@@ -41,7 +41,7 @@ export function In9AssetPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm pt-space-xs">
       <div className="flex items-center gap-space-sm">
       <button type="button" onClick={() => form.closeAssetPage()} className="inline-flex items-center gap-1.5 px-space-sm py-1 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface transition-colors font-body-sm text-body-sm group shadow-sm">
-      <span className="material-symbols-outlined text-[18px] transition-transform group-hover:-translate-x-0.5">arrow_back</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px] transition-transform group-hover:-translate-x-0.5">arrow_back</span>
       <span className="font-medium">Back</span>
       </button>
       <span className="text-surface-tint">/</span>
@@ -52,7 +52,7 @@ export function In9AssetPage() {
       <div className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-space-lg">
       <div className="flex flex-wrap items-center gap-space-md">
       <div className="w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center text-primary">
-      <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>inventory_2</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>inventory_2</span>
       </div>
       <div className="space-y-1">
       <div className="flex flex-wrap items-center gap-space-sm">
@@ -61,14 +61,14 @@ export function In9AssetPage() {
       <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-surface-container rounded-lg font-label-code text-label-code text-on-surface">
       <span data-stitch-data-stitch-id="serialDisplay">{savedSerial}</span>
       <button type="button" className="p-0.5 hover:text-primary transition-colors flex items-center justify-center" title="Copy serial" aria-label="Copy serial" onClick={() => void form.copySerial()}>
-      <span className="material-symbols-outlined text-[16px]">content_copy</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">content_copy</span>
       </button>
       </div>
       ) : (
       <span className="px-2 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-code text-caption font-semibold">No serial yet</span>
       )}
       <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container text-on-surface font-label-code text-caption font-semibold">
-      <span className="material-symbols-outlined text-[16px] text-surface-tint">{plate ? 'directions_car' : 'warehouse'}</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-surface-tint">{plate ? 'directions_car' : 'warehouse'}</span>
       <span>{plate ? <>Installed on <span className="font-label-plate tracking-wider text-primary">{plate}</span></> : locationName}</span>
       </div>
       </div>
@@ -79,19 +79,19 @@ export function In9AssetPage() {
       {!readOnly ? (
       <div className="flex flex-wrap items-center gap-space-xs sm:gap-space-sm">
       <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm" onClick={() => form.openMoveDialog()}>
-      <span className="material-symbols-outlined text-[18px]">drive_file_move</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">drive_file_move</span>
       <span>Move</span>
       </button>
       <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm" onClick={() => form.openRepairDialog()}>
-      <span className="material-symbols-outlined text-[18px]">build</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">build</span>
       <span>Send to repair</span>
       </button>
       <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-error-container hover:text-on-error-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm" onClick={() => form.openConditionDialog()}>
-      <span className="material-symbols-outlined text-[18px]">report_problem</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">report_problem</span>
       <span>Change condition</span>
       </button>
       <button type="button" className="px-space-md py-2 rounded-lg bg-error-container text-error hover:bg-error-container/80 font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm" onClick={() => form.retireConfirmed()}>
-      <span className="material-symbols-outlined text-[18px]">archive</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">archive</span>
       <span>Retire</span>
       </button>
       </div>
@@ -117,7 +117,7 @@ export function In9AssetPage() {
       <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col justify-between space-y-space-xs">
       <div className="flex items-center justify-between text-on-surface-variant font-caption text-caption uppercase tracking-wider">
       <span>Cost</span>
-      <span className="material-symbols-outlined text-sm">payments</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-sm">payments</span>
       </div>
       <div>
       <div className="font-label-price text-headline-sm text-on-surface font-bold">{form.valueLabel}</div>
@@ -130,7 +130,7 @@ export function In9AssetPage() {
       <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col justify-between space-y-space-xs">
       <div className="flex items-center justify-between text-on-surface-variant font-caption text-caption uppercase tracking-wider">
       <span>Installed</span>
-      <span className="material-symbols-outlined text-sm">event</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-sm">event</span>
       </div>
       <div className="font-label-code text-headline-sm text-on-surface font-bold">{installedAt || '—'}</div>
       </div>
@@ -138,7 +138,7 @@ export function In9AssetPage() {
       <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col justify-between space-y-space-xs">
       <div className="flex items-center justify-between text-on-surface-variant font-caption text-caption uppercase tracking-wider">
       <span>Serial number</span>
-      <span className="material-symbols-outlined text-sm">qr_code_2</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-sm">qr_code_2</span>
       </div>
       {!readOnly ? (
       <div className="flex flex-col gap-1.5">
@@ -153,7 +153,7 @@ export function In9AssetPage() {
       <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col justify-between space-y-space-xs">
       <div className="flex items-center justify-between text-on-surface-variant font-caption text-caption uppercase tracking-wider">
       <span>Next inspection</span>
-      <span className="material-symbols-outlined text-sm">calendar_month</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-sm">calendar_month</span>
       </div>
       <div>
       <div className="flex items-baseline gap-1.5 flex-wrap">
@@ -177,7 +177,7 @@ export function In9AssetPage() {
       <div className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-space-md gap-space-sm">
       <div className="flex items-center gap-2">
-      <span className="material-symbols-outlined text-primary text-xl">history</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-primary text-xl">history</span>
       <h2 className="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">History</h2>
       </div>
       <div className="flex items-center gap-1.5 bg-surface-container p-1 rounded-lg self-start sm:self-auto font-caption text-caption">
@@ -193,7 +193,7 @@ export function In9AssetPage() {
       form.eventRows.map((ev) => (
       <div key={ev.id} className="relative group">
       <div className="absolute -left-6 sm:-left-8 top-0.5 w-6 sm:w-8 h-6 sm:h-8 rounded-full bg-primary-container text-on-primary flex items-center justify-center ring-4 ring-surface-container-lowest">
-      <span className="material-symbols-outlined text-[15px]">history</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[15px]">history</span>
       </div>
       <div className="bg-surface-container-low rounded-xl p-space-md shadow-sm">
       <div className="flex items-center gap-2 flex-wrap">
@@ -218,7 +218,7 @@ export function In9AssetPage() {
       <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center gap-space-md">
       <input type="text" className="flex-1 bg-surface-container-low rounded-lg px-space-md py-2 font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant" placeholder="Add a note (inspection, cable check…)" value={form.incidentNote} onChange={(e) => form.setIncidentNote(e.target.value)} aria-label="Note"/>
       <button type="button" className="px-space-md py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1.5 disabled:opacity-60" disabled={!form.incidentNote.trim()} onClick={() => void form.addIncidentNote().catch(() => undefined)}>
-      <span className="material-symbols-outlined text-[16px]">edit_note</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">edit_note</span>
       <span>Add note</span>
       </button>
       </div>
@@ -229,7 +229,7 @@ export function In9AssetPage() {
       <div className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm space-y-space-md">
       <div className="flex items-center justify-between">
       <div className="flex items-center gap-2">
-      <span className="material-symbols-outlined text-primary text-xl">folder_open</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-primary text-xl">folder_open</span>
       <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">Documents</h3>
       </div>
       <span className="font-label-code text-caption text-on-surface-variant bg-surface-container px-2 py-0.5 rounded">{form.documents.length}</span>
@@ -248,10 +248,10 @@ export function In9AssetPage() {
       {hasUrl ? (
       <div className="flex items-center gap-1 shrink-0">
       <button type="button" className="w-8 h-8 rounded hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface flex items-center justify-center" title="View" aria-label="View document" onClick={() => form.openDocument(doc)}>
-      <span className="material-symbols-outlined text-[18px]">visibility</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">visibility</span>
       </button>
       <button type="button" className="w-8 h-8 rounded hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface flex items-center justify-center" title="Download" aria-label="Download document" onClick={() => form.downloadDocument(doc)}>
-      <span className="material-symbols-outlined text-[18px]">download</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">download</span>
       </button>
       </div>
       ) : null}
@@ -265,7 +265,7 @@ export function In9AssetPage() {
       <div className="p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex items-center justify-between">
       <div className="flex items-center gap-space-sm min-w-0">
       <div className="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center shrink-0">
-      <span className="material-symbols-outlined text-primary text-xl">{plate ? 'directions_car' : 'warehouse'}</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-primary text-xl">{plate ? 'directions_car' : 'warehouse'}</span>
       </div>
       <div className="min-w-0">
       <div className="font-caption text-caption uppercase text-on-surface-variant font-semibold">{plate ? 'Car' : 'Location'}</div>
@@ -275,7 +275,7 @@ export function In9AssetPage() {
       {vehicleId ? (
       <button type="button" onClick={() => goToFleetPath(vehiclePath(vehicleId))} className="px-space-sm py-1.5 rounded-lg bg-surface-container-low text-on-surface hover:bg-surface-container font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1 shadow-sm shrink-0">
       <span>View Car</span>
-      <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">chevron_right</span>
       </button>
       ) : null}
       </div>

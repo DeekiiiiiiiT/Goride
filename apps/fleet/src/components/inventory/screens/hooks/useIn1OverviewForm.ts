@@ -12,6 +12,7 @@ export function useIn1OverviewForm() {
       { label: 'Export', onClick: () => void downloadInventoryExportCsv() },
       { label: 'Settings', onClick: () => shell.openModal('inventory-settings') },
       { label: 'Locations', onClick: () => shell.openModal('locations-bins') },
+      { label: 'Setup guide', onClick: () => shell.openModal('first-time-setup') },
     ],
     [shell],
   );

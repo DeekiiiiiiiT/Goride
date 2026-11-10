@@ -752,6 +752,13 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
         body.next_inspection_due ?? body.nextInspectionDue ?? body.inspection_due,
       ),
     };
+    if (row.serial_number) {
+      const { data: dup } = await fleetDb().from("fleet_inv_asset").select("asset_tag")
+        .eq("organization_id", org).eq("serial_number", row.serial_number).limit(1).maybeSingle();
+      if (dup) {
+        return c.json({ error: `This serial is already registered as ${dup.asset_tag}` }, 409);
+      }
+    }
     const { data, error } = await fleetDb().from("fleet_inv_asset").insert(row).select("*").single();
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ asset: data });

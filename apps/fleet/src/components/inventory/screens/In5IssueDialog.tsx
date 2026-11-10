@@ -13,7 +13,7 @@ export function In5IssueDialog() {
       <div className="space-y-1">
       <div className="flex items-center gap-space-sm">
       <span className="inline-flex items-center justify-center w-7 h-7 rounded bg-primary-container text-on-primary">
-      <span className="material-symbols-outlined text-[17px]">inventory_2</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[17px]">inventory_2</span>
       </span>
       <h2 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">Issue to cars</h2>
       </div>
@@ -22,7 +22,7 @@ export function In5IssueDialog() {
                   </p>
       </div>
       <button type="button" onClick={() => shell.closeModal()} aria-label="Close dialog" className="w-8 h-8 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface-variant flex items-center justify-center transition-colors">
-      <span className="material-symbols-outlined text-[18px]">close</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">close</span>
       </button>
       </div>
       </div>
@@ -70,7 +70,7 @@ export function In5IssueDialog() {
 
       <div className="bg-tertiary-fixed rounded-xl p-space-md flex items-start justify-between gap-space-md">
       <div className="flex items-start gap-space-sm">
-      <span className="material-symbols-outlined text-[20px] text-on-tertiary-fixed-variant mt-0.5" style={{ fontVariationSettings: "'FILL' 1" }}>warning</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[20px] text-on-tertiary-fixed-variant mt-0.5" style={{ fontVariationSettings: "'FILL' 1" }}>warning</span>
       <div>
       <div className="font-body-md text-body-md font-semibold text-on-tertiary-fixed">
                       {form.uncoverable.length > 0
@@ -137,7 +137,7 @@ export function In5IssueDialog() {
       <td className="py-space-sm px-space-md text-right">
       {!row.fromStock ? (
       <span className="inline-flex items-center gap-1 font-caption text-caption text-secondary bg-surface-container px-2 py-0.5 rounded-full">
-      <span className="material-symbols-outlined text-[12px]">link</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[12px]">link</span>
                             Set up on the {row.cell.label === 'Fuel card' ? 'Fuel Cards' : 'Toll Tags'} page
                           </span>
       ) : !tickable ? (
@@ -147,7 +147,7 @@ export function In5IssueDialog() {
                           </span>
       ) : isTicked ? (
       <span className="inline-flex items-center gap-1 font-caption text-caption text-primary bg-primary-fixed px-2 py-0.5 rounded-full font-bold">
-      <span className="material-symbols-outlined text-[12px]">check</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[12px]">check</span>
                             Will issue
                           </span>
       ) : (
@@ -189,7 +189,7 @@ export function In5IssueDialog() {
                 </button>
       {!shell.readOnly ? (
       <button type="button" className="px-space-lg py-2 rounded-lg bg-primary hover:bg-primary/90 text-on-primary font-body-sm text-body-sm font-semibold flex items-center gap-space-sm shadow-sm active:scale-[0.98] transition-all disabled:opacity-60" data-stitch-data-stitch-id="issue-btn" disabled={!form.canIssue || form.submit.saving} onClick={() => void form.issue().catch(() => undefined)}>
-      <span className="material-symbols-outlined text-[17px]">{form.submit.saving ? 'progress_activity' : 'send'}</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[17px]">{form.submit.saving ? 'progress_activity' : 'send'}</span>
       <span>{form.submit.saving ? 'Issuing…' : `Issue ${form.ticked.size} line${form.ticked.size === 1 ? '' : 's'}`}</span>
       </button>
       ) : null}

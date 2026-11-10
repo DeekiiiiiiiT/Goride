@@ -38,7 +38,7 @@ export function In13Alerts() {
       <div className="flex items-center gap-space-sm self-start md:self-auto">
       {!shell.readOnly ? (
       <button type="button" className="flex items-center gap-space-xs bg-primary text-on-primary px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm" onClick={() => shell.openModal('receive')}>
-      <span className="material-symbols-outlined text-[16px]">move_to_inbox</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">move_to_inbox</span>
       <span>Receive stock</span>
       </button>
       ) : null}
@@ -64,15 +64,15 @@ export function In13Alerts() {
       </div>
       <div className="flex flex-wrap items-center gap-space-sm">
       <div className="relative min-w-[240px]">
-      <span className="material-symbols-outlined absolute left-space-md top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">search</span>
+      <span aria-hidden="true" className="material-symbols-outlined absolute left-space-md top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">search</span>
       <input className="w-full bg-surface-container-low pl-9 pr-space-md py-2 rounded-lg font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:bg-surface-container-lowest transition-colors" placeholder="Search alerts..." type="text" value={form.search} onChange={(e) => form.setSearch(e.target.value)}/>
       </div>
       <button type="button" onClick={() => shell.openModal('snooze-settings')} className="flex items-center gap-space-xs bg-surface-container-low hover:bg-surface-container text-on-surface px-space-md py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors">
-      <span className="material-symbols-outlined text-[18px] text-on-surface-variant">schedule</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px] text-on-surface-variant">schedule</span>
       <span>Snooze settings</span>
       </button>
       <button type="button" className="flex items-center gap-space-xs bg-surface-container-low hover:bg-surface-container text-on-surface px-space-md py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors" onClick={() => void form.markAllViewed().catch(() => undefined)}>
-      <span className="material-symbols-outlined text-[18px] text-on-surface-variant">done_all</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px] text-on-surface-variant">done_all</span>
       <span>Mark all viewed</span>
       </button>
       </div>
@@ -86,7 +86,7 @@ export function In13Alerts() {
       <span className="font-caption text-caption text-error font-medium">{form.counts.critical} critical</span>
       </div>
       <div className="w-10 h-10 rounded-lg bg-error-container text-on-error-container flex items-center justify-center">
-      <span className="material-symbols-outlined text-[20px]">warning</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[20px]">warning</span>
       </div>
       </div>
       <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm flex items-center justify-between">
@@ -96,7 +96,7 @@ export function In13Alerts() {
       <span className="font-caption text-caption text-on-surface-variant">From the driver app</span>
       </div>
       <div className="w-10 h-10 rounded-lg bg-surface-container text-primary flex items-center justify-center">
-      <span className="material-symbols-outlined text-[20px]">campaign</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[20px]">campaign</span>
       </div>
       </div>
       <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm flex items-center justify-between">
@@ -106,7 +106,7 @@ export function In13Alerts() {
       <span className="font-caption text-caption text-on-surface-variant">{live.assetsFaulty} faulty · {live.assetsLost} lost · {live.assetsInRepair} in repair</span>
       </div>
       <div className="w-10 h-10 rounded-lg bg-tertiary-fixed text-on-tertiary-fixed flex items-center justify-center">
-      <span className="material-symbols-outlined text-[20px]">build</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[20px]">build</span>
       </div>
       </div>
       <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm flex items-center justify-between">
@@ -116,7 +116,7 @@ export function In13Alerts() {
       <span className="font-caption text-caption text-on-surface-variant">{live.lowStockCount ? live.lowStockLabel : 'The store covers the cars'}</span>
       </div>
       <div className="w-10 h-10 rounded-lg bg-secondary-fixed text-on-secondary-fixed flex items-center justify-center">
-      <span className="material-symbols-outlined text-[20px]">inventory</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[20px]">inventory</span>
       </div>
       </div>
       </div>
@@ -162,7 +162,7 @@ export function In13Alerts() {
       <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary"></div>
       <div className="flex items-start gap-space-lg pl-space-xs min-w-0">
       <div className="w-10 h-10 rounded-full bg-surface-container text-on-surface flex items-center justify-center shrink-0 mt-0.5">
-      <span className="material-symbols-outlined text-[22px]">notifications</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[22px]">notifications</span>
       </div>
       <div className="flex flex-col gap-1 min-w-0">
       <div className="flex items-center flex-wrap gap-space-sm">
@@ -229,7 +229,7 @@ export function In13Alerts() {
       <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm lg:col-span-2">
       <div className="flex items-center justify-between mb-space-md">
       <div className="flex items-center gap-space-sm">
-      <span className="material-symbols-outlined text-on-surface text-[20px]">history</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-on-surface text-[20px]">history</span>
       <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">Recently resolved</h3>
       </div>
       </div>
@@ -240,7 +240,7 @@ export function In13Alerts() {
       form.resolvedAlertRows.map((row) => (
       <div key={row.id} className="p-space-sm bg-surface-container-low rounded-lg flex items-center justify-between text-body-sm font-body-sm">
       <div className="flex items-center gap-space-md min-w-0">
-      <span className="material-symbols-outlined text-secondary text-[18px]">check_circle</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-secondary text-[18px]">check_circle</span>
       <span className="truncate"><strong className="font-semibold text-on-surface">{row.title}</strong></span>
       </div>
       <div className="flex items-center gap-space-md shrink-0">

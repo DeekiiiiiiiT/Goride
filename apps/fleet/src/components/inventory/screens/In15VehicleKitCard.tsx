@@ -62,7 +62,7 @@ export function In15VehicleKitCard({ vehicleId }: { vehicleId?: string | null })
 
       <div className="flex flex-wrap items-center justify-between gap-space-sm">
       <div className="flex items-center gap-space-sm">
-      <span className="material-symbols-outlined text-on-surface text-[24px]">inventory_2</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-on-surface text-[24px]">inventory_2</span>
       <h2 className="font-headline-lg text-headline-lg text-on-surface font-semibold tracking-tight">Kit & equipment</h2>
       <span className="font-label-plate text-label-plate px-space-xs py-0.5 rounded bg-surface-container-high text-on-surface font-bold">{vehicle.plate}</span>
       </div>
@@ -72,7 +72,7 @@ export function In15VehicleKitCard({ vehicleId }: { vehicleId?: string | null })
       </div>
       {shell ? (
       <button type="button" aria-label="Close" className="w-8 h-8 rounded-lg bg-surface-container-low hover:bg-surface-container flex items-center justify-center" onClick={() => shell.closeModal()}>
-      <span className="material-symbols-outlined text-[18px]">close</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">close</span>
       </button>
       ) : null}
       </div>
@@ -91,7 +91,7 @@ export function In15VehicleKitCard({ vehicleId }: { vehicleId?: string | null })
       <div className="grid grid-cols-1 md:grid-cols-2 gap-space-md pt-space-xs">
       <div className="flex flex-col gap-space-sm">
       <div className="flex items-center gap-space-xs px-space-xs">
-      <span className="material-symbols-outlined text-error text-base">warning</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-error text-base">warning</span>
       <span className="font-caption text-caption uppercase tracking-wider text-error font-bold">Missing ({missing.length})</span>
       </div>
       {missing.length === 0 ? (
@@ -105,7 +105,7 @@ export function In15VehicleKitCard({ vehicleId }: { vehicleId?: string | null })
       </div>
       {!readOnly && c.itemId ? (
       <button type="button" className="px-space-sm py-1 rounded bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium shadow-sm flex items-center gap-1" onClick={() => shell!.openIssue({ vehicleId: vehicle.vehicleId, kitLineIds: [c.kitLineId] })}>
-      <span className="material-symbols-outlined text-sm">add_box</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-sm">add_box</span>
       <span>Issue</span>
       </button>
       ) : null}
@@ -116,7 +116,7 @@ export function In15VehicleKitCard({ vehicleId }: { vehicleId?: string | null })
 
       <div className="flex flex-col gap-space-sm">
       <div className="flex items-center gap-space-xs px-space-xs">
-      <span className="material-symbols-outlined text-surface-tint text-base">verified</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-surface-tint text-base">verified</span>
       <span className="font-caption text-caption uppercase tracking-wider text-on-surface font-bold">In the car ({present.length})</span>
       </div>
       <div className="flex flex-col gap-space-xs bg-surface-container-low p-space-xs rounded-lg">
@@ -146,13 +146,13 @@ export function In15VehicleKitCard({ vehicleId }: { vehicleId?: string | null })
       <div className="flex flex-wrap items-center gap-space-sm pt-space-sm">
       {shell && !readOnly && missing.some((c) => c.itemId) ? (
       <button type="button" className="px-space-lg py-2 rounded-lg bg-primary hover:opacity-90 text-on-primary font-body-sm text-body-sm font-semibold flex items-center gap-space-xs shadow-sm" onClick={() => shell.openIssue({ vehicleId: vehicle.vehicleId, kitLineIds: missing.filter((c) => c.itemId).map((c) => c.kitLineId) })}>
-      <span className="material-symbols-outlined text-base">outgoing_mail</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-base">outgoing_mail</span>
       <span>Issue missing ({missing.filter((c) => c.itemId).length})</span>
       </button>
       ) : null}
       {!shell ? (
       <button type="button" className="px-space-lg py-2 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium flex items-center gap-space-xs" onClick={() => goToFleetPath('/vehicle-operations/inventory?tab=vehicle-kits')}>
-      <span className="material-symbols-outlined text-base">open_in_new</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-base">open_in_new</span>
       <span>Open in Inventory</span>
       </button>
       ) : null}

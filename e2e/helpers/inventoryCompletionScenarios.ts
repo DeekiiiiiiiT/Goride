@@ -104,8 +104,8 @@ export async function runCompletion08(page: Page) {
 /** Done-test 9: a driver report shows in Alerts and Overview, and opens its record. */
 export async function runCompletion09(page: Page) {
   execInventoryDb(`
-    INSERT INTO fleet.inv_driver_report (organization_id, vehicle_id, item_id, issue, note, status)
-    VALUES ('${ORG}', '${INV_DONE_VEHICLE_2}', (SELECT id FROM fleet.inv_item WHERE organization_id = '${ORG}' AND sku = 'ZZ-TEST-TRI'), 'missing', 'ZZ e2e report', 'sent');
+    INSERT INTO fleet.inv_driver_report (organization_id, report_no, vehicle_id, item_id, issue, note, status)
+    VALUES ('${ORG}', 'R-IVC09-' || substr(md5(random()::text), 1, 6), '${INV_DONE_VEHICLE_2}', (SELECT id FROM fleet.inv_item WHERE organization_id = '${ORG}' AND sku = 'ZZ-TEST-TRI'), 'missing', 'ZZ e2e report', 'sent');
   `);
   await seedInventoryFleetSession(page);
   await gotoFleetInventory(page, 'overview');

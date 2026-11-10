@@ -13,11 +13,9 @@ function serviceClient() {
   return createClient(url, key);
 }
 
+/** The fleet schema isn't exposed over the API — read the public bridge views instead. */
 function fleetSchemaClient() {
-  const url = Deno.env.get("SUPABASE_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!url || !key) return null;
-  return createClient(url, key, { db: { schema: "fleet" } });
+  return serviceClient();
 }
 
 async function loadVehiclePlate(
@@ -93,7 +91,7 @@ export async function assertRoadClearForDispatch(
   if (!fleet) return { ok: true };
 
   const { data: rows, error } = await fleet
-    .from("v_inv_kit_compliance")
+    .from("fleet_inv_v_kit_compliance")
     .select("line_status, blocks_road_clearance, required")
     .eq("organization_id", organizationId)
     .eq("vehicle_id", vehicleId);
@@ -118,7 +116,7 @@ export async function assertRoadClearForDispatch(
 export const ROAD_CLEARANCE_LOGIC_SIGNATURE = [
   "fleet_inventory_phase3_kits",
   "inv_road_clearance_gate",
-  "v_inv_kit_compliance",
+  "fleet_inv_v_kit_compliance",
   "blocks_road_clearance",
   "required",
   "missing",

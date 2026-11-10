@@ -23,7 +23,7 @@ export function GapModalShell({
             className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-lg bg-surface-container-low text-on-surface hover:bg-surface-container"
             onClick={onClose}
           >
-            <span className="material-symbols-outlined text-[20px]">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-[20px]">close</span>
           </button>
         ) : null}
         <div className="min-h-0 flex-1 overflow-y-auto p-space-md md:p-space-lg">

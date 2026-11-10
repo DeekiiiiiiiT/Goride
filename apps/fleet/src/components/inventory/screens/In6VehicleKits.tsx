@@ -26,7 +26,7 @@ function Cell({ cell, readOnly, onOpen }: { cell: KitCell | undefined; readOnly:
   if (cell.status === 'ok') {
     return (
       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-surface-container-low text-primary font-label-code text-caption font-semibold" data-testid="kit-cell" data-status="ok">
-        <span className="material-symbols-outlined text-[14px]">check_circle</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[14px]">check_circle</span>
         ✓ OK
       </span>
     );
@@ -114,7 +114,7 @@ export function In6VehicleKits() {
       <button type="button" onClick={() => shell.openGap('kit-compare')} className="px-space-md py-1 rounded bg-surface-container-lowest text-on-surface hover:text-primary font-body-sm text-body-sm font-medium transition-colors">Kit templates</button>
       {!readOnly ? (
       <button type="button" onClick={() => form.openKitEditor()} className="px-space-md py-1 rounded bg-surface-container-lowest text-on-surface hover:text-primary font-body-sm text-body-sm font-medium transition-colors flex items-center gap-1" data-testid="edit-kit">
-      <span className="material-symbols-outlined text-[16px]">edit</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">edit</span>
                   Edit kit
                 </button>
       ) : null}
@@ -125,21 +125,21 @@ export function In6VehicleKits() {
 
       <div className="flex items-center bg-surface-container-high p-0.5 rounded">
       <button type="button" className={`flex items-center gap-space-xs px-space-md py-1 rounded font-body-sm text-body-sm transition-all ${form.view === 'matrix' ? 'bg-surface-container-lowest text-primary font-semibold shadow-xs' : 'text-on-surface-variant hover:text-on-surface'}`} data-stitch-data-stitch-id="view-mode-matrix"  onClick={() => form.setView('matrix')}>
-      <span className="material-symbols-outlined text-[16px]">grid_view</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">grid_view</span>
                   Matrix
                 </button>
       <button type="button" className={`flex items-center gap-space-xs px-space-md py-1 rounded font-body-sm text-body-sm transition-all ${form.view === 'cards' ? 'bg-surface-container-lowest text-primary font-semibold shadow-xs' : 'text-on-surface-variant hover:text-on-surface'}`} data-stitch-data-stitch-id="view-mode-cards"  onClick={() => form.setView('cards')}>
-      <span className="material-symbols-outlined text-[16px]">view_agenda</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">view_agenda</span>
                   Cards
                 </button>
       </div>
       <button type="button" className="h-9 px-space-md rounded bg-surface-container-lowest text-on-surface font-body-sm text-body-sm font-medium hover:bg-surface-container transition-colors flex items-center gap-space-xs shadow-xs" onClick={() => void form.exportMatrix().catch(() => undefined)}>
-      <span className="material-symbols-outlined text-[16px]">download</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">download</span>
                 Export matrix
               </button>
       {!readOnly ? (
       <button type="button" className="h-9 px-space-md rounded bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-inverse-surface transition-colors flex items-center gap-space-xs shadow-sm"  onClick={() => form.issueAllMissing()}>
-      <span className="material-symbols-outlined text-[16px]">inventory</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">inventory</span>
                 Issue missing
               </button>
       ) : null}
@@ -149,7 +149,7 @@ export function In6VehicleKits() {
       {!readOnly ? (
       <div className="bg-surface-container-low px-space-md py-space-sm rounded-lg flex items-center justify-between gap-space-md">
       <div className="flex items-center gap-space-sm">
-      <span className="material-symbols-outlined text-secondary text-[18px]">info</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-secondary text-[18px]">info</span>
       <span className="font-body-sm text-body-sm text-on-surface-variant">
                 Clicking any red <span className="text-error font-semibold uppercase font-label-code text-[11px] bg-error-container/50 px-1 py-0.5 rounded">Missing</span> cell opens the Issue dialog for that car and item. Fuel card and toll tag cells open their own page.
               </span>
@@ -175,7 +175,7 @@ export function In6VehicleKits() {
       <th key={col.kitLineId} className={`p-space-sm text-center min-w-[105px] ${col.required ? '' : 'bg-surface-container-high/40'}`} data-testid="kit-column">
       <div className="flex flex-col items-center gap-1 py-1">
       <div className={`w-7 h-7 rounded flex items-center justify-center ${col.required ? 'bg-surface-container text-on-surface-variant' : 'bg-surface-container-high text-outline'}`}>
-      <span className="material-symbols-outlined text-[16px]">{columnIcon(col)}</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">{columnIcon(col)}</span>
       </div>
       <div className="flex flex-col items-center">
       <span className={`font-caption text-caption ${col.required ? 'text-on-surface font-semibold' : 'text-secondary font-medium'}`}>{col.label}</span>
@@ -210,7 +210,7 @@ export function In6VehicleKits() {
       </div>
 
       <div className="mt-1 flex items-center gap-1 text-on-surface-variant flex-wrap">
-      <span className="material-symbols-outlined text-[13px]">{also.length ? 'layers' : 'layers_clear'}</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[13px]">{also.length ? 'layers' : 'layers_clear'}</span>
       <span className="font-caption text-caption text-on-surface-variant">Also on this car:</span>
       {also.length ? (
         also.map((a) => (
@@ -296,7 +296,7 @@ export function In6VehicleKits() {
       <div className="flex flex-col gap-space-sm pt-space-xs">
       {vehicle.missingLabels.length > 0 ? (
       <div className="bg-error-container/20 p-space-sm rounded flex items-start gap-space-sm">
-      <span className="material-symbols-outlined text-error text-[18px] shrink-0 mt-0.5">error</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-error text-[18px] shrink-0 mt-0.5">error</span>
       <div className="flex flex-col">
       <span className="font-caption text-caption uppercase font-semibold text-error">Missing items required</span>
       <p className="font-body-sm text-body-sm font-semibold text-error">{vehicle.missingLabels.join(', ')}</p>
@@ -304,7 +304,7 @@ export function In6VehicleKits() {
       </div>
       ) : (
       <div className="bg-surface-container-low p-space-sm rounded flex items-start gap-space-sm">
-      <span className="material-symbols-outlined text-primary text-[18px] shrink-0 mt-0.5">check_circle</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-primary text-[18px] shrink-0 mt-0.5">check_circle</span>
       <div className="flex flex-col">
       <span className="font-caption text-caption uppercase font-semibold text-primary">Kit complete</span>
       <p className="font-body-sm text-body-sm text-on-surface">Every required item is in {vehicle.plate}.</p>
@@ -318,7 +318,7 @@ export function In6VehicleKits() {
       <button type="button" className="h-9 px-space-md rounded bg-surface-container-low text-on-surface hover:bg-surface-container font-body-sm text-body-sm font-medium transition-colors" onClick={() => form.openKitCard(vehicle.vehicleId)}>Report</button>
       {!readOnly && vehicle.missingLabels.length > 0 ? (
       <button type="button" onClick={() => form.issueMissingForCar(vehicle.vehicleId)} className="h-9 px-space-md rounded bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-inverse-surface transition-colors flex items-center gap-1 shadow-xs" >
-      <span className="material-symbols-outlined text-[16px]">add_box</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">add_box</span>
                       Issue missing
                     </button>
       ) : null}

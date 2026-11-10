@@ -43,7 +43,7 @@ export function InventoryOverflowMenu({
         className="w-8 h-8 rounded flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors"
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="material-symbols-outlined text-[20px]">{icon}</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[20px]">{icon}</span>
       </button>
       {open ? (
         <div

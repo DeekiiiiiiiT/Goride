@@ -29,7 +29,7 @@ export function GapRegisterAsset(p: { onClose?: () => void }) {
         <p className="font-body-sm text-body-sm text-on-surface-variant">Track one expensive device by its serial number.</p>
         </div>
         <button aria-label="Close dialog" className="w-8 h-8 rounded-lg bg-surface-container-low hover:bg-surface-container-high text-on-surface flex items-center justify-center transition-colors" type="button" onClick={closeReg}>
-        <span className="material-symbols-outlined text-[18px]">close</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">close</span>
         </button>
         </div>
 
@@ -51,7 +51,7 @@ export function GapRegisterAsset(p: { onClose?: () => void }) {
           <option key={String(it.id)} value={String(it.id)}>{String(it.name ?? '—')}</option>
         ))}
         </select>
-        <span className="material-symbols-outlined absolute right-2.5 top-2.5 text-[18px] text-on-surface-variant pointer-events-none">unfold_more</span>
+        <span aria-hidden="true" className="material-symbols-outlined absolute right-2.5 top-2.5 text-[18px] text-on-surface-variant pointer-events-none">unfold_more</span>
         </div>
         </div>
 
@@ -62,18 +62,18 @@ export function GapRegisterAsset(p: { onClose?: () => void }) {
         </label>
         <div className="relative">
         <input className="w-full h-10 px-3 rounded-lg bg-surface-container-low font-label-code text-label-code text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary shadow-sm" type="text" value={form.assetTag} onChange={(e) => form.setAssetTag(e.target.value)}/>
-        <span className="material-symbols-outlined absolute right-2.5 top-2.5 text-[18px] text-on-surface-variant">tag</span>
+        <span aria-hidden="true" className="material-symbols-outlined absolute right-2.5 top-2.5 text-[18px] text-on-surface-variant">tag</span>
         </div>
         <p className="text-caption font-caption text-on-surface-variant">Auto-generated tag sequence</p>
         </div>
 
         <div className="flex flex-col gap-1">
-        <label className="text-caption font-caption uppercase tracking-wider text-on-surface-variant font-semibold flex items-center justify-between">
+        <label htmlFor="register-asset-serial" className="text-caption font-caption uppercase tracking-wider text-on-surface-variant font-semibold flex items-center justify-between">
         <span>Serial Number <span className="text-error">*</span></span>
         </label>
         <div className="relative">
-        <input className="w-full h-10 px-3 rounded-lg bg-surface-container-low font-label-code text-label-code text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary shadow-sm font-semibold tracking-wide" required type="text" value={form.serialNumber} onChange={(e) => form.setSerialNumber(e.target.value)}/>
-        <span className="material-symbols-outlined absolute right-2.5 top-2.5 text-[18px] text-on-surface-variant">qr_code_scanner</span>
+        <input id="register-asset-serial" className="w-full h-10 px-3 rounded-lg bg-surface-container-low font-label-code text-label-code text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary shadow-sm font-semibold tracking-wide" required type="text" value={form.serialNumber} onChange={(e) => form.setSerialNumber(e.target.value)}/>
+        <span aria-hidden="true" className="material-symbols-outlined absolute right-2.5 top-2.5 text-[18px] text-on-surface-variant">qr_code_scanner</span>
         </div>
         </div>
 
@@ -81,7 +81,7 @@ export function GapRegisterAsset(p: { onClose?: () => void }) {
         <label className="text-caption font-caption uppercase tracking-wider text-on-surface-variant font-semibold">Cost (J$)</label>
         <div className="relative">
         <input className="w-full h-10 px-3 rounded-lg bg-surface-container-low font-label-price text-label-price text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary shadow-sm font-bold" type="text" value={form.purchaseCost} onChange={(e) => form.setPurchaseCost(e.target.value)}/>
-        <span className="material-symbols-outlined absolute right-2.5 top-2.5 text-[18px] text-on-surface-variant">receipt_long</span>
+        <span aria-hidden="true" className="material-symbols-outlined absolute right-2.5 top-2.5 text-[18px] text-on-surface-variant">receipt_long</span>
         </div>
         <span className="text-caption font-caption text-on-surface-variant">What this unit cost, incl. GCT. Counts in Stock value.</span>
         </div>
@@ -105,7 +105,7 @@ export function GapRegisterAsset(p: { onClose?: () => void }) {
           <option key={String(loc.id)} value={String(loc.id)}>{String(loc.name ?? loc.code ?? '—')}</option>
         ))}
         </select>
-        <span className="material-symbols-outlined absolute right-2 top-2 text-[14px] text-on-surface-variant pointer-events-none">expand_more</span>
+        <span aria-hidden="true" className="material-symbols-outlined absolute right-2 top-2 text-[14px] text-on-surface-variant pointer-events-none">expand_more</span>
         </div>
         </div>
         </div>
@@ -117,7 +117,7 @@ export function GapRegisterAsset(p: { onClose?: () => void }) {
         <label className="text-caption font-caption uppercase tracking-wider text-on-surface-variant font-semibold">Next inspection</label>
         <div className="relative">
         <input className="w-full h-10 px-3 rounded-lg bg-surface-container-low font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary shadow-sm" type="date" value={form.nextInspectionDue} onChange={(e) => form.setNextInspectionDue(e.target.value)}/>
-        <span className="material-symbols-outlined absolute right-2.5 top-2.5 text-[18px] text-on-surface-variant">event_repeat</span>
+        <span aria-hidden="true" className="material-symbols-outlined absolute right-2.5 top-2.5 text-[18px] text-on-surface-variant">event_repeat</span>
         </div>
         <span className="text-caption font-caption text-on-surface-variant">Optional schedule</span>
         </div>
@@ -127,7 +127,7 @@ export function GapRegisterAsset(p: { onClose?: () => void }) {
         <div className="p-space-md rounded-xl bg-surface-container-low flex flex-col gap-2">
         <div className="flex items-center justify-between">
         <span className="text-caption font-caption uppercase tracking-wider text-on-surface font-semibold flex items-center gap-1.5">
-        <span className="material-symbols-outlined text-[16px] text-on-surface-variant">history_edu</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-on-surface-variant">history_edu</span>
                       What will change
                     </span>
         </div>
@@ -154,7 +154,7 @@ export function GapRegisterAsset(p: { onClose?: () => void }) {
                 </button>
         <div className="flex items-center gap-space-md">
         <button type="button" disabled={!form.canRegister || form.submit.saving} onClick={() => void form.register().catch(() => undefined)} className="px-space-xl py-2 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold flex items-center gap-2 hover:opacity-95 active:scale-[0.98] transition-all shadow-md disabled:opacity-60">
-        <span className="material-symbols-outlined text-[18px]">lock</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">lock</span>
         <span>Register asset</span>
         </button>
         </div>

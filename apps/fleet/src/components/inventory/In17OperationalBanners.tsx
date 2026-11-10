@@ -19,9 +19,9 @@ export function In17OperationalBanners({
       {showError ? (
         <div className="w-full bg-error text-on-error rounded-xl p-space-md shadow-md flex flex-col md:flex-row md:items-center justify-between gap-space-md">
           <div className="flex items-start gap-space-sm">
-            <span className="material-symbols-outlined text-[20px]">sync_problem</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-[20px]">sync_problem</span>
             <div>
-              <p className="font-body-sm text-body-sm font-semibold">Could not refresh inventory</p>
+              <p className="font-body-sm text-body-sm font-semibold">Couldn't load inventory</p>
               <p className="font-caption text-caption text-on-error/80 mt-0.5">
                 {errorMessage ?? 'Connection or server error. Showing last loaded snapshot.'}
               </p>
@@ -32,7 +32,7 @@ export function In17OperationalBanners({
       {showDiscrepancy ? (
         <div className="w-full bg-error-container text-on-error-container rounded-xl p-space-md shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-space-md">
           <div className="flex items-start gap-space-sm">
-            <span className="material-symbols-outlined text-[20px]">warning</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-[20px]">warning</span>
             <div>
               <p className="font-body-sm text-body-sm font-semibold">Ledger discrepancy detected</p>
               <p className="font-caption text-caption text-on-error-container/85 mt-0.5">

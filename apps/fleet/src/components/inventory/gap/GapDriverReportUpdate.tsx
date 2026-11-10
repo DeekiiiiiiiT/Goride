@@ -52,7 +52,7 @@ export function GapDriverReportUpdate(p: { reportId?: string | null; onClose?: (
         <h2 className="font-headline-lg text-headline-lg text-on-surface tracking-tight" id="drawer-title">Update reported item</h2>
         </div>
         <button type="button" onClick={p.onClose} aria-label="Close drawer" className="w-9 h-9 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors focus:outline-none" id="btn-close-drawer">
-        <span className="material-symbols-outlined text-[20px]">close</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[20px]">close</span>
         </button>
         </div>
 
@@ -96,7 +96,7 @@ export function GapDriverReportUpdate(p: { reportId?: string | null; onClose?: (
 
         <div className="flex flex-col gap-space-sm p-space-lg rounded-xl bg-surface-container-low shadow-sm">
         <div className="flex items-center gap-space-xs text-on-surface">
-        <span className="material-symbols-outlined text-[18px] text-on-surface-variant">quickreply</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px] text-on-surface-variant">quickreply</span>
         <span className="font-headline-sm text-body-lg font-semibold text-on-surface">Driver&apos;s Submission</span>
         </div>
         <p className="font-body-md text-body-md text-on-surface leading-relaxed bg-surface-container-lowest p-space-md rounded-lg">
@@ -106,13 +106,13 @@ export function GapDriverReportUpdate(p: { reportId?: string | null; onClose?: (
         <div className="flex flex-wrap gap-space-sm font-caption text-caption text-on-surface-variant">
         {photos.length ? (
         <span className="inline-flex items-center gap-1 bg-surface-container-lowest px-2 py-1 rounded">
-        <span className="material-symbols-outlined text-[14px]">photo_camera</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[14px]">photo_camera</span>
         {photos.length} photo{photos.length === 1 ? '' : 's'} attached
         </span>
         ) : null}
         {hasGps ? (
         <span className="inline-flex items-center gap-1 bg-surface-container-lowest px-2 py-1 rounded font-label-code">
-        <span className="material-symbols-outlined text-[14px]">location_on</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[14px]">location_on</span>
         GPS {Number(report.gps_lat).toFixed(4)}, {Number(report.gps_lng).toFixed(4)}
         </span>
         ) : null}
@@ -157,15 +157,15 @@ export function GapDriverReportUpdate(p: { reportId?: string | null; onClose?: (
         <label className="font-caption text-caption uppercase tracking-wider font-semibold text-on-surface-variant">Quick replies</label>
         <div className="flex flex-wrap gap-space-sm" id="quick-choices-group">
         <button type="button" onClick={() => void form.applyChip('replacement').catch(() => undefined)} disabled={form.submit.saving} className="px-space-md py-1.5 rounded-full text-body-sm font-body-sm font-semibold transition-all bg-primary text-on-primary shadow-xs flex items-center gap-1.5">
-        <span className="material-symbols-outlined text-[16px]">check_circle</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[16px]">check_circle</span>
         <span>Replacement on the way</span>
         </button>
         <button type="button" onClick={() => void form.applyChip('hub-pickup').catch(() => undefined)} disabled={form.submit.saving} className="px-space-md py-1.5 rounded-full text-body-sm font-body-sm transition-all bg-surface-container hover:bg-surface-container-high text-on-surface flex items-center gap-1.5">
-        <span className="material-symbols-outlined text-[16px]">warehouse</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[16px]">warehouse</span>
         <span>Ready to collect at the hub</span>
         </button>
         <button type="button" onClick={() => void form.applyChip('urgent').catch(() => undefined)} disabled={form.submit.saving} className="px-space-md py-1.5 rounded-full text-body-sm font-body-sm transition-all bg-surface-container hover:bg-surface-container-high text-on-surface flex items-center gap-1.5">
-        <span className="material-symbols-outlined text-[16px] text-error">warning</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-error">warning</span>
         <span>Urgent safety item</span>
         </button>
         </div>
@@ -173,7 +173,7 @@ export function GapDriverReportUpdate(p: { reportId?: string | null; onClose?: (
 
         <div className="flex flex-col gap-space-xs">
         <label className="font-caption text-caption uppercase tracking-wider font-semibold text-on-surface-variant flex items-center gap-1" htmlFor="driver-message-input">
-        <span className="material-symbols-outlined text-[15px]">send_to_mobile</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[15px]">send_to_mobile</span>
                     Message to the Driver
                   </label>
         <textarea className="w-full p-space-md rounded-lg bg-surface-container-lowest text-body-md font-body-md text-on-surface focus:outline-none focus:ring-1 focus:ring-primary shadow-sm resize-none" id="driver-message-input" rows={3} value={form.driverMessage} onChange={(e) => form.setDriverMessage(e.target.value)} />
@@ -220,7 +220,7 @@ export function GapDriverReportUpdate(p: { reportId?: string | null; onClose?: (
         {!readOnly ? (
         <button type="button" disabled={!form.canSend || form.submit.saving} onClick={() => void form.sendUpdate().catch(() => undefined)} className="px-space-xl py-2 rounded-lg bg-primary hover:bg-primary/90 text-on-primary font-body-sm text-body-sm font-semibold shadow-md flex items-center gap-space-xs transition-transform active:scale-95 disabled:opacity-60" id="btn-send-update">
         <span>{form.submit.saving ? 'Sending…' : 'Send & mark fixed'}</span>
-        <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">arrow_forward</span>
         </button>
         ) : null}
         </div>

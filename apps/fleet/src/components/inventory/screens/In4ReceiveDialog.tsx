@@ -37,7 +37,7 @@ export function In4ReceiveDialog() {
       <div className="flex flex-col gap-0.5">
       <div className="flex items-center gap-space-sm">
       <div className="w-7 h-7 rounded-lg bg-primary-container text-on-primary flex items-center justify-center">
-      <span className="material-symbols-outlined text-[18px]">move_to_inbox</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">move_to_inbox</span>
       </div>
       <h2 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">Receive stock</h2>
       </div>
@@ -46,7 +46,7 @@ export function In4ReceiveDialog() {
                 </p>
       </div>
       <button type="button" onClick={() => shell.closeModal()} aria-label="Close dialog" className="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors">
-      <span className="material-symbols-outlined text-[20px]">close</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[20px]">close</span>
       </button>
       </div>
 
@@ -66,11 +66,11 @@ export function In4ReceiveDialog() {
         );
       })}
       </select>
-      <span className="material-symbols-outlined text-[16px] text-secondary absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">expand_more</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-secondary absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">expand_more</span>
       </div>
       ) : (
       <div className="flex items-center gap-space-sm bg-surface-container-lowest px-space-md py-2 rounded-lg">
-      <span className="material-symbols-outlined text-[18px] text-secondary">warehouse</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px] text-secondary">warehouse</span>
       <div className="flex flex-col min-w-0">
       <span className="font-body-sm text-body-sm font-semibold text-on-surface truncate">{form.locationLabel}</span>
       <span className="font-caption text-[10px] text-secondary tracking-tight">Node: {form.locationId || live.hubShort}</span>
@@ -78,7 +78,7 @@ export function In4ReceiveDialog() {
       </div>
       )}
       <div className="mt-1 flex items-center gap-space-xs text-secondary font-caption text-caption">
-      <span className="material-symbols-outlined text-[14px] text-secondary">lock</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[14px] text-secondary">lock</span>
       <span>Primary secure lockup</span>
       </div>
       </div>
@@ -86,7 +86,7 @@ export function In4ReceiveDialog() {
       <div className="flex flex-col gap-1.5">
       <label className="font-caption text-caption text-secondary uppercase font-semibold tracking-wide">Received On</label>
       <div className="relative flex items-center bg-surface-container-lowest rounded-lg px-space-md py-2">
-      <span className="material-symbols-outlined text-[18px] text-secondary mr-2">calendar_today</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px] text-secondary mr-2">calendar_today</span>
       <input className="bg-transparent font-label-code text-label-code text-on-surface focus:outline-none w-full" type="date" value={form.receivedOn} onChange={(e) => form.setReceivedOn(e.target.value)}/>
       </div>
       </div>
@@ -154,7 +154,7 @@ export function In4ReceiveDialog() {
       </div>
       ) : (
       <div className="inline-flex items-center gap-1 bg-surface-container px-2 py-1 rounded text-secondary">
-      <span className="material-symbols-outlined text-[14px]">pin</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[14px]">pin</span>
       <span className="font-caption text-[11px]">Quantity-tracked only</span>
       </div>
       )}
@@ -162,7 +162,7 @@ export function In4ReceiveDialog() {
 
       <div className="col-span-1 text-right">
       <button type="button" className="w-8 h-8 rounded flex items-center justify-center text-secondary hover:text-error hover:bg-error-container/20 transition-colors ml-auto" title="Remove line" onClick={() => form.removeLine(line.key)}>
-      <span className="material-symbols-outlined text-[18px]">delete</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">delete</span>
       </button>
       </div>
       </div>
@@ -172,7 +172,7 @@ export function In4ReceiveDialog() {
 
       <div className="p-space-sm bg-surface-container-low/50 flex items-center justify-between">
       <button type="button" className="flex items-center gap-space-xs font-body-sm text-body-sm font-semibold text-on-surface hover:text-primary px-space-md py-1.5 rounded-lg hover:bg-surface-container transition-colors" onClick={() => form.addLine()}>
-      <span className="material-symbols-outlined text-[18px]">add</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">add</span>
       <span>Add another item</span>
       </button>
       <div className="flex items-center gap-space-md font-caption text-caption text-secondary pr-space-md">
@@ -186,7 +186,7 @@ export function In4ReceiveDialog() {
       <div className="bg-surface-container-low rounded-xl p-space-md flex flex-col gap-space-sm">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-xs">
       <div className="flex items-center gap-space-xs">
-      <span className="material-symbols-outlined text-[18px] text-secondary">local_shipping</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px] text-secondary">local_shipping</span>
       <span className="font-headline-sm text-body-md font-semibold text-on-surface">Extra costs (landed cost allocation)</span>
       </div>
       <span className="font-caption text-caption text-secondary">Spread across lines weighted by item value (FIFO landed valuation)</span>
@@ -195,7 +195,7 @@ export function In4ReceiveDialog() {
 
       <div className="flex items-center justify-between bg-surface-container-lowest px-space-md py-2 rounded-lg">
       <div className="flex items-center gap-space-xs">
-      <span className="material-symbols-outlined text-[16px] text-secondary">flight_takeoff</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-secondary">flight_takeoff</span>
       <span className="font-body-sm text-body-sm text-secondary">Freight & Shipping</span>
       </div>
       <div className="flex items-center gap-1 font-label-price text-label-code text-on-surface font-bold">
@@ -206,7 +206,7 @@ export function In4ReceiveDialog() {
 
       <div className="flex items-center justify-between bg-surface-container-lowest px-space-md py-2 rounded-lg">
       <div className="flex items-center gap-space-xs">
-      <span className="material-symbols-outlined text-[16px] text-secondary">account_balance</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-secondary">account_balance</span>
       <span className="font-body-sm text-body-sm text-secondary">Customs & Tariffs (Duty)</span>
       </div>
       <div className="flex items-center gap-1 font-label-price text-label-code text-on-surface font-bold">
@@ -219,24 +219,24 @@ export function In4ReceiveDialog() {
 
       <div className="bg-surface-container-high rounded-xl p-space-md flex flex-col gap-space-xs">
       <div className="flex items-center gap-space-xs text-on-surface">
-      <span className="material-symbols-outlined text-[18px] text-on-surface">auto_awesome</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px] text-on-surface">auto_awesome</span>
       <span className="font-body-md text-body-md font-semibold">What will change</span>
       </div>
       <ul className="flex flex-col gap-1.5 mt-1 font-body-sm text-body-sm text-on-surface">
       <li className="flex items-start gap-2">
-      <span className="material-symbols-outlined text-[16px] text-on-surface mt-0.5">arrow_forward</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-on-surface mt-0.5">arrow_forward</span>
       <span>
       <strong>Main store:</strong> Phone Holder Mount <span className="font-label-code text-caption bg-surface-container-lowest px-1.5 py-0.5 rounded">1 → 6</span> (+5 units)
                     </span>
       </li>
       <li className="flex items-start gap-2">
-      <span className="material-symbols-outlined text-[16px] text-on-surface mt-0.5">arrow_forward</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-on-surface mt-0.5">arrow_forward</span>
       <span>
                       New asset <code className="font-label-code text-caption font-bold bg-surface-container-lowest px-1.5 py-0.5 rounded">{form.lines.find((l) => l.serial.trim())?.serial || '—'}</code> added to {form.locationLabel}
                     </span>
       </li>
       <li className="flex items-start gap-2">
-      <span className="material-symbols-outlined text-[16px] text-on-surface mt-0.5">arrow_forward</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-on-surface mt-0.5">arrow_forward</span>
       <span>
                       Average cost {form.lines[0]?.name ?? 'item'} <span className="font-label-price text-caption">{form.grandTotalLabel}</span> (includes apportioned shipping and duty)
                     </span>
@@ -248,7 +248,7 @@ export function In4ReceiveDialog() {
       <div className="px-space-xl py-space-md bg-surface-container-low flex flex-col sm:flex-row items-center justify-between gap-space-md border-t border-surface-container">
 
       <div className="flex items-center gap-space-xs text-secondary">
-      <span className="material-symbols-outlined text-[16px]">verified</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">verified</span>
       <span className="font-caption text-caption tracking-tight">Audit note: Creates immutable RECEIVE ledger entry</span>
       </div>
 
@@ -257,7 +257,7 @@ export function In4ReceiveDialog() {
                   Cancel
                 </button>
       <button type="button" className="bg-primary text-on-primary px-space-xl py-2 rounded-lg font-headline-sm text-body-md font-semibold flex items-center gap-space-xs shadow-md hover:bg-primary-container transition-colors disabled:opacity-60" disabled={!form.canSubmit || form.submit.saving} onClick={() => void form.receive()}>
-      <span className="material-symbols-outlined text-[18px]">{form.submit.saving ? 'progress_activity' : 'archive'}</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">{form.submit.saving ? 'progress_activity' : 'archive'}</span>
       <span>{form.submit.saving ? 'Receiving…' : 'Receive'}</span>
       </button>
       </div>

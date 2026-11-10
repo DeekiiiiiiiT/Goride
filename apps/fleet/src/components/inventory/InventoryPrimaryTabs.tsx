@@ -34,7 +34,7 @@ export function InventoryPrimaryTabs({ variant = 'pill' }: { variant?: Variant }
               }
             >
               {active && t.id === 'movements' ? (
-                <span className="material-symbols-outlined text-[15px]">swap_horiz</span>
+                <span aria-hidden="true" className="material-symbols-outlined text-[15px]">swap_horiz</span>
               ) : null}
               {t.label}
               {t.id === 'alerts' && live.openAlertCount > 0 ? (

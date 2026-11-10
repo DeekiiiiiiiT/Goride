@@ -28,9 +28,8 @@ export function useGapRegisterAssetForm(onClose?: () => void) {
 
   const serialItems = useMemo(
     () =>
-      (load.data?.items ?? []).filter((row) =>
-        Boolean(row.is_serial_tracked ?? row.serial_tracked ?? row.track_serial),
-      ),
+      // inv_item.tracking is the real column ('quantity' | 'serial').
+      (load.data?.items ?? []).filter((row) => String(row.tracking ?? '') === 'serial' && !row.archived_at),
     [load.data?.items],
   );
 

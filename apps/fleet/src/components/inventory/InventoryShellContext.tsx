@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -169,6 +170,7 @@ export function InventoryShellProvider({
   const [tabLoading, setTabLoading] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [discrepancyBanner, setDiscrepancyBanner] = useState<string | null>(null);
+  const setupOffered = useRef(false);
 
   const refreshOverview = useCallback(async () => {
     const [ov, stock, kits, assetPayload, alertPayload] = await Promise.all([
@@ -189,8 +191,19 @@ export function InventoryShellProvider({
     } else {
       setDiscrepancyBanner(null);
     }
-    if (asPagedItems(stock).length === 0 && tab !== 'overview') {
-      setModal('first-time-setup');
+    // First-time setup only for a truly empty inventory (no items, no stock, no kit),
+    // and only once per visit — it used to cover every tab whenever stock was empty.
+    if (
+      !setupOffered.current &&
+      tab !== 'overview' &&
+      asPagedItems(stock).length === 0 &&
+      asPagedItems(kits).length === 0
+    ) {
+      const itemsPayload = await inventoryApi.items().catch(() => null);
+      if (itemsPayload && asPagedItems(itemsPayload).length === 0) {
+        setupOffered.current = true;
+        setModal('first-time-setup');
+      }
     }
   }, [tab]);
 

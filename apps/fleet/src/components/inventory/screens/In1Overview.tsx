@@ -49,7 +49,7 @@ export function In1Overview() {
 
       <div className="flex items-center gap-space-sm shrink-0">
       <button type="button" onClick={() => shell.openModal('inventory-settings')} aria-label="Settings" className="h-9 px-space-md flex items-center justify-center rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container transition-colors shadow-sm" title="Settings">
-      <span className="material-symbols-outlined text-[18px]">settings</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">settings</span>
       </button>
       <InventoryOverflowMenu
         items={form.headerMoreMenuItems}
@@ -59,11 +59,11 @@ export function In1Overview() {
       {!shell.readOnly ? (
       <>
       <button type="button" onClick={() => shell.openModal('receive')} className="h-9 px-space-lg flex items-center gap-space-xs rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container transition-colors shadow-sm font-body-sm text-body-sm font-medium">
-      <span className="material-symbols-outlined text-[16px]">move_to_inbox</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">move_to_inbox</span>
       <span>Receive</span>
       </button>
       <button type="button" onClick={() => shell.openIssue()} className="h-9 px-space-lg flex items-center gap-space-xs rounded-lg bg-primary text-on-primary hover:bg-primary/90 transition-all shadow-sm font-body-sm text-body-sm font-medium active:scale-95">
-      <span className="material-symbols-outlined text-[16px]">grid_view</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">grid_view</span>
       <span>Issue</span>
       </button>
       </>
@@ -134,7 +134,7 @@ export function In1Overview() {
           <div className="p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
             <div className="flex items-center gap-space-md min-w-0">
               <div className="relative shrink-0 w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
-                <span className="material-symbols-outlined text-[20px]">directions_car</span>
+                <span aria-hidden="true" className="material-symbols-outlined text-[20px]">directions_car</span>
                 <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-error ring-2 ring-surface-container-lowest"></span>
               </div>
               <div className="flex flex-col min-w-0">
@@ -164,7 +164,7 @@ export function In1Overview() {
           <div className="p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md bg-surface-container-lowest hover:bg-surface-container-low transition-colors" data-testid="overview-driver-report">
             <div className="flex items-center gap-space-md min-w-0">
               <div className="shrink-0 w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
-                <span className="material-symbols-outlined text-[20px]">campaign</span>
+                <span aria-hidden="true" className="material-symbols-outlined text-[20px]">campaign</span>
               </div>
               <div className="flex flex-col min-w-0">
                 <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">{strField(a, 'title', 'Driver report')}</span>
@@ -184,7 +184,7 @@ export function In1Overview() {
           <div className="p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
             <div className="flex items-center gap-space-md min-w-0">
               <div className="shrink-0 w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
-                <span className="material-symbols-outlined text-[20px]">inventory_2</span>
+                <span aria-hidden="true" className="material-symbols-outlined text-[20px]">inventory_2</span>
               </div>
               <div className="flex flex-col min-w-0">
                 <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">
@@ -205,7 +205,7 @@ export function In1Overview() {
           <div className="p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
             <div className="flex items-center gap-space-md min-w-0">
               <div className="shrink-0 w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
-                <span className="material-symbols-outlined text-[20px]">report_problem</span>
+                <span aria-hidden="true" className="material-symbols-outlined text-[20px]">report_problem</span>
               </div>
               <div className="flex flex-col min-w-0">
                 <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">
@@ -227,7 +227,7 @@ export function In1Overview() {
           <div className="p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
             <div className="flex items-center gap-space-md min-w-0">
               <div className="shrink-0 w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
-                <span className="material-symbols-outlined text-[20px]">location_off</span>
+                <span aria-hidden="true" className="material-symbols-outlined text-[20px]">location_off</span>
               </div>
               <div className="flex flex-col min-w-0">
                 <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">
@@ -249,7 +249,7 @@ export function In1Overview() {
           <div className="p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
             <div className="flex items-center gap-space-md min-w-0">
               <div className="shrink-0 w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
-                <span className="material-symbols-outlined text-[20px]">build</span>
+                <span aria-hidden="true" className="material-symbols-outlined text-[20px]">build</span>
               </div>
               <div className="flex flex-col min-w-0">
                 <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">
@@ -312,7 +312,7 @@ export function In1Overview() {
       </div>
       <button type="button" onClick={() => shell.setTab('vehicle-kits')} className="inline-flex items-center gap-space-xs self-start h-8 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high font-body-sm text-body-sm text-on-surface font-semibold mt-space-xs">
       <span>Open Vehicle kits</span>
-      <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">arrow_forward</span>
       </button>
       </div>
 

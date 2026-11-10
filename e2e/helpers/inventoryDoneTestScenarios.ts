@@ -130,13 +130,10 @@ export async function runDoneTest03(page: Page) {
   expect(movId).not.toBe('');
   await seedInventoryFleetSession(page);
   await gotoFleetInventory(page, 'movements');
-  await page.locator(`[data-movement-id="${movId}"]`).click().catch(async () => {
-    await page.getByText(/ISSUE/i).first().click();
-  });
-  await page.getByRole('button', { name: /Reverse/i }).first().click();
-  await page.locator('select').first().selectOption({ index: 1 }).catch(() => {});
-  await page.getByPlaceholder(/bill of lading|E\.g\./i).fill('Done-test 03 reversal reason');
-  await page.getByRole('button', { name: /Confirm reversal/i }).click();
+  // Each movement row has its own Reverse button (completion audit IV-14 Movements rebuild).
+  await page.locator('[data-testid="movement-row"][data-type="issue"]').first().getByRole('button', { name: 'Reverse' }).click();
+  await page.locator('#reverse-reason').fill('Done-test 03 reversal reason');
+  await page.locator('[data-stitch-data-stitch-id="confirm-reversal-btn"]').click();
   await expect.poll(() => movementCount(INV_DONE_ORG, 'REVERSAL'), { timeout: 30_000 }).toBeGreaterThanOrEqual(1);
   await expect.poll(() => balanceQty(INV_DONE_ORG, 'ZZ-TEST-PUMP'), { timeout: 30_000 }).toBe(2);
   expect(movementCount(INV_DONE_ORG, 'ISSUE')).toBeGreaterThanOrEqual(1);
@@ -144,32 +141,20 @@ export async function runDoneTest03(page: Page) {
 }
 
 export async function runDoneTest04(page: Page) {
-  receiveSku(INV_DONE_ORG, 'ZZ-TEST-DASH', 1, 45998.85, 'dt04-rcv');
-  const stockBefore = balanceQty(INV_DONE_ORG, 'ZZ-TEST-DASH');
-  expect(stockBefore).toBe(1);
+  // Write-off approvals were removed in the 5 Nov cut-down: a write-off posts straight away.
+  receiveSku(INV_DONE_ORG, 'ZZ-TEST-PUMP', 2, 6500, 'dt04-rcv');
+  const stockBefore = balanceQty(INV_DONE_ORG, 'ZZ-TEST-PUMP');
+  expect(stockBefore).toBe(2);
   await seedInventoryFleetSession(page);
   await gotoFleetInventory(page, 'stock');
-  await page.getByText(/Dash camera/i).first().click();
-  await page.getByRole('button', { name: /Write off|Remove from stock/i }).first().click();
-  await expect(page.getByRole('heading', { name: /Write off|Custody/i })).toBeVisible({ timeout: 60_000 });
+  await page.getByRole('button', { name: 'Tyre pump', exact: true }).first().click();
+  await page.getByRole('button', { name: 'Move', exact: true }).click();
+  await page.locator('[data-stitch-data-stitch-id="tab-writeoff"]').click();
+  await expect(page.getByRole('heading', { name: /Write off stock/i })).toBeVisible({ timeout: 60_000 });
+  await page.locator('#custody-reason').selectOption('damaged');
   await saveLiveScreenshot(page, 'inventory_asset_management_approval_review_drawer');
-  await page.getByRole('button', { name: /Submit|Confirm write-off/i }).last().click();
-  await expect.poll(() => approvalStatusForItem(INV_DONE_ORG, 'ZZ-TEST-DASH'), { timeout: 30_000 }).toMatch(
-    /pending|awaiting/i,
-  );
-  const approvalId = approvalIdForItem(INV_DONE_ORG, 'ZZ-TEST-DASH');
-  expect(approvalId).not.toBe('');
-  const ownerApprove = await inventoryDoneTestFetch(`/approvals/${approvalId}/approve`, {
-    method: 'POST',
-    email: INV_DONE_OWNER_EMAIL,
-  });
-  expect(ownerApprove.status).toBeGreaterThanOrEqual(400);
-  await seedInventoryFleetSession(page, INV_DONE_APPROVER_EMAIL);
-  await gotoFleetInventory(page, 'alerts');
-  await page.getByRole('button', { name: /Review|Approve/i }).first().click();
-  await page.getByRole('button', { name: /Approve write-off/i }).click();
-  await expect.poll(() => balanceQty(INV_DONE_ORG, 'ZZ-TEST-DASH'), { timeout: 30_000 }).toBe(0);
-  expect(balanceQty(INV_DONE_ORG, 'ZZ-TEST-DASH')).toBe(stockBefore - 1);
+  await page.getByRole('button', { name: /Confirm write-off/i }).click();
+  await expect.poll(() => balanceQty(INV_DONE_ORG, 'ZZ-TEST-PUMP'), { timeout: 30_000 }).toBe(stockBefore - 1);
 }
 
 export async function runDoneTest05(page: Page) {
@@ -224,9 +209,12 @@ export async function runDoneTest07(page: Page) {
   receiveSku(INV_DONE_ORG, 'ZZ-TEST-TRI', 1, 1200, 'dt07-fix');
   await seedInventoryFleetSession(page);
   await gotoFleetInventory(page, 'alerts');
-  await page.getByRole('button', { name: /Update|Fix|Resolve/i }).first().click();
-  await page.getByRole('radio', { name: /stock/i }).click().catch(() => {});
-  await page.getByRole('button', { name: /Mark fixed|Confirm/i }).click();
+  // Driver reports show in Alerts (IV-11); the detail panel opens the report.
+  await page.getByRole('button').filter({ hasText: /driver reports/i }).first().click();
+  await page.getByRole('button', { name: 'Open record' }).last().click();
+  await page.getByRole('radio', { name: /no stock used/i }).click();
+  await page.locator('#driver-message-input').fill('Fixed during done-test 07');
+  await page.getByRole('button', { name: /Send & mark fixed/i }).click();
   await expect.poll(
     () => queryInventoryDb(`SELECT count(*)::text FROM fleet.inv_driver_report WHERE organization_id = '${INV_DONE_ORG}' AND status = 'fixed'`),
     { timeout: 60_000 },
@@ -240,8 +228,9 @@ export async function runDoneTest07(page: Page) {
 export async function runDoneTest08(page: Page) {
   const linesBefore = kitTemplateLineCount(INV_DONE_ORG);
   await seedInventoryFleetSession(page);
-  await page.goto('/vehicle-operations/inventory?tab=vehicle-kits&kitEditor=1');
-  await page.locator('.hidden.md\\:block .inventory-stitch-root').first().waitFor({ state: 'visible', timeout: 120_000 });
+  await gotoFleetInventory(page, 'vehicle-kits');
+  // The kit editor opens from the Edit kit button (completion audit IV-10).
+  await page.getByTestId('edit-kit').click();
   await page.getByRole('button', { name: /Add equipment line/i }).click();
   await page.getByText(/Reflective vest/i).click();
   await saveLiveScreenshot(page, 'inventory_asset_management_kit_template_editor');
@@ -268,10 +257,14 @@ export async function runDoneTest09(page: Page) {
   expect(blocked.status).toBe(409);
   expect(JSON.stringify(blocked.body)).toMatch(/road_clearance_blocked/i);
   receiveSku(INV_DONE_ORG, 'ZZ-TEST-TRI', 2, 1200, 'dt09-stock');
+  receiveSku(INV_DONE_ORG, 'ZZ-TEST-PUMP', 1, 6500, 'dt09-pump');
+  receiveSku(INV_DONE_ORG, 'ZZ-TEST-EXT', 2, 8000, 'dt09-ext');
   await seedInventoryFleetSession(page);
   await gotoFleetInventory(page, 'vehicle-kits');
-  await page.getByRole('button', { name: /^Matrix$/i }).click();
-  await page.locator('[data-stitch-data-stitch-id="matrix-container"] button').filter({ hasText: 'Missing' }).first().click();
+  // Cards view → car 1 → Issue missing ticks every missing item line the store covers (IV-07).
+  await page.getByRole('button', { name: /^Cards$/i }).click();
+  await page.locator('div').filter({ hasText: /^TEST-001/ }).getByRole('button', { name: 'Issue missing' }).first().click();
+  await page.getByRole('button', { name: /^Issue \d+ lines?$/ }).click();
   await expect.poll(() => roadClearanceBlockCount(INV_DONE_ORG, VEH1), { timeout: 60_000 }).toBe(0);
   const cleared = await acceptDeliveryOfferAsDriver(INV_DONE_DT09_OFFER_ID);
   expect(cleared.status).toBe(200);
@@ -282,11 +275,7 @@ export async function runDoneTest10(page: Page) {
   await seedInventoryFleetSession(page);
   await gotoFleetInventory(page);
   await expect(page.getByRole('button', { name: /^Purchasing$/i })).toHaveCount(0);
-  await assertPhaseBlocked('/purchase-orders', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code: 'ZZ-PO-1', vendor_id: null }),
-  });
+  // Purchase orders were removed in the 5 Nov cut-down (route gone); only the assets phase gate remains.
   await assertPhaseBlocked('/assets');
   execInventoryDb(`UPDATE public.platform_feature_flags SET enabled = true WHERE name = 'fleet_inventory_phase4_assets'`);
   await waitPhaseFlag('/assets', true);
@@ -350,13 +339,19 @@ export async function runDoneTest13(page: Page) {
   await waitPhaseFlag('/assets', true);
   await seedInventoryFleetSession(page);
   await gotoFleetInventory(page, 'assets');
-  await page.getByRole('button', { name: /Register asset|Register/i }).first().click();
+  const registerOnce = async () => {
+    await page.getByRole('button', { name: 'Register asset', exact: true }).first().click();
+    await page.locator('#register-asset-form-root select').first().selectOption({ label: 'Dash camera' });
+    await page.getByLabel(/serial/i).fill('ZZ-DT13-SN-001');
+    await page.getByRole('button', { name: 'Register asset', exact: true }).last().click();
+  };
+  await registerOnce();
   await saveLiveScreenshot(page, 'inventory_asset_management_register_asset_dialog');
-  await page.getByLabel(/serial/i).fill('ZZ-DT13-SN-001');
-  await page.getByRole('button', { name: /Register|Save/i }).last().click();
-  await page.getByRole('button', { name: /Register asset|Register/i }).first().click();
-  await page.getByLabel(/serial/i).fill('ZZ-DT13-SN-001');
-  await page.getByRole('button', { name: /Register|Save/i }).last().click();
+  await expect.poll(
+    () => queryInventoryDb(`SELECT count(*)::text FROM fleet.inv_asset WHERE organization_id = '${INV_DONE_ORG}' AND serial_number = 'ZZ-DT13-SN-001'`),
+    { timeout: 30_000 },
+  ).toBe('1');
+  await registerOnce();
   await expect(page.getByText(/already|duplicate|exists/i).first()).toBeVisible({ timeout: 30_000 });
 }
 
@@ -394,9 +389,10 @@ export async function runDoneTest16(page: Page) {
 
 export async function runDoneTest17(page: Page) {
   await seedInventoryFleetSession(page);
-  await page.goto('/vehicle-operations/inventory?tab=overview');
-  await page.getByRole('button', { name: /Finish setup/i }).click();
-  await page.locator('.hidden.md\\:block .inventory-stitch-root').first().waitFor({ state: 'visible', timeout: 120_000 });
+  await gotoFleetInventory(page, 'overview');
+  // Setup guide only auto-opens for an empty inventory now; open it from the More menu.
+  await page.getByTitle('More Options').first().click();
+  await page.getByText('Setup guide', { exact: true }).click();
   await page.getByRole('button', { name: /Add location/i }).click();
   await page.getByRole('button', { name: /Finish setup/i }).click();
   await gotoFleetInventory(page);
@@ -437,8 +433,8 @@ export async function runDoneTest18(page: Page) {
   `);
   await seedInventoryFleetSession(page);
   await gotoFleetInventory(page);
-  await expect(page.getByText(/do not add up/i)).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText(/cannot snooze/i)).toBeVisible({ timeout: 30_000 });
+  // The nightly line names the failure; snoozing is refused by the server (checked below).
+  await expect(page.getByTestId('nightly-check-line')).toContainText(/do not add up/i, { timeout: 60_000 });
   const alertId = latestIntegrityAlertId(INV_DONE_ORG);
   expect(alertId).not.toBe('');
   const snooze = await inventoryDoneTestFetch(`/alerts/${alertId}/snooze`, {

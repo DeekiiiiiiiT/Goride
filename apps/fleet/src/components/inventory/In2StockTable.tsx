@@ -54,9 +54,16 @@ export function In2StockTable({
             className="hover:bg-surface-container-low/50 transition-colors group"
           >
             <td className="py-space-sm px-space-lg">
-              <div className="font-body-md text-body-md font-bold text-on-surface leading-tight">
+              <button
+                type="button"
+                className="font-body-md text-body-md font-bold text-on-surface leading-tight text-left hover:text-primary"
+                onClick={() => {
+                  shell.setSelectedItemId(itemId || null);
+                  shell.openModal('item-drawer');
+                }}
+              >
                 {strField(row, 'name', '—')}
-              </div>
+              </button>
               <div className="font-label-code text-caption text-secondary font-medium tracking-wide">
                 {strField(row, 'sku', strField(row, 'short_code', '—'))}
               </div>
@@ -68,7 +75,7 @@ export function In2StockTable({
               <div
                 className={`inline-flex items-center gap-1 ${onVehicle ? 'text-on-surface font-medium' : 'text-on-surface-variant'}`}
               >
-                <span className="material-symbols-outlined text-[14px] text-secondary">
+                <span aria-hidden="true" className="material-symbols-outlined text-[14px] text-secondary">
                   {onVehicle ? 'directions_car' : 'warehouse'}
                 </span>
                 <span>
@@ -112,7 +119,7 @@ export function In2StockTable({
                   className="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors"
                   title="Item details"
                 >
-                  <span className="material-symbols-outlined text-[17px]">edit</span>
+                  <span aria-hidden="true" className="material-symbols-outlined text-[17px]">edit</span>
                 </button>
                 {!shell.readOnly ? (
                 <button
@@ -122,7 +129,7 @@ export function In2StockTable({
                   title="Issue to cars"
                   aria-label="Issue to cars"
                 >
-                  <span className="material-symbols-outlined text-[17px]">output</span>
+                  <span aria-hidden="true" className="material-symbols-outlined text-[17px]">output</span>
                 </button>
                 ) : null}
               </div>

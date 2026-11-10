@@ -34,7 +34,7 @@ export function GapItemEditor(p: { itemId?: string | null; onClose?: () => void 
         ) : null}
         </div>
         <button aria-label="Close" className="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface flex items-center justify-center transition-colors" id="close-drawer-btn" type="button" onClick={closeDrawer}>
-        <span className="material-symbols-outlined text-[18px]">close</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">close</span>
         </button>
         </div>
 
@@ -42,7 +42,7 @@ export function GapItemEditor(p: { itemId?: string | null; onClose?: () => void 
         <div className="flex items-center justify-between px-space-md py-space-sm bg-surface-container-low rounded-lg gap-space-sm">
         <span className="font-body-sm text-body-sm text-on-surface font-semibold">On hand: {onHand} across {rows.length} place{rows.length === 1 ? '' : 's'} · {formatJmd(value || null)}</span>
         <button type="button" className="px-space-sm py-1 rounded bg-surface-container-lowest hover:bg-surface-container font-caption text-caption text-on-surface font-semibold flex items-center gap-0.5" onClick={() => shell.openMovementsForItem(itemId)}>
-                  View history <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                  View history <span aria-hidden="true" className="material-symbols-outlined text-[14px]">arrow_forward</span>
         </button>
         </div>
         ) : null}
@@ -107,7 +107,7 @@ export function GapItemEditor(p: { itemId?: string | null; onClose?: () => void 
         <footer className="p-space-lg bg-surface-container-lowest flex flex-col gap-space-sm shrink-0 border-t border-surface-container">
         <div className="flex items-center justify-between">
         <button type="button" disabled={form.isNew || form.submit.saving} onClick={() => form.archiveSteps.openConfirm()} className="px-space-md py-2 rounded-lg bg-error-container text-error font-body-sm text-body-sm font-semibold flex items-center gap-1 disabled:opacity-60" id="archive-toggle-btn">
-        <span className="material-symbols-outlined text-[16px]">archive</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[16px]">archive</span>
                   Archive item
                 </button>
         <div className="flex items-center gap-space-sm">
@@ -115,14 +115,14 @@ export function GapItemEditor(p: { itemId?: string | null; onClose?: () => void 
                     Cancel
                   </button>
         <button type="button" disabled={!form.canSave || form.submit.saving} onClick={() => void form.save().catch(() => undefined)} className="px-space-xl py-2 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold shadow-md flex items-center gap-space-xs disabled:opacity-60">
-        <span className="material-symbols-outlined text-[18px]">check</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">check</span>
                     Save item
                   </button>
         </div>
         </div>
         {form.archiveSteps.confirmOpen ? (
         <div className="flex p-space-md rounded-lg bg-error-container/40 items-start gap-space-sm" id="archive-warning-box">
-        <span className="material-symbols-outlined text-[18px] text-error flex-shrink-0 mt-0.5">warning</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px] text-error flex-shrink-0 mt-0.5">warning</span>
         <div className="flex flex-col gap-1">
         <p className="font-body-sm text-body-sm text-on-surface font-semibold">Archive {form.name.trim() || 'this item'}?</p>
         <p className="font-caption text-caption text-on-surface-variant">It stays in history but can&apos;t be received or issued.</p>

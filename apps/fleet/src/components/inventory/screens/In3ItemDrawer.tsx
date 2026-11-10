@@ -18,14 +18,14 @@ export function In3ItemDrawer() {
       <div className="flex items-center justify-between">
       <span className="font-caption text-caption uppercase tracking-wider text-surface-tint font-bold">Item detail</span>
       <button type="button" className="w-8 h-8 rounded flex items-center justify-center hover:bg-surface-container transition-colors text-on-surface-variant hover:text-on-surface" title="Close" aria-label="Close drawer" onClick={() => form.close()}>
-      <span className="material-symbols-outlined text-[20px]">close</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[20px]">close</span>
       </button>
       </div>
       <div className="flex items-center gap-space-sm">
       <h2 className="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight" id="drawerTitle" data-stitch-data-stitch-id="drawerTitle">{form.drawerRow?.name ?? 'Select an item'}</h2>
       {!readOnly && form.itemId ? (
       <button type="button" className="p-1 rounded hover:bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors" title="Edit item" aria-label="Edit item" onClick={() => form.openEditItem()}>
-      <span className="material-symbols-outlined text-[18px]">edit</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">edit</span>
       </button>
       ) : null}
       </div>
@@ -55,7 +55,7 @@ export function In3ItemDrawer() {
 
       <div className="flex flex-col gap-space-sm">
       <div className="flex items-center gap-space-xs">
-      <span className="material-symbols-outlined text-[18px] text-primary">location_on</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px] text-primary">location_on</span>
       <h3 className="font-headline-sm text-body-lg font-bold text-on-surface">Where it is</h3>
       </div>
       <div className="bg-surface-container-low rounded-lg overflow-hidden">
@@ -75,7 +75,7 @@ export function In3ItemDrawer() {
       <tr key={strField(r, 'location_id', '')} className="bg-surface-container-lowest">
       <td className="py-space-sm px-space-md">
       <div className="flex items-center gap-space-sm">
-      <span className="material-symbols-outlined text-[16px] text-on-surface">{strField(r, 'location_code', '').toLowerCase().startsWith('veh') ? 'directions_car' : 'warehouse'}</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-on-surface">{strField(r, 'location_code', '').toLowerCase().startsWith('veh') ? 'directions_car' : 'warehouse'}</span>
       <span className="font-bold text-on-surface">{strField(r, 'location_name', '—')}</span>
       </div>
       </td>
@@ -92,7 +92,7 @@ export function In3ItemDrawer() {
       {form.kitCells.length ? (
       <div className="flex flex-col gap-space-sm">
       <div className="flex items-center gap-space-xs">
-      <span className="material-symbols-outlined text-[18px] text-primary">category</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px] text-primary">category</span>
       <h3 className="font-headline-sm text-body-lg font-bold text-on-surface">In the car kit</h3>
       </div>
       <div className="bg-surface-container-low p-space-md rounded-lg flex flex-col gap-space-xs">
@@ -106,7 +106,7 @@ export function In3ItemDrawer() {
       {!readOnly && c.status !== 'ok' && c.required ? (
       <button type="button" className="px-2 py-1 rounded bg-primary text-on-primary font-caption text-caption font-bold flex items-center gap-0.5" onClick={() => form.shell.openIssue({ vehicleId: c.vehicleId, kitLineIds: [c.kitLineId] })}>
       <span>Issue to {c.plate}</span>
-      <span className="material-symbols-outlined text-[13px]">arrow_forward</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[13px]">arrow_forward</span>
       </button>
       ) : null}
       </div>
@@ -117,7 +117,7 @@ export function In3ItemDrawer() {
 
       <div className="flex flex-col gap-space-sm">
       <div className="flex items-center gap-space-xs">
-      <span className="material-symbols-outlined text-[18px] text-primary">history_toggle_off</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px] text-primary">history_toggle_off</span>
       <h3 className="font-headline-sm text-body-lg font-bold text-on-surface">Recent history</h3>
       </div>
       <div className="flex flex-col gap-space-xs">
@@ -144,7 +144,7 @@ export function In3ItemDrawer() {
       {form.itemId ? (
       <button type="button" className="w-full py-space-sm rounded bg-surface-container-low hover:bg-surface-container text-center font-caption text-caption font-bold text-on-surface transition-colors flex items-center justify-center gap-1" onClick={() => form.shell.openMovementsForItem(form.itemId)}>
       <span>View full history in Movements</span>
-      <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[14px]">arrow_forward</span>
       </button>
       ) : null}
       </div>
@@ -153,15 +153,15 @@ export function In3ItemDrawer() {
       {!readOnly ? (
       <div className="p-space-lg bg-surface-container-lowest shadow-[0_-4px_16px_rgba(0,0,0,0.04)] grid grid-cols-3 gap-space-sm shrink-0">
       <button type="button" className="px-space-md py-2.5 rounded bg-surface-container text-on-surface hover:bg-surface-container-high font-body-sm text-body-sm font-bold flex items-center justify-center gap-space-xs transition-colors" onClick={() => form.openReceive()}>
-      <span className="material-symbols-outlined text-[18px]">move_to_inbox</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">move_to_inbox</span>
       <span>Receive</span>
       </button>
       <button type="button" className="px-space-md py-2.5 rounded bg-surface-container text-on-surface hover:bg-surface-container-high font-body-sm text-body-sm font-bold flex items-center justify-center gap-space-xs transition-colors" onClick={() => form.openTransfer()}>
-      <span className="material-symbols-outlined text-[18px]">sync_alt</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">sync_alt</span>
       <span>Move</span>
       </button>
       <button type="button" className="px-space-md py-2.5 rounded bg-primary text-on-primary hover:bg-primary/90 font-body-sm text-body-sm font-bold flex items-center justify-center gap-space-xs transition-colors shadow-sm" onClick={() => form.openIssue()}>
-      <span className="material-symbols-outlined text-[18px]">send</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">send</span>
       <span>Issue</span>
       </button>
       </div>

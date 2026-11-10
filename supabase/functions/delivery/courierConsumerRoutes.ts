@@ -750,13 +750,14 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     const assignment = await courierAssignmentFields(serviceSb, auth.userId);
 
     if (assignment.courier_fleet_id) {
-      const fleetSb = createClient(
+      // The `fleet` schema isn't exposed over the API, so read the public bridge view
+      // (reading fleet.drivers directly always returned nothing and the gate never ran).
+      const publicSb = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-        { db: { schema: "fleet" } },
       );
-      const { data: driverRow } = await fleetSb
-        .from("drivers")
+      const { data: driverRow } = await publicSb
+        .from("fleet_drivers")
         .select("assigned_vehicle_id")
         .eq("organization_id", assignment.courier_fleet_id)
         .eq("user_id", auth.userId)

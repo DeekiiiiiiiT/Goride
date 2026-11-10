@@ -49,7 +49,7 @@ export function In10Movements() {
       <div className="flex items-center gap-space-md self-start md:self-auto">
       <div className="bg-surface-container-lowest p-space-md rounded-lg shadow-sm flex items-center gap-space-md">
       <div className="w-8 h-8 rounded bg-surface-container flex items-center justify-center text-on-surface">
-      <span className="material-symbols-outlined text-[18px]">receipt_long</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">receipt_long</span>
       </div>
       <div>
       <div className="font-caption text-caption uppercase text-on-surface-variant">Movements</div>
@@ -64,7 +64,7 @@ export function In10Movements() {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-space-md bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
       <div className="flex items-start gap-space-md max-w-4xl">
       <div className="w-10 h-10 rounded bg-surface-container-low flex items-center justify-center text-on-surface mt-1 shrink-0">
-      <span className="material-symbols-outlined text-[20px]">history</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[20px]">history</span>
       </div>
       <div>
       <h2 className="font-headline-sm text-headline-sm text-on-surface font-semibold">Movements — every stock change, kept forever</h2>
@@ -75,12 +75,12 @@ export function In10Movements() {
       </div>
       <div className="flex items-center gap-space-sm shrink-0">
       <button type="button" className="flex items-center gap-space-xs px-space-md py-2 rounded bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium transition-all shadow-sm" data-stitch-data-stitch-id="btn-export-csv" onClick={() => form.exportCsv()}>
-      <span className="material-symbols-outlined text-[16px]">download</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">download</span>
       <span>Export CSV</span>
       </button>
       {!shell.readOnly ? (
       <button type="button" className="flex items-center gap-space-xs px-space-md py-2 rounded bg-primary text-on-primary font-body-sm text-body-sm font-medium transition-all shadow-sm" onClick={() => form.recordMovement()}>
-      <span className="material-symbols-outlined text-[16px]">add_circle</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">add_circle</span>
       <span>Receive stock</span>
       </button>
       ) : null}
@@ -91,7 +91,7 @@ export function In10Movements() {
       <div className="flex flex-wrap items-center gap-space-sm flex-1">
 
       <div className="relative">
-      <span className="material-symbols-outlined absolute left-2.5 top-2 text-[16px] text-on-surface-variant pointer-events-none">filter_list</span>
+      <span aria-hidden="true" className="material-symbols-outlined absolute left-2.5 top-2 text-[16px] text-on-surface-variant pointer-events-none">filter_list</span>
       <select className="bg-surface-container-low pl-8 pr-3 py-1.5 rounded text-on-surface font-body-sm text-body-sm font-medium appearance-none cursor-pointer" value={form.typeFilter} onChange={(e) => form.setTypeFilter(e.target.value)} aria-label="Movement type">
       <option value="">All types</option>
       {TYPES.map((t) => <option key={t} value={t}>{t.toUpperCase()}</option>)}
@@ -102,13 +102,13 @@ export function In10Movements() {
       <span className="inline-flex items-center gap-1 bg-primary-fixed text-on-surface px-3 py-1.5 rounded font-body-sm text-body-sm font-medium">
       Item: {strField(itemFilterName, 'name', 'Item')}
       <button type="button" aria-label="Show all items" className="ml-1 w-5 h-5 rounded bg-surface-container-lowest flex items-center justify-center" onClick={() => shell.setMovementItemId(null)}>
-      <span className="material-symbols-outlined text-[14px]">close</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[14px]">close</span>
       </button>
       </span>
       ) : null}
 
       <div className="flex-1 min-w-[240px] relative">
-      <span className="material-symbols-outlined absolute left-3 top-2 text-[16px] text-on-surface-variant">search</span>
+      <span aria-hidden="true" className="material-symbols-outlined absolute left-3 top-2 text-[16px] text-on-surface-variant">search</span>
       <input className="w-full bg-surface-container-low pl-9 pr-3 py-1.5 rounded font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest transition-all placeholder:text-on-surface-variant/60" data-stitch-data-stitch-id="movement-search" placeholder="Search item, reference or place..." type="text" value={form.searchQuery} onChange={(e) => form.setSearchQuery(e.target.value)}/>
       </div>
       </div>
@@ -158,7 +158,7 @@ export function In10Movements() {
       </td>
       <td className="py-space-md px-space-md whitespace-nowrap">
       <span className="inline-flex items-center gap-1 font-label-code text-[11px] font-bold px-2 py-0.5 rounded bg-surface-container-high text-on-surface">
-      <span className="material-symbols-outlined text-[12px]">{movementTypeIcon(type)}</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[12px]">{movementTypeIcon(type)}</span>
                         {type.toUpperCase()}
                       </span>
       </td>
@@ -170,7 +170,7 @@ export function In10Movements() {
       <td className="py-space-md px-space-lg whitespace-nowrap">
       <div className="flex items-center gap-space-xs font-label-code text-caption">
       <span className="text-on-surface">{strField(m, 'from_label', '—')}</span>
-      <span className="material-symbols-outlined text-[14px] text-on-surface-variant">arrow_forward</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[14px] text-on-surface-variant">arrow_forward</span>
       <span className="text-on-surface font-semibold">{strField(m, 'to_label', '—')}</span>
       </div>
       </td>
@@ -201,7 +201,7 @@ export function In10Movements() {
       <div className="flex items-start justify-between pb-space-sm">
       <div className="flex items-center gap-space-sm">
       <div className="w-7 h-7 rounded bg-error-container text-on-error-container flex items-center justify-center">
-      <span className="material-symbols-outlined text-[16px]">undo</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">undo</span>
       </div>
       <div>
       <h3 className="font-headline-sm text-[16px] leading-5 text-on-surface font-bold">Reverse movement {selectedRef}?</h3>
@@ -209,7 +209,7 @@ export function In10Movements() {
       </div>
       </div>
       <button type="button" aria-label="Close" className="text-on-surface-variant hover:text-on-surface p-1 rounded hover:bg-surface-container" data-stitch-data-stitch-id="close-reversal-modal" onClick={closeReversal}>
-      <span className="material-symbols-outlined text-[18px]">close</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">close</span>
       </button>
       </div>
       <div className="py-space-md flex flex-col gap-space-md font-body-sm text-body-sm">
@@ -230,7 +230,7 @@ export function In10Movements() {
                   Cancel
                 </button>
       <button type="button" className="px-space-md py-1.5 rounded bg-primary text-on-primary font-body-sm text-body-sm font-semibold transition-all flex items-center gap-space-xs shadow-sm disabled:opacity-50" data-stitch-data-stitch-id="confirm-reversal-btn" disabled={!form.reverseReason.trim() || form.submit.saving} onClick={() => void form.confirmReversal().catch(() => undefined)}>
-      <span className="material-symbols-outlined text-[16px]">undo</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">undo</span>
                   Reverse
                 </button>
       </div>

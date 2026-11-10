@@ -29,7 +29,7 @@ export function GapSnoozeSettings(p: { alertId?: string | null; onClose?: () => 
         <div className="flex items-center justify-between">
         <div className="flex items-center gap-space-xs font-body-sm text-body-sm text-on-surface-variant">
         <span>Inventory settings</span>
-        <span className="material-symbols-outlined text-[14px]">chevron_right</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[14px]">chevron_right</span>
         <span className="text-on-surface font-semibold">Alerts & Escalation</span>
         </div>
         </div>
@@ -44,7 +44,7 @@ export function GapSnoozeSettings(p: { alertId?: string | null; onClose?: () => 
         <span className="font-label-code text-caption text-on-error bg-error-container/40 px-1.5 py-0.5 rounded font-bold">CRITICAL DEFICIT</span>
         </div>
         <div className="flex items-start gap-space-sm pt-space-xs">
-        <span className="material-symbols-outlined text-[20px] text-error">warning</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[20px] text-error">warning</span>
         <div className="flex-1 min-w-0">
         <p className="font-body-md text-body-md text-on-surface font-semibold truncate">Low stock: Tyre pump at Main store</p>
         <p className="font-label-code text-body-sm text-on-surface-variant">1 on hand · Reorder threshold: 2 units</p>
@@ -56,11 +56,11 @@ export function GapSnoozeSettings(p: { alertId?: string | null; onClose?: () => 
 
         <div className="bg-surface-container-low px-space-lg py-space-md flex items-center justify-between">
         <div className="flex items-center gap-space-xs">
-        <span className="material-symbols-outlined text-[18px] text-primary">snooze</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px] text-primary">snooze</span>
         <span className="font-headline-sm text-[15px] text-on-surface font-semibold">Snooze alert · Tyre pump</span>
         </div>
         <button type="button" aria-label="Close snooze popover" className="w-6 h-6 rounded flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-colors" onClick={() => p.onClose?.()}>
-        <span className="material-symbols-outlined text-[16px]">close</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[16px]">close</span>
         </button>
         </div>
         <div className="p-space-lg flex flex-col gap-space-lg">
@@ -98,7 +98,7 @@ export function GapSnoozeSettings(p: { alertId?: string | null; onClose?: () => 
         <input checked={popover.duration === 'custom'} onChange={() => popover.setDuration('custom')} className="accent-primary w-4 h-4 cursor-pointer" name="snooze_duration" type="radio" value="custom"/>
         <span className="font-body-md text-body-md text-on-surface font-medium">Until a date…</span>
         </div>
-        <span className="material-symbols-outlined text-[16px] text-on-surface-variant">calendar_today</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-on-surface-variant">calendar_today</span>
         </label>
         </div>
         </div>
@@ -125,7 +125,7 @@ export function GapSnoozeSettings(p: { alertId?: string | null; onClose?: () => 
         </div>
 
         <div className="bg-surface-container-low rounded-lg p-space-md flex gap-space-sm">
-        <span className="material-symbols-outlined text-[18px] text-primary">info</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px] text-primary">info</span>
         <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
                     Snoozed notifications continue to log metric readings. When the interval lapses, alerts re-trigger directly to the assigned officer's mobile terminal.
                   </p>
@@ -142,7 +142,7 @@ export function GapSnoozeSettings(p: { alertId?: string | null; onClose?: () => 
         <div className="flex items-center gap-space-sm shrink-0">
         <span className="font-label-code text-caption text-on-surface-variant">{lastSaved ? `Last saved ${new Date(lastSaved).toLocaleString('en-JM', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}` : 'Not saved yet'}</span>
         <button type="button" disabled={!form.canSave || form.submit.saving} onClick={() => void form.save().catch(() => undefined)} className="px-space-lg py-2 rounded-lg bg-primary text-on-primary font-body-md text-body-md font-semibold shadow hover:opacity-90 active:scale-95 transition-all flex items-center gap-space-xs disabled:opacity-60">
-        <span className="material-symbols-outlined text-[16px]">check</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[16px]">check</span>
         <span>{form.submit.saving ? 'Saving…' : 'Save alert rules'}</span>
         </button>
         </div>
@@ -171,7 +171,7 @@ export function GapSnoozeSettings(p: { alertId?: string | null; onClose?: () => 
         <div className="p-space-md bg-surface-container-low flex flex-col sm:flex-row items-center justify-between gap-space-md">
         <div className="flex items-center gap-space-sm w-full sm:w-auto">
         <div className="flex items-center gap-space-xs bg-surface-container-lowest px-space-md py-1.5 rounded-lg shadow-sm text-on-surface-variant w-full sm:w-64">
-        <span className="material-symbols-outlined text-[16px]">filter_list</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[16px]">filter_list</span>
         <input className="bg-transparent text-on-surface font-body-sm text-body-sm focus:outline-none w-full placeholder:text-on-surface-variant/60" placeholder="Filter alert rules..." type="text" value="" readOnly aria-label="Filter alert rules"/>
         </div>
         </div>
@@ -229,7 +229,7 @@ export function GapSnoozeSettings(p: { alertId?: string | null; onClose?: () => 
 
         <div className="p-space-md bg-surface-container-low flex flex-col sm:flex-row items-center justify-between gap-space-sm font-caption text-caption text-on-surface-variant">
         <div className="flex items-center gap-space-xs">
-        <span className="material-symbols-outlined text-[15px] text-primary">verified_user</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[15px] text-primary">verified_user</span>
         <span></span>
         </div>
         <div className="flex items-center gap-space-md">

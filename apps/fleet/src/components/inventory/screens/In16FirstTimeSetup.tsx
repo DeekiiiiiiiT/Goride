@@ -4,7 +4,7 @@ import { STARTER_ITEMS, useIn16SetupForm } from './hooks/useIn16SetupForm';
 function StepDot({ n, done }: { n: number; done: boolean }) {
   return (
     <div className={`w-8 h-8 rounded-full flex items-center justify-center font-label-code text-caption font-bold shadow-sm z-10 ${done ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface'}`}>
-      {done ? <span className="material-symbols-outlined text-[16px]">check</span> : n}
+      {done ? <span aria-hidden="true" className="material-symbols-outlined text-[16px]">check</span> : n}
     </div>
   );
 }
@@ -36,7 +36,7 @@ export function In16FirstTimeSetup() {
       <div className="bg-surface-container-low px-space-xl py-space-lg flex items-center justify-between">
       <div className="flex items-center gap-space-md">
       <div className="w-10 h-10 rounded-lg bg-surface-container-lowest shadow-sm flex items-center justify-center text-primary">
-      <span className="material-symbols-outlined text-[22px]">inventory_2</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[22px]">inventory_2</span>
       </div>
       <h2 className="font-headline-sm text-headline-sm text-on-surface leading-tight">Set up inventory</h2>
       </div>
@@ -66,14 +66,14 @@ export function In16FirstTimeSetup() {
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-space-sm">
       <input className="flex-1 bg-surface-container-lowest text-on-surface font-body-md text-body-md px-space-md py-2 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-primary" data-stitch-data-stitch-id="storeroom-input" placeholder="e.g. Main store" type="text" value={form.locationName} onChange={(e) => form.setLocationName(e.target.value)} aria-label="Store name"/>
       <button type="button" className="bg-primary text-on-primary font-body-md text-body-md font-medium px-space-lg py-2 rounded active:scale-95 flex items-center justify-center gap-space-xs shadow-sm disabled:opacity-60" data-stitch-data-stitch-id="add-location-btn" disabled={form.submit.saving} onClick={() => void form.addLocation().catch(() => undefined)}>
-      <span className="material-symbols-outlined text-[16px]">add_location_alt</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">add_location_alt</span>
       <span>Add location</span>
       </button>
       </div>
       {form.stores.map((l) => (
       <div key={String(l.id)} className="flex items-center justify-between bg-surface-container-lowest px-space-md py-space-sm rounded shadow-sm">
       <div className="flex items-center gap-space-sm">
-      <span className="material-symbols-outlined text-[16px] text-primary">check</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-primary">check</span>
       <span className="font-body-md text-body-md font-semibold text-on-surface">{String(l.name ?? l.code)}</span>
       <span className="font-label-code text-caption text-secondary">{String(l.code ?? '')}</span>
       </div>
@@ -104,7 +104,7 @@ export function In16FirstTimeSetup() {
       </div>
       <div className="pt-space-md mt-space-sm flex items-center justify-end">
       <button type="button" className="bg-primary text-on-primary font-body-sm text-body-sm font-semibold px-space-md py-1.5 rounded flex items-center gap-space-xs shadow-sm" data-stitch-data-stitch-id="load-starter-btn" onClick={() => form.loadStarter()}>
-      <span className="material-symbols-outlined text-[16px]">file_download_done</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">file_download_done</span>
       <span>Load starter list ({STARTER_ITEMS.length} items)</span>
       </button>
       </div>
@@ -116,7 +116,7 @@ export function In16FirstTimeSetup() {
       </div>
       <div className="pt-space-md mt-space-sm flex items-center justify-end">
       <button type="button" onClick={() => form.shell.openGap('item-editor', { itemId: null })} className="bg-surface-container-lowest hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium px-space-md py-1.5 rounded shadow-sm flex items-center gap-space-xs">
-      <span className="material-symbols-outlined text-[16px]">edit_document</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">edit_document</span>
       <span>Add an item</span>
       </button>
       </div>
@@ -137,7 +137,7 @@ export function In16FirstTimeSetup() {
       <div className="bg-surface-container-low rounded-lg p-space-md flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm shadow-sm">
       <div className="flex items-center gap-space-md">
       <div className="w-10 h-10 rounded-lg bg-surface-container-lowest flex items-center justify-center text-primary shadow-sm">
-      <span className="material-symbols-outlined text-[20px]">directions_car</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[20px]">directions_car</span>
       </div>
       <div>
       <span className="font-headline-sm text-[16px] text-on-surface font-semibold">{kitName ?? 'No kit yet'}</span>
@@ -155,7 +155,7 @@ export function In16FirstTimeSetup() {
       <div className="bg-surface-container-low px-space-xl py-space-lg flex items-center justify-end">
       <button type="button" className="w-full sm:w-auto bg-primary text-on-primary font-headline-sm text-body-md font-semibold px-8 py-3 rounded-lg shadow-md active:scale-95 flex items-center justify-center gap-space-sm" data-stitch-data-stitch-id="finish-setup-btn" onClick={() => form.finishSetup()}>
       <span>Finish setup</span>
-      <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">arrow_forward</span>
       </button>
       </div>
       </section>
@@ -167,7 +167,7 @@ export function In16FirstTimeSetup() {
       </div>
       <div className="flex flex-col items-stretch sm:items-end gap-space-sm w-full md:w-auto flex-shrink-0">
       <button type="button" className="bg-primary text-on-primary font-body-md text-body-md font-semibold px-space-xl py-2.5 rounded-lg shadow-sm active:scale-95 flex items-center justify-center gap-space-xs" onClick={() => form.shell.openGap('opening-balances')}>
-      <span className="material-symbols-outlined text-[18px]">fact_check</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">fact_check</span>
       <span>Enter opening balances</span>
       </button>
       <button type="button" onClick={() => form.finishSetup()} className="px-space-md py-1.5 rounded bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-body-sm">

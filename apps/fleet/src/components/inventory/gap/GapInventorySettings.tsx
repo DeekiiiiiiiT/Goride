@@ -24,12 +24,12 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md mb-space-xl">
         <div className="flex flex-col gap-space-xs">
         <button type="button" onClick={() => p.onClose?.()} className="self-start inline-flex items-center gap-space-xs px-space-sm py-1 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm">
-        <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[16px]">arrow_back</span>
         <span>Back</span>
         </button>
         <div className="flex items-center gap-space-md mt-space-xs">
         <div className="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-primary shadow-sm">
-        <span className="material-symbols-outlined text-[22px]">settings</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[22px]">settings</span>
         </div>
         <div>
         <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-semibold">Inventory settings</h1>
@@ -44,16 +44,16 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         <aside className="lg:col-span-3 flex flex-col gap-space-sm">
         <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-1">
         <button className={navBtn} type="button" onClick={() => shell.openGap('locations-bins')}>
-        <span className="flex items-center gap-space-sm"><span className="material-symbols-outlined text-[18px]">warehouse</span>Locations</span>
-        <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+        <span className="flex items-center gap-space-sm"><span aria-hidden="true" className="material-symbols-outlined text-[18px]">warehouse</span>Locations</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[16px]">chevron_right</span>
         </button>
         <button className={navBtn} type="button" onClick={() => shell.openGap('snooze-settings')}>
-        <span className="flex items-center gap-space-sm"><span className="material-symbols-outlined text-[18px]">notifications_active</span>Alerts &amp; Escalation</span>
-        <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+        <span className="flex items-center gap-space-sm"><span aria-hidden="true" className="material-symbols-outlined text-[18px]">notifications_active</span>Alerts &amp; Escalation</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[16px]">chevron_right</span>
         </button>
         <button className={navBtn} type="button" onClick={() => shell.openGap('opening-balances')}>
-        <span className="flex items-center gap-space-sm"><span className="material-symbols-outlined text-[18px]">account_balance_wallet</span>Opening Balances</span>
-        <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+        <span className="flex items-center gap-space-sm"><span aria-hidden="true" className="material-symbols-outlined text-[18px]">account_balance_wallet</span>Opening Balances</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[16px]">chevron_right</span>
         </button>
         </div>
         </aside>
@@ -79,7 +79,7 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         </span>
         {!readOnly ? (
         <button type="button" disabled={!form.canSaveGeneral} className="px-space-lg py-2 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-medium shadow-sm flex items-center gap-space-xs disabled:opacity-60" onClick={() => void form.saveGeneral().catch(() => undefined)}>
-        <span className="material-symbols-outlined text-[16px]">{form.submit.saving ? 'progress_activity' : 'save'}</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[16px]">{form.submit.saving ? 'progress_activity' : 'save'}</span>
         <span>{form.submit.saving ? 'Saving…' : 'Save'}</span>
         </button>
         ) : null}
@@ -93,7 +93,7 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         <div className="flex items-center gap-space-sm">
         <input className="px-space-md py-1.5 rounded-lg bg-surface-container-low text-on-surface font-body-sm text-body-sm" placeholder="New category name" value={form.newCategoryName} onChange={(e) => form.setNewCategoryName(e.target.value)} aria-label="New category name" />
         <button className="px-space-md py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium flex items-center gap-space-xs disabled:opacity-60" type="button" disabled={!form.newCategoryName.trim() || form.submit.saving} onClick={() => void form.createCategory().catch(() => undefined)}>
-        <span className="material-symbols-outlined text-[16px]">add</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[16px]">add</span>
         <span>Add category</span>
         </button>
         </div>
@@ -111,10 +111,10 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         {!readOnly ? (
         <div className="flex items-center gap-space-sm">
         <button className="w-8 h-8 rounded bg-surface-container-low hover:bg-surface-container flex items-center justify-center" title="Move up" aria-label="Move up" type="button" onClick={() => void form.moveCategory(id, 'up').catch(() => undefined)}>
-        <span className="material-symbols-outlined text-[18px]">arrow_upward</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">arrow_upward</span>
         </button>
         <button className="w-8 h-8 rounded bg-surface-container-low hover:bg-surface-container flex items-center justify-center" title="Move down" aria-label="Move down" type="button" onClick={() => void form.moveCategory(id, 'down').catch(() => undefined)}>
-        <span className="material-symbols-outlined text-[18px]">arrow_downward</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">arrow_downward</span>
         </button>
         <button className="px-space-sm py-1 rounded bg-error-container text-error font-body-sm text-body-sm font-semibold" type="button" onClick={() => void form.toggleCategory(id, active).catch(() => undefined)}>
         {active ? 'Archive' : 'Restore'}

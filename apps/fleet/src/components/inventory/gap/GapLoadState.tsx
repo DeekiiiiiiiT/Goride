@@ -14,7 +14,7 @@ export function GapLoadState({
   if (loading) {
     return (
       <div className="flex min-h-[120px] items-center justify-center gap-space-sm text-on-surface-variant">
-        <span className="material-symbols-outlined animate-spin text-[22px]">progress_activity</span>
+        <span aria-hidden="true" className="material-symbols-outlined animate-spin text-[22px]">progress_activity</span>
         <span className="font-body-sm text-body-sm">Loading…</span>
       </div>
     );

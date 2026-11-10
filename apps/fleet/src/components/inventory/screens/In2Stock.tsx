@@ -45,7 +45,7 @@ export function In2Stock() {
       <div className="flex items-center gap-space-sm w-full sm:w-auto">
 
       <div className="relative min-w-[160px]">
-      <span className="material-symbols-outlined absolute left-3 top-2.5 text-[16px] text-secondary pointer-events-none">location_on</span>
+      <span aria-hidden="true" className="material-symbols-outlined absolute left-3 top-2.5 text-[16px] text-secondary pointer-events-none">location_on</span>
       <select
         className="w-full h-9 pl-9 pr-8 bg-surface-container-lowest text-on-surface rounded font-body-sm text-body-sm font-medium shadow-sm appearance-none cursor-pointer focus:outline-none"
         value={form.locationFilter}
@@ -56,13 +56,13 @@ export function In2Stock() {
         <option key={loc.id} value={loc.id}>{loc.label}</option>
       ))}
       </select>
-      <span className="material-symbols-outlined absolute right-2.5 top-2.5 text-[16px] text-secondary pointer-events-none">arrow_drop_down</span>
+      <span aria-hidden="true" className="material-symbols-outlined absolute right-2.5 top-2.5 text-[16px] text-secondary pointer-events-none">arrow_drop_down</span>
       </div>
 
       {!shell.readOnly ? (
       <div className="relative group">
       <button type="button" onClick={() => shell.openModal('receive')} className="h-9 px-space-md bg-primary text-on-primary rounded font-body-sm text-body-sm font-semibold flex items-center gap-space-xs hover:bg-surface-tint transition-colors shadow-sm">
-      <span className="material-symbols-outlined text-[18px]">add</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">add</span>
       <span>Receive</span>
       </button>
       </div>
@@ -73,7 +73,7 @@ export function In2Stock() {
       <div className="bg-surface-container-lowest rounded-lg p-space-md shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center gap-space-md">
 
       <div className="relative flex-1">
-      <span className="material-symbols-outlined absolute left-3 top-2.5 text-[18px] text-secondary">search</span>
+      <span aria-hidden="true" className="material-symbols-outlined absolute left-3 top-2.5 text-[18px] text-secondary">search</span>
       <input className="w-full h-9 pl-9 pr-space-md bg-surface-container-low text-on-surface rounded font-body-sm text-body-sm placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest transition-all" placeholder="Search name, SKU or serial..." type="text" value={form.searchQuery} onChange={(e) => form.setSearchQuery(e.target.value)}/>
       </div>
 
@@ -86,7 +86,7 @@ export function In2Stock() {
       <option value="low">Status: Low</option>
       <option value="out">Status: Out</option>
       </select>
-      <span className="material-symbols-outlined absolute right-2.5 top-2.5 text-[16px] text-secondary pointer-events-none">arrow_drop_down</span>
+      <span aria-hidden="true" className="material-symbols-outlined absolute right-2.5 top-2.5 text-[16px] text-secondary pointer-events-none">arrow_drop_down</span>
       </div>
 
       <div className="relative min-w-[210px] flex-1 sm:flex-initial">
@@ -95,10 +95,10 @@ export function In2Stock() {
       <option value="quantity">Type: Quantity Batch</option>
       <option value="serial">Type: Tracked by Serial</option>
       </select>
-      <span className="material-symbols-outlined absolute right-2.5 top-2.5 text-[16px] text-secondary pointer-events-none">arrow_drop_down</span>
+      <span aria-hidden="true" className="material-symbols-outlined absolute right-2.5 top-2.5 text-[16px] text-secondary pointer-events-none">arrow_drop_down</span>
       </div>
       <button type="button" className="h-9 px-space-md bg-surface-container-high hover:bg-surface-container-highest text-on-surface rounded font-body-sm text-body-sm font-medium flex items-center gap-1 transition-colors" onClick={() => form.resetFilters()}>
-      <span className="material-symbols-outlined text-[16px]">filter_alt_off</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">filter_alt_off</span>
       <span>Reset</span>
       </button>
       </div>
@@ -134,11 +134,11 @@ export function In2Stock() {
       <div className="h-4 w-px bg-outline-variant/40"></div>
       <div className="flex items-center gap-1">
       <button type="button" className="h-7 w-7 rounded flex items-center justify-center text-outline/50 bg-surface-container-lowest disabled:opacity-50" disabled={form.page <= 0} onClick={() => form.setPage(Math.max(0, form.page - 1))}>
-      <span className="material-symbols-outlined text-[16px]">chevron_left</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">chevron_left</span>
       </button>
       <span className="px-2 font-label-code text-caption text-on-surface font-bold">Page {form.page + 1} of {form.pageCount}</span>
       <button type="button" className="h-7 w-7 rounded flex items-center justify-center text-outline/50 bg-surface-container-lowest disabled:opacity-50" disabled={form.page >= form.pageCount - 1} onClick={() => form.setPage(Math.min(form.pageCount - 1, form.page + 1))}>
-      <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">chevron_right</span>
       </button>
       </div>
       </div>
@@ -158,7 +158,7 @@ export function In2Stock() {
       <div className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">{live.hubName}</div>
       </div>
       <div className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-primary">
-      <span className="material-symbols-outlined text-[20px]">warehouse</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[20px]">warehouse</span>
       </div>
       </div>
 
@@ -169,7 +169,7 @@ export function In2Stock() {
       <div className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">{live.lowStockCount ? live.lowStockLabel : 'The store covers what the cars need'}</div>
       </div>
       <div className="w-10 h-10 rounded-full bg-error-container flex items-center justify-center text-on-error-container">
-      <span className="material-symbols-outlined text-[20px]">notification_important</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[20px]">notification_important</span>
       </div>
       </div>
 
@@ -179,7 +179,7 @@ export function In2Stock() {
       <div className={`font-body-sm text-body-sm font-semibold mt-0.5 ${nightlyBad ? 'text-error' : 'text-on-surface'}`}>{nightly.text}</div>
       </div>
       <div className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-primary">
-      <span className="material-symbols-outlined text-[20px]">verified</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[20px]">verified</span>
       </div>
       </div>
       </div>

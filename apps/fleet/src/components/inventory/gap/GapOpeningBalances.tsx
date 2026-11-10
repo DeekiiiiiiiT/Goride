@@ -23,7 +23,7 @@ export function GapOpeningBalances(p: { onClose?: () => void }) {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-space-lg">
         <div className="flex flex-col gap-space-xs">
         <button type="button" onClick={() => p.onClose?.()} className="self-start inline-flex items-center gap-space-xs px-space-sm py-1 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm">
-        <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[16px]">arrow_back</span>
         <span>Inventory</span>
         </button>
         <h1 className="font-headline-xl text-headline-xl text-on-surface tracking-tight pt-space-xs">Opening balances</h1>
@@ -32,7 +32,7 @@ export function GapOpeningBalances(p: { onClose?: () => void }) {
         <div className="flex items-center bg-surface-container-low p-1 rounded-lg gap-1 self-start md:self-auto flex-wrap">
         {form.locations.map((loc) => (
         <button key={String(loc.id)} type="button" className={`flex items-center gap-space-xs px-space-md py-1.5 rounded font-body-sm text-body-sm transition-all ${form.locationId === String(loc.id) ? 'bg-primary text-on-primary shadow-sm' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high'}`} onClick={() => form.setLocationId(String(loc.id))}>
-        <span className="material-symbols-outlined text-[16px]">{String(loc.kind) === 'vehicle' ? 'directions_car' : 'warehouse'}</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[16px]">{String(loc.kind) === 'vehicle' ? 'directions_car' : 'warehouse'}</span>
         <span className="font-medium">{String(loc.name ?? '—')}</span>
         </button>
         ))}
@@ -41,7 +41,7 @@ export function GapOpeningBalances(p: { onClose?: () => void }) {
 
         {form.locationId && form.existingRows.length > 0 ? (
         <div className="w-full bg-tertiary-fixed rounded-xl p-space-lg flex items-start gap-space-md shadow-sm">
-        <span className="material-symbols-outlined text-on-tertiary-container text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>info</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-on-tertiary-container text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>info</span>
         <div className="flex flex-col">
         <span className="font-body-md text-body-md text-on-tertiary-fixed font-semibold">{placeName} already has stock recorded</span>
         <p className="font-body-sm text-body-sm text-on-tertiary-fixed-variant">
@@ -95,7 +95,7 @@ export function GapOpeningBalances(p: { onClose?: () => void }) {
         <td className="py-space-md px-space-md text-center">
         {!reviewing ? (
         <button type="button" className="w-8 h-8 rounded bg-error-container text-error flex items-center justify-center" title="Remove line" aria-label={`Remove ${l.name}`} onClick={() => form.removeLine(l.key)}>
-        <span className="material-symbols-outlined text-[18px]">close</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">close</span>
         </button>
         ) : null}
         </td>
@@ -114,7 +114,7 @@ export function GapOpeningBalances(p: { onClose?: () => void }) {
         ))}
         </select>
         <button className="px-space-md py-2 bg-primary text-on-primary font-body-sm text-body-sm font-medium rounded shadow-sm flex items-center gap-space-xs shrink-0 disabled:opacity-60" type="button" disabled={!form.pickItemId} onClick={() => form.addLine()}>
-        <span className="material-symbols-outlined text-[18px]">add</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">add</span>
         <span>Add line</span>
         </button>
         </div>
@@ -146,7 +146,7 @@ export function GapOpeningBalances(p: { onClose?: () => void }) {
         </button>
         {reviewing ? (
         <button type="button" disabled={!form.canReview || form.submit.saving} onClick={() => void form.post().catch(() => undefined)} className="w-2/3 py-2.5 px-space-md bg-primary text-on-primary font-body-md text-body-md font-semibold rounded shadow-md flex items-center justify-center gap-space-xs disabled:opacity-60">
-        <span className="material-symbols-outlined text-[18px]">verified</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">verified</span>
         <span>{form.submit.saving ? 'Saving…' : 'Save opening balance'}</span>
         </button>
         ) : (

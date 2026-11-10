@@ -41,7 +41,7 @@ export function In14CustodyDialog() {
       <div className="flex items-start justify-between">
       <div className="flex items-center gap-space-sm">
       <div className="w-7 h-7 rounded bg-primary text-on-primary flex items-center justify-center">
-      <span className="material-symbols-outlined text-[16px]">inventory_2</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">inventory_2</span>
       </div>
       <div>
       <span className="font-label-code text-caption uppercase tracking-wider text-secondary font-semibold">Stock change</span>
@@ -49,7 +49,7 @@ export function In14CustodyDialog() {
       </div>
       </div>
       <button type="button" onClick={() => shell.closeModal()} aria-label="Close dialog" className="w-8 h-8 rounded-lg flex items-center justify-center text-secondary hover:bg-surface-variant transition-colors">
-      <span className="material-symbols-outlined text-[20px]">close</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[20px]">close</span>
       </button>
       </div>
       <p className="font-body-sm text-body-sm text-secondary -mt-1" data-stitch-data-stitch-id="modal-subtitle">{mode.sub}</p>
@@ -57,7 +57,7 @@ export function In14CustodyDialog() {
       <div className="grid grid-cols-3 p-1 rounded-lg bg-surface-variant/70 gap-1 font-body-sm text-body-sm">
       {MODES.map((m) => (
       <button key={m.id} type="button" className={`py-1.5 px-space-sm rounded flex items-center justify-center gap-space-xs transition-all ${form.mode === m.id ? 'font-semibold text-on-surface bg-surface-container-lowest shadow-sm' : 'font-medium text-secondary hover:text-on-surface'}`} data-stitch-data-stitch-id={`tab-${m.id}`} onClick={() => form.setMode(m.id)}>
-      <span className="material-symbols-outlined text-[16px]">{m.icon}</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">{m.icon}</span>
       <span>{m.label}</span>
       </button>
       ))}
@@ -101,7 +101,7 @@ export function In14CustodyDialog() {
       <div className="col-span-6 flex flex-col gap-1" data-stitch-data-stitch-id="field-to-container">
       <label className="font-caption text-caption uppercase tracking-wider text-secondary font-semibold">To</label>
       <div className="h-9 px-space-md bg-surface-container text-secondary font-body-sm text-body-sm rounded flex items-center gap-space-sm" data-stitch-data-stitch-id="field-to-display">
-      <span className="material-symbols-outlined text-[16px] text-error">cancel</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-error">cancel</span>
       <span className="truncate italic text-[12px]">Removed from stock for good</span>
       </div>
       </div>
@@ -140,7 +140,7 @@ export function In14CustodyDialog() {
       {form.itemId && qty > 0 ? (
       <div className="rounded-lg bg-surface-container-low p-space-md flex flex-col gap-space-xs">
       <div className="flex items-center gap-space-xs text-secondary font-caption text-caption uppercase tracking-wider font-semibold">
-      <span className="material-symbols-outlined text-[14px]">fact_check</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[14px]">fact_check</span>
       <span>What will change</span>
       </div>
       <div className="flex flex-col gap-1.5 font-label-code text-caption" data-stitch-data-stitch-id="impact-preview-content">
@@ -169,7 +169,7 @@ export function In14CustodyDialog() {
       <div className="flex items-center gap-space-sm">
       <span className="font-caption text-caption text-secondary">Recorded as {userName}</span>
       <button type="button" className="h-9 px-space-lg bg-primary text-on-primary rounded font-body-sm text-body-sm font-semibold flex items-center gap-space-xs hover:bg-surface-tint active:scale-95 transition-all shadow-sm disabled:opacity-60" data-stitch-data-stitch-id="primary-action-btn" title={form.submitDisabledReason || undefined} disabled={!form.canSubmit || form.submit.saving} onClick={() => void form.submitCustody().catch(() => undefined)}>
-      <span className="material-symbols-outlined text-[18px]">{form.submit.saving ? 'progress_activity' : 'check'}</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">{form.submit.saving ? 'progress_activity' : 'check'}</span>
       <span data-stitch-data-stitch-id="primary-action-label">{form.submit.saving ? 'Saving…' : form.mode === 'writeoff' ? 'Confirm write-off' : 'Save'}</span>
       </button>
       </div>

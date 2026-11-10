@@ -26,7 +26,7 @@ export function In8Assets() {
 
       <div className="flex items-center flex-wrap gap-space-xs shrink-0">
       <button type="button" className="w-9 h-9 rounded flex items-center justify-center bg-surface-container-lowest text-on-surface hover:bg-surface-container-high transition-colors shadow-sm" title="Settings" onClick={() => shell.openModal('inventory-settings')}>
-      <span className="material-symbols-outlined text-lg">settings</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-lg">settings</span>
       </button>
       <InventoryOverflowMenu
         items={[{ label: 'Export assets', onClick: () => form.exportAssets() }]}
@@ -35,11 +35,11 @@ export function In8Assets() {
       {!shell.readOnly ? (
       <>
       <button type="button" className="h-9 px-space-md rounded bg-surface-container-lowest text-on-surface hover:bg-surface-container-high font-body-sm text-body-sm font-semibold transition-colors shadow-sm flex items-center gap-space-xs" onClick={() => shell.openModal('receive')}>
-      <span className="material-symbols-outlined text-base">download</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-base">download</span>
       <span>Receive Stock</span>
       </button>
       <button type="button" className="h-9 px-space-md rounded bg-primary text-on-primary hover:bg-primary/90 font-body-sm text-body-sm font-semibold transition-transform active:scale-95 shadow-sm flex items-center gap-space-xs" onClick={() => shell.openIssue()}>
-      <span className="material-symbols-outlined text-base">local_shipping</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-base">local_shipping</span>
       <span>Issue to cars</span>
       </button>
       </>
@@ -64,12 +64,12 @@ export function In8Assets() {
       </div>
       <div className="flex items-center gap-space-sm flex-wrap">
       <div className="relative min-w-[240px]">
-      <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant text-base">search</span>
+      <span aria-hidden="true" className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant text-base">search</span>
       <input className="w-full bg-surface-container-lowest text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm pl-8 pr-3 py-1.5 rounded-lg shadow-sm outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary/20" placeholder="Search serial, asset or car..." type="text" value={form.searchQuery} onChange={(e) => form.setSearchQuery(e.target.value)}/>
       </div>
       {!shell.readOnly ? (
       <button type="button" onClick={() => shell.openModal('register-asset')} className="h-9 px-space-md rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container-high font-body-sm text-body-sm font-semibold transition-colors shadow-sm flex items-center gap-space-xs">
-      <span className="material-symbols-outlined text-base">add</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-base">add</span>
       <span>Register asset</span>
       </button>
       ) : null}
@@ -135,7 +135,7 @@ export function In8Assets() {
       <td className="py-space-md px-space-md align-middle">
       {row.serial && row.serial !== '—' ? (
       <span className="font-label-code text-label-code font-semibold text-on-surface flex items-center gap-1">
-      <span className="material-symbols-outlined text-sm text-surface-tint">qr_code_2</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-sm text-surface-tint">qr_code_2</span>
       <span>{row.serial}</span>
       </span>
       ) : (
@@ -164,7 +164,7 @@ export function In8Assets() {
       </td>
       <td className="py-space-md px-space-md align-middle">
       <div className="flex items-center gap-space-xs">
-      <span className="material-symbols-outlined text-secondary text-base">{st === 'installed' ? 'directions_car' : 'warehouse'}</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-secondary text-base">{st === 'installed' ? 'directions_car' : 'warehouse'}</span>
       <span className="font-body-sm text-body-sm text-on-surface">{row.plate || '—'}</span>
       </div>
       </td>
@@ -219,7 +219,7 @@ export function In8Assets() {
       <div className="flex items-center justify-between">
       <span className="font-caption text-caption uppercase text-secondary font-semibold tracking-wider">Units without a serial</span>
       <span className="w-7 h-7 rounded bg-surface-container flex items-center justify-center text-on-surface">
-      <span className="material-symbols-outlined text-sm">qr_code_2</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-sm">qr_code_2</span>
       </span>
       </div>
       <div className="mt-space-md flex items-baseline gap-space-xs">
@@ -232,7 +232,7 @@ export function In8Assets() {
       <div className="flex items-center justify-between">
       <span className="font-caption text-caption uppercase text-secondary font-semibold tracking-wider">Next check due</span>
       <span className="w-7 h-7 rounded bg-surface-container flex items-center justify-center text-on-surface">
-      <span className="material-symbols-outlined text-sm">event_repeat</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-sm">event_repeat</span>
       </span>
       </div>
       <div className="mt-space-md">
@@ -244,7 +244,7 @@ export function In8Assets() {
       <div className="flex items-center justify-between">
       <span className="font-caption text-caption uppercase text-secondary font-semibold tracking-wider">Value of units</span>
       <span className="w-7 h-7 rounded bg-surface-container flex items-center justify-center text-on-surface">
-      <span className="material-symbols-outlined text-sm">payments</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-sm">payments</span>
       </span>
       </div>
       <div className="mt-space-md flex flex-col gap-1">

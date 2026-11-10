@@ -23,13 +23,13 @@ export function GapImportItems(p: { onClose?: () => void }) {
         <div className="bg-surface-container-lowest rounded-xl shadow-sm p-space-lg flex flex-col gap-space-md">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-md">
         <label className="flex-1 flex items-center gap-space-sm p-space-md rounded-lg bg-surface-container-low cursor-pointer hover:bg-surface-container">
-        <span className="material-symbols-outlined text-[22px] text-primary">upload_file</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[22px] text-primary">upload_file</span>
         <span className="font-body-sm text-body-sm text-on-surface font-semibold">{form.fileName || 'Choose a CSV file'}</span>
         <input type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => void form.onFile(e.target.files?.[0] ?? null)} aria-label="CSV file" />
         </label>
         <div className="flex items-center gap-space-sm">
         <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold flex items-center gap-1" onClick={() => form.downloadSampleTemplate()}>
-        <span className="material-symbols-outlined text-[16px]">download</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[16px]">download</span>
         Download sample CSV
         </button>
         <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold" onClick={() => form.loadStarter()}>

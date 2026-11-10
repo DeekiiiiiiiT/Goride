@@ -187,6 +187,8 @@ export function registerInventoryR16Routes(app: Hono<InvEnv>) {
 export async function assertAlertSnoozeAllowed(org: string, alertId: string): Promise<string | null> {
   const { data: alert } = await fleetDb().from("fleet_inv_alert").select("type").eq("organization_id", org).eq("id", alertId).maybeSingle();
   if (!alert?.type) return null;
+  // Stock-integrity problems can never be snoozed, whatever the rules table says.
+  if (alert.type === "ledger_variance" || alert.type === "integrity") return "This alert type cannot be snoozed";
   const { data: rule } = await fleetDb().from("fleet_inv_alert_rule").select("can_snooze")
     .eq("organization_id", org).eq("alert_type", alert.type).maybeSingle();
   if (rule && rule.can_snooze === false) return "This alert type cannot be snoozed";

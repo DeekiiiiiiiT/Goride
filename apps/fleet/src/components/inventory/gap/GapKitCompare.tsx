@@ -47,7 +47,7 @@ export function GapKitCompare(p: { onClose?: () => void }) {
         <div className="flex flex-col gap-space-sm">
         <div className="flex items-center gap-space-xs text-on-surface-variant">
         <button type="button" className="inline-flex items-center gap-1 px-space-sm py-1 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm" onClick={close}>
-        <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[16px]">arrow_back</span>
         <span>Back to Vehicle Kits</span>
         </button>
         <span className="text-outline-variant">/</span>
@@ -56,7 +56,7 @@ export function GapKitCompare(p: { onClose?: () => void }) {
         <div className="flex flex-wrap items-center justify-between gap-space-lg">
         <div className="flex items-center gap-space-md">
         <div className="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-primary">
-        <span className="material-symbols-outlined text-[24px]">compare_arrows</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[24px]">compare_arrows</span>
         </div>
         <div>
         <div className="flex items-center gap-space-sm">
@@ -71,7 +71,7 @@ export function GapKitCompare(p: { onClose?: () => void }) {
                     Rollout scope: {form.diffCount} change{form.diffCount === 1 ? '' : 's'}
                   </span>
         <button type="button" className="bg-surface-container-lowest hover:bg-surface-container text-on-surface p-2 rounded transition-colors" title="Export Diff Manifest" onClick={() => form.exportDiffManifest()}>
-        <span className="material-symbols-outlined text-[18px]">download</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">download</span>
         </button>
         </div>
         </div>
@@ -83,7 +83,7 @@ export function GapKitCompare(p: { onClose?: () => void }) {
 
         <div className="bg-surface-container-low rounded-lg p-space-sm flex items-center gap-space-md min-w-[280px]">
         <div className="w-8 h-8 rounded bg-surface-container flex items-center justify-center text-on-surface-variant">
-        <span className="material-symbols-outlined text-[18px]">history</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">history</span>
         </div>
         <div className="flex flex-col">
         <span className="font-caption text-caption uppercase text-on-surface-variant font-semibold tracking-wider">Base Specification</span>
@@ -99,7 +99,7 @@ export function GapKitCompare(p: { onClose?: () => void }) {
 
         <div className="bg-surface-container-low rounded-lg p-space-sm flex items-center gap-space-md min-w-[320px]">
         <div className="w-8 h-8 rounded bg-primary text-on-primary flex items-center justify-center">
-        <span className="material-symbols-outlined text-[18px]">new_releases</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">new_releases</span>
         </div>
         <div className="flex flex-col">
         <span className="font-caption text-caption uppercase text-on-surface-variant font-semibold tracking-wider">Target Specification</span>
@@ -176,7 +176,7 @@ export function GapKitCompare(p: { onClose?: () => void }) {
 
         <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm flex items-start gap-space-md">
         <div className="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary flex-shrink-0">
-        <span className="material-symbols-outlined text-[18px]">inventory</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">inventory</span>
         </div>
         <div className="flex flex-col gap-1">
         <span className="font-body-sm text-body-sm font-semibold text-primary">Depot stock availability</span>
@@ -192,7 +192,7 @@ export function GapKitCompare(p: { onClose?: () => void }) {
         <div className="bg-surface-container-lowest rounded-xl shadow-sm p-space-lg flex flex-col gap-space-lg">
         <div className="flex items-center justify-between">
         <div className="flex items-center gap-space-xs">
-        <span className="material-symbols-outlined text-[20px] text-primary">analytics</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[20px] text-primary">analytics</span>
         <h2 className="font-headline-sm text-headline-sm text-primary">Fleet Rollout Impact</h2>
         </div>
         <span className="font-caption text-caption px-space-sm py-0.5 rounded bg-surface-container font-medium text-on-surface">Compliance</span>
@@ -247,7 +247,7 @@ export function GapKitCompare(p: { onClose?: () => void }) {
         </div>
 
         <div className="bg-surface-container p-space-md rounded-lg flex items-start gap-space-sm text-on-surface">
-        <span className="material-symbols-outlined text-[18px] text-on-surface-variant flex-shrink-0 mt-0.5">info</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px] text-on-surface-variant flex-shrink-0 mt-0.5">info</span>
         <div className="flex flex-col gap-0.5">
         <span className="font-caption text-caption font-bold uppercase tracking-wider text-on-surface">Operational Procedure</span>
         <p className="font-caption text-caption text-on-surface-variant leading-relaxed">
@@ -261,7 +261,7 @@ export function GapKitCompare(p: { onClose?: () => void }) {
 
         <div className="sticky bottom-4 z-40 bg-surface-container-lowest rounded-xl shadow-xl p-space-md flex flex-wrap items-center justify-between gap-space-md mt-space-md">
         <button type="button" className="inline-flex items-center gap-space-xs px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium" onClick={close}>
-        <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">arrow_back</span>
         <span>Back to kit editor</span>
         </button>
         <div className="flex flex-wrap items-center gap-space-sm">
@@ -272,7 +272,7 @@ export function GapKitCompare(p: { onClose?: () => void }) {
                   Save as inactive {form.rightVersion}
                 </button>
         <button type="button" disabled={!form.canPublish || form.submit.saving} onClick={() => modal.openConfirm()} className="bg-primary hover:bg-primary/90 text-on-primary font-body-sm text-body-sm font-semibold px-space-lg py-2.5 rounded-lg flex items-center gap-space-xs transition-transform active:scale-95 shadow-md disabled:opacity-60">
-        <span className="material-symbols-outlined text-[18px]">publish</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">publish</span>
         <span>Apply draft version</span>
         </button>
         </div>
@@ -283,10 +283,10 @@ export function GapKitCompare(p: { onClose?: () => void }) {
         <div className="bg-surface-container-lowest rounded-xl shadow-xl max-w-lg w-full p-space-xl flex flex-col gap-space-lg">
         <div className="flex items-start justify-between">
         <div className="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center text-primary">
-        <span className="material-symbols-outlined text-[20px]">warning</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[20px]">warning</span>
         </div>
         <button type="button" className="text-on-surface-variant hover:text-primary p-1" onClick={() => modal.closeConfirm()}>
-        <span className="material-symbols-outlined text-[20px]">close</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[20px]">close</span>
         </button>
         </div>
         <div className="flex flex-col gap-space-xs">

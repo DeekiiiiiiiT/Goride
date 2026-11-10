@@ -21,7 +21,7 @@ export function InAssetMoveDialog() {
             className="w-8 h-8 rounded-lg hover:bg-surface-container flex items-center justify-center text-on-surface-variant"
             onClick={() => form.shell.closeModal()}
           >
-            <span className="material-symbols-outlined text-[20px]">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-[20px]">close</span>
           </button>
         </div>
         <div className="p-space-xl flex flex-col gap-space-md">

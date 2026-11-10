@@ -34,7 +34,7 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
       <button key={id} type="button" onClick={() => form.setSelectedLocationId(id)} className={`w-full text-left bg-surface-container-lowest p-space-md rounded-xl shadow-sm transition-all relative overflow-hidden ${active ? 'shadow-md ring-2 ring-primary' : 'hover:bg-surface-container-low'}`}>
         <div className="flex items-start justify-between gap-space-sm">
           <div className="flex items-center gap-space-xs">
-            <span className="material-symbols-outlined text-[16px] text-secondary">{icon}</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-secondary">{icon}</span>
             <span className="font-label-code text-caption px-1.5 py-0.5 rounded font-bold bg-surface-container-high text-secondary">{strField(loc, 'code', '—')}</span>
             <span className="font-body-md text-body-md font-semibold text-on-surface">{strField(loc, 'name', '—')}</span>
           </div>
@@ -57,7 +57,7 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         <div className="px-margin-desktop py-space-md flex flex-col md:flex-row md:items-center justify-between gap-space-md">
         <div className="flex flex-col gap-space-xs">
         <button type="button" onClick={() => p.onClose?.()} className="self-start inline-flex items-center gap-1 px-space-sm py-1 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-caption text-caption">
-        <span className="material-symbols-outlined text-[13px]">arrow_back</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[13px]">arrow_back</span>
                   Settings
                 </button>
         <h1 className="font-headline-lg text-headline-lg text-primary tracking-tight">Locations</h1>
@@ -65,7 +65,7 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         </div>
         {!readOnly ? (
         <button type="button" onClick={() => { form.setLocationName(''); form.setLocationCode(''); form.setLocationAddress(''); setShowNewLocation(true); }} className="px-space-md py-2 rounded-lg bg-primary text-on-primary shadow-sm flex items-center gap-1.5 font-body-sm text-body-sm font-semibold self-start md:self-auto">
-        <span className="material-symbols-outlined text-[18px]">add_location_alt</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">add_location_alt</span>
                 New location
               </button>
         ) : null}
@@ -76,7 +76,7 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         <div className="xl:col-span-4 flex flex-col gap-space-md w-full">
         <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm">
         <div className="relative w-full">
-        <span className="material-symbols-outlined text-secondary absolute left-3 top-2.5 text-[18px]">search</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-secondary absolute left-3 top-2.5 text-[18px]">search</span>
         <input className="w-full pl-9 pr-space-md py-2 bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface focus:outline-none" placeholder="Search code or name..." type="text" value={form.searchQuery} onChange={(e) => form.setSearchQuery(e.target.value)} aria-label="Search locations"/>
         </div>
         </div>
@@ -91,7 +91,7 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         <div className="bg-surface-container-lowest p-space-xl rounded-xl shadow-md flex flex-col gap-space-lg">
         <div className="flex items-start gap-space-md">
         <div className="w-12 h-12 rounded-xl bg-primary text-on-primary flex items-center justify-center shrink-0">
-        <span className="material-symbols-outlined text-[24px]">{strField(selected, 'kind', '') === 'vehicle' ? 'directions_car' : 'corporate_fare'}</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[24px]">{strField(selected, 'kind', '') === 'vehicle' ? 'directions_car' : 'corporate_fare'}</span>
         </div>
         <div className="flex flex-col gap-0.5">
         <h2 className="font-headline-sm text-headline-sm text-primary font-bold">{strField(selected, 'name', '—')}</h2>
@@ -128,13 +128,13 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         {!readOnly && strField(selected, 'kind', '') !== 'vehicle' ? (
         <div className="p-space-md bg-surface-container-low rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-space-md">
         <button type="button" disabled={!form.canPatchLocation || form.submit.saving} onClick={() => void form.patchLocation().catch(() => undefined)} className="px-space-md py-2 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold flex items-center gap-1 disabled:opacity-60">
-        <span className="material-symbols-outlined text-[16px]">save</span> Save details
+        <span aria-hidden="true" className="material-symbols-outlined text-[16px]">save</span> Save details
         </button>
         {selHeld.items > 0 ? (
         <span className="font-body-sm text-body-sm text-on-surface-variant">Can&apos;t archive while stock is inside. Move the {selHeld.items} item{selHeld.items === 1 ? '' : 's'} out first.</span>
         ) : (
         <button type="button" disabled={form.submit.saving} onClick={() => void form.archiveLocation().catch(() => undefined)} className="px-space-md py-2 rounded-lg bg-error-container text-error font-body-sm text-body-sm font-semibold flex items-center gap-1.5 disabled:opacity-60">
-        <span className="material-symbols-outlined text-[16px]">archive</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[16px]">archive</span>
                       Archive location
                     </button>
         )}
@@ -153,7 +153,7 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         <div className="flex items-center justify-between">
         <h3 className="font-headline-sm text-headline-sm text-primary font-bold">New store location</h3>
         <button type="button" aria-label="Close dialog" className="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center text-secondary" onClick={() => setShowNewLocation(false)}>
-        <span className="material-symbols-outlined text-[18px]">close</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">close</span>
         </button>
         </div>
         <div className="grid grid-cols-3 gap-space-sm font-body-sm text-body-sm">
