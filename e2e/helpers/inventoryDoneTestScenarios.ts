@@ -188,7 +188,7 @@ export async function runDoneTest05(page: Page) {
   await expect.poll(() => driverReportCount(INV_DONE_ORG, 'missing'), { timeout: 60_000 }).toBe(before + 1);
   await seedInventoryFleetSession(page);
   await gotoFleetInventory(page, 'alerts');
-  await expect(page.getByText(/Warning triangle|triangle|missing/i).first()).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('text=/driver reports Warning triangle missing/i >> visible=true').first()).toBeVisible({ timeout: 60_000 });
   await saveLiveScreenshot(page, 'inventory_asset_management_alerts_tab');
   await seedInventoryDriverSession(page);
   await gotoDriverCarKit(page);
@@ -205,8 +205,11 @@ export async function runDoneTest06(page: Page) {
   await page.getByRole('button', { name: /Report a problem/i }).first().click();
   await page.getByRole('radio', { name: /Missing/i }).click();
   await page.getByRole('button', { name: /Send report/i }).click();
-  await page.waitForTimeout(2000);
+  // Offline: the report is kept as a draft with "Resend now" (same key, so it never lands twice).
+  await expect(page.getByText(/Couldn't send report/i)).toBeVisible({ timeout: 30_000 });
+  expect(driverReportCount(INV_DONE_ORG, 'missing')).toBe(before);
   await page.context().setOffline(false);
+  await page.getByRole('button', { name: /Resend now/i }).click();
   await expect.poll(() => driverReportCount(INV_DONE_ORG, 'missing'), { timeout: 90_000 }).toBe(before + 1);
   expect(driverReportCount(INV_DONE_ORG, 'missing')).toBe(before + 1);
   await saveLiveScreenshot(page, 'report_sent_offline_queued', false);

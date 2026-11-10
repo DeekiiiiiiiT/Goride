@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   driverInventoryApi,
   type DriverCarKitPayload,
@@ -32,8 +32,11 @@ export function useCarKitFlow(vehicleId?: string | null) {
   const [pendingDraft, setPendingDraft] = useState<{
     itemLabel: string;
     issueLabel: string;
+    issueType?: string;
     note?: string;
   } | null>(null);
+  /** Idempotency key of the last unsent report; reused by "Resend now". */
+  const resendKeyRef = useRef<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastReport, setLastReport] = useState<DriverReportRow | null>(null);
   const [reports, setReports] = useState<DriverReportRow[]>([]);
@@ -128,23 +131,31 @@ export function useCarKitFlow(vehicleId?: string | null) {
     notes?: string;
     hasPhoto?: boolean;
   }) => {
-    const itemLabel = reportItemLabel?.trim() || 'Kit item';
+    // No payload = "Resend now": send the saved draft again with the same key, so it never lands twice.
+    const resend = !payload && pendingDraft != null && resendKeyRef.current != null;
+    const itemLabel = resend ? pendingDraft!.itemLabel : reportItemLabel?.trim() || 'Kit item';
+    const issueType = resend ? pendingDraft!.issueType : payload?.issueType;
+    const notes = resend ? pendingDraft!.note : payload?.notes;
+    const key = resend ? resendKeyRef.current! : newIdempotencyKey('driver-report');
+    resendKeyRef.current = key;
     setPendingDraft({
       itemLabel,
-      issueLabel: payload?.issueType ?? 'Missing / Broken',
-      note: payload?.notes,
+      issueLabel: issueType ?? 'Missing / Broken',
+      issueType,
+      note: notes,
     });
     setSending(true);
     try {
       const res = (await driverInventoryApi.submitReport(
         {
-          itemNames: reportItemLabel ? [reportItemLabel] : undefined,
-          issueType: payload?.issueType ?? 'driver_report',
-          notes: payload?.notes?.trim() || undefined,
+          itemNames: itemLabel !== 'Kit item' ? [itemLabel] : undefined,
+          issueType: issueType ?? 'driver_report',
+          notes: notes?.trim() || undefined,
           vehicleId: kit?.vehicleId ?? vehicleId ?? undefined,
         },
-        newIdempotencyKey('driver-report'),
+        key,
       )) as { report?: DriverReportRow };
+      resendKeyRef.current = null;
       setSendError(false);
       setSendErrorRef(null);
       setLastReport(res.report ?? { itemLabel: reportItemLabel, displayName: reportItemLabel });
