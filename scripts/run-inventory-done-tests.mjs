@@ -188,6 +188,10 @@ async function main() {
   });
   run('node', ['scripts/seed-inventory-done-tests.mjs', 'reset']);
 
+  // fleet-core/index.ts is a git-ignored bundle — without this build the function
+  // doesn't exist on a fresh checkout (404 "Function not found").
+  run('node', ['scripts/build-edge-bundle.mjs', 'fleet-core']);
+
   killFunctionsServe();
   // One serve process for all functions: a second `functions serve` replaces the first,
   // which left fleet-core unserved ("Function not found") and every screen empty.
