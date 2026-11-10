@@ -322,8 +322,3 @@ SELECT * FROM fleet.inv_settings;
 
 REVOKE ALL ON public.fleet_inv_settings FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.fleet_inv_settings TO service_role;
-
--- Logbook line (hand-run SQL never updates schema_migrations).
-INSERT INTO supabase_migrations.schema_migrations (version, name)
-VALUES ('20261110125114', 'fleet_inventory_completion')
-ON CONFLICT (version) DO NOTHING;
