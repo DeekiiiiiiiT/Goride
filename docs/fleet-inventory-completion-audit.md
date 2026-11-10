@@ -29,7 +29,10 @@
 | IV-14 | Fixed in code | Every row of the table is done. Fixed text is dropped and real values are wired, including the signed-in user, real store names, versions, the driver report timeline, the settings save time, setup steps out of 3, the toll tag number and the last-checked time (two columns added to the compliance view). |
 | IV-15 | Fixed in code | Both stray `<aside>` side menus are deleted, along with the blurred fake pages behind the dialogs. |
 | IV-16 | Fixed in code | The words and fields are removed. The migration drops the 7 `inv_settings` columns (no database function used them). The Stock Category filter is removed, and Type now reads `tracking`. "Locations & bins" is now "Locations". |
-| IV-17–IV-20 | Waiting | Owner data, after the new code is live. |
+| IV-17 | Done 10 Nov | Owner count: 1505LM empty (matches). 5179KZ has Car Jack, Car Mats, Lug Tool, Phone Holder Mount, Spare Tire, Dash Camera unit and Tyre pump (Tyre pump posted as OPN-0006, 1 @ J$8,700). Store has Phone Holder Mount ×1 and Spare Tire ×1 (confirmed). |
+| IV-18 | Done 10 Nov | Tyre pump J$8,700, Warning triangle J$2,527.33, Fire extinguisher J$4,054. First-aid kit has no cost: none were bought. |
+| IV-19 | Done 10 Nov | Phone Holder Mount code renamed to `EQ-PHONE-MOUNT`. |
+| IV-20 | Owner, later | The owner will add the Dash Camera serial on the Asset page. |
 
 ### Found while building (all fixed in code)
 
