@@ -5,7 +5,7 @@
  * previews → Playwright (18 specs + postflight) → assert-clean → stop everything.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { readdirSync } from 'node:fs';
+import { existsSync, openSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -81,11 +81,21 @@ function run(cmd, args, opts = {}) {
   }
 }
 
-function spawnBg(label, cmd, args, env = {}) {
+const FUNCTIONS_LOG = join(root, 'functions-serve.log');
+
+function dumpFunctionsLog() {
+  if (!existsSync(FUNCTIONS_LOG)) return;
+  const lines = readFileSync(FUNCTIONS_LOG, 'utf8').split(/\r?\n/);
+  console.error('\n--- last lines of `supabase functions serve` ---');
+  console.error(lines.slice(-80).join('\n'));
+}
+
+function spawnBg(label, cmd, args, env = {}, logFile = null) {
   console.error(`\n>>> [bg ${label}] ${cmd} ${args.join(' ')}`);
+  const out = logFile ? openSync(logFile, 'w') : null;
   const child = spawn(cmd, args, {
     cwd: workRoot,
-    stdio: 'ignore',
+    stdio: out != null ? ['ignore', out, out] : 'ignore',
     shell: isWin,
     detached: !isWin,
     env: { ...process.env, DATABASE_URL, ...env },
@@ -151,17 +161,20 @@ async function waitForHttp(url, timeoutMs = 180_000) {
 async function waitForFunction(slug, timeoutMs = 180_000) {
   const url = `http://127.0.0.1:54321/functions/v1/${slug}`;
   const start = Date.now();
+  let last = 'no response';
   while (Date.now() - start < timeoutMs) {
     try {
       const res = await fetch(url, { method: 'GET' });
       const text = await res.text();
+      last = `${res.status} ${text.slice(0, 300)}`;
       if (res.status !== 503 && !/Function not found/i.test(text)) return;
-    } catch {
-      /* retry */
+    } catch (e) {
+      last = String(e);
     }
     await new Promise((r) => setTimeout(r, 1000));
   }
-  throw new Error(`Timeout waiting for edge function ${slug}`);
+  dumpFunctionsLog();
+  throw new Error(`Timeout waiting for edge function ${slug} (last: ${last})`);
 }
 
 async function main() {
@@ -186,7 +199,7 @@ async function main() {
     'delivery',
     'driver',
     '--no-verify-jwt',
-  ]);
+  ], {}, FUNCTIONS_LOG);
   await new Promise((r) => setTimeout(r, 8000));
   await waitForFunction('fleet-core');
   await waitForFunction('delivery');
@@ -251,6 +264,7 @@ async function main() {
 main()
   .catch((err) => {
     console.error(err.message || err);
+    if (!/edge function/.test(String(err.message))) dumpFunctionsLog();
     process.exitCode = 1;
   })
   .finally(() => {

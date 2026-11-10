@@ -112,3 +112,4 @@ supabase/functions/fleet-core/index.ts
 scripts/tmp-migrations/
 scripts/.fp-replay*.json
 scripts/mismatch-versions.json
+functions-serve.log
