@@ -9,7 +9,9 @@ import { offersForFleet } from "./catalog_parts_shape.ts";
 import {
   loadPartsActivity,
   myVehicleCard,
+  myVehicleVerifiedFromKv,
   photoFolderAllowed,
+  vehicleContextSpecsForResponse,
   quoteInputError,
   replyDueAt,
   scopedToOrg,
@@ -145,6 +147,51 @@ Deno.test("my vehicle card keeps an empty shelf visible", () => {
   assertEquals(card.verified, true);
 });
 
+const MY_VEHICLES_CATALOG = "e2000005-0000-4000-8000-000000000010";
+const STALE_CATALOG = "e2000005-0000-4000-8000-000000000099";
+
+Deno.test("T9 my-vehicles verified uses explicit link that exists in catalog, not stale catalogId", () => {
+  const verifiedSet = new Set([MY_VEHICLES_CATALOG]);
+  assertEquals(
+    myVehicleVerifiedFromKv(
+      { catalogId: STALE_CATALOG, make: "Toyota", model: "Roomy" },
+      verifiedSet,
+    ),
+    false,
+  );
+  assertEquals(
+    myVehicleVerifiedFromKv(
+      { vehicle_catalog_id: MY_VEHICLES_CATALOG, catalogId: STALE_CATALOG, make: "Toyota" },
+      verifiedSet,
+    ),
+    true,
+  );
+});
+
+Deno.test("T10 vehicle-context specs are all null when unverified", () => {
+  const extras = {
+    trim_series: "Pre-Facelift",
+    engine_code: "1KR-FE",
+    engine_displacement_l: 1,
+    drivetrain: "2WD",
+    chassis_code: "M900A",
+    engineFilterLine: "1KR-FE",
+    alternateTrimsLine: "also …",
+    brake_front_type: "disc",
+    brake_rear_type: "drum",
+    brake_front_rotor_mm: 256,
+    brake_rear_drum_mm: 200,
+    hub_bolt_pattern: "4x100",
+    abs_channels: "4",
+    handbrake_type: "cable",
+  };
+  const unverified = vehicleContextSpecsForResponse(false, extras);
+  assertEquals(Object.values(unverified).every((v) => v === null), true);
+  const verified = vehicleContextSpecsForResponse(true, extras);
+  assertEquals(verified.engine_code, "1KR-FE");
+  assertEquals(verified.chassis_code, "M900A");
+});
+
 Deno.test("brake wear is blank until a service interval exists", () => {
   assertEquals(wearPercent(null, 40000), null);
   assertEquals(wearPercent(10000, 40000), 75);
@@ -192,4 +239,56 @@ Deno.test("hub label prefers vehicle depot then org name", () => {
   assertEquals(hubLabelFromVehicle({ depot: "Kingston" }, "Roam Fleet"), "Kingston");
   assertEquals(hubLabelFromVehicle({}, "Kingston Auto"), "Kingston Auto");
   assertEquals(hubLabelFromVehicle({}, null), "Fleet hub");
+});
+
+import {
+  findPartsCatalogVariant,
+  partInterchangeFitsCatalogIds,
+  rejectUnlessVehicleId,
+  requireVariantInVerifiedSet,
+} from "./fleet_parts_access.ts";
+import { registerFleetFindPartsRoutes } from "./fleet_find_parts_routes.ts";
+
+const TEST_CATALOG = "e2000005-0000-4000-8000-000000000010";
+const FOREIGN_CATALOG = "e2000005-0000-4000-8000-000000000020";
+const PARTS_VEHICLE_OPTIONS = "/make-server-37f42386/parts/vehicle-options";
+
+Deno.test("route rule: /find without vehicleId is 400", () => {
+  assertEquals(rejectUnlessVehicleId("")?.status, 400);
+});
+
+Deno.test("route rule: /find ignores foreign variantId", () => {
+  assertEquals(findPartsCatalogVariant(TEST_CATALOG, FOREIGN_CATALOG), TEST_CATALOG);
+});
+
+Deno.test("route rule: /term without vehicleId is 400", () => {
+  assertEquals(rejectUnlessVehicleId("")?.error?.includes("cars"), true);
+});
+
+Deno.test("route rule: /browse without variantId is 400", () => {
+  assertEquals(requireVariantInVerifiedSet("", [TEST_CATALOG]).status, 400);
+});
+
+Deno.test("route rule: /lookup part not listed for org cars returns 404", () => {
+  const group = "a1111111-1111-4111-8111-111111111111";
+  assertEquals(partInterchangeFitsCatalogIds(group, new Map([[group, new Set([FOREIGN_CATALOG])]]), [TEST_CATALOG]), false);
+});
+
+Deno.test("route rule: /vehicle-options route is not registered", () => {
+  const paths: string[] = [];
+  const app = {
+    get(path: string, ..._handlers: unknown[]) { paths.push(path); },
+    post(path: string, ..._handlers: unknown[]) { paths.push(path); },
+    put() {},
+  };
+  registerFleetFindPartsRoutes(app, {} as never);
+  assertEquals(paths.includes(PARTS_VEHICLE_OPTIONS), false);
+});
+
+Deno.test("route rule: /catalog-request without vehicleId is 400", () => {
+  assertEquals(rejectUnlessVehicleId("   ")?.status, 400);
+});
+
+Deno.test("route rule: /request without vehicleId is 400", () => {
+  assertEquals(rejectUnlessVehicleId("")?.status, 400);
 });

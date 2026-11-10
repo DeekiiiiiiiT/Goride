@@ -11,20 +11,11 @@ export function usePartsMyVehicles(enabled = true) {
   });
 }
 
-export function usePartsVehicleOptions(make?: string, model?: string, enabled = true) {
+export function usePartsTerm(term: string, vehicleId: string, enabled = true) {
   return useQuery({
-    queryKey: ["parts-vehicle-options", make || "", model || ""],
-    queryFn: () => api.partsVehicleOptions({ make, model }),
-    enabled,
-    staleTime: 120_000,
-  });
-}
-
-export function usePartsTerm(term: string, enabled = true) {
-  return useQuery({
-    queryKey: ["parts-term", term],
-    queryFn: () => api.partsTerm(term),
-    enabled: enabled && term.trim().length >= 2,
+    queryKey: ["parts-term", term, vehicleId],
+    queryFn: () => api.partsTerm(term, vehicleId),
+    enabled: enabled && term.trim().length >= 2 && Boolean(vehicleId),
     staleTime: 30_000,
   });
 }

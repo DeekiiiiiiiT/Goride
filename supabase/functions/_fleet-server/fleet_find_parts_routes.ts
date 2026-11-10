@@ -6,7 +6,17 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission } from "./rbac_middleware.ts";
 import { filterByOrg, getOrgId } from "./org_scope.ts";
-import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
+import {
+  findPartsCatalogVariant,
+  partFitsCatalogIds,
+  readExplicitCatalogLink,
+  rejectUnlessVehicleId,
+  requireVariantInVerifiedSet,
+  verifiedCarForVehicle,
+  verifiedCatalogIdFromLink,
+  verifiedCatalogIdsForOrg,
+  vehicleContextStatus,
+} from "./fleet_parts_access.ts";
 import { findParts } from "./parts_finder.ts";
 import { readPartTerm, readPartsBrowseForVariant, readSymptoms } from "./parts_catalog_read.ts";
 import { readCatalogAddAvgMinutes, readComponentListingHints } from "./parts_find_parts_overlay_meta.ts";
@@ -69,6 +79,70 @@ export function myVehicleCard(input: {
   };
 }
 
+/** T9: verified only when explicit vehicle_catalog_id exists in vehicle_catalog (not catalogId alias alone). */
+export function myVehicleVerifiedFromKv(
+  car: Record<string, unknown>,
+  existingCatalogIds: ReadonlySet<string>,
+): boolean {
+  const link = readExplicitCatalogLink(car);
+  return Boolean(verifiedCatalogIdFromLink(link, existingCatalogIds));
+}
+
+type VehicleContextExtrasForSpecs = {
+  trim_series?: string | null;
+  engine_code?: string | null;
+  engine_displacement_l?: number | null;
+  drivetrain?: string | null;
+  chassis_code?: string | null;
+  engineFilterLine?: string | null;
+  alternateTrimsLine?: string | null;
+  brake_front_type?: string | null;
+  brake_rear_type?: string | null;
+  brake_front_rotor_mm?: number | null;
+  brake_rear_drum_mm?: number | null;
+  hub_bolt_pattern?: string | null;
+  abs_channels?: string | null;
+  handbrake_type?: string | null;
+};
+
+const NULL_VEHICLE_SPECS = {
+  trim_series: null,
+  engine_code: null,
+  engine_displacement_l: null,
+  drivetrain: null,
+  chassis_code: null,
+  engineFilterLine: null,
+  alternateTrimsLine: null,
+  brake_front_type: null,
+  brake_rear_type: null,
+  brake_front_rotor_mm: null,
+  brake_rear_drum_mm: null,
+  hub_bolt_pattern: null,
+  abs_channels: null,
+  handbrake_type: null,
+} as const;
+
+/** T10: unverified cars must not expose guessed MMY specs from loadVehiclePartsContextExtras. */
+export function vehicleContextSpecsForResponse(verified: boolean, extras: VehicleContextExtrasForSpecs) {
+  if (!verified) return { ...NULL_VEHICLE_SPECS };
+  return {
+    trim_series: extras.trim_series ?? null,
+    engine_code: extras.engine_code ?? null,
+    engine_displacement_l: extras.engine_displacement_l ?? null,
+    drivetrain: extras.drivetrain ?? null,
+    chassis_code: extras.chassis_code ?? null,
+    engineFilterLine: extras.engineFilterLine ?? null,
+    alternateTrimsLine: extras.alternateTrimsLine ?? null,
+    brake_front_type: extras.brake_front_type ?? null,
+    brake_rear_type: extras.brake_rear_type ?? null,
+    brake_front_rotor_mm: extras.brake_front_rotor_mm ?? null,
+    brake_rear_drum_mm: extras.brake_rear_drum_mm ?? null,
+    hub_bolt_pattern: extras.hub_bolt_pattern ?? null,
+    abs_channels: extras.abs_channels ?? null,
+    handbrake_type: extras.handbrake_type ?? null,
+  };
+}
+
 /** Km since the last service of this part, divided by the interval. 0 when unknown. */
 export function wearPercent(kmSince: number | null, intervalKm: number | null): number | null {
   if (kmSince == null || !intervalKm || intervalKm <= 0) return null;
@@ -109,11 +183,7 @@ export function sourcingRow(input: {
   };
 }
 
-export function vehicleContextStatus(foundInKv: boolean, inOrg: boolean): 200 | 403 | 404 {
-  if (!foundInKv) return 404;
-  if (!inOrg) return 403;
-  return 200;
-}
+export { vehicleContextStatus } from "./fleet_parts_access.ts";
 
 type RouteApp = {
   get: (path: string, ...handlers: unknown[]) => void;
@@ -202,49 +272,40 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
 
   app.get(`${PREFIX}/find`, ...view, async (c: Context) => {
     try {
-      const orgId = String(getOrgId(c) || "");
       const vehicleId = c.req.query("vehicleId")?.trim() || "";
-      const make = c.req.query("make")?.trim() || "";
-      const model = c.req.query("model")?.trim() || "";
-      const yearRaw = Number(c.req.query("year") ?? "");
-      const year = Number.isFinite(yearRaw) && yearRaw > 0 ? yearRaw : null;
-      const variantId = c.req.query("variantId")?.trim() || "";
+      const vehicleGate = rejectUnlessVehicleId(vehicleId);
+      if (vehicleGate) return c.json({ error: vehicleGate.error }, vehicleGate.status);
       const componentId = c.req.query("componentId")?.trim() || "";
       const position = c.req.query("position") || c.req.query("pos") || "";
       const side = c.req.query("side") || "";
       const fit = c.req.query("fit") || "";
       const fitPairs = resolvePartsFitPairs({ fit, position, side });
 
-      let vehicle: Record<string, unknown> | null = null;
-      let catalogId = "";
-      if (vehicleId) {
-        const access = await ownVehicle(c, vehicleId);
-        if (access.status === 404) return c.json({ error: "Vehicle not found" }, 404);
-        if (access.status === 403) return c.json({ error: "Forbidden" }, 403);
-        vehicle = access.vehicle;
-        catalogId = (await resolveCatalogIdForKvVehicle(supabase, vehicle!)) || "";
-        if (!catalogId) {
-          return c.json({
-            linked: false,
-            make: String(vehicle!.make ?? ""),
-            model: String(vehicle!.model ?? ""),
-            year: vehicle!.year != null ? Number(vehicle!.year) : null,
-            vehicle: {
-              id: vehicleId,
-              label: [vehicle!.year, vehicle!.make, vehicle!.model].filter(Boolean).join(" "),
-              plate: String(vehicle!.licensePlate ?? vehicle!.plate ?? ""),
-            },
-          });
-        }
-      } else if (!make || !model || year == null) {
-        return c.json({ error: "Choose a vehicle, or make, model and year" }, 400);
+      const access = await verifiedCarForVehicle(c, supabase, vehicleId);
+      if (access.status === 404) return c.json({ error: "Vehicle not found" }, 404);
+      if (access.status === 403) return c.json({ error: "Forbidden" }, 403);
+      const vehicle = access.vehicle!;
+      const catalogId = access.catalogId;
+      if (!catalogId) {
+        return c.json({
+          linked: false,
+          verified: false,
+          make: String(vehicle.make ?? ""),
+          model: String(vehicle.model ?? ""),
+          year: vehicle.year != null ? Number(vehicle.year) : null,
+          vehicle: {
+            id: vehicleId,
+            label: [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" "),
+            plate: String(vehicle.licensePlate ?? vehicle.plate ?? ""),
+          },
+        });
       }
 
       const body = await findParts(supabase, {
-        make: vehicle ? String(vehicle.make ?? make) : make,
-        model: vehicle ? String(vehicle.model ?? model) : model,
-        year: vehicle && vehicle.year != null ? Number(vehicle.year) : year,
-        variantId: variantId || catalogId || null,
+        make: String(vehicle.make ?? ""),
+        model: String(vehicle.model ?? ""),
+        year: vehicle.year != null ? Number(vehicle.year) : null,
+        variantId: findPartsCatalogVariant(catalogId, c.req.query("variantId")?.trim() || undefined),
         componentId: componentId || null,
         position: fitPairs.length === 1 ? fitPairs[0].axle : (fitPairs.length ? null : (position || null)),
         side: fitPairs.length === 1 ? fitPairs[0].side : (fitPairs.length ? null : (side || null)),
@@ -254,14 +315,13 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       });
       return c.json({
         ...body,
-        linked: Boolean(catalogId),
-        vehicle: vehicle
-          ? {
-            id: vehicleId,
-            label: [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" "),
-            plate: String(vehicle.licensePlate ?? vehicle.plate ?? ""),
-          }
-          : null,
+        linked: true,
+        verified: true,
+        vehicle: {
+          id: vehicleId,
+          label: [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" "),
+          plate: String(vehicle.licensePlate ?? vehicle.plate ?? ""),
+        },
       });
     } catch (error) {
       return c.json({ error: errorText(error) }, 500);
@@ -271,7 +331,11 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
   app.get(`${PREFIX}/lookup`, ...view, async (c: Context) => {
     try {
       const partId = (c.req.query("partId") ?? "").trim();
-      const vehicleCatalogId = (c.req.query("variantId") ?? c.req.query("vehicleCatalogId") ?? "").trim() || null;
+      const verifiedIds = await verifiedCatalogIdsForOrg(c, supabase);
+      const fits = await partFitsCatalogIds(supabase, partId, verifiedIds);
+      if (!fits) return c.json({ error: "Part not found" }, 404);
+      const queryVariant = (c.req.query("variantId") ?? c.req.query("vehicleCatalogId") ?? "").trim();
+      const vehicleCatalogId = queryVariant && verifiedIds.includes(queryVariant) ? queryVariant : null;
       const out = await readFleetPartLookup(supabase, { partId, vehicleCatalogId });
       if ("error" in out && out.status !== 200) {
         return c.json({ error: out.error }, out.status);
@@ -285,6 +349,9 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
   app.get(`${PREFIX}/brakes-overview`, ...view, async (c: Context) => {
     try {
       const variantId = (c.req.query("variantId") ?? "").trim();
+      const verifiedIds = await verifiedCatalogIdsForOrg(c, supabase);
+      const gate = requireVariantInVerifiedSet(variantId, verifiedIds);
+      if (!gate.ok) return c.json({ error: gate.error }, gate.status);
       const yearRaw = Number(c.req.query("year") ?? c.req.query("vehicleYear") ?? "");
       const vehicleYear = Number.isFinite(yearRaw) && yearRaw > 0 ? yearRaw : null;
       const out = await readBrakesOverview(supabase, variantId, vehicleYear);
@@ -321,8 +388,10 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
   app.get(`${PREFIX}/browse`, ...view, async (c: Context) => {
     try {
       const variantId = c.req.query("variantId")?.trim() || "";
-      if (variantId && !UUID_RE.test(variantId)) return c.json({ error: "Invalid variant" }, 400);
-      return c.json(await readPartsBrowseForVariant(supabase, variantId || undefined));
+      const verifiedIds = await verifiedCatalogIdsForOrg(c, supabase);
+      const gate = requireVariantInVerifiedSet(variantId, verifiedIds);
+      if (!gate.ok) return c.json({ error: gate.error }, gate.status);
+      return c.json(await readPartsBrowseForVariant(supabase, variantId));
     } catch (error) {
       return c.json({ error: errorText(error) }, 500);
     }
@@ -332,7 +401,9 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
     try {
       const variantId = c.req.query("variantId")?.trim() || "";
       const componentId = c.req.query("componentId")?.trim() || "";
-      if (!variantId || !UUID_RE.test(variantId)) return c.json({ error: "variantId required" }, 400);
+      const verifiedIds = await verifiedCatalogIdsForOrg(c, supabase);
+      const gate = requireVariantInVerifiedSet(variantId, verifiedIds);
+      if (!gate.ok) return c.json({ error: gate.error }, gate.status);
       if (!componentId || !UUID_RE.test(componentId)) return c.json({ error: "componentId required" }, 400);
       return c.json(await readComponentFitHints(supabase, variantId, componentId));
     } catch (error) {
@@ -342,7 +413,17 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
 
   app.get(`${PREFIX}/term`, ...view, async (c: Context) => {
     try {
-      return c.json(await readPartTerm(supabase, (c.req.query("q") ?? "").trim()));
+      const vehicleId = c.req.query("vehicleId")?.trim() || "";
+      const termVehicleGate = rejectUnlessVehicleId(vehicleId);
+      if (termVehicleGate) return c.json({ error: termVehicleGate.error }, termVehicleGate.status);
+      const access = await verifiedCarForVehicle(c, supabase, vehicleId);
+      if (access.status === 404) return c.json({ error: "Vehicle not found" }, 404);
+      if (access.status === 403) return c.json({ error: "Forbidden" }, 403);
+      if (!access.catalogId) {
+        return c.json({ components: [], synonyms: [], parts: [], hits: [], verified: false });
+      }
+      const term = await readPartTerm(supabase, (c.req.query("q") ?? "").trim(), access.catalogId);
+      return c.json({ ...term, verified: true });
     } catch (error) {
       return c.json({ error: errorText(error) }, 500);
     }
@@ -351,8 +432,10 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
   app.get(`${PREFIX}/symptoms`, ...view, async (c: Context) => {
     try {
       const variantId = c.req.query("variantId")?.trim() || "";
-      if (variantId && !UUID_RE.test(variantId)) return c.json({ error: "Invalid variant" }, 400);
-      return c.json(await readSymptoms(supabase, variantId ? { variantId } : undefined));
+      const verifiedIds = await verifiedCatalogIdsForOrg(c, supabase);
+      const gate = requireVariantInVerifiedSet(variantId, verifiedIds);
+      if (!gate.ok) return c.json({ error: gate.error }, gate.status);
+      return c.json(await readSymptoms(supabase, { variantId }));
     } catch (error) {
       return c.json({ error: errorText(error) }, 500);
     }
@@ -372,16 +455,15 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       const qty = isAddPart ? null : (body.qty != null && body.qty !== "" ? Number(body.qty) : null);
       if (qty != null && (!Number.isFinite(qty) || qty <= 0)) return c.json({ error: "Quantity must be at least 1" }, 400);
       const vehicleId = String(body.vehicleId ?? "").trim();
-      if (vehicleId) {
-        const access = await ownVehicle(c, vehicleId);
-        if (access.status !== 200) return c.json({ error: "Vehicle not found" }, access.status === 403 ? 403 : 404);
-      }
+      const requestVehicleGate = rejectUnlessVehicleId(vehicleId);
+      if (requestVehicleGate) return c.json({ error: requestVehicleGate.error }, requestVehicleGate.status);
+      const access = await verifiedCarForVehicle(c, supabase, vehicleId);
+      if (access.status === 404) return c.json({ error: "Vehicle not found" }, 404);
+      if (access.status === 403) return c.json({ error: "Forbidden" }, 403);
+      const catalogVariantId = access.catalogId;
       const user = c.get("rbacUser") as { id?: string } | undefined;
       const side = body.side ? String(body.side).slice(0, 20) : null;
       const position = body.position ? String(body.position).slice(0, 20) : null;
-      const catalogVariantId = body.vehicleCatalogId && UUID_RE.test(String(body.vehicleCatalogId))
-        ? String(body.vehicleCatalogId)
-        : (body.platformId && UUID_RE.test(String(body.platformId)) ? String(body.platformId) : null);
       const matchType = normalizeMatchType(body.matchType ?? body.match_type);
       const composedNeed = needText
         || [String(body.partName ?? "").trim(), side, position].filter(Boolean).join(" · ")
@@ -389,7 +471,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       const sentAt = isAddPart ? new Date().toISOString() : null;
       const insertRow = await buildPartsSourcingInsert(supabase, {
         orgId,
-        vehicleId: vehicleId || null,
+        vehicleId,
         needText: composedNeed,
         componentId: body.maintenanceComponentId && UUID_RE.test(String(body.maintenanceComponentId))
           ? String(body.maintenanceComponentId)
@@ -482,63 +564,25 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       const orgId = String(getOrgId(c) || "");
       const vehicleId = c.req.query("vehicleId")?.trim() || "";
       if (!vehicleId) return c.json({ error: "vehicleId required" }, 400);
-      const access = await ownVehicle(c, vehicleId);
+      const access = await verifiedCarForVehicle(c, supabase, vehicleId);
       if (access.status === 404) return c.json({ error: "Vehicle not found" }, 404);
       if (access.status === 403) return c.json({ error: "Forbidden" }, 403);
       const vehicle = access.vehicle!;
       const extras = await loadVehiclePartsContextExtras(supabase, orgId, vehicleId, vehicle as Record<string, unknown>);
-      const catalogId = (await resolveCatalogIdForKvVehicle(supabase, vehicle)) || "";
+      const catalogId = access.catalogId;
       const catalogAddAvgMinutes = await readCatalogAddAvgMinutes(supabase, orgId);
+      const verified = Boolean(catalogId);
       return c.json({
         label: extras.label,
         plate: extras.plate,
         version: extras.trim || extras.variant,
-        variantId: catalogId || null,
+        variantId: catalogId,
+        verified,
         catalogAddAvgMinutes,
-        specs: {
-          trim_series: extras.trim_series,
-          engine_code: extras.engine_code,
-          engine_displacement_l: extras.engine_displacement_l,
-          drivetrain: extras.drivetrain,
-          chassis_code: extras.chassis_code,
-          engineFilterLine: extras.engineFilterLine,
-          alternateTrimsLine: extras.alternateTrimsLine,
-          brake_front_type: extras.brake_front_type,
-          brake_rear_type: extras.brake_rear_type,
-          brake_front_rotor_mm: extras.brake_front_rotor_mm,
-          brake_rear_drum_mm: extras.brake_rear_drum_mm,
-          hub_bolt_pattern: extras.hub_bolt_pattern,
-          abs_channels: extras.abs_channels,
-          handbrake_type: extras.handbrake_type,
-        },
+        specs: vehicleContextSpecsForResponse(verified, extras),
         orgShortCode: extras.orgShortCode,
         hub_label: extras.hub_label,
       });
-    } catch (error) {
-      return c.json({ error: errorText(error) }, 500);
-    }
-  });
-
-  app.get(`${PREFIX}/vehicle-options`, ...view, async (c: Context) => {
-    try {
-      const make = (c.req.query("make") ?? "").trim();
-      const model = (c.req.query("model") ?? "").trim();
-      let query = supabase.from("vehicle_catalog").select("make, model, production_start_year, production_end_year");
-      if (make) query = query.ilike("make", make);
-      if (model) query = query.ilike("model", model);
-      const { data, error } = await query.limit(500);
-      if (error) throw error;
-      const rows = (data || []) as Array<{ make?: string; model?: string; production_start_year?: number; production_end_year?: number }>;
-      const makes = [...new Set(rows.map((row) => String(row.make ?? "")).filter(Boolean))].sort();
-      const models = [...new Set(rows.map((row) => String(row.model ?? "")).filter(Boolean))].sort();
-      const years = new Set<number>();
-      for (const row of rows) {
-        const from = Number(row.production_start_year ?? 0);
-        const to = Number(row.production_end_year ?? from);
-        if (!from) continue;
-        for (let year = from; year <= (to || from); year += 1) years.add(year);
-      }
-      return c.json({ makes, models, years: [...years].sort((a, b) => b - a) });
     } catch (error) {
       return c.json({ error: errorText(error) }, 500);
     }
@@ -553,31 +597,17 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       if (!make || !model || !Number.isFinite(year)) return c.json({ error: "Make, model and year are required" }, 400);
       const orgId = String(getOrgId(c) || "");
       const vehicleId = String(body.vehicleId ?? "").trim();
-      if (vehicleId) {
-        const access = await ownVehicle(c, vehicleId);
-        if (access.status === 404) return c.json({ error: "Vehicle not found" }, 404);
-        if (access.status === 403) return c.json({ error: "Forbidden" }, 403);
-        await upsertPendingFromKvVehicle(supabase, {
-          organizationId: orgId,
-          fleetVehicleId: vehicleId,
-          vehicle: { ...(access.vehicle as Record<string, unknown>), make, model, year },
-          source: "find_parts",
-        });
-        return c.json({ ok: true });
-      }
-      const fleetVehicleId = `unlisted:${orgId}:${make}:${model}:${year}`.slice(0, 180);
-      const { error } = await supabase.from("vehicle_catalog_pending_requests").insert({
-        organization_id: orgId,
-        fleet_vehicle_id: fleetVehicleId,
-        proposed_make: make,
-        proposed_model: model,
-        proposed_year: year,
-        proposed_production_start_year: year,
-        proposed_production_end_year: year,
+      const catalogRequestGate = rejectUnlessVehicleId(vehicleId);
+      if (catalogRequestGate) return c.json({ error: catalogRequestGate.error }, catalogRequestGate.status);
+      const access = await verifiedCarForVehicle(c, supabase, vehicleId);
+      if (access.status === 404) return c.json({ error: "Vehicle not found" }, 404);
+      if (access.status === 403) return c.json({ error: "Forbidden" }, 403);
+      await upsertPendingFromKvVehicle(supabase, {
+        organizationId: orgId,
+        fleetVehicleId: vehicleId,
+        vehicle: { ...(access.vehicle as Record<string, unknown>), make, model, year },
         source: "find_parts",
-        status: "pending",
       });
-      if (error) throw error;
       return c.json({ ok: true });
     } catch (error) {
       return c.json({ error: errorText(error) }, 500);
@@ -628,6 +658,8 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
           }
         }
       }
+      const verifiedCatalogIds = await verifiedCatalogIdsForOrg(c, supabase);
+      const verifiedIdSet = new Set(verifiedCatalogIds);
       const items = cars.map((car) => {
         const vehicleId = String(car.id ?? car.vehicleId ?? "");
         const fromSchedule = dueByVehicle.get(vehicleId);
@@ -638,7 +670,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
           model: String(car.model ?? ""),
           year: car.year as string | number | null,
           versionLine: String(car.catalogVersionLabel ?? car.trim ?? "") || null,
-          verified: Boolean(car.catalogId || car.vehicleCatalogId),
+          verified: myVehicleVerifiedFromKv(car, verifiedIdSet),
           shelfCount: Number(car.shelfCount ?? 0) || 0,
           serviceDue,
         });

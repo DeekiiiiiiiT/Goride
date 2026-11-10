@@ -9,12 +9,12 @@ import {
   usePartsMyVehicles,
   usePartsTerm,
   usePartsVehicleContext,
-  usePartsVehicleOptions,
 } from "../findPartsQueries";
 import { EverydayAlsoFitsSheet } from "./EverydayAlsoFitsSheet";
+import { buildStoreCopyText, carDetailsLine, type StoreBrandNumber } from "./storeCopyText";
 import { EverydayShell, MakerLogo, TrustBadge, mapTrustLabel, useCopyToast } from "./EverydayShared";
 import { type CaptureState, type EverydayStep } from "./findPartsCapture";
-import { StitchAnswerCard, StitchAnswerHeader, StitchCarPosition } from "./StitchAnswerCard";
+import { StitchAnswerCard, StitchAnswerHeader, StitchCarPosition, type PartInfoFact } from "./StitchAnswerCard";
 import {
   CARD,
   Icon,
@@ -34,7 +34,7 @@ import {
   needIcon,
   partIcon,
 } from "./stitchKit";
-import { CablePathDiagram, GenericPartGlyph, ShockIllustration, SideCarDrive } from "./stitchDrawings";
+import { CablePathDiagram, GenericPartGlyph, ShockIllustration } from "./stitchDrawings";
 import {
   EVERYDAY_CAPTURE_PLATE,
   EVERYDAY_CAPTURE_VARIANT_ID,
@@ -43,15 +43,13 @@ import {
 
 import { formatEverydayCarLabel } from "./everydayCarLabel";
 import { popularChips, requestStatusLabel } from "./everydayLabels";
-import { loadRecentSearches, pushRecentSearch } from "./everydayRecentSearches";
-
 type Props = {
   cars: FleetCar[];
   capture: CaptureState | null;
   onUseInService?: (vehicleId: string, componentId: string, partName: string) => void;
 };
 
-type CatalogPhase = "maker" | "model" | "year";
+type ShownFleetCar = FleetCar & { verified?: boolean };
 
 function captureVehicleIdFromUrl(): string {
   if (typeof window === "undefined") return "";
@@ -69,39 +67,29 @@ function resolveCaptureVehicleId(cars: FleetCar[]): string {
   return roomy?.vehicleId || EVERYDAY_CAPTURE_VEHICLE_ID;
 }
 
-function initialVariantForCapture(capture: CaptureState | null): string {
-  if (!capture) return "";
-  const needsVariant = ["brakes", "answer", "alsoFits", "home", "search", "request"].includes(capture.step);
-  return needsVariant ? EVERYDAY_CAPTURE_VARIANT_ID : "";
-}
-
 export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) {
   const activityQ = usePartsActivity();
   const activity = activityQ.data as PartsActivity | null;
 
   const [step, setStep] = useState<EverydayStep>(capture?.step ?? "car");
   const [vehicleId, setVehicleId] = useState(() => {
-    if (!capture || capture.step === "car" || capture.step === "catalog") return "";
+    if (!capture || capture.step === "car" || capture.step === "notVerified") return "";
     return resolveCaptureVehicleId(cars);
   });
-  const [variantId, setVariantId] = useState(() => initialVariantForCapture(capture));
   const seed = cars.find((c) => c.vehicleId === vehicleId) || cars[0];
   const [make, setMake] = useState(String(seed?.make || ""));
   const [model, setModel] = useState(String(seed?.model || ""));
   const [year, setYear] = useState<number | null>(seed?.year != null ? Number(seed.year) : null);
-  const [catalogPhase, setCatalogPhase] = useState<CatalogPhase>("maker");
   const [searchQuery, setSearchQuery] = useState(capture?.searchQuery ?? "");
   const [alsoFitsOpen, setAlsoFitsOpen] = useState(Boolean(capture?.openAlsoFits));
   const [requestSent, setRequestSent] = useState(Boolean(capture?.requestSent));
+  const [catalogVerifySent, setCatalogVerifySent] = useState(false);
   const [selectedTypeId, setSelectedTypeId] = useState(capture?.partTypeId ?? "cmp-brake-pads");
   const [answerVariant, setAnswerVariant] = useState(capture?.answerVariant ?? "pads");
   const [trustDemo, setTrustDemo] = useState<"verified" | "check">(capture?.openTrust ?? "verified");
   const [hoverWheel, setHoverWheel] = useState<"front" | "rear" | "all" | "none">("none");
   const [otherNumbersOpen, setOtherNumbersOpen] = useState(false);
-  const [unsureVariant, setUnsureVariant] = useState(false);
   const [requestFilter, setRequestFilter] = useState<"all" | "looking" | "added" | "cant_find">("all");
-  const [recentSearches, setRecentSearches] = useState(() => loadRecentSearches());
-  const [unknownSample, setUnknownSample] = useState<{ make: string; model: string; year: number } | null>(null);
 
   const { copy, toast } = useCopyToast();
 
@@ -114,12 +102,8 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
     if (capture.partTypeId) setSelectedTypeId(capture.partTypeId);
     if (capture.answerVariant) setAnswerVariant(capture.answerVariant);
     if (capture.openTrust) setTrustDemo(capture.openTrust);
-    if (capture.step === "stateUnknown") {
-      setUnknownSample({ make: "Toyota", model: "Rush", year: 2018 });
-    }
-    if (capture.step !== "car" && capture.step !== "catalog") {
+    if (capture.step !== "car" && capture.step !== "notVerified") {
       setVehicleId(resolveCaptureVehicleId(cars));
-      if (initialVariantForCapture(capture)) setVariantId(EVERYDAY_CAPTURE_VARIANT_ID);
     }
   }, [capture, cars]);
 
@@ -134,12 +118,8 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
   const ctxQ = usePartsVehicleContext(vehicleId, selectedTypeId, Boolean(vehicleId));
   const ctx = (ctxQ.data || {}) as Record<string, unknown>;
 
-  useEffect(() => {
-    const v = String(ctx.variantId || "");
-    if (v && variantId !== v) setVariantId(v);
-  }, [ctx.variantId, variantId]);
   const plate = String(ctx.plate || cars.find((c) => c.vehicleId === vehicleId)?.licensePlate || "");
-  const variantFromCtx = String(ctx.variantId || variantId || (capture ? EVERYDAY_CAPTURE_VARIANT_ID : ""));
+  const variantFromCtx = String(ctx.variantId || "") || (capture ? EVERYDAY_CAPTURE_VARIANT_ID : "");
   const vehicleYear = Number(ctx.year ?? cars.find((c) => c.vehicleId === vehicleId)?.year ?? year) || null;
   const difference = String(ctx.version || ctx.drivetrain || "2WD");
 
@@ -170,19 +150,8 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
     enabled: Boolean(leadPartId(findQ.data) && variantFromCtx) && (step === "answer" || step === "alsoFits" || alsoFitsOpen),
   });
 
-  const termQ = usePartsTerm(searchQuery, searchQuery.trim().length >= 2 && step === "search");
+  const termQ = usePartsTerm(searchQuery, vehicleId, searchQuery.trim().length >= 2 && step === "search");
   const termHits = (termQ.data as { hits?: Array<Record<string, unknown>> } | undefined)?.hits || [];
-
-  const optionsQ = usePartsVehicleOptions(make || undefined, model || undefined, catalogPhase !== "maker");
-  // The maker grid needs the full maker list before any maker is picked (it was empty before).
-  const makersQ = usePartsVehicleOptions(undefined, undefined, step === "car" || step === "catalog");
-  const allMakes = ((makersQ.data as { makes?: string[] } | undefined)?.makes || []) as string[];
-  const options = optionsQ.data as {
-    makes?: string[];
-    models?: string[];
-    years?: number[];
-    versions?: Array<{ id: string; plainLabel: string }>;
-  } | undefined;
 
   const myVehiclesQ = usePartsMyVehicles();
   const fleetRows = (myVehiclesQ.data?.items || []) as Array<Record<string, unknown>>;
@@ -227,29 +196,24 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
     return rows;
   }, [ctx]);
 
-  function pickFleetCar(car: FleetCar) {
+  function pickFleetCar(car: ShownFleetCar) {
     setVehicleId(car.vehicleId);
     setMake(car.make || "");
     setModel(car.model || "");
     setYear(car.year != null ? Number(car.year) : null);
+    setCatalogVerifySent(false);
+    if (car.verified === false) {
+      setStep("notVerified");
+      return;
+    }
     void api.findParts({ vehicleId: car.vehicleId }).then((body) => {
-      const gate = body as { askVariant?: boolean; pickedVariantId?: string | null; linked?: boolean };
-      if (gate.linked === false) {
-        setStep("linkCar");
+      const gate = body as { linked?: boolean; verified?: boolean };
+      if (gate.linked === false || gate.verified === false) {
+        setStep("notVerified");
         return;
       }
-      if (gate.askVariant || capture?.forceVariantPick) {
-        setStep("version");
-        return;
-      }
-      if (gate.pickedVariantId) setVariantId(gate.pickedVariantId);
       setStep("home");
     }).catch(() => setStep("stateError"));
-  }
-
-  function afterVariantPick(id: string) {
-    setVariantId(id);
-    setStep("home");
   }
 
   const lookup = lookupQ.data as {
@@ -273,24 +237,6 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
     setSelectedTypeId(String(row.maintenance_component_id || selectedTypeId));
     setAnswerVariant("pads");
     setStep("answer");
-  }
-
-  function finishMmy(y: number) {
-    setVehicleId("");
-    pushRecentSearch({ make, model, year: y });
-    setRecentSearches(loadRecentSearches());
-    void api.findParts({ make, model, year: String(y) }).then((body) => {
-      const gate = body as { askVariant?: boolean; linked?: boolean; inCatalog?: boolean };
-      if (gate.linked === false) {
-        setStep("linkCar");
-        return;
-      }
-      if (gate.askVariant) setStep("version");
-      else if (gate.inCatalog === false) {
-        setUnknownSample({ make, model, year: y });
-        setStep("stateUnknown");
-      } else setStep("home");
-    }).catch(() => setStep("stateError"));
   }
 
   /** "Your requests" side card (F1, F10). */
@@ -413,45 +359,39 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
     );
   }
 
-  if (step === "linkCar") {
+  if (step === "notVerified") {
+    const car = cars.find((c) => c.vehicleId === vehicleId);
+    const reqMake = String(car?.make || make || "");
+    const reqModel = String(car?.model || model || "");
+    const reqYear = car?.year != null ? Number(car.year) : year ?? new Date().getFullYear();
     return (
       <EverydayShell>
         <div className={`${CARD} mx-auto flex max-w-xl flex-col items-center gap-4 p-8 text-center`}>
           <IconBox name="directions_car" size="lg" />
-          <p className={`text-[26px] font-semibold tracking-tight ${TXT}`}>Link this car once</p>
+          <p className={`text-[26px] font-semibold tracking-tight ${TXT}`}>Not verified yet</p>
           <p className={`text-base ${MUTED}`}>
-            We have {displayCarLabel || "this car"} on your fleet, but it isn&apos;t matched to our parts list yet. Pick the exact version
-            and every part search will work.
-          </p>
-          <SBtn kind="primary" size="lg" className="mt-2 w-full" onClick={() => setStep("version")}>Choose 2WD or 4WD</SBtn>
-          <SBtn kind="secondary" className="w-full" onClick={() => setStep("car")}>Pick a different car</SBtn>
-        </div>
-        {toast}
-      </EverydayShell>
-    );
-  }
-
-  if (step === "stateUnknown") {
-    const sample = unknownSample || { make: make || "Toyota", model: model || "Rush", year: year || 2018 };
-    return (
-      <EverydayShell>
-        <div className={`${CARD} mx-auto flex max-w-xl flex-col items-center gap-4 p-10 text-center`}>
-          <div className={`${TILE} flex h-24 w-24 items-center justify-center`}>
-            <Icon name="car_repair" className={`text-[44px] ${TXT}`} />
-          </div>
-          <p className={`text-[26px] font-semibold tracking-tight ${TXT}`}>
-            We don&apos;t have the {sample.make} {sample.model} {sample.year} in our list yet.
+            Roam is checking this car. Its parts show here once it&apos;s verified.
           </p>
           <SBtn
             kind="primary"
             size="lg"
-            icon="add_circle"
             className="mt-2 w-full"
-            onClick={() => void api.requestCatalogAddition({ make: sample.make, model: sample.model, year: sample.year, vehicleId: null })}
+            disabled={catalogVerifySent || !vehicleId}
+            onClick={() => {
+              if (!vehicleId || catalogVerifySent) return;
+              void api
+                .requestCatalogAddition({ vehicleId, make: reqMake, model: reqModel, year: reqYear })
+                .then(() => setCatalogVerifySent(true))
+                .catch(() => setStep("stateError"));
+            }}
           >
-            Ask Roam to add this car
+            {catalogVerifySent ? "Sent" : "Ask Roam to verify this car"}
+          </SBtn>
+          <SBtn kind="secondary" className="w-full" onClick={() => setStep("car")}>
+            Back to your cars
           </SBtn>
         </div>
+        {toast}
       </EverydayShell>
     );
   }
@@ -473,7 +413,7 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
     const shownCars = displayCars(cars, fleetRows);
     return (
       <EverydayShell>
-        <SPageTitle title="Which car is it for?" subtitle="Pick one of your cars, or any other car." />
+        <SPageTitle title="Which car is it for?" subtitle="Pick one of your cars." />
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
           <div className="flex flex-col gap-8 lg:col-span-8">
             <div className="flex flex-col gap-4">
@@ -500,6 +440,9 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
                       <p className={`text-base ${MUTED}`}>{row.year}</p>
                     </div>
                     <SPlate plate={row.licensePlate || "PLATE"} />
+                    {row.verified === false ? (
+                      <SStatusPill tone="gray" icon="help_outline">Not verified yet</SStatusPill>
+                    ) : null}
                     <span className="mt-1 inline-flex w-fit items-center gap-1.5 rounded-xl border border-[#cbd5e1] bg-white px-3.5 py-2 text-sm font-semibold text-[#0b1c30] transition-colors group-hover:bg-[#030213] group-hover:text-white dark:border-[#3a3a3d] dark:bg-[#1c1c1e] dark:text-[#fafafa]">
                       Select car <Icon name="arrow_forward" className="text-[16px]" />
                     </span>
@@ -507,231 +450,8 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
                 ))}
               </div>
             </div>
-
-            <div className={`${CARD} flex flex-col gap-6 p-8`}>
-              <div>
-                <p className={`text-[22px] font-semibold ${TXT}`}>Another car</p>
-                <p className={`text-[15px] ${MUTED}`}>Search any car, or pick a maker below.</p>
-              </div>
-              <SSearch placeholder="Type a make or model — e.g. Toyota Roomy" big onFocus={() => setStep("catalog")} />
-              <div className="flex flex-col gap-4">
-                <p className={`text-[15px] ${TXT}`}>Or choose a maker:</p>
-                <div className="grid grid-cols-4 gap-4 sm:grid-cols-8">
-                  {allMakes.slice(0, 8).map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      className="group flex flex-col items-center gap-2"
-                      onClick={() => {
-                        setMake(m);
-                        setCatalogPhase("model");
-                        setStep("catalog");
-                      }}
-                    >
-                      <span className="rounded-full ring-1 ring-[#e5eeff] transition-all group-hover:ring-2 group-hover:ring-[#030213] dark:ring-[#3a3a3d]">
-                        <MakerLogo make={m} size={56} />
-                      </span>
-                      <span className={`text-[13px] ${TXT}`}>{m}</span>
-                    </button>
-                  ))}
-                </div>
-                <SBtn kind="secondary" iconAfter="expand_more" className="w-fit" onClick={() => setStep("catalog")}>All makers</SBtn>
-              </div>
-            </div>
           </div>
           <aside className="lg:col-span-4">{requestsCard()}</aside>
-        </div>
-        {toast}
-      </EverydayShell>
-    );
-  }
-
-  if (step === "catalog") {
-    const makes = allMakes;
-    const models = options?.models || [];
-    const years = options?.years || [];
-    const stepDot = (n: number, label: string, on: boolean) => (
-      <span className={`inline-flex items-center gap-2 text-[15px] font-semibold ${on ? TXT : MUTED}`}>
-        <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[12px] ${on ? "bg-[#030213] text-white dark:bg-[#fafafa] dark:text-[#030213]" : "bg-[#e5eeff] dark:bg-[#3a3a3d]"}`}>{n}</span>
-        {label}
-      </span>
-    );
-    const tileCls = (on: boolean) =>
-      `${TILE} flex flex-col items-center justify-center gap-2 p-4 transition-all ${on ? "ring-2 ring-[#030213] dark:ring-[#fafafa]" : "ring-1 ring-transparent hover:ring-[#cbd5e1]"}`;
-    return (
-      <EverydayShell>
-        <div className="mb-4">
-          <SBtn kind="secondary" icon="arrow_back" onClick={() => setStep("car")}>Back to your cars</SBtn>
-        </div>
-        <SPageTitle title="Pick another car" subtitle="Find the right part by picking your car's maker, model and year." />
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-          <div className={`${CARD} flex flex-col gap-8 p-6 sm:p-8 lg:col-span-8`}>
-            <div className="flex flex-wrap items-center gap-3 border-b border-[#e5eeff] pb-6 dark:border-[#3a3a3d]">
-              {stepDot(1, "Maker", true)}
-              <Icon name="chevron_right" className={`text-[18px] ${MUTED}`} />
-              {stepDot(2, "Model", Boolean(make))}
-              <Icon name="chevron_right" className={`text-[18px] ${MUTED}`} />
-              {stepDot(3, "Year", Boolean(make && model))}
-            </div>
-
-            <section className="flex flex-col gap-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className={`text-[20px] font-semibold ${TXT}`}>1. Pick a maker</p>
-                {make ? <SStatusPill tone="green" icon="check_circle">{make} picked</SStatusPill> : null}
-              </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {makes.map((m) => (
-                  <button key={m} type="button" className={tileCls(make === m)} onClick={() => { setMake(m); setModel(""); setYear(null); setCatalogPhase("model"); }}>
-                    <MakerLogo make={m} size={44} />
-                    <span className={`text-[15px] font-semibold ${TXT}`}>{m}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            {make ? (
-              <section className="flex flex-col gap-4 border-t border-[#e5eeff] pt-6 dark:border-[#3a3a3d]">
-                <div className="flex items-center justify-between gap-3">
-                  <p className={`text-[20px] font-semibold ${TXT}`}>2. Pick a model <span className={`text-sm font-normal ${MUTED}`}>({make})</span></p>
-                  {model ? <SStatusPill tone="green" icon="check_circle">{model} picked</SStatusPill> : null}
-                </div>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  {models.map((m) => (
-                    <button key={m} type="button" className={`${tileCls(model === m)} !items-start`} onClick={() => { setModel(m); setYear(null); setCatalogPhase("year"); }}>
-                      <span className={`text-[17px] font-semibold ${TXT}`}>{m}</span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            ) : null}
-
-            {make && model ? (
-              <section className="flex flex-col gap-4 border-t border-[#e5eeff] pt-6 dark:border-[#3a3a3d]">
-                <div className="flex items-center justify-between gap-3">
-                  <p className={`text-[20px] font-semibold ${TXT}`}>3. Pick the year <span className={`text-sm font-normal ${MUTED}`}>({make} {model})</span></p>
-                  {year ? <SStatusPill tone="green" icon="check_circle">{year} picked</SStatusPill> : null}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {years.map((y) => (
-                    <button
-                      key={y}
-                      type="button"
-                      onClick={() => setYear(y)}
-                      className={`min-w-[64px] rounded-xl px-4 py-2.5 text-[17px] font-semibold transition-all ${
-                        year === y
-                          ? "bg-[#030213] text-white ring-2 ring-[#030213] ring-offset-2 dark:bg-[#fafafa] dark:text-[#030213] dark:ring-offset-[#2a2a2d]"
-                          : `border border-[#cbd5e1] bg-white hover:bg-[#eff4ff] dark:border-[#3a3a3d] dark:bg-[#1c1c1e] ${TXT}`
-                      }`}
-                    >
-                      {y}
-                    </button>
-                  ))}
-                </div>
-              </section>
-            ) : null}
-
-            <div className="flex flex-col justify-between gap-4 border-t border-[#e5eeff] pt-6 dark:border-[#3a3a3d] sm:flex-row sm:items-center">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={`text-sm ${MUTED}`}>Your car:</span>
-                <span className={`inline-flex items-center gap-1.5 rounded-full bg-[#eff4ff] px-3 py-1.5 text-sm dark:bg-[#1c1c1e] ${TXT}`}>
-                  {make || "Maker"} <Icon name="arrow_forward" className="text-[14px]" /> {model || "Model"} <Icon name="arrow_forward" className="text-[14px]" /> {year || "Year"}
-                </span>
-              </div>
-              <SBtn kind="primary" size="lg" iconAfter="arrow_forward" disabled={!(make && model && year)} onClick={() => year && finishMmy(year)}>
-                {make && model && year ? `Continue with ${year} ${make} ${model}` : "Continue"}
-              </SBtn>
-            </div>
-          </div>
-
-          <aside className="flex flex-col gap-6 lg:col-span-4">
-            {recentSearches.length ? (
-              <div className={`${CARD} flex flex-col gap-3 p-6`}>
-                <div className="flex items-center justify-between">
-                  <p className={`text-[20px] font-semibold ${TXT}`}>Recent searches</p>
-                  <Icon name="history" className={`text-[20px] ${MUTED}`} />
-                </div>
-                {recentSearches.map((r) => (
-                  <button
-                    key={`${r.make}-${r.model}-${r.year}`}
-                    type="button"
-                    className={`flex items-center justify-between rounded-xl border border-[#cbd5e1] px-4 py-3 text-left hover:bg-[#eff4ff] dark:border-[#3a3a3d] dark:hover:bg-[#1c1c1e] ${TXT}`}
-                    onClick={() => {
-                      setMake(r.make);
-                      setModel(r.model);
-                      setYear(r.year);
-                      void api.findParts({ make: r.make, model: r.model, year: String(r.year) }).then((body) => {
-                        const gate = body as { askVariant?: boolean };
-                        setStep(gate.askVariant ? "version" : "home");
-                      });
-                    }}
-                  >
-                    <span className="inline-flex items-center gap-3"><Icon name="directions_car" className="text-[18px]" />{r.make} {r.model} {r.year}</span>
-                    <Icon name="chevron_right" className="text-[20px]" />
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            <div className={`${CARD} flex flex-col gap-3 p-6`}>
-              <p className={`text-[20px] font-semibold ${TXT}`}>Can&apos;t find your car?</p>
-              <p className={`text-sm ${MUTED}`}>Tell us which car it is and we&apos;ll add it.</p>
-              <SBtn kind="secondary" icon="add_circle" className="w-full" onClick={() => void api.requestCatalogAddition({ make, model, year: year || new Date().getFullYear(), vehicleId: null })}>
-                Ask Roam to add this car
-              </SBtn>
-            </div>
-          </aside>
-        </div>
-        {toast}
-      </EverydayShell>
-    );
-  }
-
-  if (step === "version") {
-    const versions = options?.versions?.length
-      ? options.versions
-      : [{ id: variantFromCtx || "2wd", plainLabel: "2WD" }, { id: "4wd", plainLabel: "4WD" }];
-    return (
-      <EverydayShell className="max-w-[920px]">
-        <div className="mb-6">
-          <SBtn kind="secondary" icon="arrow_back" onClick={() => setStep(vehicleId ? "car" : "catalog")}>Back</SBtn>
-        </div>
-        <SPageTitle title={`Which ${model || "car"} ${year || ""} is yours?`.replace(/\s+/g, " ").replace(" is", " is")} subtitle="These two need some different parts. Pick yours so everything fits." />
-        <div className={`${CARD} mb-6 flex items-center gap-4 px-5 py-4`}>
-          <MakerLogo make={make || "Car"} size={40} />
-          <p className={`text-[17px] font-semibold ${TXT}`}>{make} {model} {year ? `(${year})` : ""}</p>
-        </div>
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          {versions.map((v) => {
-            const is4 = /4wd|awd/i.test(v.plainLabel);
-            return (
-              <div key={v.id} className={`${CARD} flex flex-col gap-5 p-7`}>
-                <div>
-                  <p className={`${MONO} text-[26px] ${TXT}`}>{v.plainLabel}</p>
-                  <p className={`text-[17px] font-semibold ${TXT}`}>{is4 ? "All-wheel drive" : "Front-wheel drive"}</p>
-                </div>
-                <div className={`${TILE} px-4 py-3`}>
-                  <SideCarDrive drive={is4 ? "4wd" : "2wd"} />
-                </div>
-                <SBtn kind="primary" size="lg" iconAfter="arrow_forward" className="w-full" onClick={() => afterVariantPick(v.id)}>
-                  Select {v.plainLabel}
-                </SBtn>
-              </div>
-            );
-          })}
-        </div>
-        <div className={`${CARD} mt-6 flex flex-col items-center gap-3 p-7 text-center`}>
-          <SBtn kind="soft" icon="help_outline" onClick={() => { setUnsureVariant(true); setStep("home"); }}>
-            I&apos;m not sure which one I have
-          </SBtn>
-          <p className={`max-w-lg text-[15px] ${MUTED}`}>
-            Shows parts for both, and marks anything that differs with a small &quot;Depends on your version&quot; note.
-          </p>
-        </div>
-        <div className="mt-6 flex gap-4 rounded-[20px] bg-[#eff4ff] p-6 dark:bg-[#2a2a2d]">
-          <IconBox name="visibility" size="sm" className="!bg-white dark:!bg-[#1c1c1e]" />
-          <div>
-            <p className={`text-[17px] font-semibold ${TXT}`}>How can you tell?</p>
-            <p className={`mt-1 text-[15px] ${MUTED}`}>Check whether your car pulls from the front wheels only, or from all four.</p>
-          </div>
         </div>
         {toast}
       </EverydayShell>
@@ -1020,9 +740,6 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
                       <div className="min-w-0 flex-1">
                         <p className={`text-[16px] font-semibold ${TXT}`}>{row.name}</p>
                         <p className={`text-sm ${MUTED}`}>{row.description}</p>
-                        {unsureVariant && row.id.includes("shoe") ? (
-                          <p className="mt-1 text-[13px] font-semibold text-[#b45309] dark:text-[#fbbf24]">Depends on your version</p>
-                        ) : null}
                       </div>
                       {row.onFile ? (
                         <SStatusPill tone="green" icon="check_circle">Verified</SStatusPill>
@@ -1066,8 +783,9 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
           onClose={() => { setAlsoFitsOpen(false); if (step === "alsoFits") setStep("answer"); }}
           partName={lookup?.reference?.name || "Front brake pads"}
           partNumber={lookup?.reference?.number || ""}
-          rows={(lookup?.alsoFits || []) as Array<{ make: string; model: string; years: string; trust: string; isYourCar?: boolean; difference?: string; version?: string }>}
-          sources={lookup?.sources || []}
+          rows={(lookup?.alsoFits || []) as Array<{ make: string; model: string; years: string; trust: string; isYourCar?: boolean; difference?: string; version?: string; chassis?: string; engine?: string }>}
+          numberBrand={lookup?.reference?.brand || ""}
+          brandNumbers={lookupBrandNumbers()}
           plate={plate}
         />
         {toast}
@@ -1111,7 +829,6 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
               </div>
               <p className={`text-[15px] ${MUTED}`}>
                 {vehicleYear || year} · {difference}
-                {unsureVariant ? " · Depends on your version" : ""}
               </p>
             </div>
           </div>
@@ -1240,6 +957,49 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
     </EverydayShell>
   );
 
+  /** The facts shown in "Your part info": same car record "Copy part info" uses; empty values are left out. */
+  function yourPartInfo(partName: string): PartInfoFact[] {
+    const specs = (ctx.specs || {}) as Record<string, unknown>;
+    const facts: PartInfoFact[] = [];
+    const add = (label: string, raw: unknown, extra?: Partial<PartInfoFact>) => {
+      const value = String(raw ?? "").trim();
+      if (value) facts.push({ label, value, ...extra });
+    };
+    add("Car", displayCarLabel);
+    add("Chassis", specs.chassis_code, { mono: true });
+    add("Engine", specs.engine_code, { mono: true });
+    add("Drive", specs.drivetrain);
+    add("Part", partName, { wide: true });
+    return facts;
+  }
+
+  /** What the store needs: car (make, model, year), part name and part number. */
+  function storeText(partName: string | undefined, num: string, numberBrand?: string, brandNumbers?: StoreBrandNumber[]) {
+    const specs = (ctx.specs || {}) as Record<string, unknown>;
+    // Only real values from the car's record; a missing one is left out, never guessed.
+    return buildStoreCopyText({
+      carLine: displayCarLabel || "",
+      carDetails: carDetailsLine({
+        chassis: String(specs.chassis_code ?? ""),
+        engine: String(specs.engine_code ?? ""),
+        drive: String(specs.drivetrain ?? ""),
+      }),
+      partName,
+      number: num,
+      numberBrand,
+      brandNumbers,
+    });
+  }
+
+  /** The reference number plus every brand number for the looked-up part. */
+  // A function (not a const): this sits after the component's return, so only hoisted declarations work here.
+  function lookupBrandNumbers(): StoreBrandNumber[] {
+    return [
+      ...(lookup?.reference?.number ? [{ brand: String(lookup.reference.brand || ""), number: String(lookup.reference.number) }] : []),
+      ...(lookup?.brandNumbers || []).map((a) => ({ brand: String(a.brand || ""), number: String(a.number || "") })),
+    ];
+  }
+
   function renderAnswerCard() {
     const ref = lookup?.reference;
     const alts = lookup?.brandNumbers || [];
@@ -1248,16 +1008,16 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
       const cards = (findQ.data as { sections?: Array<{ items?: Array<Record<string, unknown>> }> })?.sections?.[0]?.items || [];
       const partOf = (item: Record<string, unknown>) =>
         (item.part || {}) as { name?: string; oem_part_number?: string; catalog_decision?: string };
-      const numberBox = (num: string, compact?: boolean) => (
+      const numberBox = (num: string, partName?: string, compact?: boolean) => (
         <div className={`${TILE} flex flex-wrap items-center justify-between gap-3 p-4`}>
           <div className="flex flex-col gap-1">
-            <span className={`text-[12px] font-semibold uppercase tracking-wider ${MUTED}`}>Give the store this number</span>
+            <span className={`text-[12px] font-semibold uppercase tracking-wider ${MUTED}`}>Your part info</span>
             <span className={`${MONO} text-[20px] ${TXT}`}>{num}</span>
           </div>
           {compact ? (
-            <SIconBtn icon="content_copy" label={`Copy ${num}`} onClick={() => void copy(num, num)} />
+            <SIconBtn icon="content_copy" label={`Copy ${num}`} onClick={() => void copy(storeText(partName, num), num)} />
           ) : (
-            <SBtn kind="primary" size="sm" icon="content_copy" onClick={() => void copy(num, num)}>Copy number</SBtn>
+            <SBtn kind="primary" size="sm" icon="content_copy" onClick={() => void copy(storeText(partName, num), num)}>Copy part info</SBtn>
           )}
         </div>
       );
@@ -1283,7 +1043,7 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
                       <TrustBadge trust={mapTrustLabel(part.catalog_decision === "confirmed" ? "Confirmed" : "Needs checking")} />
                     </div>
                     <p className={`text-[20px] font-semibold ${TXT}`}>{part.name}</p>
-                    {numberBox(String(part.oem_part_number || ""))}
+                    {numberBox(String(part.oem_part_number || ""), part.name)}
                   </div>
                 );
               })}
@@ -1311,7 +1071,7 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
                       <TrustBadge trust={mapTrustLabel(part.catalog_decision === "confirmed" ? "Confirmed" : "Needs checking")} />
                     </div>
                     <p className={`text-[18px] font-semibold ${TXT}`}>{part.name}</p>
-                    {numberBox(String(part.oem_part_number || ""), true)}
+                    {numberBox(String(part.oem_part_number || ""), part.name, true)}
                   </div>
                 );
               })}
@@ -1333,7 +1093,7 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
                   <span className={`text-sm ${MUTED}`}>· Set of 4 shoes (both rear wheels)</span>
                 </div>
                 <p className={`text-[28px] font-semibold tracking-tight ${TXT}`}>{current.name || "Rear brake shoes"}</p>
-                <p className={`text-[15px] ${MUTED}`}>Genuine Toyota part</p>
+                <p className={`text-[15px] ${MUTED}`}>Genuine part</p>
                 <div className="flex items-center gap-3">
                   <div className={`${TILE} flex h-20 w-16 items-center justify-center p-1.5`}>
                     <StitchCarPosition spot="rear" />
@@ -1343,10 +1103,10 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
               </div>
               <div className="lg:col-span-5">
                 <div className={`${TILE} flex flex-col gap-3 p-5`}>
-                  <span className={`text-[12px] font-semibold uppercase tracking-wider ${MUTED}`}>Give the store this number</span>
+                  <span className={`text-[12px] font-semibold uppercase tracking-wider ${MUTED}`}>Your part info</span>
                   <span className={`${MONO} text-[24px] ${TXT}`}>{String(current.oem_part_number || "")}</span>
-                  <SBtn kind="primary" icon="content_copy" className="w-full" onClick={() => void copy(String(current.oem_part_number || ""), String(current.oem_part_number || ""))}>
-                    Copy number
+                  <SBtn kind="primary" icon="content_copy" className="w-full" onClick={() => void copy(storeText(current.name || "Rear brake shoes", String(current.oem_part_number || "")), String(current.oem_part_number || ""))}>
+                    Copy part info
                   </SBtn>
                 </div>
               </div>
@@ -1364,7 +1124,7 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
                 </p>
                 <p className={`text-[15px] ${MUTED}`}>An older number some stores still use.</p>
               </div>
-              <SBtn kind="secondary" icon="content_copy" onClick={() => void copy(String(older.oem_part_number || ""), String(older.oem_part_number || ""))}>
+              <SBtn kind="secondary" icon="content_copy" onClick={() => void copy(storeText(older.name || current?.name || "Rear brake shoes", String(older.oem_part_number || "")), String(older.oem_part_number || ""))}>
                 Copy older number
               </SBtn>
             </div>
@@ -1390,9 +1150,14 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
         number={primary}
         alts={alts.map((a) => ({ brand: a.brand, number: a.number }))}
         fits={fits}
-        sourceUrl={lookup?.sources?.[0]?.url}
         defaultAltsOpen={otherNumbersOpen || Boolean(capture)}
-        onCopy={(text) => void copy(text, text)}
+        partInfo={yourPartInfo(ref?.name || "Front brake pads")}
+        onCopy={(text, brand) =>
+          void copy(
+            storeText(ref?.name || "Front brake pads", text, brand || ref?.brand, lookupBrandNumbers()),
+            brand ? `${brand} ${text}` : text,
+          )
+        }
         onSeeEveryCar={() => setAlsoFitsOpen(true)}
         onUseInService={
           onUseInService && ref?.partId
@@ -1403,17 +1168,22 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
     );
   }
 
-  function displayCars(fleetCars: FleetCar[], rows: Array<Record<string, unknown>>) {
-    if (rows.length >= 3) {
-      return rows.slice(0, 3).map((row, i) => ({
-        vehicleId: String(row.vehicle_id || row.id || fleetCars[i]?.vehicleId || `row-${i}`),
-        licensePlate: String(row.plate || fleetCars[i]?.licensePlate || "PLATE"),
-        make: String(row.make || fleetCars[i]?.make || ""),
-        model: String(row.model || fleetCars[i]?.model || ""),
-        year: Number(row.year ?? fleetCars[i]?.year ?? 0) || undefined,
-      })) as FleetCar[];
+  function displayCars(fleetCars: FleetCar[], rows: Array<Record<string, unknown>>): ShownFleetCar[] {
+    if (rows.length) {
+      return rows.map((row, i) => {
+        const vehicleId = String(row.vehicle_id || row.id || fleetCars[i]?.vehicleId || `row-${i}`);
+        const match = fleetCars.find((c) => c.vehicleId === vehicleId) || fleetCars[i];
+        return {
+          vehicleId,
+          licensePlate: String(row.plate || match?.licensePlate || "PLATE"),
+          make: String(row.make || match?.make || ""),
+          model: String(row.model || match?.model || ""),
+          year: Number(row.year ?? match?.year ?? 0) || undefined,
+          verified: row.verified === undefined ? true : Boolean(row.verified),
+        };
+      });
     }
-    return fleetCars;
+    return fleetCars.map((c) => ({ ...c, verified: true }));
   }
 }
 

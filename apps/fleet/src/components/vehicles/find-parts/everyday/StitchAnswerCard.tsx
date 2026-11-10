@@ -6,11 +6,35 @@
  * "Exact Fit", "recognized across auto suppliers island-wide", brand adjectives, the theme switcher.
  */
 import { useState } from "react";
-import { MakerLogo, TrustBadge, mapTrustLabel } from "./EverydayShared";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../ui/tooltip";
+import { TrustBadge, mapTrustLabel } from "./EverydayShared";
+
+/** Small (i) next to a heading; hover or tap shows the plain explanation. */
+function InfoTip({ label, text }: { label: string; text: string }) {
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            role="button"
+            tabIndex={0}
+            aria-label={label}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex h-6 w-6 cursor-help items-center justify-center rounded-full border border-[#cbd5e1] text-[#47464c] hover:bg-[#e5eeff] dark:border-[#3a3a3d] dark:text-[#a1a1aa] dark:hover:bg-[#3a3a3d]"
+          >
+            <span className="material-symbols-outlined text-[15px]">info</span>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-[280px] text-sm leading-snug">{text}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 export type WheelSpot = "front" | "rear" | "all" | "none" | "front-left" | "front-right" | "rear-left" | "rear-right";
 
 type AltNumber = { brand: string; number: string };
+export type PartInfoFact = { label: string; value: string; mono?: boolean; wide?: boolean };
 type FitRow = { make: string; model: string; isYourCar?: boolean };
 
 const ORANGE = "#EA580C";
@@ -137,12 +161,14 @@ export function StitchAnswerCard({
   number,
   alts,
   fits,
-  sourceUrl,
   onCopy,
   onSeeEveryCar,
   onUseInService,
   defaultAltsOpen = false,
+  partInfo = [],
 }: {
+  /** Facts shown in "Your part info" (car, chassis, engine, drive, part). Only real values; missing ones are left out. */
+  partInfo?: PartInfoFact[];
   name: string;
   trust: string;
   brand?: string;
@@ -153,8 +179,8 @@ export function StitchAnswerCard({
   number: string;
   alts: AltNumber[];
   fits: FitRow[];
-  sourceUrl?: string;
-  onCopy: (text: string) => void;
+  /** brand is set for "Other numbers" rows so the store knows whose number it is. */
+  onCopy: (text: string, brand?: string) => void;
   onSeeEveryCar: () => void;
   onUseInService?: () => void;
   defaultAltsOpen?: boolean;
@@ -163,28 +189,36 @@ export function StitchAnswerCard({
   const [copied, setCopied] = useState(false);
 
   const others = fits.filter((r) => !r.isYourCar);
-  const makers: string[] = [];
-  for (const r of fits) if (r.make && !makers.includes(r.make)) makers.push(r.make);
-  const shownMakers = makers.slice(0, 6);
-  const extraMakers = makers.slice(6);
-  // Name other cars, not other versions of your own model; one model per maker first so the line shows variety.
-  const yourModels = fits.filter((r) => r.isYourCar).map((r) => r.model);
-  const otherModels = others.filter((r) => r.model && !yourModels.includes(r.model));
-  const models: string[] = [];
-  const makersUsed = new Set<string>();
-  for (const r of otherModels) {
-    if (!makersUsed.has(r.make) && !models.includes(r.model)) {
-      models.push(r.model);
-      makersUsed.add(r.make);
-    }
-  }
-  for (const r of otherModels) if (!models.includes(r.model)) models.push(r.model);
-  const namesLine = models.length > 4 ? `${models.slice(0, 4).join(", ")} & more` : models.join(", ");
 
   function copyMain() {
     onCopy(number);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
+  }
+
+  function renderActions() {
+    return (
+      <div className="flex shrink-0 flex-wrap items-center gap-3">
+        {others.length ? (
+          <button
+            type="button"
+            onClick={onSeeEveryCar}
+            className="flex items-center justify-center gap-1.5 rounded-xl border border-[#cbd5e1] bg-white px-4 py-3 text-base font-medium text-[#0b1c30] shadow-sm transition-colors hover:bg-[#e5eeff] dark:border-[#3a3a3d] dark:bg-[#1c1c1e] dark:text-[#fafafa]"
+          >
+            <span>See every car ({fits.length})</span>
+            <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={copyMain}
+          className="flex items-center justify-center gap-2 rounded-xl bg-[#030213] px-5 py-3 text-base font-semibold text-white shadow-sm transition-all hover:opacity-90 active:scale-[0.98] dark:bg-[#fafafa] dark:text-[#1c1c1e]"
+        >
+          <span className="material-symbols-outlined text-[20px]">{copied ? "check" : "content_copy"}</span>
+          <span>{copied ? "Copied" : "Copy part info"}</span>
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -214,30 +248,47 @@ export function StitchAnswerCard({
               <span className="text-sm text-[#47464c] dark:text-[#a1a1aa]">· {qtyLine}</span>
             </div>
             <h2 className="text-[26px] font-semibold tracking-tight text-[#0b1c30] dark:text-[#fafafa]">{name}</h2>
-            {brand ? <p className="text-base text-[#47464c] dark:text-[#a1a1aa]">Genuine {brand} part</p> : null}
+            {brand ? <p className="text-base text-[#47464c] dark:text-[#a1a1aa]">Genuine part</p> : null}
           </div>
 
-          {/* The number to give the store */}
-          <div className="relative flex flex-col justify-between gap-5 overflow-hidden rounded-2xl bg-[#eff4ff] p-6 shadow-md dark:bg-[#2a2a2d] md:flex-row md:items-center">
-            <div className="flex flex-col gap-1.5">
-              <span className="text-[12px] font-semibold uppercase tracking-wider text-[#47464c] dark:text-[#a1a1aa]">
-                Give the store this number
-              </span>
-              <span
-                className="font-['JetBrains_Mono',monospace] text-[22px] font-semibold leading-7 tracking-[0.08em] text-[#0b1c30] dark:text-white"
-                data-testid="everyday-primary-number"
-              >
-                {number}
-              </span>
+          {/* Your part info: everything the store needs, the same facts "Copy part info" copies */}
+          <div className="relative flex flex-col gap-5 overflow-hidden rounded-2xl bg-[#eff4ff] p-6 shadow-md dark:bg-[#2a2a2d]">
+            <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+              <div className="flex flex-col gap-1.5">
+                <span className="flex items-center gap-2">
+                  <span className="text-[12px] font-semibold uppercase tracking-wider text-[#47464c] dark:text-[#a1a1aa]">
+                    Your part info
+                  </span>
+                  <InfoTip
+                    label="What is this number?"
+                    text="This is the OEM part number: the car maker's own number for this part. Copy part info gives the store all of this, plus the other brands' numbers."
+                  />
+                </span>
+                <span className="text-[13px] text-[#47464c] dark:text-[#a1a1aa]">OEM part number</span>
+                <span
+                  className="font-['JetBrains_Mono',monospace] text-[26px] font-semibold leading-8 tracking-[0.08em] text-[#0b1c30] dark:text-white"
+                  data-testid="everyday-primary-number"
+                >
+                  {number}
+                </span>
+              </div>
+              {renderActions()}
             </div>
-            <button
-              type="button"
-              onClick={copyMain}
-              className="flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#030213] px-5 py-3 text-base font-semibold text-white shadow-sm transition-all hover:opacity-90 active:scale-[0.98] dark:bg-[#fafafa] dark:text-[#1c1c1e]"
-            >
-              <span className="material-symbols-outlined text-[20px]">{copied ? "check" : "content_copy"}</span>
-              <span>{copied ? "Copied" : "Copy number"}</span>
-            </button>
+            {partInfo.length ? (
+              <dl className="grid grid-cols-2 gap-3 border-t border-[#dce9ff] pt-5 sm:grid-cols-3 dark:border-[#3a3a3d]">
+                {partInfo.map((f) => (
+                  <div
+                    key={f.label}
+                    className={`flex min-w-0 flex-col gap-0.5 rounded-xl bg-white px-3.5 py-2.5 shadow-sm dark:bg-[#1c1c1e] ${f.wide ? "col-span-2" : ""}`}
+                  >
+                    <dt className="text-[11px] font-semibold uppercase tracking-wider text-[#47464c] dark:text-[#a1a1aa]">{f.label}</dt>
+                    <dd className={`truncate text-[15px] font-semibold text-[#0b1c30] dark:text-[#fafafa] ${f.mono ? "font-['JetBrains_Mono',monospace] tracking-wide" : ""}`} title={f.value}>
+                      {f.value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            ) : null}
           </div>
 
           {/* Other numbers */}
@@ -252,8 +303,12 @@ export function StitchAnswerCard({
                 <div className="flex items-center gap-2.5">
                   <span className="material-symbols-outlined text-[20px] text-[#0b1c30] dark:text-[#fafafa]">swap_horiz</span>
                   <span className="text-[20px] font-semibold leading-7 tracking-[-0.01em] text-[#0b1c30] dark:text-[#fafafa]">
-                    Other numbers stores may use
+                    Other compatible parts
                   </span>
+                  <InfoTip
+                    label="What are these?"
+                    text="The same pads sold under other numbers: other car makers' OEM numbers and aftermarket brands (like Akebono or Brembo). Any of these fits your car."
+                  />
                   <span className="rounded-full bg-[#e5eeff] px-2 py-0.5 text-[12px] font-semibold text-[#47464c] dark:bg-[#3a3a3d] dark:text-[#a1a1aa]">
                     {alts.length}
                   </span>
@@ -280,9 +335,9 @@ export function StitchAnswerCard({
                         </div>
                         <button
                           type="button"
-                          title="Copy number"
+                          title="Copy part info"
                           aria-label={`Copy ${row.number}`}
-                          onClick={() => onCopy(row.number)}
+                          onClick={() => onCopy(row.number, row.brand)}
                           className="rounded-lg border border-[#cbd5e1] p-2 text-[#47464c] transition-colors hover:bg-[#eff4ff] hover:text-[#0b1c30] dark:border-[#3a3a3d] dark:text-[#a1a1aa] dark:hover:bg-[#2a2a2d] dark:hover:text-[#fafafa]"
                         >
                           <span className="material-symbols-outlined text-[18px]">content_copy</span>
@@ -290,51 +345,8 @@ export function StitchAnswerCard({
                       </div>
                     ))}
                   </div>
-                  <div className="flex items-start gap-2.5 rounded-xl bg-white p-3 text-[#47464c] dark:bg-[#1c1c1e] dark:text-[#a1a1aa]">
-                    <span className="material-symbols-outlined mt-0.5 text-[18px]">info</span>
-                    <span className="text-sm leading-relaxed">These are the same pads made by other brands.</span>
-                  </div>
                 </div>
               ) : null}
-            </div>
-          ) : null}
-
-          {/* Also fits */}
-          {others.length ? (
-            <div className="flex flex-col justify-between gap-4 rounded-2xl bg-[#eff4ff]/40 p-5 dark:bg-[#2a2a2d]/60 md:flex-row md:items-center">
-              <div className="flex min-w-0 flex-1 flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-3.5">
-                <div className="flex shrink-0 -space-x-2">
-                  {shownMakers.map((m) => (
-                    <div key={m} title={m} className="rounded-full shadow-sm ring-2 ring-white dark:ring-[#1c1c1e]">
-                      <MakerLogo make={m} size={32} />
-                    </div>
-                  ))}
-                </div>
-                <div className="flex min-w-0 flex-col">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-base font-semibold text-[#0b1c30] dark:text-[#fafafa]">
-                      Also fits {others.length} other {others.length === 1 ? "car" : "cars"}
-                    </span>
-                    {extraMakers.map((m) => (
-                      <span
-                        key={m}
-                        className="rounded-full bg-[#e5eeff] px-2 py-0.5 text-[11px] font-semibold text-[#47464c] dark:bg-[#3a3a3d] dark:text-[#a1a1aa]"
-                      >
-                        + {m}
-                      </span>
-                    ))}
-                  </div>
-                  {namesLine ? <span className="truncate text-sm text-[#47464c] dark:text-[#a1a1aa]">{namesLine}</span> : null}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={onSeeEveryCar}
-                className="flex shrink-0 items-center gap-1.5 self-start rounded-xl border border-[#cbd5e1] bg-white px-4 py-2 text-sm font-medium text-[#0b1c30] shadow-sm transition-colors hover:bg-[#e5eeff] dark:border-[#3a3a3d] dark:bg-[#1c1c1e] dark:text-[#fafafa] md:self-auto"
-              >
-                <span>See every car ({fits.length})</span>
-                <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-              </button>
             </div>
           ) : null}
 
@@ -352,17 +364,6 @@ export function StitchAnswerCard({
             ) : (
               <span />
             )}
-            {sourceUrl ? (
-              <a
-                href={sourceUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-xl border border-[#cbd5e1] bg-white px-4 py-2 text-sm font-medium text-[#47464c] no-underline transition-colors hover:text-[#0b1c30] dark:border-[#3a3a3d] dark:bg-[#1c1c1e] dark:text-[#a1a1aa] dark:hover:text-[#fafafa]"
-              >
-                <span>Open the maker&apos;s page</span>
-                <span className="material-symbols-outlined text-[16px]">open_in_new</span>
-              </a>
-            ) : null}
           </div>
         </div>
       </div>

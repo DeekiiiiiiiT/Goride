@@ -114,7 +114,38 @@ export type TermPart = {
   oem_part_number?: string | null;
   oem_part_number_norm?: string | null;
   maintenance_component_id?: string | null;
+  interchange_group_id?: string | null;
 };
+
+export type TermSearchResult = ReturnType<typeof rankTermResults>;
+
+/** Keep component/synonym hits; drop part rows not listed for this catalog variant. */
+export function filterTermPartsForCatalog(
+  result: TermSearchResult,
+  partsWithGroups: TermPart[],
+  allowedGroupIds: ReadonlySet<string>,
+): TermSearchResult {
+  if (!allowedGroupIds.size) {
+    return {
+      ...result,
+      parts: [],
+      hits: result.hits.filter((row) => row.kind !== "part"),
+    };
+  }
+  const allowedPartIds = new Set(
+    partsWithGroups
+      .filter((row) => {
+        const g = String(row.interchange_group_id ?? "");
+        return g && allowedGroupIds.has(g);
+      })
+      .map((row) => row.id),
+  );
+  return {
+    ...result,
+    parts: result.parts.filter((row) => allowedPartIds.has(row.id)),
+    hits: result.hits.filter((row) => row.kind !== "part" || allowedPartIds.has(row.id)),
+  };
+}
 
 export type TermHit = {
   kind: "part" | "synonym" | "name";
@@ -202,7 +233,10 @@ function searchLike(q: string): string {
   return `%${q.replace(/[%_,()]/g, "")}%`;
 }
 
-export async function readPartTerm(supabase: SupabaseClient, q: string) {
+const PART_TERM_COLUMNS =
+  "id, name, oem_part_number, oem_part_number_norm, maintenance_component_id, interchange_group_id";
+
+export async function readPartTerm(supabase: SupabaseClient, q: string, catalogId?: string | null) {
   const needle = q.trim();
   if (needle.length < 2) return { components: [], synonyms: [], parts: [], hits: [] as TermHit[] };
   const like = searchLike(needle);
@@ -210,9 +244,9 @@ export async function readPartTerm(supabase: SupabaseClient, q: string) {
   const [{ data: names, error: nameError }, { data: synonyms, error: synonymError }, { data: numbers, error: numberError }, exactResult] = await Promise.all([
     supabase.from("maintenance_service_categories").select("id, name, plain_name").or(`name.ilike.${like},plain_name.ilike.${like}`).limit(16),
     supabase.from("part_term_synonym").select("term, maintenance_component_id, canonical").ilike("term", like).limit(16),
-    supabase.from("part_master").select("id, name, oem_part_number, oem_part_number_norm, maintenance_component_id").or(`name.ilike.${like},oem_part_number.ilike.${like}`).limit(16),
+    supabase.from("part_master").select(PART_TERM_COLUMNS).or(`name.ilike.${like},oem_part_number.ilike.${like}`).limit(16),
     norm.length >= 4
-      ? supabase.from("part_master").select("id, name, oem_part_number, oem_part_number_norm, maintenance_component_id").eq("oem_part_number_norm", norm).limit(8)
+      ? supabase.from("part_master").select(PART_TERM_COLUMNS).eq("oem_part_number_norm", norm).limit(8)
       : Promise.resolve({ data: [], error: null }),
   ]);
   if (nameError) throw nameError;
@@ -229,7 +263,20 @@ export async function readPartTerm(supabase: SupabaseClient, q: string) {
   }
   const byId = new Map<string, TermPart>();
   for (const row of [...((exactResult.data || []) as TermPart[]), ...((numbers || []) as TermPart[])]) byId.set(row.id, row);
-  return rankTermResults(needle, { components, synonyms: synonymRows, parts: [...byId.values()] });
+  const ranked = rankTermResults(needle, { components, synonyms: synonymRows, parts: [...byId.values()] });
+  const variant = catalogId?.trim();
+  if (!variant) return ranked;
+  const { data: listings, error: listingError } = await supabase
+    .from("part_listing")
+    .select("interchange_group_id")
+    .eq("vehicle_catalog_id", variant);
+  if (listingError) throw listingError;
+  const groupIds = new Set(
+    (listings ?? [])
+      .map((row) => String((row as { interchange_group_id?: string }).interchange_group_id ?? ""))
+      .filter(Boolean),
+  );
+  return filterTermPartsForCatalog(ranked, [...byId.values()], groupIds);
 }
 
 export type CoverageListing = { interchange_group_id?: string | null };

@@ -2,11 +2,12 @@
  * F8 — every car the part fits, ported from
  * docs/stitch/fleet-find-parts-everyday/every_car_the_front_pads_fit_cross_maker_matrix_roam_fleet/code.html
  * Dropped: "Light Mode / Dark Preview", "ACTIVE FLEET QUERY", "Front Axle Disc System", "Cross-ref index",
- * "Platform Breakdown / Expanded View". Added: logos, "Where this comes from".
+ * "Platform Breakdown / Expanded View". Added: logos. "Where this comes from" (maker page links) removed 9 Nov: owner does not show source links to users.
  */
 import { useMemo, useState } from "react";
 import { MakerLogo, TrustBadge, mapTrustLabel, useCopyToast } from "./EverydayShared";
-import { CARD, Icon, IconBox, MONO, MUTED, SBtn, SChip, SIconBtn, SPlate, TILE, TXT } from "./stitchKit";
+import { buildStoreCopyText, carDetailsLine, type StoreBrandNumber } from "./storeCopyText";
+import { CARD, Icon, MUTED, SBtn, SChip, SIconBtn, SPlate, TILE, TXT } from "./stitchKit";
 
 type FitRow = {
   make: string;
@@ -16,6 +17,8 @@ type FitRow = {
   difference?: string;
   trust: string;
   isYourCar?: boolean;
+  chassis?: string;
+  engine?: string;
 };
 
 export function EverydayAlsoFitsSheet({
@@ -24,15 +27,18 @@ export function EverydayAlsoFitsSheet({
   partName,
   partNumber,
   rows,
-  sources,
   plate,
+  numberBrand,
+  brandNumbers,
 }: {
+  /** Maker the part number belongs to, so a store for another maker knows it is a cross-reference. */
+  numberBrand?: string;
+  brandNumbers?: StoreBrandNumber[];
   open: boolean;
   onClose: () => void;
   partName: string;
   partNumber: string;
   rows: FitRow[];
-  sources: Array<{ label: string; url: string }>;
   plate?: string;
 }) {
   const { copy, toast } = useCopyToast();
@@ -57,10 +63,22 @@ export function EverydayAlsoFitsSheet({
 
   const verifiedCount = rows.filter((r) => mapTrustLabel(r.trust) === "verified").length;
   const checkCount = rows.length - verifiedCount;
-  const makerCount = new Set(rows.map((r) => r.make)).size;
   const yourCar = rows.find((r) => r.isYourCar);
   const openMake = expandedMake ?? byMake[0]?.[0] ?? null;
   const openList = byMake.find(([m]) => m === openMake)?.[1] || [];
+
+  /** What the store needs for this row's car: make, model, years, version, part name and number. */
+  function rowStoreText(row: FitRow) {
+    return buildStoreCopyText({
+      carLine: `${row.make} ${row.model} ${row.years}`,
+      carDetails: carDetailsLine({ chassis: row.chassis, engine: row.engine }),
+      version: row.difference || row.version || "",
+      partName,
+      number: partNumber,
+      numberBrand,
+      brandNumbers,
+    });
+  }
 
   if (!open) return null;
 
@@ -76,22 +94,6 @@ export function EverydayAlsoFitsSheet({
           <div className="mb-5 flex items-center justify-between gap-3">
             <SBtn kind="secondary" icon="arrow_back" onClick={onClose}>Back to the part</SBtn>
             <SIconBtn icon="close" label="Close" onClick={onClose} className="h-10 w-10 rounded-full" />
-          </div>
-
-          <div className={`${TILE} mb-6 flex flex-col gap-4 p-5 sm:flex-row sm:items-center`}>
-            <IconBox name="layers" size="lg" className="!bg-white dark:!bg-[#2a2a2d]" />
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className={`text-[22px] font-semibold ${TXT}`}>{partName}</p>
-                <span className="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-1.5 shadow-sm dark:bg-[#2a2a2d]">
-                  <span className={`${MONO} text-[17px] ${TXT}`}>{partNumber}</span>
-                  <SIconBtn icon="content_copy" label={`Copy ${partNumber}`} className="h-8 w-8" onClick={() => void copy(partNumber, partNumber)} />
-                </span>
-              </div>
-              <p className={`text-[15px] ${MUTED}`}>
-                Ask for any of these cars and you get the same part. Fits {rows.length} cars across {makerCount} makers.
-              </p>
-            </div>
           </div>
 
           <div className="mb-6 flex flex-wrap gap-2">
@@ -166,31 +168,21 @@ export function EverydayAlsoFitsSheet({
                         </p>
                       </div>
                     </div>
-                    <TrustBadge trust={mapTrustLabel(row.trust)} />
+                    <div className="flex shrink-0 items-center gap-2">
+                      <TrustBadge trust={mapTrustLabel(row.trust)} />
+                      <SIconBtn
+                        icon="content_copy"
+                        label={`Copy ${row.make} ${row.model} with part number`}
+                        className="h-8 w-8"
+                        onClick={() => void copy(rowStoreText(row), `${row.make} ${row.model}`)}
+                      />
+                    </div>
                   </li>
                 ))}
               </ul>
             </div>
           ) : null}
 
-          {sources.length ? (
-            <div className={`${CARD} flex flex-col gap-3 p-5`}>
-              <p className={`text-[17px] font-semibold ${TXT}`}>Where this comes from</p>
-              {sources.map((s) => (
-                <div key={s.url} className="flex flex-wrap items-center justify-between gap-2">
-                  <span className={`text-[15px] ${MUTED}`}>{s.label}</span>
-                  <a
-                    href={s.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className={`inline-flex items-center gap-1.5 rounded-xl border border-[#cbd5e1] bg-white px-4 py-2 text-sm font-semibold no-underline hover:bg-[#eff4ff] dark:border-[#3a3a3d] dark:bg-[#1c1c1e] ${TXT}`}
-                  >
-                    Open the maker&apos;s page <Icon name="open_in_new" className="text-[16px]" />
-                  </a>
-                </div>
-              ))}
-            </div>
-          ) : null}
         </div>
         <div className="flex items-center justify-between gap-3 border-t border-[#e5eeff] bg-white px-6 py-4 dark:border-[#3a3a3d] dark:bg-[#2a2a2d] sm:px-8">
           <span className={`text-[15px] ${MUTED}`}>{filtered.length} {filtered.length === 1 ? "car fits" : "cars fit"} this part</span>

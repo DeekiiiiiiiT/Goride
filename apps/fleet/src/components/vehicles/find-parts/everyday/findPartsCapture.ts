@@ -1,7 +1,6 @@
 export type EverydayStep =
   | "car"
-  | "catalog"
-  | "version"
+  | "notVerified"
   | "home"
   | "search"
   | "brakes"
@@ -12,13 +11,10 @@ export type EverydayStep =
   | "trustDemo"
   | "stateLoading"
   | "stateError"
-  | "stateUnknown"
-  | "stateOffline"
-  | "linkCar";
+  | "stateOffline";
 
 export type CaptureState = {
   step: EverydayStep;
-  forceVariantPick?: boolean;
   answerVariant?: "pads" | "calipers" | "cables" | "shoes";
   openAlsoFits?: boolean;
   openTrust?: "verified" | "check";
@@ -29,8 +25,6 @@ export type CaptureState = {
 
 const FOLDER_TO_CAPTURE: Record<string, CaptureState> = {
   find_parts_which_car_is_it_for: { step: "car" },
-  pick_another_car_maker_model_year: { step: "catalog" },
-  which_roomy_2019_is_yours_2wd_or_4wd: { step: "version", forceVariantPick: true },
   car_home_what_do_you_need_toyota_roomy: { step: "home" },
   brakes_for_your_roomy_front_rear_whole_car: { step: "brakes" },
   front_brake_pads_the_answer_04465_b1190: { step: "answer", answerVariant: "pads", partTypeId: "cmp-brake-pads" },
@@ -55,7 +49,6 @@ export function captureFromSearchParams(params: URLSearchParams): CaptureState |
   }
   if (raw === "states_loading_couldn_t_load_car_we_don_t_know_yet_offline" && state) {
     if (state === "error") return { step: "stateError" };
-    if (state === "unknown") return { step: "stateUnknown" };
     if (state === "offline") return { step: "stateOffline" };
     if (state === "loading") return { step: "stateLoading" };
   }
