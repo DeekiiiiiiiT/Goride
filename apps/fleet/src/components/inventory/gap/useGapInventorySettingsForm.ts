@@ -7,11 +7,7 @@ import { useInventoryShell } from '../InventoryShellContext';
 type SettingsRow = Record<string, unknown>;
 type CategoryRow = Record<string, unknown>;
 
-function parseMoney(raw: string): number | null {
-  const n = Number(String(raw).replace(/,/g, '').trim());
-  return Number.isFinite(n) ? n : null;
-}
-
+/** Inventory settings: driver phone + safety notice, and item categories (IV-16 removed the rest). */
 export function useGapInventorySettingsForm(onClose?: () => void) {
   const shell = useInventoryShell();
   const submit = useGapSubmit();
@@ -29,34 +25,16 @@ export function useGapInventorySettingsForm(onClose?: () => void) {
   const settings = load.data?.settings ?? null;
   const categories = load.data?.categories ?? [];
   const categoryCount = categories.length;
+  const updatedAt = settings?.updated_at ? String(settings.updated_at) : null;
 
   const [fleetPhone, setFleetPhone] = useState('');
   const [safetyNotice, setSafetyNotice] = useState('');
-  const [approvalThreshold, setApprovalThreshold] = useState('');
-  const [monthlyCap, setMonthlyCap] = useState('');
-  const [scrapNote, setScrapNote] = useState('');
-  const [fiscalYear, setFiscalYear] = useState('4');
-  const [settingsSection, setSettingsSection] = useState<'general' | 'categories' | 'scrap'>(
-    'general',
-  );
   const [newCategoryName, setNewCategoryName] = useState('');
 
   useEffect(() => {
     if (!settings) return;
     setFleetPhone(String(settings.fleet_support_phone ?? ''));
     setSafetyNotice(String(settings.safety_notice_text ?? ''));
-    setApprovalThreshold(
-      settings.approval_threshold_jmd != null ? String(settings.approval_threshold_jmd) : '',
-    );
-    setMonthlyCap(
-      settings.monthly_procurement_cap_jmd != null
-        ? String(settings.monthly_procurement_cap_jmd)
-        : '',
-    );
-    setScrapNote(String(settings.scrap_note ?? ''));
-    if (settings.fiscal_year_start_month != null) {
-      setFiscalYear(String(settings.fiscal_year_start_month));
-    }
   }, [settings]);
 
   const toggleCategory = (id: string, active: boolean) =>
@@ -87,20 +65,9 @@ export function useGapInventorySettingsForm(onClose?: () => void) {
       if (swapIdx < 0 || swapIdx >= sorted.length) return;
       const a = sorted[idx];
       const b = sorted[swapIdx];
-      const aOrder = Number(a.sort_order ?? idx);
-      const bOrder = Number(b.sort_order ?? swapIdx);
-      await inventoryApi.patchCategory(String(a.id), { sort_order: bOrder });
-      await inventoryApi.patchCategory(String(b.id), { sort_order: aOrder });
+      await inventoryApi.patchCategory(String(a.id), { sort_order: Number(b.sort_order ?? swapIdx) });
+      await inventoryApi.patchCategory(String(b.id), { sort_order: Number(a.sort_order ?? idx) });
       await load.reload();
-      await shell.refresh();
-    });
-
-  const saveFiscalYear = () =>
-    submit.run(async () => {
-      const month = Number.parseInt(fiscalYear, 10);
-      await inventoryApi.updateSettings({
-        fiscal_year_start_month: Number.isFinite(month) ? month : 4,
-      });
       await shell.refresh();
     });
 
@@ -110,47 +77,24 @@ export function useGapInventorySettingsForm(onClose?: () => void) {
         fleet_support_phone: fleetPhone.trim() || null,
         safety_notice_text: safetyNotice.trim() || null,
       });
+      await load.reload();
       await shell.refresh();
       onClose?.();
     });
-
-  const saveScrapNote = () =>
-    submit.run(async () => {
-      await inventoryApi.updateSettings({
-        scrap_note: scrapNote.trim() || null,
-      });
-      await shell.refresh();
-      onClose?.();
-    });
-
-  const canSaveGeneral = !submit.saving;
-  const canSaveScrapNote = !submit.saving;
 
   return {
     load,
     submit,
     categories,
+    categoryCount,
+    updatedAt,
     fleetPhone,
     setFleetPhone,
     safetyNotice,
     setSafetyNotice,
-    approvalThreshold,
-    setApprovalThreshold,
-    monthlyCap,
-    setMonthlyCap,
-    scrapNote,
-    setScrapNote,
-    fiscalYear,
-    setFiscalYear,
-    categoryCount,
-    canSaveGeneral,
-    canSaveScrapNote,
+    canSaveGeneral: !submit.saving,
     toggleCategory,
-    saveFiscalYear,
     saveGeneral,
-    saveScrapNote,
-    settingsSection,
-    setSettingsSection,
     newCategoryName,
     setNewCategoryName,
     createCategory,

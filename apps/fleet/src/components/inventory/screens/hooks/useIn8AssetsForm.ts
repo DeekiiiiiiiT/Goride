@@ -31,7 +31,6 @@ export function useIn8AssetsForm() {
       in_store: 0,
       in_repair: 0,
       faulty: 0,
-      warranty_ending: 0,
     };
     for (const a of assets) {
       const st = strField(a, 'status', '').toLowerCase();
@@ -39,7 +38,6 @@ export function useIn8AssetsForm() {
       else if (st === 'in_store' || st === 'in store') counts.in_store += 1;
       else if (st === 'in_repair' || st === 'in repair') counts.in_repair += 1;
       else if (st === 'faulty') counts.faulty += 1;
-      if (strField(a, 'warranty_ending_soon', '') === 'true') counts.warranty_ending += 1;
     }
     return counts;
   }, [assets]);

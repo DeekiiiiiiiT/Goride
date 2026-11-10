@@ -5,19 +5,17 @@ import { useInventoryShell } from '../InventoryShellContext';
 import { InventoryPrimaryTabs } from '../InventoryPrimaryTabs';
 import { InventoryOverflowMenu } from '../InventoryOverflowMenu';
 import { strField } from '../inventoryData';
+import { isStoredAlert } from './hooks/useIn13AlertsForm';
 export function In13Alerts() {
   const form = useIn13AlertsForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
-  const secondary = live.secondaryVehicle;
-  const lowStockLabel = live.lowStockLabel;
   const alertRecord = (id: string) => form.filtered.find((a) => strField(a, 'id', '') === id) ?? {};
   const alertMenu = (id: string) => {
     const a = alertRecord(id);
-    return [
-      { label: 'Mark done', onClick: () => id && form.markDone(id) },
-      { label: 'Open record', onClick: () => form.openRelated(a) },
-    ];
+    const open = { label: form.openLabel(a), onClick: () => form.openRelated(a) };
+    if (!isStoredAlert(a) || shell.readOnly) return [open];
+    return [{ label: 'Mark done', onClick: () => void form.markDone(id).catch(() => undefined) }, open];
   };
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
@@ -38,14 +36,12 @@ export function In13Alerts() {
       <p className="font-body-md text-body-md text-on-surface-variant mt-1">What you have, where it is, and what every car is missing.</p>
       </div>
       <div className="flex items-center gap-space-sm self-start md:self-auto">
-      <div className="flex items-center gap-space-xs bg-surface-container px-space-md py-1.5 rounded-lg text-on-surface-variant">
-      <span className="material-symbols-outlined text-[18px]">verified</span>
-      <span className="font-label-code text-caption font-semibold">Ledger Sync: Operational</span>
-      </div>
+      {!shell.readOnly ? (
       <button type="button" className="flex items-center gap-space-xs bg-primary text-on-primary px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm" onClick={() => shell.openModal('receive')}>
       <span className="material-symbols-outlined text-[16px]">move_to_inbox</span>
       <span>Receive stock</span>
       </button>
+      ) : null}
       </div>
       </div>
 
@@ -60,9 +56,11 @@ export function In13Alerts() {
       <div>
       <div className="flex items-center gap-space-sm mb-1">
       <h2 className="font-headline-lg text-headline-lg text-on-surface font-bold tracking-tight">Inventory & Storeroom Alerts</h2>
-      <span className="bg-error-container text-on-error-container font-label-code text-caption font-bold px-2 py-0.5 rounded">2 CRITICAL</span>
+      {form.counts.critical > 0 ? (
+      <span className="bg-error-container text-on-error-container font-label-code text-caption font-bold px-2 py-0.5 rounded">{form.counts.critical} CRITICAL</span>
+      ) : null}
       </div>
-      <p className="font-body-md text-body-md text-on-surface-variant">5 actionable discrepancy and compliance triggers requiring storeroom dispatch or hub resolution.</p>
+      <p className="font-body-md text-body-md text-on-surface-variant">{form.counts.open} open alert{form.counts.open === 1 ? '' : 's'}.</p>
       </div>
       <div className="flex flex-wrap items-center gap-space-sm">
       <div className="relative min-w-[240px]">
@@ -73,7 +71,7 @@ export function In13Alerts() {
       <span className="material-symbols-outlined text-[18px] text-on-surface-variant">schedule</span>
       <span>Snooze settings</span>
       </button>
-      <button type="button" className="flex items-center gap-space-xs bg-surface-container-low hover:bg-surface-container text-on-surface px-space-md py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors" onClick={() => form.markAllViewed()}>
+      <button type="button" className="flex items-center gap-space-xs bg-surface-container-low hover:bg-surface-container text-on-surface px-space-md py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors" onClick={() => void form.markAllViewed().catch(() => undefined)}>
       <span className="material-symbols-outlined text-[18px] text-on-surface-variant">done_all</span>
       <span>Mark all viewed</span>
       </button>
@@ -83,9 +81,9 @@ export function In13Alerts() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-lg">
       <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm flex items-center justify-between">
       <div>
-      <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold">Active Deficits</span>
-      <div className="font-headline-lg text-headline-lg font-bold text-on-surface mt-1">{form.live.totalStockValue}</div>
-      <span className="font-caption text-caption text-error font-medium">Kit items missing</span>
+      <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold">Open alerts</span>
+      <div className="font-headline-lg text-headline-lg font-bold text-on-surface mt-1">{form.counts.open}</div>
+      <span className="font-caption text-caption text-error font-medium">{form.counts.critical} critical</span>
       </div>
       <div className="w-10 h-10 rounded-lg bg-error-container text-on-error-container flex items-center justify-center">
       <span className="material-symbols-outlined text-[20px]">warning</span>
@@ -93,32 +91,32 @@ export function In13Alerts() {
       </div>
       <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm flex items-center justify-between">
       <div>
-      <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold">Kit Non-Compliance</span>
-      <div className="font-headline-lg text-headline-lg font-bold text-on-surface mt-1">1 Vehicle</div>
-      <span className="font-caption text-caption text-on-surface-variant">Dispatch blocked at Kingston #01</span>
+      <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold">Driver reports open</span>
+      <div className="font-headline-lg text-headline-lg font-bold text-on-surface mt-1">{form.counts.driverReports}</div>
+      <span className="font-caption text-caption text-on-surface-variant">From the driver app</span>
       </div>
       <div className="w-10 h-10 rounded-lg bg-surface-container text-primary flex items-center justify-center">
-      <span className="material-symbols-outlined text-[20px]">block</span>
+      <span className="material-symbols-outlined text-[20px]">campaign</span>
       </div>
       </div>
       <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm flex items-center justify-between">
       <div>
-      <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold">Stock Reorders Due</span>
-      <div className="font-headline-lg text-headline-lg font-bold text-on-surface mt-1">1 SKU</div>
-      <span className="font-caption text-caption text-tertiary-container font-medium">Below safety threshold</span>
+      <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold">Equipment needing attention</span>
+      <div className="font-headline-lg text-headline-lg font-bold text-on-surface mt-1">{live.assetsFaulty + live.assetsLost + live.assetsInRepair}</div>
+      <span className="font-caption text-caption text-on-surface-variant">{live.assetsFaulty} faulty · {live.assetsLost} lost · {live.assetsInRepair} in repair</span>
       </div>
       <div className="w-10 h-10 rounded-lg bg-tertiary-fixed text-on-tertiary-fixed flex items-center justify-center">
-      <span className="material-symbols-outlined text-[20px]">inventory</span>
+      <span className="material-symbols-outlined text-[20px]">build</span>
       </div>
       </div>
       <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm flex items-center justify-between">
       <div>
-      <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold">Ledger Variance</span>
-      <div className="font-headline-lg text-headline-lg font-bold text-on-surface mt-1">-1 Unit</div>
-      <span className="font-caption text-caption text-on-surface-variant">Audit triggered today 06:30</span>
+      <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold">Low or out</span>
+      <div className="font-headline-lg text-headline-lg font-bold text-on-surface mt-1">{live.lowStockCount}</div>
+      <span className="font-caption text-caption text-on-surface-variant">{live.lowStockCount ? live.lowStockLabel : 'The store covers the cars'}</span>
       </div>
       <div className="w-10 h-10 rounded-lg bg-secondary-fixed text-on-secondary-fixed flex items-center justify-center">
-      <span className="material-symbols-outlined text-[20px]">calculate</span>
+      <span className="material-symbols-outlined text-[20px]">inventory</span>
       </div>
       </div>
       </div>
@@ -141,13 +139,6 @@ export function In13Alerts() {
       <span>Done</span>
       <span className="bg-surface-container-high text-on-surface-variant font-label-code text-[11px] px-1.5 py-0.2 rounded-full">{form.tabCounts.done}</span>
       </button>
-      </div>
-      <div className="flex items-center gap-space-sm">
-      <span className="font-caption text-caption text-on-surface-variant uppercase font-semibold">Priority Sort:</span>
-      <div className="flex items-center gap-1 bg-surface-container-lowest px-space-md py-1.5 rounded-lg shadow-sm font-body-sm text-body-sm text-on-surface">
-      <span>Critical Severity First</span>
-      <span className="material-symbols-outlined text-[16px] text-on-surface-variant">expand_more</span>
-      </div>
       </div>
       </div>
 
@@ -207,21 +198,25 @@ export function In13Alerts() {
       {form.selectedAlertRow.sku ? (
       <div className="font-label-code text-caption">SKU: {form.selectedAlertRow.sku}</div>
       ) : null}
+      {form.selectedAlert && isStoredAlert(form.selectedAlert) && !shell.readOnly ? (
       <button
         type="button"
         className="mt-space-md h-9 px-space-md rounded-lg bg-primary text-on-primary font-semibold disabled:opacity-60"
         disabled={!form.selectedAlertId}
         title={form.markDoneSelectedDisabledReason || 'Mark selected alert done'}
-        onClick={() => form.selectedAlertId && form.markDone(form.selectedAlertId)}
+        onClick={() => form.selectedAlertId && void form.markDone(form.selectedAlertId).catch(() => undefined)}
       >
         Mark done
       </button>
+      ) : (
+      <p className="mt-space-md font-caption text-caption text-on-surface-variant">This alert clears by itself when the record behind it changes.</p>
+      )}
       <button
         type="button"
         className="h-9 px-space-md rounded-lg bg-surface-container text-on-surface font-semibold"
         onClick={() => form.selectedAlert && form.openRelated(form.selectedAlert)}
       >
-        Open related record
+        {form.selectedAlert ? form.openLabel(form.selectedAlert) : 'Open record'}
       </button>
       </div>
       ) : (
@@ -235,9 +230,8 @@ export function In13Alerts() {
       <div className="flex items-center justify-between mb-space-md">
       <div className="flex items-center gap-space-sm">
       <span className="material-symbols-outlined text-on-surface text-[20px]">history</span>
-      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">Recent Hub Clearances (Last 24h)</h3>
+      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">Recently resolved</h3>
       </div>
-      <a className="font-caption text-caption text-primary font-semibold hover:underline" href="#">View 18 resolved alerts</a>
       </div>
       <div className="space-y-space-sm">
       {form.resolvedAlertRows.length === 0 ? (
@@ -260,21 +254,6 @@ export function In13Alerts() {
       </div>
       </div>
 
-      <div className="w-full bg-surface-container p-space-lg rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-md text-on-surface">
-      <div className="flex items-center gap-space-md">
-      <div className="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center shrink-0">
-      <span className="material-symbols-outlined text-on-surface text-[18px]">info</span>
-      </div>
-      <p className="font-body-md text-body-md text-on-surface">
-                  Looking for vehicle service schedules, driver license expirations, or road fitness renewals? Car service and document alerts are in
-                  <a className="font-semibold underline hover:text-on-surface-variant ml-1" href="#">Vehicles →</a>
-      </p>
-      </div>
-      <a className="inline-flex items-center gap-space-xs font-body-sm text-body-sm font-semibold text-on-surface hover:underline whitespace-nowrap self-end sm:self-auto" href="#">
-      <span>Go to Vehicles & Maintenance</span>
-      <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-      </a>
-      </div>
       </div>
       </div>
       </div></div>

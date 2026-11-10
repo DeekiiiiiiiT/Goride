@@ -3,6 +3,9 @@ import { GapLoadState, GapSubmitError } from './GapLoadState';
 import { GapModalShell } from './GapModalShell';
 import { useGapKitCompareForm, type KitCompareRow } from './useGapKitCompareForm';
 import { useGapModalSteps } from './useGapModalSteps';
+import { useInventoryShell } from '../InventoryShellContext';
+import { useInventoryLive } from '../inventoryLive';
+import { kitColumns } from '../inventoryData';
 
 function changeStatusLabel(row: KitCompareRow) {
   if (row.changeStatus === 'added') return '+ Added';
@@ -22,6 +25,17 @@ export function GapKitCompare(p: { onClose?: () => void }) {
   const form = useGapKitCompareForm();
   const modal = useGapModalSteps();
   const close = () => p.onClose?.();
+  const shell = useInventoryShell();
+  const live = useInventoryLive(shell);
+  const kitName = form.affectedTemplateLabel && form.affectedTemplateLabel !== '—' ? form.affectedTemplateLabel : 'Kit';
+  /** Real per-line missing counts across cars on the kit. */
+  const lineMissing = kitColumns(live.complianceRows)
+    .filter((c) => c.required)
+    .map((c) => ({
+      label: c.label,
+      missing: live.kitVehicles.filter((v) => v.cells.some((x) => x.kitLineId === c.kitLineId && x.status !== 'ok')).length,
+    }))
+    .filter((x) => x.missing > 0);
   return (
     <GapModalShell onClose={p.onClose} ariaLabel="KitCompare">
       <GapSubmitError message={form.submit.error} />
@@ -32,12 +46,12 @@ export function GapKitCompare(p: { onClose?: () => void }) {
 
         <div className="flex flex-col gap-space-sm">
         <div className="flex items-center gap-space-xs text-on-surface-variant">
-        <a className="inline-flex items-center gap-1 font-body-sm text-body-sm hover:text-primary transition-colors" href="#">
+        <button type="button" className="inline-flex items-center gap-1 px-space-sm py-1 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm" onClick={close}>
         <span className="material-symbols-outlined text-[16px]">arrow_back</span>
         <span>Back to Vehicle Kits</span>
-        </a>
+        </button>
         <span className="text-outline-variant">/</span>
-        <span className="font-body-sm text-body-sm text-on-surface-variant">Rideshare car kit</span>
+        <span className="font-body-sm text-body-sm text-on-surface-variant">{kitName}</span>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-space-lg">
         <div className="flex items-center gap-space-md">
@@ -46,10 +60,9 @@ export function GapKitCompare(p: { onClose?: () => void }) {
         </div>
         <div>
         <div className="flex items-center gap-space-sm">
-        <h1 className="font-headline-lg text-headline-lg text-primary tracking-tight">Kit version compare: Rideshare car kit</h1>
-        <span className="bg-surface-container-high text-on-surface font-caption text-caption px-space-sm py-0.5 rounded font-semibold uppercase tracking-wider">SKU-KIT-RIDE-01</span>
+        <h1 className="font-headline-lg text-headline-lg text-primary tracking-tight">Kit version compare: {kitName}</h1>
         </div>
-        <p className="font-body-sm text-body-sm text-on-surface-variant">Analyze structural inventory variances, depot procurement needs, and fleet compliance deltas before applying changes.</p>
+        <p className="font-body-sm text-body-sm text-on-surface-variant">See what changes between two versions of the kit before you apply it.</p>
         </div>
         </div>
         <div className="flex items-center gap-space-sm">
@@ -126,8 +139,8 @@ export function GapKitCompare(p: { onClose?: () => void }) {
         <thead>
         <tr className="bg-surface-container-lowest text-on-surface-variant font-caption text-caption uppercase tracking-wider">
         <th className="py-space-md px-space-lg font-semibold">Kit Item & SKU</th>
-        <th className="py-space-md px-space-md font-semibold text-center w-36">v3 (Active)</th>
-        <th className="py-space-md px-space-md font-semibold text-center w-36">v4 (Draft)</th>
+        <th className="py-space-md px-space-md font-semibold text-center w-36">{form.leftVersion} (Active)</th>
+        <th className="py-space-md px-space-md font-semibold text-center w-36">{form.rightVersion} (Draft)</th>
         <th className="py-space-md px-space-md font-semibold w-32">Change Status</th>
         <th className="py-space-md px-space-lg font-semibold">Impact Note</th>
         </tr>
@@ -157,8 +170,7 @@ export function GapKitCompare(p: { onClose?: () => void }) {
         </table>
         </div>
         <div className="px-space-lg py-space-sm bg-surface-container-lowest flex items-center justify-between text-on-surface-variant font-caption text-caption">
-        <span>Displaying filtered kit inventory items</span>
-        <span className="font-label-code">Hash: v3.89cf...v4.120a</span>
+        <span>{form.rows.length} of {form.totalCount} kit lines shown</span>
         </div>
         </div>
 
@@ -198,14 +210,13 @@ export function GapKitCompare(p: { onClose?: () => void }) {
         <span className="font-caption text-caption uppercase text-on-surface-variant font-semibold tracking-wider">Additional Items Required</span>
         <div className="flex items-baseline justify-between mt-1">
         <span className="font-headline-sm text-headline-sm font-bold text-primary">{form.additionalUnitsLabel} units</span>
-        <span className="font-caption text-caption text-on-surface-variant">2 Triangles + Optional</span>
         </div>
         </div>
         <div className="p-space-md rounded-lg bg-surface-container-low flex flex-col">
-        <span className="font-caption text-caption uppercase text-on-surface-variant font-semibold tracking-wider">Estimated Procurement Value</span>
+        <span className="font-caption text-caption uppercase text-on-surface-variant font-semibold tracking-wider">Value of the kit</span>
         <div className="flex items-baseline justify-between mt-1">
         <span className="font-label-price text-headline-sm text-primary">{form.kitValuationLabel}</span>
-        <span className="font-caption text-caption text-on-surface-variant">Depot landed cost</span>
+        <span className="font-caption text-caption text-on-surface-variant">At item costs</span>
         </div>
         </div>
         </div>
@@ -219,10 +230,10 @@ export function GapKitCompare(p: { onClose?: () => void }) {
         <div className="h-full bg-primary" style={{ width: `${form.primaryBarPct}%` }}></div>
         <div className="h-full bg-secondary-fixed-dim" style={{ width: `${form.secondaryBarPct}%` }}></div>
         </div>
-        <div className="flex justify-between items-center text-[10px] font-label-code text-on-surface-variant">
-        <span>75% v4 Compliant</span>
-        <span>10% Missing Triangle</span>
-        <span>15% Missing Baseline</span>
+        <div className="flex flex-col gap-0.5 text-[11px] font-label-code text-on-surface-variant">
+        {lineMissing.length === 0 ? <span>No required lines missing today.</span> : lineMissing.map((x) => (
+        <span key={x.label}>{x.label}: missing on {x.missing} car{x.missing === 1 ? '' : 's'}</span>
+        ))}
         </div>
         </div>
 
@@ -249,16 +260,16 @@ export function GapKitCompare(p: { onClose?: () => void }) {
         </div>
 
         <div className="sticky bottom-4 z-40 bg-surface-container-lowest rounded-xl shadow-xl p-space-md flex flex-wrap items-center justify-between gap-space-md mt-space-md">
-        <a className="inline-flex items-center gap-space-xs text-on-surface-variant hover:text-primary font-body-sm text-body-sm font-medium transition-colors" href="#">
+        <button type="button" className="inline-flex items-center gap-space-xs px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium" onClick={close}>
         <span className="material-symbols-outlined text-[18px]">arrow_back</span>
         <span>Back to kit editor</span>
-        </a>
+        </button>
         <div className="flex flex-wrap items-center gap-space-sm">
         <button type="button" className="bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold px-space-lg py-2.5 rounded-lg transition-colors" onClick={close}>
                   Keep editing draft
                 </button>
         <button type="button" disabled={!form.canPublish || form.submit.saving} onClick={() => void form.saveInactive()} className="bg-surface-container-lowest hover:bg-surface-container-low text-on-surface font-body-sm text-body-sm font-semibold px-space-lg py-2.5 rounded-lg shadow-sm transition-colors disabled:opacity-60">
-                  Save as inactive v4
+                  Save as inactive {form.rightVersion}
                 </button>
         <button type="button" disabled={!form.canPublish || form.submit.saving} onClick={() => modal.openConfirm()} className="bg-primary hover:bg-primary/90 text-on-primary font-body-sm text-body-sm font-semibold px-space-lg py-2.5 rounded-lg flex items-center gap-space-xs transition-transform active:scale-95 shadow-md disabled:opacity-60">
         <span className="material-symbols-outlined text-[18px]">publish</span>
@@ -279,27 +290,26 @@ export function GapKitCompare(p: { onClose?: () => void }) {
         </button>
         </div>
         <div className="flex flex-col gap-space-xs">
-        <h3 className="font-headline-sm text-headline-sm text-primary font-bold">Apply Specification Version 4?</h3>
+        <h3 className="font-headline-sm text-headline-sm text-primary font-bold">Apply version {form.rightVersion}?</h3>
         <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
-                  This will update the active specification for <span className="font-semibold text-primary">Rideshare car kit</span> across 2 vehicles. 
-                  Assigned vehicles may show as partially stocked until changed lines are verified in the depot.
+                  This makes {form.rightVersion} the kit for <span className="font-semibold text-primary">{kitName}</span> on {form.affectedVehicleCount} car{form.affectedVehicleCount === 1 ? '' : 's'}. Cars show missing items until they are issued.
                 </p>
         </div>
         <div className="bg-surface-container-low rounded-lg p-space-md flex flex-col gap-1 font-label-code text-caption">
         <div className="flex justify-between text-on-surface">
-        <span>Target Vehicles:</span>
-        <span className="font-bold">Assigned fleet units</span>
+        <span>Changes:</span>
+        <span className="font-bold">{form.diffCount}</span>
         </div>
         <div className="flex justify-between text-on-surface">
-        <span>Required Actions:</span>
-        <span className="font-bold text-primary">Issue +2 Triangles</span>
+        <span>Extra units needed:</span>
+        <span className="font-bold text-primary">{form.additionalUnitsLabel}</span>
         </div>
         </div>
         <div className="flex items-center justify-end gap-space-sm pt-space-xs">
-        <button type="button" className="px-space-lg py-2 rounded-lg font-body-sm text-body-sm text-on-surface-variant hover:text-primary font-medium transition-colors" onClick={() => modal.closeConfirm()}>
+        <button type="button" className="px-space-lg py-2 rounded-lg bg-error-container text-error font-body-sm text-body-sm font-semibold" onClick={() => modal.closeConfirm()}>
                   Cancel
                 </button>
-        <button type="button" className="bg-primary hover:bg-primary/90 text-on-primary px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold shadow transition-transform active:scale-95" onClick={() => void form.publishKitTemplate().then(() => modal.closeConfirm())}>
+        <button type="button" className="bg-primary hover:bg-primary/90 text-on-primary px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold shadow transition-transform active:scale-95" onClick={() => void form.publishKitTemplate().then(() => modal.closeConfirm()).catch(() => undefined)}>
                   Confirm Rollout
                 </button>
         </div>

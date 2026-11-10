@@ -99,12 +99,14 @@ export async function runDoneTest02(page: Page) {
   await seedInventoryFleetSession(page);
   await gotoFleetInventory(page, 'vehicle-kits');
   await page.getByRole('button', { name: /^Matrix$/i }).click();
-  await page.locator('[data-stitch-data-stitch-id="matrix-container"] button').filter({ hasText: 'Missing' }).first().click();
+  // Completion audit IV-09: a Missing cell opens the Issue dialog with that line ticked (it never posts by itself).
+  await page.getByRole('button', { name: /^Missing: Tyre pump on / }).first().click();
+  await expect(page.getByRole('heading', { name: /Issue to cars/i })).toBeVisible({ timeout: 30_000 });
+  expect(balanceQty(INV_DONE_ORG, 'ZZ-TEST-PUMP')).toBe(2);
+  await saveLiveScreenshot(page, 'inventory_asset_management_issue_dialog');
+  await page.getByRole('button', { name: /^Issue 1 line$/ }).click();
   await expect.poll(() => balanceQty(INV_DONE_ORG, 'ZZ-TEST-PUMP'), { timeout: 30_000 }).toBe(1);
   expect(movementQtySum(INV_DONE_ORG, 'ISSUE')).toBeLessThanOrEqual(-1);
-  await page.getByRole('button', { name: /^Issue$/i }).first().click();
-  await expect(page.getByRole('heading', { name: /Issue to cars/i })).toBeVisible({ timeout: 30_000 });
-  await saveLiveScreenshot(page, 'inventory_asset_management_issue_dialog');
 }
 
 export async function runDoneTest03(page: Page) {

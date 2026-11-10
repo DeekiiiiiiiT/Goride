@@ -57,6 +57,8 @@ export type Paged<T> = {
 
 export const inventoryApi = {
   overview: () => invFetch('/overview'),
+  /** Every stock row (stock value and low/out are worked out from all rows). */
+  stockAll: () => invFetch('/stock?all=1'),
   stock: (params?: URLSearchParams) =>
     invFetch(`/stock${params?.toString() ? `?${params}` : ''}`),
   stockKpis: () => invFetch('/stock/kpis'),
@@ -321,4 +323,6 @@ export const inventoryApi = {
     }),
   driverReports: (params?: URLSearchParams) =>
     invFetch(`/driver/reports${params?.toString() ? `?${params}` : ''}`),
+  /** Fleet view of one driver report + its real timeline. */
+  driverReport: (id: string) => invFetch(`/driver-reports/${encodeURIComponent(id)}`),
 };

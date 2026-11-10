@@ -3,13 +3,18 @@ import { useIn1OverviewForm } from './hooks/useIn1OverviewForm';
 import { InventoryOverflowMenu } from '../InventoryOverflowMenu';
 import { InventoryPrimaryTabs } from '../InventoryPrimaryTabs';
 import { useInventoryLive } from '../inventoryLive';
-import { strField } from '../inventoryData';
+import { chainCheckLine, storeNeedLabel, strField } from '../inventoryData';
 import { useInventoryShell } from '../InventoryShellContext';
+import { useFleetTimezone } from '../../../utils/timezoneDisplay';
 
 export function In1Overview() {
   const form = useIn1OverviewForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
+  const timezone = useFleetTimezone();
+  const nightly = chainCheckLine(live.chainCheckedAt, live.chainCheckOk, timezone);
+  const nightlyBad = live.chainCheckOk === false || nightly.stale;
+  const driverReports = live.alerts.filter((a) => strField(a, 'type', '') === 'driver_report');
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full">
@@ -27,7 +32,7 @@ export function In1Overview() {
               </p>
       <div className="flex items-center gap-space-xs mt-space-xs">
       <span className="relative flex h-2 w-2">
-      {live.chainCheckOk === false ? (
+      {nightlyBad ? (
       <span className="relative inline-flex rounded-full h-2 w-2 bg-error"></span>
       ) : (
       <>
@@ -36,10 +41,8 @@ export function In1Overview() {
       </>
       )}
       </span>
-      <span className={`font-label-code text-caption ${live.chainCheckOk === false ? 'text-error font-semibold' : 'text-secondary'}`}>
-                  {live.chainCheckOk === false
-                    ? 'Nightly check found stock numbers that do not add up — cannot snooze'
-                    : 'Nightly check ran 06:30 today · all stock numbers add up'}
+      <span className={`font-body-sm text-body-sm ${nightlyBad ? 'text-error font-semibold' : 'text-on-surface'}`} data-testid="nightly-check-line">
+                  {nightly.text}
                 </span>
       </div>
       </div>
@@ -59,7 +62,7 @@ export function In1Overview() {
       <span className="material-symbols-outlined text-[16px]">move_to_inbox</span>
       <span>Receive</span>
       </button>
-      <button type="button" onClick={() => shell.openModal('issue')} className="h-9 px-space-lg flex items-center gap-space-xs rounded-lg bg-primary text-on-primary hover:bg-primary/90 transition-all shadow-sm font-body-sm text-body-sm font-medium active:scale-95">
+      <button type="button" onClick={() => shell.openIssue()} className="h-9 px-space-lg flex items-center gap-space-xs rounded-lg bg-primary text-on-primary hover:bg-primary/90 transition-all shadow-sm font-body-sm text-body-sm font-medium active:scale-95">
       <span className="material-symbols-outlined text-[16px]">grid_view</span>
       <span>Issue</span>
       </button>
@@ -83,8 +86,14 @@ export function In1Overview() {
       <div className="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm flex flex-col justify-between gap-space-md">
       <span className="font-body-sm text-body-sm text-on-surface-variant font-medium">Low or out of stock</span>
       <div className="flex flex-col gap-1">
-      <span className="font-label-code text-headline-sm text-on-surface tracking-tight font-bold">{live.lowStockCount}</span>
-      <span className="font-body-sm text-body-sm text-tertiary font-medium">{live.lowStockLabel}</span>
+      <span className="font-label-code text-headline-sm text-on-surface tracking-tight font-bold" data-testid="low-or-out-count">{live.lowStockCount}</span>
+      {live.lowOrOut.length ? (
+      <ul className="font-body-sm text-body-sm text-tertiary font-medium" data-testid="low-or-out-list">
+      {live.lowOrOut.map((n) => <li key={n.itemId}>{storeNeedLabel(n)}</li>)}
+      </ul>
+      ) : (
+      <span className="font-body-sm text-body-sm text-on-surface-variant">The store covers what the cars need</span>
+      )}
       </div>
       </div>
 
@@ -140,14 +149,36 @@ export function In1Overview() {
                 </span>
               </div>
             </div>
-            <button type="button" onClick={() => shell.openModal('issue')} className="shrink-0 h-8 px-space-md rounded-lg bg-primary text-on-primary hover:bg-primary/90 transition-all font-body-sm text-body-sm font-medium active:scale-95 shadow-sm">
+            {!shell.readOnly ? (
+            <button type="button" onClick={() => shell.openIssue({ vehicleId: vehicle.vehicleId })} className="shrink-0 h-8 px-space-md rounded-lg bg-primary text-on-primary hover:bg-primary/90 transition-all font-body-sm text-body-sm font-medium active:scale-95 shadow-sm" data-testid="overview-issue-kit" data-plate={vehicle.plate}>
               Issue kit
+            </button>
+            ) : null}
+          </div>
+        </div>
+      ))}
+
+      {driverReports.map((a) => (
+        <div key={strField(a, 'id', '')}>
+          <div className="h-px w-full bg-surface-container-low"></div>
+          <div className="p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md bg-surface-container-lowest hover:bg-surface-container-low transition-colors" data-testid="overview-driver-report">
+            <div className="flex items-center gap-space-md min-w-0">
+              <div className="shrink-0 w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
+                <span className="material-symbols-outlined text-[20px]">campaign</span>
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">{strField(a, 'title', 'Driver report')}</span>
+                {a.note ? <span className="font-label-code text-caption text-on-surface-variant truncate">{strField(a, 'note', '')}</span> : null}
+              </div>
+            </div>
+            <button type="button" onClick={() => shell.openGap('driver-report-update', { reportId: strField(a, 'report_id', '') })} className="shrink-0 h-8 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors font-body-sm text-body-sm font-medium">
+              Open record
             </button>
           </div>
         </div>
       ))}
 
-      {live.lowStockCount > 0 && live.lowStockLabel !== '—' ? (
+      {live.lowOrOut.length > 0 ? (
         <>
           <div className="h-px w-full bg-surface-container-low"></div>
           <div className="p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
@@ -157,10 +188,10 @@ export function In1Overview() {
               </div>
               <div className="flex flex-col min-w-0">
                 <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">
-                  {live.lowStockLabel} is low or out
+                  {live.lowStockCount} kit item{live.lowStockCount === 1 ? '' : 's'} low or out in the store
                 </span>
                 <span className="font-label-code text-caption text-on-surface-variant">
-                  {live.lowStockCount} item{live.lowStockCount === 1 ? '' : 's'} need attention
+                  {live.lowStockLabel}
                 </span>
               </div>
             </div>
@@ -234,7 +265,8 @@ export function In1Overview() {
         </>
       ) : null}
 
-      {live.openAlertCount === 0 &&
+      {driverReports.length === 0 &&
+      live.openAlertCount === 0 &&
       live.kitVehicles.every((v) => v.missingLines + v.shortLines === 0) &&
       live.lowStockCount === 0 &&
       live.assetsFaulty + live.assetsLost + live.assetsInRepair === 0 ? (
@@ -248,7 +280,7 @@ export function In1Overview() {
       <div className="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-lg">
       <div className="flex items-center justify-between">
       <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold tracking-tight">Kit completeness</h3>
-      <span className="font-label-code text-caption text-secondary">{live.kitVehicleCount} Vehicles Active</span>
+      <span className="font-label-code text-caption text-secondary">{live.kitVehicleCount} cars</span>
       </div>
 
       <div className="flex flex-col gap-space-lg">
@@ -258,7 +290,6 @@ export function In1Overview() {
         live.kitVehicles.map((vehicle) => (
           <div key={vehicle.vehicleId} className="flex flex-col gap-space-xs">
             <div className="flex items-center justify-between">
-              <span className="font-body-sm text-body-sm font-medium text-on-surface">{vehicle.plate}</span>
               <span className="font-label-plate text-label-plate text-on-surface">{vehicle.plate}</span>
             </div>
             <div className="w-full h-2 rounded-full bg-surface-container overflow-hidden">
@@ -269,7 +300,7 @@ export function In1Overview() {
             </div>
             <div className="flex items-center justify-between text-caption font-label-code text-secondary">
               <span className={vehicle.pct >= 100 ? '' : 'text-error font-medium'}>
-                {vehicle.okLines} of {vehicle.requiredLines} items allocated
+                {vehicle.okLines} of {vehicle.requiredLines} items in the car
               </span>
               <span className={vehicle.pct >= 100 ? 'font-semibold text-on-surface' : 'text-error font-semibold'}>
                 {vehicle.pct}%
@@ -279,7 +310,7 @@ export function In1Overview() {
         ))
       )}
       </div>
-      <button type="button" onClick={() => shell.setTab('vehicle-kits')} className="inline-flex items-center gap-space-xs font-body-sm text-body-sm text-primary font-semibold hover:underline mt-space-xs">
+      <button type="button" onClick={() => shell.setTab('vehicle-kits')} className="inline-flex items-center gap-space-xs self-start h-8 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high font-body-sm text-body-sm text-on-surface font-semibold mt-space-xs">
       <span>Open Vehicle kits</span>
       <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
       </button>

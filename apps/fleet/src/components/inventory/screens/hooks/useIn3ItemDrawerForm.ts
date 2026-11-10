@@ -36,18 +36,46 @@ export function useIn3ItemDrawerForm() {
     unitCost: formatJmd(unitCost),
   };
 
+  const itemName = item ? strField(item, 'name', '') : '';
+  /** Movements already loaded that touch this item (by name from the ledger lines). */
   const itemMovements = useMemo(() => {
-    if (!itemId) return [];
-    return shell.movements.filter((m) => strField(m, 'item_id', '') === itemId).slice(0, 20);
-  }, [shell.movements, itemId]);
+    if (!itemName) return [];
+    return shell.movements
+      .filter((m) => Array.isArray(m.item_names) && (m.item_names as string[]).includes(itemName))
+      .slice(0, 5);
+  }, [shell.movements, itemName]);
+
+  /** Stock rows for this item at every place. */
+  const placeRows = useMemo(
+    () => shell.stockRows.filter((r) => strField(r, 'item_id', '') === itemId && numField(r, 'on_hand', 0) !== 0),
+    [shell.stockRows, itemId],
+  );
+  const totals = useMemo(() => {
+    let inStore = 0;
+    let onCars = 0;
+    let value = 0;
+    for (const r of placeRows) {
+      const q = numField(r, 'on_hand', 0);
+      if (strField(r, 'location_code', '').toLowerCase().startsWith('veh')) onCars += q;
+      else inStore += q;
+      value += numField(r, 'stock_value', 0);
+    }
+    return { inStore, onCars, onHand: inStore + onCars, value };
+  }, [placeRows]);
+  const need = live.storeNeeds.find((n) => n.itemId === itemId) ?? null;
+  const kitCells = useMemo(
+    () => live.kitVehicles.flatMap((v) => v.cells.filter((c) => c.itemId === itemId)),
+    [live.kitVehicles, itemId],
+  );
 
   const openReceive = () => {
     if (itemId) shell.setSelectedItemId(itemId);
     shell.openModal('receive');
   };
   const openIssue = () => {
-    if (itemId) shell.setSelectedItemId(itemId);
-    shell.openModal('issue');
+    const missing = kitCells.filter((c) => c.required && c.status !== 'ok');
+    if (missing.length === 1) shell.openIssue({ vehicleId: missing[0].vehicleId, kitLineIds: [missing[0].kitLineId] });
+    else shell.openIssue();
   };
   const openTransfer = () => {
     if (itemId) shell.setSelectedItemId(itemId);
@@ -94,14 +122,11 @@ export function useIn3ItemDrawerForm() {
   const movementRows = useMemo(
     () =>
       itemMovements.map((m) => ({
-        id: strField(m, 'id', strField(m, 'reference', '')),
-        label: strField(m, 'reference', strField(m, 'type', 'Movement')),
-        actor: strField(m, 'actor_name', strField(m, 'created_by', '—')),
-        when: strField(m, 'created_at', strField(m, 'occurred_at', '—')),
-        typeLabel: strField(m, 'type', strField(m, 'movement_type', 'MOVE')).toUpperCase(),
-        locationLabel: strField(m, 'location_name', strField(m, 'location', '—')),
-        qtyLabel: strField(m, 'qty_delta', strField(m, 'qty', '')),
-        note: strField(m, 'note', strField(m, 'memo', '')),
+        id: strField(m, 'id', ''),
+        when: strField(m, 'created_at', ''),
+        typeLabel: strField(m, 'type', 'MOVE').toUpperCase(),
+        route: `${strField(m, 'from_label', '—')} → ${strField(m, 'to_label', '—')}`,
+        qtyLabel: String(numField(m, 'qty', 0) || '—'),
       })),
     [itemMovements],
   );
@@ -130,6 +155,10 @@ export function useIn3ItemDrawerForm() {
     receiveDisabledReason,
     valueLabels,
     itemMovements,
+    placeRows,
+    totals,
+    need,
+    kitCells,
     formatJmd,
     strField,
     openReceive,

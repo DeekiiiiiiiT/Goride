@@ -7,8 +7,10 @@ import {
   numField,
   primaryWarehouseLabel,
   strField,
+  storeNeedsFrom,
   sumStockValue,
   type KitVehicleSummary,
+  type StoreNeed,
 } from './inventoryData';
 import type { InventoryShellState } from './InventoryShellContext';
 
@@ -27,6 +29,16 @@ export type InventoryLive = {
   secondaryVehicle: KitVehicleSummary | null;
   lowStockCount: number;
   lowStockLabel: string;
+  /** Kit items the store can't cover (IV-02). */
+  lowOrOut: StoreNeed[];
+  storeNeeds: StoreNeed[];
+  /** Sum of required kit lines missing or short across all cars. */
+  missingRequiredTotal: number;
+  assetUnitsWithoutSerial: number;
+  /** Purchase cost of single units still owned (IV-03). */
+  assetValueLabel: string;
+  assetNextCheckDue: string | null;
+  chainCheckedAt: string | null;
   kitFullCount: number;
   kitVehicleCount: number;
   assetsFaulty: number;
@@ -79,26 +91,29 @@ export function buildInventoryLive(shell: InventoryShellState): InventoryLive {
   const kitMeta = asRecord(overview.kitCompleteness);
 
   const stockRows = shell.stockRows;
-  const totalRaw =
-    numField(kpis, 'total_stock_value', NaN) ||
-    numField(kpis, 'stock_value', NaN) ||
-    sumStockValue(stockRows);
-  const { inStore, onCars } = splitStoreVsCarsValue(stockRows, kpis);
+  // IV-03: balances + single units (assets) still owned, each on its own side.
+  const assetValue = asRecord(overview.assetValue);
+  const assetStore = numField(assetValue, 'store', 0);
+  const assetCars = numField(assetValue, 'cars', 0);
+  const split = splitStoreVsCarsValue(stockRows, kpis);
+  const inStore = split.inStore + assetStore;
+  const onCars = split.onCars + assetCars;
+  const totalRaw = sumStockValue(stockRows) + assetStore + assetCars;
 
   const complianceRows = shell.kitComplianceRows;
   const kitVehicles = aggregateKitVehicles(complianceRows);
   const primaryVehicle = kitVehicles[0] ?? null;
   const secondaryVehicle = kitVehicles[1] ?? null;
 
-  const lowStockRows = stockRows.filter((r) => {
-    const s = strField(r, 'stock_status', 'ok');
-    return s === 'low' || s === 'out';
-  });
-  const lowStockLabel = lowStockRows[0]
-    ? strField(lowStockRows[0], 'name', '—')
-    : '—';
+  // IV-02: low or out is worked out against what the cars need.
+  const storeNeeds = storeNeedsFrom(shell.overview);
+  const lowOrOut = storeNeeds
+    .filter((n) => n.status !== 'ok')
+    .sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'out' ? -1 : 1));
+  const lowStockLabel = lowOrOut.length ? lowOrOut.map((n) => n.name).join(', ') : '—';
 
-  const kitFullCount = kitVehicles.filter((v) => v.pct >= 100).length;
+  const kitFullCount = kitVehicles.filter((v) => v.requiredLines > 0 && v.okLines === v.requiredLines).length;
+  const missingRequiredTotal = kitVehicles.reduce((sum, v) => sum + v.missingLines + v.shortLines, 0);
   const kitVehicleCount =
     typeof kitMeta.activeVehicles === 'number'
       ? kitMeta.activeVehicles
@@ -115,6 +130,7 @@ export function buildInventoryLive(shell: InventoryShellState): InventoryLive {
 
   const chain = asRecord(overview.chainCheck);
   const chainCheckOk = typeof chain.ok === 'boolean' ? chain.ok : null;
+  const chainCheckedAt = typeof chain.checked_at === 'string' ? chain.checked_at : null;
 
   const hubName = primaryWarehouseLabel(stockRows);
   const hubShort = hubName.split('—')[0]?.trim() || hubName;
@@ -144,8 +160,15 @@ export function buildInventoryLive(shell: InventoryShellState): InventoryLive {
     secondaryPlate: secondaryVehicle?.plate ?? '—',
     primaryVehicle,
     secondaryVehicle,
-    lowStockCount: lowStockRows.length,
+    lowStockCount: lowOrOut.length,
     lowStockLabel,
+    lowOrOut,
+    storeNeeds,
+    missingRequiredTotal,
+    assetUnitsWithoutSerial: numField(assetValue, 'unitsWithoutSerial', 0),
+    assetValueLabel: formatStockValue(assetStore + assetCars),
+    assetNextCheckDue: typeof assetValue.nextCheckDue === 'string' ? assetValue.nextCheckDue : null,
+    chainCheckedAt,
     kitFullCount,
     kitVehicleCount,
     assetsFaulty,

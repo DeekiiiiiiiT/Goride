@@ -64,7 +64,11 @@ function requireIdempotencyKey(c: InvCtx): string | Response {
   return key;
 }
 
+/** Hard cap for screens that need every row (stock value, kit grid). */
+const ALL_ROWS = 5000;
+
 function pageParams(c: InvCtx): { limit: number; offset: number } {
+  if (c.req.query("all") === "1") return { limit: ALL_ROWS, offset: 0 };
   const limit = Math.min(PAGE, Math.max(1, Number(c.req.query("limit") || PAGE) || PAGE));
   const cursor = Math.max(0, Number(c.req.query("cursor") || 0) || 0);
   return { limit, offset: cursor };
@@ -118,13 +122,23 @@ app.get(`${PREFIX}/overview`, requirePermission("inventory.view"), async (c) => 
         .order("checked_at", { ascending: false }).limit(1).maybeSingle(),
     ]);
 
-    const { data: compliance } = await db.from("fleet_inv_v_kit_compliance").select("vehicle_id, line_status")
-      .eq("organization_id", org);
+    const [{ data: compliance }, needs, assetValue] = await Promise.all([
+      db.from("fleet_inv_v_kit_compliance").select("vehicle_id, line_status, required")
+        .eq("organization_id", org),
+      db.from("fleet_inv_v_store_needs").select("item_id, sku, name, store_on_hand, needed, cars_needing, need_status")
+        .eq("organization_id", org),
+      db.from("fleet_inv_v_asset_value").select("*").eq("organization_id", org).maybeSingle(),
+    ]);
 
+    // Optional kit lines (required = false) never count toward completeness.
+    const required = (compliance ?? []).filter((r) => r.required !== false);
     const vehicles = new Set((compliance ?? []).map((r) => String(r.vehicle_id)));
-    const lines = compliance ?? [];
-    const okLines = lines.filter((r) => String(r.line_status) === "ok").length;
-    const avgScore = lines.length ? Math.round((okLines / lines.length) * 1000) / 10 : null;
+    const okLines = required.filter((r) => String(r.line_status) === "ok").length;
+    const avgScore = required.length ? Math.round((okLines / required.length) * 1000) / 10 : null;
+    const fullKitVehicles = [...vehicles].filter((vid) =>
+      required.every((r) => String(r.vehicle_id) !== vid || String(r.line_status) === "ok")
+    ).length;
+    const av = (assetValue.data ?? null) as Record<string, unknown> | null;
 
     return c.json({
       stockKpis: stockKpis.data ?? null,
@@ -133,6 +147,17 @@ app.get(`${PREFIX}/overview`, requirePermission("inventory.view"), async (c) => 
       kitCompleteness: {
         activeVehicles: vehicles.size,
         averageScorePct: avgScore,
+        fullKitVehicles,
+        missingRequiredLines: required.length - okLines,
+      },
+      storeNeeds: needs.error ? [] : needs.data ?? [],
+      assetValue: {
+        store: Number(av?.in_store_value ?? 0),
+        cars: Number(av?.on_cars_value ?? 0),
+        total: Number(av?.total_value ?? 0),
+        units: Number(av?.units ?? 0),
+        unitsWithoutSerial: Number(av?.units_without_serial ?? 0),
+        nextCheckDue: (av?.next_check_due as string | null | undefined) ?? null,
       },
     });
   } catch (e) {
@@ -220,6 +245,14 @@ app.get(`${PREFIX}/items/:id`, requirePermission("inventory.view"), async (c) =>
   }
 });
 
+/** Item cost from the body; accepts the old field names screens used. */
+function itemCostFromBody(body: Record<string, unknown>): number | null {
+  const raw = body.default_unit_cost ?? body.unit_cost_jmd ?? body.default_cost_jmd;
+  if (raw === undefined || raw === null || raw === "") return null;
+  const n = Number(String(raw).replace(/,/g, ""));
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
 app.post(`${PREFIX}/items`, requirePermission("inventory.move"), async (c) => {
   try {
     const org = orgOrForbid(c);
@@ -234,6 +267,10 @@ app.post(`${PREFIX}/items`, requirePermission("inventory.move"), async (c) => {
       description: body.description ?? null,
       tracking: body.tracking ?? body.tracking_mode ?? "quantity",
       category_id: body.category_id ?? null,
+      model: body.model ?? null,
+      uom: body.uom ?? body.unit_of_measure ?? "each",
+      default_unit_cost: itemCostFromBody(body),
+      inspection_interval_days: body.inspection_interval_days ?? null,
       idempotency_key: idem,
     };
     if (!row.sku || !row.name) {
@@ -254,21 +291,26 @@ app.patch(`${PREFIX}/items/:id`, requirePermission("inventory.move"), async (c) 
     const id = c.req.param("id");
     const body = await c.req.json();
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    // Only real inv_item columns (older screens sent unit_cost_jmd / unit_of_measure, which made every save fail).
     for (const key of [
       "name",
       "description",
       "tracking",
       "category_id",
-      "min_qty",
       "reorder_qty",
       "sku",
       "model",
-      "unit_of_measure",
-      "photo_paths",
-      "unit_cost_jmd",
-      "default_cost_jmd",
+      "uom",
+      "photo_path",
+      "inspection_interval_days",
+      "default_unit_cost",
     ]) {
       if (body[key] !== undefined) patch[key] = body[key];
+    }
+    if (body.uom === undefined && body.unit_of_measure !== undefined) patch.uom = body.unit_of_measure;
+    if (body.default_unit_cost === undefined) {
+      const cost = itemCostFromBody(body);
+      if (cost !== null) patch.default_unit_cost = cost;
     }
     const { data, error } = await fleetDb().from("fleet_inv_item").update(patch)
       .eq("organization_id", org).eq("id", id).select("*").maybeSingle();
@@ -306,16 +348,75 @@ app.get(`${PREFIX}/movements`, requirePermission("inventory.view"), async (c) =>
     if (org instanceof Response) return org;
     const { limit, offset } = pageParams(c);
     const type = c.req.query("type");
+    const itemId = c.req.query("item_id");
+    const db = fleetDb();
 
-    let query = fleetDb().from("fleet_inv_movement").select("*", { count: "exact" })
+    // Item filter (Item editor → View history): only movements whose ledger lines touch that item.
+    let movementIds: string[] | null = null;
+    if (itemId) {
+      const { data: hits, error: hitErr } = await db.from("fleet_inv_ledger").select("movement_id")
+        .eq("organization_id", org).eq("item_id", itemId).limit(2000);
+      if (hitErr) return c.json({ error: hitErr.message }, 500);
+      movementIds = [...new Set((hits ?? []).map((h) => String(h.movement_id)))];
+      if (!movementIds.length) return c.json(pagedResponse([], offset, limit, { total: 0 }));
+    }
+
+    let query = db.from("fleet_inv_movement").select("*", { count: "exact" })
       .eq("organization_id", org)
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
     if (type) query = query.eq("type", type);
+    if (movementIds) query = query.in("id", movementIds);
 
     const { data, error, count } = await query;
     if (error) return c.json({ error: error.message }, 500);
-    return c.json(pagedResponse(data ?? [], offset, limit, { total: count ?? undefined }));
+    const movements = data ?? [];
+
+    // Real lines per movement from the ledger: item, qty, from → to, value.
+    const ids = movements.map((m) => String(m.id));
+    const { data: ledger } = ids.length
+      ? await db.from("fleet_inv_ledger").select("movement_id, item_id, location_id, qty_delta, unit_cost")
+        .eq("organization_id", org).in("movement_id", ids)
+      : { data: [] as Record<string, unknown>[] };
+    const itemIds = [...new Set((ledger ?? []).map((l) => l.item_id).filter(Boolean))] as string[];
+    const locIds = [...new Set((ledger ?? []).map((l) => l.location_id).filter(Boolean))] as string[];
+    const [items, locs] = await Promise.all([
+      itemIds.length
+        ? db.from("fleet_inv_item").select("id, name, sku").eq("organization_id", org).in("id", itemIds)
+        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+      locIds.length
+        ? db.from("fleet_inv_location").select("id, name").eq("organization_id", org).in("id", locIds)
+        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+    ]);
+    const itemById = new Map((items.data ?? []).map((i) => [String(i.id), i]));
+    const locName = new Map((locs.data ?? []).map((l) => [String(l.id), String(l.name)]));
+    const linesByMovement = new Map<string, Record<string, unknown>[]>();
+    for (const l of ledger ?? []) {
+      const k = String(l.movement_id);
+      linesByMovement.set(k, [...(linesByMovement.get(k) ?? []), l]);
+    }
+    const enriched = movements.map((m) => {
+      const lines = linesByMovement.get(String(m.id)) ?? [];
+      const outs = lines.filter((l) => Number(l.qty_delta) < 0);
+      const ins = lines.filter((l) => Number(l.qty_delta) > 0);
+      const names = [...new Set(lines.map((l) => {
+        const it = itemById.get(String(l.item_id));
+        return it ? String(it.name) : null;
+      }).filter(Boolean))] as string[];
+      const qty = ins.reduce((s, l) => s + Number(l.qty_delta), 0);
+      const value = ins.reduce((s, l) => s + Number(l.qty_delta) * Number(l.unit_cost ?? 0), 0);
+      const from = [...new Set(outs.map((l) => locName.get(String(l.location_id)) ?? "—"))].join(", ");
+      const to = [...new Set(ins.map((l) => locName.get(String(l.location_id)) ?? "—"))].join(", ");
+      return {
+        ...m,
+        item_names: names,
+        qty,
+        value,
+        from_label: from || null,
+        to_label: to || null,
+      };
+    });
+    return c.json(pagedResponse(enriched, offset, limit, { total: count ?? undefined }));
   } catch (e) {
     return safeErrorResponse(c, e, "inventory.movements");
   }
@@ -492,10 +593,15 @@ app.post(`${PREFIX}/ledger/verify`, requirePermission("inventory.export"), async
 app.get(`${PREFIX}/kits/compliance`, requirePermission("inventory.view"), async (c) => {
   const org = orgOrForbid(c);
   if (org instanceof Response) return org;
-  const { limit, offset } = pageParams(c);
-  const { data, error } = await fleetDb().from("fleet_inv_v_kit_compliance").select("*")
+  // Kit grid needs every line for every car — never paged.
+  const vehicleId = c.req.query("vehicle_id");
+  const offset = 0;
+  const limit = ALL_ROWS;
+  let query = fleetDb().from("fleet_inv_v_kit_compliance").select("*")
     .eq("organization_id", org)
-    .range(offset, offset + limit - 1);
+    .range(0, ALL_ROWS - 1);
+  if (vehicleId) query = query.eq("vehicle_id", vehicleId);
+  const { data, error } = await query;
   if (error) return c.json({ error: error.message }, 500);
   return c.json(pagedResponse(data ?? [], offset, limit, { stub: false }));
 });

@@ -11,7 +11,7 @@ export function In18Phone() {
   const primary = live.primaryVehicle;
   const secondary = live.secondaryVehicle;
   const assetSerial = firstAssetSerial(live.assets);
-  const sortLabel = form.sort === 'bin' ? 'Bin' : form.sort === 'qty' ? 'Qty' : 'Name';
+  const sortLabel = form.sort === 'bin' ? 'Place' : form.sort === 'qty' ? 'Qty' : 'Name';
   const cycleSort = () => {
     form.setSort(form.sort === 'bin' ? 'name' : form.sort === 'name' ? 'qty' : 'bin');
   };
@@ -67,7 +67,7 @@ export function In18Phone() {
       <div className="bg-surface-container-lowest p-space-xs rounded-xl shadow-sm flex items-center gap-space-sm">
       <div className="flex items-center gap-space-xs flex-1 pl-space-sm">
       <span className="material-symbols-outlined text-on-surface-variant text-[20px]">search</span>
-      <input className="w-full bg-transparent text-on-surface placeholder:text-on-surface-variant text-body-sm font-body-sm outline-none" placeholder="Scan or search SKU, serial, bin..." type="text" value={form.manualCode} onChange={(e) => form.setManualCode(e.target.value)}/>
+      <input className="w-full bg-transparent text-on-surface placeholder:text-on-surface-variant text-body-sm font-body-sm outline-none" placeholder="Scan or search SKU or serial..." type="text" value={form.manualCode} onChange={(e) => form.setManualCode(e.target.value)}/>
       </div>
       <button type="button" className="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface hover:bg-surface-container-high transition-colors"  onClick={() => form.scanBarcode()}>
       <span className="material-symbols-outlined text-[20px]">qr_code_scanner</span>
@@ -259,7 +259,6 @@ export function In18Phone() {
       <p className="font-label-code text-caption text-on-surface-variant truncate">Serial: {assetSerial}</p>
       </div>
       </div>
-      <span className="px-space-sm py-0.5 rounded bg-surface-container-low text-on-surface font-caption text-caption font-semibold">Bin A-04</span>
       </div>
 
       <div className="grid grid-cols-3 gap-space-xs pt-space-xs">

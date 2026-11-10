@@ -31,7 +31,7 @@ export function InAssetRepairDialog() {
               className="w-full min-h-[88px] bg-surface-container-low rounded-lg px-space-md py-2 font-body-sm text-on-surface resize-none"
               value={form.description}
               onChange={(e) => form.setDescription(e.target.value)}
-              placeholder="Vendor, fault, ticket reference…"
+              placeholder="Fault, who repaired it, ticket reference…"
             />
           </div>
           <div className="flex flex-col gap-1.5">

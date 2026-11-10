@@ -9,7 +9,15 @@ export function GapSnoozeSettings(p: { alertId?: string | null; onClose?: () => 
   const shell = useInventoryShell();
   const form = useGapSnoozeSettingsForm(p.onClose);
   const popover = useGapAlertSnoozePopover(p.alertId, p.onClose);
-  const hubLabel = shell.overview?.hub_code ? String(shell.overview.hub_code) : '—';
+  void shell;
+  /** "Until 12 Nov" for a snooze of N days from now (real dates, IV-14). */
+  const untilLabel = (days: number) =>
+    `Until ${new Date(Date.now() + days * 86400000).toLocaleDateString('en-JM', { day: 'numeric', month: 'short' })}`;
+  const lastSaved = form.rules
+    .map((r) => String(r.updated_at ?? ''))
+    .filter(Boolean)
+    .sort()
+    .pop();
   return (
     <GapModalShell onClose={p.onClose} ariaLabel="SnoozeSettings">
       <GapSubmitError message={form.submit.error ?? popover.submit.error} />
@@ -20,17 +28,9 @@ export function GapSnoozeSettings(p: { alertId?: string | null; onClose?: () => 
 
         <div className="flex items-center justify-between">
         <div className="flex items-center gap-space-xs font-body-sm text-body-sm text-on-surface-variant">
-        <span className="hover:text-on-surface cursor-pointer">Hub Configuration</span>
+        <span>Inventory settings</span>
         <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-        <span className="hover:text-on-surface cursor-pointer">Telemetry & Notifications</span>
-        <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-        <span className="text-on-surface font-semibold">Alerts & Escalation Governance</span>
-        </div>
-        <div className="flex items-center gap-space-sm bg-surface-container px-space-md py-1 rounded">
-        <span className="w-2 h-2 rounded-full bg-primary"></span>
-        <span className="font-label-code text-label-code text-on-surface">Ruleset Version: 2026.Q4-Rev9</span>
-        <span className="text-outline-variant">•</span>
-        <span className="font-label-code text-caption text-on-surface-variant">Active across {hubLabel}</span>
+        <span className="text-on-surface font-semibold">Alerts & Escalation</span>
         </div>
         </div>
 
@@ -74,7 +74,7 @@ export function GapSnoozeSettings(p: { alertId?: string | null; onClose?: () => 
         <input checked={popover.duration === '1d'} onChange={() => popover.setDuration('1d')} className="accent-primary w-4 h-4 cursor-pointer" name="snooze_duration" type="radio" value="1d"/>
         <span className="font-body-md text-body-md text-on-surface font-medium">1 day</span>
         </div>
-        <span className="font-label-code text-caption text-on-surface-variant">Tomorrow 08:00 AM</span>
+        <span className="font-label-code text-caption text-on-surface-variant">{untilLabel(1)}</span>
         </label>
 
         <label className="flex items-center justify-between p-space-sm rounded-lg bg-surface-container-lowest shadow-sm cursor-pointer">
@@ -82,7 +82,7 @@ export function GapSnoozeSettings(p: { alertId?: string | null; onClose?: () => 
         <input checked={popover.duration === '3d'} onChange={() => popover.setDuration('3d')} className="accent-primary w-4 h-4 cursor-pointer" name="snooze_duration" type="radio" value="3d"/>
         <span className="font-body-md text-body-md text-primary font-semibold">3 days</span>
         </div>
-        <span className="font-label-code text-caption text-primary font-semibold">Until 4 Nov · 08:00 AM</span>
+        <span className="font-label-code text-caption text-primary font-semibold">{untilLabel(3)}</span>
         </label>
 
         <label className="flex items-center justify-between p-space-sm rounded-lg bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
@@ -90,7 +90,7 @@ export function GapSnoozeSettings(p: { alertId?: string | null; onClose?: () => 
         <input checked={popover.duration === '7d'} onChange={() => popover.setDuration('7d')} className="accent-primary w-4 h-4 cursor-pointer" name="snooze_duration" type="radio" value="7d"/>
         <span className="font-body-md text-body-md text-on-surface font-medium">1 week</span>
         </div>
-        <span className="font-label-code text-caption text-on-surface-variant">Until 8 Nov 2026</span>
+        <span className="font-label-code text-caption text-on-surface-variant">{untilLabel(7)}</span>
         </label>
 
         <label className="flex items-center justify-between p-space-sm rounded-lg bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
@@ -104,23 +104,8 @@ export function GapSnoozeSettings(p: { alertId?: string | null; onClose?: () => 
         </div>
 
         <div className="flex flex-col gap-space-xs">
-        <label className="font-caption text-caption uppercase tracking-wider font-semibold text-on-surface-variant">Assign Follow-Up To</label>
-        <div className="relative">
-        <select className="w-full bg-surface-container-low text-on-surface font-body-md text-body-md rounded-lg py-2 pl-3 pr-8 appearance-none focus:outline-none focus:bg-surface-container cursor-pointer" value={popover.assignee} onChange={(e) => popover.setAssignee(e.target.value)}>
-        <option value="">Unassigned (General Queue)</option>
-        <option value="platform_owner">Platform owner</option>
-        <option value="procurement">Procurement officer</option>
-        </select>
-        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-on-surface-variant">
-        <span className="material-symbols-outlined text-[18px]">unfold_more</span>
-        </div>
-        </div>
-        </div>
-
-        <div className="flex flex-col gap-space-xs">
         <label className="font-caption text-caption uppercase tracking-wider font-semibold text-on-surface-variant">Audit Reason / Ticket Reference</label>
-        <textarea className="w-full bg-surface-container-low text-on-surface placeholder:text-on-surface-variant/60 font-body-sm text-body-sm rounded-lg p-2.5 resize-none focus:outline-none focus:bg-surface-container" placeholder="e.g. Purchase order purchase order already placed with supplier" rows={3} value={popover.reason} onChange={(e) => popover.setReason(e.target.value)} />
-        <span className="font-caption text-[10px] text-on-surface-variant">Logged in Hub Activity Ledger for safety audits.</span>
+        <textarea className="w-full bg-surface-container-low text-on-surface placeholder:text-on-surface-variant/60 font-body-sm text-body-sm rounded-lg p-2.5 resize-none focus:outline-none focus:bg-surface-container" placeholder="e.g. Replacement already on the way" rows={3} value={popover.reason} onChange={(e) => popover.setReason(e.target.value)} />
         </div>
 
         <div className="flex items-center justify-end gap-space-sm pt-space-xs">
@@ -155,8 +140,8 @@ export function GapSnoozeSettings(p: { alertId?: string | null; onClose?: () => 
         <p className="font-body-md text-body-md text-on-surface-variant">Control alert thresholds, default snoozes, and escalation rules. Safety-critical items cannot be muted.</p>
         </div>
         <div className="flex items-center gap-space-sm shrink-0">
-        <span className="font-label-code text-caption text-on-surface-variant">Saved 08:20 AM</span>
-        <button type="button" disabled={!form.canSave || form.submit.saving} onClick={() => void form.save()} className="px-space-lg py-2 rounded-lg bg-primary text-on-primary font-body-md text-body-md font-semibold shadow hover:opacity-90 active:scale-95 transition-all flex items-center gap-space-xs disabled:opacity-60">
+        <span className="font-label-code text-caption text-on-surface-variant">{lastSaved ? `Last saved ${new Date(lastSaved).toLocaleString('en-JM', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}` : 'Not saved yet'}</span>
+        <button type="button" disabled={!form.canSave || form.submit.saving} onClick={() => void form.save().catch(() => undefined)} className="px-space-lg py-2 rounded-lg bg-primary text-on-primary font-body-md text-body-md font-semibold shadow hover:opacity-90 active:scale-95 transition-all flex items-center gap-space-xs disabled:opacity-60">
         <span className="material-symbols-outlined text-[16px]">check</span>
         <span>{form.submit.saving ? 'Saving…' : 'Save alert rules'}</span>
         </button>
@@ -209,7 +194,7 @@ export function GapSnoozeSettings(p: { alertId?: string | null; onClose?: () => 
         <tbody className="text-on-surface">
         {form.rules.length === 0 ? (
         <tr><td colSpan={5} className="py-space-lg px-space-lg text-center text-on-surface-variant">No alert rules loaded.</td></tr>
-        ) : form.rules.map((rule) => {
+        ) : form.rules.filter((rule) => String(rule.alert_type ?? '') !== 'reorder').map((rule) => {
           const alertType = String(rule.alert_type ?? '');
           const canSnooze = rule.can_snooze !== false;
           const days = Number(rule.default_snooze_days ?? 0);

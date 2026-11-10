@@ -7,14 +7,47 @@ export function useIn2StockForm() {
   const { shell, live } = base;
   const [locationFilter, setLocationFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [page, setPage] = useState(0);
   const pageSize = 25;
 
+  /**
+   * IV-02: store rows carry the need status (out / low against what the cars need),
+   * and kit items with no balance row show as 0 in the store.
+   */
+  const stockRows = useMemo(() => {
+    const isCar = (r: Record<string, unknown>) =>
+      strField(r, 'location_code', '').toLowerCase().startsWith('veh');
+    const storeRow = shell.stockRows.find((r) => !isCar(r));
+    const needByItem = new Map(live.storeNeeds.map((n) => [n.itemId, n]));
+    const rows = shell.stockRows.map((r) => {
+      if (isCar(r)) return r;
+      const need = needByItem.get(strField(r, 'item_id', ''));
+      return need && need.status !== 'ok' ? { ...r, stock_status: need.status, needed: need.needed } : r;
+    });
+    const inStore = new Set(rows.filter((r) => !isCar(r)).map((r) => strField(r, 'item_id', '')));
+    for (const n of live.storeNeeds) {
+      if (inStore.has(n.itemId)) continue;
+      rows.push({
+        item_id: n.itemId,
+        sku: n.sku,
+        name: n.name,
+        location_id: storeRow ? storeRow.location_id : 'store',
+        location_code: storeRow ? storeRow.location_code : '',
+        location_name: storeRow ? storeRow.location_name : live.hubName,
+        on_hand: 0,
+        reserved: 0,
+        stock_value: 0,
+        stock_status: n.status === 'ok' ? 'out' : n.status,
+        needed: n.needed,
+      });
+    }
+    return rows;
+  }, [shell.stockRows, live.storeNeeds, live.hubName]);
+
   const filteredRows = useMemo(() => {
-    let rows = shell.stockRows;
+    let rows = stockRows;
     if (locationFilter !== 'all') {
       rows = rows.filter((r) => strField(r, 'location_id', '') === locationFilter);
     }
@@ -26,17 +59,14 @@ export function useIn2StockForm() {
         return name.includes(q) || sku.includes(q);
       });
     }
-    if (categoryFilter) {
-      rows = rows.filter((r) => strField(r, 'category', '') === categoryFilter);
-    }
     if (statusFilter) {
       rows = rows.filter((r) => strField(r, 'stock_status', '') === statusFilter);
     }
     if (typeFilter) {
-      rows = rows.filter((r) => strField(r, 'tracking_type', '') === typeFilter);
+      rows = rows.filter((r) => strField(r, 'tracking', '') === typeFilter);
     }
     return rows;
-  }, [shell.stockRows, locationFilter, searchQuery, categoryFilter, statusFilter, typeFilter]);
+  }, [stockRows, locationFilter, searchQuery, statusFilter, typeFilter]);
 
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const safePage = Math.min(page, pageCount - 1);
@@ -45,7 +75,6 @@ export function useIn2StockForm() {
   const resetFilters = () => {
     setLocationFilter('all');
     setSearchQuery('');
-    setCategoryFilter('');
     setStatusFilter('');
     setTypeFilter('');
     setPage(0);
@@ -83,8 +112,6 @@ export function useIn2StockForm() {
     setLocationFilter,
     searchQuery,
     setSearchQuery,
-    categoryFilter,
-    setCategoryFilter,
     statusFilter,
     setStatusFilter,
     typeFilter,

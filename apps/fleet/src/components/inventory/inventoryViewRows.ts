@@ -91,10 +91,10 @@ export function buildAssetRow(asset: Record<string, unknown>, formatMoney: (n: n
     status: st,
     statusLabel: st.replace(/_/g, ' '),
     plate: formatPlate(strField(asset, 'license_plate', strField(asset, 'plate', ''))),
-    bookValue: formatMoney(
-      numField(asset, 'book_value_jmd', numField(asset, 'book_value', 0)) || null,
-    ),
+    bookValue: formatMoney(numField(asset, 'purchase_cost', 0) || null),
     category: strField(asset, 'category', strField(asset, 'asset_type', '—')),
+    installedAt: strField(asset, 'installed_at', '').slice(0, 10),
+    nextCheck: strField(asset, 'next_inspection_due', '').slice(0, 10),
   };
 }
 

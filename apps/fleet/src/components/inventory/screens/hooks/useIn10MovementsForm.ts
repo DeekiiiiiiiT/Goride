@@ -23,10 +23,11 @@ export function useIn10MovementsForm() {
     if (q) {
       list = list.filter((r) => {
         const hay = [
-          strField(r, 'reference', ''),
-          strField(r, 'item_name', ''),
-          strField(r, 'sku', ''),
-          strField(r, 'license_plate', ''),
+          strField(r, 'ref_no', ''),
+          Array.isArray(r.item_names) ? (r.item_names as string[]).join(' ') : '',
+          strField(r, 'from_label', ''),
+          strField(r, 'to_label', ''),
+          strField(r, 'reason', ''),
         ]
           .join(' ')
           .toLowerCase();

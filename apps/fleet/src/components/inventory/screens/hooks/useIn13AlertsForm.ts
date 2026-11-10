@@ -13,6 +13,12 @@ function alertStatus(a: Record<string, unknown>): string {
   return strField(a, 'status', 'open').toLowerCase();
 }
 
+/** Worked-out alerts (asset status, driver reports) have no Mark done / Snooze (IV-12). */
+export function isStoredAlert(a: Record<string, unknown>): boolean {
+  if (a.derived === true) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(strField(a, 'id', ''));
+}
+
 function isSnoozed(a: Record<string, unknown>): boolean {
   const until = strField(a, 'snoozed_until', '');
   if (!until) return alertStatus(a) === 'snoozed';
@@ -103,7 +109,7 @@ export function useIn13AlertsForm() {
       for (const a of alerts) {
         const id = strField(a, 'id', '');
         const st = alertStatus(a);
-        if (id && (st === 'open' || st === 'new')) {
+        if (id && isStoredAlert(a) && (st === 'open' || st === 'new')) {
           await inventoryApi.alertViewed(id);
         }
       }
@@ -131,6 +137,11 @@ export function useIn13AlertsForm() {
     });
 
   const openRelated = (alert: Record<string, unknown>) => {
+    const reportId = strField(alert, 'report_id', '');
+    if (strField(alert, 'type', '') === 'driver_report' && reportId) {
+      shell.openGap('driver-report-update', { reportId });
+      return;
+    }
     const itemId = strField(alert, 'item_id', '');
     const assetId = strField(alert, 'asset_id', '');
     const vehicleId = strField(alert, 'vehicle_id', '');
@@ -142,8 +153,8 @@ export function useIn13AlertsForm() {
       shell.openModal('asset-page');
     } else if (vehicleId) {
       shell.setTab('vehicle-kits');
-    } else {
-      void markViewed(strField(alert, 'id', ''));
+    } else if (isStoredAlert(alert)) {
+      void markViewed(strField(alert, 'id', '')).catch(() => undefined);
     }
   };
 
@@ -154,6 +165,22 @@ export function useIn13AlertsForm() {
   };
 
   const markDoneSelectedDisabledReason = selectedAlertId ? '' : 'Select an alert first';
+
+  /** Label for the open action: Open asset / Open record. */
+  const openLabel = (alert: Record<string, unknown>) =>
+    strField(alert, 'asset_id', '') && strField(alert, 'type', '') !== 'driver_report' ? 'Open asset' : 'Open record';
+
+  const counts = useMemo(() => {
+    const open = alerts.filter((a) => {
+      const st = alertStatus(a);
+      return (st === 'open' || st === 'new') && !isSnoozed(a);
+    });
+    return {
+      open: open.length,
+      critical: open.filter((a) => strField(a, 'severity', '') === 'critical').length,
+      driverReports: open.filter((a) => strField(a, 'type', '') === 'driver_report').length,
+    };
+  }, [alerts]);
 
   const resolvedAlertRows: AlertResolvedRow[] = useMemo(
     () =>
@@ -198,6 +225,8 @@ export function useIn13AlertsForm() {
     addSerial,
     markDoneSelectedDisabledReason,
     resolvedAlertRows,
+    openLabel,
+    counts,
     formatJmd,
     strField,
   };

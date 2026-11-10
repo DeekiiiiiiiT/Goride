@@ -32,12 +32,24 @@ export type InventoryModalId =
   | 'register-asset'
   | 'snooze-settings'
   | 'kit-compare'
+  | 'kit-card'
   | 'driver-report-update';
+
+/** What the Issue dialog opens with (IV-07). */
+export type IssueRequest = {
+  /** Car the user clicked; null = header Issue (no car chosen yet). */
+  vehicleId: string | null;
+  /** Kit lines ticked on open. Empty = nothing ticked. */
+  kitLineIds: string[];
+  /** Tick every car's missing lines (Vehicle kits → Issue missing). */
+  allMissing: boolean;
+};
 
 export type InventoryGapContext = {
   itemId?: string | null;
   assetId?: string | null;
   reportId?: string | null;
+  vehicleId?: string | null;
 };
 
 export type InventoryShellState = {
@@ -56,6 +68,13 @@ export type InventoryShellState = {
   setSelectedReportId: (id: string | null) => void;
   selectedAlertId: string | null;
   setSelectedAlertId: (id: string | null) => void;
+  selectedVehicleId: string | null;
+  issueRequest: IssueRequest;
+  openIssue: (req?: Partial<IssueRequest>) => void;
+  /** Movements filtered to one item (Item editor → View history). */
+  movementItemId: string | null;
+  setMovementItemId: (id: string | null) => void;
+  openMovementsForItem: (itemId: string) => void;
   setErrorBanner: (message: string | null) => void;
   readOnly: boolean;
   errorBanner: string | null;
@@ -77,10 +96,15 @@ export type InventoryShellState = {
 
 const InventoryShellContext = createContext<InventoryShellState | null>(null);
 
-async function loadTabPayload(tab: InventoryTabId): Promise<Partial<InventoryShellState>> {
+async function loadTabPayload(
+  tab: InventoryTabId,
+  movementItemId: string | null = null,
+): Promise<Partial<InventoryShellState>> {
   switch (tab) {
     case 'movements': {
-      const data = await inventoryApi.movements();
+      const params = new URLSearchParams();
+      if (movementItemId) params.set('item_id', movementItemId);
+      const data = await inventoryApi.movements(params);
       return {
         movements: asPagedItems(data),
         movementsTotal: pagedTotal(data) ?? asPagedItems(data).length,
@@ -99,7 +123,7 @@ async function loadTabPayload(tab: InventoryTabId): Promise<Partial<InventoryShe
       return { alerts: asPagedItems(data) };
     }
     case 'stock': {
-      const [stock, items] = await Promise.all([inventoryApi.stock(), inventoryApi.items()]);
+      const [stock, items] = await Promise.all([inventoryApi.stockAll(), inventoryApi.items()]);
       return {
         stockRows: asPagedItems(stock),
         items: asPagedItems(items),
@@ -126,6 +150,13 @@ export function InventoryShellProvider({
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  const [issueRequest, setIssueRequest] = useState<IssueRequest>({
+    vehicleId: null,
+    kitLineIds: [],
+    allMissing: false,
+  });
+  const [movementItemId, setMovementItemId] = useState<string | null>(null);
   const [overview, setOverview] = useState<Record<string, unknown> | null>(null);
   const [stockRows, setStockRows] = useState<Record<string, unknown>[]>([]);
   const [items, setItems] = useState<Record<string, unknown>[]>([]);
@@ -142,7 +173,7 @@ export function InventoryShellProvider({
   const refreshOverview = useCallback(async () => {
     const [ov, stock, kits, assetPayload, alertPayload] = await Promise.all([
       inventoryApi.overview() as Promise<Record<string, unknown>>,
-      inventoryApi.stock() as Promise<{ items?: Record<string, unknown>[] }>,
+      inventoryApi.stockAll() as Promise<{ items?: Record<string, unknown>[] }>,
       inventoryApi.kitsCompliance() as Promise<{ items?: Record<string, unknown>[] }>,
       inventoryApi.assets() as Promise<{ items?: Record<string, unknown>[] }>,
       inventoryApi.alerts() as Promise<{ items?: Record<string, unknown>[] }>,
@@ -166,7 +197,7 @@ export function InventoryShellProvider({
   const refreshTab = useCallback(async () => {
     setTabLoading(true);
     try {
-      const patch = await loadTabPayload(tab);
+      const patch = await loadTabPayload(tab, movementItemId);
       if (patch.movements) {
         setMovements(patch.movements);
         setMovementsTotal(patch.movementsTotal ?? patch.movements.length);
@@ -181,7 +212,7 @@ export function InventoryShellProvider({
     } finally {
       setTabLoading(false);
     }
-  }, [tab]);
+  }, [tab, movementItemId]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -231,8 +262,27 @@ export function InventoryShellProvider({
     if (ctx?.itemId !== undefined) setSelectedItemId(ctx.itemId);
     if (ctx?.assetId !== undefined) setSelectedAssetId(ctx.assetId);
     if (ctx?.reportId !== undefined) setSelectedReportId(ctx.reportId);
+    if (ctx?.vehicleId !== undefined) setSelectedVehicleId(ctx.vehicleId);
     setModal(next);
   }, []);
+
+  const openIssue = useCallback((req?: Partial<IssueRequest>) => {
+    setIssueRequest({
+      vehicleId: req?.vehicleId ?? null,
+      kitLineIds: req?.kitLineIds ?? [],
+      allMissing: req?.allMissing ?? false,
+    });
+    setModal('issue');
+  }, []);
+
+  const openMovementsForItem = useCallback(
+    (itemId: string) => {
+      setMovementItemId(itemId);
+      setModal('none');
+      setTab('movements');
+    },
+    [setTab],
+  );
 
   const value = useMemo<InventoryShellState>(
     () => ({
@@ -251,6 +301,12 @@ export function InventoryShellProvider({
       setSelectedReportId,
       selectedAlertId,
       setSelectedAlertId,
+      selectedVehicleId,
+      issueRequest,
+      openIssue,
+      movementItemId,
+      setMovementItemId,
+      openMovementsForItem,
       setErrorBanner,
       readOnly,
       errorBanner,
@@ -296,12 +352,22 @@ export function InventoryShellProvider({
       verifyLedger,
       openGap,
       closeAndGoToTab,
+      selectedVehicleId,
+      issueRequest,
+      openIssue,
+      movementItemId,
+      openMovementsForItem,
     ],
   );
 
   return (
     <InventoryShellContext.Provider value={value}>{children}</InventoryShellContext.Provider>
   );
+}
+
+/** Shell when inside the Inventory page; null elsewhere (e.g. Vehicle → Profile kit card). */
+export function useInventoryShellOptional(): InventoryShellState | null {
+  return useContext(InventoryShellContext);
 }
 
 export function useInventoryShell(): InventoryShellState {

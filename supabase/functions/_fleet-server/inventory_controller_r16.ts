@@ -45,11 +45,7 @@ export function registerInventoryR16Routes(app: Hono<InvEnv>) {
       if (org instanceof Response) return org;
       const body = await c.req.json() as Record<string, unknown>;
       const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      for (const key of [
-        "safety_notice_text", "fleet_support_phone", "monthly_procurement_cap_jmd",
-        "fiscal_year_start_month", "approval_threshold_jmd", "approval_rule_code",
-        "approval_rule_name", "write_off_rule_code", "scrap_note",
-      ]) {
+      for (const key of ["safety_notice_text", "fleet_support_phone"]) {
         if (key in body) patch[key] = body[key];
       }
       const { data, error } = await fleetDb().from("fleet_inv_settings").update(patch)

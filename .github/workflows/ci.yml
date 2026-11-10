@@ -519,6 +519,7 @@ jobs:
           supabase/functions/_fleet-server/inventory_http_asset_move_condition_repair.test.ts
           supabase/functions/_fleet-server/inventory_controller_r16.test.ts
           supabase/functions/_fleet-server/inventory_double_entry.test.ts
+          supabase/functions/_fleet-server/inventory_completion.test.ts
 
       - name: Restore pnpm links after Deno steps
         run: pnpm install --frozen-lockfile

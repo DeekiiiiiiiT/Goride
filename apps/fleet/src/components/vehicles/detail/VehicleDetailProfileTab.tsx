@@ -316,7 +316,7 @@ export function VehicleDetailProfileTab({
                   </TabsContent>
 
                   <TabsContent value="equipment" className="space-y-6">
-                      {inventoryKitsEnabled ? <In15VehicleKitCard /> : null}
+                      {inventoryKitsEnabled ? <In15VehicleKitCard vehicleId={vehicle.id || vehicle.licensePlate} /> : null}
                   </TabsContent>
               </Tabs>
           </TabsContent>

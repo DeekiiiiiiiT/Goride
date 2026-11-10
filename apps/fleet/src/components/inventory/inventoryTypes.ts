@@ -40,6 +40,10 @@ export type AssetRow = {
   plate: string;
   bookValue: string;
   category: string;
+  /** yyyy-mm-dd or '' */
+  installedAt: string;
+  /** yyyy-mm-dd or '' */
+  nextCheck: string;
 };
 
 export type AlertRow = {

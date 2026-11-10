@@ -146,6 +146,79 @@ function parseAssetMoney(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+const ALERT_NOT_FOUND = "Alert not found";
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Only stored inv_alert rows can be marked done / snoozed / assigned / viewed. */
+export function isStoredAlertId(id: string): boolean {
+  return UUID_RE.test(id);
+}
+
+/** Open driver reports (status != fixed), shown in Fleet Alerts as type driver_report. */
+export async function buildDriverReportAlerts(org: string): Promise<Record<string, unknown>[]> {
+  const { data: reports, error } = await fleetDb().from("fleet_inv_driver_report").select("*")
+    .eq("organization_id", org).neq("status", "fixed").order("created_at", { ascending: false }).limit(100);
+  if (error || !reports?.length) return [];
+
+  const itemIds = [...new Set(reports.map((r) => r.item_id).filter(Boolean))] as string[];
+  const lineIds = [...new Set(reports.map((r) => r.kit_line_id).filter(Boolean))] as string[];
+  const vehIds = [...new Set(reports.map((r) => r.vehicle_id).filter(Boolean))] as string[];
+  const nameByItem = new Map<string, string>();
+  const typeByLine = new Map<string, string>();
+  const plateByVeh = new Map<string, string>();
+  const empty = Promise.resolve({ data: [] as Record<string, unknown>[] });
+  const [items, lines, vehs] = await Promise.all([
+    itemIds.length
+      ? fleetDb().from("fleet_inv_item").select("id, name").eq("organization_id", org).in("id", itemIds)
+      : empty,
+    lineIds.length
+      ? fleetDb().from("fleet_inv_kit_template_line").select("id, line_type").in("id", lineIds)
+      : empty,
+    vehIds.length ? fleetDb().from("fleet_vehicles").select("id, license_plate").in("id", vehIds) : empty,
+  ]);
+  for (const it of items.data ?? []) nameByItem.set(String(it.id), String(it.name));
+  for (const l of lines.data ?? []) typeByLine.set(String(l.id), String(l.line_type));
+  for (const v of vehs.data ?? []) plateByVeh.set(String(v.id), String(v.license_plate ?? v.id));
+
+  return reports.map((r) => {
+    const lineType = r.kit_line_id ? typeByLine.get(String(r.kit_line_id)) : undefined;
+    const itemName = r.item_id
+      ? nameByItem.get(String(r.item_id)) ?? "Kit item"
+      : lineType === "linked_fuel_card"
+      ? "Fuel card"
+      : lineType === "linked_toll_tag"
+      ? "Toll tag"
+      : "Kit item";
+    const plate = plateByVeh.get(String(r.vehicle_id)) ?? String(r.vehicle_id ?? "");
+    const issue = String(r.issue ?? "missing");
+    const issueWord = issue === "missing" ? "missing" : issue === "damaged" ? "broken" : "not working";
+    return {
+      id: `report:${r.id}`,
+      organization_id: org,
+      type: "driver_report",
+      severity: issue === "missing" ? "high" : "medium",
+      title: `${plate}: driver reports ${itemName} ${issueWord}`,
+      body: r.note ? String(r.note) : null,
+      message: r.note ? String(r.note) : null,
+      status: "open",
+      report_status: r.status,
+      entity_type: "driver_report",
+      entity_id: r.id,
+      report_id: r.id,
+      report_no: r.report_no ?? null,
+      vehicle_id: r.vehicle_id,
+      vehicle_plate: plate,
+      item_name: itemName,
+      issue,
+      note: r.note ?? null,
+      photo_paths: r.photo_paths ?? [],
+      derived: true,
+      actions: ["open_report"],
+      created_at: r.created_at,
+    };
+  });
+}
+
 async function buildDerivedAssetAlerts(org: string): Promise<Record<string, unknown>[]> {
   const cutoff = new Date();
   cutoff.setUTCDate(cutoff.getUTCDate() + 30);
@@ -205,6 +278,8 @@ async function buildDerivedAssetAlerts(org: string): Promise<Record<string, unkn
       const alertType = typeByStatus[status as keyof typeof typeByStatus];
       derived.push({
         id: `derived:${alertType}:${id}`,
+        derived: true,
+        actions: ["open_asset"],
         organization_id: org,
         type: alertType,
         severity: status === "lost" ? "critical" : "high",
@@ -228,6 +303,8 @@ async function buildDerivedAssetAlerts(org: string): Promise<Record<string, unkn
       const past = due < today;
       derived.push({
         id: `derived:asset_inspection_due:${id}`,
+        derived: true,
+        actions: ["open_asset"],
         organization_id: org,
         type: "asset_inspection_due",
         severity: past ? "critical" : "medium",
@@ -601,7 +678,43 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
     if (org instanceof Response) return org;
     const { data, error } = await fleetDb().from("fleet_inv_asset").select("*").eq("organization_id", org).limit(100);
     if (error) return c.json({ error: error.message }, 500);
-    return c.json({ items: data ?? [] });
+    const rows = data ?? [];
+    // Add item name, location and car plate so the Assets tab and Asset page show real values.
+    const itemIds = [...new Set(rows.map((a) => a.item_id).filter(Boolean))] as string[];
+    const locIds = [...new Set(rows.map((a) => a.location_id).filter(Boolean))] as string[];
+    const empty = Promise.resolve({ data: [] as Record<string, unknown>[] });
+    const [items, locs] = await Promise.all([
+      itemIds.length
+        ? fleetDb().from("fleet_inv_item").select("id, name, sku").eq("organization_id", org).in("id", itemIds)
+        : empty,
+      locIds.length
+        ? fleetDb().from("fleet_inv_location").select("id, name, kind, vehicle_id").eq("organization_id", org)
+          .in("id", locIds)
+        : empty,
+    ]);
+    const vehIds = [...new Set((locs.data ?? []).map((l) => l.vehicle_id).filter(Boolean))] as string[];
+    const vehs = vehIds.length
+      ? await fleetDb().from("fleet_vehicles").select("id, license_plate").in("id", vehIds)
+      : { data: [] as Record<string, unknown>[] };
+    const itemById = new Map((items.data ?? []).map((i) => [String(i.id), i]));
+    const locById = new Map((locs.data ?? []).map((l) => [String(l.id), l]));
+    const plateById = new Map((vehs.data ?? []).map((v) => [String(v.id), String(v.license_plate ?? v.id)]));
+    return c.json({
+      items: rows.map((a) => {
+        const item = itemById.get(String(a.item_id));
+        const loc = locById.get(String(a.location_id));
+        const vehicleId = loc?.vehicle_id ? String(loc.vehicle_id) : null;
+        return {
+          ...a,
+          name: item?.name ?? null,
+          item_sku: item?.sku ?? null,
+          location_name: loc?.name ?? null,
+          location_kind: loc?.kind ?? null,
+          vehicle_id: vehicleId,
+          license_plate: vehicleId ? plateById.get(vehicleId) ?? vehicleId : null,
+        };
+      }),
+    });
   });
 
   app.post(`${PREFIX}/assets`, requirePermission("inventory.move"), async (c) => {
@@ -940,6 +1053,42 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
     }
   });
 
+  /** Fleet view of one driver report with its real timeline (IV-11 / IV-14 "Open record"). */
+  app.get(`${PREFIX}/driver-reports/:id`, requirePermission("inventory.view"), async (c) => {
+    try {
+      const org = orgOrForbid(c);
+      if (org instanceof Response) return org;
+      const id = c.req.param("id");
+      if (!isStoredAlertId(id)) return c.json({ error: "Not found" }, 404);
+      const { data: report, error } = await fleetDb().from("fleet_inv_driver_report").select("*")
+        .eq("organization_id", org).eq("id", id).maybeSingle();
+      if (error) return c.json({ error: error.message }, 500);
+      if (!report) return c.json({ error: "Not found" }, 404);
+      const [alerts, updates] = await Promise.all([
+        buildDriverReportAlerts(org),
+        fleetDb().from("fleet_inv_driver_report_update").select("*")
+          .eq("organization_id", org).eq("report_id", id).order("created_at", { ascending: true }),
+      ]);
+      const summary = alerts.find((a) => a.report_id === id);
+      let itemName = (summary?.item_name as string | undefined) ?? null;
+      if (!itemName && report.item_id) {
+        const { data: item } = await fleetDb().from("fleet_inv_item").select("name")
+          .eq("organization_id", org).eq("id", report.item_id).maybeSingle();
+        itemName = item?.name ? String(item.name) : null;
+      }
+      return c.json({
+        report: {
+          ...report,
+          license_plate: summary?.vehicle_plate ?? report.vehicle_id,
+          item_name: itemName,
+        },
+        updates: updates.data ?? [],
+      });
+    } catch (e) {
+      return safeErrorResponse(c, e, "inventory.driver-reports.get");
+    }
+  });
+
   app.get(`${PREFIX}/alerts`, requirePermission("inventory.view"), async (c) => {
     const org = orgOrForbid(c);
     if (org instanceof Response) return org;
@@ -947,7 +1096,8 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
       .order("created_at", { ascending: false }).limit(100);
     if (error) return c.json({ error: error.message }, 500);
     const derived = await buildDerivedAssetAlerts(org);
-    const merged = [...(data ?? []), ...derived];
+    const reports = await buildDriverReportAlerts(org);
+    const merged = [...(data ?? []), ...derived, ...reports];
     merged.sort((a, b) => {
       const ta = new Date(String(a.created_at ?? 0)).getTime();
       const tb = new Date(String(b.created_at ?? 0)).getTime();
@@ -959,10 +1109,13 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
   app.post(`${PREFIX}/alerts/:id/assign`, requirePermission("inventory.approve"), async (c) => {
     const org = orgOrForbid(c);
     if (org instanceof Response) return org;
+    const alertId = c.req.param("id");
+    if (!isStoredAlertId(alertId)) return c.json({ error: ALERT_NOT_FOUND }, 404);
     const body = await c.req.json();
-    const { error } = await fleetDb().from("fleet_inv_alert").update({ assignee_id: body.user_id })
-      .eq("organization_id", org).eq("id", c.req.param("id"));
+    const { data, error } = await fleetDb().from("fleet_inv_alert").update({ assignee_id: body.user_id })
+      .eq("organization_id", org).eq("id", alertId).select("id");
     if (error) return c.json({ error: error.message }, 500);
+    if (!data?.length) return c.json({ error: ALERT_NOT_FOUND }, 404);
     return c.json({ ok: true });
   });
 
@@ -971,6 +1124,7 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
       const org = orgOrForbid(c);
       if (org instanceof Response) return org;
       const alertId = c.req.param("id");
+      if (!isStoredAlertId(alertId)) return c.json({ error: ALERT_NOT_FOUND }, 404);
       const blocked = await assertAlertSnoozeAllowed(org, alertId);
       if (blocked) return c.json({ error: blocked }, 409);
       const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
@@ -978,9 +1132,10 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
       const until = body.until
         ? new Date(String(body.until)).toISOString()
         : new Date(Date.now() + days * 86400000).toISOString();
-      const { error } = await fleetDb().from("fleet_inv_alert").update({ snoozed_until: until })
-        .eq("organization_id", org).eq("id", c.req.param("id"));
+      const { data, error } = await fleetDb().from("fleet_inv_alert").update({ snoozed_until: until })
+        .eq("organization_id", org).eq("id", alertId).select("id");
       if (error) return c.json({ error: error.message }, 500);
+      if (!data?.length) return c.json({ error: ALERT_NOT_FOUND }, 404);
       return c.json({ ok: true, snoozedUntil: until });
     } catch (e) {
       return safeErrorResponse(c, e, "inventory.alerts.snooze");
@@ -991,13 +1146,16 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
     try {
       const org = orgOrForbid(c);
       if (org instanceof Response) return org;
+      const alertId = c.req.param("id");
+      if (!isStoredAlertId(alertId)) return c.json({ error: ALERT_NOT_FOUND }, 404);
       const now = new Date().toISOString();
-      const { error } = await fleetDb().from("fleet_inv_alert").update({
+      const { data, error } = await fleetDb().from("fleet_inv_alert").update({
         status: "done",
         resolved_at: now,
         resolved_by: actorId(c),
-      }).eq("organization_id", org).eq("id", c.req.param("id"));
+      }).eq("organization_id", org).eq("id", alertId).select("id");
       if (error) return c.json({ error: error.message }, 500);
+      if (!data?.length) return c.json({ error: ALERT_NOT_FOUND }, 404);
       return c.json({ ok: true, status: "done" });
     } catch (e) {
       return safeErrorResponse(c, e, "inventory.alerts.done");
@@ -1008,10 +1166,13 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
     try {
       const org = orgOrForbid(c);
       if (org instanceof Response) return org;
+      const alertId = c.req.param("id");
+      if (!isStoredAlertId(alertId)) return c.json({ error: ALERT_NOT_FOUND }, 404);
       const now = new Date().toISOString();
-      const { error } = await fleetDb().from("fleet_inv_alert").update({ viewed_at: now })
-        .eq("organization_id", org).eq("id", c.req.param("id"));
+      const { data, error } = await fleetDb().from("fleet_inv_alert").update({ viewed_at: now })
+        .eq("organization_id", org).eq("id", alertId).select("id");
       if (error) return c.json({ error: error.message }, 500);
+      if (!data?.length) return c.json({ error: ALERT_NOT_FOUND }, 404);
       return c.json({ ok: true, viewedAt: now });
     } catch (e) {
       return safeErrorResponse(c, e, "inventory.alerts.viewed");

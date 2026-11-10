@@ -26,7 +26,11 @@ export function useIn4ReceiveForm() {
     ]);
     return {
       items: asPagedItems(items as { items?: unknown[] }),
-      locations: (locations as { locations?: Row[] }).locations ?? [],
+      // IV-13a: only real places stock can be received into (no virtual locations).
+      locations: ((locations as { locations?: Row[] }).locations ?? []).filter((l) => {
+        const kind = String(l.kind ?? "");
+        return (kind === "warehouse" || kind === "vehicle") && l.is_active !== false;
+      }),
     };
   }, []);
 
@@ -42,8 +46,7 @@ export function useIn4ReceiveForm() {
 
   useEffect(() => {
     if (locationId || !locations.length) return;
-    const primary =
-      locations.find((l) => String(l.is_primary ?? l.primary) === 'true') ?? locations[0];
+    const primary = locations.find((l) => l.is_default === true) ?? locations[0];
     if (primary) setLocationId(String(primary.id ?? ''));
   }, [locations, locationId]);
 
@@ -57,7 +60,7 @@ export function useIn4ReceiveForm() {
         name: String(first.name ?? '—'),
         sku: String(first.sku ?? '—'),
         qty: '1',
-        unitPrice: String(first.unit_cost_jmd ?? first.default_cost_jmd ?? '0'),
+        unitPrice: String(first.default_unit_cost ?? '0'),
         serial: '',
       },
     ]);
@@ -98,7 +101,7 @@ export function useIn4ReceiveForm() {
         name: String(item.name ?? '—'),
         sku: String(item.sku ?? '—'),
         qty: '1',
-        unitPrice: String(item.unit_cost_jmd ?? item.default_cost_jmd ?? '0'),
+        unitPrice: String(item.default_unit_cost ?? '0'),
         serial: '',
       },
     ]);

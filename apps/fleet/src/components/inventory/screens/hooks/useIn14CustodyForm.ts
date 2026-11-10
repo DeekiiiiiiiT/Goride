@@ -32,6 +32,19 @@ export function useIn14CustodyForm() {
 
   const locations = load.data?.locations ?? [];
   const stockRows = shell.stockRows;
+  /** Store + car locations only (no virtual ones). */
+  const realLocations = locations.filter((l) => {
+    const kind = String(l.kind ?? '');
+    return (kind === 'warehouse' || kind === 'vehicle') && l.is_active !== false;
+  });
+  const storeLocations = realLocations.filter((l) => String(l.kind ?? '') === 'warehouse');
+  const itemOptions = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of stockRows) m.set(strField(r, 'item_id', ''), strField(r, 'name', 'Item'));
+    for (const i of shell.items) if (!m.has(strField(i, 'id', ''))) m.set(strField(i, 'id', ''), strField(i, 'name', 'Item'));
+    m.delete('');
+    return [...m.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [stockRows, shell.items]);
 
   useEffect(() => {
     if (itemId || !shell.selectedItemId) return;
@@ -46,10 +59,10 @@ export function useIn14CustodyForm() {
   }, [itemId, shell.selectedItemId, shell.items, stockRows]);
 
   useEffect(() => {
-    if (vehicleId) return;
-    const v = live.primaryVehicle?.vehicleId;
-    if (v) setVehicleId(String(v));
-  }, [live.primaryVehicle, vehicleId]);
+    if (toLocationId || mode !== 'return') return;
+    const store = locations.find((l) => String(l.kind ?? '') === 'warehouse' && l.is_default === true);
+    if (store) setToLocationId(String(store.id));
+  }, [mode, locations, toLocationId]);
 
   const selectedRow =
     stockRows.find((r) => strField(r, 'item_id', '') === itemId) ??
@@ -161,6 +174,9 @@ export function useIn14CustodyForm() {
     itemDrawerRow,
     itemName,
     itemSku,
+    realLocations,
+    storeLocations,
+    itemOptions,
     selectedAsset,
     valueLabel,
     formatJmd,

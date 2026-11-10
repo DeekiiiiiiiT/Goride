@@ -24,7 +24,7 @@ export function In4ReceiveDialog() {
       itemId,
       name: String(item?.name ?? '—'),
       sku: String(item?.sku ?? '—'),
-      unitPrice: String(item?.unit_cost_jmd ?? item?.default_cost_jmd ?? '0'),
+      unitPrice: String(item?.default_unit_cost ?? '0'),
     });
   };
   return (
@@ -58,7 +58,7 @@ export function In4ReceiveDialog() {
       <label className="font-caption text-caption text-secondary uppercase font-semibold tracking-wide">Into Location</label>
       {form.locations.length > 1 ? (
       <div className="relative">
-      <select className="w-full bg-surface-container-lowest text-on-surface font-body-sm text-body-sm rounded-lg px-space-md py-2 appearance-none focus:outline-none" value={form.locationId} onChange={(e) => form.setLocationId(e.target.value)}>
+      <select id="in4-receive-location" aria-label="Into location" className="w-full bg-surface-container-lowest text-on-surface font-body-sm text-body-sm rounded-lg px-space-md py-2 appearance-none focus:outline-none" value={form.locationId} onChange={(e) => form.setLocationId(e.target.value)}>
       {form.locations.map((loc) => {
         const id = String(loc.id ?? '');
         return (
@@ -88,11 +88,6 @@ export function In4ReceiveDialog() {
       <div className="relative flex items-center bg-surface-container-lowest rounded-lg px-space-md py-2">
       <span className="material-symbols-outlined text-[18px] text-secondary mr-2">calendar_today</span>
       <input className="bg-transparent font-label-code text-label-code text-on-surface focus:outline-none w-full" type="date" value={form.receivedOn} onChange={(e) => form.setReceivedOn(e.target.value)}/>
-      <span className="font-caption text-[10px] text-secondary font-label-code uppercase tracking-wider bg-surface-container px-1.5 py-0.5 rounded">EST</span>
-      </div>
-      <div className="mt-1 flex items-center gap-space-xs text-secondary font-caption text-caption">
-      <span className="material-symbols-outlined text-[14px] text-secondary">schedule</span>
-      <span className="font-label-code text-caption">Logged 08:47 PM EST</span>
       </div>
       </div>
       </div>

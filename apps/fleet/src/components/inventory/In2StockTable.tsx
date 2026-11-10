@@ -21,11 +21,10 @@ function isVehicleLocation(row: Record<string, unknown>): boolean {
 export function In2StockTable({
   rows,
   shell,
-  primaryPlate,
 }: {
   rows: Record<string, unknown>[];
   shell: InventoryShellState;
-  primaryPlate: string;
+  primaryPlate?: string;
 }) {
   if (rows.length === 0) {
     return (
@@ -73,9 +72,7 @@ export function In2StockTable({
                   {onVehicle ? 'directions_car' : 'warehouse'}
                 </span>
                 <span>
-                  {onVehicle
-                    ? `On cars (${primaryPlate !== '—' ? primaryPlate : strField(row, 'location_name', '—')})`
-                    : strField(row, 'location_name', '—')}
+                  {strField(row, 'location_name', '—')}
                 </span>
               </div>
             </td>
@@ -100,6 +97,9 @@ export function In2StockTable({
                 <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
                 {stockStatusLabel(status)}
               </span>
+              {numField(row, 'needed', 0) > 0 && status !== 'ok' ? (
+                <div className="font-caption text-caption text-on-surface-variant mt-0.5">{numField(row, 'needed', 0)} needed</div>
+              ) : null}
             </td>
             <td className="py-space-sm px-space-lg text-right">
               <div className="flex items-center justify-end gap-1">
@@ -114,14 +114,17 @@ export function In2StockTable({
                 >
                   <span className="material-symbols-outlined text-[17px]">edit</span>
                 </button>
+                {!shell.readOnly ? (
                 <button
                   type="button"
-                  onClick={() => shell.openModal('issue')}
+                  onClick={() => shell.openIssue()}
                   className="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors"
-                  title="Issue or transfer"
+                  title="Issue to cars"
+                  aria-label="Issue to cars"
                 >
-                  <span className="material-symbols-outlined text-[17px]">more_horiz</span>
+                  <span className="material-symbols-outlined text-[17px]">output</span>
                 </button>
+                ) : null}
               </div>
             </td>
           </tr>

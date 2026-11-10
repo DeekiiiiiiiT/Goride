@@ -131,9 +131,9 @@ BEGIN
         AND ur.scope_id = v_org_uuid
     );
 
-  INSERT INTO fleet.inv_settings (organization_id, approval_threshold_jmd)
-  VALUES (v_org, 20000)
-  ON CONFLICT (organization_id) DO UPDATE SET approval_threshold_jmd = EXCLUDED.approval_threshold_jmd;
+  INSERT INTO fleet.inv_settings (organization_id)
+  VALUES (v_org)
+  ON CONFLICT (organization_id) DO NOTHING;
 
   IF NOT EXISTS (SELECT 1 FROM fleet.inv_location WHERE organization_id = v_org AND lower(code) = 'main') THEN
     INSERT INTO fleet.inv_location (organization_id, code, name, kind, is_default)

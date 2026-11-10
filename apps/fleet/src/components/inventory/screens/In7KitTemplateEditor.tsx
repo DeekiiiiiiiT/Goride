@@ -7,6 +7,11 @@ export function In7KitTemplateEditor() {
   const form = useIn7KitTemplateForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
+  const tplName = form.strField(form.selectedTemplate ?? {}, 'name', 'Kit');
+  const carVersion = (vehicleId: string) => {
+    const row = live.complianceRows.find((r) => form.strField(r, 'vehicle_id', '') === vehicleId);
+    return row ? form.strField(row, 'kit_version', '') : '';
+  };
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <GapSubmitError message={form.submit.error} />
@@ -18,19 +23,17 @@ export function In7KitTemplateEditor() {
       <div className="flex flex-wrap items-center justify-between gap-space-md">
       <div>
       <div className="flex items-center gap-space-sm">
-      <span className="font-label-code text-caption uppercase tracking-wider text-secondary">Asset Governance // KGN-01</span>
+      <span className="font-label-code text-caption uppercase tracking-wider text-secondary">Kit editor</span>
       <span className="inline-block w-1.5 h-1.5 rounded-full bg-on-surface"></span>
-      <span className="font-label-code text-caption text-secondary">Standard Spec v3.0</span>
+      <span className="font-label-code text-caption text-secondary">v{form.versionLabel}</span>
       </div>
       <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold tracking-tight">Inventory & Asset Management</h1>
       <p className="font-body-sm text-body-sm text-on-surface-variant">What you have, where it is, and what every car is missing.</p>
       </div>
       <div className="flex items-center gap-space-md">
-      <div className="flex items-center gap-space-xs bg-surface-container px-space-md py-1.5 rounded-lg">
-      <span className="material-symbols-outlined text-[16px] text-secondary">verified_user</span>
-      <span className="font-label-code text-body-sm font-semibold text-on-surface">{form.editorAuthorLabel}</span>
-      <span className="font-caption text-caption text-secondary uppercase tracking-tight">(platform_owner)</span>
-      </div>
+      <button type="button" aria-label="Close kit editor" className="w-9 h-9 rounded-lg bg-surface-container-low hover:bg-surface-container flex items-center justify-center" onClick={() => form.close()}>
+      <span className="material-symbols-outlined text-[18px]">close</span>
+      </button>
       <button type="button" className="bg-primary text-on-primary font-body-sm px-space-md py-1.5 rounded-lg flex items-center gap-space-xs shadow-sm hover:opacity-90 transition-opacity" onClick={() => form.newTemplate()}>
       <span className="material-symbols-outlined text-[16px]">add</span>
       <span>New kit template</span>
@@ -38,28 +41,6 @@ export function In7KitTemplateEditor() {
       </div>
       </div>
 
-      <div className="flex items-center gap-space-xs overflow-x-auto py-1">
-      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" onClick={() => form.goTab('overview')}>Overview</button>
-      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" onClick={() => form.goTab('stock')}>Stock</button>
-      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm font-semibold text-on-primary bg-primary shadow-sm flex items-center gap-space-xs" onClick={() => form.goTab('vehicle-kits')}>
-      <span className="material-symbols-outlined text-[16px]">inventory_2</span>
-      <span>Vehicle kits</span>
-      </button>
-      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" onClick={() => form.goTab('assets')}>Assets</button>
-      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" onClick={() => form.goTab('movements')}>Movements</button>
-      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors flex items-center gap-space-xs" onClick={() => form.goTab('alerts')}>
-      <span>Alerts</span>
-      <span className="bg-error text-on-error font-label-code text-[10px] font-bold px-1.5 py-0.2 rounded-full">5</span>
-      </button>
-      </div>
-
-      <div className="flex items-center gap-space-sm pt-space-xs">
-      <div className="inline-flex p-1 bg-surface-container rounded-lg">
-      <button type="button" className="px-space-md py-1 rounded font-body-sm text-secondary hover:text-on-surface transition-colors" onClick={() => form.goTab('vehicle-kits')}>Cars</button>
-      <button type="button" className="px-space-md py-1 rounded bg-surface-container-lowest font-body-sm font-semibold text-on-surface shadow-sm" onClick={() => form.goTab('vehicle-kits')}>Kit templates</button>
-      </div>
-      <span className="font-caption text-caption text-secondary">Editing Master Specifications</span>
-      </div>
       </div>
       </div>
 
@@ -73,12 +54,11 @@ export function In7KitTemplateEditor() {
       </div>
       <div>
       <div className="flex items-center gap-space-sm">
-      <h2 className="font-headline-sm text-headline-sm text-on-surface font-bold">Rideshare car kit</h2>
-      <span className="font-label-code text-[11px] bg-surface-container px-2 py-0.5 rounded font-bold text-on-surface">Editing v3</span>
-      <span className="font-label-code text-[11px] bg-secondary-container text-on-secondary-fixed font-semibold px-2 py-0.5 rounded">Active Standard</span>
+      <h2 className="font-headline-sm text-headline-sm text-on-surface font-bold">{tplName}</h2>
+      <span className="font-label-code text-[11px] bg-surface-container px-2 py-0.5 rounded font-bold text-on-surface">v{form.versionLabel}</span>
       </div>
       <p className="font-label-code text-caption text-secondary mt-0.5">
-                    Rideshare car kit · 10 items + 1 optional · used by 2 cars · version 3 (drafting changes)
+                    {form.linesCount} lines · used by {form.applyVehicleCount} car{form.applyVehicleCount === 1 ? '' : 's'} · version {form.versionLabel}
                   </p>
       </div>
       </div>
@@ -101,7 +81,6 @@ export function In7KitTemplateEditor() {
       <div className="bg-surface-container-lowest rounded-xl p-space-xl shadow-sm flex flex-col gap-space-lg">
       <div className="flex items-center justify-between">
       <h3 className="font-headline-sm text-headline-sm font-semibold text-on-surface">Template Parameters</h3>
-      <span className="font-caption text-caption text-secondary uppercase font-semibold">UUID: TPL-RSH-003</span>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-space-lg">
 
@@ -110,20 +89,6 @@ export function In7KitTemplateEditor() {
       <div className="relative">
       <input className="w-full bg-surface-container-low text-on-surface font-body-md px-space-md py-2 rounded-lg focus:outline-none focus:bg-surface-container-lowest" data-stitch-data-stitch-id="tpl-name" type="text" readOnly value={form.strField(form.selectedTemplate ?? {}, 'name', '')}/>
       <span className="material-symbols-outlined absolute right-3 top-2.5 text-[16px] text-secondary">edit</span>
-      </div>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-      <label className="font-caption text-caption uppercase text-secondary font-bold tracking-wider" htmlFor="body-type">Target Body Type</label>
-      <div className="relative">
-      <select className="w-full appearance-none bg-surface-container-low text-on-surface font-body-md px-space-md py-2 rounded-lg focus:outline-none focus:bg-surface-container-lowest cursor-pointer" data-stitch-data-stitch-id="body-type" value={form.strField(form.selectedTemplate ?? {}, 'body_type', 'any')} onChange={(e) => form.selectTemplate(form.selectedTemplateId)}>
-      <option>Any body type</option>
-      <option>Hatchback (5-Door)</option>
-      <option>Sedan (Compact / Midsize)</option>
-      <option>Minivan / Small MPV</option>
-      <option>Utility Van</option>
-      </select>
-      <span className="material-symbols-outlined absolute right-3 top-2.5 text-[16px] text-secondary pointer-events-none">expand_more</span>
       </div>
       </div>
 
@@ -290,10 +255,10 @@ export function In7KitTemplateEditor() {
       <div className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-wrap items-center justify-between gap-space-md">
       <div className="flex items-center gap-space-sm text-secondary">
       <span className="material-symbols-outlined text-[18px]">info</span>
-      <span className="font-caption text-caption">Saving creates an immutable revision hash on Kingston Cluster #01</span>
+      <span className="font-caption text-caption">Saving a new version keeps the old one in Version history.</span>
       </div>
       <div className="flex items-center gap-space-md">
-      <button type="button" className="text-secondary hover:text-on-surface font-body-sm px-space-md py-2 transition-colors" onClick={() => form.close()}>
+      <button type="button" className="bg-error-container text-error font-body-sm font-semibold px-space-md py-2 rounded-lg transition-colors" onClick={() => form.close()}>
                       Cancel
                     </button>
       <button type="button" className="bg-surface-container text-on-surface hover:bg-surface-container-high font-body-sm font-semibold px-space-lg py-2 rounded-lg transition-colors" onClick={() => form.saveDraft()}>
@@ -312,11 +277,8 @@ export function In7KitTemplateEditor() {
       <div className="bg-surface-container-lowest rounded-xl p-space-xl shadow-sm flex flex-col gap-space-lg">
       <div className="flex items-center justify-between">
       <h3 className="font-headline-sm text-headline-sm font-semibold text-on-surface">Version history</h3>
-      <span className="font-label-code text-caption bg-surface-container px-2 py-0.5 rounded text-secondary">3 Releases</span>
+      <span className="font-label-code text-caption bg-surface-container px-2 py-0.5 rounded text-secondary">{form.versionHistoryRows.length} version{form.versionHistoryRows.length === 1 ? '' : 's'}</span>
       </div>
-      <p className="font-body-sm text-body-sm text-on-surface-variant">
-                    Revision logs are cryptographically tracked against platform auditor IDs.
-                  </p>
 
       <div className="relative pl-6 space-y-space-lg">
 
@@ -345,65 +307,28 @@ export function In7KitTemplateEditor() {
 
       <div className="bg-surface-container-lowest rounded-xl p-space-xl shadow-sm flex flex-col gap-space-md">
       <div className="flex items-center justify-between">
-      <h3 className="font-headline-sm text-headline-sm font-semibold text-on-surface">Active Cars</h3>
-      <span className="font-label-code text-caption font-bold text-on-surface bg-surface-container px-2 py-0.5 rounded">2 Active</span>
+      <h3 className="font-headline-sm text-headline-sm font-semibold text-on-surface">Cars on this kit</h3>
+      <span className="font-label-code text-caption font-bold text-on-surface bg-surface-container px-2 py-0.5 rounded">{live.kitVehicles.length}</span>
       </div>
-      <p className="font-body-sm text-body-sm text-on-surface-variant">
-                    Vehicles bound to this template specification currently operating in Kingston:
-                  </p>
       <div className="space-y-space-sm pt-space-xs">
-
-      <div className="bg-surface-container-low p-space-md rounded-lg flex items-center justify-between">
+      {live.kitVehicles.length === 0 ? (
+      <p className="font-body-sm text-body-sm text-on-surface-variant">No cars on this kit yet.</p>
+      ) : (
+        live.kitVehicles.map((v) => (
+      <div key={v.vehicleId} className="bg-surface-container-low p-space-md rounded-lg flex items-center justify-between">
       <div className="flex items-center gap-space-sm">
       <span className="material-symbols-outlined text-[20px] text-secondary">directions_car</span>
-      <div>
-      <div className="font-body-sm font-semibold text-on-surface">{live.primaryPlate}</div>
-      <div className="font-label-plate text-caption text-secondary">{live.primaryPlate}</div>
-      </div>
+      <span className="font-label-plate text-label-plate font-semibold text-on-surface">{v.plate}</span>
       </div>
       <div className="text-right">
-      <span className="font-label-code text-[11px] bg-surface-container text-on-surface px-2 py-0.5 rounded font-medium">on v2</span>
-      <div className="font-caption text-[11px] text-error flex items-center justify-end gap-0.5 mt-0.5">
-      <span className="material-symbols-outlined text-[13px]">warning</span> Missing Triangle
-                        </div>
-      </div>
-      </div>
-
-      <div className="bg-surface-container-low p-space-md rounded-lg flex items-center justify-between">
-      <div className="flex items-center gap-space-sm">
-      <span className="material-symbols-outlined text-[20px] text-secondary">directions_car</span>
-      <div>
-      <div className="font-body-sm font-semibold text-on-surface">{live.secondaryPlate}</div>
-      <div className="font-label-plate text-caption text-secondary">{live.secondaryPlate}</div>
-      </div>
-      </div>
-      <div className="text-right">
-      <span className="font-label-code text-[11px] bg-surface-container text-on-surface px-2 py-0.5 rounded font-medium">on v2</span>
-      <div className="font-caption text-[11px] text-secondary mt-0.5">Compliance OK</div>
+      {carVersion(v.vehicleId) ? <span className="font-label-code text-[11px] bg-surface-container text-on-surface px-2 py-0.5 rounded font-medium">on v{carVersion(v.vehicleId)}</span> : null}
+      <div className={`font-caption text-[11px] mt-0.5 ${v.missingLabels.length ? 'text-error' : 'text-secondary'}`}>
+      {v.missingLabels.length ? `Missing ${v.missingLabels.length}: ${v.missingLabels.slice(0, 3).join(', ')}${v.missingLabels.length > 3 ? '…' : ''}` : 'Full kit'}
       </div>
       </div>
       </div>
-
-      <div className="bg-surface-container p-space-md rounded-lg flex items-start gap-space-sm mt-space-sm">
-      <span className="material-symbols-outlined text-[18px] text-on-surface shrink-0 mt-0.5">sync_problem</span>
-      <p className="font-caption text-caption text-on-surface leading-relaxed">
-                      Deploying version 3 will mark both vehicles as <strong>Pending Verification</strong> until the physical equipment inspection is acknowledged at {live.hubShort}.
-                    </p>
-      </div>
-      </div>
-
-      <div className="bg-surface-container-lowest rounded-xl p-space-xl shadow-sm flex flex-col gap-space-md">
-      <div className="flex items-center justify-between">
-      <h4 className="font-body-sm font-bold text-on-surface uppercase tracking-wider">Fleet Readiness Score</h4>
-      <span className="font-label-code text-body-sm font-bold text-on-surface">91%</span>
-      </div>
-
-      <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
-      <div className="bg-primary h-full rounded-full" style={{ width: "91%" }}></div>
-      </div>
-      <div className="grid grid-cols-2 gap-space-sm pt-space-xs text-center font-label-code text-caption text-secondary">
-      <div className="bg-surface-container-low py-1.5 rounded">Required: 8/8 Fulfilled</div>
-      <div className="bg-surface-container-low py-1.5 rounded">Optional: 1/1 Pending</div>
+        ))
+      )}
       </div>
       </div>
       </div>
@@ -424,16 +349,12 @@ export function In7KitTemplateEditor() {
       </div>
       </div>
       <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
-              Publishing revision <strong>v3</strong> will flag <strong>{live.primaryPlate}</strong> and <strong>{live.secondaryPlate}</strong> with updated equipment check requirements. Hub dispatchers will receive an inspection notice.
+              Moving the cars means their kit check uses the new list straight away: {live.kitVehicles.map((v) => v.plate).join(', ') || 'no cars'}.
             </p>
       <div className="bg-surface-container-low p-space-md rounded-lg space-y-1">
       <div className="flex justify-between font-label-code text-caption text-on-surface">
-      <span>Target Spec:</span>
-      <span className="font-bold">Rideshare car kit (v3)</span>
-      </div>
-      <div className="flex justify-between font-label-code text-caption text-secondary">
-      <span>Automated Work Orders:</span>
-      <span>Generate 2 kit upgrade tickets</span>
+      <span>Kit:</span>
+      <span className="font-bold">{tplName} (v{form.versionLabel})</span>
       </div>
       </div>
       <div className="flex items-center justify-end gap-space-md pt-space-xs flex-wrap">
@@ -467,7 +388,7 @@ export function In7KitTemplateEditor() {
         );
       })}
       </div>
-      <button type="button" className="self-end font-body-sm font-semibold text-secondary" onClick={() => form.closeLinePicker()}>Cancel</button>
+      <button type="button" className="self-end px-space-md py-1.5 rounded-lg bg-error-container text-error font-body-sm font-semibold" onClick={() => form.closeLinePicker()}>Cancel</button>
       </div>
       </div>
       ) : null}
@@ -485,8 +406,8 @@ export function In7KitTemplateEditor() {
       <option value="executive">Executive</option>
       </select>
       <div className="flex justify-end gap-space-md">
-      <button type="button" className="px-space-lg py-2 rounded-lg bg-surface-container" onClick={() => form.setNewKitOpen(false)}>Cancel</button>
-      <button type="button" className="px-space-lg py-2 rounded-lg bg-primary text-on-primary font-semibold" onClick={() => void form.createNewKit()}>Create</button>
+      <button type="button" className="px-space-lg py-2 rounded-lg bg-error-container text-error font-semibold" onClick={() => form.setNewKitOpen(false)}>Cancel</button>
+      <button type="button" className="px-space-lg py-2 rounded-lg bg-primary text-on-primary font-semibold" onClick={() => void form.createNewKit().catch(() => undefined)}>Create</button>
       </div>
       </div>
       </div>

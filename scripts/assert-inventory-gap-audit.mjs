@@ -390,6 +390,51 @@ function scanR35DriverCarKitAudit() {
 
 scanR35DriverCarKitAudit();
 
+/**
+ * Fleet Inventory completion audit (docs/fleet-inventory-completion-audit.md)
+ * Done-test 11: no invented text. Done-test 12: no dead buttons / links.
+ */
+const completionDenyList = [
+  'Kingston',
+  'Hub #01',
+  'John Doe',
+  'TRX-',
+  'LOT-',
+  '84.6%',
+  '06:30',
+  'Warranty',
+  'platform_owner',
+  'Immutable',
+  'SHA-256',
+  'Standard Spec',
+  'Fiscal year',
+  'Supplier Profile',
+];
+
+function scanCompletionAudit() {
+  const inventoryDir = join(root, 'apps', 'fleet', 'src', 'components', 'inventory');
+  for (const file of walkFiles(inventoryDir)) {
+    if (!/\.tsx$/.test(file)) continue;
+    const text = stripBlockComments(readFileSync(file, 'utf8'));
+    for (const needle of completionDenyList) {
+      if (text.includes(needle)) fail('inventory-completion', file, `invented / removed text "${needle}" (IV-14/IV-16)`);
+    }
+    if (/href="#"/.test(text)) fail('inventory-completion', file, 'dead link href="#" (IV-13)');
+    // A <button> with no onClick and not a submit button does nothing (IV-13).
+    const buttonRe = /<button\b((?:[^>"'{}]|"[^"]*"|'[^']*'|\{(?:[^{}]|\{[^{}]*\})*\})*)>/g;
+    let m;
+    while ((m = buttonRe.exec(text))) {
+      const attrs = m[1];
+      if (!/\bonClick=/.test(attrs) && !/type="submit"/.test(attrs)) {
+        const line = text.slice(0, m.index).split('\n').length;
+        fail('inventory-completion', `${file}:${line}`, 'button without onClick (IV-13)');
+      }
+    }
+  }
+}
+
+scanCompletionAudit();
+
 if (failed) process.exit(1);
 console.log('OK — inventory audit checks passed.');
 process.exit(0);

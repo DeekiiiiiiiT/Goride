@@ -74,6 +74,13 @@ if (relink.status !== 0) {
   process.exit(relink.status ?? 1);
 }
 
+console.log('Fleet inventory data checks: completion audit (done-tests 1–4, 14)…');
+const completion = runSqlFile(join(sqlDir, 'fleet_inventory_completion_test.sql'), [], false);
+if (completion.status !== 0) {
+  if (completion.stderr) process.stderr.write(completion.stderr);
+  process.exit(completion.status ?? 1);
+}
+
 console.log('Fleet inventory data checks: integrity…');
 const gate = runSqlFile(integrity, ['-tA'], true);
 if (gate.status !== 0) {

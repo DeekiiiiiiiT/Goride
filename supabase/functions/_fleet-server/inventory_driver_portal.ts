@@ -29,8 +29,13 @@ function mapIssue(raw: unknown): "damaged" | "missing" | "not_working" {
   return "not_working";
 }
 
-function mapItemStatus(lineStatus: string): "present" | "missing" | "linked" | "reported" {
-  if (lineStatus === "linked") return "linked";
+function mapItemStatus(
+  lineStatus: string,
+  lineType: string,
+): "present" | "missing" | "linked" | "reported" {
+  const isLinkedLine = lineType === "linked_fuel_card" || lineType === "linked_toll_tag";
+  // Fuel card / toll tag lines are now really checked (ok | missing); "linked" kept for old rows.
+  if (lineStatus === "linked" || (isLinkedLine && lineStatus === "ok")) return "linked";
   if (lineStatus === "ok") return "present";
   return "missing";
 }
@@ -207,7 +212,7 @@ export async function buildDriverCarKitPayload(
     const name = row.item_id
       ? names.get(String(row.item_id)) ?? "Kit item"
       : LINKED_LABELS[lineType] ?? "Linked item";
-    let status = mapItemStatus(String(row.line_status));
+    let status = mapItemStatus(String(row.line_status), lineType);
     let reportedAt: string | null = null;
     let statusHint: string | null = null;
     let reportId: string | null = null;

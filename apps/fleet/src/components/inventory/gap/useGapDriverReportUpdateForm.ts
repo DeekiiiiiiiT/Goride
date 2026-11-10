@@ -1,17 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { inventoryApi } from '../inventoryApi';
-import { asPagedItems } from '../inventoryData';
-import { formatJmd } from '../inventoryFormat';
 import { useInventoryShell } from '../InventoryShellContext';
 import { useGapLoad } from './useGapLoad';
 import { useGapSubmit } from './useGapSubmit';
 
 type ReportRow = Record<string, unknown>;
 
-const CHIP_KINDS: Record<
-  string,
-  { kind: string; message: string }
-> = {
+const CHIP_KINDS: Record<string, { kind: string; message: string }> = {
   replacement: {
     kind: 'replacement_en_route',
     message: 'Replacement is on the way.',
@@ -26,6 +21,7 @@ const CHIP_KINDS: Record<
   },
 };
 
+/** Fleet driver-report dialog: loads one report + its real updates (IV-11, IV-14). */
 export function useGapDriverReportUpdateForm(
   reportId: string | null | undefined,
   onClose?: () => void,
@@ -33,16 +29,13 @@ export function useGapDriverReportUpdateForm(
   const shell = useInventoryShell();
   const submit = useGapSubmit();
   const load = useGapLoad(async () => {
-    const data = await inventoryApi.driverReports();
-    return { items: asPagedItems(data as { items?: unknown[] }) as ReportRow[] };
-  }, []);
+    if (!reportId) return { report: null as ReportRow | null, updates: [] as ReportRow[] };
+    const data = (await inventoryApi.driverReport(reportId)) as { report?: ReportRow; updates?: ReportRow[] };
+    return { report: data.report ?? null, updates: data.updates ?? [] };
+  }, [reportId]);
 
-  const reports = load.data?.items ?? [];
-
-  const report = useMemo(() => {
-    if (!reportId) return reports[0] ?? null;
-    return reports.find((r) => String(r.id) === reportId) ?? null;
-  }, [reportId, reports]);
+  const report = load.data?.report ?? null;
+  const updates = load.data?.updates ?? [];
 
   const [driverMessage, setDriverMessage] = useState('');
   const [resolutionType, setResolutionType] = useState<'stock' | 'nostock'>('stock');
@@ -53,53 +46,51 @@ export function useGapDriverReportUpdateForm(
       setDriverMessage('');
       return;
     }
-    const existing = report.fleet_reply ?? report.fleetReply;
+    const existing = report.fleet_reply;
     setDriverMessage(existing != null ? String(existing) : '');
     setDriverLiable(Boolean(report.driver_liability));
   }, [report]);
 
-  const reportIdResolved = reportId ?? (report?.id ? String(report.id) : null);
-
   const postFleetUpdate = async (kind: string, note: string) => {
-    const id = reportIdResolved;
-    if (!id) throw new Error('Select a report first');
+    if (!reportId) throw new Error('No report selected');
     const trimmed = note.trim();
     if (!trimmed) throw new Error('Enter a message for the driver');
-    await inventoryApi.driverReportUpdate(
-      id,
-      { by_role: 'fleet', kind, note: trimmed },
-      crypto.randomUUID(),
-    );
+    await inventoryApi.driverReportUpdate(reportId, { by_role: 'fleet', kind, note: trimmed }, crypto.randomUUID());
     setDriverMessage(trimmed);
     await shell.refresh();
   };
 
-  const canSend = Boolean(reportIdResolved) && driverMessage.trim().length > 0;
-
-  const payrollDeductionLabel = formatJmd(
-    Number(report?.payroll_deduction_jmd ?? report?.replacement_cost_jmd ?? 0) || null,
-  );
+  const isFixed = String(report?.status ?? '') === 'fixed';
+  const canSend = Boolean(reportId) && driverMessage.trim().length > 0 && !isFixed;
 
   const applyChip = (chip: string) =>
     submit.run(async () => {
       const preset = CHIP_KINDS[chip];
       if (!preset) throw new Error('Unknown quick reply');
       await postFleetUpdate(preset.kind, preset.message);
-      onClose?.();
+      await load.reload();
     });
 
+  /**
+   * Send + mark fixed. "Issue from stock" then opens the Issue dialog for that car and kit line,
+   * so the stock really moves (the resolve call itself moves nothing).
+   */
   const sendUpdate = () =>
     submit.run(async () => {
+      if (!reportId || !report) throw new Error('No report selected');
       await postFleetUpdate('replacement_en_route', driverMessage);
-      const id = reportIdResolved;
-      if (id) {
-        await inventoryApi.resolveDriverReport(id, {
-          mode: resolutionType === 'stock' ? 'fixed_from_stock' : 'fixed_without_stock',
-          note: driverMessage.trim(),
-          fleet_reply: driverMessage.trim(),
-          driver_liability: driverLiable,
-          payroll_deduction: driverLiable,
-        });
+      await inventoryApi.resolveDriverReport(reportId, {
+        mode: resolutionType === 'stock' ? 'fixed_from_stock' : 'fixed_without_stock',
+        note: driverMessage.trim(),
+        fleet_reply: driverMessage.trim(),
+        driver_liability: driverLiable,
+      });
+      await shell.refresh();
+      const vehicleId = report.vehicle_id ? String(report.vehicle_id) : null;
+      const lineId = report.kit_line_id ? String(report.kit_line_id) : null;
+      if (resolutionType === 'stock' && vehicleId && lineId && report.item_id) {
+        shell.openIssue({ vehicleId, kitLineIds: [lineId] });
+        return;
       }
       onClose?.();
     });
@@ -108,8 +99,8 @@ export function useGapDriverReportUpdateForm(
     load,
     submit,
     report,
-    reports,
-    reportCount: reports.length,
+    updates,
+    isFixed,
     driverMessage,
     setDriverMessage,
     resolutionType,
@@ -119,7 +110,5 @@ export function useGapDriverReportUpdateForm(
     canSend,
     applyChip,
     sendUpdate,
-    payrollDeductionLabel,
-    formatJmd,
   };
 }

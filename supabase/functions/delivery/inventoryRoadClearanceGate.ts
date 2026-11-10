@@ -57,10 +57,12 @@ async function insertKitCheckFailedAlert(
 }
 
 function countBlockedComplianceRows(
-  rows: Array<{ line_status?: unknown; blocks_road_clearance?: unknown }> | null,
+  rows: Array<{ line_status?: unknown; blocks_road_clearance?: unknown; required?: unknown }> | null,
 ): number {
+  // Optional kit lines (required = false) never block a car.
   return (rows ?? []).filter(
     (r) =>
+      r.required !== false &&
       Boolean(r.blocks_road_clearance) &&
       BLOCKED_STATUSES.includes(String(r.line_status) as typeof BLOCKED_STATUSES[number]),
   ).length;
@@ -92,7 +94,7 @@ export async function assertRoadClearForDispatch(
 
   const { data: rows, error } = await fleet
     .from("v_inv_kit_compliance")
-    .select("line_status, blocks_road_clearance")
+    .select("line_status, blocks_road_clearance, required")
     .eq("organization_id", organizationId)
     .eq("vehicle_id", vehicleId);
 
@@ -118,6 +120,7 @@ export const ROAD_CLEARANCE_LOGIC_SIGNATURE = [
   "inv_road_clearance_gate",
   "v_inv_kit_compliance",
   "blocks_road_clearance",
+  "required",
   "missing",
   "short",
   "damaged",

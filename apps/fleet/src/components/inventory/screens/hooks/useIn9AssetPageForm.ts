@@ -52,7 +52,7 @@ export function useIn9AssetPageForm() {
   }, [resolvedAsset]);
 
   const valueLabel = formatJmd(
-    resolvedAsset ? Number(strField(resolvedAsset, 'book_value_jmd', '0')) : null,
+    resolvedAsset ? Number(strField(resolvedAsset, 'purchase_cost', '0')) || null : null,
   );
 
   const nextInspectionDueRaw = resolvedAsset
@@ -222,12 +222,9 @@ export function useIn9AssetPageForm() {
     a.click();
   };
 
-  const confirmAction = (message: string, run: () => void) => {
-    if (window.confirm(message)) run();
-  };
-
-  const retireConfirmed = () =>
-    confirmAction('Retire this asset permanently?', () => void retire());
+  /** In-app confirm for Retire (no browser pop-ups). */
+  const [confirmRetire, setConfirmRetire] = useState(false);
+  const retireConfirmed = () => setConfirmRetire(true);
 
   return {
     ...base,
@@ -275,6 +272,8 @@ export function useIn9AssetPageForm() {
     openDocument,
     downloadDocument,
     retireConfirmed,
+    confirmRetire,
+    setConfirmRetire,
     closeAssetPage: () => shell.closeModal(),
     strField,
   };

@@ -1,16 +1,9 @@
-/** Ported from Stitch — do not simplify layout (audit §0.4). */
+/** Ported from Stitch — do not simplify layout (audit §0.4). Rows and payload are the same ticked lines (IV-07). */
 import { useIn5IssueForm } from './hooks/useIn5IssueForm';
-import { useInventoryLive } from '../inventoryLive';
-import { useInventoryShell } from '../InventoryShellContext';
-import { formatPlate, itemLabelById, numField, strField } from '../inventoryData';
+
 export function In5IssueDialog() {
   const form = useIn5IssueForm();
-  const shell = useInventoryShell();
-  const live = useInventoryLive(shell);
-  const issueLines = shell.kitComplianceRows.filter((row) => {
-    const status = strField(row, 'line_status', '');
-    return status === 'missing' || status === 'short';
-  });
+  const { shell, live } = form;
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root w-full">
       <div className="relative w-full max-w-[848px] bg-surface-container-lowest rounded-xl shadow-xl mx-auto overflow-hidden" data-stitch-data-stitch-id="issue-dialog">
@@ -23,52 +16,14 @@ export function In5IssueDialog() {
       <span className="material-symbols-outlined text-[17px]">inventory_2</span>
       </span>
       <h2 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">Issue to cars</h2>
-      <span className="bg-surface-container px-2 py-0.5 rounded font-label-code text-[11px] text-on-surface-variant">BATCH-ALLOC-042</span>
       </div>
       <p className="font-body-sm text-body-sm text-on-surface-variant">
-                    Allocate tools, equipment, and standard vehicle kits directly from storeroom stock to active fleet cars.
+                    Tick the missing kit lines to send from the store to each car.
                   </p>
       </div>
       <button type="button" onClick={() => shell.closeModal()} aria-label="Close dialog" className="w-8 h-8 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface-variant flex items-center justify-center transition-colors">
       <span className="material-symbols-outlined text-[18px]">close</span>
       </button>
-      </div>
-
-      <div className="mt-space-lg pt-space-md">
-      <div className="grid grid-cols-4 gap-space-sm">
-
-      <div className="flex items-center gap-space-xs bg-surface-container-low px-space-md py-2 rounded-lg">
-      <span className="material-symbols-outlined text-[16px] text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-      <div className="flex flex-col min-w-0">
-      <span className="font-caption text-[10px] uppercase text-secondary tracking-wider">Step 1</span>
-      <span className="font-caption text-caption text-on-surface font-semibold truncate">What</span>
-      </div>
-      </div>
-
-      <div className="flex items-center gap-space-xs bg-surface-container-low px-space-md py-2 rounded-lg">
-      <span className="material-symbols-outlined text-[16px] text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-      <div className="flex flex-col min-w-0">
-      <span className="font-caption text-[10px] uppercase text-secondary tracking-wider">Step 2</span>
-      <span className="font-caption text-caption text-on-surface font-semibold truncate">Which cars</span>
-      </div>
-      </div>
-
-      <div className="flex items-center gap-space-xs bg-primary text-on-primary px-space-md py-2 rounded-lg shadow-sm">
-      <span className="w-4 h-4 rounded-full bg-surface-container-lowest text-primary flex items-center justify-center font-label-code text-[10px] font-bold">3</span>
-      <div className="flex flex-col min-w-0">
-      <span className="font-caption text-[10px] uppercase text-surface-dim tracking-wider">Step 3 (Active)</span>
-      <span className="font-caption text-caption text-on-primary font-bold truncate">Check</span>
-      </div>
-      </div>
-
-      <div className="flex items-center gap-space-xs bg-surface-container-low/60 px-space-md py-2 rounded-lg">
-      <span className="w-4 h-4 rounded-full bg-surface-variant text-on-surface-variant flex items-center justify-center font-label-code text-[10px]">4</span>
-      <div className="flex flex-col min-w-0">
-      <span className="font-caption text-[10px] uppercase text-secondary tracking-wider">Step 4</span>
-      <span className="font-caption text-caption text-on-surface-variant truncate">Done</span>
-      </div>
-      </div>
-      </div>
       </div>
       </div>
 
@@ -78,26 +33,39 @@ export function In5IssueDialog() {
       <div className="flex flex-wrap items-center gap-y-1 gap-x-space-md font-body-sm text-body-sm text-on-surface">
       <div className="flex items-center gap-space-xs">
       <span className="font-caption text-caption text-secondary uppercase font-semibold">Kit:</span>
-      <span className="font-body-sm font-semibold text-on-surface">Rideshare car kit</span>
-      <span className="font-label-code text-caption bg-surface-container px-1.5 py-0.5 rounded text-on-surface-variant">(10 items)</span>
+      <span className="font-body-sm font-semibold text-on-surface">{form.kitName}</span>
+      <span className="font-label-code text-caption bg-surface-container px-1.5 py-0.5 rounded text-on-surface-variant">({form.kitLineCount} items)</span>
       </div>
       <div className="h-3 w-px bg-surface-dim hidden md:block"></div>
       <div className="flex items-center gap-space-xs">
       <span className="font-caption text-caption text-secondary uppercase font-semibold">Store:</span>
-      <span className="font-body-sm text-on-surface">Main store — Kingston</span>
+      <span className="font-body-sm text-on-surface">{form.storeName}</span>
       </div>
       <div className="h-3 w-px bg-surface-dim hidden md:block"></div>
-      <div className="flex items-center gap-space-xs">
+      <div className="flex flex-wrap items-center gap-space-xs">
       <span className="font-caption text-caption text-secondary uppercase font-semibold">Targets:</span>
-      <span className="font-label-plate text-[12px] bg-surface-container-lowest px-1.5 py-0.5 rounded">{live.secondaryPlate}</span>
-      <span className="text-caption text-on-surface-variant">(Fit · 0%)</span>
-      <span className="font-label-plate text-[12px] bg-surface-container-lowest px-1.5 py-0.5 rounded ml-1">{live.primaryPlate}</span>
-      <span className="text-caption text-on-surface-variant">(Roomy · 70%)</span>
+      {live.kitVehicles.map((v) => (
+      <span key={v.vehicleId} className="inline-flex items-center gap-1">
+      <span className="font-label-plate text-[12px] bg-surface-container-lowest px-1.5 py-0.5 rounded">{v.plate}</span>
+      <span className="text-caption text-on-surface-variant">({v.pct}%)</span>
+      </span>
+      ))}
       </div>
       </div>
-      <button type="button" className="font-caption text-caption text-primary hover:underline font-semibold whitespace-nowrap self-end md:self-auto" onClick={() => form.editCarsOrItems()}>
-                  Edit cars or items
-                </button>
+      <label className="flex items-center gap-space-xs font-caption text-caption text-secondary">
+      <span className="uppercase font-semibold">Car</span>
+      <select
+        className="bg-surface-container-lowest rounded-lg px-2 py-1 font-body-sm text-on-surface"
+        value={form.carFilter}
+        onChange={(e) => form.setCarFilter(e.target.value)}
+        aria-label="Choose car"
+      >
+      <option value="">All cars</option>
+      {live.kitVehicles.map((v) => (
+      <option key={v.vehicleId} value={v.vehicleId}>{v.plate}</option>
+      ))}
+      </select>
+      </label>
       </div>
 
       <div className="bg-tertiary-fixed rounded-xl p-space-md flex items-start justify-between gap-space-md">
@@ -105,12 +73,12 @@ export function In5IssueDialog() {
       <span className="material-symbols-outlined text-[20px] text-on-tertiary-fixed-variant mt-0.5" style={{ fontVariationSettings: "'FILL' 1" }}>warning</span>
       <div>
       <div className="font-body-md text-body-md font-semibold text-on-tertiary-fixed">
-                      {form.shortCount > 0
-                        ? `${form.shortCount} item${form.shortCount === 1 ? '' : 's'} short in store.`
-                        : 'All requested items appear available in store.'}
+                      {form.uncoverable.length > 0
+                        ? `${form.uncoverable.length} line${form.uncoverable.length === 1 ? '' : 's'} short in store.`
+                        : 'The store can cover what is shown.'}
                     </div>
       <p className="font-body-sm text-body-sm text-on-tertiary-fixed-variant mt-0.5">
-                      Only the dashboard mount is currently stocked in Kingston Main Hub. Cabs will remain in incomplete kit state until restocked.
+                      {form.shortfallSentence}
                     </p>
       </div>
       </div>
@@ -121,8 +89,9 @@ export function In5IssueDialog() {
       <table className="w-full text-left border-collapse">
       <thead>
       <tr className="bg-surface-container-low text-secondary font-caption text-caption uppercase tracking-wider">
+      <th className="py-space-sm px-space-md font-semibold w-10"><span className="sr-only">Issue</span></th>
       <th className="py-space-sm px-space-md font-semibold">Car</th>
-      <th className="py-space-sm px-space-md font-semibold">Item & SKU</th>
+      <th className="py-space-sm px-space-md font-semibold">Item</th>
       <th className="py-space-sm px-space-sm font-semibold text-right">Needs</th>
       <th className="py-space-sm px-space-sm font-semibold text-right">In Store</th>
       <th className="py-space-sm px-space-sm font-semibold text-right">Will Issue</th>
@@ -131,49 +100,59 @@ export function In5IssueDialog() {
       </thead>
       <tbody className="divide-y divide-surface-container-low font-body-sm text-body-sm">
 
-      {issueLines.length === 0 ? (
+      {form.rows.length === 0 ? (
       <tr>
-      <td colSpan={6} className="py-space-lg px-space-md font-body-sm text-body-sm text-on-surface-variant text-center">
+      <td colSpan={7} className="py-space-lg px-space-md font-body-sm text-body-sm text-on-surface-variant text-center">
                       No kit gaps to issue right now.
                     </td>
       </tr>
       ) : (
-      issueLines.map((row) => {
-        const plate = formatPlate(strField(row, 'license_plate', ''));
-        const itemId = strField(row, 'item_id', '');
-        const { name, sku } = itemLabelById(shell.items, shell.stockRows, itemId);
-        const needs = numField(row, 'qty_required', 1);
-        const status = strField(row, 'line_status', '');
-        const isLinked = strField(row, 'line_type', '') !== 'item';
-        const short = status === 'missing' || status === 'short';
+      form.rows.map((row) => {
+        const isTicked = form.ticked.has(row.key);
+        const tickable = form.canTick(row);
+        const inStore = form.inStoreFor(row);
         return (
-      <tr key={`${plate}-${itemId}-${status}`} className="hover:bg-surface-container-lowest/80 transition-colors">
+      <tr key={row.key} className={`transition-colors ${tickable ? 'hover:bg-surface-container-lowest/80' : 'opacity-60'}`} data-testid="issue-row" data-item={row.cell.label} data-plate={row.cell.plate}>
       <td className="py-space-sm px-space-md">
-      <span className="font-label-plate text-[13px] text-on-surface bg-surface-container-low px-1.5 py-0.5 rounded">{plate}</span>
-      <span className="block font-caption text-caption text-on-surface-variant">{strField(row, 'kit_code', 'Kit')}</span>
+      {row.fromStock ? (
+      <input
+        type="checkbox"
+        className="h-4 w-4 rounded accent-primary cursor-pointer disabled:cursor-not-allowed"
+        checked={isTicked}
+        disabled={!tickable || shell.readOnly}
+        onChange={() => form.toggle(row)}
+        aria-label={`Issue ${row.cell.label} to ${row.cell.plate}`}
+      />
+      ) : null}
       </td>
       <td className="py-space-sm px-space-md">
-      <div className="font-body-md font-medium text-on-surface">{name}</div>
-      <div className="font-label-code text-[11px] text-secondary">{sku}</div>
+      <span className="font-label-plate text-[13px] text-on-surface bg-surface-container-low px-1.5 py-0.5 rounded">{row.cell.plate}</span>
       </td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-on-surface">{needs}</td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-on-surface-variant">—</td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-secondary">{short ? 0 : needs}</td>
+      <td className="py-space-sm px-space-md">
+      <div className="font-body-md font-medium text-on-surface">{row.cell.label}</div>
+      </td>
+      <td className="py-space-sm px-space-sm text-right font-label-code text-on-surface">{row.need}</td>
+      <td className="py-space-sm px-space-sm text-right font-label-code text-on-surface-variant">{row.fromStock ? inStore : '—'}</td>
+      <td className="py-space-sm px-space-sm text-right font-label-code text-secondary">{isTicked ? row.need : 0}</td>
       <td className="py-space-sm px-space-md text-right">
-      {isLinked ? (
+      {!row.fromStock ? (
       <span className="inline-flex items-center gap-1 font-caption text-caption text-secondary bg-surface-container px-2 py-0.5 rounded-full">
       <span className="material-symbols-outlined text-[12px]">link</span>
-                            Linked item
+                            Set up on the {row.cell.label === 'Fuel card' ? 'Fuel Cards' : 'Toll Tags'} page
                           </span>
-      ) : short ? (
+      ) : !tickable ? (
       <span className="inline-flex items-center gap-1 font-caption text-caption text-error bg-error-container/50 px-2 py-0.5 rounded-full font-semibold">
       <span className="w-1.5 h-1.5 rounded-full bg-error"></span>
-                            Short {needs}
+                            {inStore} in store — receive first
                           </span>
-      ) : (
+      ) : isTicked ? (
       <span className="inline-flex items-center gap-1 font-caption text-caption text-primary bg-primary-fixed px-2 py-0.5 rounded-full font-bold">
       <span className="material-symbols-outlined text-[12px]">check</span>
-                            OK
+                            Will issue
+                          </span>
+      ) : (
+      <span className="inline-flex items-center gap-1 font-caption text-caption text-secondary bg-surface-container px-2 py-0.5 rounded-full">
+                            Not ticked
                           </span>
       )}
       </td>
@@ -186,47 +165,34 @@ export function In5IssueDialog() {
       </div>
       </div>
 
-      <label className="block bg-surface-container-low/70 hover:bg-surface-container-low p-space-md rounded-xl cursor-pointer transition-colors">
-      <div className="flex items-start gap-space-md">
-      <input defaultChecked className="mt-1 h-4 w-4 rounded text-primary focus:ring-0 accent-primary cursor-pointer" type="checkbox"/>
-      <div>
-      <div className="font-body-md text-body-md font-semibold text-on-surface">
-                      Issue what's available now and leave the rest as missing
-                    </div>
-      <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
-                      Will dispatch 1 Phone Holder Mount to {live.secondaryPlate}. {live.secondaryPlate} kit completeness will increase after posting. {live.primaryPlate} remains at {live.primaryVehicle?.pct ?? 0}%.
-                    </p>
-      </div>
-      </div>
-      </label>
+      {form.submit.error ? (
+      <div className="bg-error-container/50 text-error rounded-xl p-space-md font-body-sm" role="alert">{form.submit.error}</div>
+      ) : null}
 
       <div className="bg-surface-container p-space-md rounded-xl flex items-center justify-between gap-space-md">
-      <div className="flex items-center gap-space-sm">
-      <span className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-on-primary">
-      <span className="material-symbols-outlined text-[15px]" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
-      </span>
       <div className="font-caption text-caption text-on-surface">
-      <span className="font-semibold">Step 4 Live Audit:</span> 1 item issued to 1 car · Logged in immutable movements ledger (JM-KGN-MV-9021)
-                  </div>
+      Every issue is recorded in Movements.
       </div>
-      <a className="font-caption text-caption text-primary underline font-semibold hover:text-on-surface-variant transition-colors whitespace-nowrap" href="#">
+      <button type="button" className="px-space-md py-1.5 rounded-lg bg-surface-container-lowest hover:bg-surface-container-low text-primary font-caption text-caption font-semibold whitespace-nowrap transition-colors" onClick={() => shell.closeAndGoToTab('movements')}>
                   View in Movements →
-                </a>
+                </button>
       </div>
       </div>
 
       <div className="px-space-xl py-space-md bg-surface-container-lowest flex items-center justify-between">
       <div className="font-label-code text-caption text-secondary">
-                Step 3 of 4: Allocation check
+                {form.totalUnits} unit{form.totalUnits === 1 ? '' : 's'} to {form.tickedCars} car{form.tickedCars === 1 ? '' : 's'}
               </div>
       <div className="flex items-center gap-space-sm">
-      <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors" onClick={() => form.close()}>
-                  Back
+      <button type="button" className="px-space-md py-2 rounded-lg bg-error-container text-error hover:bg-error-container/80 font-body-sm text-body-sm font-semibold transition-colors" onClick={() => form.close()}>
+                  Cancel
                 </button>
-      <button type="button" className="px-space-lg py-2 rounded-lg bg-primary hover:bg-primary/90 text-on-primary font-body-sm text-body-sm font-semibold flex items-center gap-space-sm shadow-sm active:scale-[0.98] transition-all disabled:opacity-60" data-stitch-data-stitch-id="issue-btn" disabled={!form.canIssue || form.submit.saving} onClick={() => void form.issue()}>
+      {!shell.readOnly ? (
+      <button type="button" className="px-space-lg py-2 rounded-lg bg-primary hover:bg-primary/90 text-on-primary font-body-sm text-body-sm font-semibold flex items-center gap-space-sm shadow-sm active:scale-[0.98] transition-all disabled:opacity-60" data-stitch-data-stitch-id="issue-btn" disabled={!form.canIssue || form.submit.saving} onClick={() => void form.issue().catch(() => undefined)}>
       <span className="material-symbols-outlined text-[17px]">{form.submit.saving ? 'progress_activity' : 'send'}</span>
-      <span>{form.submit.saving ? 'Issuing…' : 'Issue 1 item'}</span>
+      <span>{form.submit.saving ? 'Issuing…' : `Issue ${form.ticked.size} line${form.ticked.size === 1 ? '' : 's'}`}</span>
       </button>
+      ) : null}
       </div>
       </div>
       </div>

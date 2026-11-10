@@ -12,6 +12,7 @@ import { In14CustodyDialog } from './screens/In14CustodyDialog';
 import { In16FirstTimeSetup } from './screens/In16FirstTimeSetup';
 import { In9AssetPage } from './screens/In9AssetPage';
 import { In7KitTemplateEditor } from './screens/In7KitTemplateEditor';
+import { In15VehicleKitCard } from './screens/In15VehicleKitCard';
 import { InventoryModalFrame } from './InventoryModalFrame';
 import { useInventoryShell } from './InventoryShellContext';
 import { InventoryGapModals } from './InventoryGapModals';
@@ -81,6 +82,11 @@ function InventoryModals() {
       {shell.modal === 'kit-editor' ? (
         <InventoryModalFrame>
           <In7KitTemplateEditor />
+        </InventoryModalFrame>
+      ) : null}
+      {shell.modal === 'kit-card' ? (
+        <InventoryModalFrame>
+          <In15VehicleKitCard vehicleId={shell.selectedVehicleId} />
         </InventoryModalFrame>
       ) : null}
       <InventoryGapModals />

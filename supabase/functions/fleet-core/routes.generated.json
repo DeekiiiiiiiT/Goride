@@ -1,7 +1,7 @@
 {
   "slug": "fleet-core",
-  "generatedAt": "2026-11-10T02:21:12.279Z",
-  "routeCount": 880,
+  "generatedAt": "2026-11-10T13:43:57.194Z",
+  "routeCount": 881,
   "routes": [
     "ALL /make-server-37f42386/webhooks/wipay-fleet-modules",
     "DELETE ${ADMIN_CAT}/:id",
@@ -141,6 +141,7 @@
     "GET ${PREFIX}/catalog-makers",
     "GET ${PREFIX}/categories",
     "GET ${PREFIX}/component-fit-hints",
+    "GET ${PREFIX}/driver-reports/:id",
     "GET ${PREFIX}/driver/car-kit",
     "GET ${PREFIX}/driver/reports",
     "GET ${PREFIX}/driver/workforce/me",

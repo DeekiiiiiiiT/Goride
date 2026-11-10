@@ -1,6 +1,5 @@
 import { In1Overview } from './screens/In1Overview';
 import { In2Stock } from './screens/In2Stock';
-import { StockRowMenu } from './StockRowMenu';
 import { In6VehicleKits } from './screens/In6VehicleKits';
 import { In8Assets } from './screens/In8Assets';
 import { In10Movements } from './screens/In10Movements';
@@ -25,12 +24,7 @@ export function InventoryTabs({
     case 'overview':
       return <In1Overview />;
     case 'stock':
-      return (
-        <>
-          <In2Stock />
-          <StockRowMenu />
-        </>
-      );
+      return <In2Stock />;
     case 'vehicle-kits':
       return <In6VehicleKits />;
     case 'assets':

@@ -76,12 +76,11 @@ export function useGapItemEditorForm(itemId: string | null | undefined, onClose?
     setSku(String(row.sku ?? ''));
     setDescription(String(row.description ?? ''));
     setModelSpec(String(row.model ?? row.specification ?? ''));
-    const cost =
-      row.unit_cost_jmd ?? row.default_cost_jmd ?? row.default_unit_cost_jmd;
-    setUnitCost(cost != null ? formatJmd(Number(cost)) : '');
+    const cost = row.default_unit_cost;
+    setUnitCost(cost != null ? String(cost) : '');
     const track = String(row.tracking ?? row.tracking_mode ?? 'quantity');
     setTracking(track === 'serial' ? 'serial' : 'quantity');
-    setUnitOfMeasure(String(row.unit_of_measure ?? row.uom ?? 'each'));
+    setUnitOfMeasure(String(row.uom ?? 'each'));
     setInspectionIntervalDays(
       row.inspection_interval_days != null ? String(row.inspection_interval_days) : '',
     );
@@ -122,24 +121,14 @@ export function useGapItemEditorForm(itemId: string | null | undefined, onClose?
       description: description.trim() || null,
       tracking,
       model: modelSpec.trim() || null,
-      unit_of_measure: unitOfMeasure,
+      // Real inv_item columns only (IV-16: no warranty / reorder / vendor fields).
+      uom: unitOfMeasure,
       inspection_interval_days:
         inspectionIntervalDays.trim() === ''
           ? null
           : Number.parseInt(inspectionIntervalDays, 10),
-      warranty_months:
-        warrantyMonths.trim() === '' ? null : Number.parseInt(warrantyMonths, 10),
-      reorder_rules: reorderRules.map((r) => ({
-        location_id: r.location_id,
-        reorder_at: r.reorder_at.trim() === '' ? null : Number(r.reorder_at),
-        order_qty: r.order_qty.trim() === '' ? null : Number(r.order_qty),
-        safety_stock: r.safety_stock.trim() === '' ? null : Number(r.safety_stock),
-      })),
     };
-    if (cost != null) {
-      body.unit_cost_jmd = cost;
-      body.default_cost_jmd = cost;
-    }
+    if (cost != null) body.default_unit_cost = cost;
     if (isNew) body.sku = sku.trim();
     else body.sku = sku.trim() || null;
     return body;
