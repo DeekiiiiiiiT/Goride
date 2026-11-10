@@ -105,6 +105,13 @@
     "pending_catalog_drawer_added_automatically",
     "pending_catalog_research_settings_and_health",
     "pending_catalog_vehicles_tab_car_version_review_drawer",
-    "pending_catalog_empty_loading_error_research_off_states"
+    "pending_catalog_empty_loading_error_research_off_states",
+    "maintenance_templates_jobs_tab_list",
+    "maintenance_templates_add_edit_job_drawer_light",
+    "maintenance_templates_manage_sections_engine_light",
+    "maintenance_templates_retire_dialog_states_light",
+    "maintenance_templates_service_packages_tab_light",
+    "maintenance_templates_review_list_tab_light",
+    "maintenance_templates_history_tab_light"
   ]
 }
