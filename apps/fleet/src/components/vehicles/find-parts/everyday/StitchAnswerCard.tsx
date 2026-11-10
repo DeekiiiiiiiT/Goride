@@ -307,7 +307,7 @@ export function StitchAnswerCard({
                   </span>
                   <InfoTip
                     label="What are these?"
-                    text="The same pads sold under other numbers: other car makers' OEM numbers and aftermarket brands (like Akebono or Brembo). Any of these fits your car."
+                    text="The same pads sold under other numbers: other car makers' OEM numbers and aftermarket brands. Any of these fits your car."
                   />
                   <span className="rounded-full bg-[#e5eeff] px-2 py-0.5 text-[12px] font-semibold text-[#47464c] dark:bg-[#3a3a3d] dark:text-[#a1a1aa]">
                     {alts.length}
