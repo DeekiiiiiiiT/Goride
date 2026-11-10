@@ -1,0 +1,4 @@
+#!/bin/sh
+# Runs the fast checks before every push (scripts/check-before-push.mjs).
+# Emergency only: `git push --no-verify` skips it.
+node scripts/check-before-push.mjs

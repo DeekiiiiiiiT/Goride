@@ -3,6 +3,8 @@
   "private": true,
   "packageManager": "pnpm@11.1.0",
   "scripts": {
+    "check": "node scripts/check-before-push.mjs",
+    "prepare": "git config core.hooksPath .githooks || true",
     "test:e2e:toll": "node scripts/e2e/toll-reconciliation-smoke.mjs",
     "stitch:render:s42": "node scripts/stitch-render.mjs",
     "build:find-parts-css": "node scripts/build-find-parts-css.mjs",
