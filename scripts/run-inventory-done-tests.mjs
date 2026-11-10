@@ -147,6 +147,23 @@ async function waitForHttp(url, timeoutMs = 180_000) {
   throw new Error(`Timeout waiting for ${url}`);
 }
 
+/** Waits until the edge runtime really serves this function (404 "Function not found" = not ready). */
+async function waitForFunction(slug, timeoutMs = 180_000) {
+  const url = `http://127.0.0.1:54321/functions/v1/${slug}`;
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const res = await fetch(url, { method: 'GET' });
+      const text = await res.text();
+      if (res.status !== 503 && !/Function not found/i.test(text)) return;
+    } catch {
+      /* retry */
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  throw new Error(`Timeout waiting for edge function ${slug}`);
+}
+
 async function main() {
   assertLocalDatabaseUrl();
   mapSubstIfNeeded();
@@ -159,10 +176,20 @@ async function main() {
   run('node', ['scripts/seed-inventory-done-tests.mjs', 'reset']);
 
   killFunctionsServe();
-  spawnBg('fleet-core', npx, ['supabase', 'functions', 'serve', 'fleet-core', '--no-verify-jwt']);
-  spawnBg('delivery', npx, ['supabase', 'functions', 'serve', 'delivery', '--no-verify-jwt']);
+  // One serve process for all functions: a second `functions serve` replaces the first,
+  // which left fleet-core unserved ("Function not found") and every screen empty.
+  spawnBg('functions', npx, [
+    'supabase',
+    'functions',
+    'serve',
+    'fleet-core',
+    'delivery',
+    'driver',
+    '--no-verify-jwt',
+  ]);
   await new Promise((r) => setTimeout(r, 8000));
-  await waitForHttp('http://127.0.0.1:54321/functions/v1/fleet-core');
+  await waitForFunction('fleet-core');
+  await waitForFunction('delivery');
 
   run('node', ['scripts/build-inventory-e2e-previews.mjs']);
 

@@ -1,5 +1,7 @@
 -- Reset local inventory done-test baseline: flags, purge ZZ-TEST-* rows, tear down done-test org.
 BEGIN;
+-- Local test DB only: skip the append-only ledger guard so test rows can be cleaned up.
+SET LOCAL session_replication_role = replica;
 
 INSERT INTO public.platform_feature_flags (name, enabled) VALUES
   ('fleet_inventory_phase0_security', true),

@@ -1,5 +1,7 @@
 -- Remove all inventory done-test data (org f6010000-0000-4000-8000-000000000099).
 BEGIN;
+-- Local test DB only: skip the append-only ledger guard so test rows can be cleaned up.
+SET LOCAL session_replication_role = replica;
 
 DELETE FROM fleet.inv_driver_report_update
 WHERE report_id IN (
