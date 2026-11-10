@@ -401,7 +401,12 @@ export async function runDoneTest17(page: Page) {
     .locator('input[type="text"]')
     .nth(1);
   await priceInput.fill('6500');
+  const receiveSaved = page.waitForResponse(
+    (r) => r.request().method() === 'POST' && /\/inventory\/receive/.test(r.url()),
+    { timeout: 60_000 },
+  );
   await page.getByRole('button', { name: /^Receive$/i }).last().click();
+  expect((await receiveSaved).ok()).toBe(true);
   await gotoFleetInventory(page);
   const expectedQty = 2;
   // Setup may add a second store; count the pump in every store, not only MAIN.

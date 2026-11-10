@@ -150,7 +150,8 @@ export function vestComplianceMissingCount(org: string, vehicleId: string): numb
   const raw = queryInventoryDb(`
     SELECT count(*)::text FROM fleet.v_inv_kit_compliance
     WHERE organization_id = '${org}' AND vehicle_id = '${vehicleId.replace(/'/g, "''")}'
-      AND sku = 'ZZ-TEST-VEST' AND line_status IN ('missing', 'short')
+      AND item_id = (SELECT id FROM fleet.inv_item WHERE organization_id = '${org}' AND sku = 'ZZ-TEST-VEST')
+      AND line_status IN ('missing', 'short')
   `);
   return Number(raw) || 0;
 }

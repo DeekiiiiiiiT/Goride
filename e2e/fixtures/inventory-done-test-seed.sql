@@ -179,6 +179,20 @@ BEGIN
     (v_v2, v_org, 'TEST-002', 'legacy-' || v_v2)
   ON CONFLICT (id) DO UPDATE SET license_plate = EXCLUDED.license_plate;
 
+  -- The driver app finds "my car" by the vehicle's current driver (key vehicle:<id>, payload currentDriverId).
+  UPDATE fleet.vehicles v
+     SET legacy_kv_id = 'vehicle:' || v.id,
+         status = 'active',
+         current_driver_id = CASE WHEN v.id = v_v1 THEN v_driver::text ELSE NULL END,
+         payload_json = jsonb_strip_nulls(jsonb_build_object(
+           'id', v.id,
+           'organizationId', v_org,
+           'licensePlate', v.license_plate,
+           'status', 'Active',
+           'currentDriverId', CASE WHEN v.id = v_v1 THEN v_driver::text ELSE NULL END
+         ))
+   WHERE v.id IN (v_v1, v_v2);
+
   IF NOT EXISTS (SELECT 1 FROM fleet.kit_template WHERE organization_id = v_org AND lower(code) = lower('ZZ-TEST-RIDESHARE-KIT')) THEN
     INSERT INTO fleet.kit_template (organization_id, code, name, classification)
     VALUES (v_org, 'ZZ-TEST-RIDESHARE-KIT', 'ZZ Rideshare car kit', 'rideshare');
