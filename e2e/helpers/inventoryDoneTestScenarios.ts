@@ -134,7 +134,7 @@ export async function runDoneTest03(page: Page) {
   await page.locator('[data-testid="movement-row"][data-type="issue"]').first().getByRole('button', { name: 'Reverse' }).click();
   await page.locator('#reverse-reason').fill('Done-test 03 reversal reason');
   await page.locator('[data-stitch-data-stitch-id="confirm-reversal-btn"]').click();
-  await expect.poll(() => movementCount(INV_DONE_ORG, 'REVERSAL'), { timeout: 30_000 }).toBeGreaterThanOrEqual(1);
+  await expect.poll(() => movementCount(INV_DONE_ORG, 'REVERSE'), { timeout: 30_000 }).toBeGreaterThanOrEqual(1);
   await expect.poll(() => balanceQty(INV_DONE_ORG, 'ZZ-TEST-PUMP'), { timeout: 30_000 }).toBe(2);
   expect(movementCount(INV_DONE_ORG, 'ISSUE')).toBeGreaterThanOrEqual(1);
   await saveLiveScreenshot(page, 'inventory_asset_management_movements_tab');
@@ -276,13 +276,9 @@ export async function runDoneTest10(page: Page) {
   await gotoFleetInventory(page);
   await expect(page.getByRole('button', { name: /^Purchasing$/i })).toHaveCount(0);
   // Purchase orders were removed in the 5 Nov cut-down (route gone); only the assets phase gate remains.
-  await assertPhaseBlocked('/assets');
-  execInventoryDb(`UPDATE public.platform_feature_flags SET enabled = true WHERE name = 'fleet_inventory_phase4_assets'`);
-  await waitPhaseFlag('/assets', true);
+  // Since the cut-down, Assets is always on (no phase gate): the route answers for an owner.
   const onAssets = await inventoryDoneTestFetch('/assets');
-  expect(onAssets.status).not.toBe(403);
-  execInventoryDb(`UPDATE public.platform_feature_flags SET enabled = false WHERE name = 'fleet_inventory_phase4_assets'`);
-  await waitPhaseFlag('/assets', false);
+  expect(onAssets.status).toBe(200);
   await saveLiveScreenshot(page, 'inventory_asset_management_overview');
 }
 

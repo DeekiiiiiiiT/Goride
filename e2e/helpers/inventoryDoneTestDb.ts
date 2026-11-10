@@ -86,8 +86,13 @@ export function latestMovementId(org: string, movementType: string): string {
 
 export function movementQtySum(org: string, movementType: string): number {
   const raw = queryInventoryDb(`
-    SELECT coalesce(sum(qty), 0)::text FROM fleet.inv_movement
-    WHERE organization_id = '${org}' AND upper(type) = upper('${movementType.replace(/'/g, "''")}')
+    -- Quantities live in the ledger; sum the store-side legs of this movement type.
+    SELECT coalesce(sum(l.qty_delta), 0)::text
+    FROM fleet.inv_ledger l
+    JOIN fleet.inv_movement m ON m.id = l.movement_id AND m.organization_id = l.organization_id
+    JOIN fleet.inv_location loc ON loc.id = l.location_id
+    WHERE l.organization_id = '${org}' AND loc.kind = 'warehouse'
+      AND upper(m.type) = upper('${movementType.replace(/'/g, "''")}')
   `);
   return Number(raw) || 0;
 }

@@ -66,7 +66,14 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
     submitCheckIn,
   } = useWeeklyCheckIn(driverRecord?.id || user?.id);
 
-  const [currentPage, setCurrentPage] = useState(forcePassengerRides ? 'passenger-rides' : 'dashboard');
+  const [currentPage, setCurrentPage] = useState(() => {
+    if (forcePassengerRides) return 'passenger-rides';
+    // Deep link: /car-kit opens My car kit directly (links from Fleet, e2e done-tests).
+    if (typeof window !== 'undefined' && window.location.pathname.replace(/\/+$/, '') === '/car-kit') {
+      return 'car-kit';
+    }
+    return 'dashboard';
+  });
   const [menuOpen, setMenuOpen] = useState(false);
   const [expensesChooserOpen, setExpensesChooserOpen] = useState(false);
   const [expensesMode, setExpensesMode] = useState<'view' | 'log'>('view');

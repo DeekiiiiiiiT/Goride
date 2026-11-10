@@ -7,7 +7,7 @@ import { formatJmd } from '../inventoryFormat';
 import { InventoryPagination } from '../InventoryPagination';
 import { InventoryPrimaryTabs } from '../InventoryPrimaryTabs';
 
-const TYPES = ['receive', 'issue', 'transfer', 'adjust', 'reversal'];
+const TYPES = ['receive', 'issue', 'transfer', 'adjust', 'reverse'];
 
 export function In10Movements() {
   const form = useIn10MovementsForm();

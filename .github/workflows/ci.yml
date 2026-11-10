@@ -487,6 +487,17 @@ jobs:
           DRIVER_BASE_URL: http://127.0.0.1:5174
         run: node scripts/run-inventory-done-tests.mjs
 
+      - name: Upload inventory done-test screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inventory-done-test-results
+          path: |
+            test-results/**/*.png
+            functions-serve.log
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Fleet inventory data checks
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
