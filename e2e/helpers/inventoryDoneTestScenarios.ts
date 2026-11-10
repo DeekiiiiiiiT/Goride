@@ -50,11 +50,11 @@ function receiveSku(org: string, sku: string, qty: number, unitCost: number, ide
   execInventoryDb(`
     SELECT fleet.inv_receive(
       '${org}',
-      '{}'::jsonb,
+      jsonb_build_object('location_id', (SELECT id FROM fleet.inv_location WHERE organization_id = '${org}' AND lower(code) = 'main')),
       jsonb_build_array(jsonb_build_object(
         'item_id', (SELECT id FROM fleet.inv_item WHERE organization_id = '${org}' AND sku = '${sku}'),
         'location_id', (SELECT id FROM fleet.inv_location WHERE organization_id = '${org}' AND lower(code) = 'main'),
-        'qty', ${qty}, 'unit_cost', ${unitCost}
+        'qty', ${qty}, 'unit_price', ${unitCost}, 'unit_cost', ${unitCost}
       )),
       '[]'::jsonb,
       '${idem.replace(/'/g, "''")}'

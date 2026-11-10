@@ -15,12 +15,12 @@ function receive(sku: string, qty: number) {
   execInventoryDb(`
     SELECT fleet.inv_receive(
       '${ORG}',
-      '{}'::jsonb,
+      jsonb_build_object('location_id', (SELECT id FROM fleet.inv_location WHERE organization_id = '${ORG}' AND lower(code) = 'main')),
       jsonb_build_array(jsonb_build_object(
         'item_id', (SELECT id FROM fleet.inv_item WHERE organization_id = '${ORG}' AND sku = '${sku}'),
         'location_id', (SELECT id FROM fleet.inv_location WHERE organization_id = '${ORG}' AND lower(code) = 'main'),
         'qty', ${qty},
-        'unit_cost', (SELECT default_unit_cost FROM fleet.inv_item WHERE organization_id = '${ORG}' AND sku = '${sku}'))),
+        'unit_price', (SELECT default_unit_cost FROM fleet.inv_item WHERE organization_id = '${ORG}' AND sku = '${sku}'))),
       '[]'::jsonb,
       'ivc-${sku}-${Date.now()}'
     );
