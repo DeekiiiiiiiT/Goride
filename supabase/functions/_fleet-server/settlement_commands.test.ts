@@ -6,7 +6,6 @@ import {
   enforcePayCap,
   enforceCollectCap,
   assertCashReceiptSoftGuards,
-  CASH_RECEIPT_FAT_FINGER_FLOOR,
   buildMovementRow,
   isSameIdempotencyScope,
   SettlementCommandError,
@@ -97,21 +96,22 @@ Deno.test("R6-04 assertCashReceiptSoftGuards: within owed ok (Kenny open-week re
   assertCashReceiptSoftGuards({ owed: 500, amount: 100, expectedOutstanding: 500 });
 });
 
-Deno.test("R6-04 assertCashReceiptSoftGuards: over owed without reason blocked", () => {
-  assertThrows(
-    () => assertCashReceiptSoftGuards({ owed: 500, amount: 50_000, expectedOutstanding: 500 }),
-    SettlementCommandError,
-    "exceeds amount owed",
-  );
+Deno.test("Log cash: any amount above owed is recorded — no reason needed", () => {
+  // Kenny Nov 2 shape: net owed 5,700, $7,000 handed back → must be accepted.
+  assertCashReceiptSoftGuards({ owed: 5700, amount: 7000, expectedOutstanding: 5700 });
+  assertCashReceiptSoftGuards({ owed: 500, amount: 50_000 });
+  assertCashReceiptSoftGuards({ owed: 0, amount: 1_000_000 });
 });
 
-Deno.test("R6-04 assertCashReceiptSoftGuards: over owed with reason ok", () => {
-  assertCashReceiptSoftGuards({
-    owed: 500,
-    amount: 600,
-    expectedOutstanding: 500,
-    reason: "driver brought extra cash",
-  });
+Deno.test("Log cash: zero or invalid amount still refused", () => {
+  for (const amount of [0, -5, Number.NaN]) {
+    try {
+      assertCashReceiptSoftGuards({ owed: 500, amount });
+      throw new Error("expected throw");
+    } catch (e) {
+      assertEquals((e as SettlementCommandError).code, "INVALID_AMOUNT");
+    }
+  }
 });
 
 Deno.test("R6-04 assertCashReceiptSoftGuards: stale expectedOutstanding → 409", () => {
@@ -124,23 +124,8 @@ Deno.test("R6-04 assertCashReceiptSoftGuards: stale expectedOutstanding → 409"
   }
 });
 
-Deno.test("R6-04 assertCashReceiptSoftGuards: zero owed allows normal receipt; fat-finger needs reason", () => {
+Deno.test("Log cash: zero owed still records the receipt", () => {
   assertCashReceiptSoftGuards({ owed: 0, amount: 250, expectedOutstanding: 0 });
-  assertThrows(
-    () =>
-      assertCashReceiptSoftGuards({
-        owed: 0,
-        amount: CASH_RECEIPT_FAT_FINGER_FLOOR + 1,
-        expectedOutstanding: 0,
-      }),
-    SettlementCommandError,
-  );
-  assertCashReceiptSoftGuards({
-    owed: 0,
-    amount: CASH_RECEIPT_FAT_FINGER_FLOOR + 1,
-    expectedOutstanding: 0,
-    reason: "large advance remittance",
-  });
 });
 
 Deno.test("residual helpers split company vs driver owes", () => {

@@ -51,7 +51,7 @@ export type CashCollectResult = {
 
 export class CashGateError extends Error {
   constructor(
-    readonly code: 'PERIOD_FROZEN' | 'MONEY_LOCKED' | 'SERVER_STALE' | 'STALE_RESIDUAL' | 'OVER_COLLECT',
+    readonly code: 'PERIOD_FROZEN' | 'MONEY_LOCKED' | 'SERVER_STALE' | 'STALE_RESIDUAL',
     readonly weekAnchor: string,
     message?: string,
   ) {
@@ -232,13 +232,6 @@ export async function collectCashPayment(
           'STALE_RESIDUAL',
           input.weekAnchor,
           'Balance changed since you loaded this week. Reload and try again.',
-        );
-      }
-      if (code === 'OVER_COLLECT_CAP' || code === 'OVER_COLLECT_REASON_REQUIRED') {
-        throw new CashGateError(
-          'OVER_COLLECT',
-          input.weekAnchor,
-          err.message || 'Amount exceeds what is owed — add a reason to continue.',
         );
       }
       if (err.status === 409 && code === 'MONEY_LOCKED') {

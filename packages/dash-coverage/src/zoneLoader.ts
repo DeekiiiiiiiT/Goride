@@ -1,4 +1,4 @@
-import type { ActiveCoverageZone, LatLng } from './zonesPayload';
+import type { ActiveCoverageZone, LatLng } from './zonesPayload.ts';
 
 export function createDeliveryZoneLoader(opts: {
   fetchZones: () => Promise<ActiveCoverageZone[]>;

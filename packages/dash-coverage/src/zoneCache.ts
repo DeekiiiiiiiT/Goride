@@ -1,4 +1,4 @@
-import type { ActiveCoverageZone, LatLng } from './zonesPayload';
+import type { ActiveCoverageZone, LatLng } from './zonesPayload.ts';
 
 export type ZoneCacheStorage = {
   getItem: (key: string) => string | null;

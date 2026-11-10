@@ -286,13 +286,13 @@ export function enforceCollectCap(
 }
 
 /**
- * R6-04 soft guards for receipt-first Log Cash (collect).
- * - Stale desk view → 409 when client sent expectedOutstanding.
- * - Over owed (or over fat-finger floor when owed is zero) → reason required.
- * Does not reintroduce period-ended / money-unlock hard blocks.
+ * Guards for receipt-first Log Cash (collect).
+ * A cash receipt is a plain record of cash handed back — it is NEVER capped
+ * by what the week owes. Settlement math (computePeriodSettlement) is signed:
+ * cash returned above the net owed flips the week to "company owes driver".
+ * Only remaining guard: stale desk view → 409 when client sent expectedOutstanding.
+ * `reason` is accepted for the record but never required.
  */
-export const CASH_RECEIPT_FAT_FINGER_FLOOR = 50_000;
-
 export function assertCashReceiptSoftGuards(opts: {
   owed: number;
   amount: number;
@@ -300,15 +300,18 @@ export function assertCashReceiptSoftGuards(opts: {
   reason?: string | null;
 }): void {
   const owed = Math.max(0, Number(opts.owed) || 0);
-  const amount = Math.max(0, Number(opts.amount) || 0);
+  const amount = Number(opts.amount);
+  if (!(Number.isFinite(amount) && amount > 0.005)) {
+    throw new SettlementCommandError(
+      "INVALID_AMOUNT",
+      "Collection amount must be greater than zero",
+      400,
+    );
+  }
   const expectedRaw = opts.expectedOutstanding;
   if (expectedRaw !== undefined && expectedRaw !== null && Number.isFinite(Number(expectedRaw))) {
     assertExpectedOutstanding(owed, Number(expectedRaw));
   }
-  const reason = String(opts.reason || "").trim();
-  // When residual is unknown/zero, still block absurd fat-finger amounts without a reason.
-  const capBase = owed > 0.005 ? owed : CASH_RECEIPT_FAT_FINGER_FLOOR;
-  enforceCollectCap(capBase, amount, reason.length > 0, reason || undefined);
 }
 
 export interface BuildMovementRowInput {

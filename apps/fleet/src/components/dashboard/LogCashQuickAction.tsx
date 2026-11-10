@@ -111,7 +111,12 @@ export function LogCashQuickActionHost({
   const canCollect = can('settlements.collect');
   const cash = useCashCollection({ enabled: canCollect });
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<CashDriver | null>(null);
+  /**
+   * Only the picked driver's id + name is stored. Their weeks are read live from
+   * the cash queue on every render, so a click made before the queue finishes
+   * loading still shows earlier weeks once they arrive (never a frozen empty copy).
+   */
+  const [picked, setPicked] = useState<{ driverId: string; driverName: string } | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [pendingRowOpen, setPendingRowOpen] = useState<LogCashOpenRequest | null>(null);
   /** Dashboard button keeps the name list open for the next driver. A row open does not. */
@@ -123,10 +128,11 @@ export function LogCashQuickActionHost({
   const [adding, setAdding] = useState(false);
 
   // Sync external picker open into the hook so the queue stays lazy until needed.
+  // Keep it on while the amount screen is open so a still-loading queue finishes.
   useEffect(() => {
     if (!canCollect) return;
-    cash.setPickerOpen(pickerOpen || Boolean(pendingRowOpen));
-  }, [pickerOpen, pendingRowOpen, canCollect]); // eslint-disable-line react-hooks/exhaustive-deps
+    cash.setPickerOpen(pickerOpen || Boolean(pendingRowOpen) || modalOpen);
+  }, [pickerOpen, pendingRowOpen, modalOpen, canCollect]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // After queue loads, publish per-driver gate map for row menus.
   useEffect(() => {
@@ -187,6 +193,14 @@ export function LogCashQuickActionHost({
       blockedCount: 0,
     };
 
+  /** Live view of the picked driver — re-read from the queue every render. */
+  const selected: CashDriver | null = picked
+    ? asCashDriver(picked.driverId, picked.driverName)
+    : null;
+  /** Queue still loading and this driver's weeks are not in yet. */
+  const weeksLoading =
+    !!picked && !cash.findDriver(picked.driverId) && (cash.isLoading || cash.isFetching);
+
   const closePicker = () => {
     onPickerOpenChange(false);
     setSearch('');
@@ -198,7 +212,7 @@ export function LogCashQuickActionHost({
   const openModalFor = (d: CashDriver, opts?: { stayInSession?: boolean }) => {
     savedThisOpen.current = false;
     setStayInSession(Boolean(opts?.stayInSession));
-    setSelected(d);
+    setPicked({ driverId: d.driverId, driverName: d.driverName });
     setModalOpen(true);
     if (opts?.stayInSession) hidePickerForPayment.current = true;
     else closePicker();
@@ -209,7 +223,7 @@ export function LogCashQuickActionHost({
     const saved = savedThisOpen.current;
     savedThisOpen.current = false;
     setModalOpen(false);
-    setSelected(null);
+    setPicked(null);
     if (!stayInSession) {
       closePicker();
       return;
@@ -288,7 +302,7 @@ export function LogCashQuickActionHost({
               : undefined,
           });
           setModalOpen(false);
-          setSelected(null);
+          setPicked(null);
           if (!stayInSession) closePicker();
           const quiet = new Error('cash_gate');
           (quiet as Error & { quiet?: boolean }).quiet = true;
@@ -418,6 +432,7 @@ export function LogCashQuickActionHost({
           driverName={selected.driverName}
           cashOwed={selected.totalOwed}
           periods={cash.periodsFor(selected)}
+          periodsLoading={weeksLoading}
           allowedTypes={['payment']}
         />
       ) : null}

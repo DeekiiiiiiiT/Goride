@@ -1356,9 +1356,6 @@ export function DriverSettlementsPage({
       await api.saveTransaction(newTx);
     } else {
       try {
-        const overReason =
-          String(payment.notes || '').match(/\[Over-(?:collection|held)\]\s*(.+)/i)?.[1]?.trim() ||
-          undefined;
         const res = await collectCashPayment(qc, {
           driverId: collectModal.driverId,
           weekAnchor: weekStart,
@@ -1366,7 +1363,6 @@ export function DriverSettlementsPage({
           method: payment.paymentMethod,
           reference: payment.referenceNumber,
           note: payment.notes,
-          reason: overReason,
           expectedOutstanding: Number.isFinite(expectedOwed) ? expectedOwed : 0,
         });
         serverAfter = res.afterOwed;
@@ -1386,12 +1382,6 @@ export function DriverSettlementsPage({
           if (err.code === 'STALE_RESIDUAL') {
             toast.error(err.message || 'Balance changed ? reload and try again');
             const quiet = new Error('stale_residual');
-            (quiet as Error & { quiet?: boolean }).quiet = true;
-            throw quiet;
-          }
-          if (err.code === 'OVER_COLLECT') {
-            toast.error(err.message || 'Amount exceeds owed ? add a reason');
-            const quiet = new Error('over_collect');
             (quiet as Error & { quiet?: boolean }).quiet = true;
             throw quiet;
           }

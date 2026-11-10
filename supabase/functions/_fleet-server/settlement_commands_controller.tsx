@@ -485,10 +485,7 @@ app.post(`${BASE}/collect`, requireSettlementPerm("settlements.collect"), async 
     const method = String(body.method || "Cash");
     const reference = body.reference ? String(body.reference) : undefined;
     const note = body.note ? String(body.note) : undefined;
-    const reasonFromBody = body.reason ? String(body.reason).trim() : "";
-    const overFromNote =
-      note?.match(/\[Over-(?:collection|held)\]\s*(.+)/i)?.[1]?.trim() || "";
-    const reason = reasonFromBody || overFromNote || undefined;
+    const reason = (body.reason ? String(body.reason).trim() : "") || undefined;
     const idempotencyKey = String(body.idempotencyKey || "").trim();
     const expectedOutstanding =
       body.expectedOutstanding !== undefined && body.expectedOutstanding !== null
@@ -538,7 +535,7 @@ app.post(`${BASE}/collect`, requireSettlementPerm("settlements.collect"), async 
     await assertFrozenPeriodHashIntact(periodDb as Parameters<typeof assertFrozenPeriodHashIntact>[0]);
     const settlementAmount = Number(periodDb.settlement_amount) || 0;
     const owed = driverOwesResidual(settlementAmount);
-    // R6-04: soft over-collect + stale-view guards (receipt-first unlock/period gates stay off).
+    // Cash receipt: any amount is recorded; only the stale-view guard applies.
     assertCashReceiptSoftGuards({ owed, amount, expectedOutstanding, reason });
     const observedVersion = Number(periodDb.row_version) || 1;
 

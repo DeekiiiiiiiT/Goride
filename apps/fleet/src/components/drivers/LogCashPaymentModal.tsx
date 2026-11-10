@@ -63,6 +63,8 @@ interface LogCashPaymentModalProps {
   allowedTypes?: CashTxType[];
   /** Dashboard desk already shows its own collected-amount confirmation. */
   suppressSuccessToast?: boolean;
+  /** Driver's weeks still loading — show a loading line instead of "this week only". */
+  periodsLoading?: boolean;
 }
 
 const ALL_CASH_TX_TYPES: CashTxType[] = ['payment', 'float', 'adjustment'];
@@ -80,6 +82,7 @@ export function LogCashPaymentModal({
     periods = [],
     allowedTypes = ALL_CASH_TX_TYPES,
     suppressSuccessToast = false,
+    periodsLoading = false,
 }: LogCashPaymentModalProps) {
   const typeOptions = allowedTypes.length > 0 ? allowedTypes : ALL_CASH_TX_TYPES;
   const showTypePicker = typeOptions.length > 1;
@@ -93,7 +96,6 @@ export function LogCashPaymentModal({
   const [workPeriodEnd, setWorkPeriodEnd] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [overCollectReason, setOverCollectReason] = useState('');
 
   const activePeriods = periods.filter((p) => {
     if (!(p.amountOwed > 0)) return false;
@@ -236,27 +238,12 @@ export function LogCashPaymentModal({
       return;
     }
 
+    // Any amount is recorded as-is; settlement math works out who owes whom.
     const parsed = parseFloat(amount);
-    // R6-04 soft guard: amount above cash still held / owed needs a reason.
-    const heldCap =
-      transactionType === "payment"
-        ? Math.max(0, Number(selectedPeriodObj?.balance ?? cashOwed) || 0)
-        : Infinity;
-    const OVER_HELD_SOFT = 0.005;
-    const FAT_FINGER_FLOOR = 50_000;
-    const overHeld =
-      transactionType === "payment" &&
-      ((heldCap > OVER_HELD_SOFT && parsed > heldCap + OVER_HELD_SOFT) ||
-        (heldCap <= OVER_HELD_SOFT && parsed > FAT_FINGER_FLOOR + OVER_HELD_SOFT));
 
     // Cash receipt must be tagged to a Settlement Week (Cash Returned SSOT)
     if (transactionType === 'payment' && (!workPeriodStart || !workPeriodEnd)) {
       toast.error("Select a Settlement Week for this cash");
-      return;
-    }
-
-    if (overHeld && !overCollectReason.trim()) {
-      toast.error("Amount is above what is owed — add a reason to continue");
       return;
     }
 
@@ -278,15 +265,11 @@ export function LogCashPaymentModal({
 
     setIsSubmitting(true);
     try {
-      const notesWithOver =
-        overHeld && overCollectReason.trim()
-          ? `${notes ? notes + "\n" : ""}[Over-collection] ${overCollectReason.trim()}`
-          : notes;
       await onSave({
         id: initialTransaction?.id,
         amount: parsed,
         date: date, // Keep as YYYY-MM-DD string to avoid UTC shift in constructor
-        notes: notesWithOver,
+        notes,
         paymentMethod: savedMethod,
         referenceNumber: savedReference,
         transactionType,
@@ -377,7 +360,7 @@ export function LogCashPaymentModal({
             </div>
             <div className="text-right">
                 <p className="text-xl font-bold text-slate-900">
-                  {formatJMD(
+                  {periodsLoading && !selectedPeriodObj ? '…' : formatJMD(
                     selectedPeriodObj
                       ? Number(selectedPeriodObj.balance) || 0
                       : cashOwed || 0,
@@ -468,29 +451,6 @@ export function LogCashPaymentModal({
             </div>
           </div>
 
-          {transactionType === 'payment' &&
-            ((Math.max(0, Number(selectedPeriodObj?.balance ?? cashOwed) || 0) > 0.005 &&
-              Number(amount) >
-                Math.max(0, Number(selectedPeriodObj?.balance ?? cashOwed) || 0) + 0.005) ||
-              (Math.max(0, Number(selectedPeriodObj?.balance ?? cashOwed) || 0) <= 0.005 &&
-                Number(amount) > 50_000.005)) && (
-            <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3">
-              <p className="text-xs text-amber-900">
-                Amount is above what is owed for this week. Add a reason to confirm — settlement
-                math will update after.
-              </p>
-              <Label htmlFor="over-collect-reason">Reason (required)</Label>
-              <Textarea
-                id="over-collect-reason"
-                value={overCollectReason}
-                onChange={(e) => setOverCollectReason(e.target.value)}
-                placeholder="e.g. driver brought extra cash"
-                rows={2}
-                required
-              />
-            </div>
-          )}
-          
           {/* Settlement Week — required for Cash Collection */}
           <div className="space-y-2">
             <Label htmlFor={cashCollectCreate ? 'earlier-week' : 'settlement-period'}>
@@ -533,6 +493,11 @@ export function LogCashPaymentModal({
                       );
                     })}
                   </select>
+                ) : periodsLoading ? (
+                  <div className="flex h-9 w-full items-center gap-2 rounded-md border border-input bg-slate-50 px-3 text-sm text-slate-500">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Loading earlier weeks…
+                  </div>
                 ) : null}
               </>
             ) : activePeriods.length > 0 ? (

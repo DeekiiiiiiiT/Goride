@@ -90,7 +90,7 @@ describe('owedMajor', () => {
 });
 
 describe('CashGateError codes (R6-04)', () => {
-  it('exposes STALE_RESIDUAL and OVER_COLLECT codes for desk copy', async () => {
+  it('exposes STALE_RESIDUAL code for desk copy (no over-collect gate: any cash amount is recorded)', async () => {
     const { CashGateError } = await import('./useCashCollection');
     const stale = new CashGateError(
       'STALE_RESIDUAL',
@@ -99,8 +99,6 @@ describe('CashGateError codes (R6-04)', () => {
     );
     expect(stale.code).toBe('STALE_RESIDUAL');
     expect(stale.message).toMatch(/reload/i);
-    const over = new CashGateError('OVER_COLLECT', '2026-09-01', 'Amount exceeds what is owed');
-    expect(over.code).toBe('OVER_COLLECT');
   });
 });
 
