@@ -50,6 +50,15 @@ Build **Data → Server → Screens → Tests**, in that order. Finish and check
 - The planner writes the builder's prompt for **one layer only**.
 - When the builder says "done", the planner checks the actual code, runs the tests, and reports what's really true.
 - You run anything that touches the real database, then paste the result back.
+- **Change the screen, change its test, in the same round.** If a button is renamed, moved, added or removed, or a feature is cut, the click-through tests for that screen are updated in the same piece of work. "Done" means the screen works **and** its tests pass. (On 10 Nov, half a day went to tests left over from the 5 Nov Inventory cut-down, and real bugs hid among the "it's just old tests" failures.)
+
+**Before every push, in this order:**
+1. **Build.** Claude or Cursor makes the change, including its tests.
+2. **Code review.** Type `/code-review` in Claude Code and let it fix what it finds. Skip this for small text or colour changes.
+3. **Playwright on your computer.** Run `pnpm test:inventory`, or one test like `pnpm test:inventory 05`, with Docker Desktop open. If a test fails, fix it and re-run just that test.
+4. **Push.** The fast checks run automatically (about 45 seconds, `pnpm check`). GitHub is the final confirmation, not the place to find problems.
+
+Review comes before the tests because the review often changes code. That way, the tests check the final version.
 
 ## Step 6 — Prove it on a private copy first
 Before anything risky touches real data, the planner tests it on a **private copy of your database** running on your own computer (for example in Docker).
@@ -87,12 +96,13 @@ The app you open in your browser shows the **real** database, so a feature prove
 6. **One question per screen, plain words first.** If you don't understand a screen, your users won't either.
 7. **Short chat, detailed plan file.** The file is the project's memory; the chat disappears.
 8. **Use the switch.** New features stay off until they're proven on real data.
+9. **A red test is never "just an old test".** Read why it fails before changing it. Either the app is broken (fix the app) or the screen changed on purpose (update the test in the same round).
 
 ## Copy-paste prompts
 - **Start a feature:** *"New feature: [one sentence]. Read the code and live data first, then write a plan file with Data / Server / Screens / Tests, every screen and button, numbered problems with one fix each, and done-tests. Don't build yet."*
 - **Tighten the plan:** *"Re-check the whole plan against the code, data, screens and tests. List anything missing and update the file."*
 - **Design:** *"Write the design prompt for this plan: colours, principles, every screen and button, and how things behave."*
-- **Build one layer:** *"Write the builder prompt for the [Data / Server / Screens] layer only."*
+- **Build one layer:** *"Write the builder prompt for the [Data / Server / Screens] layer only. Include updating the tests for every screen you change, and run them locally before saying done."*
 - **Check the builder:** *"The builder says it's done. Check the code, run the tests, and tell me what's really true."*
 - **Prove it:** *"Test this on a private copy of the database before I run anything live."*
 - **Status:** *"Where are we on this plan? Update the status at the top."*
