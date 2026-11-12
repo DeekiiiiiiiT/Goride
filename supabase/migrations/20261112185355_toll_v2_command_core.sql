@@ -469,11 +469,11 @@ AS $$
                    WHERE s.organization_id = toll_read.current_company()), false);
 $$;
 
-REVOKE ALL ON FUNCTION public.toll_v2_enabled() FROM PUBLIC, anon, service_role;
+REVOKE ALL ON FUNCTION public.toll_v2_enabled() FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.toll_v2_enabled() TO authenticated;
 
 -- 8. Grants: users only, never anon, never the service key (B7.3) -------------------------------
-REVOKE ALL ON FUNCTION public.toll_v2_command(text, jsonb) FROM PUBLIC, anon, service_role;
+REVOKE ALL ON FUNCTION public.toll_v2_command(text, jsonb) FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.toll_v2_command(text, jsonb) TO authenticated;
 
 REVOKE ALL ON FUNCTION toll_write.command(text, jsonb) FROM PUBLIC, anon, service_role;
