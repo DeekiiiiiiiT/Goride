@@ -6,7 +6,7 @@
  * the live servers would have ignored it. This fails when a bundle lacks the check.
  * Fix: node scripts/build-edge-bundle.mjs <slug>
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = process.cwd();
@@ -14,7 +14,11 @@ const missing = [];
 for (const slug of ['fleet-toll', 'fleet-fuel', 'fleet-pay', 'fleet-claims']) {
   const main = readFileSync(join(root, 'supabase', 'functions', slug, 'src', 'main.ts'), 'utf8');
   if (!main.includes('reconWeekVersionGuard')) continue;
-  const bundle = readFileSync(join(root, 'supabase', 'functions', slug, 'index.ts'), 'utf8');
+  const bundlePath = join(root, 'supabase', 'functions', slug, 'index.ts');
+  // Some bundles are not kept in git (e.g. fleet-fuel, .gitignore): the deploy builds them from
+  // src/main.ts, so they always carry the check. Only kept bundles can go stale.
+  if (!existsSync(bundlePath)) continue;
+  const bundle = readFileSync(bundlePath, 'utf8');
   if (!bundle.includes('x-recon-week')) missing.push(slug);
 }
 if (missing.length) {
