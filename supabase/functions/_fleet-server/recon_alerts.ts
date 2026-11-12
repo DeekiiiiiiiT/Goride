@@ -105,7 +105,8 @@ export async function syncOrgAlerts(orgId: string, nowMs = Date.now(), shadowMis
 }
 
 async function phonesFor(orgId: string, userIds: string[]): Promise<string[]> {
-  const map = await loadStaffAlertPhones(sb(), orgId, userIds);
+  // sb() and team_staff_service import different supabase-js versions; same client at runtime.
+  const map = await loadStaffAlertPhones(sb() as unknown as Parameters<typeof loadStaffAlertPhones>[0], orgId, userIds);
   return userIds.map((id) => map.get(id)).filter((p): p is string => Boolean(p));
 }
 
