@@ -19,7 +19,8 @@ function fakeSupabase(state: {
   phones: PhoneRow[];
   authUpdates: number;
 }): SupabaseClient {
-  return {
+  // deno-lint-ignore no-explicit-any
+  const client: any = {
     from(table: string) {
       if (table === "organizations") {
         return {
@@ -36,6 +37,7 @@ function fakeSupabase(state: {
       if (name === "platform") {
         return {
           from(table: string) {
+            if (table === "staff_alert_phones") return client.schema("platform-alerts").from(table);
             if (table !== "user_roles") throw new Error(table);
             return {
               select: () => {
@@ -59,7 +61,7 @@ function fakeSupabase(state: {
           },
         };
       }
-      if (name === "fleet") {
+      if (name === "platform-alerts") {
         return {
           from(table: string) {
             if (table !== "staff_alert_phones") throw new Error(table);
@@ -103,7 +105,8 @@ function fakeSupabase(state: {
         },
       },
     },
-  } as unknown as SupabaseClient;
+  };
+  return client as unknown as SupabaseClient;
 }
 
 Deno.test("WRA-31 alert phone: Jamaican numbers get +1 876, others need +country, empty clears", () => {

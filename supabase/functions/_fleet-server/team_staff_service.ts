@@ -623,7 +623,7 @@ export async function setStaffStatus(
   });
 }
 
-/** Per-fleet alert numbers (fleet.staff_alert_phones). Server-only via service_role. */
+/** Per-fleet alert numbers (platform.staff_alert_phones). Server-only via service_role. */
 export async function loadStaffAlertPhones(
   supabase: SupabaseClient,
   organizationId: string,
@@ -633,7 +633,7 @@ export async function loadStaffAlertPhones(
   const ids = [...new Set(userIds.map((id) => String(id).trim()).filter(Boolean))];
   if (!ids.length) return out;
   const { data, error } = await supabase
-    .schema("fleet")
+    .schema("platform")
     .from("staff_alert_phones")
     .select("user_id, phone")
     .eq("organization_id", organizationId)
@@ -686,7 +686,7 @@ export async function setStaffAlertPhone(
     (err as Error & { status?: number }).status = 403;
     throw err;
   }
-  const fleet = supabase.schema("fleet").from("staff_alert_phones");
+  const fleet = supabase.schema("platform").from("staff_alert_phones");
   if (!phone) {
     const { error } = await fleet.delete().eq("organization_id", input.organizationId).eq("user_id", input.targetId);
     if (error) throw new Error(error.message);
