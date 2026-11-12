@@ -23,6 +23,13 @@ on:
       - 'supabase/tests/20261106131300_mm_go_live_order_fixture.sql'
       - 'supabase/tests/engine_sections_checks.sql'
       - 'supabase/tests/engine_sections_used_ids_test.sql'
+      - 'supabase/tests/toll_v2_schema_checks.sql'
+      - 'supabase/tests/toll_v2_postings.sql'
+      - 'supabase/tests/toll_v2_commands.sql'
+      - 'supabase/tests/toll_v2_nightly.sql'
+      - 'supabase/tests/toll_v2_week_rule.sql'
+      - 'supabase/tests/toll_v2_contract.sql'
+      - 'packages/toll-core/src/v2/weekRuleCases.json'
       - '.github/workflows/parts-sql-checks.yml'
   push:
     branches: [main]
@@ -43,6 +50,13 @@ on:
       - 'supabase/tests/20261106131300_mm_go_live_order_fixture.sql'
       - 'supabase/tests/engine_sections_checks.sql'
       - 'supabase/tests/engine_sections_used_ids_test.sql'
+      - 'supabase/tests/toll_v2_schema_checks.sql'
+      - 'supabase/tests/toll_v2_postings.sql'
+      - 'supabase/tests/toll_v2_commands.sql'
+      - 'supabase/tests/toll_v2_nightly.sql'
+      - 'supabase/tests/toll_v2_week_rule.sql'
+      - 'supabase/tests/toll_v2_contract.sql'
+      - 'packages/toll-core/src/v2/weekRuleCases.json'
       - '.github/workflows/parts-sql-checks.yml'
   workflow_dispatch:
 
@@ -118,3 +132,15 @@ jobs:
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/engine_sections_checks.sql
           docker cp supabase/tests/engine_sections_used_ids_test.sql "$db_container":/tmp/engine_sections_used_ids_test.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/engine_sections_used_ids_test.sql
+          docker cp supabase/tests/toll_v2_schema_checks.sql "$db_container":/tmp/toll_v2_schema_checks.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_v2_schema_checks.sql
+          docker cp supabase/tests/toll_v2_postings.sql "$db_container":/tmp/toll_v2_postings.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_v2_postings.sql
+          docker cp supabase/tests/toll_v2_commands.sql "$db_container":/tmp/toll_v2_commands.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_v2_commands.sql
+          docker cp supabase/tests/toll_v2_nightly.sql "$db_container":/tmp/toll_v2_nightly.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_v2_nightly.sql
+          docker cp supabase/tests/toll_v2_week_rule.sql "$db_container":/tmp/toll_v2_week_rule.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_v2_week_rule.sql
+          docker cp supabase/tests/toll_v2_contract.sql "$db_container":/tmp/toll_v2_contract.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_v2_contract.sql

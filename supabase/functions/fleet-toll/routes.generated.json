@@ -1,7 +1,7 @@
 {
   "slug": "fleet-toll",
-  "generatedAt": "2026-11-08T16:28:50.745Z",
-  "routeCount": 101,
+  "generatedAt": "2026-11-12T20:41:39.271Z",
+  "routeCount": 102,
   "routes": [
     "DELETE /toll-plazas/:id",
     "DELETE /toll-tags/:id",
@@ -103,6 +103,7 @@
     "POST /toll-tags/:id/topup-requested",
     "POST /toll-tags/assign",
     "POST /toll-tags/unassign",
+    "POST /toll/v2/commands/:intent",
     "PUT ${BASE}/automation-settings"
   ]
 }

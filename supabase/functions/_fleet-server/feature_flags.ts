@@ -93,6 +93,11 @@ export const FEATURE_FLAGS = {
    * Client may also enable via VITE_RECON_WIZARD.
    */
   RECON_WIZARD: "recon_wizard",
+  /**
+   * I24: refuse pay / write-off / batch pay / settle-from-balance until toll week is sealed.
+   * Default off — no behaviour change until enabled per org.
+   */
+  TOLL_SEAL_BEFORE_PAY: "toll_seal_before_pay",
   /** Tiered parts search (OEM / sister / engine / aftermarket). Default off. */
   PARTS_TIERED_SEARCH: "parts_tiered_search",
   /** Dominion parts auto-match engine (OE numbers, derived fits, conflicts). Default off. */
@@ -414,6 +419,11 @@ export async function initializeDefaultFlags(): Promise<void> {
       enabled: true,
       description:
         "Apply unlinked trip refunds before dispute refunds; settle via allocation ledger",
+    },
+    {
+      name: FEATURE_FLAGS.TOLL_SEAL_BEFORE_PAY,
+      enabled: false,
+      description: "Refuse driver pay until the week's tolls are sealed (collect always allowed)",
     },
     {
       name: FEATURE_FLAGS.EXPENSE_HUB_V1,

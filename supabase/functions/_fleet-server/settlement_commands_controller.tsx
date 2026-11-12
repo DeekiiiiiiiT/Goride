@@ -58,6 +58,10 @@ import { reviewSettlementPay } from "../../../packages/finance-core/src/driverFu
 import { hasPendingRestatementDrafts } from "../../../packages/finance-core/src/weekStatement.ts";
 import { getLatestWeekStatements } from "./week_statements.ts";
 import { settleFromBalance } from "./settlement_settle_from_balance.ts";
+import {
+  assertTollWeekSealedForPay,
+  serviceLineFromPeriodRow,
+} from "./toll_seal_before_pay.ts";
 
 function requiresApproval(amount: number, threshold = SETTLEMENT_APPROVAL_THRESHOLD): boolean {
   return requiresSettlementApproval(amount, threshold);
@@ -364,6 +368,14 @@ async function insertMovementAndDualWrite(
     isCashReceipt,
   });
   await assertFinancePeriodNotLocked(opts.organizationId, opts.weekAnchor);
+  if (!isCashReceipt) {
+    await assertTollWeekSealedForPay({
+      organizationId: opts.organizationId,
+      weekAnchor: opts.weekAnchor,
+      serviceLine: serviceLineFromPeriodRow(periodForGate),
+      authHeader: c.req.header("Authorization") ?? null,
+    });
+  }
   if (periodForGate) {
     await assertFrozenPeriodHashIntact(
       periodForGate as Parameters<typeof assertFrozenPeriodHashIntact>[0],
@@ -577,6 +589,7 @@ app.post(`${BASE}/settle-from-balance`, requireSettlementPerm("settlements.colle
       amount: Number(body.amount),
       idempotencyKey: String(body.idempotencyKey || "").trim(),
       note: body.note ? String(body.note) : undefined,
+      authHeader: c.req.header("Authorization") ?? null,
     });
     const [owingPeriod, creditPeriod] = await Promise.all([
       getDriverFinancialPeriodDetail(driverId, result.owingWeekStart),

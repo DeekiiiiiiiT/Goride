@@ -6,6 +6,7 @@ import { createFleetFunction } from "../../_shared/edgeKernel.ts";
 import tollApp from "../../_fleet-server/toll_controller.tsx";
 import tollPeriodApp from "../../_fleet-server/toll_period_controller.tsx";
 import tollInventoryApp from "../../_fleet-server/toll_inventory_controller.tsx";
+import tollV2CommandApp from "../../_fleet-server/toll_v2_command_controller.ts";
 import { sealTollWeek } from "../../_fleet-server/toll_week_seal.ts";
 import { beginSealAttempt, completeSealAttempt } from "../../_fleet-server/week_seal_log.ts";
 
@@ -80,6 +81,7 @@ const app = createFleetFunction({
       }
     });
 
+    parent.route("/", tollV2CommandApp);
     parent.route("/", tollPeriodApp);
     parent.route("/", tollInventoryApp);
   },

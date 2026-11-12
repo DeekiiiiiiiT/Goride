@@ -88,6 +88,12 @@ jobs:
       - name: Check toll org-scope
         run: node scripts/check-toll-org-scope.mjs
 
+      - name: Check toll week-rule SQL drift
+        run: node scripts/gen-toll-week-rule-sql.mjs --check
+
+      - name: Check toll handlers avoid toll_system
+        run: node scripts/check-toll-system-not-from-user-handlers.mjs
+
       - name: Check client route contract
         run: node scripts/check-client-route-contract.mjs
 
@@ -299,6 +305,7 @@ jobs:
           supabase/functions/_fleet-server/toll_request_idempotency.test.ts
           supabase/functions/_fleet-server/toll_period_seal_guard.test.ts
           supabase/functions/_fleet-server/toll_ledger_request_cache.test.ts
+          supabase/functions/_fleet-server/toll_v2_command_errors.test.ts
           supabase/functions/_fleet-server/period_projector.test.ts
 
       - name: Deno test remittance money + residual + pause routes
@@ -389,6 +396,7 @@ jobs:
         run: >
           deno test --allow-read --allow-env
           supabase/functions/_fleet-server/settlement_commands.test.ts
+          supabase/functions/_fleet-server/toll_seal_before_pay.test.ts
           supabase/functions/_fleet-server/week_statements_restatement_guard.test.ts
           supabase/functions/_fleet-server/recon_statement_coverage.test.ts
           supabase/functions/_shared/edgeKernel.test.ts

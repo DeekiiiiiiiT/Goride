@@ -24,7 +24,8 @@
     "./tollPeriodCounts": "./src/tollPeriodCounts.ts",
     "./unlinkedShortfallEligibility": "./src/unlinkedShortfallEligibility.ts",
     "./tollSpend": "./src/tollSpend.ts",
-    "./tollPeriodReadiness": "./src/tollPeriodReadiness.ts"
+    "./tollPeriodReadiness": "./src/tollPeriodReadiness.ts",
+    "./v2/weekResultV1": "./src/v2/weekResultV1.ts"
   },
 
   "scripts": {

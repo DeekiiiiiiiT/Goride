@@ -5,6 +5,7 @@
   "scripts": {
     "check": "node scripts/check-before-push.mjs",
     "prepare": "git config core.hooksPath .githooks || true",
+    "test:toll": "node scripts/run-toll-tests.mjs",
     "test:inventory": "node scripts/run-inventory-done-tests.mjs",
     "test:e2e:toll": "node scripts/e2e/toll-reconciliation-smoke.mjs",
     "stitch:render:s42": "node scripts/stitch-render.mjs",

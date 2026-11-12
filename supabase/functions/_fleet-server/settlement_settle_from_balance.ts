@@ -21,6 +21,10 @@ import {
   SettlementCommandError,
   validateSettleFromBalanceAmount,
 } from "./settlement_commands.ts";
+import {
+  assertTollWeekSealedForPay,
+  serviceLineFromPeriodRow,
+} from "./toll_seal_before_pay.ts";
 
 export { validateSettleFromBalanceAmount };
 
@@ -211,6 +215,28 @@ async function appendSettleCorrection(opts: {
   await syncPeriodCashFromTransactions(opts.driverId, opts.week);
 }
 
+async function assertSettleWeeksTollSealed(opts: {
+  organizationId: string;
+  authHeader: string | null;
+  owingWeek: string;
+  creditWeek: string;
+  owingRow: Record<string, unknown> | null;
+  creditRow: Record<string, unknown> | null;
+}): Promise<void> {
+  await assertTollWeekSealedForPay({
+    organizationId: opts.organizationId,
+    weekAnchor: opts.owingWeek,
+    serviceLine: serviceLineFromPeriodRow(opts.owingRow),
+    authHeader: opts.authHeader,
+  });
+  await assertTollWeekSealedForPay({
+    organizationId: opts.organizationId,
+    weekAnchor: opts.creditWeek,
+    serviceLine: serviceLineFromPeriodRow(opts.creditRow),
+    authHeader: opts.authHeader,
+  });
+}
+
 export async function settleFromBalance(opts: {
   organizationId: string;
   actorId: string | null;
@@ -220,6 +246,7 @@ export async function settleFromBalance(opts: {
   amount: number;
   idempotencyKey: string;
   note?: string;
+  authHeader?: string | null;
 }): Promise<{
   offsetId: string;
   amount: number;
@@ -301,6 +328,9 @@ export async function settleFromBalance(opts: {
 
     await assertFinancePeriodNotLocked(opts.organizationId, owingWeek);
     await assertFinancePeriodNotLocked(opts.organizationId, creditWeek);
+    // No toll-seal check here (I24): this only finishes an offset whose first half is already written.
+    // The check ran before that first half (fresh path below). Refusing now would leave the driver's
+    // balance one-sided (owing cleared, credit missing).
 
     // Write whichever half is missing (appendSettleCorrection is safe per offsetId).
     if (!clearMov || !owingHasLine) {
@@ -385,6 +415,14 @@ export async function settleFromBalance(opts: {
   }
   assertPeriodNotFrozen(periodGateFromRow(owingRow));
   assertPeriodNotFrozen(periodGateFromRow(creditRow));
+  await assertSettleWeeksTollSealed({
+    organizationId: opts.organizationId,
+    authHeader: opts.authHeader ?? null,
+    owingWeek,
+    creditWeek,
+    owingRow,
+    creditRow,
+  });
 
   const validated = validateSettleFromBalanceAmount({
     amount: opts.amount,
