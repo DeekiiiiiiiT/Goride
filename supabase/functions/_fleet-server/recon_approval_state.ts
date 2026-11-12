@@ -26,7 +26,8 @@ export type RequestStatus = "pending_approval" | "approved" | "rejected" | "with
 
 export type ApproveDecision =
   | { go: true }
-  | { go: false; code: "APPROVAL_GONE" | "APPROVAL_STALE" | "WEEK_CHANGED"; markStale: boolean; status: 409 };
+  | { go: false; code: "APPROVAL_GONE" | "APPROVAL_STALE" | "WEEK_CHANGED"; markStale: boolean; status: 409 }
+  | { go: false; code: "SAME_PERSON"; markStale: false; status: 403 };
 
 /**
  * WRA-38 "Approve, step by step":
@@ -38,9 +39,16 @@ export function decideApprove(input: {
   status: RequestStatus | string;
   versionAtSend: number | null;
   currentVersion: number;
+  preparedBy?: string | null;
+  approver?: string | null;
 }): ApproveDecision {
   if (input.status === "stale") return { go: false, code: "APPROVAL_STALE", markStale: false, status: 409 };
   if (input.status !== "pending_approval") return { go: false, code: "APPROVAL_GONE", markStale: false, status: 409 };
+  const prep = String(input.preparedBy ?? "").trim();
+  const appr = String(input.approver ?? "").trim();
+  if (prep && appr && prep === appr) {
+    return { go: false, code: "SAME_PERSON", markStale: false, status: 403 };
+  }
   if (input.versionAtSend == null || input.versionAtSend !== input.currentVersion) {
     return { go: false, code: "WEEK_CHANGED", markStale: true, status: 409 };
   }

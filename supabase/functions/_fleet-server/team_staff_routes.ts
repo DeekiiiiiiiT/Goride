@@ -265,7 +265,13 @@ export function registerTeamStaffRoutes(app: Hono, deps: Deps): void {
   });
 
   // WRA-31: mobile number for Week Reconciliation SMS alerts (empty clears it).
-  app.put(`${PREFIX}/team/staff/:userId/alert-phone`, auth, perm("users.edit_role"), async (c) => {
+  const alertPhonePerm = async (c: { get: (k: string) => unknown; req: { param: (k: string) => string } }, next: () => Promise<void>) => {
+    const user = userOf(c);
+    if (user?.userId === c.req.param("userId")) return next();
+    const gate = perm("users.edit_role") as (c: unknown, n: () => Promise<void>) => Promise<void | Response>;
+    return gate(c, next);
+  };
+  app.put(`${PREFIX}/team/staff/:userId/alert-phone`, auth, alertPhonePerm as never, async (c) => {
     try {
       const user = userOf(c);
       const id = await orgId(deps.supabase, c);

@@ -12,6 +12,29 @@ Deno.test("WRA-38: approve goes ahead only for a pending request on an unchanged
   assertEquals(decideApprove({ status: "pending_approval", versionAtSend: 7, currentVersion: 7 }), { go: true });
 });
 
+Deno.test("S2: same person cannot approve their own request", () => {
+  assertEquals(
+    decideApprove({
+      status: "pending_approval",
+      versionAtSend: 7,
+      currentVersion: 7,
+      preparedBy: "u1",
+      approver: "u1",
+    }),
+    { go: false, code: "SAME_PERSON", markStale: false, status: 403 },
+  );
+  assertEquals(
+    decideApprove({
+      status: "pending_approval",
+      versionAtSend: 7,
+      currentVersion: 7,
+      preparedBy: "u1",
+      approver: "u2",
+    }),
+    { go: true },
+  );
+});
+
 Deno.test("WRA-38: approve on a stale / handled request does nothing", () => {
   assertEquals(decideApprove({ status: "stale", versionAtSend: 7, currentVersion: 7 }),
     { go: false, code: "APPROVAL_STALE", markStale: false, status: 409 });

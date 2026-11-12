@@ -420,6 +420,7 @@ jobs:
           supabase/functions/_fleet-server/recon_week_change.test.ts
           supabase/functions/_fleet-server/recon_approval_state.test.ts
           supabase/functions/_fleet-server/recon_approvals.test.ts
+          supabase/functions/_fleet-server/recon_week_version_guard.test.ts
           supabase/functions/_fleet-server/recon_alert_rules.test.ts
           supabase/functions/_fleet-server/recon_permissions.test.ts
           supabase/functions/_fleet-server/recon_alerts.test.ts

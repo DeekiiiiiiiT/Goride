@@ -11,6 +11,8 @@
  */
 import type { Context, Next } from "npm:hono@4.3.11";
 import { getServiceClientWithSchema } from "./service_client.ts";
+import { requireAuth } from "./rbac_middleware.ts";
+import { getOrgId } from "./org_scope.ts";
 import { correlationIdFrom, idempotencyKeyFrom } from "./recon_week_change.ts";
 
 const CHANGING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -24,16 +26,53 @@ export function parseWeekHeader(value: string | undefined | null): { runId: stri
   return { runId: m[1].toLowerCase(), version: Number(m[2]) };
 }
 
-export async function reconWeekVersionGuard(c: Context, next: Next) {
-  if (!CHANGING.has(c.req.method)) return next();
-  const parsed = parseWeekHeader(c.req.header("x-recon-week"));
-  if (parsed === null) return next();
-  if (parsed === "bad") {
-    return c.json({ error: "BAD_WEEK_HEADER", message: "x-recon-week must be <week run id>@<version>" }, 400);
+export type WeekReconClient = {
+  from(table: string): {
+    select(cols: string): {
+      eq(col: string, val: string): {
+        eq(col: string, val: string): {
+          maybeSingle(): Promise<{ data: Record<string, unknown> | null; error: { message: string } | null }>;
+        };
+      };
+    };
+  };
+  rpc(name: string, args: Record<string, unknown>): Promise<{ data: unknown; error: { message: string } | null }>;
+};
+
+export type WeekGuardDeps = {
+  reconClient: () => WeekReconClient;
+  requireAuthStrict: (c: Context, next: () => Promise<void | Response>) => Promise<void | Response>;
+};
+
+const defaultDeps: WeekGuardDeps = {
+  reconClient: () => getServiceClientWithSchema("recon") as unknown as WeekReconClient,
+  requireAuthStrict: async (c, next) => {
+    let inner: void | Response | undefined;
+    const wrapped: Next = async () => {
+      inner = await next();
+    };
+    const auth = await requireAuth({ strict: true })(c, wrapped);
+    if (auth instanceof Response) return auth;
+    if (inner instanceof Response) return inner;
+  },
+};
+
+export async function runWeekVersionGuardCore(
+  c: Context,
+  next: Next,
+  parsed: { runId: string; version: number },
+  deps: WeekGuardDeps = defaultDeps,
+): Promise<Response | void> {
+  const orgId = getOrgId(c);
+  if (!orgId) {
+    return c.json({ error: "WEEK_NOT_READY", message: "This week is still being prepared." }, 409);
   }
-  const recon = getServiceClientWithSchema("recon");
+  const recon = deps.reconClient();
   const { data: run, error } = await recon.from("week_runs")
-    .select("id, version, state").eq("id", parsed.runId).maybeSingle();
+    .select("id, version, state")
+    .eq("id", parsed.runId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
   if (error) return c.json({ error: "WEEK_READ_FAILED", message: error.message }, 500);
   if (!run) return c.json({ error: "WEEK_NOT_READY", message: "This week is still being prepared." }, 409);
   if ((run as { state: string }).state === "closed") {
@@ -66,8 +105,21 @@ export async function reconWeekVersionGuard(c: Context, next: Next) {
   if (claimErr) {
     console.warn("[recon] lane change history failed", claimErr.message);
   } else if ((claim as { status?: string } | null)?.status !== "ok" && (claim as { status?: string } | null)?.status !== "replay") {
-    // Someone else changed the week between the check and the change: the change stands,
-    // the next screen load shows the new version.
     console.warn("[recon] lane change claim", (claim as { status?: string } | null)?.status);
   }
 }
+
+export function reconWeekVersionGuardWith(deps: WeekGuardDeps = defaultDeps) {
+  return async (c: Context, next: Next) => {
+    if (!CHANGING.has(c.req.method)) return next();
+    const parsed = parseWeekHeader(c.req.header("x-recon-week"));
+    if (parsed === null) return next();
+    if (parsed === "bad") {
+      return c.json({ error: "BAD_WEEK_HEADER", message: "x-recon-week must be <week run id>@<version>" }, 400);
+    }
+    const gated = await deps.requireAuthStrict(c, async () => runWeekVersionGuardCore(c, next, parsed, deps));
+    if (gated instanceof Response) return gated;
+  };
+}
+
+export const reconWeekVersionGuard = reconWeekVersionGuardWith();

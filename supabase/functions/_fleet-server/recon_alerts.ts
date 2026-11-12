@@ -7,6 +7,7 @@
 import { getServiceClient } from "./service_client.ts";
 import { nextEscalation, openAlerts, type AlertCandidate } from "./recon_alert_rules.ts";
 import { sendPlainSms } from "../_shared/smsCarrierSend.ts";
+import { loadStaffAlertPhones } from "./team_staff_service.ts";
 
 function sb() {
   return getServiceClient();
@@ -103,14 +104,9 @@ export async function syncOrgAlerts(orgId: string, nowMs = Date.now(), shadowMis
   return candidates;
 }
 
-async function phonesFor(userIds: string[]): Promise<string[]> {
-  const phones: string[] = [];
-  for (const id of userIds) {
-    const { data } = await sb().auth.admin.getUserById(id);
-    const phone = String(data?.user?.phone || "").trim();
-    if (phone) phones.push(phone.startsWith("+") ? phone : `+${phone}`);
-  }
-  return phones;
+async function phonesFor(orgId: string, userIds: string[]): Promise<string[]> {
+  const map = await loadStaffAlertPhones(sb(), orgId, userIds);
+  return userIds.map((id) => map.get(id)).filter((p): p is string => Boolean(p));
 }
 
 async function managerIds(orgId: string): Promise<string[]> {
@@ -148,7 +144,7 @@ export async function escalateOrgAlerts(orgId: string, nowMs = Date.now()): Prom
     });
     if (!step) continue;
     const people = step === "manager" ? await managerIds(orgId) : await ownerId(orgId);
-    const phones = await phonesFor(people);
+    const phones = await phonesFor(orgId, people);
     let sent = 0;
     const reasons = new Set<string>();
     for (const phone of phones) {

@@ -23,7 +23,7 @@ export type StaffSeat = {
   lastActive: string | null;
   isOwner: boolean;
   inviteId: string | null;
-  /** Mobile number for Week Reconciliation SMS alerts (auth phone), shown as +1876…. */
+  /** Mobile number for Week Reconciliation SMS alerts (per-fleet table), shown as +1876…. */
   alertPhone?: string | null;
 };
 
@@ -454,6 +454,15 @@ export async function listStaff(
     .eq("scope_id", organizationId);
   if (error) throw new Error(error.message);
 
+  const seatUserIds: string[] = [];
+  for (const row of seatRows || []) {
+    const roleName = String((row as { roles?: { name?: string } }).roles?.name || "");
+    if (!STAFF_ROLE_NAMES.includes(roleName)) continue;
+    seatUserIds.push(String(row.user_id));
+  }
+  if (ownerId) seatUserIds.push(ownerId);
+  const alertByUser = await loadStaffAlertPhones(supabase, organizationId, [...new Set(seatUserIds)]);
+
   const seats: StaffSeat[] = [];
   for (const row of seatRows || []) {
     const roleName = String((row as { roles?: { name?: string } }).roles?.name || "");
@@ -469,7 +478,7 @@ export async function listStaff(
       role: ownerId === userId ? "fleet_owner" : roleName,
       status: row.status === "suspended" ? "suspended" : "active",
       lastActive: user?.last_sign_in_at || null,
-      alertPhone: user?.phone ? `+${String(user.phone).replace(/^\+/, "")}` : null,
+      alertPhone: alertByUser.get(userId) ?? null,
       isOwner: ownerId === userId,
       inviteId: null,
     });
@@ -485,7 +494,7 @@ export async function listStaff(
       role: "fleet_owner",
       status: "active",
       lastActive: owner?.user?.last_sign_in_at || null,
-      alertPhone: owner?.user?.phone ? `+${String(owner.user.phone).replace(/^\+/, "")}` : null,
+      alertPhone: alertByUser.get(ownerId) ?? null,
       isOwner: true,
       inviteId: null,
     });
@@ -614,10 +623,34 @@ export async function setStaffStatus(
   });
 }
 
+/** Per-fleet alert numbers (fleet.staff_alert_phones). Server-only via service_role. */
+export async function loadStaffAlertPhones(
+  supabase: SupabaseClient,
+  organizationId: string,
+  userIds: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const ids = [...new Set(userIds.map((id) => String(id).trim()).filter(Boolean))];
+  if (!ids.length) return out;
+  const { data, error } = await supabase
+    .schema("fleet")
+    .from("staff_alert_phones")
+    .select("user_id, phone")
+    .eq("organization_id", organizationId)
+    .in("user_id", ids);
+  if (error) throw new Error(error.message);
+  for (const row of data ?? []) {
+    const uid = String((row as { user_id: string }).user_id);
+    const phone = String((row as { phone: string }).phone || "").trim();
+    if (phone) out.set(uid, phone);
+  }
+  return out;
+}
+
 /**
- * WRA-31: a mobile number for Week Reconciliation SMS alerts, saved on the person's
- * sign-in account (auth phone). Jamaican 7- or 10-digit numbers get +1 876; others
- * must be in +country form. Empty clears it. Returns null when the number is not valid.
+ * WRA-31: a mobile number for Week Reconciliation SMS alerts (per fleet, not sign-in phone).
+ * Jamaican 7- or 10-digit numbers get +1 876; others must be in +country form.
+ * Empty clears it. Returns null when the number is not valid.
  */
 export function normalizeAlertPhone(raw: string): string | null {
   const trimmed = String(raw ?? "").trim();
@@ -648,8 +681,25 @@ export async function setStaffAlertPhone(
     (err as Error & { status?: number }).status = 403;
     throw err;
   }
-  const { error } = await supabase.auth.admin.updateUserById(input.targetId, { phone: phone.replace(/^\+/, "") });
-  if (error) throw new Error(error.message);
+  if (isOwner && input.actorId !== input.targetId) {
+    const err = new Error("Only the owner can set the owner's alert number.");
+    (err as Error & { status?: number }).status = 403;
+    throw err;
+  }
+  const fleet = supabase.schema("fleet").from("staff_alert_phones");
+  if (!phone) {
+    const { error } = await fleet.delete().eq("organization_id", input.organizationId).eq("user_id", input.targetId);
+    if (error) throw new Error(error.message);
+  } else {
+    const { error } = await fleet.upsert({
+      organization_id: input.organizationId,
+      user_id: input.targetId,
+      phone,
+      set_by: input.actorId,
+      set_at: new Date().toISOString(),
+    });
+    if (error) throw new Error(error.message);
+  }
   await audit({
     actorUserId: input.actorId,
     targetUserId: input.targetId,

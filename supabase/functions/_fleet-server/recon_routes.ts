@@ -2419,8 +2419,16 @@ export function registerReconRoutes(app: Hono) {
           status: request.status,
           versionAtSend: request.version_at_send == null ? null : Number(request.version_at_send),
           currentVersion: Number(run.version),
+          preparedBy: request.prepared_by == null ? null : String(request.prepared_by),
+          approver: actor,
         });
         if (!decision.go) {
+          if (decision.code === "SAME_PERSON") {
+            return c.json({
+              error: "SAME_PERSON",
+              message: "Someone else must approve this.",
+            }, 403);
+          }
           if (decision.markStale) {
             await moveApprovalRequest(request, ["pending_approval"], "stale", actor, "approval_stale", null, correlationId);
           }
