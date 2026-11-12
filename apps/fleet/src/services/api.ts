@@ -7829,7 +7829,7 @@ export const api = {
     bankDateYmd?: string;
     statementFileName?: string;
     platform?: 'uber' | 'indrive' | 'roam';
-    /** @deprecated Use organizationId — legacy only. */
+    /** @deprecated Legacy only — server uses session company. */
     driverId?: string;
   }): Promise<{ success: boolean; data: Record<string, unknown> }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/fleet-bank-confirms`, {
@@ -7855,7 +7855,6 @@ export const api = {
     const params = new URLSearchParams({
       weekStartYmd: payload.weekStartYmd,
     });
-    if (payload.organizationId) params.set('organizationId', payload.organizationId);
     if (payload.driverId) params.set('driverId', payload.driverId);
     if (payload.platform) params.set('platform', payload.platform);
     const response = await fetchWithRetry(
@@ -7871,8 +7870,9 @@ export const api = {
     }
     return response.json();
   },
+    const { organizationId: _org, ...body } = payload;
 
-  async getOrganizationSettings(organizationId?: string): Promise<{
+  async getOrganizationSettings(_organizationId?: string): Promise<{
     data: {
       organizationId: string;
       uberOrganizationUuid: string | null;
@@ -7882,11 +7882,8 @@ export const api = {
       downtimeCostPerDayJmd: number | null;
     };
   }> {
-    const params = new URLSearchParams();
-    if (organizationId) params.set('organizationId', organizationId);
-    const q = params.toString();
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.financial}/organization-settings${q ? `?${q}` : ''}`,
+      `${API_ENDPOINTS.financial}/organization-settings`,
       { headers: await getHeaders(null, { requireAuth: true }) },
     );
     if (!response.ok) {
@@ -7907,7 +7904,7 @@ export const api = {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/organization-settings`, {
       method: 'PUT',
       headers: await getHeaders(),
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     });
     if (!response.ok) {
       const errText = await response.text();
@@ -7926,7 +7923,7 @@ export const api = {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/fleet-bank-statements`, {
       method: 'PUT',
       headers: await getHeaders(),
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     });
     if (!response.ok) {
       const errText = await response.text();
@@ -7943,6 +7940,7 @@ export const api = {
       const errText = await response.text();
       throw new Error(`Fleet bank statements failed: ${errText}`);
     }
+    const { organizationId: _org, ...body } = payload;
     return response.json();
   },
 
