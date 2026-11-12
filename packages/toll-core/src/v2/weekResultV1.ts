@@ -65,6 +65,16 @@ export interface TollWeekResultV1 {
     fleetOwesMinor: number;
     /** recovered_in_driver_cash: already inside their passenger cash */
     recoveredInPassengerCashMinor: number;
+    /** Total posted spend attributed to this driver for the week */
+    spendMinor: number;
+    /** Tag-paid portion of spendMinor */
+    tagSpendMinor: number;
+    /** Cash-paid portion of spendMinor */
+    cashSpendMinor: number;
+    /** Platform-borne allocation total (toll reimbursement in settlement) */
+    platformMinor: number;
+    /** Fleet-borne allocation total (net fleet toll loss on the driver line) */
+    fleetMinor: number;
   }>;
   afterSeal: Array<{
     kind: 'charge' | 'payback' | 'reversal' | 'correction';

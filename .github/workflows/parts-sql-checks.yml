@@ -31,6 +31,10 @@ on:
       - 'supabase/tests/toll_v2_nightly.sql'
       - 'supabase/tests/toll_v2_week_rule.sql'
       - 'supabase/tests/toll_v2_contract.sql'
+      - 'supabase/tests/toll_v2_week_result.sql'
+      - 'supabase/tests/toll_v2_roam_native.sql'
+      - 'supabase/tests/toll_v2_settlement_lines.sql'
+      - 'supabase/tests/toll_v2_metrics.sql'
       - 'packages/toll-core/src/v2/weekRuleCases.json'
       - '.github/workflows/parts-sql-checks.yml'
   push:
@@ -60,6 +64,10 @@ on:
       - 'supabase/tests/toll_v2_nightly.sql'
       - 'supabase/tests/toll_v2_week_rule.sql'
       - 'supabase/tests/toll_v2_contract.sql'
+      - 'supabase/tests/toll_v2_week_result.sql'
+      - 'supabase/tests/toll_v2_roam_native.sql'
+      - 'supabase/tests/toll_v2_settlement_lines.sql'
+      - 'supabase/tests/toll_v2_metrics.sql'
       - 'packages/toll-core/src/v2/weekRuleCases.json'
       - '.github/workflows/parts-sql-checks.yml'
   workflow_dispatch:
@@ -152,3 +160,11 @@ jobs:
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_v2_week_rule.sql
           docker cp supabase/tests/toll_v2_contract.sql "$db_container":/tmp/toll_v2_contract.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_v2_contract.sql
+          docker cp supabase/tests/toll_v2_week_result.sql "$db_container":/tmp/toll_v2_week_result.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_v2_week_result.sql
+          docker cp supabase/tests/toll_v2_roam_native.sql "$db_container":/tmp/toll_v2_roam_native.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_v2_roam_native.sql
+          docker cp supabase/tests/toll_v2_settlement_lines.sql "$db_container":/tmp/toll_v2_settlement_lines.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_v2_settlement_lines.sql
+          docker cp supabase/tests/toll_v2_metrics.sql "$db_container":/tmp/toll_v2_metrics.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_v2_metrics.sql

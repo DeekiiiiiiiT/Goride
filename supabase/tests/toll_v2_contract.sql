@@ -84,6 +84,22 @@ BEGIN
     END IF;
   END LOOP;
 
+  -- 5. public.toll_sys_% : service_role only (service entry points; mirror of B7.3).
+  FOR r IN
+    SELECT p.proname, p.oid
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname LIKE 'toll_sys\_%' ESCAPE '\'
+  LOOP
+    IF NOT has_function_privilege('service_role', r.oid, 'EXECUTE') THEN
+      RAISE EXCEPTION 'contract: service_role must EXECUTE public.%', r.proname;
+    END IF;
+    IF has_function_privilege('anon', r.oid, 'EXECUTE')
+      OR has_function_privilege('authenticated', r.oid, 'EXECUTE') THEN
+      RAISE EXCEPTION 'contract: anon/authenticated must not EXECUTE public.%', r.proname;
+    END IF;
+  END LOOP;
+
   RAISE NOTICE 'toll_v2_contract: ok';
 END;
 $$;

@@ -15,6 +15,15 @@ import {
 } from "./toll_period_inputs.ts";
 import { periodAnchorFor, periodEndForAnchor, minorToMajor } from "./financial_ledger.ts";
 import {
+  findDriverTollLineInWeek,
+  getCachedWeekDrivers,
+  parseWeekDriversRpc,
+  resolveTollInputs,
+  shouldPassEOverrideTollStatement,
+  type TollSource,
+} from "./toll_v2_settlement_inputs.ts";
+import { isTollV2RpcMissing } from "./toll_v2_rpc.ts";
+import {
   resolveActiveEarningsBundleForDriverWeek,
 } from "./earnings_policy_runtime.ts";
 import {
@@ -253,6 +262,11 @@ export type RebuildContext = {
   chargeTxByWeek?: Map<string, any[]>;
   /** Perf: finalized fuel reports pre-bucketed by their week-start anchor. */
   fuelReportsByWeek?: Map<string, any[]>;
+  /** P1-R4: one toll_sys_tolls_v2_on lookup per org per rebuild batch (not cross-request). */
+  tollsV2ByOrg?: Map<string, boolean>;
+  /** P1 review #10: one toll_sys_week_drivers per org-week per rebuild batch. */
+  v2WeekDriversByKey?: Map<string, import("./toll_v2_settlement_inputs.ts").WeekDriversBundle>;
+  tollOrgResolveWarned?: boolean;
 };
 
 function inferTripServiceLine(trip: Record<string, unknown>): "rideshare" | "rush_delivery" {
@@ -821,6 +835,24 @@ export async function loadRebuildContext(
   };
 }
 
+async function tollsV2OnForOrg(orgId: string, ctx: RebuildContext): Promise<boolean> {
+  if (!orgId) return false;
+  if (!ctx.tollsV2ByOrg) ctx.tollsV2ByOrg = new Map();
+  const cached = ctx.tollsV2ByOrg.get(orgId);
+  if (cached !== undefined) return cached;
+  const { data, error } = await sb().rpc("toll_sys_tolls_v2_on", { p_company: orgId });
+  if (error) {
+    if (isTollV2RpcMissing(error)) {
+      ctx.tollsV2ByOrg.set(orgId, false);
+      return false;
+    }
+    throw new Error(`toll_sys_tolls_v2_on failed for ${orgId}: ${error.message}`);
+  }
+  const on = data === true;
+  ctx.tollsV2ByOrg.set(orgId, on);
+  return on;
+}
+
 /**
  * Rebuild one driver-week projection from operational SSOT + financial_events.
  * Always reopens if unmatched toll usage remains.
@@ -1297,6 +1329,67 @@ export async function rebuildDriverFinancialPeriod(
     );
   }
 
+  let orgIdForTolls = "";
+  try {
+    orgIdForTolls = await requirePeriodOrganizationId(driverId, context.organizationId);
+  } catch {
+    if (!context.tollOrgResolveWarned) {
+      context.tollOrgResolveWarned = true;
+      console.warn(
+        `[DFP] toll v2 switch: no organization_id for driver=${driverId}; using legacy toll inputs`,
+      );
+    }
+  }
+  const weekKey = String(periodAnchor || "").slice(0, 10);
+  let tollSource: TollSource = "legacy";
+  try {
+    const resolvedTolls = await resolveTollInputs(orgIdForTolls, driverId, weekKey, {
+      tollChargedToDriver,
+      tollCashWashEligible,
+      tollSpend,
+      tollCashSpend,
+      tollTagSpend,
+      tollReimbursed,
+    }, {
+      isTollsV2On: (orgId) => tollsV2OnForOrg(orgId, context),
+      fetchDriverWeekTolls: async (orgId, week, drv) => {
+        if (!context.v2WeekDriversByKey) {
+          context.v2WeekDriversByKey = new Map();
+        }
+        const bundle = await getCachedWeekDrivers(
+          context.v2WeekDriversByKey,
+          orgId,
+          week,
+          async (o, w) => {
+            const { data, error } = await sb().rpc("toll_sys_week_drivers", {
+              p_company: o,
+              p_week: w,
+            });
+            if (error) {
+              throw new Error(`toll_sys_week_drivers failed: ${error.message}`);
+            }
+            return parseWeekDriversRpc(data);
+          },
+        );
+        const line = findDriverTollLineInWeek(bundle, drv);
+        return { line };
+      },
+    });
+    tollChargedToDriver = resolvedTolls.tollChargedToDriver;
+    tollCashWashEligible = resolvedTolls.tollCashWashEligible;
+    tollSpend = resolvedTolls.tollSpend;
+    tollCashSpend = resolvedTolls.tollCashSpend;
+    tollTagSpend = resolvedTolls.tollTagSpend;
+    tollReimbursed = resolvedTolls.tollReimbursed;
+    tollSource = resolvedTolls.tollSource;
+    if (tollSource === "toll_v2") {
+      tollChargedSource = "events";
+    }
+  } catch (tollV2Err) {
+    const msg = tollV2Err instanceof Error ? tollV2Err.message : String(tollV2Err);
+    throw new Error(`[DFP] toll v2 settlement inputs failed driver=${driverId} week=${weekKey}: ${msg}`);
+  }
+
   const fuelNetPay = round2(fuelDriverSpend - fuelDeduction);
   let settled = computePeriodSettlement({
     driverShare,
@@ -1454,11 +1547,12 @@ export async function rebuildDriverFinancialPeriod(
       moneyUnlocked: derived.moneyUnlocked,
       fuelLeftoverDriverShare,
       ...cashHeldClampStamp(settled.cashBalance),
+      tollSource,
       projectionSources: {
         fuel: fuelSource,
         cash: settlementTxTableReadEnabled() ? "table" : "kv",
-        tolls: useTollEvents ? "events" : "ledger",
-        tollCharged: tollChargedSource,
+        tolls: tollSource === "toll_v2" ? "toll_v2" : (useTollEvents ? "events" : "ledger"),
+        tollCharged: tollSource === "toll_v2" ? "toll_v2" : tollChargedSource,
         fares: projectionReadsEventsForFares() ? "events" : "events_or_trips",
       },
     },
@@ -1689,12 +1783,14 @@ export async function rebuildDriverFinancialPeriod(
           const fuel = byKind.get("fuel");
           const toll = byKind.get("toll");
           const earnings = byKind.get("earnings");
+          const passEOverrideToll = shouldPassEOverrideTollStatement(tollSource);
           if (fuel) {
             row.fuelDeduction = statementAmountMajor(fuel, "driverShare");
             row.fuelFleetShare = statementAmountMajor(fuel, "companyShare");
             fuelSource = "events";
           }
-          if (toll) {
+          // toll_v2: engine already read the v2 week answer; statements were written from it — do not round-trip.
+          if (toll && passEOverrideToll) {
             row.tollSpend = statementAmountMajor(toll, "totalSpend");
             row.tollChargedToDriver = statementAmountMajor(toll, "chargedToDriver");
             row.tollReimbursed = statementAmountMajor(toll, "reimbursed");
@@ -1744,8 +1840,10 @@ export async function rebuildDriverFinancialPeriod(
               projectionSources: {
                 ...((fc.projectionSources as Record<string, unknown>) || {}),
                 fuel: fuel ? "week_statement" : fuelSource,
-                tolls: toll ? "week_statement" : (useTollEvents ? "events" : "ledger"),
-                tollCharged: toll ? "week_statement" : tollChargedSource,
+                tolls: toll && passEOverrideToll
+                  ? "week_statement"
+                  : (tollSource === "toll_v2" ? "toll_v2" : (useTollEvents ? "events" : "ledger")),
+                tollCharged: toll && passEOverrideToll ? "week_statement" : tollChargedSource,
                 fares: earnings ? "week_statement" : undefined,
                 cash: settlementTxTableReadEnabled() ? "table" : "kv",
               },

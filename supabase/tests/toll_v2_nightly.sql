@@ -22,7 +22,7 @@ DECLARE
   v_owner_b     uuid := 'e0411111-1111-4111-8111-111111111114';
   v_org_a       uuid := 'e1111111-1111-4111-8111-111111111101';
   v_org_b       uuid := 'e2222222-2222-4222-8222-222222222202';
-  v_effective   timestamptz := '2026-04-07 12:00:00+00';
+  v_effective   timestamptz := '2024-04-09 12:00:00+00';  -- in the past: sealed weeks must have ended
   v_amount      bigint := 1000;
   v_d           bigint := 200;
   v_week0       date;

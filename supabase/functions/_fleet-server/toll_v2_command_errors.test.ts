@@ -7,6 +7,7 @@ const MAPPED: Array<{ code: string; status: number }> = [
   { code: "WEEK_NOT_SEALED", status: 409 },
   { code: "PENDING_NOT_RESOLVED", status: 409 },
   { code: "DRIVERS_ALREADY_PAID", status: 409 },
+  { code: "WEEK_NOT_ENDED", status: 409 },
   { code: "REOPEN_INSTEAD", status: 409 },
   { code: "COMMAND_ID_REUSED", status: 409 },
   { code: "TOLLS_V2_OFF", status: 409 },

@@ -271,7 +271,7 @@ app.post("/v1/internal/record-crossing", async (c) => {
       // Bump ride actual tolls
       const { data: ride } = await db
         .from("ride_requests")
-        .select("actual_tolls_minor")
+        .select("actual_tolls_minor, organization_id, attribution_mode, payment_method")
         .eq("id", rideId)
         .maybeSingle();
       const prev = Number(ride?.actual_tolls_minor || 0);
@@ -280,8 +280,28 @@ app.post("/v1/internal/record-crossing", async (c) => {
         .update({ actual_tolls_minor: prev + row.toll_amount_minor })
         .eq("id", rideId);
 
+      let skipLegacyTollKv = false;
+      const { rideRecordedByTollV2 } = await import("../rides/tolls/nativeTollPayload.ts");
+      const rideRow = (ride ?? {}) as Record<string, unknown>;
+      if (rideRecordedByTollV2(rideRow)) {
+        const rideOrgId = String(rideRow.organization_id);
+        const { data: v2On, error: v2Err } = await db.rpc("toll_sys_tolls_v2_on", {
+          p_company: rideOrgId,
+        });
+        if (v2Err) {
+          logLine({
+            event: "toll_v2_on_check_failed",
+            rideId,
+            organizationId: rideOrgId,
+            error: v2Err.message,
+          });
+        } else if (v2On === true) {
+          skipLegacyTollKv = true;
+        }
+      }
+
       // Live ledger materialize
-      if (policy.liveLedgerMaterializeEnabled) {
+      if (policy.liveLedgerMaterializeEnabled && !skipLegacyTollKv) {
         const now = new Date().toISOString();
         const ledgerId = crypto.randomUUID();
         const amountMajor = row.toll_amount_minor / 100;

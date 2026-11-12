@@ -307,6 +307,8 @@ jobs:
           supabase/functions/_fleet-server/toll_ledger_request_cache.test.ts
           supabase/functions/_fleet-server/toll_v2_command_errors.test.ts
           supabase/functions/_fleet-server/period_projector.test.ts
+          supabase/functions/rides/tolls/nativeTollPayload.test.ts
+          supabase/functions/rides/tolls/nativeTollSync.test.ts
 
       - name: Deno test remittance money + residual + pause routes
         run: >
@@ -396,6 +398,7 @@ jobs:
         run: >
           deno test --allow-read --allow-env
           supabase/functions/_fleet-server/settlement_commands.test.ts
+          supabase/functions/_fleet-server/toll_v2_settlement_inputs.test.ts
           supabase/functions/_fleet-server/toll_seal_before_pay.test.ts
           supabase/functions/_fleet-server/route_company.test.ts
           supabase/functions/_fleet-server/register_fleet_bank_routes.test.ts

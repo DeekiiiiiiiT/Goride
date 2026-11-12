@@ -66,6 +66,10 @@ export interface ApplyTransitionDeps {
     payload: Record<string, unknown>,
   ) => Promise<void>;
   cleanupLiveState: (rideId: string) => Promise<void>;
+  syncNativeTolls?: (
+    ride: Record<string, unknown>,
+    moment: "awaiting_cash" | "completed",
+  ) => Promise<void>;
 }
 
 export interface ApplyTransitionParams {
@@ -267,6 +271,18 @@ export async function applyRideTransition(
 
   if (generatedPin && deps.upsertRidePin) {
     await deps.upsertRidePin(params.rideId, generatedPin);
+  }
+
+  if (params.next === "awaiting_cash_settlement" && deps.syncNativeTolls) {
+    // Toll v2 must never break the ride flow: the re-read sits inside the guard too.
+    try {
+      const updatedForTolls = await deps.loadRideRequestById(params.rideId);
+      if (updatedForTolls) {
+        await deps.syncNativeTolls(updatedForTolls, "awaiting_cash");
+      }
+    } catch (e) {
+      console.error("[toll-v2] native sync failed", { rideId: params.rideId, moment: "awaiting_cash", message: String(e) });
+    }
   }
 
   if (params.next === "completed" || params.next === "cancelled") {

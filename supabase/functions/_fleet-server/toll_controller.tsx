@@ -9698,7 +9698,7 @@ async function loadRideContext(rideIds: string[]): Promise<Map<string, any>> {
     const { data, error } = await supabase
       .schema("rides")
       .from("ride_requests")
-      .select("id, assigned_driver_user_id, completed_at, status")
+      .select("id, assigned_driver_user_id, completed_at, status, organization_id, attribution_mode, payment_method")
       .in("id", rideIds);
     if (error) {
       console.error("[TollBridge] Failed to load ride context:", error.message);
@@ -9715,6 +9715,7 @@ async function bridgeRideTollCrossings(opts: { dryRun: boolean; limit: number })
   scanned: number;
   bridged: number;
   skipped: number;
+  skippedV2: number;
   dryRun: boolean;
 }> {
   const crossings = await loadRideTollCrossings(opts.limit);
@@ -9723,7 +9724,32 @@ async function bridgeRideTollCrossings(opts: { dryRun: boolean; limit: number })
 
   let bridged = 0;
   let skipped = 0;
+  let skippedV2 = 0;
+  const v2ByOrg = new Map<string, boolean>();
   const now = new Date().toISOString();
+  const { rideRecordedByTollV2 } = await import("../rides/tolls/nativeTollPayload.ts");
+
+  async function companyOnTollsV2(organizationId: string): Promise<boolean> {
+    const cached = v2ByOrg.get(organizationId);
+    if (cached !== undefined) return cached;
+    try {
+      const { data, error } = await supabase.rpc("toll_sys_tolls_v2_on", {
+        p_company: organizationId,
+      });
+      if (error) {
+        console.warn(`[TollBridge] toll_sys_tolls_v2_on failed for ${organizationId}: ${error.message}`);
+        v2ByOrg.set(organizationId, false);
+        return false;
+      }
+      const on = data === true;
+      v2ByOrg.set(organizationId, on);
+      return on;
+    } catch (e: any) {
+      console.warn(`[TollBridge] toll_sys_tolls_v2_on error for ${organizationId}: ${e?.message}`);
+      v2ByOrg.set(organizationId, false);
+      return false;
+    }
+  }
 
   for (const x of crossings) {
     const dedupKey = `${TOLL_BRIDGE_DEDUP_PREFIX}${x.id}`;
@@ -9732,12 +9758,22 @@ async function bridgeRideTollCrossings(opts: { dryRun: boolean; limit: number })
       skipped++;
       continue;
     }
+
+    const ride = rideCtx.get(x.ride_request_id);
+    const rideRow = (ride ?? {}) as Record<string, unknown>;
+    if (rideRecordedByTollV2(rideRow)) {
+      const rideOrgId = String(rideRow.organization_id);
+      const v2On = await companyOnTollsV2(rideOrgId);
+      if (v2On === true) {
+        skippedV2++;
+        continue;
+      }
+    }
+
     if (opts.dryRun) {
       bridged++; // would-bridge count
       continue;
     }
-
-    const ride = rideCtx.get(x.ride_request_id);
     const amountMajor = Number(x.toll_amount_minor || 0) / 100;
     const ledgerId = crypto.randomUUID();
 
@@ -9826,9 +9862,9 @@ async function bridgeRideTollCrossings(opts: { dryRun: boolean; limit: number })
   }
 
   console.log(
-    `[TollBridge] ${opts.dryRun ? "DRY-RUN " : ""}scanned=${crossings.length} bridged=${bridged} skipped=${skipped}`,
+    `[TollBridge] ${opts.dryRun ? "DRY-RUN " : ""}scanned=${crossings.length} bridged=${bridged} skipped=${skipped} skippedV2=${skippedV2}`,
   );
-  return { scanned: crossings.length, bridged, skipped, dryRun: opts.dryRun };
+  return { scanned: crossings.length, bridged, skipped, skippedV2, dryRun: opts.dryRun };
 }
 
 // ─── POST /bridge-rides ──────────────────────────────────────────────────

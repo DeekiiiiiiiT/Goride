@@ -77,6 +77,7 @@ import { getOpenDebtMinor } from "./cashSettlement/debtRepayment.ts";
 import { isRiderArrearsBlocked } from "./cashSettlement/arrearsCheck.ts";
 import { evaluateGeofenceTransitions, cleanupRideLiveState } from "./rideGeofence.ts";
 import { getTotalTollsForRide } from "./fare/tollGeofence.ts";
+import { syncNativeTolls as syncRideNativeTolls } from "./tolls/nativeTollSync.ts";
 import { loadAppPermissionPolicy, policyDto } from "../_shared/appPermissionPolicy.ts";
 import type { AppPermissionSurface } from "../_shared/appPermissionCatalog.ts";
 import { registerRideChatRoutes } from "./rideChat.ts";
@@ -678,6 +679,10 @@ async function handleTerminalRideLedgerAndSync(rideId: string): Promise<void> {
   } catch (e) {
     console.error("[rides] fleet KV sync failed:", e);
   }
+
+  if (status === "completed") {
+    await syncRideNativeTolls(svc(), pubSvc(), fresh, "completed");
+  }
 }
 
 function transitionDeps(): ApplyTransitionDeps {
@@ -689,6 +694,7 @@ function transitionDeps(): ApplyTransitionDeps {
     bumpSurgeDemand,
     audit,
     cleanupLiveState: async (rideId: string) => cleanupRideLiveState(svc(), rideId),
+    syncNativeTolls: (ride, moment) => syncRideNativeTolls(svc(), pubSvc(), ride, moment),
   };
 }
 

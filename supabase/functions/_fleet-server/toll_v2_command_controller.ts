@@ -8,6 +8,7 @@ import {
   mapTollCommandError,
   tollsV2OffResponse,
 } from "./toll_v2_command_errors.ts";
+import { getOrgId } from "./org_scope.ts";
 
 const app = new Hono();
 
@@ -56,6 +57,43 @@ app.post(
     if (error) {
       const mapped = mapTollCommandError(error);
       return c.json(mapped.body, mapped.status as 400 | 401 | 403 | 409 | 500 | 501);
+    }
+
+    const replay = data && typeof data === "object" && (data as Record<string, unknown>).replay === true;
+    if (
+      (intent === "seal_week" || intent === "reopen_week") &&
+      !replay
+    ) {
+      const organizationId = getOrgId(c);
+      const weekKey = typeof body.week_key === "string" ? body.week_key : String(body.week_key ?? "");
+      if (organizationId && weekKey) {
+        try {
+          const { runSealSideEffects } = await import("./seal_side_effects.ts");
+          for (const serviceLine of ["rideshare", "rush_delivery"] as const) {
+            const sideEffects = await runSealSideEffects({
+              organizationId,
+              weekKey,
+              serviceLine,
+            });
+            if (sideEffects.rebuildErrors.length > 0) {
+              console.error("[toll-v2-command] seal side effects had errors", {
+                intent,
+                organizationId,
+                weekKey,
+                serviceLine,
+                errors: sideEffects.rebuildErrors,
+              });
+            }
+          }
+        } catch (sideErr) {
+          console.error("[toll-v2-command] seal side effects failed", {
+            intent,
+            organizationId,
+            weekKey,
+            error: sideErr instanceof Error ? sideErr.message : String(sideErr),
+          });
+        }
+      }
     }
 
     return c.json(data);
