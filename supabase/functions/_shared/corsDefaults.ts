@@ -24,6 +24,8 @@ export const CORS_DEFAULT_HEADERS = [
   "Idempotency-Key",
   "If-Match",
   "X-Fuel-Force-Client-Money",
+  // WRA-27: Week Reconciliation sends the open week's version on toll / fuel / settlement changes.
+  "x-recon-week",
 ] as const;
 
 export const CORS_EXPOSE_HEADERS = [

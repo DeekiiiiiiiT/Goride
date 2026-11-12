@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
   if (!sa) {
     return new Response(JSON.stringify({ error: "server_misconfigured" }), { status: 500 });
   }
-  const body = await req.json().catch(() => ({})) as { nightly?: boolean };
+  const body = await req.json().catch(() => ({})) as { nightly?: boolean; alertsOnly?: boolean };
   try {
     const uri = await reconWorkerUri(sa);
     const idToken = await googleIdToken(sa, uri);
@@ -36,7 +36,8 @@ Deno.serve(async (req) => {
         Authorization: `Bearer ${idToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ nightly: body.nightly === true }),
+      // Rev 24: while the calculator is paused the database still wakes it, alerts-only.
+      body: JSON.stringify({ nightly: body.nightly === true, alertsOnly: body.alertsOnly === true }),
     });
     const text = await res.text();
     return new Response(text || "{}", {

@@ -9,8 +9,9 @@ import {
 } from './inventoryDoneTestAuth';
 import { INV_DONE_ORG } from './inventoryDoneTestDb';
 
-export const STITCH_FLEET = join(process.cwd(), 'docs', 'stitch', 'roam-fleet-app', 'inventory');
-export const STITCH_DRIVER = join(process.cwd(), 'docs', 'stitch', 'roam-driver-app', 'car-kit');
+// Test screenshots go to the git-ignored test-results folder, never into docs/ (the owner never saves them).
+export const STITCH_FLEET = join(process.cwd(), 'test-results', 'screen-live', 'roam-fleet-app', 'inventory');
+export const STITCH_DRIVER = join(process.cwd(), 'test-results', 'screen-live', 'roam-driver-app', 'car-kit');
 
 export async function saveLiveScreenshot(
   page: import('@playwright/test').Page,

@@ -42,6 +42,7 @@ import { RematchCandidatesQueue } from "./RematchCandidatesQueue";
 import { PeriodResetDialog } from "./PeriodResetDialog";
 import { TollReconBusyProvider, useTollReconBusy } from "./tollReconBusyLock";
 import { StepAdvancePrompt } from "./StepAdvancePrompt";
+import { TollDeskSections, ReimbursedTollRows, type TollDeskSection } from "./TollDeskSections";
 import {
   TOLL_RECONCILIATION_PERIODS_KEY,
   useInvalidateTollReconciliationPeriods,
@@ -102,6 +103,10 @@ interface ReconciliationWizardProps {
    * run (complete Tolls → next ready step). When set, replaces exit-only Finish.
    */
   onPeriodFinished?: () => void | Promise<void>;
+  /** Week Reconciliation step 3 (WRA-01): stacked sections, no inner stepper, Seal tolls finishes. */
+  deskSections?: boolean;
+  /** Week page right column, for the Driver toll charges card. */
+  summaryTarget?: HTMLElement | null;
 }
 
 /**
@@ -130,6 +135,8 @@ function ReconciliationWizardInner({
   initialStepId,
   serviceLine,
   onPeriodFinished,
+  deskSections = false,
+  summaryTarget,
 }: ReconciliationWizardProps) {
   const { runExclusive, busy: actionBusy, setMessage, setCancel } = useTollReconBusy();
   const handleRunTest = () => {
@@ -976,10 +983,12 @@ function ReconciliationWizardInner({
   if (loadError) {
     return (
       <div className="space-y-4">
+        {deskSections ? null : (
         <Button variant="ghost" size="sm" onClick={onExit} className="-ml-2 text-slate-500 hover:text-slate-700">
           <ArrowLeft className="h-4 w-4 mr-1.5" />
           Back to Periods
         </Button>
+        )}
         <div
           className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-rose-200 bg-rose-50 py-16 text-rose-800"
           role="alert"
@@ -1253,8 +1262,9 @@ function ReconciliationWizardInner({
   /** One action at a time — blocks the whole wizard UI while money/match work runs. */
   const lock =
     <A extends unknown[]>(label: string, fn: (...args: A) => Promise<unknown>) =>
-    (...args: A) =>
-      runExclusive(label, () => fn(...args) as Promise<unknown>);
+    async (...args: A): Promise<void> => {
+      await runExclusive(label, () => fn(...args) as Promise<unknown>);
+    };
 
   const lockedApprove = lock('Matching toll…', handleApprove);
   const lockedReject = lock('Updating toll…', handleReject);
@@ -1335,9 +1345,265 @@ function ReconciliationWizardInner({
     invalidateSharedPeriods();
   });
 
+  // Week Reconciliation step 3 (WRA-01): same data and handlers, laid out as sections.
+  const deskView = deskSections ? (() => {
+    const todo = (id: StepId) => stepCounts[id]?.actionable || 0;
+    const sumTolls = (rows: FinancialTransaction[]) =>
+      Math.round(rows.reduce((n, tx) => n + Math.abs(Number(tx.amount) || 0), 0) * 100) / 100;
+    const reimbursedTolls = pReconciledInPeriod.filter((tx) => !claimTollIdsForPeriod.has(tx.id));
+    const driverNameById = new Map<string, string>(
+      (drivers as Array<{ id: string; name: string }>).map((d) => [String(d.id), d.name]),
+    );
+    const chargesByDriver = new Map<string, number>();
+    for (const c of pPeriodClaims) {
+      if (c.status !== 'Resolved' || c.resolutionReason !== 'Charge Driver') continue;
+      const name =
+        (c as { driverName?: string }).driverName || driverNameById.get(String(c.driverId)) || 'Unknown driver';
+      chargesByDriver.set(name, (chargesByDriver.get(name) || 0) + Math.abs(c.amount || 0));
+    }
+    const block = finishBlockReason({
+      loadError,
+      dataTruncated,
+      platformFilter,
+      identityResidual,
+      allPlatformActionable: needsReviewCount,
+    });
+    const sealBlockedReason =
+      block === 'load_error'
+        ? 'Toll data did not load. Re-run matching.'
+        : block === 'truncated'
+          ? 'Too many rows to check in one go.'
+          : block === 'identity_residual'
+            ? 'The totals do not match the toll ledger yet.'
+            : block === 'cross_platform_actionable'
+              ? `${needsReviewCount} ${needsReviewCount === 1 ? 'item still needs' : 'items still need'} a decision.`
+              : null;
+    const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
+    const sections: TollDeskSection[] = [
+      {
+        id: 'reimbursed',
+        title: 'Reimbursed',
+        description: 'On a trip, and the platform paid the full toll back.',
+        itemCount: reimbursedTolls.length,
+        itemNoun: plural(reimbursedTolls.length, 'toll', 'tolls'),
+        todo: 0,
+        total: sumTolls(reimbursedTolls),
+        content: <ReimbursedTollRows tolls={reimbursedTolls} />,
+      },
+      {
+        id: 'underpaid',
+        title: 'Underpaid',
+        description: 'On a trip, but the platform paid back less.',
+        itemCount: classified.underpaid.length + pPeriodClaims.length,
+        itemNoun: 'items',
+        todo: todo('underpaid-claims'),
+        total: null,
+        content: (
+          <UnderpaidClaimsStep
+            claims={pPeriodClaims}
+            allClaims={claims}
+            reconciledTolls={underpaidReconciledTolls}
+            pendingUnderpaidTolls={classified.underpaid}
+            suggestions={suggestions}
+            tollLookup={reconciledTolls}
+            trips={trips}
+            disputeRefunds={disputeRefunds}
+            unlinkedRefundTrips={unclaimedRefunds}
+            periodWeekKey={period.startDate}
+            periodLabel={period.label}
+            fleetTz={fleetTz}
+            drivers={drivers}
+            loadingTolls={tollsLoading}
+            loadingClaims={claimsLoading}
+            createClaim={lockedCreateClaim}
+            updateClaim={lockedUpdateClaim}
+            rawCreateClaim={createClaim}
+            rawUpdateClaim={updateClaim}
+            deleteClaim={lockedDeleteClaim}
+            rawDeleteClaim={deleteClaim}
+            refreshClaims={refreshClaims}
+            onUndoUnlinkedApply={lockedUndoApply}
+            busyUnlinkedTripId={busyUnlinkedTripId}
+            historyAudit={{
+              resolvedRefundTrips: pResolved,
+              onUndoRefund: lockedUndoRefund,
+              matchedTolls: pReconciledInPeriod,
+              reconciledTolls: reconciledTolls,
+              onUnmatch: lockedUnreconcile,
+              selectedDriverId: driverId || '',
+              periodStartDate: period.startDate,
+              periodEndDate: period.endDate,
+            }}
+          />
+        ),
+      },
+      {
+        id: 'deadhead',
+        title: 'Deadhead',
+        description: 'Driving to a pickup, no passenger yet.',
+        itemCount: classified.deadhead.length,
+        itemNoun: plural(classified.deadhead.length, 'toll', 'tolls'),
+        todo: todo('deadhead'),
+        total: sumTolls(classified.deadhead),
+        content: (
+          <TollBucketPanel
+            tolls={classified['deadhead']}
+            suggestions={suggestions}
+            allTrips={trips}
+            drivers={drivers}
+            unifiedPeriodView
+            stepId="deadhead"
+            onReconcile={lockedSmartReconcile}
+            onApprove={lockedApprove}
+            onReject={lockedReject}
+            onDiscardReceipt={lockedDiscardReceipt}
+            onAcceptPersonal={lockedAcceptPersonal}
+            onFlag={lockedFlag}
+            onManualResolve={lockedManualResolve}
+            onEdit={lockedEditToll}
+            onChargeDriver={lockedChargeDeadhead}
+            approveLabel="Fleet pays"
+            emptyState={{ icon: Route, title: 'No deadhead tolls this week', description: 'Nothing to decide here.' }}
+            listTitle="Deadhead tolls"
+            listDescription=""
+          />
+        ),
+      },
+      {
+        id: 'personal-use',
+        title: 'Personal use',
+        description: 'No trip at the time.',
+        itemCount: classified['personal-use'].length,
+        itemNoun: plural(classified['personal-use'].length, 'toll', 'tolls'),
+        todo: todo('personal-use'),
+        total: sumTolls(classified['personal-use']),
+        content: (
+          <TollBucketPanel
+            tolls={classified['personal-use']}
+            suggestions={suggestions}
+            allTrips={trips}
+            drivers={drivers}
+            unifiedPeriodView
+            stepId="personal-use"
+            onReconcile={lockedSmartReconcile}
+            onApprove={lockedApprove}
+            onReject={lockedReject}
+            onDiscardReceipt={lockedDiscardReceipt}
+            onAcceptPersonal={lockedAcceptPersonal}
+            onFlag={lockedFlag}
+            onManualResolve={lockedManualResolve}
+            onChargePersonal={lockedChargePersonal}
+            onBulkChargePersonal={lockedBulkChargePersonal}
+            onEdit={lockedEditToll}
+            emptyState={{ icon: CarFront, title: 'No personal-use tolls this week', description: 'Nothing to decide here.' }}
+            listTitle="Personal-use tolls"
+            listDescription=""
+          />
+        ),
+      },
+      {
+        id: 'needs-review',
+        title: 'Needs review',
+        description: 'No clear trip.',
+        itemCount: classified['needs-review'].length,
+        itemNoun: plural(classified['needs-review'].length, 'toll', 'tolls'),
+        todo: todo('needs-review'),
+        total: sumTolls(classified['needs-review']),
+        content: (
+          <TollBucketPanel
+            tolls={classified['needs-review']}
+            suggestions={suggestions}
+            allTrips={trips}
+            drivers={drivers}
+            unifiedPeriodView
+            onReconcile={lockedSmartReconcile}
+            onApprove={lockedApprove}
+            onReject={lockedReject}
+            onAcceptPersonal={lockedAcceptPersonal}
+            onFlag={lockedFlag}
+            onManualResolve={lockedManualResolve}
+            onEdit={lockedEditToll}
+            onBulkLinkReady={lockedAutoMatch}
+            emptyState={{ icon: HelpCircle, title: 'No tolls need review', description: 'Every toll has a clear answer.' }}
+            listTitle="Tolls to review"
+            listDescription=""
+          />
+        ),
+      },
+      {
+        id: 'dispute-refunds',
+        title: 'Dispute refunds',
+        description: 'Support refunds from the platform.',
+        itemCount: periodScopedDisputeRefunds.length,
+        itemNoun: plural(periodScopedDisputeRefunds.length, 'item', 'items'),
+        todo: todo('dispute-refunds'),
+        total:
+          Math.round(periodScopedDisputeRefunds.reduce((n, r) => n + Math.abs(Number(r.amount) || 0), 0) * 100) / 100,
+        credit: true,
+        content: (
+          <DisputeRefundsList
+            refunds={periodScopedDisputeRefunds}
+            onMatchComplete={lockedRefundMatch}
+            activePeriodStart={period.startDate}
+            activePeriodEnd={period.endDate}
+            periodShortfalls={periodDisputeShortfalls}
+          />
+        ),
+      },
+      {
+        id: 'unlinked-refunds',
+        title: 'Unlinked refunds',
+        description: 'A toll credit with no matching toll yet.',
+        itemCount: pUnclaimed.length,
+        itemNoun: plural(pUnclaimed.length, 'item', 'items'),
+        todo: todo('unlinked-refunds'),
+        total: Math.round(pUnclaimed.reduce((n, t) => n + Math.abs(Number(t.tollCharges) || 0), 0) * 100) / 100,
+        credit: true,
+        content: (
+          <UnclaimedRefundsList
+            trips={pUnclaimed}
+            suggestions={refundSuggestions}
+            shortfallSuggestions={shortfallSuggestions}
+            drivers={drivers}
+            onResolve={lockedResolveRefund}
+            onBulkResolve={lockedBulkResolve}
+            onApplyToShortfall={lockedApplyShortfall}
+          />
+        ),
+      },
+    ];
+    return (
+      <TollDeskSections
+        money={{ spend: tollSpend, paidBack: reimbursedByUber, charged: chargedToDrivers, fleetCost: netTollLoss }}
+        sections={sections}
+        driverCharges={[...chargesByDriver.entries()]
+          .map(([name, amount]) => ({ name, amount }))
+          .sort((a, b) => b.amount - a.amount)}
+        ledgerDifference={identityResidual ?? null}
+        sealBlockedReason={sealBlockedReason}
+        sealing={actionBusy}
+        busy={actionBusy}
+        onSeal={() => void lockedFinish()}
+        onRefresh={() => void lockedRefresh()}
+        summaryTarget={summaryTarget}
+        topSlot={
+          <>
+            {truncationMessage ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                {truncationMessage}
+              </div>
+            ) : null}
+            <RematchCandidatesQueue driverId={driverId} enabled={!isLoading} />
+          </>
+        }
+      />
+    );
+  })() : null;
+
   return (
     <TooltipProvider>
     <div className={`space-y-6 ${actionBusy ? 'select-none' : ''}`}>
+      {deskView ?? (<>
       {truncationMessage && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           {truncationMessage}
@@ -1590,6 +1856,7 @@ function ReconciliationWizardInner({
           </div>
         )}
       </div>
+      </>)}
 
       <Dialog open={!!pendingPersonalTx} onOpenChange={(o) => { if (!o) setPendingPersonalTx(null); }}>
         <DialogContent>

@@ -18,6 +18,17 @@ import { Hono, type Context } from "npm:hono@4.3.11";
 import { requireAuth, requirePermission, requireAnyPermission, type RbacUser } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
 import { safeErrorResponse } from "./safe_error.ts";
+import { getServiceClient } from "./service_client.ts";
+import { isLegacyCleanupWeek, logDirectApproverAction } from "./recon_week_change.ts";
+
+/** History row for an approver's direct action; never fails the action itself. */
+async function logDirectSafely(input: Parameters<typeof logDirectApproverAction>[0]): Promise<void> {
+  try {
+    await logDirectApproverAction(input);
+  } catch (e) {
+    console.warn("[week-close] history row failed", e instanceof Error ? e.message : e);
+  }
+}
 import { previewWeekClose, prepareWeekClose, reopenWeek, retryFreezeWeek, listClosedWeeks, listOpenWeeks, acknowledgeCashSourceMismatch, WeekCloseError } from "./week_close.ts";
 import { loadWorkflow, startWeekWorkflow } from "./recon_close_workflow.ts";
 import { sealFuelWeekViaHttp } from "./fuel_seal_http.ts";
@@ -162,7 +173,7 @@ app.post(`${BASE}/prepare`, requireAnyPermission("recon.prepare", "transactions.
 app.post(`${BASE}/sync`, requireAnyPermission("recon.prepare", "transactions.edit"), handleWeekSync);
 
 // ── POST /week-close/acknowledge-cash-source — accept statement Uber cash (M-1) ─
-app.post(`${BASE}/acknowledge-cash-source`, requireAnyPermission("recon.prepare", "transactions.edit"), async (c) => {
+app.post(`${BASE}/acknowledge-cash-source`, requireAnyPermission("recon.approve", "transactions.edit"), async (c) => {
   try {
     const org = requireOrg(c);
     if (typeof org !== "string") return org;
@@ -183,6 +194,10 @@ app.post(`${BASE}/acknowledge-cash-source`, requireAnyPermission("recon.prepare"
       user.userId,
       String(body.reason || ""),
     );
+    await logDirectSafely({
+      orgId: org, line: "rideshare", weekKey, actor: user.userId, kind: "cash_source_accepted",
+      reason: body.reason, payload: { driverId: String(body.driverId || "") },
+    });
     return c.json({ success: true, ...result });
   } catch (e) {
     if (e instanceof WeekCloseError) {
@@ -210,6 +225,11 @@ app.post(BASE, requireAnyPermission("recon.approve", "transactions.edit"), async
     if (!WEEK_RE.test(weekKey)) {
       return c.json({ error: "weekKey (YYYY-MM-DD) is required" }, 400);
     }
+    // WRA-32: a direct Close is an approver approving their own close — it needs a reason
+    // (same rule as the screen's "Approve it myself"). Approved requests do not come through here.
+    if (String(body.reason || "").trim().length < 8) {
+      return c.json({ error: "REASON_REQUIRED", message: "Enter a reason (at least 8 characters) to close the week yourself" }, 400);
+    }
     const override = String(body.earlierWeekOverrideReason || "").trim();
     if (override) {
       await kv.set(`week_close_override:${org}:${weekKey}`, {
@@ -220,6 +240,21 @@ app.post(BASE, requireAnyPermission("recon.approve", "transactions.edit"), async
     }
     const idempotencyKey = String(body.idempotencyKey || "").trim();
     const serviceLine = normalizeWeekCloseServiceLine(body.serviceLine);
+
+    // WRA-16: no close while the week calculator is paused — the numbers would be stale.
+    // (While units are pending, the close workflow already waits for them.)
+    {
+      const { data: status, error: statusErr } = await getServiceClient().rpc("recon_worker_status");
+      const paused = statusErr || !status || typeof status !== "object"
+        ? true
+        : Boolean((status as { emergencyOff?: boolean }).emergencyOff);
+      if (paused) {
+        return c.json({
+          error: "CALCULATOR_PAUSED",
+          message: "The week calculator is paused, so this week's numbers may be out of date. Close is off until it is running again.",
+        }, 409);
+      }
+    }
 
     // C-3: return stored outcome for a completed idempotency key.
     if (idempotencyKey) {
@@ -267,6 +302,10 @@ app.post(BASE, requireAnyPermission("recon.approve", "transactions.edit"), async
         serviceLine,
         kind: "close",
         actorId: user.userId,
+      });
+      await logDirectSafely({
+        orgId: org, line: serviceLine, weekKey, actor: user.userId, kind: "week_close_started",
+        reason: body.reason, payload: { workflowId: workflow.id },
       });
       if (workflow.state === "succeeded" && workflow.result) {
         if (idempotencyKey) {
@@ -358,6 +397,13 @@ app.post(`${BASE}/reopen`, requireAnyPermission("recon.approve", "transactions.e
     if (!reason) {
       return c.json({ error: "REASON_REQUIRED", message: "A reopen reason is required" }, 400);
     }
+    // §9 step 4 / done-test 4k: weeks closed by the legacy clean-up stay closed.
+    if (await isLegacyCleanupWeek(org, normalizeWeekCloseServiceLine(body.serviceLine), weekKey)) {
+      return c.json({
+        error: "LEGACY_CLOSED",
+        message: "This week was closed by the clean-up of old weeks and cannot be reopened.",
+      }, 409);
+    }
     const result = await reopenWeek(
       org,
       weekKey,
@@ -366,6 +412,10 @@ app.post(`${BASE}/reopen`, requireAnyPermission("recon.approve", "transactions.e
       body.acknowledgeSettlementRisk === true,
       normalizeWeekCloseServiceLine(body.serviceLine),
     );
+    await logDirectSafely({
+      orgId: org, line: normalizeWeekCloseServiceLine(body.serviceLine), weekKey, actor: user.userId,
+      kind: "week_reopened", reason,
+    });
     return c.json(result);
   } catch (e) {
     if (e instanceof WeekCloseError) {

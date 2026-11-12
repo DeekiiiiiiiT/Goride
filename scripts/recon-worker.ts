@@ -12,6 +12,7 @@ import {
   runReconWorkerTick,
 } from "../supabase/functions/_fleet-server/recon_worker.ts";
 import { RECON_WAKE_BUDGET_MS, wakeShouldReturn } from "../supabase/functions/_fleet-server/recon_worker_wake.ts";
+import { runAlertPass } from "../supabase/functions/_fleet-server/recon_alerts.ts";
 
 const qty = Number(Deno.env.get("RECON_WORKER_QTY") || 2);
 
@@ -55,8 +56,13 @@ if (!port) {
     if (req.method !== "POST" || url.pathname !== "/tick") {
       return new Response("not found", { status: 404 });
     }
-    const body = await req.json().catch(() => ({})) as { nightly?: boolean };
+    const body = await req.json().catch(() => ({})) as { nightly?: boolean; alertsOnly?: boolean };
     try {
+      // Rev 24 (WRA-31): while paused, the database wakes us alerts-only — raise, refresh and
+      // escalate alerts (in-app + SMS), calculate nothing.
+      if (body.alertsOnly === true) {
+        return Response.json({ alertsOnly: await runAlertPass() });
+      }
       const result = await runWake(body.nightly === true);
       return Response.json(result);
     } catch (e) {

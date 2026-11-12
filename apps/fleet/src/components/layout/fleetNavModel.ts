@@ -60,6 +60,8 @@ export type BuildFleetNavModelInput = {
   unattributedFuelCount?: number;
   /** Platform flag fleet_inventory_phase2_stock (fail-closed). */
   inventoryPhase2Enabled?: boolean;
+  /** Week Reconciliation switch-over (§9); off hides Week Reconciliation and keeps the old close path. */
+  reconV2Enabled?: boolean;
 };
 
 export type FleetNavDesk = {
@@ -141,7 +143,7 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
     canView('fuel-reconciliation') ||
     canView('toll-tags');
   const canSeeWeekReconciliation =
-    canView('fuel-reconciliation') || canView('toll-tags');
+    input.reconV2Enabled === true && (canView('fuel-reconciliation') || canView('toll-tags'));
   const canSeeFleetOps = hasSharedOps && (canSeeFuelDesk || canSeeTollDesk);
   const canSeeCouriersInDriverOps =
     hasRushDeliveryLine &&

@@ -2,6 +2,7 @@
  * fleet-toll — extracted toll HTTP surface (ADR-0021 F1).
  * Built exclusively via createFleetFunction (ADR-0020).
  */
+import { reconWeekVersionGuard } from "../../_fleet-server/recon_week_version_guard.ts";
 import { createFleetFunction } from "../../_shared/edgeKernel.ts";
 import tollApp from "../../_fleet-server/toll_controller.tsx";
 import tollPeriodApp from "../../_fleet-server/toll_period_controller.tsx";
@@ -15,6 +16,8 @@ const app = createFleetFunction({
   pathStyle: "slug",
   domainApp: tollApp,
   registerParentRoutes: (parent) => {
+    // WRA-27: opt-in week-version check (header x-recon-week) for Week Reconciliation changes.
+    parent.use("*", reconWeekVersionGuard);
     // Register before the period/inventory apps. Those apps require a user
     // login on every path, and a later route never runs once that gate answers.
     parent.post("/internal/seal-toll-week", async (c) => {

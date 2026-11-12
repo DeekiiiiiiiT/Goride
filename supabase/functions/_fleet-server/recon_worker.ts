@@ -22,7 +22,9 @@ import { hashDriverWeekFacts, hashVehicleWeekFacts } from "./recon_unit_hash.ts"
 import { nextAttemptStatus, plainComputeFailure } from "./recon_projection.ts";
 import { advanceOpenCloseWorkflows } from "./recon_close_workflow.ts";
 import { logReconPhase } from "./recon_phase_log.ts";
-import { writeDriverWeekBlockers, writeWeekLevelBlockers } from "./recon_week_blockers.ts";
+import { writeDriverWeekBlockers } from "./recon_week_blockers.ts";
+import { decideDeskPublish } from "./recon_publish_timing.ts";
+import { runAlertPass } from "./recon_alerts.ts";
 import { postDueFixedExpensesThroughToday } from "./fixed_expense_nightly.ts";
 import { lockSealedFinanceWeeks } from "./business_finance_week_read.ts";
 
@@ -342,6 +344,125 @@ async function publishDesk(orgId: string, line: "rideshare" | "rush_delivery", w
   await publishWeekDesk(orgId, line, weekKey, "recon-worker");
 }
 
+function parseMs(value: unknown): number | null {
+  if (value == null) return null;
+  const ms = Date.parse(String(value));
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * WRA-27 timing: publish only after 45 s with no new change for the week, and not
+ * while a user hold is active (capped at 15 minutes in a row). A deferred publish
+ * is queued again with a delay, so it is never dropped.
+ */
+async function publishDeskWhenQuiet(
+  orgId: string,
+  line: "rideshare" | "rush_delivery",
+  weekKey: string,
+): Promise<"published" | "deferred"> {
+  const { data: lastUnit, error: unitErr } = await recon()
+    .from("projection_state")
+    .select("updated_at")
+    .eq("organization_id", orgId)
+    .eq("week_key", weekKey)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (unitErr) throw new Error(`week units read failed: ${unitErr.message}`);
+  const { data: run, error: runErr } = await recon()
+    .from("week_runs")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("service_line", line)
+    .eq("week_key", weekKey)
+    .maybeSingle();
+  if (runErr) throw new Error(`week run read failed: ${runErr.message}`);
+  type Hold = { hold_until?: string | null; held_since?: string | null };
+  let hold: Hold | null = null;
+  if (run) {
+    const { data, error } = await recon()
+      .from("week_publish_holds")
+      .select("hold_until, held_since")
+      .eq("run_id", (run as { id: string }).id)
+      .maybeSingle();
+    if (error) throw new Error(`publish hold read failed: ${error.message}`);
+    hold = (data as Hold | null) ?? null;
+  }
+  const decision = decideDeskPublish({
+    nowMs: Date.now(),
+    lastChangeAtMs: parseMs((lastUnit as { updated_at?: string } | null)?.updated_at),
+    holdUntilMs: parseMs(hold?.hold_until),
+    heldSinceMs: parseMs(hold?.held_since),
+  });
+  if (!decision.publish) {
+    const { error } = await sb().rpc("recon_enqueue_week_desk", {
+      p_org: orgId,
+      p_line: line,
+      p_week: weekKey,
+      p_delay_seconds: decision.retryInSeconds,
+    });
+    if (error) throw new Error(`desk re-queue failed: ${error.message}`);
+    logReconPhase("desk_deferred", Date.now(), { orgId, weekKey, line, reason: decision.reason, retryInSeconds: decision.retryInSeconds });
+    return "deferred";
+  }
+  await publishDesk(orgId, line, weekKey);
+  return "published";
+}
+
+/** Only so often per warm calculator: creating weeks walks every week of every org. */
+const ENSURE_EVERY_MS = 10 * 60 * 1000;
+const DESK_REQUEST_EVERY_MS = 10 * 60 * 1000;
+let lastEnsureAt = 0;
+
+/**
+ * WRA-13 + WRA-39: the calculator creates every ended week (and adopts weeks the
+ * money record already closed) through recon.ensure_ended_week_runs, then queues a
+ * desk for any week that has never had one. Page reads never do this.
+ */
+export async function ensureWeekRunsAndDesks(nowMs = Date.now()): Promise<{ orgs: number; queued: number }> {
+  if (nowMs - lastEnsureAt < ENSURE_EVERY_MS) return { orgs: 0, queued: 0 };
+  lastEnsureAt = nowMs;
+
+  const orgIds = new Set<string>();
+  const { data: periodOrgs, error: periodErr } = await sb()
+    .from("driver_financial_periods")
+    .select("organization_id")
+    .limit(10000);
+  if (periodErr) throw new Error(`period orgs read failed: ${periodErr.message}`);
+  for (const row of periodOrgs ?? []) {
+    const id = String((row as { organization_id?: string }).organization_id || "");
+    if (id) orgIds.add(id);
+  }
+  for (const orgId of orgIds) {
+    const { error } = await recon().rpc("ensure_ended_week_runs", { p_org: orgId });
+    if (error) console.warn("[recon] ensure weeks failed", orgId, error.message);
+  }
+
+  const staleBefore = new Date(nowMs - DESK_REQUEST_EVERY_MS).toISOString();
+  const { data: missing, error: missingErr } = await recon()
+    .from("week_runs")
+    .select("id, organization_id, service_line, week_key, desk_requested_at")
+    .is("desk_snapshot", null)
+    .or(`desk_requested_at.is.null,desk_requested_at.lt.${staleBefore}`)
+    .limit(25);
+  if (missingErr) throw new Error(`missing desks read failed: ${missingErr.message}`);
+  let queued = 0;
+  for (const row of (missing ?? []) as Array<{ id: string; organization_id: string; service_line: string; week_key: string }>) {
+    const { error } = await sb().rpc("recon_enqueue_week_desk", {
+      p_org: row.organization_id,
+      p_line: row.service_line,
+      p_week: String(row.week_key).slice(0, 10),
+    });
+    if (error) {
+      console.warn("[recon] desk enqueue failed", error.message);
+      continue;
+    }
+    await recon().from("week_runs").update({ desk_requested_at: new Date(nowMs).toISOString() }).eq("id", row.id);
+    queued += 1;
+  }
+  return { orgs: orgIds.size, queued };
+}
+
 async function publishSettledDesks(touched: DeskTouch[]): Promise<void> {
   const seen = new Set<string>();
   for (const item of touched) {
@@ -360,9 +481,9 @@ async function publishSettledDesks(touched: DeskTouch[]): Promise<void> {
     }
     if ((count ?? 0) > 0) continue;
     try {
-      // Whole-week checks first, so the desk the steps read already lists them.
-      await writeWeekLevelBlockers(item.organizationId, item.weekKey, item.serviceLine, { withPnlTie: false });
-      await publishDesk(item.organizationId, item.serviceLine, item.weekKey);
+      // The desk publish works out the whole-week checks itself and saves them
+      // in the same transaction as the desk (recon.publish_week_desk).
+      await publishDeskWhenQuiet(item.organizationId, item.serviceLine, item.weekKey);
     } catch (e) {
       console.warn("[recon] desk publish failed", e instanceof Error ? e.message : e);
     }
@@ -411,8 +532,7 @@ export async function processReconQueueBatch(qty = 1): Promise<{ processed: numb
       const weekKey = String(message.weekKey || "").slice(0, 10);
       try {
         if (orgId && weekKey) {
-          await writeWeekLevelBlockers(orgId, weekKey, line, { withPnlTie: false });
-          await publishDesk(orgId, line, weekKey);
+          await publishDeskWhenQuiet(orgId, line, weekKey);
         }
         await sb().rpc("recon_archive_recompute", { p_msg_id: row.msg_id });
         processed += 1;
@@ -601,7 +721,18 @@ export async function finishNightlyIntegrity(
 }
 
 export async function runReconWorkerTick(qty = 1): Promise<{ processed: number; workflows: number }> {
+  try {
+    await ensureWeekRunsAndDesks();
+  } catch (e) {
+    console.warn("[recon] ensure weeks pass failed", e instanceof Error ? e.message : e);
+  }
   const processed = await processReconQueueBatch(qty);
+  try {
+    // WRA-31: raise / resolve alerts and send the SMS steps (throttled to every 10 minutes).
+    await runAlertPass();
+  } catch (e) {
+    console.warn("[recon] alert pass failed", e instanceof Error ? e.message : e);
+  }
   // Settle blockers and desks before a workflow reads them.
   await publishSettledDesks(processed.touched);
   const workflows = await advanceOpenCloseWorkflows(1);

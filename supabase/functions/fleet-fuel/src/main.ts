@@ -2,6 +2,7 @@
  * fleet-fuel — extracted fuel HTTP surface (strangler cutover from make-server-37f42386).
  * Built exclusively via createFleetFunction (ADR-0020).
  */
+import { reconWeekVersionGuard } from "../../_fleet-server/recon_week_version_guard.ts";
 import { createFleetFunction } from "../../_shared/edgeKernel.ts";
 import fuelApp from "../../_fleet-server/fuel_controller.tsx";
 import { sealFuelWeek } from "../../_fleet-server/fuel_week_seal.ts";
@@ -12,6 +13,8 @@ const app = createFleetFunction({
   pathStyle: "slug",
   domainApp: fuelApp,
   registerParentRoutes: (parent) => {
+    // WRA-27: opt-in week-version check (header x-recon-week) for Week Reconciliation changes.
+    parent.use("*", reconWeekVersionGuard);
     parent.post("/internal/seal-fuel-week", async (c) => {
       const body = await c.req.json();
       const organizationId = String(body.organizationId ?? "");

@@ -3,6 +3,7 @@ import { requireAuthHeaders } from '../utils/authHeaders';
 import { FuelCard, FuelEntry, FuelEntryCorrection, MileageAdjustment, FuelScenario, JaaProgram } from '../types/fuel';
 import { FinancialTransaction } from '../types/data';
 import { API_ENDPOINTS } from './apiConfig';
+import { noteReconWeekResponse, withReconWeekHeader } from './reconWeekContext';
 import { catalogGet, catalogPages } from '@roam/api-client';
 import { settlementService } from './settlementService';
 import { throwIfCatalogGateBlocked } from './api';
@@ -15,6 +16,17 @@ import {
 import { toast } from 'sonner';
 
 async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 500): Promise<Response> {
+  // WRA-27: inside Week Reconciliation, fuel changes carry the week version.
+  const week = withReconWeekHeader(url, options);
+  if (week.sent) {
+    const response = await fetchWithRetryInner(url, week.options, retries, backoff);
+    await noteReconWeekResponse(week.sent, response);
+    return response;
+  }
+  return fetchWithRetryInner(url, options, retries, backoff);
+}
+
+async function fetchWithRetryInner(url: string, options: RequestInit = {}, retries = 3, backoff = 500): Promise<Response> {
   try {
     const response = await fetch(url, options);
     if (response.status >= 500 && retries > 0) {
@@ -24,7 +36,7 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 
   } catch (err) {
     if (retries > 0) {
       await new Promise(resolve => setTimeout(resolve, backoff));
-      return fetchWithRetry(url, options, retries - 1, backoff * 2);
+      return fetchWithRetryInner(url, options, retries - 1, backoff * 2);
     }
     throw err;
   }

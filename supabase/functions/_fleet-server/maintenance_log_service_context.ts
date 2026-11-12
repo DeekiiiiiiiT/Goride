@@ -2,7 +2,7 @@ import type { Context } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { analyzeMaintenanceScheduleRow } from "../../../packages/finance-core/src/maintenanceOverdueDetails.ts";
 import { canonicalOdometerForVehicle } from "./canonical_vehicle_odometer.ts";
-import { loadOrgDueSoonSettings, loadTrustedOdometerMap } from "./maintenance_logging_helpers.ts";
+import { loadDiscountEnabled, loadOrgDueSoonSettings, loadTrustedOdometerMap } from "./maintenance_logging_helpers.ts";
 
 export type LogServicePackageCard = {
   templateId: string;
@@ -51,6 +51,7 @@ export async function buildLogServiceContext(args: {
   packages: LogServicePackageCard[];
   suggestedOperations: LogServiceSuggestedOp[];
   inspectionPointCount: number;
+  discountEnabled: boolean;
 }> {
   const { supabase, c, orgId, vehicleId } = args;
   const trustedOdo = await loadTrustedOdometerMap(orgId);
@@ -206,11 +207,14 @@ export async function buildLogServiceContext(args: {
     if (count != null && count > 0) inspectionPointCount = count;
   }
 
+  const discountEnabled = await loadDiscountEnabled(orgId);
+
   return {
     vehicleId,
     odometer: odo,
     packages: packages.slice(0, 12),
     suggestedOperations: suggestedOperations.slice(0, 8),
     inspectionPointCount,
+    discountEnabled,
   };
 }

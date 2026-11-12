@@ -49,6 +49,7 @@ export const SERVER_STEP_BY_BLOCKER: Record<string, RunStepId> = {
   PRIOR_CLOSE_HASH_CHANGED: 'close',
   PERIOD_REBUILD_FAILED: 'close',
   COVERAGE_WIDER_THAN_DATA: 'close',
+  EARLIER_WEEK_OPEN: 'close',
 };
 
 /**
@@ -91,6 +92,7 @@ export const CHECK_CLOSE_INVARIANT_BLOCK_CODES = [
   'SOURCE_WAITING_EXTERNAL',
   'STEP_STALE',
   'LINE_UNATTRIBUTED',
+  'EARLIER_WEEK_OPEN',
 ] as const;
 
 export function codesForStep(stepId: RunStepId): readonly string[] {

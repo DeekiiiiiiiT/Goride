@@ -6,6 +6,7 @@
 export type SourceKind = "upload" | "native" | "driver_submitted" | "external_dependency";
 export type CoverageMode = "daily_rows" | "statement_period" | "none";
 export type ReconServiceLine = "rideshare" | "rush_delivery" | "org";
+export type ManifestSourceLine = ReconServiceLine | "main_line";
 export type SourceRequirement = "required" | "optional" | "not_applicable";
 
 export type ReconSourceId =
@@ -43,7 +44,7 @@ export type OrgReconProfile = {
 
 export type ReconSourceDef = {
   id: ReconSourceId;
-  line: ReconServiceLine;
+  line: ManifestSourceLine;
   kind: SourceKind;
   label: string;
   coverage: CoverageMode;
@@ -93,7 +94,7 @@ export const RECON_SOURCES: readonly ReconSourceDef[] = [
   },
   {
     id: "toll_usage",
-    line: "org",
+    line: "main_line",
     kind: "upload",
     label: "Tag account usage statement",
     coverage: "statement_period",
@@ -102,7 +103,7 @@ export const RECON_SOURCES: readonly ReconSourceDef[] = [
   },
   {
     id: "toll_topup",
-    line: "org",
+    line: "main_line",
     kind: "upload",
     label: "Tag account top-ups",
     coverage: "statement_period",
@@ -223,6 +224,13 @@ export function computeSourceStatusFromCoverage(
   if (opts?.waitingExternal) return "waiting_external";
   if (requirement === "not_applicable") return "not_applicable";
 
+  const weekStatus = coverage.week;
+  if (weekStatus != null && weekStatus !== "") {
+    if (weekStatus === "zero_attested") return "attested_none";
+    if (weekStatus === "covered") return "received";
+    return requirement === "optional" ? "missing" : "missing";
+  }
+
   const days = Object.values(coverage);
   if (days.length === 0) {
     return requirement === "optional" ? "received" : "missing";
@@ -243,6 +251,30 @@ export function computeSourceStatusFromCoverage(
   return "missing";
 }
 
-export function sourcesForLine(line: "rideshare" | "rush_delivery"): ReconSourceDef[] {
-  return RECON_SOURCES.filter((s) => s.line === line || s.line === "org");
+export function orgMainLine(
+  profile: OrgReconProfile,
+): "rideshare" | "rush_delivery" | null {
+  const rideshareActive = profile.serviceLines.includes("rideshare");
+  const deliveryActive =
+    profile.serviceLines.includes("rush_delivery") && profile.rushDeliveryEnabled;
+  if (!rideshareActive && !deliveryActive) return null;
+  if (rideshareActive) return "rideshare";
+  return "rush_delivery";
+}
+
+export function resolveSourceLine(
+  def: ReconSourceDef,
+  runMainLine: "rideshare" | "rush_delivery",
+): Exclude<ManifestSourceLine, "main_line" | "org"> | "org" {
+  if (def.line === "main_line") return runMainLine;
+  return def.line;
+}
+
+export function sourcesForLine(
+  deskLine: "rideshare" | "rush_delivery",
+  runMainLine: "rideshare" | "rush_delivery",
+): ReconSourceDef[] {
+  return RECON_SOURCES.filter(
+    (s) => resolveSourceLine(s, runMainLine) === deskLine,
+  );
 }

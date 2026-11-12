@@ -130,6 +130,10 @@ export function FuelManagement(props: {
   hideReconLanding?: boolean;
   /** R2-16: Week Recon embed — lock fuel lens to this service line. */
   serviceLine?: 'rideshare' | 'rush_delivery';
+  /** Week Reconciliation step 5 (WRA-01): sections layout, Finalize fuel finishes the step. */
+  deskSections?: boolean;
+  summaryTarget?: HTMLElement | null;
+  onDeskFinalized?: () => void | Promise<void>;
 }) {
   return (
     <FuelReconBusyProvider>
@@ -148,6 +152,9 @@ function FuelManagementInner({
   initialWeekStart,
   hideReconLanding = false,
   serviceLine,
+  deskSections,
+  summaryTarget,
+  onDeskFinalized,
 }: {
   defaultTab?: string;
   onViewDriverLedger?: (driverId: string) => void;
@@ -156,6 +163,10 @@ function FuelManagementInner({
   initialWeekStart?: string;
   hideReconLanding?: boolean;
   serviceLine?: 'rideshare' | 'rush_delivery';
+  /** Week Reconciliation step 5 (WRA-01): sections layout, Finalize fuel finishes the step. */
+  deskSections?: boolean;
+  summaryTarget?: HTMLElement | null;
+  onDeskFinalized?: () => void | Promise<void>;
 }) {
   const queryClient = useQueryClient();
   const { can } = usePermissions();
@@ -2224,6 +2235,9 @@ function FuelManagementInner({
           autoCloseDualApprovalMode={autoCloseDualApprovalMode}
           initialWeekStart={initialWeekStart}
           hideLanding={hideReconLanding}
+          deskSections={deskSections}
+          summaryTarget={summaryTarget}
+          onDeskFinalized={onDeskFinalized}
           dispositions={flagDispositions}
           onOpenIntegrityStopToStop={({ weekStart, vehicleId }) => {
             setFlagsWeekStart(weekStart);

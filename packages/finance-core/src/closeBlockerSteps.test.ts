@@ -59,3 +59,11 @@ describe('close blocker step map (R10-02)', () => {
     ).toBe(1);
   });
 });
+
+describe('WRA-40: close weeks in order', () => {
+  it('maps EARLIER_WEEK_OPEN to the Close step and treats it as blocking', () => {
+    expect(serverStepForBlockerCode('EARLIER_WEEK_OPEN')).toBe('close');
+    expect(CHECK_CLOSE_INVARIANT_BLOCK_CODES).toContain('EARLIER_WEEK_OPEN');
+    expect(countBlockersForStep('close', [{ code: 'EARLIER_WEEK_OPEN', severity: 'block' }])).toBe(1);
+  });
+});

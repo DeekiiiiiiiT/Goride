@@ -16,3 +16,14 @@ export function wakeShouldReturn(input: {
   if (input.elapsedMs >= budget) return true;
   return input.processed === 0 && input.workflows === 0;
 }
+
+/**
+ * Rev 24: true when a close workflow's state, step or message changed in this pass.
+ * A close that is only waiting is not work (see advanceOpenCloseWorkflows).
+ */
+export function workflowMoved(
+  before: { state: string; step: string; error?: string | null },
+  after: { state: string; step: string; error?: string | null },
+): boolean {
+  return before.state !== after.state || before.step !== after.step || (before.error ?? null) !== (after.error ?? null);
+}

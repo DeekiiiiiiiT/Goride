@@ -40,4 +40,25 @@ describe("service history grouping", () => {
     expect(groupJobsPreview(["A", "B"])).toBe("A, B");
     expect(groupJobsPreview(["A", "B", "C", "D"])).toBe("A, B + 2 more");
   });
+
+  it("applies discount_amount to group total and exposes discountAmount", () => {
+    const groups = groupServiceHistoryRows([
+      row("2026-11-11", "TEST01", "Job A", 1000, { discount_amount: 1000 }),
+      row("2026-11-11", "TEST01", "Job B", 600, { discount_amount: 1000 }),
+      row("2026-11-11", "TEST01", "Job C", 8000, { discount_amount: 1000 }),
+      row("2026-11-11", "TEST01", "Job D", 8000, { discount_amount: 1000 }),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].discountAmount).toBe(1000);
+    expect(groups[0].total).toBe(16_600);
+  });
+
+  it("leaves total unchanged when no discount", () => {
+    const groups = groupServiceHistoryRows([
+      row("2026-08-22", "5179KZ", "Wheel Alignment", 3000),
+      row("2026-08-22", "5179KZ", "Wheel Balancing", 4000),
+    ]);
+    expect(groups[0].discountAmount).toBe(0);
+    expect(groups[0].total).toBe(7000);
+  });
 });

@@ -6,6 +6,7 @@ import {
   computeSourceStatusFromCoverage,
   resolveSourceRequirements,
   sourcesForLine,
+  orgMainLine,
   weekDayKeys,
   RECON_SOURCES,
   type OrgReconProfile,
@@ -193,16 +194,21 @@ export async function loadWeekCloseReconContext(
   const profile = await loadOrgReconProfile(orgId);
   const requirements = resolveSourceRequirements(profile, week);
   const reqById = Object.fromEntries(requirements.map((r) => [r.sourceId, r.requirement]));
-  const defs = sourcesForLine(serviceLine);
-
   const { data: runRow } = await sb()
     .schema("recon")
     .from("week_runs")
-    .select("id, state")
+    .select("id, state, main_line")
     .eq("organization_id", orgId)
     .eq("service_line", serviceLine)
     .eq("week_key", week)
     .maybeSingle();
+
+  const runMainLine = (
+    (runRow as { main_line?: string } | null)?.main_line
+    ?? orgMainLine(profile)
+    ?? "rideshare"
+  ) as WeekCloseServiceLine;
+  const defs = sourcesForLine(serviceLine, runMainLine);
 
   let runSourcesById = new Map<
     string,

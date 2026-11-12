@@ -424,6 +424,28 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
                 );
                         })
                       : null}
+                    {open && g.discountAmount > 0 ? (
+                      <>
+                        <tr className="bg-surface-container-lowest" data-testid="service-history-discount-row">
+                          <td className="py-3 pl-14 pr-4 whitespace-nowrap text-stitch-secondary text-xs" colSpan={5}>
+                            Discount
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap text-right font-mono font-semibold" colSpan={3}>
+                            −{g.currency === "JMD" ? "JMD" : g.currency} {g.discountAmount.toLocaleString()}
+                          </td>
+                          <td className="py-3 px-4" />
+                        </tr>
+                        <tr className="bg-surface-container-low/80" data-testid="service-history-net-total-row">
+                          <td className="py-3 pl-14 pr-4 whitespace-nowrap text-sm font-semibold text-on-surface" colSpan={5}>
+                            Total
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap text-right font-mono font-semibold text-base" colSpan={3}>
+                            {formatMoney(g.currency, g.total)}
+                          </td>
+                          <td className="py-3 px-4" />
+                        </tr>
+                      </>
+                    ) : null}
                   </React.Fragment>
                 );
               })}
@@ -435,7 +457,7 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
       {total > 50 ? (
         <div className="p-4 flex items-center justify-between border-t border-surface-container text-sm">
           <span className="text-stitch-secondary font-mono text-[11px]">
-            Page {page} · {total} lines
+            Page {page} · {total} services
           </span>
           <div className="flex gap-2">
             <Button type="button" variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>

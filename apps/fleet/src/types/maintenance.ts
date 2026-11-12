@@ -343,6 +343,30 @@ export function sumMaintenanceLogLines(lines: MaintenanceLogLine[] | undefined |
   return Math.round(total * 100) / 100;
 }
 
+/** Parse a discount amount (≥ 0, 2 dp); null if invalid or negative. */
+export function parseMaintenanceDiscount(input: string | number): number | null {
+  if (input === "" || input == null) return 0;
+  const n = typeof input === "number" ? input : Number(String(input).trim().replace(/,/g, ""));
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 100) / 100;
+}
+
+export function maintenanceServiceNetTotal(
+  lines: MaintenanceLogLine[] | undefined | null,
+  discount: number,
+): number {
+  const subtotal = sumMaintenanceLogLines(lines);
+  const net = subtotal - (Number.isFinite(discount) ? discount : 0);
+  return Math.round(Math.max(0, net) * 100) / 100;
+}
+
+export function maintenanceDiscountTooLarge(
+  lines: MaintenanceLogLine[] | undefined | null,
+  discount: number,
+): boolean {
+  return discount > sumMaintenanceLogLines(lines);
+}
+
 export function formatMaintenanceLineLabel(line: MaintenanceLogLine): string {
   const parts = [
     line.systemName,

@@ -28,7 +28,8 @@ const driverBaseUrl = process.env.DRIVER_BASE_URL?.trim();
 const reuseLocalPreviewServer = !process.env.CI;
 const previewWebServers = [
   // Inventory done-tests only build Fleet + Driver; no inventory spec opens Admin.
-  ...(!adminBaseUrl && process.env.INVENTORY_E2E !== '1'
+  // Week Reconciliation done-tests only build Fleet too (WEEK_RECON_E2E=1).
+  ...(!adminBaseUrl && process.env.INVENTORY_E2E !== '1' && process.env.WEEK_RECON_E2E !== '1'
     ? [{
         // CI has no apps/admin/.env.testcopy (gitignored), so dev:testcopy would show the
         // setup screen. CI builds admin with VITE_SUPABASE_URL=https://example.supabase.co
@@ -89,7 +90,7 @@ export default defineConfig({
     },
     {
       name: 'fleet',
-      testMatch: /fleet-rush-integration\.spec\.ts|fuel-recon-wizard\.spec\.ts|fuel-recon-shadow-soak\.spec\.ts|driver-settlements-desk\.spec\.ts|driver-detail-smoke\.spec\.ts|fleet-find-parts-visual\.spec\.ts|parts-import-stitch\.spec\.ts|parts-auto-match-stitch\.spec\.ts|fleet-maintenance-master\.spec\.ts|fleet-vehicle-documents-overlay\.spec\.ts/,
+      testMatch: /fleet-rush-integration\.spec\.ts|fuel-recon-wizard\.spec\.ts|fuel-recon-shadow-soak\.spec\.ts|driver-settlements-desk\.spec\.ts|driver-detail-smoke\.spec\.ts|fleet-find-parts-visual\.spec\.ts|parts-import-stitch\.spec\.ts|parts-auto-match-stitch\.spec\.ts|fleet-maintenance-master\.spec\.ts|fleet-maintenance-log-service\.spec\.ts|fleet-vehicle-documents-overlay\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         baseURL: fleetBaseUrl || 'http://127.0.0.1:5181',
@@ -98,6 +99,16 @@ export default defineConfig({
     {
       name: 'inventory',
       testMatch: /inventory-done-test-.+\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1456, height: 900 },
+        baseURL: fleetBaseUrl || 'http://127.0.0.1:5181',
+      },
+    },
+    {
+      name: 'week-recon',
+      testMatch: /week-recon-done-test-.+\.spec\.ts/,
       fullyParallel: false,
       use: {
         ...devices['Desktop Chrome'],

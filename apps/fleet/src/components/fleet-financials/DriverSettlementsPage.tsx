@@ -78,7 +78,7 @@ import {
   payDriverWeek,
 } from '../../hooks/useCashCollection';
 import { useServiceLineScopeParam } from '../../hooks/useServiceLineScopeParam';
-import { useReconWizardEnabled } from '../../hooks/useReconWizardFlag';
+import { useReconV2 } from '../../hooks/useReconV2';
 import {
   RecordPayoutModal,
   type RecordPayoutSavePayload,
@@ -422,7 +422,8 @@ export function DriverSettlementsPage({
   const qc = useQueryClient();
   const settlementCmds = useSettlementCommands();
   const { scope, serviceLineParam } = useServiceLineScopeParam();
-  const wizardEnabled = useReconWizardEnabled();
+  /** recon_v2 on: Close Week happens in Week Reconciliation (audit §9). Off: the old Close Week tab. */
+  const wizardEnabled = useReconV2() === true;
   const thisMonday = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
   const [hubTab, setHubTab] = useState<SettlementsHubTab>(initialHubTab || 'cash');
   const [closeWeekKey, setCloseWeekKey] = useState<string | undefined>(

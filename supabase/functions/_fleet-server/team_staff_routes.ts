@@ -21,6 +21,7 @@ import {
   revokeStaffInvite,
   sendOwnershipNotice,
   sendStaffResetEmail,
+  setStaffAlertPhone,
   setStaffStatus,
   type AuditCtx,
 } from "./team_staff_service.ts";
@@ -258,6 +259,26 @@ export function registerTeamStaffRoutes(app: Hono, deps: Deps): void {
         audit: auditOf(c),
       });
       return c.json({ success: true, message: "Password reset email sent. You will not see the link." });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  // WRA-31: mobile number for Week Reconciliation SMS alerts (empty clears it).
+  app.put(`${PREFIX}/team/staff/:userId/alert-phone`, auth, perm("users.edit_role"), async (c) => {
+    try {
+      const user = userOf(c);
+      const id = await orgId(deps.supabase, c);
+      if (!user || !id) return c.json({ error: "Organization context required" }, 400);
+      const body = (await c.req.json().catch(() => ({}))) as { phone?: string };
+      const result = await setStaffAlertPhone(deps.supabase, {
+        organizationId: id,
+        actorId: user.userId,
+        targetId: c.req.param("userId"),
+        phone: String(body.phone ?? ""),
+        audit: auditOf(c),
+      });
+      return c.json({ success: true, ...result });
     } catch (e) {
       return fail(c, e);
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateRun } from './evaluateRun.ts';
+import { evaluateRun, hiddenLaneSteps } from './evaluateRun.ts';
 
 describe('evaluateRun', () => {
   it('locks tolls while toll usage source is missing', () => {
@@ -49,9 +49,9 @@ describe('evaluateRun', () => {
     expect(result.nextAction.label).toMatch(/Re-review/);
   });
 
-  it('marks fuel complete when nothing is left to do, without a continue click', () => {
+  it('WRA-17: fuel with nothing left to do is ready, not complete, until it is completed', () => {
     const zero = { actionable: 0, informational: 0 };
-    const result = evaluateRun({
+    const base = {
       sources: [],
       stepCounts: {
         sources: zero,
@@ -60,6 +60,9 @@ describe('evaluateRun', () => {
         tag_account: zero,
         fuel: zero,
       },
+    };
+    const before = evaluateRun({
+      ...base,
       completedSteps: [
         { stepId: 'sources', inputsHashAtComplete: '' },
         { stepId: 'attribution', inputsHashAtComplete: '' },
@@ -67,7 +70,65 @@ describe('evaluateRun', () => {
         { stepId: 'tag_account', inputsHashAtComplete: '' },
       ],
     });
-    expect(result.steps.find((s) => s.id === 'fuel')?.status).toBe('complete');
+    expect(before.steps.find((s) => s.id === 'fuel')?.status).toBe('ready');
+    expect(before.steps.find((s) => s.id === 'trips_earnings')?.status).toBe('locked');
+
+    const after = evaluateRun({
+      ...base,
+      completedSteps: [
+        { stepId: 'sources', inputsHashAtComplete: '' },
+        { stepId: 'attribution', inputsHashAtComplete: '' },
+        { stepId: 'tolls', inputsHashAtComplete: '' },
+        { stepId: 'tag_account', inputsHashAtComplete: '' },
+        { stepId: 'fuel', inputsHashAtComplete: '' },
+      ],
+    });
+    expect(after.steps.find((s) => s.id === 'fuel')?.status).toBe('complete');
+  });
+
+  it('WRA-19: hidden lane steps show as complete and never lock later steps', () => {
+    const zero = { actionable: 0, informational: 0 };
+    const result = evaluateRun({
+      sources: [{ id: 'rush_deliveries', status: 'received' }],
+      stepCounts: {
+        sources: zero,
+        attribution: zero,
+        // A probe can still count work on a step that does not apply; hidden wins.
+        tolls: { actionable: 1, informational: 0 },
+        tag_account: zero,
+        fuel: { actionable: 1, informational: 0 },
+        trips_earnings: zero,
+      },
+      completedSteps: [
+        { stepId: 'sources', inputsHashAtComplete: '' },
+        { stepId: 'attribution', inputsHashAtComplete: '' },
+      ],
+      hiddenSteps: ['tolls', 'tag_account', 'fuel'],
+    });
+    for (const id of ['tolls', 'tag_account', 'fuel']) {
+      const step = result.steps.find((s) => s.id === id);
+      expect(step?.hidden, id).toBe(true);
+      expect(step?.status, id).toBe('complete');
+      expect(step?.actionable, id).toBe(0);
+    }
+    expect(result.steps.find((s) => s.id === 'trips_earnings')?.status).toBe('ready');
+  });
+
+  it('WRA-19: hiddenLaneSteps hides only lane steps with no applicable feeding source and no blockers', () => {
+    // Delivery: only Rush sources apply → tolls, tag account and fuel are hidden.
+    expect(hiddenLaneSteps({ applicableSourceIds: ['rush_deliveries', 'cod_remittance'], blockerStepIds: [] }))
+      .toEqual(['tolls', 'tag_account', 'fuel']);
+    // Rideshare main line with toll tags and fuel: nothing hidden.
+    expect(hiddenLaneSteps({
+      applicableSourceIds: ['uber_bundle', 'toll_usage', 'toll_topup', 'fuel_card_roam', 'cash_fuel'],
+      blockerStepIds: [],
+    })).toEqual([]);
+    // Rideshare without toll tags: Tag account hidden, Tolls still fed by Uber.
+    expect(hiddenLaneSteps({ applicableSourceIds: ['uber_bundle', 'cash_fuel'], blockerStepIds: [] }))
+      .toEqual(['tag_account']);
+    // A stored blocker on a step keeps it visible.
+    expect(hiddenLaneSteps({ applicableSourceIds: ['rush_deliveries'], blockerStepIds: ['fuel'] }))
+      .toEqual(['tolls', 'tag_account']);
   });
 
   it('keeps fuel open while it still has work', () => {

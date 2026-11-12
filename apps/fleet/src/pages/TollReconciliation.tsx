@@ -11,6 +11,8 @@ export function TollReconciliation({
   hideLanding = false,
   serviceLine,
   onPeriodFinished,
+  deskSections,
+  summaryTarget,
 }: {
   focusVehicleId?: string;
   focusDriverId?: string;
@@ -24,6 +26,9 @@ export function TollReconciliation({
   serviceLine?: 'rideshare' | 'rush_delivery';
   /** Week Recon hub: advance left-rail after tolls Finish. */
   onPeriodFinished?: () => void | Promise<void>;
+  /** Week Reconciliation step 3: sections layout, Seal tolls finishes (WRA-01). */
+  deskSections?: boolean;
+  summaryTarget?: HTMLElement | null;
 } = {}) {
   return (
     <div className={cn(embedded ? undefined : 'p-6')}>
@@ -35,6 +40,8 @@ export function TollReconciliation({
         hideLanding={hideLanding}
         serviceLine={serviceLine}
         onPeriodFinished={onPeriodFinished}
+        deskSections={deskSections}
+        summaryTarget={summaryTarget}
       />
     </div>
   );

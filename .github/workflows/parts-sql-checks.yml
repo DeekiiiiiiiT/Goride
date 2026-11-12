@@ -23,6 +23,8 @@ on:
       - 'supabase/tests/20261106131300_mm_go_live_order_fixture.sql'
       - 'supabase/tests/engine_sections_checks.sql'
       - 'supabase/tests/engine_sections_used_ids_test.sql'
+      - 'supabase/tests/maintenance_discount_checks.sql'
+      - 'supabase/tests/maintenance_discount_db_test.sql'
       - 'supabase/tests/toll_v2_schema_checks.sql'
       - 'supabase/tests/toll_v2_postings.sql'
       - 'supabase/tests/toll_v2_commands.sql'
@@ -50,6 +52,8 @@ on:
       - 'supabase/tests/20261106131300_mm_go_live_order_fixture.sql'
       - 'supabase/tests/engine_sections_checks.sql'
       - 'supabase/tests/engine_sections_used_ids_test.sql'
+      - 'supabase/tests/maintenance_discount_checks.sql'
+      - 'supabase/tests/maintenance_discount_db_test.sql'
       - 'supabase/tests/toll_v2_schema_checks.sql'
       - 'supabase/tests/toll_v2_postings.sql'
       - 'supabase/tests/toll_v2_commands.sql'
@@ -132,6 +136,10 @@ jobs:
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/engine_sections_checks.sql
           docker cp supabase/tests/engine_sections_used_ids_test.sql "$db_container":/tmp/engine_sections_used_ids_test.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/engine_sections_used_ids_test.sql
+          docker cp supabase/tests/maintenance_discount_checks.sql "$db_container":/tmp/maintenance_discount_checks.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/maintenance_discount_checks.sql
+          docker cp supabase/tests/maintenance_discount_db_test.sql "$db_container":/tmp/maintenance_discount_db_test.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/maintenance_discount_db_test.sql
           docker cp supabase/tests/toll_v2_schema_checks.sql "$db_container":/tmp/toll_v2_schema_checks.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_v2_schema_checks.sql
           docker cp supabase/tests/toll_v2_postings.sql "$db_container":/tmp/toll_v2_postings.sql

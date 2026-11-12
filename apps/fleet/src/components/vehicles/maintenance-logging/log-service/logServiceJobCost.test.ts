@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultActionForCategory, isServiceJob, serviceJobCost } from "./logServiceJobCost";
+import { defaultActionForCategory, hiddenLineFieldsFor, isServiceJob, serviceJobCost, sidePositionsFor } from "./logServiceJobCost";
 
 describe("service job cost", () => {
   it("total cost is used as-is", () => {
@@ -39,5 +39,30 @@ describe("service job detection + hidden action", () => {
   it("falls back only when the job has no default action", () => {
     expect(defaultActionForCategory({ is_part: true, code: "x" })).toBe("replace");
     expect(defaultActionForCategory({ is_part: false, code: "y" })).toBe("other");
+  });
+});
+
+describe("stabilizer links: Left / Right, short form", () => {
+  it("front link picks LF/RF, rear link picks LR/RR", () => {
+    expect(sidePositionsFor({ code: "front_stabilizer_link" })?.map((o) => o.value)).toEqual(["LF", "RF"]);
+    expect(sidePositionsFor({ code: "rear_stabilizer_link" })?.map((o) => o.value)).toEqual(["LR", "RR"]);
+    expect(sidePositionsFor({ code: "front_stabilizer_link" })?.map((o) => o.label)).toEqual(["Left", "Right"]);
+    expect(sidePositionsFor({ code: "front_stabilizer_bar" })).toBeNull();
+  });
+
+  it("hides labour hours, labour rate, brand and part number on both links", () => {
+    for (const code of ["front_stabilizer_link", "rear_stabilizer_link"]) {
+      expect(hiddenLineFieldsFor({ code })).toEqual(["labor_hours", "labor_rate", "brand", "part_number"]);
+    }
+    expect(hiddenLineFieldsFor({ code: "front_stabilizer_bar" })).toEqual([]);
+  });
+});
+
+describe("engine service parts: short form", () => {
+  it("hides labour hours, labour rate, brand and part number on oil change, oil filter and air filter", () => {
+    for (const code of ["oil", "oil_filter", "air_filter", "brakes"]) {
+      expect(hiddenLineFieldsFor({ code })).toEqual(["labor_hours", "labor_rate", "brand", "part_number"]);
+    }
+    expect(hiddenLineFieldsFor({ code: "spark_plugs" })).toEqual([]);
   });
 });

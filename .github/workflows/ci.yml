@@ -410,8 +410,34 @@ jobs:
           supabase/functions/_fleet-server/recon_worker_switch.test.ts
           supabase/functions/_fleet-server/recon_week_blocker_rows.test.ts
 
+      - name: Deno test Week Reconciliation one truth (Round 2a)
+        run: >
+          deno test --allow-read
+          supabase/functions/_fleet-server/recon_desk_shape.test.ts
+          supabase/functions/_fleet-server/recon_publish_timing.test.ts
+          supabase/functions/_fleet-server/recon_reads_are_reads.test.ts
+          supabase/functions/_fleet-server/recon_data_checks_codemap.test.ts
+          supabase/functions/_fleet-server/recon_week_change.test.ts
+          supabase/functions/_fleet-server/recon_approval_state.test.ts
+          supabase/functions/_fleet-server/recon_approvals.test.ts
+          supabase/functions/_fleet-server/recon_alert_rules.test.ts
+          supabase/functions/_fleet-server/recon_permissions.test.ts
+          supabase/functions/_fleet-server/recon_alerts.test.ts
+          supabase/functions/_fleet-server/recon_desk_reads.test.ts
+          supabase/functions/_fleet-server/team_staff_alert_phone.test.ts
+          supabase/functions/_fleet-server/recon_activity.test.ts
+          supabase/functions/_fleet-server/recon_close_workflow_wake.test.ts
+          supabase/functions/_fleet-server/recon_alerts_while_paused.test.ts
+          supabase/functions/_fleet-server/upload_routes_company.test.ts
+
       - name: Page reads do not run week engines
         run: node scripts/assert-no-engine-on-edge-read.mjs
+
+      - name: Week Reconciliation screens read the saved desk
+        run: node scripts/assert-recon-desk-reads-saved.mjs
+
+      - name: Week Reconciliation week-version check is in the lane bundles
+        run: node scripts/assert-recon-week-guard-bundled.mjs
 
       - name: Typecheck fleet Rush spine
         env:

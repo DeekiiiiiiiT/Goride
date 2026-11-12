@@ -273,6 +273,8 @@ export interface ImportBatch {
   paymentLedgerLineCount?: number;
   paymentLedgerLinesImported?: number;
   paymentLedgerLinesSkipped?: number;
+  /** WRA-21: per-driver hours from the week's Uber driver_activity.csv (Week Reconciliation step 6). */
+  driverActivity?: Array<{ driverId: string; name: string; tripsCompleted: number; onlineHours: number; onTripHours: number }>;
   /** Recon P0: manifest source id (uber_bundle, toll_usage, …). */
   sourceId?: string;
   serviceLine?: 'rideshare' | 'rush_delivery' | null;

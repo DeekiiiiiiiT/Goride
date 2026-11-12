@@ -23,6 +23,8 @@ export type StaffSeat = {
   lastActive: string | null;
   isOwner: boolean;
   inviteId: string | null;
+  /** Mobile number for Week Reconciliation SMS alerts (auth phone), shown as +1876…. */
+  alertPhone?: string | null;
 };
 
 const STAFF_ROLE_NAMES = [
@@ -467,6 +469,7 @@ export async function listStaff(
       role: ownerId === userId ? "fleet_owner" : roleName,
       status: row.status === "suspended" ? "suspended" : "active",
       lastActive: user?.last_sign_in_at || null,
+      alertPhone: user?.phone ? `+${String(user.phone).replace(/^\+/, "")}` : null,
       isOwner: ownerId === userId,
       inviteId: null,
     });
@@ -482,6 +485,7 @@ export async function listStaff(
       role: "fleet_owner",
       status: "active",
       lastActive: owner?.user?.last_sign_in_at || null,
+      alertPhone: owner?.user?.phone ? `+${String(owner.user.phone).replace(/^\+/, "")}` : null,
       isOwner: true,
       inviteId: null,
     });
@@ -495,12 +499,8 @@ export async function listStaff(
     .is("accepted_at", null)
     .is("revoked_at", null);
 
-  const pending: StaffSeat[] = (invites || []).map((row: {
-    id: string;
-    email: string;
-    metadata?: { name?: string };
-    roles?: { name?: string };
-  }) => ({
+  type InviteRow = { id: string; email: string; metadata?: { name?: string }; roles?: { name?: string } };
+  const pending: StaffSeat[] = ((invites || []) as unknown as InviteRow[]).map((row) => ({
     id: `invite:${row.id}`,
     name: row.metadata?.name || row.email,
     email: row.email,
@@ -526,9 +526,10 @@ async function seatFor(
     .eq("scope_type", "organization")
     .eq("scope_id", organizationId);
   if (error) throw new Error(error.message);
-  const row = (data || []).find((r: { roles?: { name?: string } }) =>
+  type SeatRow = { id: string; status: string; roles?: { name?: string } };
+  const row = ((data || []) as unknown as SeatRow[]).find((r) =>
     isTeamRole(String(r.roles?.name || ""))
-  ) as { id: string; status: string; roles?: { name?: string } } | undefined;
+  );
   if (!row) return null;
   return { id: row.id, role: String(row.roles?.name || ""), status: row.status };
 }
@@ -611,6 +612,52 @@ export async function setStaffStatus(
     metadata: { organizationId: input.organizationId },
     ...input.audit,
   });
+}
+
+/**
+ * WRA-31: a mobile number for Week Reconciliation SMS alerts, saved on the person's
+ * sign-in account (auth phone). Jamaican 7- or 10-digit numbers get +1 876; others
+ * must be in +country form. Empty clears it. Returns null when the number is not valid.
+ */
+export function normalizeAlertPhone(raw: string): string | null {
+  const trimmed = String(raw ?? "").trim();
+  if (!trimmed) return "";
+  const digits = trimmed.replace(/[^0-9]/g, "");
+  if (trimmed.startsWith("+")) return digits.length >= 8 && digits.length <= 15 ? `+${digits}` : null;
+  if (digits.length === 7) return `+1876${digits}`;
+  if (digits.length === 10 && /^(876|658)/.test(digits)) return `+1${digits}`;
+  if (digits.length === 11 && /^1(876|658)/.test(digits)) return `+${digits}`;
+  return null;
+}
+
+export async function setStaffAlertPhone(
+  supabase: SupabaseClient,
+  input: { organizationId: string; actorId: string; targetId: string; phone: string; audit: AuditCtx },
+): Promise<{ alertPhone: string | null }> {
+  const phone = normalizeAlertPhone(input.phone);
+  if (phone === null) {
+    const err = new Error("Enter a mobile number like 876 555 1234, or a +country number.");
+    (err as Error & { status?: number }).status = 400;
+    throw err;
+  }
+  const seat = await seatFor(supabase, input.organizationId, input.targetId);
+  const { data: org } = await supabase.from("organizations").select("owner_id").eq("id", input.organizationId).maybeSingle();
+  const isOwner = String((org as { owner_id?: string } | null)?.owner_id || "") === input.targetId;
+  if (!seat && !isOwner) {
+    const err = new Error("Only staff in your company can have an alert number");
+    (err as Error & { status?: number }).status = 403;
+    throw err;
+  }
+  const { error } = await supabase.auth.admin.updateUserById(input.targetId, { phone: phone.replace(/^\+/, "") });
+  if (error) throw new Error(error.message);
+  await audit({
+    actorUserId: input.actorId,
+    targetUserId: input.targetId,
+    action: phone ? "team.staff.alert_phone_set" : "team.staff.alert_phone_cleared",
+    metadata: { organizationId: input.organizationId },
+    ...input.audit,
+  });
+  return { alertPhone: phone || null };
 }
 
 export async function removeStaffSeat(

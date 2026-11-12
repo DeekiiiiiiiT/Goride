@@ -21,6 +21,8 @@ export type LogServiceDraftPayload = {
   selectedCategoryIds: string[];
   idempotencyKey: string;
   anomalyAcknowledged: boolean;
+  discountAmount?: number;
+  discountRowOpen?: boolean;
 };
 
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;

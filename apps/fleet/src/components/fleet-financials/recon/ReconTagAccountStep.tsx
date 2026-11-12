@@ -7,11 +7,25 @@ import {
   fetchTagAccountRollForward,
   isReconUnavailable,
   postRunEvent,
+  ReconApiError,
 } from '../../../services/reconApi';
+import { RECON_WEEK_CHANGED_EVENT } from '../../../services/reconWeekContext';
+import { toast } from 'sonner';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { cn } from '../../ui/utils';
+
+/** Done-test 9b: a refused save says so. 409 = someone else changed (or closed) the week. */
+export function reportTagAccountSaveError(err: unknown) {
+  if (err instanceof ReconApiError && err.status === 409) {
+    window.dispatchEvent(
+      new CustomEvent(RECON_WEEK_CHANGED_EVENT, { detail: { code: /closed/i.test(err.message) ? 'WEEK_CLOSED' : 'WEEK_CHANGED' } }),
+    );
+    return;
+  }
+  toast.error(err instanceof Error && err.message ? err.message : 'Could not save the tag account. Try again.');
+}
 
 function fmtMajor(minor: number): string {
   return fromMoneyMinor(minor as import('@roam/finance-core').MoneyMinor).toLocaleString(undefined, {
@@ -74,6 +88,8 @@ export function ReconTagAccountStep({
       });
       await rollQuery.refetch();
       onRefresh();
+    } catch (err) {
+      reportTagAccountSaveError(err);
     } finally {
       setBusy(false);
     }
@@ -93,6 +109,8 @@ export function ReconTagAccountStep({
         },
       });
       onRefresh();
+    } catch (err) {
+      reportTagAccountSaveError(err);
     } finally {
       setBusy(false);
     }

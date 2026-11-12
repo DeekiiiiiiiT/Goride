@@ -114,6 +114,7 @@ import { computeImportBundleFingerprint } from '../../utils/importBundleFingerpr
 import { validateMergedImportPreview } from '../../utils/importValidation';
 import { buildCanonicalImportEvents, tripDateBounds } from '../../utils/buildCanonicalImportEvents';
 import { registerUberBundleWithRecon } from '../../utils/commitUberImportFromFiles';
+import { uberDriverActivityFromFiles } from '../../utils/uberDriverActivitySummary';
 import { registerFuelCardWithRecon } from '../../utils/registerFuelCardWithRecon';
 import { fuelDateBounds } from '../../utils/fuelStatementImportFlow';
 import { buildPaymentLedgerCanonicalEvents } from '../../utils/buildPaymentLedgerCanonicalEvents';
@@ -840,6 +841,7 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
             uploadedBy,
             usesPaymentLineSsot: processedPaymentLedgerLines.length > 0,
             paymentLedgerLineCount: processedPaymentLedgerLines.length,
+            driverActivity: uberDriverActivityFromFiles(uploadedFiles),
           };
 
           const usesLineSsot = processedPaymentLedgerLines.length > 0;

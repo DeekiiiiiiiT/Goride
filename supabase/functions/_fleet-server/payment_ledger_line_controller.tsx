@@ -13,6 +13,7 @@ import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware
 import { getServiceClientWithSchema } from "./service_client.ts";
 import { safeErrorResponse } from "./safe_error.ts";
 import { PAY_HTTP_PREFIX } from "./pay_http_prefix.ts";
+import { stampOrg } from "./org_scope.ts";
 
 const app = new Hono();
 
@@ -106,11 +107,13 @@ app.post(`${BASE}/import`, requirePermission('transactions.edit'), async (c) => 
         continue;
       }
 
-      const record = {
+      // Rev 25: every row carries the company (since 21 Oct an unstamped row 500s, which
+      // stopped every Uber upload at the payment lines step).
+      const record = stampOrg({
         ...line,
         id,
         importedAt: new Date().toISOString(),
-      };
+      }, c);
 
       await kv.set(`payment_ledger_line:${id}`, record);
       await kv.set(dedupKey, id);

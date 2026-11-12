@@ -43,6 +43,7 @@ import {
   type ReconBatchSourceId,
 } from "./recon_batch_bridge.ts";
 import { isReconWeekFrozen } from "./recon_week_writable.ts";
+import { uploadWeekKeys } from "./recon_desk_shape.ts";
 import { assertTollPeriodWritable, TollPeriodSealedError } from "./toll_period_writable.ts";
 
 function actorCanApproveWideCoverage(c: Context): boolean {
@@ -1117,7 +1118,10 @@ export function registerReconImportRoutes(app: Hono) {
               : null)
             : null);
         const supersedes = body.supersedes ? String(body.supersedes) : null;
-        const weekKeys = Array.isArray(body.weekKeys) ? body.weekKeys.map(String) : [];
+        // Rev 25: work the weeks out when the screen sends none (none does).
+        const weekKeys = Array.isArray(body.weekKeys) && body.weekKeys.length > 0
+          ? body.weekKeys.map(String)
+          : uploadWeekKeys({ weekKey: registerWeek, coverageStart, coverageEnd });
         const rowsCommitted = typeof body.rowsCommitted === "number" ? body.rowsCommitted : null;
 
         // R3-10: supersede any live batch with the same semantic_key before write

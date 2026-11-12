@@ -336,3 +336,220 @@ export async function checkMaintenanceOdometerReading(args: {
     anomalyReason: assessment.anomalyReason,
   };
 }
+
+/** WO line total from qty/unit/labor (same rule as maintenance_routes). */
+export function computeWoLineTotal(line: Record<string, unknown>): number {
+  if (line.declined === true) return 0;
+  // CR-01: legacy callers may send amounts only inside `values` (API) / `values_json` (DB row).
+  const vRaw = line.values ?? line.values_json;
+  const v = (vRaw && typeof vRaw === "object" && !Array.isArray(vRaw))
+    ? (vRaw as Record<string, unknown>)
+    : {};
+  const qty = Number(line.qty ?? v.qty ?? 0) || 0;
+  const unit = Number(line.unit_price ?? line.unitPrice ?? v.unit_price ?? 0) || 0;
+  const material = Number(line.material ?? v.material ?? 0) || 0;
+  let labor = Number(line.labor_amount ?? line.laborAmount ?? line.labor ?? v.labor ?? 0) || 0;
+  const hours = Number(line.labor_hours ?? line.laborHours ?? v.labor_hours ?? 0) || 0;
+  const rate = Number(line.labor_rate ?? line.laborRate ?? v.labor_rate ?? 0) || 0;
+  if (hours > 0 && rate > 0) labor = hours * rate;
+  if (line.complimentary === true) labor = 0;
+  let total = 0;
+  if (qty > 0 && unit > 0) total += qty * unit;
+  else total += material;
+  total += labor;
+  return Math.round(total * 100) / 100;
+}
+
+export function parseDiscount(raw: unknown): number | null {
+  if (raw === undefined || raw === null || raw === "") return 0;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 100) / 100;
+}
+
+export function lineSubtotal(lineRows: Record<string, unknown>[]): number {
+  let sum = 0;
+  for (const r of lineRows) {
+    const lt = r.line_total != null ? Number(r.line_total) : computeWoLineTotal(r);
+    sum += Number.isFinite(lt) ? lt : 0;
+  }
+  return Math.round(sum * 100) / 100;
+}
+
+export function serviceNetTotal(lineRows: Record<string, unknown>[], discount: number): number {
+  const net = lineSubtotal(lineRows) - discount;
+  return Math.round(Math.max(0, net) * 100) / 100;
+}
+
+export function discountTooLarge(lineRows: Record<string, unknown>[], discount: number): boolean {
+  return discount > lineSubtotal(lineRows);
+}
+
+export async function loadDiscountEnabled(orgId: string): Promise<boolean> {
+  const { data, error } = await fleetDb()
+    // fleet schema is not exposed to PostgREST — read through the public view (R-03).
+    .from("fleet_organization_settings")
+    .select("maintenance_discount_enabled")
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (error) {
+    // CR-07: never fail silently; still return off so Log service keeps working.
+    console.error("[maintenance] loadDiscountEnabled failed", { orgId, error: error.message });
+    return false;
+  }
+  const row = data as { maintenance_discount_enabled?: boolean } | null;
+  return row?.maintenance_discount_enabled === true;
+}
+
+export function respondDiscountRejection(
+  c: Context,
+  parsed: number | null,
+  enabled: boolean,
+  lineRows: Record<string, unknown>[],
+  discount: number,
+): Response | null {
+  if (parsed === null) {
+    return c.json({ code: "discount_invalid" }, 400);
+  }
+  if (discount > 0 && !enabled) {
+    return c.json({ code: "discount_disabled", error: "Discounts are switched off." }, 400);
+  }
+  if (discountTooLarge(lineRows, discount)) return discountTooLargeResponse(c);
+  return null;
+}
+
+export function discountTooLargeResponse(c: Context): Response {
+  return c.json({ code: "discount_too_large", error: "Discount can't be more than the bill." }, 400);
+}
+
+export type ServiceHistoryQueryFilters = {
+  orgId: string;
+  vehicle?: string;
+  part?: string;
+  from?: string;
+  qText?: string;
+};
+
+export type ServiceHistorySlimRow = { work_order_id: string; performed_at_date: string };
+
+/** Distinct work orders for service-history pagination (R-01). */
+export function paginateServiceHistoryWorkOrders(
+  slimRows: ServiceHistorySlimRow[],
+  page: number,
+  pageSize: number,
+): { pageIds: string[]; total: number } {
+  const byWo = new Map<string, string>();
+  for (const row of slimRows) {
+    const wo = String(row.work_order_id ?? "");
+    if (!wo) continue;
+    const d = String(row.performed_at_date ?? "");
+    const prev = byWo.get(wo);
+    if (!prev || d > prev) byWo.set(wo, d);
+  }
+
+  const sortedIds = [...byWo.entries()]
+    .sort((a, b) => {
+      const dc = b[1].localeCompare(a[1]);
+      if (dc !== 0) return dc;
+      return b[0].localeCompare(a[0]);
+    })
+    .map(([id]) => id);
+
+  const total = sortedIds.length;
+  const fromIdx = (page - 1) * pageSize;
+  return { pageIds: sortedIds.slice(fromIdx, fromIdx + pageSize), total };
+}
+
+export function sortServiceHistoryLineRows(
+  items: Record<string, unknown>[],
+  pageIds: string[],
+): Record<string, unknown>[] {
+  const idOrder = new Map(pageIds.map((id, i) => [id, i]));
+  return [...items].sort((a, b) => {
+    const woA = String(a.work_order_id ?? "");
+    const woB = String(b.work_order_id ?? "");
+    const oa = idOrder.get(woA) ?? 999;
+    const ob = idOrder.get(woB) ?? 999;
+    if (oa !== ob) return oa - ob;
+    const da = String(a.performed_at_date ?? "");
+    const db = String(b.performed_at_date ?? "");
+    if (da !== db) return db.localeCompare(da);
+    return String(a.line_id ?? "").localeCompare(String(b.line_id ?? ""));
+  });
+}
+
+// deno-lint-ignore no-explicit-any
+function applyServiceHistoryFilters(q: any, filters: ServiceHistoryQueryFilters) {
+  let query = q.eq("organization_id", filters.orgId);
+  if (filters.vehicle) query = query.eq("vehicle_id", filters.vehicle);
+  if (filters.part) {
+    query = query.or(`category_code.ilike.%${filters.part}%,category_name.ilike.%${filters.part}%`);
+  }
+  if (filters.from) query = query.gte("performed_at_date", filters.from);
+  if (filters.qText) {
+    query = query.or(
+      `log_number.ilike.%${filters.qText}%,provider.ilike.%${filters.qText}%,category_name.ilike.%${filters.qText}%`,
+    );
+  }
+  return query;
+}
+
+/**
+ * R-02 — the filters only choose which services are on the page. This query
+ * returns EVERY active line of those services (org + work_order_id only), so
+ * Σ lines − discount is the real total even when a part/search filter is set.
+ */
+// deno-lint-ignore no-explicit-any
+export function applyServiceHistoryPageLinesQuery(q: any, orgId: string, pageIds: string[]) {
+  return q
+    .eq("organization_id", orgId)
+    .in("work_order_id", pageIds)
+    .order("performed_at_date", { ascending: false });
+}
+
+/** Page service history by work order — every line for each service on the page. */
+export async function fetchMaintenanceServiceHistoryPage(
+  filters: ServiceHistoryQueryFilters,
+  page: number,
+  pageSize: number,
+): Promise<{ items: Record<string, unknown>[]; total: number }> {
+  const chunkSize = 1000;
+  const slimRows: ServiceHistorySlimRow[] = [];
+  let offset = 0;
+  for (;;) {
+    let q = applyServiceHistoryFilters(
+      fleetDb().from("fleet_maintenance_service_history_v").select("work_order_id, performed_at_date"),
+      filters,
+    );
+    // CR-05: unique tie-break so same-date rows are never skipped or repeated across chunks.
+    q = q
+      .order("performed_at_date", { ascending: false })
+      .order("work_order_id", { ascending: true })
+      .order("line_id", { ascending: true })
+      .range(offset, offset + chunkSize - 1);
+    const { data, error } = await q;
+    if (error) throw error;
+    const batch = (data || []) as ServiceHistorySlimRow[];
+    slimRows.push(...batch);
+    if (batch.length < chunkSize) break;
+    offset += chunkSize;
+  }
+
+  const { pageIds, total } = paginateServiceHistoryWorkOrders(slimRows, page, pageSize);
+
+  if (pageIds.length === 0) {
+    return { items: [], total };
+  }
+
+  const lineQ = applyServiceHistoryPageLinesQuery(
+    fleetDb().from("fleet_maintenance_service_history_v").select("*"),
+    filters.orgId,
+    pageIds,
+  );
+  const { data: lines, error: lineErr } = await lineQ;
+  if (lineErr) throw lineErr;
+
+  const items = sortServiceHistoryLineRows((lines || []) as Record<string, unknown>[], pageIds);
+
+  return { items, total };
+}

@@ -1,6 +1,6 @@
 # Fleet bank confirmations + organization settings — company fix
 
-**Rev 2 · 2026-11-12 · Status: built (Cursor) and checked (Claude); uncommitted, not live. Severity High.**
+**Rev 2 · 2026-11-12 · Status: built (Cursor), checked (Claude), committed + pushed (`a9bad91f`, fix-only split); live with the next fleet-core deploy. Severity High.**
 
 **Rev 2 check:** `resolveRouteCompany` (session company only; a different named company → 403; no company → 400) is used by all four routes; the legacy no-company write is removed; settings save needs `settings.edit` (owner, platform owner) or `toll.manage` (manager); accountant, viewer and driver hold neither. An older unstamped settings record is still shown, but only under the signed-in fleet's own key (no leak, no lost settings). 10 Deno tests pass; fleet typecheck 757 → 754 errors (none new; the rest predate this work).
 

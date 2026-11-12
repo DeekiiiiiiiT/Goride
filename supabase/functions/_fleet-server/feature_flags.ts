@@ -94,6 +94,12 @@ export const FEATURE_FLAGS = {
    */
   RECON_WIZARD: "recon_wizard",
   /**
+   * Week Reconciliation rebuild (audit §9). Default OFF: Fleet keeps the old close path
+   * (Driver Settlements → Close Week, Fuel and Toll pages). ON: every week is done inside
+   * Week Reconciliation. Turning it off brings the old path back until the old pages are removed.
+   */
+  RECON_V2: "recon_v2",
+  /**
    * I24: refuse pay / write-off / batch pay / settle-from-balance until toll week is sealed.
    * Default off — no behaviour change until enabled per org.
    */
@@ -419,6 +425,11 @@ export async function initializeDefaultFlags(): Promise<void> {
       enabled: true,
       description:
         "Apply unlinked trip refunds before dispute refunds; settle via allocation ledger",
+    },
+    {
+      name: FEATURE_FLAGS.RECON_V2,
+      enabled: false,
+      description: "Week Reconciliation rebuild: every week is done inside Week Reconciliation (off = old close path)",
     },
     {
       name: FEATURE_FLAGS.TOLL_SEAL_BEFORE_PAY,

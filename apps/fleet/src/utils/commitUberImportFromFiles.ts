@@ -18,6 +18,7 @@ import {
 } from './csvHelpers';
 import { computeImportBundleFingerprint } from './importBundleFingerprint';
 import { uberWeekNeedsStatement } from '@roam/finance-core';
+import { uberDriverActivityFromFiles } from './uberDriverActivitySummary';
 import { buildCanonicalImportEvents, tripDateBounds } from './buildCanonicalImportEvents';
 import { buildPaymentLedgerCanonicalEvents } from './buildPaymentLedgerCanonicalEvents';
 import { validateMergedImportPreview } from './importValidation';
@@ -223,6 +224,8 @@ export async function commitUberImportFromFiles(
 export async function registerUberBundleWithRecon(opts: {
   batchId: string;
   organizationId?: string | null;
+  /** The week the upload is for (Week Reconciliation); the server checks coverage against it. */
+  weekKey?: string | null;
   /** Stated statement period. Falls back to the trip span. */
   coverageStart?: string | null;
   coverageEnd?: string | null;
@@ -248,6 +251,7 @@ export async function registerUberBundleWithRecon(opts: {
         ? `uber:${opts.organizationId}:${coverageStart}:${coverageEnd}`
         : undefined,
       rowsCommitted: opts.rowsCommitted,
+      ...(opts.weekKey ? { weekKey: opts.weekKey.slice(0, 10) } : {}),
     });
   } catch (e) {
     // R3-10: only swallow when recon wizard API is not deployed; otherwise surface.
@@ -308,6 +312,7 @@ export async function commitUberCashRefresh(
     uploadedBy,
     usesPaymentLineSsot: usesLineSsot,
     paymentLedgerLineCount: paymentLines.length,
+    driverActivity: uberDriverActivityFromFiles(uberFiles),
   });
 
   const TRIP_CHUNK = 15;
@@ -415,16 +420,16 @@ export async function commitUberCashRefresh(
     (typeof appMeta.organizationId === 'string' && appMeta.organizationId.trim()) ||
     session?.user?.id ||
     null;
-  // Coverage = statement period from payments_organization when present (R2-15).
-  const stmtStart = String(orgForBatch?.periodStart || '').slice(0, 10);
-  const stmtEnd = String(orgForBatch?.periodEnd || '').slice(0, 10);
-  const coverageStart = /^\d{4}-\d{2}-\d{2}$/.test(stmtStart) ? stmtStart : tripBounds.min || wk;
-  const coverageEnd = /^\d{4}-\d{2}-\d{2}$/.test(stmtEnd)
-    ? stmtEnd
-    : tripBounds.max || weekEndYmd(wk);
+  // Rev 25 (WRA-09): this upload is for week wk and its trips are already limited to that
+  // week, so it covers exactly Monday–Sunday of wk. (Uber's payments_organization has no
+  // period columns, so the "statement period" fell back to today and every in-week upload
+  // was refused: "coverage can't start later than the first transaction".)
+  const coverageStart = wk;
+  const coverageEnd = weekEndYmd(wk);
   await registerUberBundleWithRecon({
     batchId,
     organizationId: orgId,
+    weekKey: wk,
     coverageStart,
     coverageEnd,
     dataPeriodStart: tripBounds.min || coverageStart,

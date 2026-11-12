@@ -40,11 +40,32 @@ export function serviceJobCost(values: FieldValues, positions: string[], complim
 /**
  * Boxes the details form hides for a job. Tire Change: quantity × unit price is the cost, so no
  * separate labour box, no labour hours and no part number.
- * Keys: field_schema keys ("labor") plus "labor_hours" and "part_number" for the fixed boxes.
+ * Brakes, engine oil change, oil filter and engine air filter: price + labour cost only — no labour
+ * hours, labour rate, brand or part number.
+ * Keys: field_schema keys ("labor") plus "labor_hours", "labor_rate", "brand" and "part_number"
+ * for the fixed boxes.
  */
+const SHORT_FORM_CODES = new Set(["brakes", "oil", "oil_filter", "air_filter"]);
+
 export function hiddenLineFieldsFor(cat: Pick<MaintenanceServiceCategory, "code"> | null | undefined): string[] {
-  if ((cat?.code || "").toLowerCase() === "tires") return ["labor", "labor_hours", "part_number"];
+  const code = (cat?.code || "").toLowerCase();
+  if (code === "tires") return ["labor", "labor_hours", "part_number"];
+  if (SHORT_FORM_CODES.has(code)) return ["labor_hours", "labor_rate", "brand", "part_number"];
+  if (sidePositionsFor(cat)) return ["labor_hours", "labor_rate", "brand", "part_number"];
   return [];
+}
+
+/**
+ * Jobs that are done on one side of one axle: the form shows Left / Right instead of the four
+ * wheel buttons. Saved as the usual wheel codes (LF/RF front, LR/RR rear) so history reads the same.
+ */
+export function sidePositionsFor(
+  cat: Pick<MaintenanceServiceCategory, "code"> | null | undefined,
+): { value: string; label: string }[] | null {
+  const code = (cat?.code || "").toLowerCase();
+  if (code === "front_stabilizer_link") return [{ value: "LF", label: "Left" }, { value: "RF", label: "Right" }];
+  if (code === "rear_stabilizer_link") return [{ value: "LR", label: "Left" }, { value: "RR", label: "Right" }];
+  return null;
 }
 
 export function serviceJobAmount(values: FieldValues): number | null {

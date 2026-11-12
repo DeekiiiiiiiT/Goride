@@ -33,6 +33,8 @@ type Seat = {
   lastActive: string | null;
   isOwner: boolean;
   inviteId: string | null;
+  /** Mobile number for Week Reconciliation SMS alerts (WRA-31). */
+  alertPhone?: string | null;
 };
 
 type Worker = {
@@ -81,6 +83,8 @@ function activitySentence(event: Record<string, unknown>, seats: Seat[]) {
     'team.staff.reset_email': `${who} sent ${whom} a password reset`,
     'team.staff.invite_revoked': `${who} cancelled an invite`,
     'team.staff.invite_resent': `${who} sent the invite again`,
+    'team.staff.alert_phone_set': `${who} set ${whom}'s mobile number for alerts`,
+    'team.staff.alert_phone_cleared': `${who} removed ${whom}'s mobile number for alerts`,
   };
   return lines[String(event.action || '')] || 'Team update';
 }
@@ -115,6 +119,8 @@ export function UserManagementPage({ productLine = 'fleet' }: { productLine?: 'f
   const [roleTarget, setRoleTarget] = useState<Seat | null>(null);
   const [newRole, setNewRole] = useState('');
   const [removeTarget, setRemoveTarget] = useState<Seat | null>(null);
+  const [phoneTarget, setPhoneTarget] = useState<Seat | null>(null);
+  const [phoneDraft, setPhoneDraft] = useState('');
   const [endTarget, setEndTarget] = useState<Worker | null>(null);
   const [confirmName, setConfirmName] = useState('');
   const [blockers, setBlockers] = useState<Array<{ label: string; amount?: number }>>([]);
@@ -241,12 +247,26 @@ export function UserManagementPage({ productLine = 'fleet' }: { productLine?: 'f
                         <TableCell>
                           <div className="font-medium">{member.name}</div>
                           <div className="text-xs text-slate-500">{member.email}</div>
+                          {member.alertPhone ? (
+                            <div className="text-xs text-slate-500">Alerts by text: {member.alertPhone}</div>
+                          ) : null}
                         </TableCell>
                         <TableCell><Badge variant="outline">{roleLabel(member.role)}</Badge></TableCell>
                         <TableCell className="capitalize">{member.status}</TableCell>
                         <TableCell>{member.lastActive ? new Date(member.lastActive).toLocaleDateString() : '—'}</TableCell>
                         <TableCell className="text-right">
-                          {member.isOwner ? <span className="text-xs text-slate-400">Owner</span> : (
+                          {member.isOwner ? (
+                            canEditRole ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => { setPhoneTarget(member); setPhoneDraft(member.alertPhone || ''); }}
+                              >
+                                Mobile number for alerts
+                              </Button>
+                            ) : <span className="text-xs text-slate-400">Owner</span>
+                          ) : (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="icon" aria-label="Staff actions"><MoreHorizontal className="h-4 w-4" /></Button>
@@ -260,6 +280,9 @@ export function UserManagementPage({ productLine = 'fleet' }: { productLine?: 'f
                                 )}
                                 {member.status === 'active' && canEditRole && (
                                   <DropdownMenuItem onClick={() => { setRoleTarget(member); setNewRole(member.role); }}>Change role</DropdownMenuItem>
+                                )}
+                                {member.status === 'active' && canEditRole && (
+                                  <DropdownMenuItem onClick={() => { setPhoneTarget(member); setPhoneDraft(member.alertPhone || ''); }}>Mobile number for alerts</DropdownMenuItem>
                                 )}
                                 {member.status === 'active' && canSuspend && (
                                   <DropdownMenuItem onClick={() => void run(member.id, async () => { await api.setStaffStatus(member.id, 'suspended'); toast.success('Seat suspended'); })}>Suspend</DropdownMenuItem>
@@ -393,6 +416,41 @@ export function UserManagementPage({ productLine = 'fleet' }: { productLine?: 'f
           </Select>
           <DialogFooter>
             <Button disabled={!roleTarget || busy === 'role'} onClick={() => roleTarget && void run('role', async () => { await api.updateTeamMemberRole(roleTarget.id, newRole); setRoleTarget(null); toast.success('Role updated'); })}>Update role</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!phoneTarget} onOpenChange={(open) => !open && setPhoneTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mobile number for alerts</DialogTitle>
+            <DialogDescription>
+              {phoneTarget?.name} gets a text when a week needs attention for too long (Week Reconciliation).
+              Leave it empty to stop the texts.
+            </DialogDescription>
+          </DialogHeader>
+          <div>
+            <Label htmlFor="alert-phone">Mobile number</Label>
+            <Input
+              id="alert-phone"
+              inputMode="tel"
+              placeholder="876 555 1234"
+              value={phoneDraft}
+              onChange={(e) => setPhoneDraft(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPhoneTarget(null)}>Cancel</Button>
+            <Button
+              disabled={!phoneTarget || busy === 'phone'}
+              onClick={() => phoneTarget && void run('phone', async () => {
+                const res = await api.setStaffAlertPhone(phoneTarget.id, phoneDraft);
+                setPhoneTarget(null);
+                toast.success(res.alertPhone ? `Saved ${res.alertPhone}` : 'Mobile number removed');
+              })}
+            >
+              Save number
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

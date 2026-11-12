@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"on-primary-fixed-variant":"#46445b","tertiary-fixed":"#85f8c4","on-primary":"#ffffff","secondary-fixed":"#dbe1ff","on-error":"#ffffff","primary-container":"#1b192e","surface-container-high":"#dce9ff","inverse-on-surface":"#eaf1ff","error-container":"#ffdad6","primary":"#000000","on-secondary":"#ffffff","tertiary":"#000000","on-background":"#0b1c30","surface-container":"#e5eeff","primary-fixed":"#e4dffc","outline-variant":"#c9c5cd","secondary":"#0051d5","outline":"#78767d","tertiary-container":"#002114","secondary-fixed-dim":"#b4c5ff","surface":"#f8f9ff","on-tertiary-fixed-variant":"#005137","on-primary-fixed":"#1b192e","on-secondary-container":"#fefcff","surface-container-low":"#eff4ff","surface-tint":"#5e5c74","surface-variant":"#d3e4fe","on-secondary-fixed":"#00174b","on-surface-variant":"#47464c","surface-bright":"#f8f9ff","background":"#f8f9ff","on-surface":"#0b1c30","error":"#ba1a1a","tertiary-fixed-dim":"#68dba9","inverse-primary":"#c8c3df","on-tertiary-fixed":"#002114","on-tertiary":"#ffffff","inverse-surface":"#213145","on-tertiary-container":"#069669","surface-container-lowest":"#ffffff","surface-container-highest":"#d3e4fe","on-secondary-fixed-variant":"#003ea8","primary-fixed-dim":"#c8c3df","on-error-container":"#93000a","on-primary-container":"#84819a","surface-dim":"#cbdbf5","secondary-container":"#316bf3"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},spacing:{"space-xs":"0.25rem","space-xl":"2rem","gutter-mobile":"1rem",margin:"2.5rem","space-md":"0.75rem",gutter:"1.5rem","margin-mobile":"1rem","space-sm":"0.5rem","space-lg":"1.25rem"},fontFamily:{"label-sm":["Inter"],"headline-md":["Inter"],"body-md":["Inter"],"currency-sm":["Inter"],"headline-sm":["Inter"],"currency-lg":["Inter"],"headline-lg":["Inter"],"currency-md":["Inter"],"label-md":["Inter"],"display-lg":["Inter"],"display-lg-mobile":["Inter"],"body-sm":["Inter"],"body-lg":["Inter"]},fontSize:{"label-sm":["11px",{lineHeight:"14px",letterSpacing:"0.04em",fontWeight:"600"}],"headline-md":["20px",{lineHeight:"28px",letterSpacing:"-0.015em",fontWeight:"600"}],"body-md":["14px",{lineHeight:"20px",fontWeight:"400"}],"currency-sm":["13px",{lineHeight:"18px",fontWeight:"500"}],"headline-sm":["16px",{lineHeight:"24px",letterSpacing:"-0.01em",fontWeight:"600"}],"currency-lg":["28px",{lineHeight:"36px",letterSpacing:"-0.02em",fontWeight:"600"}],"headline-lg":["24px",{lineHeight:"32px",letterSpacing:"-0.02em",fontWeight:"600"}],"currency-md":["16px",{lineHeight:"24px",letterSpacing:"-0.01em",fontWeight:"600"}],"label-md":["13px",{lineHeight:"18px",fontWeight:"500"}],"display-lg":["36px",{lineHeight:"44px",letterSpacing:"-0.025em",fontWeight:"600"}],"display-lg-mobile":["28px",{lineHeight:"36px",letterSpacing:"-0.02em",fontWeight:"600"}],"body-sm":["12px",{lineHeight:"16px",fontWeight:"400"}],"body-lg":["16px",{lineHeight:"24px",fontWeight:"400"}]}}}}</script></head><body class="bg-surface font-body-md text-on-surface antialiased min-h-screen flex flex-col justify-between"><header class="fixed top-0 left-0 w-full z-50 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-14 w-full px-gutter flex items-center justify-between"><div class="flex items-center space-x-space-lg"><div class="bg-primary text-on-primary px-3 py-1.5 rounded-lg flex items-center justify-center tracking-tight font-headline-sm text-headline-sm select-none">Roam Fleet</div><nav class="flex items-center space-x-space-md" data-active-classes="text-on-surface font-semibold border-b-2 border-primary"><a class="text-on-surface-variant hover:text-on-surface font-label-md text-label-md py-4 transition-colors" data-path="dashboard" href="#">Dashboard</a><a class="text-on-surface-variant hover:text-on-surface font-label-md text-label-md py-4 transition-colors" data-path="fleet-operations" href="#">Fleet Operations</a><a class="text-on-surface-variant hover:text-on-surface font-label-md text-label-md py-4 transition-colors" data-path="driver-operations" href="#">Driver Operations</a><a class="text-on-surface-variant hover:text-on-surface font-label-md text-label-md py-4 transition-colors" data-path="money" href="#">Money</a><a class="text-on-surface-variant hover:text-on-surface font-label-md text-label-md py-4 transition-colors" data-path="vehicle-operations" href="#">Vehicle Operations</a><a class="text-on-surface-variant hover:text-on-surface font-label-md text-label-md py-4 transition-colors" data-path="delivery-operations" href="#">Delivery Operations</a><a class="text-on-surface-variant hover:text-on-surface font-label-md text-label-md py-4 transition-colors" data-path="analytics" href="#">Analytics</a><a class="text-on-surface-variant hover:text-on-surface font-label-md text-label-md py-4 transition-colors" data-path="reports" href="#">Reports</a><a aria-current="page" class="py-4 transition-colors text-on-surface font-semibold border-b-2 border-primary" data-path="week-reconciliation" href="#">Business Finance</a></nav></div><div class="flex items-center space-x-space-md"><button class="relative p-2 text-on-surface-variant hover:text-on-surface transition-colors flex items-center justify-center" type="button"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-1.5 right-1.5 bg-error text-on-error rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold leading-none">3</span></button><div class="flex items-center space-x-space-xs pl-space-xs"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><span class="font-label-sm text-label-sm text-on-surface hidden lg:inline-block">DE · Deeki T Admin</span></div></div></div><div class="h-10 bg-primary-container px-gutter flex items-center justify-between text-on-primary"><div class="flex items-center space-x-space-sm w-96"><span class="material-symbols-outlined text-on-primary-container text-[18px]">search</span><input class="bg-transparent text-on-primary placeholder:text-on-primary-container text-body-sm font-body-sm w-full focus:outline-none" placeholder="Switch vehicle or search hub…" type="text"/></div><div class="flex items-center space-x-space-xs text-on-primary-container font-label-sm text-label-sm"><span>09:10:28 PM EST</span><span>·</span><span>America/Jamaica</span><span>·</span><span>JM (JMD)</span><span>·</span><span class="text-on-primary font-medium">DE · Deeki T</span></div></div><div class="h-9 bg-surface-container-low px-gutter flex items-center shadow-[0_1px_4px_rgba(0,0,0,0.02)]"><nav class="flex items-center space-x-space-xs font-label-sm text-label-sm"><span class="text-on-surface-variant">Business Finance</span><span class="material-symbols-outlined text-[14px] text-outline">chevron_right</span><span class="text-on-surface font-semibold">Week Reconciliation</span></nav></div></header><main class="w-full pt-[132px] bg-surface flex-1"><div class="flex flex-col w-full px-gutter py-space-md">
+<!-- Workbench Grid (3 Columns) -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-start relative">
+<!-- LEFT COLUMN: Step Rail (220px desktop projection / lg:col-span-2) -->
+<div class="lg:col-span-2 flex flex-col gap-space-sm">
+<!-- Back Navigation Button -->
+<button class="w-full flex items-center justify-start space-x-space-xs px-3 py-2 bg-surface-container-lowest hover:bg-surface-container-low text-on-surface rounded-xl shadow-sm transition-colors text-body-sm font-body-sm" type="button">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">arrow_back</span>
+<span class="font-label-md text-label-md">All weeks</span>
+</button>
+<!-- Step Navigator Rail Card -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-2 flex flex-col gap-1">
+<!-- 1. Upload inputs (ACTIVE) -->
+<div class="relative flex flex-col p-2.5 rounded-lg bg-surface-container-low text-on-surface">
+<div class="absolute left-0 top-1.5 bottom-1.5 w-1 bg-primary rounded-r"></div>
+<div class="flex items-center space-x-2 pl-1">
+<span class="w-5 h-5 rounded-full bg-primary text-on-primary flex items-center justify-center text-label-sm font-label-sm">1</span>
+<span class="font-label-md text-label-md font-semibold truncate">Upload inputs</span>
+</div>
+<span class="text-body-sm font-body-sm text-secondary pl-7 pt-0.5">In progress</span>
+</div>
+<!-- 2. Assign service lines -->
+<div class="flex flex-col p-2.5 rounded-lg hover:bg-surface-container-low transition-colors">
+<div class="flex items-center space-x-2">
+<span class="w-5 h-5 rounded-full bg-surface-container text-on-surface-variant flex items-center justify-center text-label-sm font-label-sm">2</span>
+<span class="font-label-md text-label-md text-on-surface truncate">Assign service lines</span>
+</div>
+<span class="text-body-sm font-body-sm text-on-tertiary-container pl-7 pt-0.5">Nothing to assign</span>
+</div>
+<!-- 3. Tolls -->
+<div class="flex flex-col p-2.5 rounded-lg opacity-70">
+<div class="flex items-center justify-between">
+<div class="flex items-center space-x-2">
+<span class="w-5 h-5 rounded-full bg-surface-container text-outline flex items-center justify-center text-label-sm font-label-sm">3</span>
+<span class="font-label-md text-label-md text-outline truncate">Tolls</span>
+</div>
+<span class="material-symbols-outlined text-[14px] text-outline">lock</span>
+</div>
+<span class="text-body-sm font-body-sm text-outline pl-7 pt-0.5 truncate text-[11px] leading-tight">Waiting on Tag acct</span>
+</div>
+<!-- 4. Tag account -->
+<div class="flex flex-col p-2.5 rounded-lg opacity-70">
+<div class="flex items-center justify-between">
+<div class="flex items-center space-x-2">
+<span class="w-5 h-5 rounded-full bg-surface-container text-outline flex items-center justify-center text-label-sm font-label-sm">4</span>
+<span class="font-label-md text-label-md text-outline truncate">Tag account</span>
+</div>
+<span class="material-symbols-outlined text-[14px] text-outline">lock</span>
+</div>
+<span class="text-body-sm font-body-sm text-outline pl-7 pt-0.5">Locked</span>
+</div>
+<!-- 5. Fuel -->
+<div class="flex flex-col p-2.5 rounded-lg opacity-70">
+<div class="flex items-center justify-between">
+<div class="flex items-center space-x-2">
+<span class="w-5 h-5 rounded-full bg-surface-container text-outline flex items-center justify-center text-label-sm font-label-sm">5</span>
+<span class="font-label-md text-label-md text-outline truncate">Fuel</span>
+</div>
+<span class="material-symbols-outlined text-[14px] text-outline">lock</span>
+</div>
+<span class="text-body-sm font-body-sm text-outline pl-7 pt-0.5 truncate text-[11px] leading-tight">Waiting on Roam card</span>
+</div>
+<!-- 6. Trips & earnings -->
+<div class="flex flex-col p-2.5 rounded-lg opacity-70">
+<div class="flex items-center justify-between">
+<div class="flex items-center space-x-2">
+<span class="w-5 h-5 rounded-full bg-surface-container text-outline flex items-center justify-center text-label-sm font-label-sm">6</span>
+<span class="font-label-md text-label-md text-outline truncate">Trips &amp; earnings</span>
+</div>
+<span class="material-symbols-outlined text-[14px] text-outline">lock</span>
+</div>
+<span class="text-body-sm font-body-sm text-outline pl-7 pt-0.5">Locked</span>
+</div>
+<!-- 7. Settlement preview -->
+<div class="flex flex-col p-2.5 rounded-lg opacity-70">
+<div class="flex items-center justify-between">
+<div class="flex items-center space-x-2">
+<span class="w-5 h-5 rounded-full bg-surface-container text-outline flex items-center justify-center text-label-sm font-label-sm">7</span>
+<span class="font-label-md text-label-md text-outline truncate">Settlement preview</span>
+</div>
+<span class="material-symbols-outlined text-[14px] text-outline">lock</span>
+</div>
+<span class="text-body-sm font-body-sm text-outline pl-7 pt-0.5">Locked</span>
+</div>
+<!-- 8. Close week -->
+<div class="flex flex-col p-2.5 rounded-lg opacity-70">
+<div class="flex items-center justify-between">
+<div class="flex items-center space-x-2">
+<span class="w-5 h-5 rounded-full bg-surface-container text-outline flex items-center justify-center text-label-sm font-label-sm">8</span>
+<span class="font-label-md text-label-md text-outline truncate">Close week</span>
+</div>
+<span class="material-symbols-outlined text-[14px] text-outline">lock</span>
+</div>
+<span class="text-body-sm font-body-sm text-outline pl-7 pt-0.5">Locked</span>
+</div>
+<!-- Bottom Telematics Placeholder Card -->
+<div class="mt-4 p-3 rounded-lg bg-surface-container-low opacity-60 pointer-events-none flex flex-col space-y-1">
+<div class="flex items-center space-x-1.5 text-outline">
+<span class="material-symbols-outlined text-[16px]">sensors</span>
+<span class="font-label-sm text-label-sm">Telematics</span>
+</div>
+<span class="font-body-sm text-body-sm text-outline">Coming soon</span>
+</div>
+</div>
+</div>
+<!-- MIDDLE COLUMN: Main Workspace Workbench (lg:col-span-7) -->
+<div class="lg:col-span-7 flex flex-col space-y-space-md">
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-lg flex flex-col space-y-space-lg">
+<!-- Context Header & Live Freshness Badge -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm pb-space-sm">
+<div class="flex flex-col">
+<div class="flex items-center space-x-space-xs text-on-surface-variant font-label-md text-label-md">
+<span>Week of 2 Nov 2026</span>
+<span>·</span>
+<span class="bg-surface-container-high text-on-surface px-2 py-0.5 rounded text-label-sm font-label-sm">Rideshare</span>
+<span>·</span>
+<span>2–8 Nov 2026</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface mt-1">Upload inputs</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-0.5">Do we have every file for this week?</p>
+</div>
+<div class="flex items-center space-x-1.5 px-2.5 py-1 bg-surface-container-low rounded-full self-start sm:self-center">
+<span class="w-2 h-2 rounded-full bg-on-tertiary-container animate-pulse"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Numbers updated 2 min ago</span>
+</div>
+</div>
+<!-- 2-Column Grid of 8 Source Input Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-md">
+<!-- Source 1: Uber weekly reports -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-col justify-between space-y-3">
+<div class="flex items-start justify-between">
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Uber weekly reports</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Weekly statement &amp; partner breakdown</p>
+</div>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-surface-container-high text-on-surface">
+<span class="material-symbols-outlined text-[13px] mr-1 text-secondary">upload</span> Needed
+              </span>
+</div>
+<!-- 7 Days Dot Indicator (Empty) -->
+<div class="flex items-center space-x-1.5 py-1">
+<span class="text-label-sm font-label-sm text-outline-variant mr-1">7d</span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high" title="Mon"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high" title="Tue"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high" title="Wed"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high" title="Thu"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high" title="Fri"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high" title="Sat"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high" title="Sun"></span>
+</div>
+<div class="flex items-center space-x-2 pt-1">
+<button class="px-3 py-1.5 bg-primary text-on-primary rounded-lg font-label-sm text-label-sm shadow-sm hover:bg-surface-tint transition-colors flex items-center space-x-1" type="button">
+<span class="material-symbols-outlined text-[14px]">file_upload</span>
+<span>Upload</span>
+</button>
+<button class="px-3 py-1.5 bg-surface-container-lowest text-on-surface hover:bg-surface rounded-lg font-label-sm text-label-sm transition-colors" type="button">
+                Mark no activity
+              </button>
+</div>
+</div>
+<!-- Source 2: InDrive trip export -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-col justify-between space-y-3">
+<div class="flex items-start justify-between">
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">InDrive trip export</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Digital shifts &amp; cash settled journeys</p>
+</div>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-surface-container-high text-on-surface">
+<span class="material-symbols-outlined text-[13px] mr-1 text-secondary">upload</span> Needed
+              </span>
+</div>
+<!-- 7 Days Dot Indicator (Empty) -->
+<div class="flex items-center space-x-1.5 py-1">
+<span class="text-label-sm font-label-sm text-outline-variant mr-1">7d</span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+</div>
+<div class="flex items-center space-x-2 pt-1">
+<button class="px-3 py-1.5 bg-primary text-on-primary rounded-lg font-label-sm text-label-sm shadow-sm hover:bg-surface-tint transition-colors flex items-center space-x-1" type="button">
+<span class="material-symbols-outlined text-[14px]">file_upload</span>
+<span>Upload</span>
+</button>
+<button class="px-3 py-1.5 bg-surface-container-lowest text-on-surface hover:bg-surface rounded-lg font-label-sm text-label-sm transition-colors" type="button">
+                Mark no activity
+              </button>
+</div>
+</div>
+<!-- Source 3: Roam app trips -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-col justify-between space-y-3">
+<div class="flex items-start justify-between">
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Roam app trips</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Automatic app telematics sync</p>
+</div>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-tertiary-fixed text-on-tertiary-fixed">
+<span class="material-symbols-outlined text-[13px] mr-1 text-on-tertiary-container">check_circle</span> Received (5 of 7 days)
+              </span>
+</div>
+<!-- 7 Days Dot Indicator (5 green, 2 grey) -->
+<div class="flex items-center space-x-1.5 py-1">
+<span class="text-label-sm font-label-sm text-on-surface-variant mr-1">7d</span>
+<span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container" title="Mon: Synced"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container" title="Tue: Synced"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container" title="Wed: Synced"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container" title="Thu: Synced"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container" title="Fri: Synced"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high" title="Sat: Missing"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high" title="Sun: Missing"></span>
+</div>
+<div class="flex items-center text-label-sm font-label-sm text-on-surface-variant pt-1">
+<span class="material-symbols-outlined text-[15px] mr-1 text-on-tertiary-container">sync</span>
+<span>Continuous live ingestion</span>
+</div>
+</div>
+<!-- Source 4: Tag account usage statement -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-col justify-between space-y-3">
+<div class="flex items-start justify-between">
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Tag account usage statement</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Highway 2000 Electronic Toll Collection</p>
+</div>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-surface-container-high text-on-surface">
+<span class="material-symbols-outlined text-[13px] mr-1 text-secondary">upload</span> Needed
+              </span>
+</div>
+<div class="flex items-center space-x-1.5 py-1">
+<span class="text-label-sm font-label-sm text-outline-variant mr-1">7d</span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+</div>
+<div class="flex flex-wrap items-center gap-1.5 pt-1">
+<button class="px-3 py-1.5 bg-primary text-on-primary rounded-lg font-label-sm text-label-sm shadow-sm hover:bg-surface-tint transition-colors flex items-center space-x-1" type="button">
+<span class="material-symbols-outlined text-[14px]">file_upload</span>
+<span>Upload</span>
+</button>
+<button class="px-2.5 py-1.5 bg-surface-container-lowest text-on-surface hover:bg-surface rounded-lg font-label-sm text-label-sm transition-colors" type="button">
+                Mark no activity
+              </button>
+<button class="px-2 py-1.5 bg-surface-container-lowest text-on-surface-variant hover:text-on-surface rounded-lg font-label-sm text-label-sm transition-colors" type="button">
+                Waive (approver)
+              </button>
+</div>
+</div>
+<!-- Source 5: Tag account top-ups -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-col justify-between space-y-3">
+<div class="flex items-start justify-between">
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Tag account top-ups</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Prepaid wallet reloads &amp; receipts</p>
+</div>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-surface-container-high text-on-surface">
+<span class="material-symbols-outlined text-[13px] mr-1 text-secondary">upload</span> Needed
+              </span>
+</div>
+<div class="flex items-center space-x-1.5 py-1">
+<span class="text-label-sm font-label-sm text-outline-variant mr-1">7d</span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+</div>
+<div class="flex items-center space-x-2 pt-1">
+<button class="px-3 py-1.5 bg-primary text-on-primary rounded-lg font-label-sm text-label-sm shadow-sm hover:bg-surface-tint transition-colors flex items-center space-x-1" type="button">
+<span class="material-symbols-outlined text-[14px]">file_upload</span>
+<span>Upload</span>
+</button>
+<button class="px-3 py-1.5 bg-surface-container-lowest text-on-surface hover:bg-surface rounded-lg font-label-sm text-label-sm transition-colors" type="button">
+                Mark no activity
+              </button>
+</div>
+</div>
+<!-- Source 6: Cash tolls -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-col justify-between space-y-3">
+<div class="flex items-start justify-between">
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Cash tolls</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Driver manual cash toll logs</p>
+</div>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-surface-container text-on-surface-variant">
+                Optional
+              </span>
+</div>
+<div class="flex items-center space-x-1.5 py-1">
+<span class="text-label-sm font-label-sm text-outline-variant mr-1">7d</span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+</div>
+<div class="flex items-center space-x-2 pt-1">
+<button class="px-3 py-1.5 bg-surface-container-lowest text-on-surface hover:bg-surface rounded-lg font-label-sm text-label-sm transition-colors" type="button">
+                Mark no activity
+              </button>
+</div>
+</div>
+<!-- Source 7: Roam fuel card statement -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-col justify-between space-y-3">
+<div class="flex items-start justify-between">
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Roam fuel card statement</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Waiting on Roam fuel card statement · not reminded yet</p>
+</div>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-surface-container-high text-on-surface">
+<span class="material-symbols-outlined text-[13px] mr-1 text-secondary">schedule</span> Waiting on Roam
+              </span>
+</div>
+<div class="flex items-center space-x-1.5 py-1">
+<span class="text-label-sm font-label-sm text-outline-variant mr-1">7d</span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-high"></span>
+</div>
+<div class="flex items-center space-x-2 pt-1">
+<button class="px-3 py-1.5 bg-primary text-on-primary rounded-lg font-label-sm text-label-sm shadow-sm hover:bg-surface-tint transition-colors flex items-center space-x-1" type="button">
+<span class="material-symbols-outlined text-[14px]">notifications_active</span>
+<span>Remind Roam</span>
+</button>
+</div>
+</div>
+<!-- Source 8: Cash fuel / receipts -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-col justify-between space-y-3">
+<div class="flex items-start justify-between">
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Cash fuel / receipts</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Driver out-of-pocket receipts verified</p>
+</div>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-tertiary-fixed text-on-tertiary-fixed">
+<span class="material-symbols-outlined text-[13px] mr-1 text-on-tertiary-container">check_circle</span> Received
+              </span>
+</div>
+<div class="flex items-center space-x-1.5 py-1">
+<span class="text-label-sm font-label-sm text-on-surface-variant mr-1">7d</span>
+<span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container" title="Logged"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container" title="Logged"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container" title="Logged"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container" title="Logged"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container" title="Logged"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container" title="Logged"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container" title="Logged"></span>
+</div>
+<div class="flex items-center text-label-sm font-label-sm text-on-tertiary-container pt-1">
+<span class="material-symbols-outlined text-[15px] mr-1">verified</span>
+<span>3 receipt audits reconciled</span>
+</div>
+</div>
+</div>
+<!-- Persistent Step Navigation Footer Bar -->
+<div class="flex flex-col sm:flex-row items-center justify-between gap-space-sm pt-space-md border-t-0 bg-surface-container-low p-space-md rounded-xl">
+<div class="flex items-center space-x-2">
+<span class="material-symbols-outlined text-outline text-[18px]">info</span>
+<span class="font-label-md text-label-md text-on-surface-variant">5 required files still needed</span>
+</div>
+<button class="px-5 py-2.5 rounded-xl bg-primary text-on-primary font-label-md text-label-md opacity-50 cursor-not-allowed flex items-center space-x-1.5 shadow-sm" disabled="" type="button">
+<span>Continue to Assign service lines</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+<!-- RIGHT COLUMN: Summary Column (240px desktop projection / lg:col-span-3) -->
+<div class="lg:col-span-3 flex flex-col space-y-space-md">
+<!-- Card 1: Sources Summary -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-lg flex flex-col space-y-space-md">
+<div class="flex items-center justify-between">
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Sources</h2>
+<span class="material-symbols-outlined text-[18px] text-outline">description</span>
+</div>
+<div>
+<div class="font-currency-lg text-currency-lg text-on-surface">3 / 8</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider mt-0.5">Required received</div>
+</div>
+<!-- Progress Bar (~37%) -->
+<div class="w-full bg-surface-container-high rounded-full h-2 overflow-hidden">
+<div class="bg-primary h-2 rounded-full w-[37.5%]"></div>
+</div>
+<!-- Breakdown List -->
+<div class="flex flex-col space-y-2 pt-1 text-body-sm font-body-sm">
+<div class="flex items-center justify-between py-1">
+<span class="text-on-surface">Completed &amp; Validated</span>
+<span class="font-label-md text-label-md text-on-surface">2</span>
+</div>
+<div class="flex items-center justify-between py-1">
+<span class="text-on-surface">Partially Received</span>
+<span class="font-label-md text-label-md text-secondary">1</span>
+</div>
+<div class="flex items-center justify-between py-1">
+<span class="text-on-surface">Pending / Missing</span>
+<span class="font-label-md text-label-md text-outline">5</span>
+</div>
+<div class="flex items-center justify-between py-1">
+<span class="text-on-surface">Waived / Optional</span>
+<span class="font-label-md text-label-md text-outline">1</span>
+</div>
+</div>
+</div>
+<!-- Card 2: Service Line Split Summary -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-lg flex flex-col space-y-space-md">
+<div class="flex items-center justify-between">
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Service line split</h2>
+<span class="material-symbols-outlined text-[18px] text-outline">account_tree</span>
+</div>
+<div class="grid grid-cols-2 gap-2 p-3 bg-surface-container-low rounded-xl">
+<div>
+<div class="font-label-sm text-label-sm text-on-surface-variant uppercase">Unassigned rows</div>
+<div class="font-headline-md text-headline-md text-on-surface mt-0.5">0</div>
+</div>
+<div>
+<div class="font-label-sm text-label-sm text-on-surface-variant uppercase">Unassigned J$</div>
+<div class="font-headline-md text-headline-md text-on-surface mt-0.5">—</div>
+</div>
+</div>
+<!-- Fleet Context Details -->
+<div class="flex flex-col space-y-2 pt-1 text-body-sm font-body-sm">
+<div class="flex items-start justify-between">
+<span class="text-on-surface-variant">Vehicle</span>
+<span class="font-label-md text-label-md text-on-surface text-right">Toyota Roomy · 5179KZ</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-on-surface-variant">Primary Hub</span>
+<span class="font-label-md text-label-md text-on-surface">Kingston Metro (KGN-01)</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-on-surface-variant">Assigned Driver</span>
+<span class="font-label-md text-label-md text-on-surface">Deeki T. (DE-44)</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- UPLOAD MODAL OVERLAY: Step 1 Active Demonstration State -->
+<div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-primary/40 backdrop-blur-sm transition-opacity" id="uploadModal">
+<div class="w-full max-w-lg bg-surface-container-lowest rounded-xl shadow-xl p-space-lg flex flex-col space-y-space-lg relative animate-in fade-in zoom-in-95 duration-150">
+<!-- Modal Header -->
+<div class="flex items-start justify-between">
+<div class="flex flex-col pr-4">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Uber Weekly Ledger</span>
+<h3 class="font-headline-md text-headline-md text-on-surface mt-1">Upload Uber weekly reports for the week of 2–8 Nov 2026</h3>
+</div>
+<button class="p-1 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" onclick="document.getElementById('uploadModal').classList.add('hidden')" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- File Drop Zone -->
+<div class="w-full p-8 rounded-xl bg-surface-container-low flex flex-col items-center justify-center text-center cursor-pointer hover:bg-surface-container transition-colors group">
+<div class="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-secondary text-[26px]">cloud_upload</span>
+</div>
+<p class="font-label-md text-label-md text-on-surface">Drag and drop CSV or XLSX file here, or browse files</p>
+<span class="font-body-sm text-body-sm text-on-surface-variant mt-1">Supports standard Uber partner weekly export files (max 25MB)</span>
+</div>
+<!-- Selected Sample File Card -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex items-center justify-between">
+<div class="flex items-center space-x-3 min-w-0">
+<div class="w-9 h-9 rounded-lg bg-surface-container-high flex items-center justify-center text-secondary shrink-0">
+<span class="material-symbols-outlined text-[20px]">table_view</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface truncate">uber_weekly_statement_02Nov2026.csv</span>
+<div class="flex items-center space-x-1.5 font-body-sm text-body-sm">
+<span class="text-on-surface-variant">2.4 MB</span>
+<span>·</span>
+<span class="text-on-tertiary-container font-label-sm text-label-sm font-semibold">Ready to parse</span>
+</div>
+</div>
+</div>
+<button class="p-1.5 text-on-surface-variant hover:text-error transition-colors rounded-lg" type="button">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+<!-- Modal Action Buttons -->
+<div class="flex items-center justify-end space-x-space-md pt-2">
+<button class="px-4 py-2.5 rounded-xl bg-error-container text-error font-label-md text-label-md hover:bg-error hover:text-on-error transition-colors" onclick="document.getElementById('uploadModal').classList.add('hidden')" type="button">
+          Cancel
+        </button>
+<button class="px-5 py-2.5 rounded-xl bg-primary text-on-primary font-label-md text-label-md shadow-sm hover:bg-surface-tint transition-colors flex items-center space-x-1.5" onclick="document.getElementById('uploadModal').classList.add('hidden')" type="button">
+<span class="material-symbols-outlined text-[16px]">done</span>
+<span>Upload &amp; process</span>
+</button>
+</div>
+</div>
+</div>
+<script>
+    // Lightweight toggle functionality for demo exploration
+    document.querySelectorAll('[data-path]').forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+      });
+    });
+  </script>
+</div></main><footer class="w-full bg-surface-container-low py-space-md"><div class="w-full px-gutter flex flex-col sm:flex-row items-center justify-between gap-space-xs text-on-surface-variant font-label-sm text-label-sm"><div>© 2026 Roam Fleet Inc. Financial Settlement &amp; Reconciliation Engine.</div><div class="flex items-center space-x-space-md"><a class="hover:text-on-surface transition-colors" href="#">Audit Logs</a><span>·</span><a class="hover:text-on-surface transition-colors" href="#">Compliance</a><span>·</span><a class="hover:text-on-surface transition-colors" href="#">Terms of Settlement</a></div></div></footer></body></html>

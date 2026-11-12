@@ -8,6 +8,7 @@ export type ServiceHistoryGroup = {
   rows: ServiceHistoryRow[];
   jobNames: string[];
   total: number;
+  discountAmount: number;
   currency: string;
   providers: string[];
   minKm: number | null;
@@ -36,6 +37,7 @@ export function groupServiceHistoryRows(rows: ServiceHistoryRow[]): ServiceHisto
         rows: [],
         jobNames: [],
         total: 0,
+        discountAmount: 0,
         currency: str(row.currency) || "JMD",
         providers: [],
         minKm: null,
@@ -50,6 +52,8 @@ export function groupServiceHistoryRows(rows: ServiceHistoryRow[]): ServiceHisto
     if (name) g.jobNames.push(name);
     const amount = Number(row.line_total ?? row.lineTotal);
     if (Number.isFinite(amount)) g.total += amount;
+    const disc = Number(row.discount_amount ?? row.discountAmount);
+    if (Number.isFinite(disc) && disc > 0) g.discountAmount = Math.max(g.discountAmount, disc);
     const provider = str(row.provider);
     if (provider && !g.providers.includes(provider)) g.providers.push(provider);
     const km = row.performed_at_miles != null ? Number(row.performed_at_miles) : NaN;
@@ -59,7 +63,12 @@ export function groupServiceHistoryRows(rows: ServiceHistoryRow[]): ServiceHisto
     }
     if (str(row.invoice_url ?? row.invoiceUrl)) g.invoiceCount += 1;
   }
-  for (const g of groups) g.total = Math.round(g.total * 100) / 100;
+  for (const g of groups) {
+    g.total = Math.round(g.total * 100) / 100;
+    if (g.discountAmount > 0) {
+      g.total = Math.round(Math.max(0, g.total - g.discountAmount) * 100) / 100;
+    }
+  }
   return groups;
 }
 

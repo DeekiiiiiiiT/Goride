@@ -29,6 +29,7 @@ export type ReconImportPreview = {
 };
 
 export type ReconWeekSource = {
+  requirement?: string;
   id: string;
   status: string;
   coverage: Record<string, string>;
@@ -43,6 +44,72 @@ export type ReconWeekSummary = {
   blockers: number;
   sources: ReconWeekSource[];
 };
+
+/** WRA-16: on every Week Reconciliation payload. */
+export type ReconCalculatorStatus = {
+  paused: boolean;
+  pausedSince: string | null;
+  pendingUnits: number;
+  oldestPendingAgeSeconds: number | null;
+  lastComputedAt: string | null;
+};
+
+/** One week on the list (stored rows only, Round 2a). */
+export type ReconWeekListEntry = ReconWeekSummary & {
+  closedAt: string | null;
+  closedBy: string | null;
+  requiredSourcesMissing: number;
+  /** WRA-40: the earliest open week before this one. */
+  earlierOpenWeek: string | null;
+};
+
+export type ReconWeekListKpis = {
+  openWeeks: number;
+  reconciledWeeks: number;
+  requiredSourcesMissing: number;
+  oldestOpenWeek: string | null;
+  oldestOpenNextAction: string | null;
+};
+
+export type ReconWeekList = {
+  weeks: ReconWeekListEntry[];
+  kpis: ReconWeekListKpis;
+  calculator: ReconCalculatorStatus | null;
+  deliveryActive: boolean;
+  nextCursor: string | null;
+};
+
+/** WRA-12: the whole stored week list for a line, 26 at a time. */
+export async function fetchWeekList(
+  line: 'rideshare' | 'rush_delivery',
+  opts?: { year?: number | null; status?: 'outstanding' | 'completed'; cursor?: string | null; limit?: number },
+): Promise<ReconWeekList> {
+  const qs = new URLSearchParams({ line, limit: String(opts?.limit ?? 26) });
+  if (opts?.year != null) qs.set('year', String(opts.year));
+  if (opts?.status) qs.set('status', opts.status);
+  if (opts?.cursor) qs.set('cursor', opts.cursor);
+  const response = await fetchWithRetry(`${BASE}/weeks?${qs.toString()}`, {
+    headers: await requireAuthHeaders(null),
+  });
+  if (!response.ok) {
+    let message = 'Failed to load reconciliation weeks';
+    try {
+      const j = await response.json();
+      if (j && typeof (j as { message?: string }).message === 'string') message = (j as { message: string }).message;
+    } catch {
+      /* ignore */
+    }
+    throw new ReconApiError(message, response.status);
+  }
+  const body = (await response.json()) as Partial<ReconWeekList>;
+  return {
+    weeks: (body.weeks ?? []) as ReconWeekListEntry[],
+    kpis: body.kpis ?? { openWeeks: 0, reconciledWeeks: 0, requiredSourcesMissing: 0, oldestOpenWeek: null, oldestOpenNextAction: null },
+    calculator: body.calculator ?? null,
+    deliveryActive: Boolean(body.deliveryActive),
+    nextCursor: body.nextCursor ?? null,
+  };
+}
 
 export class ReconApiError extends Error {
   readonly status: number;
@@ -123,6 +190,8 @@ export type ReconRunPayload = {
   deskReady?: boolean;
   /** True when an admin has stopped the week calculator, so the desk will not fill in. */
   calculatorPaused?: boolean;
+  /** WRA-16: calculator state and how fresh the saved numbers are. */
+  calculator?: ReconCalculatorStatus | null;
   closeCheck?: ReconCloseCheck;
   run: {
     id: string;
@@ -134,7 +203,7 @@ export type ReconRunPayload = {
   };
   evaluation: {
     stage: string;
-    steps: Array<{ id: string; status: string; lockedBy?: unknown }>;
+    steps: Array<{ id: string; status: string; lockedBy?: unknown; hidden?: boolean }>;
     nextAction: { kind: string; targetId: string; label: string };
   };
   attribution?: ReconAttributionSummary;
@@ -298,7 +367,9 @@ export async function postRunEvent(
     { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
   );
   if (!response.ok) {
-    throw new ReconApiError('Run event failed', response.status);
+    const err = (await response.json().catch(() => null)) as { error?: string; message?: string } | null;
+    // Keep the server's code (WEEK_CHANGED / WEEK_CLOSED) so the step can show the right message.
+    throw new ReconApiError(err?.message || err?.error || 'Run event failed', response.status);
   }
   return (await response.json()) as ReconRunPayload;
 }
@@ -516,6 +587,226 @@ export async function registerReconImport(
     body: JSON.stringify(input),
   });
   if (!response.ok) {
-    throw new ReconApiError('Failed to register recon import', response.status);
+    // Pass the server's reason through (e.g. which day the coverage has to include).
+    const body = (await response.json().catch(() => ({}))) as { message?: string; error?: string };
+    throw new ReconApiError(body.message || body.error || 'Failed to register recon import', response.status);
+  }
+}
+
+// ── Round 4c: steps 6–8 on saved data, approvals, History, alerts ──────────
+
+/** Error with the server's code (WEEK_CHANGED, APPROVAL_GONE, …) so screens can react. */
+export class ReconActionError extends ReconApiError {
+  readonly code: string | null;
+  constructor(message: string, status: number, code: string | null) {
+    super(message, status);
+    this.name = 'ReconActionError';
+    this.code = code;
+  }
+}
+
+async function reconJson<T>(path: string, init: RequestInit | undefined, fallback: string): Promise<T> {
+  const response = await reconFetch(path, init);
+  let body: unknown = null;
+  try {
+    body = await response.json();
+  } catch {
+    /* empty body */
+  }
+  if (!response.ok) {
+    const b = (body ?? {}) as { message?: string; error?: string };
+    throw new ReconActionError(String(b.message || fallback), response.status, b.error ? String(b.error) : null);
+  }
+  return body as T;
+}
+
+function postJson(body: unknown, idempotencyKey?: string): RequestInit {
+  return {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+    },
+    body: JSON.stringify(body ?? {}),
+  };
+}
+
+/** One key per click, so a double-click or a retry runs once (WRA-28). */
+export function newIdempotencyKey(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+}
+
+function runPath(line: string, weekKey: string, tail: string): string {
+  return `/runs/${encodeURIComponent(line)}/${encodeURIComponent(weekKey)}${tail}`;
+}
+
+export type ReconCashMismatch = {
+  driverId: string;
+  driverName: string | null;
+  weekKey: string;
+  uberCash: number;
+  uberTripCash: number;
+  mismatch: number;
+  accepted: boolean;
+};
+
+/** WRA-21: per-driver hours from the week's Uber upload (step 6 Activity vs trips). */
+export type ReconWeekActivity =
+  | { status: 'no_upload' }
+  | { status: 'not_recorded'; uploadedAt: string | null }
+  | {
+      status: 'ok';
+      uploadedAt: string | null;
+      drivers: Array<{
+        driverId: string;
+        name: string;
+        tripsCompleted: number;
+        onlineHours: number;
+        onTripHours: number;
+        onTripPct: number | null;
+      }>;
+    };
+
+export async function fetchWeekActivity(
+  line: 'rideshare' | 'rush_delivery',
+  weekKey: string,
+): Promise<ReconWeekActivity> {
+  const res = await reconJson<{ activity: ReconWeekActivity }>(
+    runPath(line, weekKey, '/activity'),
+    undefined,
+    'Could not load activity',
+  );
+  return res.activity;
+}
+
+/** Step 6: statement cash vs trip cash, from saved driver weeks (no live calculation). */
+export async function fetchWeekMoney(
+  line: 'rideshare' | 'rush_delivery',
+  weekKey: string,
+): Promise<{ cashSourceMismatches: ReconCashMismatch[]; drivers: Array<{ driverId: string; driverName: string | null }> }> {
+  return reconJson(runPath(line, weekKey, '/money'), undefined, 'Could not load the cash check');
+}
+
+/** Step 6: Seal earnings / Reseal — a change, through the week wrapper. */
+export async function sealEarnings(
+  line: 'rideshare' | 'rush_delivery',
+  weekKey: string,
+  expectedVersion: number,
+): Promise<ReconRunPayload> {
+  return reconJson(
+    runPath(line, weekKey, '/seal-earnings'),
+    postJson({ expectedVersion }, newIdempotencyKey()),
+    'Could not seal earnings',
+  );
+}
+
+export type ReconHistoryItem = {
+  id: string;
+  at: string;
+  step: string | null;
+  label: string;
+  reason: string | null;
+  by: string;
+  approval: string | null;
+  selfApproved: boolean;
+  status: string;
+  system: boolean;
+};
+
+export async function fetchWeekHistory(
+  line: 'rideshare' | 'rush_delivery',
+  weekKey: string,
+): Promise<ReconHistoryItem[]> {
+  const body = await reconJson<{ items?: ReconHistoryItem[] }>(
+    runPath(line, weekKey, '/history'),
+    undefined,
+    'Could not load the history',
+  );
+  return body.items ?? [];
+}
+
+export type ReconApprovalAction = 'waive' | 'accept_statement_cash' | 'close' | 'reopen' | 'sign_restatement';
+
+export type ReconApprovalItem = {
+  requestId: string | number;
+  weekKey: string;
+  line: 'rideshare' | 'rush_delivery';
+  action: ReconApprovalAction;
+  label: string;
+  params: Record<string, unknown>;
+  reason: string | null;
+  preparedBy: string | null;
+  sentAt: string;
+  status: 'pending_approval' | 'stale';
+};
+
+export async function fetchApprovals(): Promise<{ items: ReconApprovalItem[]; me: string | null; otherApprovers: number }> {
+  const body = await reconJson<{ items?: ReconApprovalItem[]; me?: string; otherApprovers?: number }>(
+    '/approvals',
+    undefined,
+    'Could not load approvals',
+  );
+  return { items: body.items ?? [], me: body.me ?? null, otherApprovers: Number(body.otherApprovers ?? 1) };
+}
+
+export async function sendForApproval(input: {
+  line: 'rideshare' | 'rush_delivery';
+  weekKey: string;
+  action: ReconApprovalAction;
+  params?: Record<string, unknown>;
+  reason: string;
+  expectedVersion: number;
+}): Promise<{ requestId: string | number; status: string }> {
+  return reconJson('/approvals', postJson(input, newIdempotencyKey()), 'Could not send for approval');
+}
+
+export async function approveRequest(id: string | number, reason?: string): Promise<unknown> {
+  return reconJson(`/approvals/${encodeURIComponent(String(id))}/approve`, postJson({ reason }, newIdempotencyKey()), 'Could not approve');
+}
+
+export async function rejectRequest(id: string | number, reason: string): Promise<unknown> {
+  return reconJson(`/approvals/${encodeURIComponent(String(id))}/reject`, postJson({ reason }, newIdempotencyKey()), 'Could not reject');
+}
+
+export async function withdrawRequest(id: string | number): Promise<unknown> {
+  return reconJson(`/approvals/${encodeURIComponent(String(id))}/withdraw`, postJson({}, newIdempotencyKey()), 'Could not withdraw');
+}
+
+export type ReconAlert = {
+  id: string;
+  kind: string;
+  title: string;
+  detail: string | null;
+  raisedAt: string;
+  acknowledgedAt: string | null;
+};
+
+export async function fetchReconAlerts(): Promise<ReconAlert[]> {
+  const body = await reconJson<{ items?: Array<Record<string, unknown>> }>("/alerts", undefined, "Could not load alerts");
+  return (body.items ?? []).map((r) => ({
+    id: String(r.id),
+    kind: String(r.kind ?? ""),
+    title: String(r.title ?? ""),
+    detail: r.detail == null ? null : typeof r.detail === "string" ? r.detail : JSON.stringify(r.detail),
+    raisedAt: String(r.raised_at ?? ""),
+    acknowledgedAt: r.acknowledged_at == null ? null : String(r.acknowledged_at),
+  }));
+}
+
+export async function acknowledgeReconAlert(id: string): Promise<unknown> {
+  return reconJson(`/alerts/${encodeURIComponent(id)}/acknowledge`, postJson({}), 'Could not acknowledge');
+}
+
+/** Switch-over (§9): is the rebuilt Week Reconciliation on for this company? Off unless the server says on. */
+export async function fetchReconV2Switch(): Promise<boolean> {
+  try {
+    const res = await reconJson<{ reconV2?: boolean }>('/switch', undefined, 'Could not read the Week Reconciliation switch');
+    return res.reconV2 === true;
+  } catch {
+    return false;
   }
 }

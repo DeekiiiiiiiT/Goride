@@ -3,6 +3,7 @@
  * Week-close conductor stays on the monolith (ADR-0021 F4).
  * Built exclusively via createFleetFunction (ADR-0020).
  */
+import { reconWeekVersionGuard } from "../../_fleet-server/recon_week_version_guard.ts";
 import { createFleetFunction } from "../../_shared/edgeKernel.ts";
 import settlementCommandsApp from "../../_fleet-server/settlement_commands_controller.tsx";
 import driverFinancialPeriodApp from "../../_fleet-server/driver_financial_period_controller.tsx";
@@ -16,6 +17,8 @@ const app = createFleetFunction({
   pathStyle: "slug",
   domainApp: settlementCommandsApp,
   registerParentRoutes: (parent) => {
+    // WRA-27: opt-in week-version check (header x-recon-week) for Week Reconciliation changes.
+    parent.use("*", reconWeekVersionGuard);
     // Register before the pay apps. Those apps require a user login on every
     // path, and a later route never runs once that gate answers.
     parent.post("/internal/seal-earnings-week", async (c) => {

@@ -13,6 +13,7 @@
     "jsr:@std/path@1": "1.1.6",
     "jsr:@std/path@^1.1.5": "1.1.6",
     "jsr:@std/testing@*": "1.0.21",
+    "jsr:@std/testing@1": "1.0.21",
     "jsr:@std/yaml@1.0.5": "1.0.5",
     "jsr:@supabase/supabase-js@2.49.8": "2.49.8",
     "npm:@capacitor-community/contacts@7": "7.2.0_@capacitor+core@7.6.8",

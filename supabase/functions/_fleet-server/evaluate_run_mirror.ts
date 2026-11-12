@@ -39,6 +39,8 @@ export type EvaluatedStep = {
   lockedBy?: { kind: "source" | "step"; id: string; label: string };
   actionable: number;
   informational: number;
+  /** WRA-19: lane step with nothing feeding it on this line. Shown as complete, skipped by gates. */
+  hidden?: boolean;
 };
 
 export type NextAction = {
@@ -183,16 +185,43 @@ function pickNextAction(steps: EvaluatedStep[], sources: ReconSourceSnapshot[]):
   return { kind: "none", targetId: "", label: "—" };
 }
 
+/** Lane steps that only make sense when something feeds them on this line. */
+export const HIDEABLE_LANE_STEPS: readonly RunStepId[] = ["tolls", "tag_account", "fuel"];
+
+/**
+ * WRA-19: a lane step is hidden on a line when none of the sources that feed it
+ * apply to that line, and no stored blocker belongs to it.
+ */
+export function hiddenLaneSteps(input: {
+  applicableSourceIds: readonly string[];
+  blockerStepIds: readonly RunStepId[];
+}): RunStepId[] {
+  const applicable = new Set(input.applicableSourceIds);
+  const withBlockers = new Set(input.blockerStepIds);
+  return HIDEABLE_LANE_STEPS.filter((stepId) => {
+    if (withBlockers.has(stepId)) return false;
+    const feeds = FEEDS_BY_STEP.get(stepId) ?? [];
+    return !feeds.some((id) => applicable.has(id));
+  });
+}
+
 export function evaluateRun(input: {
   sources: ReconSourceSnapshot[];
   stepCounts: Partial<Record<RunStepId, StepCounts>>;
   completedSteps: CompletedStepSnapshot[];
+  /** WRA-19: steps that do not apply to this line (see hiddenLaneSteps). */
+  hiddenSteps?: readonly RunStepId[];
 }): EvaluateRunResult {
   const { sources, stepCounts, completedSteps } = input;
+  const hidden = new Set<RunStepId>(input.hiddenSteps ?? []);
   const steps: EvaluatedStep[] = [];
   let priorIncomplete = false;
 
   for (const stepId of STEP_ORDER) {
+    if (hidden.has(stepId)) {
+      steps.push({ id: stepId, status: "complete", actionable: 0, informational: 0, hidden: true });
+      continue;
+    }
     const counts = stepCounts[stepId] ?? { actionable: 0, informational: 0 };
     const feeding = FEEDS_BY_STEP.get(stepId) ?? [];
     const blockingSource = feeding
@@ -211,7 +240,7 @@ export function evaluateRun(input: {
       };
     } else if (priorIncomplete) {
       status = "locked";
-      const blocker = steps.find((s) => s.status !== "complete");
+      const blocker = steps.find((s) => !s.hidden && s.status !== "complete");
       if (blocker) {
         lockedBy = { kind: "step", id: blocker.id, label: STEP_LABELS[blocker.id] };
       }

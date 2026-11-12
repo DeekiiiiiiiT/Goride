@@ -18,6 +18,7 @@ import type { AppendCanonicalLedgerResult, CanonicalLedgerEventInput } from '../
 import { OdometerReading } from '../types/vehicle';
 import { TollPlaza } from '../types/toll';
 import { API_ENDPOINTS } from './apiConfig';
+import { noteReconWeekResponse, withReconWeekHeader } from './reconWeekContext';
 import { catalogPages } from '@roam/api-client';
 import { tollApiErrorFromResponse } from './tollApiError';
 import type { CompatiblePartsResponse } from '../types/partSourcing';
@@ -149,6 +150,17 @@ export function getLastFleetCoreLatencyMs() {
 }
 
 export async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 1, backoff = 500): Promise<Response> {
+  // WRA-27: inside Week Reconciliation, toll / fuel / settlement changes carry the week version.
+  const week = withReconWeekHeader(url, options);
+  if (week.sent) {
+    const response = await fetchWithRetryInner(url, week.options, retries, backoff);
+    await noteReconWeekResponse(week.sent, response);
+    return response;
+  }
+  return fetchWithRetryInner(url, options, retries, backoff);
+}
+
+async function fetchWithRetryInner(url: string, options: RequestInit = {}, retries = 1, backoff = 500): Promise<Response> {
   const attempts = requestMayAutoRetry(options) ? retries : 0;
   const fleetCorePrefix = typeof API_ENDPOINTS !== "undefined" ? API_ENDPOINTS.fleetCore : "";
   const trackLatency = Boolean(fleetCorePrefix && url.startsWith(fleetCorePrefix));
@@ -173,7 +185,7 @@ export async function fetchWithRetry(url: string, options: RequestInit = {}, ret
     if (attempts > 0) {
       // Wait before retrying
       await new Promise(resolve => setTimeout(resolve, backoff));
-      return fetchWithRetry(url, options, attempts - 1, backoff * 2);
+      return fetchWithRetryInner(url, options, attempts - 1, backoff * 2);
     }
     throw err;
   }
@@ -2864,6 +2876,7 @@ export const api = {
     lines?: MaintenanceLogLine[];
     completeNow?: boolean;
     idempotencyKey?: string;
+    discount?: number;
   }) {
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance-work-orders`, {
           method: "POST",
@@ -2873,10 +2886,21 @@ export const api = {
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
         const code = (err as { code?: string }).code;
+        const message = (err as { error?: string }).error;
         if (code === "odometer_required") {
           throw new Error("Odometer is required and must be greater than zero");
         }
-        throw new Error((err as { error?: string }).error || "Failed to create work order");
+        if (
+          code === "discount_too_large"
+          || code === "discount_disabled"
+          || code === "discount_invalid"
+        ) {
+          throw new Error(
+            message
+              || (code === "discount_invalid" ? "Enter a valid discount amount." : "Discount could not be applied."),
+          );
+        }
+        throw new Error(message || "Failed to create work order");
       }
       const json = await response.json() as {
         item?: MaintenanceWorkOrder;
@@ -3113,6 +3137,7 @@ export const api = {
     return response.json() as Promise<{
       vehicleId: string;
       odometer: number;
+      discountEnabled: boolean;
       packages: Array<{
         templateId: string;
         label: string;
@@ -3772,6 +3797,20 @@ export const api = {
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
       throw new Error(err.error || 'Failed to send reset email');
+    }
+    return response.json();
+  },
+
+  /** WRA-31: mobile number for Week Reconciliation SMS alerts. Empty clears it. */
+  async setStaffAlertPhone(userId: string, phone: string): Promise<{ alertPhone: string | null }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/staff/${userId}/alert-phone`, {
+      method: 'PUT',
+      headers: await getHeaders(),
+      body: JSON.stringify({ phone }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || err.message || 'Failed to save the mobile number');
     }
     return response.json();
   },
@@ -7832,10 +7871,11 @@ export const api = {
     /** @deprecated Legacy only — server uses session company. */
     driverId?: string;
   }): Promise<{ success: boolean; data: Record<string, unknown> }> {
+    const { organizationId: _org, ...body } = payload;
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/fleet-bank-confirms`, {
       method: 'PUT',
       headers: await getHeaders(),
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     });
     if (!response.ok) {
       const errText = await response.text();
@@ -7870,7 +7910,6 @@ export const api = {
     }
     return response.json();
   },
-    const { organizationId: _org, ...body } = payload;
 
   async getOrganizationSettings(_organizationId?: string): Promise<{
     data: {
@@ -7901,6 +7940,7 @@ export const api = {
     tollLowBalanceDefaultJmd?: number | null;
     downtimeCostPerDayJmd?: number | null;
   }): Promise<{ success: boolean; data: Record<string, unknown> }> {
+    const { organizationId: _org, ...body } = payload;
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/organization-settings`, {
       method: 'PUT',
       headers: await getHeaders(),
@@ -7923,7 +7963,7 @@ export const api = {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/fleet-bank-statements`, {
       method: 'PUT',
       headers: await getHeaders(),
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     });
     if (!response.ok) {
       const errText = await response.text();
@@ -7940,7 +7980,6 @@ export const api = {
       const errText = await response.text();
       throw new Error(`Fleet bank statements failed: ${errText}`);
     }
-    const { organizationId: _org, ...body } = payload;
     return response.json();
   },
 

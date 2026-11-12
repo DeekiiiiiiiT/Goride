@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"error":"#ba1a1a","surface-tint":"#5e5c74","on-primary":"#ffffff","on-primary-fixed":"#1b192e","surface":"#f8f9ff","primary-fixed-dim":"#c8c3df","on-surface":"#0b1c30","inverse-surface":"#213145","on-tertiary-container":"#069669","background":"#f8f9ff","error-container":"#ffdad6","on-secondary-container":"#fefcff","on-secondary-fixed-variant":"#003ea8","on-tertiary":"#ffffff","on-primary-fixed-variant":"#46445b","on-secondary":"#ffffff","secondary-fixed-dim":"#b4c5ff","tertiary-container":"#002114","on-surface-variant":"#47464c","surface-container-highest":"#d3e4fe","tertiary-fixed":"#85f8c4","secondary-fixed":"#dbe1ff","inverse-on-surface":"#eaf1ff","surface-container-low":"#eff4ff","surface-container-lowest":"#ffffff","on-primary-container":"#84819a","on-tertiary-fixed":"#002114","outline-variant":"#c9c5cd","surface-variant":"#d3e4fe","primary":"#000000","tertiary":"#000000","on-tertiary-fixed-variant":"#005137","primary-container":"#1b192e","primary-fixed":"#e4dffc","on-error":"#ffffff","surface-bright":"#f8f9ff","inverse-primary":"#c8c3df","surface-container":"#e5eeff","on-error-container":"#93000a","surface-dim":"#cbdbf5","tertiary-fixed-dim":"#68dba9","surface-container-high":"#dce9ff","secondary-container":"#316bf3","outline":"#78767d","secondary":"#0051d5","on-secondary-fixed":"#00174b","on-background":"#0b1c30"},"borderRadius":{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},"spacing":{"space-md":"0.75rem","gutter-mobile":"1rem","space-sm":"0.5rem","space-xs":"0.25rem","space-lg":"1.25rem","gutter":"1.5rem","margin-mobile":"1rem","margin":"2.5rem","space-xl":"2rem"},"fontFamily":{"headline-sm":["Inter"],"display-lg":["Inter"],"headline-lg":["Inter"],"currency-sm":["Inter"],"body-lg":["Inter"],"body-md":["Inter"],"body-sm":["Inter"],"currency-md":["Inter"],"currency-lg":["Inter"],"headline-md":["Inter"],"display-lg-mobile":["Inter"],"label-sm":["Inter"],"label-md":["Inter"]},"fontSize":{"headline-sm":["16px",{"lineHeight":"24px","letterSpacing":"-0.01em","fontWeight":"600"}],"display-lg":["36px",{"lineHeight":"44px","letterSpacing":"-0.025em","fontWeight":"600"}],"headline-lg":["24px",{"lineHeight":"32px","letterSpacing":"-0.02em","fontWeight":"600"}],"currency-sm":["13px",{"lineHeight":"18px","fontWeight":"500"}],"body-lg":["16px",{"lineHeight":"24px","fontWeight":"400"}],"body-md":["14px",{"lineHeight":"20px","fontWeight":"400"}],"body-sm":["12px",{"lineHeight":"16px","fontWeight":"400"}],"currency-md":["16px",{"lineHeight":"24px","letterSpacing":"-0.01em","fontWeight":"600"}],"currency-lg":["28px",{"lineHeight":"36px","letterSpacing":"-0.02em","fontWeight":"600"}],"headline-md":["20px",{"lineHeight":"28px","letterSpacing":"-0.015em","fontWeight":"600"}],"display-lg-mobile":["28px",{"lineHeight":"36px","letterSpacing":"-0.02em","fontWeight":"600"}],"label-sm":["11px",{"lineHeight":"14px","letterSpacing":"0.04em","fontWeight":"600"}],"label-md":["13px",{"lineHeight":"18px","fontWeight":"500"}]}}}}</script></head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 right-0 w-full z-50 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 w-full px-gutter flex items-center justify-between border-b border-outline-variant/30"><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-sm"><div class="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-on-primary shadow-sm"><span class="material-symbols-outlined text-[20px]">local_shipping</span></div><span class="font-headline-sm text-headline-sm tracking-tight text-on-surface">Roam Fleet</span></div><nav class="hidden xl:flex items-center gap-space-md h-16" data-active-classes="text-on-surface font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-primary"><a class="relative h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="dashboard" href="#">Dashboard</a><a class="relative h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="fleet-operations" href="#">Fleet Operations</a><a class="relative h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="driver-operations" href="#">Driver Operations</a><a class="relative h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="money" href="#">Money</a><a class="relative h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="vehicle-operations" href="#">Vehicle Operations</a><a class="relative h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="delivery-operations" href="#">Delivery Operations</a><a class="relative h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="analytics" href="#">Analytics</a><a class="relative h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="reports" href="#">Reports</a><a aria-current="page" class="relative h-16 flex items-center px-space-xs transition-colors text-on-surface font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-primary" data-path="business-finance" href="#">Business Finance</a></nav></div><div class="flex items-center gap-space-md"><button class="relative p-space-xs rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" type="button"><span class="material-symbols-outlined text-[22px]">notifications</span><span class="absolute top-1 right-1 w-4 h-4 bg-error text-on-error font-label-sm text-[10px] leading-tight rounded-full flex items-center justify-center font-bold">3</span></button><div class="flex items-center gap-space-sm pl-space-sm border-l border-outline-variant/40"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="flex flex-col text-left"><span class="font-label-md text-label-md text-on-surface font-semibold leading-tight">Deeki T</span><span class="font-label-sm text-label-sm text-on-surface-variant leading-none">Admin</span></div></div></div></div><div class="h-11 w-full px-gutter bg-primary-container text-on-surface-variant flex items-center justify-between text-body-sm"><div class="flex items-center gap-space-sm w-96"><span class="material-symbols-outlined text-outline-variant text-[18px]">search</span><input class="bg-transparent border-none outline-none text-surface placeholder:text-outline-variant text-body-sm w-full focus:ring-0" placeholder="Switch vehicle or search hub…" type="text"/></div><div class="flex items-center gap-space-md font-label-sm text-label-sm text-surface-container-high"><span class="flex items-center gap-space-xs"><span class="w-1.5 h-1.5 rounded-full bg-tertiary-fixed"></span>09:10:28 PM EST</span><span class="text-outline">•</span><span>America/Jamaica</span><span class="text-outline">•</span><span class="text-surface font-semibold">JM (JMD)</span><span class="text-outline">•</span><div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-inverse-surface text-inverse-on-surface font-label-sm"><span class="font-bold">DE</span><span>•</span><span>Deeki T</span></div></div></div><div class="h-11 w-full px-gutter bg-surface-container-lowest border-b border-outline-variant/30 flex items-center justify-between"><div class="flex items-center gap-space-xs font-label-md text-label-md"><a class="text-on-surface-variant hover:text-on-surface transition-colors" data-path="business-finance" href="#">Business Finance</a><span class="text-outline-variant">›</span><span class="text-on-surface font-semibold">Week Reconciliation</span><span class="ml-space-xs px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-[11px] font-semibold">Wk 42 • Live</span></div><div class="flex items-center gap-space-sm font-label-sm text-label-sm text-on-surface-variant"><span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-on-tertiary-container"></span>Settlement Synced</span></div></div></header><main class="w-full pt-[152px] bg-surface min-h-[calc(100vh-80px)]"><div class="flex flex-col w-full">
+<!-- Interactive Toast Notification Container -->
+<div class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none flex items-center gap-space-sm px-space-lg py-space-md rounded-xl bg-primary text-on-primary shadow-xl" id="deskToast">
+<span class="material-symbols-outlined text-[20px] text-tertiary-fixed">check_circle</span>
+<span class="font-body-md text-body-md font-medium" id="deskToastMsg">Progress saved</span>
+</div>
+<!-- Top Desk Bar -->
+<section class="w-full px-gutter py-space-md bg-surface-container-lowest shadow-sm mb-space-lg">
+<div class="max-w-[1600px] mx-auto flex flex-col lg:flex-row lg:items-center justify-between gap-space-md">
+<!-- Title & Context Area -->
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center gap-space-xs">
+<button class="group inline-flex items-center gap-1 font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px] group-hover:-translate-x-0.5 transition-transform">arrow_back_ios</span>
+<span>Back to weeks</span>
+</button>
+<span class="text-outline-variant font-label-sm">•</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Settlement Desk</span>
+</div>
+<div class="flex flex-wrap items-center gap-space-md">
+<h1 class="font-headline-lg text-headline-lg text-on-surface font-semibold tracking-tight">Week of 8 Dec 2025</h1>
+<div class="flex items-center gap-space-xs">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface font-label-sm text-label-sm font-semibold">
+              Step 1 of 8: Upload inputs
+            </span>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-label-sm font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-on-secondary-container animate-pulse"></span>
+              In progress
+            </span>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+          Rideshare · 8–14 Dec 2025 · Toyota Roomy <span class="font-semibold text-on-surface">5179KZ</span> · Hub: Kingston Metropolitan
+        </p>
+</div>
+<!-- Sync Status & Desk Action Buttons -->
+<div class="flex items-center gap-space-md self-start lg:self-center">
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-low font-label-sm text-label-sm text-on-surface-variant">
+<span class="w-2 h-2 rounded-full bg-on-tertiary-container"></span>
+<span>Numbers updated 2 min ago</span>
+</div>
+<button class="inline-flex items-center gap-1.5 px-4 h-10 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold shadow-sm transition-all active:scale-[0.98]" id="reloadWeekBtn" type="button">
+<span class="material-symbols-outlined text-[18px]">sync</span>
+<span>Reload week</span>
+</button>
+</div>
+</div>
+</section>
+<!-- 3-Column Calm Guided Reconciliation Layout -->
+<main class="w-full px-gutter pb-space-xl">
+<div class="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-start">
+<!-- COLUMN 1: Left Step Rail (280px / 3 Cols) -->
+<aside class="lg:col-span-3 sticky top-4 flex flex-col gap-space-md">
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm">
+<div class="flex items-center justify-between pb-space-md">
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant font-bold">
+              Reconciliation Steps
+            </span>
+<span class="font-label-sm text-label-sm text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-full">
+              1 / 8
+            </span>
+</div>
+<!-- Vertical 8 Steps Progress Flow -->
+<nav class="flex flex-col gap-1.5 relative">
+<!-- Continuous line indicator -->
+<div class="absolute left-[17px] top-4 bottom-4 w-0.5 bg-surface-container-highest -z-0"></div>
+<!-- Step 1: Active -->
+<div class="relative z-10 flex items-start gap-3 p-2.5 rounded-xl bg-surface-container-low shadow-sm transition-all cursor-pointer">
+<div class="w-7 h-7 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-sm text-label-sm font-bold flex-shrink-0">
+                1
+              </div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md font-bold text-on-surface truncate">Upload inputs</span>
+<div class="mt-1">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-container-highest text-on-surface font-label-sm text-[11px] font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+                    1 of 5 received
+                  </span>
+</div>
+</div>
+</div>
+<!-- Step 2: Next -->
+<div class="relative z-10 flex items-start gap-3 p-2.5 rounded-xl opacity-75 hover:opacity-100 hover:bg-surface-container transition-all cursor-pointer group" onclick="showLockedReason('Step 2: Assign service lines requires all primary rideshare platform trip reports.')">
+<div class="w-7 h-7 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center font-label-sm text-label-sm font-semibold flex-shrink-0 group-hover:bg-primary-container group-hover:text-surface">
+                2
+              </div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md font-medium text-on-surface truncate">Assign service lines</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant truncate">Waiting on Step 1</span>
+</div>
+</div>
+<!-- Step 3: Locked -->
+<div class="relative z-10 flex items-start gap-3 p-2.5 rounded-xl opacity-60 hover:opacity-90 hover:bg-surface-container transition-all cursor-pointer group" onclick="showLockedReason('Step 3: Toll reconciliation unlocks after service lines are assigned to drivers.')">
+<div class="w-7 h-7 rounded-full bg-surface-container text-on-surface-variant flex items-center justify-center font-label-sm text-label-sm flex-shrink-0">
+<span class="material-symbols-outlined text-[15px]">lock</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md font-medium text-on-surface truncate">Tolls</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Locked</span>
+</div>
+</div>
+<!-- Step 4: Locked -->
+<div class="relative z-10 flex items-start gap-3 p-2.5 rounded-xl opacity-60 hover:opacity-90 hover:bg-surface-container transition-all cursor-pointer group" onclick="showLockedReason('Step 4: Tag account reconciliation unlocks after toll assignments.')">
+<div class="w-7 h-7 rounded-full bg-surface-container text-on-surface-variant flex items-center justify-center font-label-sm text-label-sm flex-shrink-0">
+<span class="material-symbols-outlined text-[15px]">lock</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md font-medium text-on-surface truncate">Tag account</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Locked</span>
+</div>
+</div>
+<!-- Step 5: Locked -->
+<div class="relative z-10 flex items-start gap-3 p-2.5 rounded-xl opacity-60 hover:opacity-90 hover:bg-surface-container transition-all cursor-pointer group" onclick="showLockedReason('Step 5: Fuel card allocation unlocks once operational mileage is confirmed.')">
+<div class="w-7 h-7 rounded-full bg-surface-container text-on-surface-variant flex items-center justify-center font-label-sm text-label-sm flex-shrink-0">
+<span class="material-symbols-outlined text-[15px]">lock</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md font-medium text-on-surface truncate">Fuel</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Locked</span>
+</div>
+</div>
+<!-- Step 6: Locked -->
+<div class="relative z-10 flex items-start gap-3 p-2.5 rounded-xl opacity-60 hover:opacity-90 hover:bg-surface-container transition-all cursor-pointer group" onclick="showLockedReason('Step 6: Trips & earnings summary compiles after all driver expense deductions.')">
+<div class="w-7 h-7 rounded-full bg-surface-container text-on-surface-variant flex items-center justify-center font-label-sm text-label-sm flex-shrink-0">
+<span class="material-symbols-outlined text-[15px]">lock</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md font-medium text-on-surface truncate">Trips & earnings</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Locked</span>
+</div>
+</div>
+<!-- Step 7: Locked -->
+<div class="relative z-10 flex items-start gap-3 p-2.5 rounded-xl opacity-60 hover:opacity-90 hover:bg-surface-container transition-all cursor-pointer group" onclick="showLockedReason('Step 7: Settlement preview generates the net settlement voucher draft.')">
+<div class="w-7 h-7 rounded-full bg-surface-container text-on-surface-variant flex items-center justify-center font-label-sm text-label-sm flex-shrink-0">
+<span class="material-symbols-outlined text-[15px]">lock</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md font-medium text-on-surface truncate">Settlement preview</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Locked</span>
+</div>
+</div>
+<!-- Step 8: Locked -->
+<div class="relative z-10 flex items-start gap-3 p-2.5 rounded-xl opacity-60 hover:opacity-90 hover:bg-surface-container transition-all cursor-pointer group" onclick="showLockedReason('Step 8: Final close week locks the ledger and issues driver statements.')">
+<div class="w-7 h-7 rounded-full bg-surface-container text-on-surface-variant flex items-center justify-center font-label-sm text-label-sm flex-shrink-0">
+<span class="material-symbols-outlined text-[15px]">lock</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md font-medium text-on-surface truncate">Close week</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Locked</span>
+</div>
+</div>
+</nav>
+<!-- Interactive Desk Rail Note -->
+<div class="mt-space-lg p-space-sm rounded-xl bg-surface-container-low text-on-surface-variant text-body-sm flex items-start gap-2">
+<span class="material-symbols-outlined text-[18px] text-secondary flex-shrink-0 mt-0.5">info</span>
+<span class="text-[12px] leading-relaxed">
+              Click any step to inspect requirements. Locked phases require preceding data reconciliation before opening.
+            </span>
+</div>
+</div>
+</aside>
+<!-- COLUMN 2: Center Desk Workspace (Step 1 Upload Inputs) -->
+<section class="lg:col-span-6 flex flex-col gap-space-lg">
+<!-- Desk Step Header Card -->
+<div class="bg-surface-container-lowest rounded-xl p-space-xl shadow-sm flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded-full bg-primary text-on-primary font-label-sm text-[11px] font-bold">STEP 1</span>
+<h2 class="font-headline-md text-headline-md text-on-surface font-semibold tracking-tight">Upload inputs</h2>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">schedule</span> 5 input sources
+            </span>
+</div>
+<p class="font-body-lg text-body-lg text-on-surface-variant">
+            Have all the week's input files been received?
+          </p>
+<p class="font-body-sm text-body-sm text-on-surface-variant/80 mt-1">
+            Reconcile external ride receipts and highway logs with telemetry records. All platforms must be accounted for before trip matching.
+          </p>
+</div>
+<!-- Drag & Drop Upload Zone -->
+<div class="group relative bg-surface-container-lowest rounded-xl p-space-xl shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col items-center justify-center text-center" id="dropZone">
+<input accept=".csv,.xlsx,.pdf" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" id="fileInput" multiple="" type="file"/>
+<div class="w-14 h-14 rounded-2xl bg-surface-container flex items-center justify-center text-primary group-hover:scale-105 group-hover:bg-primary group-hover:text-on-primary transition-all shadow-sm mb-space-sm">
+<span class="material-symbols-outlined text-[28px]">cloud_upload</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Drop statements here or click to browse</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">
+            Supports CSV, XLSX, PDF up to 25MB · Platform parsers run automatically
+          </p>
+<div class="flex items-center gap-2 mt-space-sm text-outline font-label-sm text-[11px]">
+<span class="px-2 py-0.5 rounded bg-surface-container">Uber Partner CSV</span>
+<span class="px-2 py-0.5 rounded bg-surface-container">InDrive XLSX</span>
+<span class="px-2 py-0.5 rounded bg-surface-container">Highway 2000 PDF</span>
+</div>
+</div>
+<!-- Source Cards List (5 Core Rideshare Input Sources) -->
+<div class="flex flex-col gap-space-md">
+<div class="flex items-center justify-between px-1">
+<h4 class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant font-bold">Platform Statement Ledger</h4>
+<span class="font-label-sm text-label-sm text-on-surface-variant">3 Required · 1 Pending Sync · 1 Optional</span>
+</div>
+<!-- Source a: Uber Weekly Reports -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-sm transition-all hover:shadow-md">
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-xl bg-primary text-on-primary flex items-center justify-center font-bold text-[16px]">
+                  U
+                </div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<h5 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Uber weekly reports</h5>
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-container text-on-tertiary-container font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">check_circle</span> Received
+                    </span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Daily payout and rideshare fare statement</span>
+</div>
+</div>
+<button class="p-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors" title="Re-upload Uber report" type="button">
+<span class="material-symbols-outlined text-[18px]">refresh</span>
+</button>
+</div>
+<!-- 7-day dot indicator (Mon-Sun) -->
+<div class="flex items-center justify-between py-space-xs px-space-sm bg-surface-container-low rounded-xl">
+<span class="font-label-sm text-[11px] text-on-surface-variant font-medium">Coverage:</span>
+<div class="flex items-center gap-2">
+<span class="flex items-center gap-1 font-label-sm text-[10px] text-on-surface font-medium"><span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container"></span>M</span>
+<span class="flex items-center gap-1 font-label-sm text-[10px] text-on-surface font-medium"><span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container"></span>T</span>
+<span class="flex items-center gap-1 font-label-sm text-[10px] text-on-surface font-medium"><span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container"></span>W</span>
+<span class="flex items-center gap-1 font-label-sm text-[10px] text-on-surface font-medium"><span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container"></span>T</span>
+<span class="flex items-center gap-1 font-label-sm text-[10px] text-on-surface font-medium"><span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container"></span>F</span>
+<span class="flex items-center gap-1 font-label-sm text-[10px] text-on-surface font-medium"><span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container"></span>S</span>
+<span class="flex items-center gap-1 font-label-sm text-[10px] text-on-surface font-medium"><span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container"></span>S</span>
+</div>
+<span class="font-label-sm text-[11px] font-semibold text-on-surface">7 of 7 days</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Uploaded 9 Dec 2025 by <span class="font-medium text-on-surface">Deeki T</span> (241 trips, <span class="font-semibold text-on-surface">J$142,500.00</span> gross)
+            </p>
+</div>
+<!-- Source b: InDrive Trip Export (CRITICAL NEEDED) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-sm ring-1 ring-secondary/20">
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-xl bg-surface-container text-primary flex items-center justify-center font-bold text-[16px]">
+                  iD
+                </div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<h5 class="font-headline-sm text-headline-sm text-on-surface font-semibold">InDrive trip export</h5>
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">warning</span> Needed
+                    </span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant">City and inter-parish passenger runs</span>
+</div>
+</div>
+</div>
+<!-- Empty Days indicator -->
+<div class="flex items-center justify-between py-space-xs px-space-sm bg-surface-container-low rounded-xl">
+<span class="font-label-sm text-[11px] text-on-surface-variant font-medium">Coverage:</span>
+<div class="flex items-center gap-2">
+<span class="flex items-center gap-1 font-label-sm text-[10px] text-on-surface-variant"><span class="w-2.5 h-2.5 rounded-full bg-outline-variant"></span>M</span>
+<span class="flex items-center gap-1 font-label-sm text-[10px] text-on-surface-variant"><span class="w-2.5 h-2.5 rounded-full bg-outline-variant"></span>T</span>
+<span class="flex items-center gap-1 font-label-sm text-[10px] text-on-surface-variant"><span class="w-2.5 h-2.5 rounded-full bg-outline-variant"></span>W</span>
+<span class="flex items-center gap-1 font-label-sm text-[10px] text-on-surface-variant"><span class="w-2.5 h-2.5 rounded-full bg-outline-variant"></span>T</span>
+<span class="flex items-center gap-1 font-label-sm text-[10px] text-on-surface-variant"><span class="w-2.5 h-2.5 rounded-full bg-outline-variant"></span>F</span>
+<span class="flex items-center gap-1 font-label-sm text-[10px] text-on-surface-variant"><span class="w-2.5 h-2.5 rounded-full bg-outline-variant"></span>S</span>
+<span class="flex items-center gap-1 font-label-sm text-[10px] text-on-surface-variant"><span class="w-2.5 h-2.5 rounded-full bg-outline-variant"></span>S</span>
+</div>
+<span class="font-label-sm text-[11px] font-semibold text-error">0 of 7 days</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Required for rideshare reconciliation. Needed before Step 2.
+            </p>
+<div class="flex items-center gap-space-sm pt-space-xs">
+<button class="inline-flex items-center gap-1.5 px-4 h-9 rounded-xl bg-primary hover:bg-slate-800 text-on-primary font-label-md text-label-md font-semibold shadow-sm transition-all active:scale-[0.98]" onclick="triggerSimulatedUpload('InDrive Trip Export')" type="button">
+<span class="material-symbols-outlined text-[16px]">upload_file</span>
+<span>Upload file</span>
+</button>
+<button class="inline-flex items-center gap-1.5 px-3.5 h-9 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-medium transition-all" onclick="markNoActivity('InDrive')" type="button">
+<span>Mark no activity</span>
+</button>
+</div>
+</div>
+<!-- Source c: Tag Account Usage Statement -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-sm">
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-xl bg-surface-container text-primary flex items-center justify-center font-bold text-[16px]">
+<span class="material-symbols-outlined text-[20px]">toll</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<h5 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Tag account usage statement</h5>
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-container-highest text-on-surface font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px] text-secondary">pie_chart</span> Partial
+                    </span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Highway 2000 Electronic Toll Collection (5179KZ Tag)</span>
+</div>
+</div>
+</div>
+<!-- 4 days green, 3 days empty -->
+<div class="flex items-center justify-between py-space-xs px-space-sm bg-surface-container-low rounded-xl">
+<span class="font-label-sm text-[11px] text-on-surface-variant font-medium">Coverage:</span>
+<div class="flex items-center gap-2">
+<span class="flex items-center gap-1 font-label-sm text-[10px] text-on-surface font-medium"><span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container"></span>M</span>
+<span class="flex items-center gap-1 font-label-sm text-[10px] text-on-surface font-medium"><span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container"></span>T</span>
+<span class="flex items-center gap-1 font-label-sm text-[10px] text-on-surface font-medium"><span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container"></span>W</span>
+<span class="flex items-center gap-1 font-label-sm text-[10px] text-on-surface font-medium"><span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container"></span>T</span>
+<span class="flex items-center gap-1 font-label-sm text-[10px] text-on-surface-variant"><span class="w-2.5 h-2.5 rounded-full bg-outline-variant"></span>F</span>
+<span class="flex items-center gap-1 font-label-sm text-[10px] text-on-surface-variant"><span class="w-2.5 h-2.5 rounded-full bg-outline-variant"></span>S</span>
+<span class="flex items-center gap-1 font-label-sm text-[10px] text-on-surface-variant"><span class="w-2.5 h-2.5 rounded-full bg-outline-variant"></span>S</span>
+</div>
+<span class="font-label-sm text-[11px] font-semibold text-on-surface">4 of 7 days</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Transactions synced through Thursday 11 Dec. 3 days missing.
+            </p>
+<div class="flex items-center gap-space-sm pt-space-xs">
+<button class="inline-flex items-center gap-1 px-3.5 h-9 rounded-xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-md text-label-md font-semibold transition-all" onclick="triggerSimulatedUpload('Tag Statement')" type="button">
+<span class="material-symbols-outlined text-[16px]">add_circle</span>
+<span>Upload remaining days</span>
+</button>
+<button class="inline-flex items-center px-3.5 h-9 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-medium transition-all" onclick="markMissingNoActivity()" type="button">
+<span>Mark missing as no activity</span>
+</button>
+</div>
+</div>
+<!-- Source d: Roam Fuel Card Statement -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-sm">
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-xl bg-surface-container text-primary flex items-center justify-center font-bold text-[16px]">
+<span class="material-symbols-outlined text-[20px]">local_gas_station</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<h5 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Roam fuel card statement</h5>
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-container-highest text-on-surface font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px] text-on-surface-variant">schedule</span> Waiting on Roam
+                    </span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Automated TotalEnergies Fleet API sync</span>
+</div>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Automated sync scheduled for tonight at 11:00 PM EST.
+            </p>
+<div class="flex items-center gap-space-sm pt-space-xs">
+<button class="inline-flex items-center gap-1.5 px-3.5 h-9 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-medium transition-all" id="remindRoamBtn" onclick="handleRemindRoam()" type="button">
+<span class="material-symbols-outlined text-[16px]">send</span>
+<span id="remindRoamText">Remind Roam</span>
+</button>
+</div>
+</div>
+<!-- Source e: Cash Tolls & Receipts (Optional) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-sm">
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-xl bg-surface-container text-on-surface-variant flex items-center justify-center font-bold text-[16px]">
+<span class="material-symbols-outlined text-[20px]">receipt_long</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<h5 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Cash tolls & receipts (optional)</h5>
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm font-medium">
+                      Optional
+                    </span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Driver cash out-of-pocket reimbursements</span>
+</div>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              No physical receipts logged by drivers for this period.
+            </p>
+<div class="flex items-center gap-space-sm pt-space-xs">
+<button class="inline-flex items-center gap-1 px-3.5 h-9 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-medium transition-all" onclick="triggerSimulatedUpload('Manual Cash Receipt')" type="button">
+<span class="material-symbols-outlined text-[16px]">add</span>
+<span>Add receipt</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Problem Banner & Clear Next Action Footer Bar -->
+<div class="sticky bottom-4 z-20 flex flex-col gap-space-sm">
+<!-- Problem alert container -->
+<div class="p-space-md rounded-xl bg-error-container text-on-error-container shadow-md flex items-center justify-between gap-space-sm" id="missingBanner">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-[20px] text-error">error</span>
+<span class="font-body-md text-body-md font-semibold">1 required source missing before proceeding to Step 2.</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-error-container/80 underline cursor-pointer" onclick="document.getElementById('dropZone').scrollIntoView({behavior: 'smooth'})">Resolve above</span>
+</div>
+<!-- Desk Action Control Panel -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-lg flex items-center justify-between gap-space-md">
+<div class="flex items-center gap-2">
+<span class="font-label-md text-label-md text-on-surface-variant font-medium">Step 1 of 8</span>
+<span class="text-outline-variant font-label-sm">•</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Draft Auto-Saved</span>
+</div>
+<div class="flex items-center gap-space-sm">
+<button class="px-4 h-11 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold transition-all" onclick="saveAndExit()" type="button">
+                Save & exit desk
+              </button>
+<button class="px-5 h-11 rounded-xl bg-outline-variant text-on-surface-variant opacity-60 cursor-not-allowed font-label-md text-label-md font-semibold shadow-sm transition-all flex items-center gap-1" disabled="" id="continueBtn" type="button">
+<span>Continue to Assign service lines</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- COLUMN 3: Right Summary Rail (300px / 3 Cols) -->
+<aside class="lg:col-span-3 sticky top-4 flex flex-col gap-space-md">
+<!-- Desk Overview Summary Card -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+<div class="flex items-center justify-between pb-space-xs">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant font-bold">Week Summary</span>
+<span class="font-label-sm text-label-sm text-on-tertiary-container font-semibold">Wk 42</span>
+</div>
+<!-- Total Gross Metric Card -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-col gap-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Total Gross Trips</span>
+<span class="font-currency-lg text-currency-lg text-on-surface font-semibold tracking-tight tabular-nums">
+              J$142,500.00
+            </span>
+<span class="font-body-sm text-[12px] text-on-surface-variant">From 241 logged fares</span>
+</div>
+<!-- Ledger Breakdowns -->
+<div class="flex flex-col gap-space-xs pt-1">
+<div class="flex items-center justify-between py-1.5 text-body-sm">
+<span class="text-on-surface-variant">Tolls Incurred</span>
+<span class="font-currency-md text-currency-md text-on-surface font-medium tabular-nums">J$8,450.00</span>
+</div>
+<div class="flex items-center justify-between py-1.5 text-body-sm">
+<span class="text-on-surface-variant">Fuel Expenses</span>
+<span class="font-currency-md text-currency-md text-on-surface font-medium tabular-nums">J$14,200.00</span>
+</div>
+<div class="flex items-center justify-between py-2 text-body-md font-semibold bg-surface-container-low px-space-sm rounded-lg mt-1">
+<span class="text-on-surface">Driver Net Payout Est.</span>
+<span class="font-currency-md text-currency-md text-secondary tabular-nums">J$38,540.25</span>
+</div>
+</div>
+<!-- Active Drivers in Week -->
+<div class="flex flex-col gap-space-xs pt-2">
+<span class="font-label-sm text-[11px] uppercase tracking-wider text-on-surface-variant font-bold">Active Drivers</span>
+<!-- Driver 1 -->
+<div class="p-space-sm rounded-xl bg-surface hover:bg-surface-container transition-colors flex items-center justify-between">
+<div class="flex flex-col min-w-0 pr-2">
+<span class="font-label-md text-label-md font-semibold text-on-surface truncate">Kenny Gregory Rattray</span>
+<span class="font-label-sm text-[11px] text-on-surface-variant truncate">Toyota Roomy · Primary</span>
+</div>
+<span class="font-currency-sm text-currency-sm font-semibold text-on-surface tabular-nums flex-shrink-0">
+                J$17,183.53
+              </span>
+</div>
+<!-- Driver 2 -->
+<div class="p-space-sm rounded-xl bg-surface hover:bg-surface-container transition-colors flex items-center justify-between">
+<div class="flex flex-col min-w-0 pr-2">
+<span class="font-label-md text-label-md font-semibold text-on-surface truncate">Phillip Bailey</span>
+<span class="font-label-sm text-[11px] text-on-surface-variant truncate">Toyota Roomy · Split</span>
+</div>
+<span class="font-currency-sm text-currency-sm font-semibold text-on-surface tabular-nums flex-shrink-0">
+                J$12,410.20
+              </span>
+</div>
+<!-- Driver 3 -->
+<div class="p-space-sm rounded-xl bg-surface hover:bg-surface-container transition-colors flex items-center justify-between">
+<div class="flex flex-col min-w-0 pr-2">
+<span class="font-label-md text-label-md font-semibold text-on-surface truncate">Sadiki Abayomi Thomas</span>
+<span class="font-label-sm text-[11px] text-on-surface-variant truncate">Toyota Roomy · Night</span>
+</div>
+<span class="font-currency-sm text-currency-sm font-semibold text-on-surface tabular-nums flex-shrink-0">
+                J$8,946.52
+              </span>
+</div>
+</div>
+<!-- Integrity Checks Box -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-col gap-2">
+<span class="font-label-sm text-[11px] uppercase tracking-wider text-on-surface-variant font-bold">Desk Verification Checks</span>
+<div class="flex items-center gap-2 text-body-sm text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-on-tertiary-container">verified</span>
+<span>5 automated checks passing</span>
+</div>
+<div class="flex items-center gap-2 text-body-sm text-error">
+<span class="material-symbols-outlined text-[16px]">pending</span>
+<span>1 check waiting on InDrive</span>
+</div>
+</div>
+<!-- Desk Companion Helper Box -->
+<div class="p-space-md rounded-xl bg-surface-container flex items-start gap-2.5">
+<span class="material-symbols-outlined text-[20px] text-primary flex-shrink-0 mt-0.5">lightbulb</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-snug">
+<span class="font-semibold text-on-surface">Need help?</span> Every step answers one plain question and auto-saves your progress continuously.
+            </p>
+</div>
+</div>
+</aside>
+</div>
+</main>
+<script>
+    // Toast helper
+    function showDeskToast(message) {
+      const toast = document.getElementById('deskToast');
+      const toastMsg = document.getElementById('deskToastMsg');
+      if (toast && toastMsg) {
+        toastMsg.textContent = message;
+        toast.classList.remove('translate-y-20', 'opacity-0');
+        toast.classList.add('translate-y-0', 'opacity-100');
+        setTimeout(() => {
+          toast.classList.remove('translate-y-0', 'opacity-100');
+          toast.classList.add('translate-y-20', 'opacity-0');
+        }, 3200);
+      }
+    }
+
+    // Step unlock reason helper
+    function showLockedReason(reason) {
+      showDeskToast(reason);
+    }
+
+    // Remind Roam interactive button
+    function handleRemindRoam() {
+      const btn = document.getElementById('remindRoamBtn');
+      const txt = document.getElementById('remindRoamText');
+      if (btn && txt) {
+        txt.textContent = 'Reminded 10 Nov 2026';
+        btn.classList.add('bg-surface-container-high', 'text-on-surface');
+        showDeskToast('Automated sync ping dispatched to Roam Financial API');
+      }
+    }
+
+    // Mark No Activity
+    function markNoActivity(platform) {
+      showDeskToast(platform + ' marked as zero activity for Week of 8 Dec.');
+      const continueBtn = document.getElementById('continueBtn');
+      const missingBanner = document.getElementById('missingBanner');
+      if (continueBtn && missingBanner) {
+        continueBtn.disabled = false;
+        continueBtn.classList.remove('bg-outline-variant', 'text-on-surface-variant', 'opacity-60', 'cursor-not-allowed');
+        continueBtn.classList.add('bg-primary', 'text-on-primary', 'hover:bg-slate-800', 'cursor-pointer');
+        missingBanner.classList.add('hidden');
+      }
+    }
+
+    function markMissingNoActivity() {
+      showDeskToast('Tag statement missing 3 days marked as non-operational idle.');
+    }
+
+    // Simulated upload trigger
+    function triggerSimulatedUpload(docName) {
+      showDeskToast('Parsed ' + docName + ' successfully. Recalculating ledger...');
+      setTimeout(() => {
+        const continueBtn = document.getElementById('continueBtn');
+        const missingBanner = document.getElementById('missingBanner');
+        if (continueBtn && missingBanner) {
+          continueBtn.disabled = false;
+          continueBtn.classList.remove('bg-outline-variant', 'text-on-surface-variant', 'opacity-60', 'cursor-not-allowed');
+          continueBtn.classList.add('bg-primary', 'text-on-primary', 'hover:bg-slate-800', 'cursor-pointer');
+          missingBanner.classList.add('hidden');
+        }
+        showDeskToast('All required inputs received. Ready for Step 2.');
+      }, 1000);
+    }
+
+    // Save & exit
+    function saveAndExit() {
+      showDeskToast('Reconciliation desk session state stored securely.');
+    }
+
+    // File input drag & drop wiring
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    if (dropZone && fileInput) {
+      fileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          triggerSimulatedUpload(e.target.files[0].name);
+        }
+      });
+      dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('bg-surface-container-high');
+      });
+      dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('bg-surface-container-high');
+      });
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('bg-surface-container-high');
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+          triggerSimulatedUpload(e.dataTransfer.files[0].name);
+        }
+      });
+    }
+
+    const reloadBtn = document.getElementById('reloadWeekBtn');
+    if (reloadBtn) {
+      reloadBtn.addEventListener('click', () => {
+        showDeskToast('Syncing week with core transaction database...');
+      });
+    }
+  </script>
+</div></main><footer class="w-full bg-surface-container-lowest border-t border-outline-variant/30 py-space-lg"><div class="w-full px-gutter flex flex-col sm:flex-row items-center justify-between gap-space-sm font-label-sm text-label-sm text-on-surface-variant"><div>© 2024 Roam Fleet Inc. Financial Settlement & Reconciliation Engine.</div><div class="flex items-center gap-space-lg"><span class="hover:text-on-surface cursor-pointer">Audit Logs</span><span class="hover:text-on-surface cursor-pointer">Compliance</span><span class="hover:text-on-surface cursor-pointer">Terms of Settlement</span></div></div></footer></body></html>

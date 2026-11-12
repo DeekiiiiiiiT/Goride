@@ -20,6 +20,7 @@ import {
   computeSourceStatusFromCoverage,
   resolveSourceRequirements,
   sourcesForLine,
+  orgMainLine,
   weekDayKeys,
   RECON_SOURCES,
   type OrgReconProfile,
@@ -32,15 +33,38 @@ import {
 import {
   evaluateRun,
   compositeInputsHashForStep,
+  hiddenLaneSteps,
   RECON_STEP_ORDER,
   type ReconSourceSnapshot,
 } from "./evaluate_run_mirror.ts";
+import {
+  deskInputsHash,
+  expandWeekCoverage,
+  fuelHasNothingToFinalize,
+  requiredSourcesMissing,
+  sortWeekList,
+  weekListEntry,
+  weekListKpis,
+  type StoredSource,
+} from "./recon_desk_shape.ts";
+import { computeWeekLevelBlockers, weekLevelBlockerRows } from "./recon_week_blockers.ts";
+import type { BlockerRow } from "./recon_week_blocker_rows.ts";
+import { correlationIdFrom, idempotencyKeyFrom, isLegacyCleanupWeek, withWeekChange, type WeekChangeOutcome } from "./recon_week_change.ts";
+import {
+  approvalActionLabel,
+  canWithdraw,
+  decideApprove,
+  isApprovalAction,
+  rejectReasonError,
+} from "./recon_approval_state.ts";
+import { acknowledgeCashSourceMismatch, reopenWeek, sealEarningsLaneForWeek } from "./week_close.ts";
+import { startWeekWorkflow } from "./recon_close_workflow.ts";
 import { registerReconImportRoutes } from "./recon_import_routes.ts";
+import { shapeWeekActivity } from "./recon_activity.ts";
+import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
 import * as kv from "./kv_store.tsx";
 import {
   periodEndForAnchor,
-  periodKeyFor,
-  DEFAULT_FLEET_TZ,
 } from "../../../packages/finance-core/src/periodKey.ts";
 import { isSettlementPeriodEnded } from "../../../packages/finance-core/src/settlementPeriodGate.ts";
 import {
@@ -53,10 +77,14 @@ import {
   countSettlementPreviewBlockers,
   isReconHumanSourceStatus,
 } from "../../../packages/finance-core/src/coverageInputHash.ts";
-import { countBlockersForStep } from "../../../packages/finance-core/src/closeBlockerSteps.ts";
+import {
+  countBlockersForStep,
+  serverStepForBlockerCode,
+} from "../../../packages/finance-core/src/closeBlockerSteps.ts";
 import { sourceVolumeMetrics } from "./recon_volume.ts";
 import { isReconWeekFrozen } from "./recon_week_writable.ts";
 import { logReconPhase } from "./recon_phase_log.ts";
+import { deskCashMismatches, displayNamesFor, historyItem, HISTORY_HIDDEN_KINDS, loadOtherApproverCount, withDriverNames } from "./recon_desk_reads.ts";
 import type { StoredWeekBlocker } from "./recon_projection_read.ts";
 
 async function refuseFrozenReconWeek(
@@ -88,6 +116,7 @@ type WeekRunRow = {
   desk_snapshot?: unknown;
   desk_computed_at?: string | null;
   desk_requested_at?: string | null;
+  main_line?: string | null;
 };
 
 function reconDb() {
@@ -100,129 +129,6 @@ function mondayOfToday(): string {
   const delta = dow === 0 ? -6 : 1 - dow;
   now.setDate(now.getDate() + delta);
   return now.toISOString().slice(0, 10);
-}
-
-function addDaysYmd(ymd: string, days: number): string {
-  const [y, m, d] = ymd.split("-").map(Number);
-  const local = new Date(y, m - 1, d, 12, 0, 0);
-  local.setDate(local.getDate() + days);
-  return local.toISOString().slice(0, 10);
-}
-
-function recentWeekKeys(count: number, year?: number): string[] {
-  const keys: string[] = [];
-  let anchor = mondayOfToday();
-  for (let i = 0; i < count; i += 1) {
-    const y = Number(anchor.slice(0, 4));
-    if (year == null || y === year) keys.push(anchor);
-    anchor = addDaysYmd(anchor, -7);
-  }
-  return keys;
-}
-
-function markWeekFromDay(
-  active: Set<string>,
-  candidateSet: Set<string>,
-  dayRaw: string,
-): void {
-  const day = String(dayRaw || "").slice(0, 10);
-  if (!WEEK_RE.test(day)) return;
-  const monday = periodKeyFor(day, DEFAULT_FLEET_TZ);
-  if (monday && candidateSet.has(monday)) active.add(monday);
-}
-
-/** Mark every candidate Monday that overlaps [start, end] inclusive. */
-function markWeeksOverlappingRange(
-  active: Set<string>,
-  candidateSet: Set<string>,
-  startRaw: string,
-  endRaw: string,
-): void {
-  const startDay = String(startRaw || "").slice(0, 10);
-  const endDay = String(endRaw || "").slice(0, 10);
-  if (!WEEK_RE.test(startDay) || !WEEK_RE.test(endDay)) return;
-  let monday = periodKeyFor(startDay, DEFAULT_FLEET_TZ);
-  if (!monday) return;
-  while (monday <= endDay) {
-    if (candidateSet.has(monday)) active.add(monday);
-    monday = addDaysYmd(monday, 7);
-  }
-}
-
-/**
- * Do not invent empty calendar weeks. Shared org sources (toll usage / top-ups)
- * stay required when tags exist — without this filter every blank Monday shows
- * “Provide Tag account…” with zero line activity.
- *
- * Rideshare activity = completed non-delivery trips and/or rideshare import
- * batches that cover the week. Delivery activity = completed rush_delivery trips.
- */
-async function weekKeysWithLineActivity(
-  orgId: string,
-  line: ReconLine,
-  candidates: string[],
-): Promise<string[]> {
-  if (candidates.length === 0) return [];
-  const sorted = [...candidates].filter((k) => WEEK_RE.test(k)).sort();
-  if (sorted.length === 0) return [];
-  const rangeStart = sorted[0];
-  const rangeEnd = periodEndForAnchor(sorted[sorted.length - 1]);
-  const candidateSet = new Set(sorted);
-  const active = new Set<string>();
-  const sb = getServiceClient();
-
-  let tripQuery = sb
-    .from("fleet_trips")
-    .select("date, service_line")
-    .eq("organization_id", orgId)
-    .eq("status", "Completed")
-    .gte("date", rangeStart)
-    .lte("date", rangeEnd)
-    .limit(100000);
-
-  if (line === "rush_delivery") {
-    tripQuery = tripQuery.eq("service_line", "rush_delivery");
-  }
-
-  const { data: trips, error: tripErr } = await tripQuery;
-  if (tripErr) {
-    console.warn(`[recon-weeks] ${line} trip activity lookup failed`, tripErr.message);
-  } else {
-    for (const row of trips ?? []) {
-      const sl = String((row as { service_line?: string | null }).service_line || "");
-      // Null / rideshare / other → rideshare desk; delivery-only → Delivery desk.
-      if (line === "rideshare" && sl === "rush_delivery") continue;
-      if (line === "rush_delivery" && sl !== "rush_delivery") continue;
-      markWeekFromDay(active, candidateSet, String((row as { date?: string }).date || ""));
-    }
-  }
-
-  if (line === "rideshare") {
-    const { data: batches, error: batchErr } = await sb
-      .from("fleet_import_batches")
-      .select("coverage_start, coverage_end, source_id")
-      .eq("organization_id", orgId)
-      .in("source_id", ["uber_bundle", "indrive_trips"])
-      .in("status", ["completed", "committed"])
-      .lte("coverage_start", rangeEnd)
-      .gte("coverage_end", rangeStart)
-      .limit(500);
-
-    if (batchErr) {
-      console.warn("[recon-weeks] rideshare import activity lookup failed", batchErr.message);
-    } else {
-      for (const b of batches ?? []) {
-        const start = String((b as { coverage_start?: string }).coverage_start || "").slice(0, 10);
-        const end = String((b as { coverage_end?: string }).coverage_end || "").slice(0, 10);
-        if (WEEK_RE.test(start) && WEEK_RE.test(end)) {
-          markWeeksOverlappingRange(active, candidateSet, start, end);
-        }
-      }
-    }
-  }
-
-  // Keep candidate order (newest first).
-  return candidates.filter((k) => active.has(k));
 }
 
 function actorFromContext(c: Context): string {
@@ -398,41 +304,62 @@ async function fetchCoverageMap(
     const days = weekDayKeys(weekKey);
     return Object.fromEntries(days.map((d) => [d, "missing"]));
   }
-  return (data as Record<string, string>) ?? {};
+  return expandWeekCoverage(data as Record<string, string> | null, weekKey);
 }
 
-async function materializeRunSources(
+type DeskSource = {
+  id: ReconSourceId;
+  label: string;
+  requirement: SourceRequirement;
+  status: SourceAggregateStatus;
+  coverage: Record<string, string>;
+  inputHash: string;
+  rowCount: number | null;
+  amountMinor: number | null;
+  /** WRA-18: when someone last pressed Remind for this source this week. */
+  lastRequestedAt: string | null;
+};
+
+/** The week's sources, worked out from the facts. Writes nothing (the desk publish saves them). */
+async function computeRunSources(
   orgId: string,
   line: ReconLine,
   weekKey: string,
-  runId: string,
+  run: WeekRunRow,
   profile: OrgReconProfile,
-): Promise<
-  Array<{
-    id: ReconSourceId;
-    label: string;
-    requirement: SourceRequirement;
-    status: SourceAggregateStatus;
-    coverage: Record<string, string>;
-    inputHash: string;
-  }>
-> {
+): Promise<DeskSource[]> {
+  const recon = reconDb();
+  // WRA-10: requirements are resolved for THIS week, then stored with the desk.
   const requirements = resolveSourceRequirements(profile, weekKey);
   const reqById = Object.fromEntries(requirements.map((r) => [r.sourceId, r.requirement]));
-  const defs = sourcesForLine(line);
-  const out = [];
+  // WRA-11: the tag-account sources follow the main line frozen on the run.
+  const runMainLine = (run.main_line ?? orgMainLine(profile) ?? "rideshare") as ReconLine;
+  const defs = sourcesForLine(line, runMainLine);
+  const out: DeskSource[] = [];
 
-  const recon = reconDb();
-  const { data: priorRows } = await recon
+  const { data: priorRows, error: priorErr } = await recon
     .from("run_sources")
     .select("source_id, status")
-    .eq("run_id", runId);
+    .eq("run_id", run.id);
+  if (priorErr) throw new Error(`run sources read failed: ${priorErr.message}`);
   const priorStatus = new Map(
     (priorRows ?? []).map((r) => [
       String((r as { source_id: string }).source_id),
       String((r as { status: string }).status),
     ]),
   );
+
+  const { data: requestRows } = await recon
+    .from("external_source_requests")
+    .select("source_id, requested_at")
+    .eq("organization_id", orgId)
+    .eq("service_line", line)
+    .eq("week_key", weekKey)
+    .order("requested_at", { ascending: false });
+  const lastRequested = new Map<string, string>();
+  for (const r of (requestRows ?? []) as Array<{ source_id: string; requested_at: string }>) {
+    if (!lastRequested.has(r.source_id)) lastRequested.set(r.source_id, r.requested_at);
+  }
 
   for (const def of defs) {
     const requirement = reqById[def.id] ?? def.requiredWhen(profile, weekKey);
@@ -457,75 +384,36 @@ async function materializeRunSources(
       status,
       coverage,
       inputHash,
+      rowCount: volume.rowCount ?? null,
+      amountMinor: volume.amountMinor ?? null,
+      lastRequestedAt: lastRequested.get(def.id) ?? null,
     });
-
-    await recon.from("run_sources").upsert(
-      {
-        run_id: runId,
-        source_id: def.id,
-        requirement,
-        status,
-        coverage,
-        input_hash: inputHash,
-        row_count: volume.rowCount,
-        amount_minor: volume.amountMinor,
-      },
-      { onConflict: "run_id,source_id" },
-    );
   }
 
   return out;
 }
 
-async function ensureWeekRun(
-  orgId: string,
-  line: ReconLine,
-  weekKey: string,
-  openedBy: string,
-): Promise<WeekRunRow> {
-  const recon = reconDb();
-  const { data: existing } = await recon
+/**
+ * WRA-13: weeks are created by the calculator (recon.ensure_ended_week_runs),
+ * never by opening a page or pressing a button. A missing week is "not ready".
+ */
+async function loadWeekRun(orgId: string, line: ReconLine, weekKey: string): Promise<WeekRunRow | null> {
+  const { data, error } = await reconDb()
     .from("week_runs")
     .select("*")
     .eq("organization_id", orgId)
     .eq("service_line", line)
     .eq("week_key", weekKey)
     .maybeSingle();
+  if (error) throw new Error(`week run read failed: ${error.message}`);
+  return (data as WeekRunRow | null) ?? null;
+}
 
-  if (existing) return existing as WeekRunRow;
-
-  const { data: inserted, error } = await recon
-    .from("week_runs")
-    .insert({
-      organization_id: orgId,
-      service_line: line,
-      week_key: weekKey,
-      opened_by: openedBy,
-    })
-    .select("*")
-    .single();
-
-  if (error || !inserted) {
-    const { data: raced } = await recon
-      .from("week_runs")
-      .select("*")
-      .eq("organization_id", orgId)
-      .eq("service_line", line)
-      .eq("week_key", weekKey)
-      .maybeSingle();
-    if (raced) return raced as WeekRunRow;
-    throw error ?? new Error("Failed to create week run");
-  }
-
-  const run = inserted as WeekRunRow;
-  const stepRows = RECON_STEP_ORDER.map((stepId) => ({
-    run_id: run.id,
-    step_id: stepId,
-    actionable: 0,
-    informational: 0,
-  }));
-  await recon.from("run_steps").upsert(stepRows, { onConflict: "run_id,step_id" });
-  return run;
+function weekNotReady(c: Context) {
+  return c.json({
+    error: "WEEK_NOT_READY",
+    message: "This week is still being prepared. Try again in a minute.",
+  }, 409);
 }
 
 async function loadRunSteps(runId: string) {
@@ -546,12 +434,8 @@ async function loadRunSteps(runId: string) {
 function sourcesStepCounts(
   sources: Array<{ requirement: SourceRequirement; status: SourceAggregateStatus }>,
 ): { actionable: number; informational: number } {
-  const actionable = sources.filter(
-    (s) =>
-      s.requirement === "required" &&
-      (s.status === "missing" || s.status === "partial" || s.status === "waiting_external"),
-  ).length;
-  return { actionable, informational: 0 };
+  // One rule for the step and the week list (recon_desk_shape.requiredSourcesMissing).
+  return { actionable: requiredSourcesMissing(sources), informational: 0 };
 }
 
 /**
@@ -563,13 +447,18 @@ type CloseCheck =
   | { status: "none" }
   | { status: "error" };
 
-/** Live lane actionable counts for run_steps + complete gates (R2-11 / R3-04/08/11). */
+/**
+ * Step counts for the desk (R2-11 / R3-04/08/11). Runs only when the desk is built
+ * (calculator or a user's own change), never on a page read (WRA-08).
+ * `blockers` = the saved driver rows + this build's whole-week rows; null = the read failed.
+ */
 async function computeLiveStepCounts(
   orgId: string,
   weekKey: string,
   line: ReconLine,
-  sources: Array<{ requirement: SourceRequirement; status: SourceAggregateStatus }>,
-  runId?: string,
+  sources: Array<{ id: string; requirement: SourceRequirement; status: SourceAggregateStatus }>,
+  runId: string,
+  blockers: StoredWeekBlocker[] | null,
 ): Promise<{
   counts: Partial<Record<RunStepId, { actionable: number; informational: number }>>;
   closeCheck: CloseCheck;
@@ -616,7 +505,10 @@ async function computeLiveStepCounts(
     .eq("week_start", weekKey)
     .eq("service_line", line)
     .maybeSingle();
-  if (!fuelPeriod) {
+  if (fuelHasNothingToFinalize(sources)) {
+    // Rev 24: every fuel file is "no activity" / waived — nothing to finalize.
+    fuelActionable = 0;
+  } else if (!fuelPeriod) {
     fuelActionable = 1;
   } else {
     const status = String((fuelPeriod as { status?: string }).status || "");
@@ -641,22 +533,20 @@ async function computeLiveStepCounts(
   let closeActionable = 0;
   let previewBlockers: Array<{ code?: string | null; severity?: string | null }> = [];
   let closeCheck: CloseCheck = { status: "none" };
-  try {
-    const { loadWeekBlockerRows, loadWeekProjectionStatus } = await import("./recon_projection_read.ts");
+  if (blockers === null) {
+    // Fail closed: a failed read must not show the week as clear.
+    closeCheck = { status: "error" };
+    closeActionable = 1;
+  } else {
+    previewBlockers = blockers.map((row) => ({ code: row.code, severity: row.severity }));
+    const { loadWeekProjectionStatus } = await import("./recon_projection_read.ts");
     const projection = await loadWeekProjectionStatus(orgId, weekKey);
     if (projection.totalDrivers > 0) {
-      const stored = await loadWeekBlockerRows(orgId, weekKey, line);
-      closeCheck = { status: "ok", blockers: stored };
-      previewBlockers = stored.map((row) => ({ code: row.code, severity: row.severity }));
+      closeCheck = { status: "ok", blockers };
       tripsActionable = countTripsEarningsBlockers(previewBlockers);
       settlementActionable = countSettlementPreviewBlockers(previewBlockers);
       closeActionable = countBlockersForStep("close", previewBlockers);
     }
-  } catch (e) {
-    console.warn("[recon] stored blocker read failed", e);
-    // Fail closed: a failed read must not show the week as clear.
-    closeCheck = { status: "error" };
-    closeActionable = 1;
   }
 
   // Period probes can read clear while a close rule on that lane is still open.
@@ -667,9 +557,7 @@ async function computeLiveStepCounts(
   try {
     const { openingMinor } = await loadPriorTagClosingMinor(orgId, weekKey);
     const { topUpsMinor, tagUsageMinor } = await sumTagLedgerWeekMinor(orgId, weekKey);
-    const statementClosingMinor = runId
-      ? await loadStoredStatementClosingMinor(runId)
-      : null;
+    const statementClosingMinor = await loadStoredStatementClosingMinor(runId);
     const roll = computeTagAccountRollForward({
       openingMinor,
       topUpsMinor,
@@ -696,72 +584,162 @@ async function computeLiveStepCounts(
   };
 }
 
-async function persistLiveStepCounts(
-  runId: string,
-  live: Partial<Record<RunStepId, { actionable: number; informational: number }>>,
-) {
-  const existing = await loadRunSteps(runId);
-  const byId = new Map(existing.map((r) => [r.step_id, r]));
-  const rows = RECON_STEP_ORDER.map((stepId) => {
-    const prev = byId.get(stepId);
-    return {
-      run_id: runId,
-      step_id: stepId,
-      actionable: live[stepId]?.actionable ?? 0,
-      informational: live[stepId]?.informational ?? 0,
-      completed_at: prev?.completed_at ?? null,
-      completed_by: prev?.completed_by ?? null,
-      inputs_hash_at_complete: prev?.inputs_hash_at_complete ?? null,
-    };
-  });
-  await reconDb().from("run_steps").upsert(rows, {
-    onConflict: "run_id,step_id",
-    ignoreDuplicates: false,
-  });
+type DeskStep = {
+  id: RunStepId;
+  actionable: number;
+  informational: number;
+  completedAt: string | null;
+  completedBy: string | null;
+  inputsHashAtComplete: string | null;
+  hidden: boolean;
+  gateStatus: string;
+};
+
+type DeskBuild = {
+  payload: Record<string, unknown> & { steps: DeskStep[] };
+  sources: DeskSource[];
+  weekBlockerRows: BlockerRow[];
+  inputsHash: string;
+  evaluation: ReturnType<typeof evaluateRun>;
+  liveCounts: Partial<Record<RunStepId, { actionable: number; informational: number }>>;
+  sourceSnaps: ReconSourceSnapshot[];
+};
+
+type PendingCorrection = {
+  statementId: string;
+  kind: string;
+  driverId: string | null;
+  closeReason: string | null;
+  raisedAt: string | null;
+  raisedAutomatically: boolean;
+};
+
+/** WRA-30: correction drafts waiting to be signed on this week (e.g. late trips after close). */
+async function loadPendingCorrections(orgId: string, weekKey: string): Promise<PendingCorrection[]> {
+  const { data, error } = await getServiceClient().from("week_statements")
+    .select("id, kind, driver_id, close_reason, created_at")
+    .eq("organization_id", orgId).eq("week_key", weekKey).eq("status", "draft")
+    .ilike("close_reason", "%restatement%");
+  if (error) throw new Error(`correction drafts read failed: ${error.message}`);
+  return ((data ?? []) as Array<{ id: string; kind: string; driver_id: string | null; close_reason: string | null; created_at: string | null }>)
+    .map((r) => ({
+      statementId: String(r.id),
+      kind: r.kind,
+      driverId: r.driver_id,
+      closeReason: r.close_reason,
+      raisedAt: r.created_at,
+      // Drafts from late data (late_trip_backfill_restatement) were raised by the system, not a person.
+      raisedAutomatically: String(r.close_reason || "").startsWith("late_"),
+    }));
 }
 
-async function buildRunPayload(
+/** Writes each automatic correction into the history once (prepared_by 'system'). */
+async function logDataRestatements(run: WeekRunRow, corrections: PendingCorrection[]): Promise<void> {
+  const automatic = corrections.filter((c) => c.raisedAutomatically);
+  if (!automatic.length) return;
+  const keys = automatic.map((c) => `data_restatement:${c.statementId}`);
+  const { data: seen, error } = await reconDb().from("run_events")
+    .select("idempotency_key").eq("run_id", run.id).in("idempotency_key", keys);
+  if (error) throw new Error(`history read failed: ${error.message}`);
+  const already = new Set((seen ?? []).map((r) => String((r as { idempotency_key: string }).idempotency_key)));
+  for (const c of automatic) {
+    const key = `data_restatement:${c.statementId}`;
+    if (already.has(key)) continue;
+    const { error: insErr } = await reconDb().from("run_events").insert({
+      run_id: run.id,
+      actor: "system",
+      kind: "data_restatement",
+      payload: { statementId: c.statementId, statementKind: c.kind, driverId: c.driverId, closeReason: c.closeReason },
+      line: run.service_line,
+      week_key: String(run.week_key).slice(0, 10),
+      idempotency_key: key,
+      prepared_by: "system",
+      status: "applied",
+      version_at_send: Number(run.version),
+    });
+    // A double write from a race hits the (run, idempotency_key) unique index: that is fine.
+    if (insErr && !/duplicate key/i.test(insErr.message)) throw new Error(`correction history failed: ${insErr.message}`);
+  }
+}
+
+/** Saved driver blockers for the week (each written by that driver's calculator unit). */
+async function loadDriverBlockerRows(
+  orgId: string,
+  weekKey: string,
+  line: ReconLine,
+): Promise<StoredWeekBlocker[]> {
+  const { data, error } = await reconDb()
+    .from("week_blockers")
+    .select("code, severity, driver_id, source_id, message, persisted, expected, delta")
+    .eq("organization_id", orgId)
+    .eq("week_key", weekKey)
+    .eq("service_line", line)
+    .not("driver_id", "is", null);
+  if (error) throw new Error(`week blockers read failed: ${error.message}`);
+  return (data ?? []) as StoredWeekBlocker[];
+}
+
+/**
+ * Works out the whole desk for one week: sources, whole-week blockers, step counts,
+ * hidden steps and the gate evaluation. Writes nothing; see publishDeskBuild.
+ */
+async function computeWeekDesk(
   orgId: string,
   line: ReconLine,
   weekKey: string,
-  openedBy: string,
-) {
+  run: WeekRunRow,
+): Promise<DeskBuild> {
   const profileStarted = Date.now();
   const profile = await loadOrgReconProfile(orgId);
   logReconPhase("profile", profileStarted, { weekKey, line });
-  const ensureStarted = Date.now();
-  const run = await ensureWeekRun(orgId, line, weekKey, openedBy);
-  logReconPhase("ensure_run", ensureStarted, { weekKey, line });
-  const sourcesStarted = Date.now();
-  const sources = await materializeRunSources(orgId, line, weekKey, run.id, profile);
-  logReconPhase("materialize_sources", sourcesStarted, { weekKey, line, sources: sources.length });
-  const stepsStarted = Date.now();
-  const { counts: liveCounts, closeCheck } = await computeLiveStepCounts(orgId, weekKey, line, sources, run.id);
-  logReconPhase("step_counts", stepsStarted, { weekKey, line });
-  const persistStarted = Date.now();
-  await persistLiveStepCounts(run.id, liveCounts);
-  const stepRows = await loadRunSteps(run.id);
-  logReconPhase("persist_steps", persistStarted, { weekKey, line });
 
+  const sourcesStarted = Date.now();
+  const sources = await computeRunSources(orgId, line, weekKey, run, profile);
+  logReconPhase("materialize_sources", sourcesStarted, { weekKey, line, sources: sources.length });
+
+  const now = new Date().toISOString();
+  const weekBlockers = await computeWeekLevelBlockers(orgId, weekKey, line, { withPnlTie: false });
+  const weekBlockerRows = weekLevelBlockerRows(orgId, weekKey, line, weekBlockers, now);
+
+  let blockers: StoredWeekBlocker[] | null;
+  try {
+    const driverRows = await loadDriverBlockerRows(orgId, weekKey, line);
+    blockers = [
+      ...driverRows,
+      ...weekBlockerRows.map((row) => ({
+        code: row.code,
+        severity: row.severity,
+        driver_id: null,
+        source_id: row.source_id,
+        message: row.message,
+        persisted: row.persisted,
+        expected: row.expected,
+        delta: row.delta,
+      })),
+    ];
+  } catch (e) {
+    console.warn("[recon] stored blocker read failed", e);
+    blockers = null;
+  }
+
+  const stepsStarted = Date.now();
+  const { counts: liveCounts, closeCheck } = await computeLiveStepCounts(
+    orgId,
+    weekKey,
+    line,
+    sources,
+    run.id,
+    blockers,
+  );
+  logReconPhase("step_counts", stepsStarted, { weekKey, line });
+
+  const stepRows = await loadRunSteps(run.id);
+  const byStep = new Map(stepRows.map((r) => [r.step_id, r]));
   const sourceSnaps: ReconSourceSnapshot[] = sources.map((s) => ({
     id: s.id,
     status: s.status,
     inputHash: s.inputHash,
   }));
-
-  const stepCounts: Partial<Record<RunStepId, { actionable: number; informational: number }>> = {
-    ...liveCounts,
-  };
-  for (const row of stepRows) {
-    // Preserve completed_* from DB; actionable comes from liveCounts.
-    if (!stepCounts[row.step_id as RunStepId]) {
-      stepCounts[row.step_id as RunStepId] = {
-        actionable: row.actionable ?? 0,
-        informational: row.informational ?? 0,
-      };
-    }
-  }
-
   const completedSteps = stepRows
     .filter((r) => r.completed_at)
     .map((r) => ({
@@ -770,29 +748,52 @@ async function buildRunPayload(
       inputsHashAtComplete: r.inputs_hash_at_complete,
     }));
 
-  const evaluation = evaluateRun({ sources: sourceSnaps, stepCounts, completedSteps });
+  // WRA-19: lane steps with nothing feeding them on this line are hidden.
+  const blockerStepIds = [
+    ...new Set(
+      (blockers ?? [])
+        .filter((b) => String(b.severity || "block") !== "warn")
+        .map((b) => serverStepForBlockerCode(String(b.code || "")))
+        .filter((s): s is RunStepId => s != null),
+    ),
+  ];
+  const hiddenSteps = hiddenLaneSteps({
+    applicableSourceIds: sources.filter((s) => s.requirement !== "not_applicable").map((s) => s.id),
+    blockerStepIds,
+  });
+  const hiddenSet = new Set<RunStepId>(hiddenSteps);
+
+  const evaluation = evaluateRun({ sources: sourceSnaps, stepCounts: liveCounts, completedSteps, hiddenSteps });
+
   const attributionStarted = Date.now();
   const attribution = await loadUnattributedForWeek(orgId, weekKey);
   logReconPhase("attribution", attributionStarted, { weekKey, line, rows: attribution.rowCount });
 
+  const corrections = await loadPendingCorrections(orgId, weekKey);
+
+  const steps: DeskStep[] = RECON_STEP_ORDER.map((stepId) => {
+    const row = byStep.get(stepId);
+    const live = liveCounts[stepId];
+    const hidden = hiddenSet.has(stepId);
+    return {
+      id: stepId,
+      actionable: hidden ? 0 : live?.actionable ?? row?.actionable ?? 0,
+      informational: hidden ? 0 : live?.informational ?? row?.informational ?? 0,
+      completedAt: row?.completed_at ?? null,
+      completedBy: row?.completed_by ?? null,
+      inputsHashAtComplete: row?.inputs_hash_at_complete ?? null,
+      hidden,
+      gateStatus: evaluation.steps.find((e) => e.id === stepId)?.status ?? "locked",
+    };
+  });
+
   const payload = {
     deskReady: true,
-    run: {
-      id: run.id,
-      organizationId: run.organization_id,
-      serviceLine: run.service_line,
-      weekKey: String(run.week_key).slice(0, 10),
-      state: run.state,
-      version: run.version,
-      openedBy: run.opened_by,
-      openedAt: run.opened_at,
-      closedAt: run.closed_at,
-      closedBy: run.closed_by,
-      closeRunId: run.close_run_id,
-    },
+    run: deskRunFields(run),
     evaluation,
     attribution,
     closeCheck,
+    corrections,
     sources: sources.map((s) => {
       const def = RECON_SOURCES.find((d) => d.id === s.id);
       return {
@@ -803,36 +804,83 @@ async function buildRunPayload(
         status: s.status,
         coverage: s.coverage,
         inputHash: s.inputHash,
+        lastRequestedAt: s.lastRequestedAt,
       };
     }),
-    steps: stepRows.map((r) => {
-      const live = liveCounts[r.step_id as RunStepId];
-      return {
-        id: r.step_id,
-        actionable: live?.actionable ?? r.actionable,
-        informational: live?.informational ?? r.informational,
-        completedAt: r.completed_at,
-        completedBy: r.completed_by,
-        inputsHashAtComplete: r.inputs_hash_at_complete,
-      gateStatus: evaluation.steps.find((e) => e.id === r.step_id)?.status ?? "locked",
-    };
-  }),
+    steps,
   };
+
+  return {
+    payload,
+    sources,
+    weekBlockerRows,
+    inputsHash: deskInputsHash(sources),
+    evaluation,
+    liveCounts,
+    sourceSnaps,
+  };
+}
+
+/**
+ * WRA-29: sources, steps, whole-week blockers, the desk picture and the version
+ * are saved in ONE transaction (recon.publish_week_desk). Returns the new version.
+ */
+async function publishDeskBuild(run: WeekRunRow, build: DeskBuild): Promise<number> {
   const saveStarted = Date.now();
-  const { error: saveError } = await reconDb().from("week_runs").update({
-    desk_snapshot: payload,
-    desk_computed_at: new Date().toISOString(),
-  }).eq("id", run.id);
-  logReconPhase("desk_save", saveStarted, { weekKey, line, ok: !saveError });
-  if (saveError) console.warn("[recon] desk snapshot write failed", saveError.message);
-  return payload;
+  const { data, error } = await reconDb().rpc("publish_week_desk", {
+    p_run_id: run.id,
+    p_inputs_hash: build.inputsHash,
+    p_payload: build.payload,
+    p_sources: build.sources.map((s) => ({
+      source_id: s.id,
+      requirement: s.requirement,
+      status: s.status,
+      coverage: s.coverage,
+      input_hash: s.inputHash,
+      row_count: s.rowCount,
+      amount_minor: s.amountMinor,
+    })),
+    p_steps: build.payload.steps.map((s) => ({
+      step_id: s.id,
+      actionable: s.actionable,
+      informational: s.informational,
+      hidden: s.hidden,
+    })),
+    p_blockers: build.weekBlockerRows,
+  });
+  logReconPhase("desk_save", saveStarted, { weekKey: String(run.week_key).slice(0, 10), ok: !error });
+  if (error) throw new Error(`desk publish failed: ${error.message}`);
+  return Number(data ?? run.version + 1);
+}
+
+/**
+ * Builds and publishes the desk for one week. Called by the calculator and right
+ * after a user's own change. Returns null when the week has not been created yet.
+ */
+async function buildRunPayload(
+  orgId: string,
+  line: ReconLine,
+  weekKey: string,
+  _actor?: string,
+) {
+  const run = await loadWeekRun(orgId, line, weekKey);
+  if (!run) return null;
+  const build = await computeWeekDesk(orgId, line, weekKey, run);
+  const version = await publishDeskBuild(run, build);
+  await logDataRestatements(run, build.payload.corrections as PendingCorrection[]);
+  const calculator = await loadCalculatorStatus(orgId, new Date().toISOString());
+  return {
+    ...build.payload,
+    run: deskRunFields({ ...run, version }),
+    calculator,
+  };
 }
 
 export async function publishWeekDesk(
   orgId: string,
   line: ReconLine,
   weekKey: string,
-  openedBy: string,
+  openedBy?: string,
 ) {
   return buildRunPayload(orgId, line, weekKey, openedBy);
 }
@@ -845,6 +893,7 @@ function deskRunFields(run: WeekRunRow) {
     weekKey: String(run.week_key).slice(0, 10),
     state: run.state,
     version: run.version,
+    mainLine: run.main_line ?? null,
     openedBy: run.opened_by,
     openedAt: run.opened_at,
     closedAt: run.closed_at,
@@ -859,52 +908,7 @@ function isDeskSnapshot(value: unknown): value is { sources: unknown[]; steps: u
   return Array.isArray(row.sources) && Array.isArray(row.steps) && row.evaluation != null && row.run != null && typeof row.run === "object";
 }
 
-/** Step rail + Continue follow current blockers, not the last saved picture. */
-async function overlayLiveStepGates(
-  orgId: string,
-  line: ReconLine,
-  weekKey: string,
-  run: WeekRunRow,
-  snapshot: { sources?: unknown; evaluation?: unknown; closeCheck?: unknown; run: Record<string, unknown> },
-) {
-  try {
-    const sources = (Array.isArray(snapshot.sources) ? snapshot.sources : []) as Array<{
-      id?: string;
-      requirement?: SourceRequirement;
-      status?: SourceAggregateStatus;
-      inputHash?: string;
-    }>;
-    const { counts, closeCheck } = await computeLiveStepCounts(
-      orgId,
-      weekKey,
-      line,
-      sources.map((s) => ({
-        requirement: (s.requirement || "required") as SourceRequirement,
-        status: (s.status || "missing") as SourceAggregateStatus,
-      })),
-      run.id,
-    );
-    const stepRows = await loadRunSteps(run.id);
-    const completedSteps = stepRows
-      .filter((r) => r.completed_at)
-      .map((r) => ({
-        stepId: r.step_id as RunStepId,
-        completedAt: r.completed_at,
-        inputsHashAtComplete: r.inputs_hash_at_complete,
-      }));
-    const sourceSnaps: ReconSourceSnapshot[] = sources.map((s) => ({
-      id: String(s.id || "") as ReconSourceId,
-      status: (s.status || "missing") as SourceAggregateStatus,
-      inputHash: String(s.inputHash || ""),
-    }));
-    const evaluation = evaluateRun({ sources: sourceSnaps, stepCounts: counts, completedSteps });
-    return { ...snapshot, evaluation, closeCheck };
-  } catch (e) {
-    console.warn("[recon] live step gates failed", e instanceof Error ? e.message : e);
-    return snapshot;
-  }
-}
-
+/** The saved desk with the run's current state and version (a read: nothing is recalculated). */
 function withLiveRun(
   snapshot: { run: Record<string, unknown> },
   run: WeekRunRow,
@@ -921,6 +925,50 @@ async function calculatorIsPaused(): Promise<boolean> {
   // Fail closed. A status outage must not look like "still preparing" while the calculator is stopped.
   if (error || !data || typeof data !== "object") return true;
   return Boolean((data as { emergencyOff?: boolean }).emergencyOff);
+}
+
+type CalculatorStatus = {
+  paused: boolean;
+  pausedSince: string | null;
+  pendingUnits: number;
+  oldestPendingAgeSeconds: number | null;
+  lastComputedAt: string | null;
+};
+
+/** WRA-16: on every payload, so the page can always say how fresh the numbers are. */
+async function loadCalculatorStatus(orgId: string, lastComputedAt: string | null): Promise<CalculatorStatus> {
+  try {
+    const { data, error } = await reconDb()
+      .from("health")
+      .select("calculator_paused, calculator_paused_since, pending_units, oldest_pending_age_seconds")
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    if (!error && data) {
+      const row = data as {
+        calculator_paused?: boolean | null;
+        calculator_paused_since?: string | null;
+        pending_units?: number | null;
+        oldest_pending_age_seconds?: number | null;
+      };
+      const paused = Boolean(row.calculator_paused);
+      return {
+        paused,
+        pausedSince: paused ? row.calculator_paused_since ?? null : null,
+        pendingUnits: Number(row.pending_units ?? 0),
+        oldestPendingAgeSeconds: row.oldest_pending_age_seconds ?? null,
+        lastComputedAt,
+      };
+    }
+  } catch (e) {
+    console.warn("[recon] health read failed", e instanceof Error ? e.message : e);
+  }
+  return {
+    paused: await calculatorIsPaused(),
+    pausedSince: null,
+    pendingUnits: 0,
+    oldestPendingAgeSeconds: null,
+    lastComputedAt,
+  };
 }
 
 function preparingPayload(run: WeekRunRow, calculatorPaused: boolean) {
@@ -943,62 +991,95 @@ function preparingPayload(run: WeekRunRow, calculatorPaused: boolean) {
   };
 }
 
-async function requestWeekDesk(run: WeekRunRow): Promise<void> {
-  if (!("desk_requested_at" in run)) return;
-  const requestedAt = run.desk_requested_at ? Date.parse(run.desk_requested_at) : NaN;
-  if (Number.isFinite(requestedAt) && Date.now() - requestedAt < 120_000) return;
-  const { error: stampError } = await reconDb()
-    .from("week_runs")
-    .update({ desk_requested_at: new Date().toISOString() })
-    .eq("id", run.id);
-  if (stampError) {
-    console.warn("[recon] desk request stamp failed", stampError.message);
-    return;
-  }
-  const { error } = await getServiceClient().rpc("recon_enqueue_week_desk", {
-    p_org: run.organization_id,
-    p_line: run.service_line,
-    p_week: String(run.week_key).slice(0, 10),
-  });
-  if (error) console.warn("[recon] desk enqueue failed", error.message);
+/** A week the calculator has not created yet looks like any other week being prepared. */
+function notCreatedRun(orgId: string, line: ReconLine, weekKey: string): WeekRunRow {
+  return {
+    id: "",
+    organization_id: orgId,
+    service_line: line,
+    week_key: weekKey,
+    state: "preparing",
+    version: 0,
+    opened_by: null,
+    opened_at: "",
+    closed_at: null,
+    closed_by: null,
+    close_run_id: null,
+    main_line: null,
+  };
 }
 
-async function bumpRunVersion(
-  runId: string,
-  expectedVersion: number | undefined,
-): Promise<{ ok: true; version: number } | { ok: false; status: 409; currentVersion: number }> {
-  const recon = reconDb();
-  const { data: current } = await recon.from("week_runs").select("version").eq("id", runId).single();
-  const cur = Number(current?.version ?? 0);
-  if (expectedVersion != null && expectedVersion !== cur) {
-    return { ok: false, status: 409, currentVersion: cur };
-  }
-  const next = cur + 1;
-  const { data: updated, error } = await recon
-    .from("week_runs")
-    .update({ version: next })
-    .eq("id", runId)
-    .eq("version", cur)
-    .select("version")
-    .maybeSingle();
-  if (error || !updated) {
-    const { data: again } = await recon.from("week_runs").select("version").eq("id", runId).single();
-    return { ok: false, status: 409, currentVersion: Number(again?.version ?? cur) };
-  }
-  return { ok: true, version: Number(updated.version) };
-}
 
-async function appendRunEvent(
+/** Waive a required source for the week. Shared by the direct Waive and an approved Waive request. */
+async function applyWaive(
+  orgId: string,
+  line: ReconLine,
+  weekKey: string,
   runId: string,
+  sourceId: ReconSourceId,
+  reason: string,
   actor: string,
-  kind: string,
-  payload: Record<string, unknown>,
-) {
-  await reconDb().from("run_events").insert({
+): Promise<void> {
+  const def = RECON_SOURCES.find((s) => s.id === sourceId);
+  if (!def) throw new Error(`unknown source ${sourceId}`);
+  const profile = await loadOrgReconProfile(orgId);
+  const requirement = def.requiredWhen(profile, weekKey);
+  const coverage = await fetchCoverageMap(orgId, line, sourceId, weekKey);
+  const volume = await sourceVolumeMetrics(orgId, sourceId, weekKey);
+  const { error } = await reconDb().from("run_sources").upsert({
     run_id: runId,
-    actor,
-    kind,
-    payload,
+    source_id: sourceId,
+    requirement,
+    status: "waived",
+    coverage,
+    input_hash: coverageInputHash(coverage, volume),
+    row_count: volume.rowCount,
+    amount_minor: volume.amountMinor,
+    attested_by: actor,
+    attested_at: new Date().toISOString(),
+    attest_reason: reason,
+  }, { onConflict: "run_id,source_id" });
+  if (error) throw new Error(`waive save failed: ${error.message}`);
+}
+
+/**
+ * The saved desk as it is — a read. Used by GET /runs and by a repeated change
+ * (same Idempotency-Key), which must not build or publish anything again.
+ */
+async function readStoredDesk(orgId: string, line: ReconLine, weekKey: string): Promise<Record<string, unknown>> {
+  const run = await loadWeekRun(orgId, line, weekKey);
+  if (run && isDeskSnapshot(run.desk_snapshot)) {
+    const calculator = await loadCalculatorStatus(orgId, run.desk_computed_at ?? null);
+    return { ...withLiveRun(run.desk_snapshot, run), calculator };
+  }
+  const calculator = await loadCalculatorStatus(orgId, null);
+  return {
+    ...preparingPayload(run ?? notCreatedRun(orgId, line, weekKey), calculator.paused),
+    calculator,
+  };
+}
+
+/** One response shape for every change: refused, repeated, or applied (desk rebuilt). */
+async function weekChangeResponse<T>(
+  c: Context,
+  outcome: WeekChangeOutcome<T>,
+  orgId: string,
+  line: ReconLine,
+  weekKey: string,
+  actor: string,
+  extra?: (result: T) => Record<string, unknown>,
+): Promise<Response> {
+  if (outcome.kind === "refused") return outcome.response;
+  if (outcome.kind === "replay") {
+    const stored = await readStoredDesk(orgId, line, weekKey);
+    return c.json({ success: true, idempotent: true, correlationId: outcome.correlationId, ...stored });
+  }
+  const payload = await buildRunPayload(orgId, line, weekKey, actor);
+  return c.json({
+    success: true,
+    correlationId: outcome.correlationId,
+    ...(extra ? extra(outcome.result) : {}),
+    ...(payload ?? {}),
   });
 }
 
@@ -1216,22 +1297,6 @@ async function loadStoredStatementClosingMinor(runId: string): Promise<number | 
   return Number.isFinite(n) ? Math.round(n) : null;
 }
 
-function pickNextAction(
-  sources: Array<{ id: ReconSourceId; status: SourceAggregateStatus; label: string }>,
-): { kind: string; targetId: string; label: string } {
-  const block = sources.find((s) =>
-    s.status === "missing" || s.status === "partial" || s.status === "waiting_external"
-  );
-  if (block) {
-    return { kind: "source", targetId: block.id, label: `Provide ${block.label}` };
-  }
-  const fuel = sources.find((s) => s.id === "fuel_card_roam" && s.status === "received");
-  if (fuel) {
-    return { kind: "step", targetId: "fuel", label: "Review fuel reconciliation" };
-  }
-  return { kind: "step", targetId: "sources", label: "Continue week reconciliation" };
-}
-
 export function registerReconRoutes(app: Hono) {
   app.get(
     `${BASE}/runs/:line/:weekKey/status`,
@@ -1325,96 +1390,124 @@ export function registerReconRoutes(app: Hono) {
           return c.json({ error: "INVALID_YEAR", message: "year must be YYYY" }, 400);
         }
 
+        // WRA-06/12: the week list reads only what the calculator stored —
+        // every week of the line, no coverage recalculation, no 12-week window.
         const profile = await loadOrgReconProfile(orgId);
-        const requirements = resolveSourceRequirements(profile, mondayOfToday());
-        const reqById = Object.fromEntries(requirements.map((r) => [r.sourceId, r.requirement]));
-        const defs = sourcesForLine(line);
+        const rushDef = RECON_SOURCES.find((s) => s.id === "rush_deliveries");
+        const deliveryActive = rushDef ? rushDef.requiredWhen(profile, mondayOfToday()) !== "not_applicable" : false;
+        const calculator = await loadCalculatorStatus(orgId, null);
 
-        // Delivery tab with rush not actually active: no line sources → do not
-        // surface shared toll/fuel as fake Delivery work.
-        if (line === "rush_delivery" && reqById.rush_deliveries === "not_applicable") {
-          return c.json({ success: true, weeks: [], line, year: year ?? null });
-        }
-
-        const sb = getServiceClient();
-        let weekKeys = recentWeekKeys(12, year);
-
-        const { data: rpcRows, error: rpcErr } = await sb.rpc("list_week_source_summaries", {
-          p_org: orgId,
-          p_line: line,
-          p_year: year ?? null,
-        });
-
-        if (!rpcErr && Array.isArray(rpcRows) && rpcRows.length > 0) {
-          weekKeys = rpcRows.map((r: { week_key: string }) => String(r.week_key).slice(0, 10));
-        }
-
-        weekKeys = await weekKeysWithLineActivity(orgId, line, weekKeys);
-        // Statements are not due until the day after Sunday. The current
-        // Mon–Sun week stays off the list so it is not shown as missing data.
-        weekKeys = weekKeys.filter((weekKey) =>
-          isSettlementPeriodEnded({ periodAnchor: weekKey })
-        );
-
-        const { data: runStateRows } = await reconDb()
-          .from("week_runs")
-          .select("week_key, state")
-          .eq("organization_id", orgId)
-          .eq("service_line", line);
-        const closedWeeks = new Set(
-          (runStateRows ?? [])
-            .filter((r) => String((r as { state?: string }).state || "") === "closed")
-            .map((r) => String((r as { week_key?: string }).week_key || "").slice(0, 10)),
-        );
-
-        const weeks = [];
-        for (const weekKey of weekKeys) {
-          if (!WEEK_RE.test(weekKey)) continue;
-          const sourceSnaps = [];
-          for (const def of defs) {
-            const requirement = reqById[def.id] ?? def.requiredWhen(profile, weekKey);
-            const coverage = await fetchCoverageMap(orgId, line, def.id, weekKey);
-            const status = computeSourceStatusFromCoverage(coverage, requirement, {
-              waitingExternal: def.id === "fuel_card_roam" &&
-                requirement === "required" &&
-                Object.values(coverage).every((v) => v === "missing"),
-            });
-            sourceSnaps.push({ id: def.id, status, coverage, label: def.label });
-          }
-
-          const actionable = sourceSnaps.filter(
-            (s) => reqById[s.id as ReconSourceId] === "required" &&
-              (s.status === "missing" || s.status === "partial" || s.status === "waiting_external"),
-          );
-          const missingCount = actionable.length;
-          const nextAction = pickNextAction(sourceSnaps);
-          const done = sourceSnaps.filter((s) =>
-            s.status === "received" || s.status === "not_applicable" || s.status === "attested_none"
-          ).length;
-
-          const runClosed = closedWeeks.has(weekKey);
-          weeks.push({
-            weekKey,
+        // WRA-15: the Delivery desk is empty while Rush deliveries are not active.
+        if (line === "rush_delivery" && !deliveryActive) {
+          return c.json({
+            success: true,
+            weeks: [],
             line,
-            state: runClosed ? "closed" : missingCount > 0 ? "collecting" : "reconciling",
-            progress: { done, total: sourceSnaps.length },
-            nextAction,
-            blockers: missingCount,
-            sources: sourceSnaps.map(({ id, status, coverage }) => ({ id, status, coverage })),
+            year: year ?? null,
+            deliveryActive,
+            kpis: weekListKpis([]),
+            nextCursor: null,
+            calculator,
           });
         }
 
-        const statusFilter = c.req.query("status");
-        let filtered = weeks;
-        if (statusFilter === "outstanding") {
-          filtered = weeks.filter((w) => w.state !== "closed" && w.blockers > 0);
-        } else if (statusFilter === "in_progress") {
-          filtered = weeks.filter((w) => w.state === "reconciling");
-        } else if (statusFilter === "completed") {
-          filtered = weeks.filter((w) => w.state === "closed");
+        let runQuery = reconDb()
+          .from("week_runs")
+          .select("id, week_key, state, closed_at, closed_by, next_action:desk_snapshot->evaluation->nextAction")
+          .eq("organization_id", orgId)
+          .eq("service_line", line);
+        if (year != null) {
+          runQuery = runQuery.gte("week_key", `${year}-01-01`).lte("week_key", `${year}-12-31`);
+        }
+        const { data: runRows, error: runErr } = await runQuery;
+        if (runErr) throw new Error(`week runs read failed: ${runErr.message}`);
+
+        // Statements are not due until the day after Sunday: the current week stays off the list.
+        const runs = ((runRows ?? []) as Array<{
+          id: string;
+          week_key: string;
+          state: string;
+          closed_at: string | null;
+          closed_by: string | null;
+          next_action: { kind: string; targetId: string; label: string } | null;
+        }>).filter((r) => isSettlementPeriodEnded({ periodAnchor: String(r.week_key).slice(0, 10) }));
+
+        const sourcesByRun = new Map<string, StoredSource[]>();
+        const runIds = runs.map((r) => r.id);
+        for (let i = 0; i < runIds.length; i += 200) {
+          const chunk = runIds.slice(i, i + 200);
+          const { data: srcRows, error: srcErr } = await reconDb()
+            .from("run_sources")
+            .select("run_id, source_id, requirement, status, coverage")
+            .in("run_id", chunk);
+          if (srcErr) throw new Error(`run sources read failed: ${srcErr.message}`);
+          for (const row of (srcRows ?? []) as Array<{
+            run_id: string;
+            source_id: string;
+            requirement: string;
+            status: string;
+            coverage: Record<string, string> | null;
+          }>) {
+            const list = sourcesByRun.get(row.run_id) ?? [];
+            list.push({
+              id: row.source_id,
+              requirement: row.requirement,
+              status: row.status,
+              coverage: row.coverage ?? {},
+            });
+            sourcesByRun.set(row.run_id, list);
+          }
         }
 
-        return c.json({ success: true, weeks: filtered, line, year: year ?? null });
+        const labelFor = (id: string) => RECON_SOURCES.find((d) => d.id === id)?.label ?? id;
+        const entries = sortWeekList(runs.map((r) =>
+          weekListEntry(
+            {
+              weekKey: String(r.week_key).slice(0, 10),
+              state: r.state,
+              closedAt: r.closed_at,
+              closedBy: r.closed_by,
+              sources: sourcesByRun.get(r.id) ?? [],
+              nextAction: r.next_action && typeof r.next_action === "object" ? r.next_action : null,
+            },
+            line,
+            labelFor,
+          )
+        ));
+        const kpis = weekListKpis(entries);
+
+        const statusFilter = c.req.query("status");
+        let filtered = entries;
+        if (statusFilter === "outstanding") {
+          filtered = entries.filter((w) => w.state !== "closed");
+        } else if (statusFilter === "in_progress") {
+          filtered = entries.filter((w) => w.state === "reconciling");
+        } else if (statusFilter === "completed") {
+          filtered = entries.filter((w) => w.state === "closed");
+        }
+
+        // Paging (26 per page) only when the caller asks for it; today's screen reads the whole list.
+        const limitRaw = c.req.query("limit");
+        const cursorRaw = c.req.query("cursor");
+        let nextCursor: string | null = null;
+        if (limitRaw != null || cursorRaw != null) {
+          const limit = Math.min(Math.max(Number(limitRaw) || 26, 1), 200);
+          const offset = Math.max(Number(cursorRaw) || 0, 0);
+          const page = filtered.slice(offset, offset + limit);
+          nextCursor = offset + limit < filtered.length ? String(offset + limit) : null;
+          filtered = page;
+        }
+
+        return c.json({
+          success: true,
+          weeks: filtered,
+          line,
+          year: year ?? null,
+          deliveryActive,
+          kpis,
+          nextCursor,
+          calculator,
+        });
       } catch (e) {
         return safeErrorResponse(c, e, "recon-weeks");
       }
@@ -1435,26 +1528,12 @@ export function registerReconRoutes(app: Hono) {
         if (!WEEK_RE.test(weekKey)) {
           return c.json({ error: "INVALID_WEEK", message: "weekKey must be YYYY-MM-DD (Monday)" }, 400);
         }
+        // WRA-08/13 + rule 4: reads are reads. Return the saved desk as it is;
+        // never create the week, recalculate gates or queue work from here.
         const started = Date.now();
-        const actor = actorFromContext(c);
-        const run = await ensureWeekRun(orgId, line, weekKey, actor);
-        if (!("desk_snapshot" in run)) {
-          logReconPhase("desk_read", started, { hit: false, fallback: "live", weekKey, line });
-          const payload = await buildRunPayload(orgId, line, weekKey, actor);
-          return c.json({ success: true, ...payload });
-        }
-        if (isDeskSnapshot(run.desk_snapshot)) {
-          // The saved picture keeps "in progress" after the pay list is empty,
-          // and Continue only appears once the step is ready. Recompute the
-          // gates from the current blockers on each open.
-          const live = await overlayLiveStepGates(orgId, line, weekKey, run, run.desk_snapshot);
-          logReconPhase("desk_read", started, { hit: true, weekKey, line, liveGates: true });
-          return c.json({ success: true, ...withLiveRun(live, run) });
-        }
-        await requestWeekDesk(run);
-        const calculatorPaused = await calculatorIsPaused();
-        logReconPhase("desk_read", started, { hit: false, weekKey, line, calculatorPaused });
-        return c.json({ success: true, ...preparingPayload(run, calculatorPaused) });
+        const desk = await readStoredDesk(orgId, line, weekKey);
+        logReconPhase("desk_read", started, { hit: desk.deskReady === true, weekKey, line });
+        return c.json({ success: true, ...desk });
       } catch (e) {
         return safeErrorResponse(c, e, "recon-run-get");
       }
@@ -1494,62 +1573,38 @@ export function registerReconRoutes(app: Hono) {
         }
 
         const actor = actorFromContext(c);
-        const run = await ensureWeekRun(orgId, line, weekKey, actor);
-        const bump = await bumpRunVersion(run.id, body.expectedVersion);
-        if (!bump.ok) {
-          return c.json({
-            error: "VERSION_CONFLICT",
-            message: "Run was updated by someone else",
-            currentVersion: bump.currentVersion,
-          }, 409);
-        }
-
-        const recon = reconDb();
-        for (const day of days) {
-          await recon.from("source_attestations").upsert(
-            {
-              organization_id: orgId,
-              service_line: line,
-              week_key: weekKey,
-              source_id: sourceId,
-              day,
-              kind: "attest_none",
-              reason,
-              actor,
-            },
-            { onConflict: "organization_id,service_line,week_key,source_id,day,kind" },
-          );
-        }
-
-        const profile = await loadOrgReconProfile(orgId);
-        const def = RECON_SOURCES.find((s) => s.id === sourceId)!;
-        const requirement = def.requiredWhen(profile, weekKey);
-        let coverage = await fetchCoverageMap(orgId, line, sourceId, weekKey);
-        for (const day of days) {
-          coverage = { ...coverage, [day]: "zero_attested" };
-        }
-        const status = computeSourceStatusFromCoverage(coverage, requirement);
-        const volume = await sourceVolumeMetrics(orgId, sourceId, weekKey);
-        const inputHash = coverageInputHash(coverage, volume);
-
-        await recon.from("run_sources").upsert({
-          run_id: run.id,
-          source_id: sourceId,
-          requirement,
-          status,
-          coverage,
-          input_hash: inputHash,
-          row_count: volume.rowCount,
-          amount_minor: volume.amountMinor,
-          attested_by: actor,
-          attested_at: new Date().toISOString(),
-          attest_reason: reason,
-        }, { onConflict: "run_id,source_id" });
-
-        await appendRunEvent(run.id, actor, "source_attest_none", { sourceId, days, reason });
-
-        const payload = await buildRunPayload(orgId, line, weekKey, actor);
-        return c.json({ success: true, ...payload });
+        const run = await loadWeekRun(orgId, line, weekKey);
+        if (!run) return weekNotReady(c);
+        const outcome = await withWeekChange(c, {
+          runId: run.id,
+          expectedVersion: body.expectedVersion,
+          actor,
+          kind: "source_attest_none",
+          step: "sources",
+          reason,
+          payload: { sourceId, days, reason },
+          idempotencyKey: idempotencyKeyFrom(c, body as { idempotencyKey?: unknown }),
+          apply: async () => {
+            const recon = reconDb();
+            for (const day of days) {
+              const { error } = await recon.from("source_attestations").upsert(
+                {
+                  organization_id: orgId,
+                  service_line: line,
+                  week_key: weekKey,
+                  source_id: sourceId,
+                  day,
+                  kind: "attest_none",
+                  reason,
+                  actor,
+                },
+                { onConflict: "organization_id,service_line,week_key,source_id,day,kind" },
+              );
+              if (error) throw new Error(`attestation save failed: ${error.message}`);
+            }
+          },
+        });
+        return weekChangeResponse(c, outcome, orgId, line, weekKey, actor);
       } catch (e) {
         return safeErrorResponse(c, e, "recon-attest-none");
       }
@@ -1582,39 +1637,24 @@ export function registerReconRoutes(app: Hono) {
         if (!reason) return c.json({ error: "VALIDATION", message: "reason is required" }, 400);
 
         const actor = actorFromContext(c);
-        const run = await ensureWeekRun(orgId, line, weekKey, actor);
-        const bump = await bumpRunVersion(run.id, body.expectedVersion);
-        if (!bump.ok) {
-          return c.json({
-            error: "VERSION_CONFLICT",
-            currentVersion: bump.currentVersion,
-          }, 409);
-        }
-
-        const profile = await loadOrgReconProfile(orgId);
+        const run = await loadWeekRun(orgId, line, weekKey);
+        if (!run) return weekNotReady(c);
         const def = RECON_SOURCES.find((s) => s.id === sourceId);
         if (!def) return c.json({ error: "INVALID_SOURCE", message: "Unknown source" }, 400);
-        const requirement = def.requiredWhen(profile, weekKey);
-        const coverage = await fetchCoverageMap(orgId, line, sourceId, weekKey);
-        const volume = await sourceVolumeMetrics(orgId, sourceId, weekKey);
 
-        await reconDb().from("run_sources").upsert({
-          run_id: run.id,
-          source_id: sourceId,
-          requirement,
-          status: "waived",
-          coverage,
-          input_hash: coverageInputHash(coverage, volume),
-          row_count: volume.rowCount,
-          amount_minor: volume.amountMinor,
-          attested_by: actor,
-          attested_at: new Date().toISOString(),
-          attest_reason: reason,
-        }, { onConflict: "run_id,source_id" });
-
-        await appendRunEvent(run.id, actor, "source_waived", { sourceId, reason });
-        const payload = await buildRunPayload(orgId, line, weekKey, actor);
-        return c.json({ success: true, ...payload });
+        const outcome = await withWeekChange(c, {
+          runId: run.id,
+          expectedVersion: body.expectedVersion,
+          actor,
+          kind: "source_waived",
+          step: "sources",
+          reason,
+          selfApproved: true,
+          payload: { sourceId, reason },
+          idempotencyKey: idempotencyKeyFrom(c, body as { idempotencyKey?: unknown }),
+          apply: () => applyWaive(orgId, line, weekKey, run.id, sourceId, reason, actor),
+        });
+        return weekChangeResponse(c, outcome, orgId, line, weekKey, actor);
       } catch (e) {
         return safeErrorResponse(c, e, "recon-waive");
       }
@@ -1635,11 +1675,10 @@ export function registerReconRoutes(app: Hono) {
           return c.json({ error: "INVALID_REQUEST", message: "Invalid line or weekKey" }, 400);
         }
 
-        const actor = actorFromContext(c);
-        const run = await ensureWeekRun(orgId, line, weekKey, actor);
+        const run = await loadWeekRun(orgId, line, weekKey);
         const { openingMinor, priorWeekKey } = await loadPriorTagClosingMinor(orgId, weekKey);
         const { topUpsMinor, tagUsageMinor } = await sumTagLedgerWeekMinor(orgId, weekKey);
-        const statementClosingMinor = await loadStoredStatementClosingMinor(run.id);
+        const statementClosingMinor = run ? await loadStoredStatementClosingMinor(run.id) : null;
         const roll = computeTagAccountRollForward({
           openingMinor,
           topUpsMinor,
@@ -1688,20 +1727,20 @@ export function registerReconRoutes(app: Hono) {
         if (!kind) return c.json({ error: "VALIDATION", message: "kind is required" }, 400);
 
         const actor = actorFromContext(c);
-        const run = await ensureWeekRun(orgId, line, weekKey, actor);
-        const bump = await bumpRunVersion(run.id, body.expectedVersion);
-        if (!bump.ok) {
-          return c.json({
-            error: "VERSION_CONFLICT",
-            currentVersion: bump.currentVersion,
-          }, 409);
-        }
-
+        const run = await loadWeekRun(orgId, line, weekKey);
+        if (!run) return weekNotReady(c);
         const payload = body.payload && typeof body.payload === "object" ? body.payload : {};
-        await appendRunEvent(run.id, actor, kind, payload);
-
-        const responsePayload = await buildRunPayload(orgId, line, weekKey, actor);
-        return c.json({ success: true, ...responsePayload });
+        // The event IS the change (e.g. the tag account statement closing): the claim writes it.
+        const outcome = await withWeekChange(c, {
+          runId: run.id,
+          expectedVersion: body.expectedVersion,
+          actor,
+          kind,
+          payload,
+          idempotencyKey: idempotencyKeyFrom(c, body as { idempotencyKey?: unknown }),
+          apply: async () => undefined,
+        });
+        return weekChangeResponse(c, outcome, orgId, line, weekKey, actor);
       } catch (e) {
         return safeErrorResponse(c, e, "recon-run-event");
       }
@@ -1734,53 +1773,48 @@ export function registerReconRoutes(app: Hono) {
         }
 
         const actor = actorFromContext(c);
-        const run = await ensureWeekRun(orgId, line, weekKey, actor);
-        const bump = await bumpRunVersion(run.id, body.expectedVersion);
-        if (!bump.ok) {
-          return c.json({
-            error: "VERSION_CONFLICT",
-            currentVersion: bump.currentVersion,
-          }, 409);
-        }
-
-        const sb = getServiceClient();
-        const now = new Date().toISOString();
-        let updated = 0;
-
-        for (const row of rows) {
-          const id = String(row.id ?? "").trim();
-          const entity = String(row.entity ?? "toll").toLowerCase();
-          const targetLine = row.serviceLine === "rush_delivery" ? "rush_delivery" : "rideshare";
-          if (!id) continue;
-
-          if (entity === "fuel") {
-            const { error } = await sb
-              .from("fleet_fuel_entries")
-              .update({
-                service_line: targetLine,
-                service_line_source: "explicit",
-                service_line_set_at: now,
-              })
-              .eq("organization_id", orgId)
-              .eq("id", id);
-            if (!error) updated += 1;
-          } else {
-            const { error } = await sb
-              .from("fleet_toll_ledger")
-              .update({
-                service_line: targetLine,
-                service_line_source: "explicit",
-                service_line_set_at: now,
-              })
-              .eq("organization_id", orgId)
-              .eq("id", id);
-            if (!error) updated += 1;
-          }
-        }
-
-        await appendRunEvent(run.id, actor, "attribution_manual", { updated, rowCount: rows.length });
-        const payload = await buildRunPayload(orgId, line, weekKey, actor);
-        return c.json({ success: true, updated, ...payload });
+        const run = await loadWeekRun(orgId, line, weekKey);
+        if (!run) return weekNotReady(c);
+        const outcome = await withWeekChange(c, {
+          runId: run.id,
+          expectedVersion: body.expectedVersion,
+          actor,
+          kind: "attribution_manual",
+          step: "attribution",
+          payload: {
+            rowCount: rows.length,
+            rows: rows.map((r) => ({ id: String(r.id ?? ""), entity: r.entity ?? "toll", serviceLine: r.serviceLine ?? null })),
+          },
+          idempotencyKey: idempotencyKeyFrom(c, body as { idempotencyKey?: unknown }),
+          apply: async () => {
+            const sb = getServiceClient();
+            const now = new Date().toISOString();
+            let updated = 0;
+            const failed: string[] = [];
+            for (const row of rows) {
+              const id = String(row.id ?? "").trim();
+              const entity = String(row.entity ?? "toll").toLowerCase();
+              const targetLine = row.serviceLine === "rush_delivery" ? "rush_delivery" : "rideshare";
+              if (!id) continue;
+              const { error } = await sb
+                .from(entity === "fuel" ? "fleet_fuel_entries" : "fleet_toll_ledger")
+                .update({
+                  service_line: targetLine,
+                  service_line_source: "explicit",
+                  service_line_set_at: now,
+                })
+                .eq("organization_id", orgId)
+                .eq("id", id);
+              if (error) failed.push(`${id}: ${error.message}`);
+              else updated += 1;
+            }
+            // A partial save must not look like success: the claim's history row
+            // then gets a 'change_failed' row listing what did not save.
+            if (failed.length) throw new Error(`attribution save failed for ${failed.length} row(s): ${failed.slice(0, 3).join("; ")}`);
+            return updated;
+          },
+        });
+        return weekChangeResponse(c, outcome, orgId, line, weekKey, actor, (updated) => ({ updated }));
       } catch (e) {
         return safeErrorResponse(c, e, "recon-attribution");
       }
@@ -1813,32 +1847,16 @@ export function registerReconRoutes(app: Hono) {
         };
 
         const actor = actorFromContext(c);
-        const run = await ensureWeekRun(orgId, line, weekKey, actor);
+        const run = await loadWeekRun(orgId, line, weekKey);
+        if (!run) return weekNotReady(c);
 
-        const profile = await loadOrgReconProfile(orgId);
-        const sources = await materializeRunSources(orgId, line, weekKey, run.id, profile);
-        const { counts: liveCounts } = await computeLiveStepCounts(orgId, weekKey, line, sources, run.id);
-        await persistLiveStepCounts(run.id, liveCounts);
-
-        const sourceSnaps: ReconSourceSnapshot[] = sources.map((s) => ({
-          id: s.id,
-          status: s.status,
-          inputHash: s.inputHash,
-        }));
-        const stepRows = await loadRunSteps(run.id);
-        const completedSteps = stepRows
-          .filter((r) => r.completed_at)
-          .map((r) => ({
-            stepId: r.step_id as RunStepId,
-            completedAt: r.completed_at,
-            inputsHashAtComplete: r.inputs_hash_at_complete,
-          }));
-        const evaluation = evaluateRun({
-          sources: sourceSnaps,
-          stepCounts: liveCounts,
-          completedSteps,
-        });
+        // Same desk the calculator builds; nothing is saved until the completion below.
+        const desk = await computeWeekDesk(orgId, line, weekKey, run);
+        const { liveCounts, sourceSnaps, evaluation } = desk;
         const stepEval = evaluation.steps.find((s) => s.id === stepId);
+        if (stepEval?.hidden) {
+          return c.json({ error: "STEP_HIDDEN", message: "This step does not apply to this line" }, 409);
+        }
         const actionable = liveCounts[stepId]?.actionable ?? 0;
         if (!stepEval || stepEval.status === "locked") {
           return c.json({
@@ -1855,14 +1873,7 @@ export function registerReconRoutes(app: Hono) {
           }, 409);
         }
 
-        const bump = await bumpRunVersion(run.id, body.expectedVersion);
-        if (!bump.ok) {
-          return c.json({
-            error: "VERSION_CONFLICT",
-            currentVersion: bump.currentVersion,
-          }, 409);
-        }
-
+        // Checked before the claim, so a refused completion leaves the version alone.
         const currentHash = compositeInputsHashForStep(stepId, sourceSnaps);
         if (body.expectedInputsHash && body.expectedInputsHash !== currentHash) {
           return c.json({
@@ -1872,20 +1883,37 @@ export function registerReconRoutes(app: Hono) {
           }, 409);
         }
 
-        const now = new Date().toISOString();
-        await reconDb().from("run_steps").upsert({
-          run_id: run.id,
-          step_id: stepId,
-          actionable: 0,
-          informational: liveCounts[stepId]?.informational ?? 0,
-          completed_at: now,
-          completed_by: actor,
-          inputs_hash_at_complete: currentHash,
-        }, { onConflict: "run_id,step_id" });
-
-        await appendRunEvent(run.id, actor, "step_complete", { stepId, inputsHash: currentHash });
-        await buildRunPayload(orgId, line, weekKey, actor);
-        return c.json({ success: true, ok: true, version: bump.version });
+        const outcome = await withWeekChange(c, {
+          runId: run.id,
+          expectedVersion: body.expectedVersion,
+          actor,
+          kind: "step_complete",
+          step: stepId,
+          payload: { stepId, inputsHash: currentHash },
+          idempotencyKey: idempotencyKeyFrom(c, body as { idempotencyKey?: unknown }),
+          apply: async () => {
+            const { error } = await reconDb().from("run_steps").upsert({
+              run_id: run.id,
+              step_id: stepId,
+              actionable: 0,
+              informational: liveCounts[stepId]?.informational ?? 0,
+              completed_at: new Date().toISOString(),
+              completed_by: actor,
+              inputs_hash_at_complete: currentHash,
+            }, { onConflict: "run_id,step_id" });
+            if (error) throw new Error(`step completion save failed: ${error.message}`);
+          },
+        });
+        if (outcome.kind === "refused") return outcome.response;
+        const published = outcome.kind === "applied" ? await buildRunPayload(orgId, line, weekKey, actor) : null;
+        const version = Number((published as { run?: { version?: number } } | null)?.run?.version ?? outcome.version);
+        return c.json({
+          success: true,
+          ok: true,
+          version,
+          correlationId: outcome.correlationId,
+          ...(outcome.kind === "replay" ? { idempotent: true } : {}),
+        });
       } catch (e) {
         return safeErrorResponse(c, e, "recon-step-complete");
       }
@@ -1919,86 +1947,56 @@ export function registerReconRoutes(app: Hono) {
         const body = await c.req.json().catch(() => ({})) as { note?: string; expectedVersion?: number };
         const note = body.note != null ? String(body.note).trim() : "";
         const actor = actorFromContext(c);
-        const run = await ensureWeekRun(orgId, line, weekKey, actor);
-        const bump = await bumpRunVersion(run.id, body.expectedVersion);
-        if (!bump.ok) {
-          return c.json({
-            error: "VERSION_CONFLICT",
-            currentVersion: bump.currentVersion,
-          }, 409);
-        }
-
-        const recon = reconDb();
-        const { data: existingReq } = await recon
-          .from("external_source_requests")
-          .select("id")
-          .eq("organization_id", orgId)
-          .eq("service_line", line)
-          .eq("week_key", weekKey)
-          .eq("source_id", sourceId)
-          .eq("status", "open")
-          .maybeSingle();
-
-        let requestId: string;
-        const now = new Date().toISOString();
-        if (existingReq?.id) {
-          requestId = String(existingReq.id);
-          await recon.from("external_source_requests").update({
-            requested_at: now,
-            requested_by: actor,
-            note: note || null,
-          }).eq("id", requestId);
-        } else {
-          const { data: inserted, error: insErr } = await recon
-            .from("external_source_requests")
-            .insert({
-              organization_id: orgId,
-              service_line: line,
-              week_key: weekKey,
-              source_id: sourceId,
-              requested_by: actor,
-              note: note || null,
-              status: "open",
-            })
-            .select("id")
-            .single();
-          if (insErr || !inserted) throw insErr ?? new Error("Failed to create external source request");
-          requestId = String(inserted.id);
-        }
-
-        if (sourceId === "fuel_card_roam") {
-          const profile = await loadOrgReconProfile(orgId);
-          const requirement = def.requiredWhen(profile, weekKey);
-          const coverage = await fetchCoverageMap(orgId, line, sourceId, weekKey);
-          const status = computeSourceStatusFromCoverage(coverage, requirement, {
-            waitingExternal: requirement === "required"
-              && Object.values(coverage).every((v) => v === "missing"),
-          });
-          const effectiveStatus = status === "missing" || status === "partial"
-            ? "waiting_external"
-            : status;
-
-          const volume = await sourceVolumeMetrics(orgId, sourceId, weekKey);
-          await recon.from("run_sources").upsert({
-            run_id: run.id,
-            source_id: sourceId,
-            requirement,
-            status: effectiveStatus,
-            coverage,
-            input_hash: coverageInputHash(coverage, volume),
-            row_count: volume.rowCount,
-            amount_minor: volume.amountMinor,
-          }, { onConflict: "run_id,source_id" });
-        }
-
-        await appendRunEvent(run.id, actor, "external_source_requested", {
-          sourceId,
-          requestId,
-          note: note || null,
+        const run = await loadWeekRun(orgId, line, weekKey);
+        if (!run) return weekNotReady(c);
+        const outcome = await withWeekChange(c, {
+          runId: run.id,
+          expectedVersion: body.expectedVersion,
+          actor,
+          kind: "external_source_requested",
+          step: "sources",
+          payload: { sourceId, note: note || null },
+          idempotencyKey: idempotencyKeyFrom(c, body as { idempotencyKey?: unknown }),
+          apply: async () => {
+            // WRA-18: one open request per source and week; Remind again moves its date.
+            const recon = reconDb();
+            const { data: existingReq, error: readErr } = await recon
+              .from("external_source_requests")
+              .select("id")
+              .eq("organization_id", orgId)
+              .eq("service_line", line)
+              .eq("week_key", weekKey)
+              .eq("source_id", sourceId)
+              .eq("status", "open")
+              .maybeSingle();
+            if (readErr) throw new Error(`request read failed: ${readErr.message}`);
+            if (existingReq?.id) {
+              const { error } = await recon.from("external_source_requests").update({
+                requested_at: new Date().toISOString(),
+                requested_by: actor,
+                note: note || null,
+              }).eq("id", existingReq.id);
+              if (error) throw new Error(`request update failed: ${error.message}`);
+              return String(existingReq.id);
+            }
+            const { data: inserted, error: insErr } = await recon
+              .from("external_source_requests")
+              .insert({
+                organization_id: orgId,
+                service_line: line,
+                week_key: weekKey,
+                source_id: sourceId,
+                requested_by: actor,
+                note: note || null,
+                status: "open",
+              })
+              .select("id")
+              .single();
+            if (insErr || !inserted) throw new Error(`request save failed: ${insErr?.message ?? "no row"}`);
+            return String(inserted.id);
+          },
         });
-
-        const payload = await buildRunPayload(orgId, line, weekKey, actor);
-        return c.json({ success: true, requestId, ...payload });
+        return weekChangeResponse(c, outcome, orgId, line, weekKey, actor, (requestId) => ({ requestId }));
       } catch (e) {
         return safeErrorResponse(c, e, "recon-source-request");
       }
@@ -2029,5 +2027,566 @@ export function registerReconRoutes(app: Hono) {
     },
   );
 
+  // ── Approvals (WRA-32, WRA-38) ─────────────────────────────────────────────
+  // A request is a decision-log row (kind 'approval_request'); its status is its state.
+
+  // ── Round 4c: steps 6–8 read saved rows only (WRA-07), plus History (WRA-30) ──
+
+  /** Saved driver weeks: statement cash vs trip cash per driver (step 6). Read only. */
+  app.get(
+    `${BASE}/runs/:line/:weekKey/money`,
+    requireAuth({ strict: true }),
+    requireAnyPermission("recon.view", "transactions.view"),
+    async (c: Context) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+        const line = parseLine(c.req.param("line"));
+        const weekKey = String(c.req.param("weekKey") || "").slice(0, 10);
+        if (!line || !WEEK_RE.test(weekKey)) {
+          return c.json({ error: "INVALID_REQUEST", message: "Invalid line or weekKey" }, 400);
+        }
+        // Driver weeks are Rideshare money; Delivery has none of its own here.
+        if (line !== "rideshare") return c.json({ success: true, cashSourceMismatches: [], drivers: [] });
+        const { data, error } = await getServiceClient()
+          .from("driver_financial_periods")
+          // driver_financial_periods has no name column; names come from the driver records.
+          .select("driver_id, metadata")
+          .eq("organization_id", orgId)
+          .eq("period_anchor", weekKey);
+        if (error) throw new Error(`driver weeks read failed: ${error.message}`);
+        const rows = await withDriverNames(
+          (data ?? []) as Array<{ driver_id: string; metadata: Record<string, unknown> | null }>,
+        );
+        const cashSourceMismatches = deskCashMismatches(rows, weekKey);
+        const drivers = rows.map((r) => ({ driverId: String(r.driver_id), driverName: r.driver_name ?? null }));
+        return c.json({ success: true, cashSourceMismatches, drivers });
+      } catch (e) {
+        return safeErrorResponse(c, e, "recon-week-money");
+      }
+    },
+  );
+
+  /** WRA-21: Activity vs trips (step 6) from the week's Uber upload. Read only, never blocks. */
+  app.get(
+    `${BASE}/runs/:line/:weekKey/activity`,
+    requireAuth({ strict: true }),
+    requireAnyPermission("recon.view", "transactions.view"),
+    async (c: Context) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+        const line = parseLine(c.req.param("line"));
+        const weekKey = String(c.req.param("weekKey") || "").slice(0, 10);
+        if (!line || !WEEK_RE.test(weekKey)) {
+          return c.json({ error: "INVALID_REQUEST", message: "Invalid line or weekKey" }, 400);
+        }
+        if (line !== "rideshare") return c.json({ success: true, activity: { status: "no_upload" } });
+        const { data, error } = await getServiceClient()
+          .from("fleet_import_batches")
+          .select("created_at, payload_json")
+          .eq("organization_id", orgId)
+          .eq("source_id", "uber_bundle")
+          .eq("status", "completed")
+          .contains("week_keys", [weekKey])
+          .order("created_at", { ascending: false })
+          .limit(1);
+        if (error) throw new Error(`uber upload read failed: ${error.message}`);
+        return c.json({ success: true, activity: shapeWeekActivity((data ?? []) as Parameters<typeof shapeWeekActivity>[0]) });
+      } catch (e) {
+        return safeErrorResponse(c, e, "recon-week-activity");
+      }
+    },
+  );
+
+  /** The week's decision log, oldest first (step 8 History). Read only. */
+  app.get(
+    `${BASE}/runs/:line/:weekKey/history`,
+    requireAuth({ strict: true }),
+    requireAnyPermission("recon.view", "transactions.view"),
+    async (c: Context) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+        const line = parseLine(c.req.param("line"));
+        const weekKey = String(c.req.param("weekKey") || "").slice(0, 10);
+        if (!line || !WEEK_RE.test(weekKey)) {
+          return c.json({ error: "INVALID_REQUEST", message: "Invalid line or weekKey" }, 400);
+        }
+        const run = await loadWeekRun(orgId, line, weekKey);
+        if (!run) return c.json({ success: true, items: [] });
+        const { data, error } = await reconDb().from("run_events")
+          .select("id, kind, step, actor, at, reason, payload, prepared_by, approved_by, self_approved, status")
+          .eq("run_id", run.id)
+          .order("at", { ascending: true })
+          .limit(500);
+        if (error) throw new Error(`history read failed: ${error.message}`);
+        const rows = (data ?? []).filter((r) => !HISTORY_HIDDEN_KINDS.has(String(r.kind)));
+        const names = await displayNamesFor(rows.flatMap((r) => [r.actor, r.prepared_by, r.approved_by]));
+        const items = rows.map((r) => historyItem(r, names));
+        return c.json({ success: true, items });
+      } catch (e) {
+        return safeErrorResponse(c, e, "recon-week-history");
+      }
+    },
+  );
+
+  /** Step 6 "Seal earnings" / "Reseal": a change, never run on a read (WRA-07). */
+  app.post(
+    `${BASE}/runs/:line/:weekKey/seal-earnings`,
+    requireAuth({ strict: true }),
+    requirePermission("recon.prepare"),
+    async (c: Context) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+        const line = parseLine(c.req.param("line"));
+        const weekKey = String(c.req.param("weekKey") || "").slice(0, 10);
+        if (!line || !WEEK_RE.test(weekKey)) {
+          return c.json({ error: "INVALID_REQUEST", message: "Invalid line or weekKey" }, 400);
+        }
+        const frozen = await refuseFrozenReconWeek(c, orgId, weekKey);
+        if (frozen) return frozen;
+        const body = await c.req.json().catch(() => ({})) as { expectedVersion?: number };
+        const actor = actorFromContext(c);
+        const run = await loadWeekRun(orgId, line, weekKey);
+        if (!run) return weekNotReady(c);
+        const outcome = await withWeekChange(c, {
+          runId: run.id,
+          expectedVersion: body.expectedVersion,
+          actor,
+          kind: "seal_earnings",
+          step: "trips_earnings",
+          payload: { weekKey },
+          idempotencyKey: idempotencyKeyFrom(c, body as { idempotencyKey?: unknown }),
+          apply: async () => {
+            await sealEarningsLaneForWeek({ orgId, week: weekKey, actorId: actor, force: true });
+          },
+        });
+        return weekChangeResponse(c, outcome, orgId, line, weekKey, actor);
+      } catch (e) {
+        return safeErrorResponse(c, e, "recon-seal-earnings");
+      }
+    },
+  );
+
+  app.post(
+    `${BASE}/approvals`,
+    requireAuth({ strict: true }),
+    requirePermission("recon.prepare"),
+    async (c: Context) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+        const body = await c.req.json().catch(() => ({})) as {
+          line?: string;
+          weekKey?: string;
+          action?: string;
+          params?: Record<string, unknown>;
+          reason?: string;
+          expectedVersion?: number;
+          idempotencyKey?: string;
+        };
+        const line = parseLine(String(body.line || "rideshare"));
+        const weekKey = String(body.weekKey || "").slice(0, 10);
+        if (!line || !WEEK_RE.test(weekKey)) {
+          return c.json({ error: "INVALID_REQUEST", message: "Invalid line or weekKey" }, 400);
+        }
+        if (!isApprovalAction(body.action)) {
+          return c.json({ error: "INVALID_ACTION", message: "Unknown approval action" }, 400);
+        }
+        const run = await loadWeekRun(orgId, line, weekKey);
+        if (!run) return weekNotReady(c);
+        const expected = Number(body.expectedVersion);
+        if (!Number.isFinite(expected)) {
+          return c.json({ error: "VERSION_REQUIRED", message: "expectedVersion is required" }, 400);
+        }
+        if (expected !== Number(run.version)) {
+          return c.json({ error: "WEEK_CHANGED", message: "This week changed while you were working. Reload the week.", currentVersion: run.version }, 409);
+        }
+        const actor = actorFromContext(c);
+        const idempotencyKey = idempotencyKeyFrom(c, body);
+        const correlationId = correlationIdFrom(c);
+
+        // withPendingApproval: permission + repeat-safety + log row. The week itself does not change,
+        // so no version bump and no calculator work.
+        if (idempotencyKey) {
+          const { data: prior } = await reconDb().from("run_events")
+            .select("id, status").eq("run_id", run.id).eq("idempotency_key", idempotencyKey).maybeSingle();
+          if (prior) return c.json({ success: true, idempotent: true, requestId: prior.id, status: prior.status });
+        }
+        const { data: inserted, error } = await reconDb().from("run_events").insert({
+          run_id: run.id,
+          actor,
+          kind: "approval_request",
+          payload: { action: body.action, params: body.params ?? {}, label: approvalActionLabel(body.action) },
+          line,
+          week_key: weekKey,
+          reason: String(body.reason ?? "").trim() || null,
+          correlation_id: correlationId,
+          idempotency_key: idempotencyKey,
+          prepared_by: actor,
+          status: "pending_approval",
+          version_at_send: Number(run.version),
+        }).select("id, status").single();
+        if (error || !inserted) throw new Error(`approval request save failed: ${error?.message ?? "no row"}`);
+        return c.json({ success: true, requestId: inserted.id, status: inserted.status, correlationId });
+      } catch (e) {
+        return safeErrorResponse(c, e, "recon-approval-send");
+      }
+    },
+  );
+
+  app.get(
+    `${BASE}/approvals`,
+    requireAuth({ strict: true }),
+    requireAnyPermission("recon.view", "transactions.view"),
+    async (c: Context) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+        // Pending and out-of-date requests for the org (week cards + bell), newest first.
+        const { data: runs, error: runErr } = await reconDb().from("week_runs")
+          .select("id, week_key, service_line, version").eq("organization_id", orgId);
+        if (runErr) throw new Error(runErr.message);
+        const byId = new Map((runs ?? []).map((r) => [String(r.id), r]));
+        const ids = [...byId.keys()];
+        const items: unknown[] = [];
+        for (let i = 0; i < ids.length; i += 200) {
+          const { data, error } = await reconDb().from("run_events")
+            .select("id, run_id, payload, reason, prepared_by, status, version_at_send, at")
+            .eq("kind", "approval_request")
+            .in("status", ["pending_approval", "stale"])
+            .in("run_id", ids.slice(i, i + 200));
+          if (error) throw new Error(error.message);
+          for (const row of data ?? []) {
+            const run = byId.get(String(row.run_id));
+            items.push({
+              requestId: row.id,
+              weekKey: String(run?.week_key ?? "").slice(0, 10),
+              line: run?.service_line,
+              action: (row.payload as { action?: string })?.action,
+              label: (row.payload as { label?: string })?.label,
+              params: (row.payload as { params?: unknown })?.params ?? {},
+              reason: row.reason,
+              preparedBy: row.prepared_by,
+              sentAt: row.at,
+              // A pending request whose week moved since Send is shown as out of date.
+              status: row.status === "pending_approval" && Number(row.version_at_send) !== Number(run?.version)
+                ? "stale"
+                : row.status,
+            });
+          }
+        }
+        items.sort((a, b) => String((b as { sentAt: string }).sentAt).localeCompare(String((a as { sentAt: string }).sentAt)));
+        // WRA-32: "Send for approval" is hidden when nobody else can approve.
+        const me = actorFromContext(c);
+        const otherApprovers = await loadOtherApproverCount(orgId, me).catch(() => 1);
+        return c.json({ success: true, items, me, otherApprovers });
+      } catch (e) {
+        return safeErrorResponse(c, e, "recon-approval-list");
+      }
+    },
+  );
+
+  /** Loads a request row of this org, or a 404. */
+  async function loadApprovalRequest(orgId: string, id: string) {
+    const { data, error } = await reconDb().from("run_events")
+      .select("id, run_id, kind, payload, reason, prepared_by, status, version_at_send")
+      .eq("id", id).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data || data.kind !== "approval_request") return null;
+    const { data: run, error: runErr } = await reconDb().from("week_runs")
+      .select("*").eq("id", data.run_id).maybeSingle();
+    if (runErr) throw new Error(runErr.message);
+    if (!run || (run as WeekRunRow).organization_id !== orgId) return null;
+    return { request: data, run: run as WeekRunRow };
+  }
+
+  /** Done-test 8e: the second approver is told who got there first ("Already approved by …"). */
+  async function alreadyHandledMessage(requestId: number | string): Promise<string> {
+    try {
+      const { data } = await reconDb().from("run_events")
+        .select("status, approved_by").eq("id", requestId).maybeSingle();
+      const row = data as { status?: string; approved_by?: string | null } | null;
+      if (row?.approved_by && (row.status === "approved" || row.status === "rejected")) {
+        const names = await displayNamesFor([row.approved_by]);
+        const who = names.get(row.approved_by) || "someone else";
+        return row.status === "approved" ? `Already approved by ${who}.` : `Already rejected by ${who}.`;
+      }
+    } catch {
+      /* fall back to the plain message */
+    }
+    return "This request was already handled.";
+  }
+
+  /** Moves a request's status (the append-only trigger allows only these moves) and logs the move. */
+  async function moveApprovalRequest(
+    request: { id: number | string; run_id: string; payload: unknown },
+    from: string[],
+    to: "approved" | "rejected" | "withdrawn" | "stale",
+    actor: string,
+    logKind: string,
+    reason: string | null,
+    correlationId: string,
+  ): Promise<boolean> {
+    const patch: Record<string, unknown> = { status: to };
+    if (to === "approved" || to === "rejected") patch.approved_by = actor;
+    const { data, error } = await reconDb().from("run_events")
+      .update(patch).eq("id", request.id).in("status", from).select("id");
+    if (error) throw new Error(`request update failed: ${error.message}`);
+    if (!data || data.length === 0) return false; // someone else moved it first
+    const { error: logErr } = await reconDb().from("run_events").insert({
+      run_id: request.run_id,
+      actor,
+      kind: logKind,
+      payload: { requestId: request.id, action: (request.payload as { action?: string })?.action ?? null },
+      reason,
+      correlation_id: correlationId,
+      status: "applied",
+    });
+    if (logErr) console.warn("[recon] approval move log failed", logErr.message);
+    return true;
+  }
+
+  app.post(
+    `${BASE}/approvals/:id/withdraw`,
+    requireAuth({ strict: true }),
+    requirePermission("recon.prepare"),
+    async (c: Context) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+        const loaded = await loadApprovalRequest(orgId, String(c.req.param("id")));
+        if (!loaded) return c.json({ error: "NOT_FOUND" }, 404);
+        const actor = actorFromContext(c);
+        const check = canWithdraw({ actor, preparedBy: loaded.request.prepared_by, status: loaded.request.status });
+        if (!check.ok) return c.json({ error: check.code }, check.code === "APPROVAL_GONE" ? 409 : 403);
+        const moved = await moveApprovalRequest(
+          loaded.request, ["pending_approval", "stale"], "withdrawn", actor, "approval_withdrawn", null, correlationIdFrom(c),
+        );
+        if (!moved) return c.json({ error: "APPROVAL_GONE", message: "This request was already handled." }, 409);
+        return c.json({ success: true, status: "withdrawn" });
+      } catch (e) {
+        return safeErrorResponse(c, e, "recon-approval-withdraw");
+      }
+    },
+  );
+
+  app.post(
+    `${BASE}/approvals/:id/reject`,
+    requireAuth({ strict: true }),
+    requirePermission("recon.approve"),
+    async (c: Context) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+        const body = await c.req.json().catch(() => ({})) as { reason?: string };
+        const reasonError = rejectReasonError(body.reason);
+        if (reasonError) return c.json({ error: "REASON_REQUIRED", message: reasonError }, 400);
+        const loaded = await loadApprovalRequest(orgId, String(c.req.param("id")));
+        if (!loaded) return c.json({ error: "NOT_FOUND" }, 404);
+        if (loaded.request.status !== "pending_approval") {
+          return c.json({ error: loaded.request.status === "stale" ? "APPROVAL_STALE" : "APPROVAL_GONE" }, 409);
+        }
+        const moved = await moveApprovalRequest(
+          loaded.request, ["pending_approval"], "rejected", actorFromContext(c), "approval_rejected",
+          String(body.reason).trim(), correlationIdFrom(c),
+        );
+        if (!moved) return c.json({ error: "APPROVAL_GONE", message: "This request was already handled." }, 409);
+        return c.json({ success: true, status: "rejected" });
+      } catch (e) {
+        return safeErrorResponse(c, e, "recon-approval-reject");
+      }
+    },
+  );
+
+  app.post(
+    `${BASE}/approvals/:id/approve`,
+    requireAuth({ strict: true }),
+    requirePermission("recon.approve"),
+    async (c: Context) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+        const loaded = await loadApprovalRequest(orgId, String(c.req.param("id")));
+        if (!loaded) return c.json({ error: "NOT_FOUND" }, 404);
+        const { request, run } = loaded;
+        const actor = actorFromContext(c);
+        const correlationId = correlationIdFrom(c);
+
+        const decision = decideApprove({
+          status: request.status,
+          versionAtSend: request.version_at_send == null ? null : Number(request.version_at_send),
+          currentVersion: Number(run.version),
+        });
+        if (!decision.go) {
+          if (decision.markStale) {
+            await moveApprovalRequest(request, ["pending_approval"], "stale", actor, "approval_stale", null, correlationId);
+          }
+          const message = decision.code === "WEEK_CHANGED"
+            ? "This request is out of date: the week changed after it was sent. Ask the sender to prepare it again."
+            : decision.code === "APPROVAL_STALE"
+            ? "This request is out of date. Ask the sender to prepare it again."
+            : await alreadyHandledMessage(request.id);
+          return c.json({ error: decision.code, message }, 409);
+        }
+
+        // Claim it first, so two approvers pressing Approve at once cannot both run the action.
+        const claimed = await moveApprovalRequest(
+          request, ["pending_approval"], "approved", actor, "approval_approved", null, correlationId,
+        );
+        if (!claimed) {
+          return c.json({ error: "APPROVAL_GONE", message: await alreadyHandledMessage(request.id) }, 409);
+        }
+
+        const action = (request.payload as { action?: string })?.action;
+        const params = ((request.payload as { params?: Record<string, unknown> })?.params ?? {}) as Record<string, unknown>;
+        const line = run.service_line === "rush_delivery" ? "rush_delivery" : "rideshare";
+        const weekKey = String(run.week_key).slice(0, 10);
+        const reason = String(request.reason ?? params.reason ?? "").trim();
+        try {
+          const result = await runApprovedAction(c, {
+            action: String(action),
+            params,
+            orgId,
+            line,
+            weekKey,
+            run,
+            actor,
+            reason,
+            requestId: String(request.id),
+          });
+          return c.json({ success: true, status: "approved", correlationId, result });
+        } catch (e) {
+          // The request stays approved (the log cannot go back); the failure is recorded next to it.
+          await reconDb().from("run_events").insert({
+            run_id: request.run_id,
+            actor,
+            kind: "approval_failed",
+            payload: { requestId: request.id, action, error: (e instanceof Error ? e.message : String(e)).slice(0, 500) },
+            correlation_id: correlationId,
+            status: "applied",
+          });
+          throw e;
+        }
+      } catch (e) {
+        return safeErrorResponse(c, e, "recon-approval-approve");
+      }
+    },
+  );
+
+  // ── Switch-over (§9): is the rebuilt Week Reconciliation on for this company? ──
+  app.get(
+    `${BASE}/switch`,
+    requireAuth({ strict: true }),
+    async (c: Context) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ success: true, reconV2: false });
+        return c.json({ success: true, reconV2: await isFeatureEnabled(FEATURE_FLAGS.RECON_V2, orgId) });
+      } catch (e) {
+        return safeErrorResponse(c, e, "recon-switch");
+      }
+    },
+  );
+
+  // ── Alerts (WRA-31) ─────────────────────────────────────────────────────────
+  app.get(
+    `${BASE}/alerts`,
+    requireAuth({ strict: true }),
+    requireAnyPermission("recon.view", "transactions.view"),
+    async (c: Context) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+        const { data, error } = await reconDb().from("alerts")
+          .select("id, kind, title, detail, raised_at, acknowledged_at, acknowledged_by, sms_status")
+          .eq("organization_id", orgId).is("resolved_at", null)
+          .order("raised_at", { ascending: false });
+        if (error) throw new Error(error.message);
+        return c.json({ success: true, items: data ?? [] });
+      } catch (e) {
+        return safeErrorResponse(c, e, "recon-alerts");
+      }
+    },
+  );
+
+  app.post(
+    `${BASE}/alerts/:id/acknowledge`,
+    requireAuth({ strict: true }),
+    requirePermission("recon.approve"),
+    async (c: Context) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+        const { data, error } = await reconDb().from("alerts")
+          .update({ acknowledged_at: new Date().toISOString(), acknowledged_by: actorFromContext(c) })
+          .eq("id", String(c.req.param("id"))).eq("organization_id", orgId)
+          .is("acknowledged_at", null).is("resolved_at", null)
+          .select("id");
+        if (error) throw new Error(error.message);
+        if (!data?.length) return c.json({ error: "ALERT_GONE", message: "This alert was already acknowledged or resolved." }, 409);
+        return c.json({ success: true });
+      } catch (e) {
+        return safeErrorResponse(c, e, "recon-alert-ack");
+      }
+    },
+  );
+
   registerReconImportRoutes(app);
+}
+
+/** Runs an approved request with the same code as the direct button. */
+async function runApprovedAction(
+  c: Context,
+  input: {
+    action: string;
+    params: Record<string, unknown>;
+    orgId: string;
+    line: ReconLine;
+    weekKey: string;
+    run: WeekRunRow;
+    actor: string;
+    reason: string;
+    requestId: string;
+  },
+): Promise<unknown> {
+  const { action, params, orgId, line, weekKey, run, actor, reason } = input;
+  switch (action) {
+    case "waive": {
+      const sourceId = String(params.sourceId || "") as ReconSourceId;
+      if (!RECON_SOURCES.some((s) => s.id === sourceId)) throw new Error("approved waive has no valid sourceId");
+      const outcome = await withWeekChange(c, {
+        runId: run.id,
+        expectedVersion: Number(run.version),
+        actor,
+        kind: "source_waived",
+        step: "sources",
+        reason,
+        payload: { sourceId, reason, approvalRequestId: input.requestId },
+        apply: () => applyWaive(orgId, line, weekKey, run.id, sourceId, reason, actor),
+      });
+      if (outcome.kind === "refused") throw new Error("week changed before the approved waive could run");
+      await buildRunPayload(orgId, line, weekKey, actor);
+      return { applied: true };
+    }
+    case "accept_statement_cash":
+      return await acknowledgeCashSourceMismatch(orgId, weekKey, String(params.driverId || ""), actor, reason);
+    case "close":
+    case "sign_restatement": {
+      if (await calculatorIsPaused()) throw new Error("CALCULATOR_PAUSED: Close is off while the week calculator is paused");
+      const workflow = await startWeekWorkflow({ orgId, weekKey, serviceLine: line, kind: "close", actorId: actor });
+      return { workflowId: workflow.id, state: workflow.state };
+    }
+    case "reopen": {
+      if (await isLegacyCleanupWeek(orgId, line, weekKey)) {
+        throw new Error("LEGACY_CLOSED: this week was closed by the legacy clean-up and cannot be reopened");
+      }
+      if (!reason) throw new Error("REASON_REQUIRED: a reopen needs a reason");
+      return await reopenWeek(orgId, weekKey, actor, reason, params.acknowledgeSettlementRisk === true, line);
+    }
+    default:
+      throw new Error(`unknown approval action ${action}`);
+  }
 }

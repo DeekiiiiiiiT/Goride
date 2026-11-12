@@ -35,6 +35,7 @@ import { withProductLineHeaders } from './config/productLine';
 import { PermissionGate } from './components/auth/PermissionGate';
 import { PAGE_PERMISSION_MAP } from './utils/permissions';
 import { usePermissions } from './hooks/usePermissions';
+import { useReconV2 } from './hooks/useReconV2';
 import { useServiceLineScope } from './contexts/ServiceLineScopeContext';
 
 import { isPassengerOnlyMetadataRole, TestCopyBar } from '@roam/auth-client';
@@ -174,11 +175,17 @@ function AppContent() {
   const { rideshareVisible } = useServiceLineScope();
   /** Close Week / Restatements live on Driver Settlements when that desk is available. */
   const canUseSettlementsHub = canView('driver-settlements') && rideshareVisible;
-  /** Fuel / Toll recon live on Week Reconciliation hub. */
+  /**
+   * Fuel / Toll recon live on Week Reconciliation hub — only once the company's
+   * recon_v2 switch is on (audit §9). Off: the old close path stays (Driver Settlements
+   * → Close Week, Fuel and Toll pages).
+   */
+  const reconV2 = useReconV2(!!user);
   const canUseWeekReconHub =
-    canView('fuel-reconciliation') ||
-    canView('toll-tags') ||
-    permissions.some((p) => String(p) === 'recon.view' || String(p) === 'nav.recon');
+    reconV2 === true &&
+    (canView('fuel-reconciliation') ||
+      canView('toll-tags') ||
+      permissions.some((p) => String(p) === 'recon.view' || String(p) === 'nav.recon'));
   
   const [currentPage, setCurrentPage] = useState(() =>
     typeof window !== 'undefined' ? resolvePageFromPathname(window.location.pathname) : 'dashboard',
@@ -532,6 +539,15 @@ function AppContent() {
       setCurrentPage('driver-settlements');
     }
   }, [currentPage, canUseSettlementsHub, canUseWeekReconHub, closeWeekKeyHint]);
+
+  // recon_v2 off: a /week-reconciliation bookmark opens the old close path instead.
+  useEffect(() => {
+    if (reconV2 !== false || currentPage !== 'week-reconciliation') return;
+    const page = canUseSettlementsHub ? 'driver-settlements' : 'close-week';
+    if (canUseSettlementsHub) setSettlementsHubTabHint('close-week');
+    setCurrentPage(page);
+    if (typeof window !== 'undefined') window.history.replaceState({ page }, '', `/${page}`);
+  }, [reconV2, currentPage, canUseSettlementsHub]);
 
   // /fuel-reconciliation and /toll-tags bookmarks → Week Reconciliation hub tabs
   useEffect(() => {

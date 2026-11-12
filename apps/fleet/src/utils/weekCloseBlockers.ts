@@ -107,6 +107,7 @@ export const BLOCKER_LABELS: Record<string, string> = {
   LINE_UNATTRIBUTED: 'Rows not assigned to Rideshare or Delivery',
   CASH_HELD_OVER_RETURNED: 'Fleet returned more cash than the driver held — resolve before close',
   COVERAGE_WIDER_THAN_DATA: 'A file was declared to cover more days than its transactions',
+  EARLIER_WEEK_OPEN: 'An earlier week is still open — close it first',
 };
 
 /** Each close code belongs on exactly one wizard step. Owned by finance-core. */

@@ -47,6 +47,7 @@ import type { LogServiceVehicleStrip, LogServiceWizardStep } from "./maintenance
 import {
   defaultActionForCategory,
   hiddenLineFieldsFor,
+  sidePositionsFor,
   isServiceJob,
   serviceJobAmount,
   serviceJobCost,
@@ -68,6 +69,9 @@ import type {
 import {
   formatMaintenanceLineLabel,
   groupCategoriesBySystem,
+  maintenanceDiscountTooLarge,
+  maintenanceServiceNetTotal,
+  parseMaintenanceDiscount,
   sumMaintenanceLogLines,
 } from "../../types/maintenance";
 import type { CompatiblePartsItem } from "../../types/partSourcing";
@@ -200,6 +204,7 @@ function numFrom(v: unknown): number | undefined {
 }
 
 function needsPositions(cat: MaintenanceServiceCategory): boolean {
+  if (sidePositionsFor(cat)) return true;
   if (cat.position_aware === true) return true;
   const hay = `${cat.code} ${cat.name} ${cat.icon_key}`.toLowerCase();
   return /tire|brake|wheel/.test(hay);
@@ -352,9 +357,14 @@ export function LogMaintenanceServiceDialog({
   const [logServiceContext, setLogServiceContext] = useState<Awaited<
     ReturnType<typeof api.getLogServiceContext>
   > | null>(null);
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [discountRowOpen, setDiscountRowOpen] = useState(false);
+  const [discountInput, setDiscountInput] = useState("");
   const [lineDetailCategories, setLineDetailCategories] = useState<MaintenanceServiceCategory[]>([]);
   const [step, setStep] = useState<DialogStep>("dateMileage");
   const [idempotencyKey, setIdempotencyKey] = useState<string>(() => crypto.randomUUID());
+  /** CR-03: discount last sent with the current save key; a changed discount needs a new key. */
+  const sentDiscountRef = useRef<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [scanLoading, setScanLoading] = useState(false);
   const [quickJobsLoading, setQuickJobsLoading] = useState(false);
@@ -459,7 +469,15 @@ export function LogMaintenanceServiceDialog({
     return groupCategoriesBySystem([...uniqSystems.values(), ...components]);
   }, [selectedPackage, allSystems, catalogById]);
 
-  const totalCost = useMemo(() => sumMaintenanceLogLines(lines), [lines]);
+  const subtotal = useMemo(() => sumMaintenanceLogLines(lines), [lines]);
+  const netTotal = useMemo(
+    () => maintenanceServiceNetTotal(lines, discountAmount),
+    [lines, discountAmount],
+  );
+  const discountTooLarge = useMemo(
+    () => discountAmount > 0 && maintenanceDiscountTooLarge(lines, discountAmount),
+    [lines, discountAmount],
+  );
 
   const draftLine = useMemo(() => {
     if (!activeCategory) return null;
@@ -538,6 +556,8 @@ export function LogMaintenanceServiceDialog({
       selectedCategoryIds,
       idempotencyKey,
       anomalyAcknowledged,
+      discountAmount,
+      discountRowOpen,
     });
   }, [
     draftUserId,
@@ -552,6 +572,8 @@ export function LogMaintenanceServiceDialog({
     selectedCategoryIds,
     idempotencyKey,
     anomalyAcknowledged,
+    discountAmount,
+    discountRowOpen,
   ]);
 
   useEffect(() => {
@@ -578,6 +600,7 @@ export function LogMaintenanceServiceDialog({
   useEffect(() => {
     if (!open) return;
     setIdempotencyKey(crypto.randomUUID());
+    sentDiscountRef.current = null;
 
     const odoPrefill =
       initialLog?.odo ??
@@ -606,6 +629,9 @@ export function LogMaintenanceServiceDialog({
     setLineDetailCategories([]);
     setAnomalyAcknowledged(false);
     setOdometerCheck(null);
+    setDiscountAmount(0);
+    setDiscountRowOpen(false);
+    setDiscountInput("");
 
     const savedDraft =
       draftUserId && !initialLog?.id ? readLogServiceDraft(draftUserId, vehicleId) : null;
@@ -622,6 +648,12 @@ export function LogMaintenanceServiceDialog({
       setSelectedCategoryIds(existingDraft.selectedCategoryIds);
       setIdempotencyKey(existingDraft.idempotencyKey);
       setAnomalyAcknowledged(existingDraft.anomalyAcknowledged);
+      const restoredDiscount = existingDraft.discountAmount ?? 0;
+      setDiscountAmount(restoredDiscount);
+      setDiscountRowOpen(
+        existingDraft.discountRowOpen === true || restoredDiscount > 0,
+      );
+      setDiscountInput(restoredDiscount > 0 ? String(restoredDiscount) : "");
       setStep("review");
       const pkg = packageChoices.find((p) => p.id === existingDraft.selectedPackageId) ?? null;
       setSelectedPackage(pkg);
@@ -1112,6 +1144,12 @@ export function LogMaintenanceServiceDialog({
       if (initialLog?.id) {
         result = await api.updateMaintenanceLog(vehicleId, logId, payload);
       } else {
+        let saveKey = idempotencyKey;
+        if (sentDiscountRef.current !== null && sentDiscountRef.current !== discountAmount) {
+          saveKey = crypto.randomUUID();
+          setIdempotencyKey(saveKey);
+        }
+        sentDiscountRef.current = discountAmount;
         const woRes = await api.createWorkOrder({
           vehicleId,
           status: "in_progress",
@@ -1126,7 +1164,8 @@ export function LogMaintenanceServiceDialog({
           invoiceUrl: invoiceUrl || null,
           lines,
           completeNow: true,
-          idempotencyKey,
+          idempotencyKey: saveKey,
+          discount: discountAmount > 0 ? discountAmount : 0,
         });
         result = {
           ledgerPosted: woRes.ledgerPosted,
@@ -1197,7 +1236,26 @@ export function LogMaintenanceServiceDialog({
       else onOpenChange(false);
     } catch (error) {
       console.error(error);
-      toast.error("Failed to save service log");
+      // Say why: a network failure (server unreachable) reads differently from a server refusal.
+      const reason =
+        error instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(error.message)
+          ? "could not reach the server — check your connection and try again"
+          : error instanceof Error && error.message
+            ? error.message
+            : "";
+      if (/discount changed/i.test(reason)) {
+        // CR-03: the next Save starts a fresh save key with the new discount.
+        setIdempotencyKey(crypto.randomUUID());
+        sentDiscountRef.current = null;
+      }
+      const discountErr = /discount can't be more|discounts are switched|valid discount|discount changed/i.test(reason);
+      toast.error(
+        discountErr
+          ? reason
+          : reason
+            ? `Failed to save service log: ${reason}`
+            : "Failed to save service log",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -1520,7 +1578,12 @@ export function LogMaintenanceServiceDialog({
                     ) : null}
                     <LogServiceWizardContinueButton
                       label={LOG_SERVICE_COPY.logServiceLabel}
-                      disabled={isLoading || lines.length < 1 || Number(formMeta.odo) <= 0}
+                      disabled={
+                        isLoading
+                        || lines.length < 1
+                        || Number(formMeta.odo) <= 0
+                        || discountTooLarge
+                      }
                       loading={isLoading}
                       onClick={() => void handleSave()}
                     />
@@ -1615,7 +1678,7 @@ export function LogMaintenanceServiceDialog({
               componentCount={lineDetailCategories.length}
               baySessionLabel={idempotencyKey.slice(0, 8).toUpperCase()}
               configuredCount={lineDetailCategories.filter((c) => categoryHasLine(c)).length}
-              subtotalLabel={`${formMeta.currency || "JMD"} ${totalCost.toLocaleString()}`}
+              subtotalLabel={`${formMeta.currency || "JMD"} ${subtotal.toLocaleString()}`}
               oemMatch={logServiceOemMatchSummary(lines)}
               homeBase={vehicleStrip?.homeBase}
               mechanicNote={formMeta.notes}
@@ -1647,6 +1710,7 @@ export function LogMaintenanceServiceDialog({
                       onBrandChange={(brand) => setLineExtras((prev) => ({ ...prev, brand }))}
                       onPartNumberChange={(partNumber) => setLineExtras((prev) => ({ ...prev, partNumber }))}
                       showPositions={needsPositions(cat)}
+                      sideOptions={sidePositionsFor(cat)}
                       positions={lineExtras.positions}
                       onTogglePosition={togglePosition}
                       warranty={lineExtras.warranty}
@@ -1719,6 +1783,7 @@ export function LogMaintenanceServiceDialog({
               onBrandChange={(brand) => setLineExtras((prev) => ({ ...prev, brand }))}
               onPartNumberChange={(partNumber) => setLineExtras((prev) => ({ ...prev, partNumber }))}
               showPositions={needsPositions(activeCategory)}
+              sideOptions={sidePositionsFor(activeCategory)}
               positions={lineExtras.positions}
               onTogglePosition={togglePosition}
               warranty={lineExtras.warranty}
@@ -1776,7 +1841,33 @@ export function LogMaintenanceServiceDialog({
               onScanFile={handleServiceScan}
               lines={lines}
               lineTotalPreview={lineTotalPreview}
-              totalCost={totalCost}
+              subtotal={subtotal}
+              netTotal={netTotal}
+              // CR-06: edit mode never sends a discount (D-08), so don't offer one.
+              discountEnabled={!initialLog?.id && logServiceContext?.discountEnabled === true}
+              discountAmount={discountAmount}
+              discountInputValue={discountInput}
+              discountRowOpen={discountRowOpen}
+              discountTooLarge={discountTooLarge}
+              onAddDiscount={() => setDiscountRowOpen(true)}
+              onRemoveDiscount={() => {
+                setDiscountRowOpen(false);
+                setDiscountAmount(0);
+                setDiscountInput("");
+              }}
+              onDiscountChange={(raw) => {
+                if (raw !== "" && !/^[\d.,\s]*$/.test(raw)) return;
+                const trimmed = raw.trim();
+                if (!trimmed) {
+                  setDiscountInput("");
+                  setDiscountAmount(0);
+                  return;
+                }
+                const parsed = parseMaintenanceDiscount(raw);
+                if (parsed === null) return;
+                setDiscountInput(raw);
+                setDiscountAmount(parsed);
+              }}
               onEditLine={(line) => {
                 const pkgCat = selectedPackage?.categories.find(
                   (c) =>

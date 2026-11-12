@@ -1,0 +1,293 @@
+ROAM FLEET — WEEK RECONCILIATION — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Week Reconciliation (Desktop Web App with a phone layout, for the fleet owner, fleet manager and fleet accountant):
+
+Design a complete, modern, high-fidelity redesign of the "Week Reconciliation" section inside Roam Fleet. Once a week, the fleet manager takes one Monday-to-Sunday week, for one service line (Rideshare, or Delivery), from "files uploaded" to "every driver paid or collected, and the week's books locked". It happens on ONE screen, in EIGHT steps, in this order: 1 Upload inputs, 2 Assign service lines, 3 Tolls, 4 Tag account, 5 Fuel, 6 Trips & earnings, 7 Settlement preview, 8 Close week. The person using it is not an accountant. Every step answers one plain question ("Who pays each toll?", "Who owes whom this week?"), shows one clear next action, and never sends them to another page to finish. Today the section feels scattered: steps open whole other apps inside them, there are several different ways to close a week, and screens disagree about numbers. The new design must feel like one calm, guided desk: a left step rail, one step in the middle, and a small summary on the right. Numbers are big and clear, every problem says what it is, how much money it is, and which button fixes it. Nothing is ever hidden, and nothing is ever vague.
+
+
+BRAND IDENTITY:
+- Keep the existing Roam Fleet app frame exactly as it is today (do not redesign it):
+  - **Top:** a white nav row with the black "Roam Fleet" app tile, then: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations, Delivery Operations, Analytics, Reports, Business Finance (active, underlined), a bell with a red count, the avatar.
+  - **Dark bar below it:** a dark navy strip with a search box "Switch vehicle or search hub…" on the left, and on the right the time "09:10:28 PM EST", "America/Jamaica", "JM (JMD)" and an org chip "DE · Deeki T".
+  - **Page title:** breadcrumb "Business Finance › Week Reconciliation".
+  - Everything BELOW the breadcrumb is the new design.
+- Theme: "Calm finance desk" — clear, trustworthy and quiet, like the best modern business banking apps. Not a spreadsheet, not a developer tool.
+- LIGHT MODE (default):
+  - Primary: near-black #030213 — main buttons, the active step
+  - Page wash: #f8fafc; cards: #FFFFFF with a soft shadow (0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(15,23,42,0.06)) and a hairline border rgba(0,0,0,0.06)
+  - Text: #0a0a0a; muted text: #64748b
+  - Done / Received / Complete: green #059669 on a soft green #ecfdf5
+  - Needed / Waiting / Action needed: amber #b45309 on a soft amber #fffbeb
+  - Blocks closing / Failed: red #d4183d on #fff1f2
+  - Optional / No activity / Not needed: slate #475569 on #f1f5f9
+  - Information / Updating: blue #2563eb on #eff6ff
+  - Closed weeks: a dark slate badge #1e293b with white text
+- DARK MODE:
+  - Page #1c1c1e, cards #2a2a2d, border #3a3a3d
+  - Text #fafafa, muted #a1a1aa, primary buttons white #fafafa with near-black text
+  - Green #34d399 on #064e3b; amber #fbbf24 on #451a03; red #f87171 on #450a0a; blue #60a5fa on #172554
+- Shapes: cards 20px corner radius, buttons and inputs 12px, chips and badges fully rounded.
+- Typography: Inter. Page titles 28px semibold, step titles 22px semibold, card titles 18px semibold, body 15px, muted helper text 13px. Money uses tabular figures, right-aligned, always with "J$" and 2 decimals (for example J$17,183.53).
+- Dates are always written in plain words: "Week of 12 Oct 2026", "2–8 Nov 2026". Never "2026-11-02". Never raw codes like "rush_delivery", "SOURCE_MISSING" or "TOLL_ENGINE_DRIFT".
+- Buttons always look like buttons:
+  - Primary = solid near-black with white text.
+  - Secondary = white with a visible #cbd5e1 border and dark text.
+  - Danger (Cancel, Reject, Withdraw, Undo, Reopen, Write off) = red border and red text; the final confirm in a danger dialog is solid red.
+  - Icon buttons are 32px with a visible border.
+  - Never underlined text links, never grey text-only buttons.
+- Status chips (fully rounded, icon + word) used everywhere for a source or step: "Received" (green check), "Needed" (amber upload icon), "Partial" (amber half circle), "No activity" (slate dash), "Waived" (slate flag), "Waiting on Roam" (amber clock), "Complete" (green check), "In progress" (blue dot), "Locked" (slate padlock), "Blocks closing" (red).
+- Sample data (real, from Roam's database):
+  - **Drivers:** Kenny Gregory Rattray, Phillip Bailey, Sadiki Abayomi Thomas.
+  - **Car:** Toyota Roomy · 5179KZ.
+  - **Weeks:** Rideshare weeks of 2 Nov, 26 Oct, 19 Oct, 5 Oct, 28 Sep, 21 Sep 2026 are open. 12 Oct, 14 Sep and 7 Sep 2026 are closed. The oldest open week is 8 Dec 2025.
+  - **A real paid amount:** Kenny Gregory Rattray, week of 12 Oct 2026, fleet paid J$17,183.53.
+  - **Sources for a Rideshare week:** Uber weekly reports, InDrive trip export, Roam app trips, Tag account usage statement, Tag account top-ups, Cash tolls (optional), Roam fuel card statement, Cash fuel / receipts (optional).
+  - All other money amounts on the screens are layout samples only.
+
+
+DESIGN PRINCIPLES:
+- One screen for the whole week. No step ever opens another app, another wizard or a second set of steps inside it. There is exactly ONE step rail.
+- One question per step, written as the step's subtitle. One obvious primary button per step.
+- Every problem is a row: what it is in plain words, the amount in J$, and one button that fixes it ("Go to Tolls", "Upload", "Decide").
+- Numbers never disagree: the week card, the step rail, the step and the Close box always show the same count.
+- The page always says how fresh the numbers are ("Numbers updated 2 min ago") and loudly says when they are not.
+- Nothing is ever hidden: weeks never drop off the list because they are old; locked steps can still be opened read-only to see why.
+- Approvals are honest: you can send a decision to another approver, or approve it yourself with a written reason, which is clearly labelled "Self-approved".
+- Closed weeks are locked. The only way to change a closed week is a correction (restatement) that someone signs, and every change is listed in History.
+- Calm, not alarming: red is used only for things that truly block closing.
+
+
+SCREEN 1: WEEK LIST — OUTSTANDING
+- Title "Week Reconciliation"; under it the subtitle "Close one week at a time, oldest first."
+- On the right of the title: a "Rideshare | Delivery" segmented toggle (Rideshare active) and a year picker chip "2026 ▾".
+- A thin green freshness line under the title: "Numbers updated 2 min ago".
+- Three KPI tiles in a row, each a white card:
+  - "Open weeks" — 34 (big number), muted line "Rideshare".
+  - "Required sources missing" — 39, muted line "across open weeks".
+  - "Oldest open week" — "Week of 8 Dec 2025" with a secondary button "Open week".
+- Tabs: "Outstanding 34" (active) and "Reconciled 3", as rounded pills with count badges.
+- A list of week cards, OLDEST FIRST. Each card:
+  - Left: "Week of 8 Dec 2025" (title), "8–14 Dec 2025" muted, and seven small day dots labelled MON…SUN (green = has data, grey = empty).
+  - Middle: a wrap of source chips with status, for example "Uber weekly reports · Received", "InDrive trip export · Needed", "Tag account usage statement · Partial", "Roam fuel card statement · Waiting on Roam", "Cash tolls · Optional".
+  - Right: "Next: Upload InDrive trip export" in bold, a small progress text "Step 1 of 8", and a primary button "Open week".
+- At the bottom of the list: a secondary button "Load older weeks".
+- Show 4 cards: 8 Dec 2025, 15 Dec 2025, 24 Aug 2026 and 2 Nov 2026.
+
+
+SCREEN 2: WEEK LIST — RECONCILED
+- Same header, toggle and KPI tiles as Screen 1, with the "Reconciled 3" tab active.
+- Cards NEWEST FIRST: Week of 12 Oct 2026, Week of 14 Sep 2026, Week of 7 Sep 2026.
+- Each card: a dark "Closed" badge, "Closed 23 Oct 2026 by Deeki T", small totals "Fleet paid J$17,183.53 · Drivers paid J$0.00", and a secondary button "View week".
+- One card (14 Sep) also shows an amber badge "Correction waiting to be signed" and a primary button "Review correction".
+
+
+SCREEN 3: WEEK DESK — STEP 1 UPLOAD INPUTS
+- Three columns:
+  - **Left (220px) step rail card:** a secondary button "← All weeks" at the top, then the 8 steps as rows: number circle, step name, status line.
+    - 1 Upload inputs — "In progress" (active, highlighted with a near-black left bar);
+    - 2 Assign service lines — "Nothing to assign" (green);
+    - 3 Tolls — "Locked · Waiting on Tag account usage statement";
+    - 4 Tag account — "Locked";
+    - 5 Fuel — "Locked · Waiting on Roam fuel card statement";
+    - 6 Trips & earnings — "Locked";
+    - 7 Settlement preview — "Locked";
+    - 8 Close week — "Locked".
+    - At the very bottom: a dashed grey tile "Telematics — Coming soon" that cannot be clicked.
+  - **Middle (main) card:**
+    - Header "Week of 2 Nov 2026 · Rideshare", "2–8 Nov 2026", the freshness line, then the step title "Upload inputs" and the question "Do we have every file for this week?"
+    - A grid of source cards (2 per row). Each card has the source name, the status chip, seven day dots, a one-line plain explanation, and its buttons:
+      - "Uber weekly reports" — Needed — buttons "Upload" (primary) and "Mark no activity" (secondary).
+      - "InDrive trip export" — Needed — "Upload", "Mark no activity".
+      - "Roam app trips" — Received (5 of 7 days) — no buttons.
+      - "Tag account usage statement" — Needed — "Upload", "Mark no activity", "Waive (approver)".
+      - "Tag account top-ups" — Needed — "Upload", "Mark no activity".
+      - "Cash tolls" — Optional — "Mark no activity".
+      - "Roam fuel card statement" — Waiting on Roam — the line "Waiting on Roam fuel card statement · not reminded yet" and a primary button "Remind Roam".
+      - "Cash fuel / receipts" — Received — no buttons.
+    - Footer bar: a muted "5 required files still needed" on the left; the primary button "Continue to Assign service lines" on the right (disabled here).
+  - **Right (240px) summary column:** two small cards.
+    - "Sources" — "3 / 8 required received" with a thin progress bar.
+    - "Service line split" — "Unassigned rows 0", "Unassigned J$ —".
+- Add a small upload panel opened from "Upload" on Uber: "Upload Uber weekly reports for the week of 2–8 Nov 2026", a drop zone, the file list, and buttons "Upload" (primary) and "Cancel" (red).
+
+
+SCREEN 4: STEP 2 ASSIGN SERVICE LINES
+- Same desk layout, step 2 active.
+- Question: "Which business does each shared cost belong to?"
+- A table of 3 shared rows: date, description ("Highway 2000 toll · 5179KZ", "Fuel · Total Constant Spring"), amount, and two choice buttons per row, "Rideshare" and "Delivery". One row is assigned (green chip "Rideshare").
+- Above the table: secondary buttons "Assign all to Rideshare" and "Assign all to Delivery".
+- Footer: "Continue to Tolls".
+- Also show a small empty-state version: "Nothing to assign this week" with a green check (the step skips itself).
+
+
+SCREEN 5: STEP 3 TOLLS — WHO PAYS EACH TOLL?
+- Same desk, step 3 active. Question: "Who pays each toll this week?"
+- A top strip of four money tiles: "Toll spend J$4,620.00", "Paid back by Uber J$2,100.00", "Charged to drivers J$900.00", "Fleet cost J$1,620.00".
+- Seven collapsible sections, in this exact order, each with a title, a count, a J$ total and its rows:
+  1. "Reimbursed" — on a trip, and the platform paid the full toll back. Read-only rows with a green "Done" chip.
+  2. "Underpaid" — on a trip, but the platform paid back less. Row button "Open claim".
+  3. "Deadhead" — driving to a pickup, no passenger yet. Row buttons "Fleet pays" and "Charge driver".
+  4. "Personal use" — no trip at the time. Row buttons "Charge driver" and "Fleet pays".
+  5. "Needs review" — no clear trip. Row buttons "Match to trip", "Personal", "Deadhead".
+  6. "Dispute refunds" — support refunds from the platform. Row buttons "Match" and "Leave unlinked".
+  7. "Unlinked refunds" — a toll credit with no matching toll yet. Row buttons "Link to toll" and "Park".
+- Each row: date and time, plaza name ("Spanish Town plaza"), car "5179KZ", driver "Kenny Gregory Rattray", amount, and payment method chip ("Tag" or "Cash").
+- At the bottom, a "Toll seal" box: the sum "Spend − Paid back − Charged − Fleet cost = J$0.00" with a green check, and the primary button "Seal tolls".
+- A small muted footnote: "On a trip = pickup to drop-off. Deadhead = up to about 45 minutes before a pickup. After a trip or no trip = personal."
+- There is NO second stepper, NO "Close Week" button and NO "Finish" inside this step.
+
+
+SCREEN 6: STEP 4 TAG ACCOUNT — DOES THE TOLL WALLET BALANCE?
+- Same desk, step 4 active. Question: "Does the prepaid toll wallet balance?"
+- A clear sum card, laid out like a receipt:
+  - "Opening balance (from last closed week)" J$12,000.00
+  - "+ Top-ups this week" J$5,000.00
+  - "− Usage this week" J$4,620.00
+  - "= Expected closing" J$12,380.00 (bold)
+- Under it, a muted note: "Usage is the total on the tag usage statement — every tag on every vehicle."
+- An input "Closing balance on the provider's statement" with the value J$12,300.00 and a secondary button "Save".
+- A variance row in amber: "Difference J$80.00". The question "What explains it?", then three secondary buttons "Missing top-up", "Provider fee", "Investigate".
+- A small waiting version: "Waiting for the tag usage statement — upload it in Upload inputs" with a secondary button "Go to Upload inputs".
+
+
+SCREEN 7: STEP 5 FUEL — WHO PAYS FOR THE FUEL?
+- Same desk, step 5 active. Question: "How was the car driven, and who pays for the fuel?"
+- A top strip: "Fuel spend J$18,450.00", "Fleet share J$11,070.00", "Driver share J$7,380.00".
+- A km category table: Category · km · J$ · Who pays. Rows in this order: "Ride share (with a passenger)", "Company work", "Deadhead (no passenger)", "Personal", "Commute (home ↔ work)", "Left over (unexplained)". A small stacked bar shows the split.
+- Three boxes side by side:
+  - "Fuel policy" — a plain summary ("Fleet pays 100% of ride share and company work; driver pays personal") and a secondary button "Open policy".
+  - "Fuel checks" — "2 fills need a look" with rows ("Fill at Total Constant Spring is larger than the tank", "Odometer jump of 640 km") each with a secondary button "Resolve".
+  - "Fuel seal" — "Driver share + fleet share = fuel spend" with a green check and the primary button "Finalize fuel".
+- No inner steps, no second "Settlement preview" in this step.
+
+
+SCREEN 8: STEP 6 TRIPS & EARNINGS — DO TRIPS, EARNINGS AND CASH AGREE?
+- Same desk, step 6 active.
+- A status card "Earnings sealed" with a green check, "Sealed 21 Oct 2026", and a secondary button "Reseal".
+- A line "Gross = driver share + company share + tips" with a green check.
+- A table "Cash mismatches": Driver · Statement cash · Trip cash · Difference · button. One row: "Phillip Bailey · J$6,200.00 · J$5,900.00 · J$300.00" with the secondary button "Accept statement cash", which opens a small dialog asking for a reason.
+- A small card "Activity vs trips" per driver: "Online 31 h · On trips 24 h", read-only.
+
+
+SCREEN 9: STEP 7 SETTLEMENT PREVIEW — WHO OWES WHOM?
+- Same desk, step 7 active.
+- Three money tiles: "Fleet owes drivers J$17,183.53", "Drivers owe fleet J$2,450.00", "Cash still held J$800.00".
+- A driver table: Driver · Driver owes · Fleet owes · Cash held · Actions.
+  - Row 1, Kenny Gregory Rattray: fleet owes J$17,183.53; primary button "Pay".
+  - Row 2, Phillip Bailey: driver owes J$2,450.00; secondary button "Collect".
+  - Row 3, Sadiki Abayomi Thomas: cash held J$800.00; secondary button "Settle from balance" and red button "Write off".
+- An empty-state version: "Nothing left to pay or collect for this week."
+
+
+SCREEN 10: STEP 8 CLOSE WEEK — OPEN WEEK
+- Same desk, step 8 active. Question: "Is this week ready to lock?"
+- An "Evidence" card: each source with its status ("Uber weekly reports · Received", "Cash tolls · No activity — confirmed by Deeki T").
+- A "Fix before closing" card: two red rows, each with the step name, a plain description and the amount, and a secondary button "Go to step":
+  - "Tolls · 1 toll needs a decision · J$320.00"
+  - "Settlement · Fleet still owes Kenny Gregory Rattray · J$17,183.53"
+- A disabled primary button "Close week" with the line "Fix 2 items to close".
+- A second version where the list says "Nothing blocks closing" with a green check and an active primary button "Close week".
+
+
+SCREEN 11: STEP 8 — CLOSED WEEK, CORRECTIONS AND HISTORY
+- Same desk for the week of 14 Sep 2026; all steps show "Complete"; a dark "Closed" badge in the header.
+- A "Corrections" card:
+  - One amber row "Raised automatically — Uber weekly reports uploaded 3 Nov 2026 14:22", with the before → after money ("Earnings J$41,200.00 → J$41,560.00").
+  - The note "The closed figures stay until someone signs."
+  - The primary button "Sign correction".
+- A red-outlined button "Reopen week" (approver only).
+- A "History" card: a timeline of entries, each with an icon, who, when, what and why:
+  - "Deeki T closed the week · 27 Oct 2026 17:16"
+  - "Phillip Bailey sent 'Close week' for approval · Approved by Deeki T"
+  - "Deeki T waived Tag account top-ups · Self-approved · Reason: no top-ups this week"
+  - "Raised automatically — Uber weekly reports uploaded 3 Nov 2026"
+- A filter chip at the top of History: "Show self-approved".
+- Outputs: three secondary buttons "Driver Settlements", "Business P&L", "Ledgers".
+
+
+SCREEN 12: APPROVALS
+- The approval dialog, opened from "Close week" (and the same for Waive, Accept statement cash, Write off, Reopen, Sign restatement):
+  - Title "Close the week of 2–8 Nov 2026?"
+  - A short summary: "3 drivers · Fleet owes J$17,183.53 · Locks every step."
+  - Two choices as large option cards:
+    - "Send for approval" — "Another approver reviews and approves it."
+    - "Approve it myself" — "This is logged as self-approved." When chosen, a required text box "Why are you approving your own change?" appears.
+  - Buttons "Send" / "Approve" (primary) and "Cancel" (red).
+- The week card and step rail while waiting: an amber banner "Waiting for approval: Close week · sent by Phillip Bailey 10 Nov 2026 09:12", with "Approve" (primary) and "Reject" (red) for other approvers, and "Withdraw" (red) for the sender.
+- An out-of-date version: a grey banner "This request is out of date — the week changed after it was sent. Ask Phillip Bailey to prepare it again."
+- The bell dropdown with five item types:
+  - "Week of 2 Nov: Close week waiting for your approval" (Approve / Reject);
+  - "Your Close week request was approved by Deeki T";
+  - "Your Waive request was rejected by Deeki T: please upload the file";
+  - "Your request for the week of 26 Oct is out of date";
+  - "Week calculator paused for 26 hours" (Acknowledge).
+
+
+SCREEN 13: STATES
+- **Calculator paused** (red banner across the top of the desk): "Calculator paused since 27 Oct 2026 — numbers last updated 27 Oct 2026. 20 changes waiting." The Close week button is disabled with the same reason.
+- **Updating** (blue banner): "Updating — Kenny Gregory Rattray · week of 12 Oct. Numbers as of 09:10."
+- **Recalculation delayed** (amber): "Recalculation delayed — the nightly run will pick it up" with a secondary button "Retry now".
+- **Calculation failed** (red): "Calculation failed for Phillip Bailey · week of 5 Oct" with a primary button "Retry".
+- **Service unavailable inside one step:** the Fuel step body shows "Fuel service unavailable" with a "Retry" button, while the other steps stay normal.
+- **Week changed while you were working** (amber toast-style card): "This week changed while you were working" with the primary button "Reload week". The text the user typed stays in the box.
+- **Locked step opened read-only:** the Trips & earnings step greyed with a padlock, "Waiting on Uber weekly reports", and the primary button "Go to Upload inputs".
+- **Loading:** skeleton cards for the week list and the desk.
+- **Empty week list:** "Every ended week is closed." with a green check.
+
+
+SCREEN 14: PHONE (390px)
+- Week list: KPI tiles stack; each week card full width with the "Open week" button full width.
+- Week desk: the step rail becomes a horizontal scrolling row of step chips at the top ("1 Upload · 2 Assign · 3 Tolls …"), the step body below, and the summary column folds under the step as two small cards.
+- Settlement preview as stacked driver cards, each with its buttons full width.
+
+
+ADDITIONAL UI COMPONENTS:
+- **Freshness line:** a small green dot + "Numbers updated 2 min ago"; turns blue "Updating…" or red "Calculator paused".
+- **Source card:** name, status chip, seven day dots, one-line explanation, buttons.
+- **Step rail row:** number circle, name, status line; the active row has a near-black left bar; locked rows are 60% opacity but clickable.
+- **Money tile:** muted label, big J$ figure, optional small muted line.
+- **Problem row:** red or amber left border, plain sentence, J$ amount, one button.
+- **Section accordion** (used in Tolls): title, count chip, J$ total, chevron.
+- **Timeline entry** (History): icon, bold actor, action sentence, muted date, optional reason in a grey quote box, optional "Self-approved" chip.
+- **Approval option card:** radio card with a title and one plain sentence.
+- **Telematics tile:** dashed border, grey, "Coming soon", no hover.
+- **Mobile number field** (User Management, each staff member): label "Mobile number for alerts", phone input with "+1 876", helper "Used to text you if the week calculator stops."
+
+
+INTERACTIONS:
+- **Open week / week card click:** opens the desk on the first step that needs work.
+- **Step rail row:** opens that step; locked steps open read-only with their reason.
+- **Continue to <next step>:** completes the current step and moves to the next.
+- **Upload:** opens the upload panel in place, never another page; after upload the source chip turns "Received" once the numbers update.
+- **Mark no activity:** asks once in a small in-app dialog which empty days to mark, then the chip turns "No activity".
+- **Remind Roam:** sends the reminder and the card shows "Reminded 10 Nov 2026".
+- **Toll row buttons:** decide the toll; the row moves to its new section with a short slide.
+- **Seal tolls / Finalize fuel:** completes the step; the rail shows "Complete".
+- **Pay / Collect / Settle from balance / Write off:** open small in-app confirm dialogs; Write off asks for a reason.
+- **Close week, Waive, Accept statement cash, Write off, Reopen, Sign restatement:** open the approval dialog (Screen 12).
+- **Sign correction:** one button, no reason needed; the correction moves into History as "Signed by <name>".
+- **Reload week:** reloads the step and keeps what the user typed.
+- **All confirmations are in-app dialogs, never browser pop-ups.**
+- **Keyboard:** every row and button reachable with Tab, Enter opens, Esc closes dialogs, visible focus rings.
+
+
+Spec screens / Area
+| Screen | Area |
+|---|---|
+| 1 | Week list — Outstanding, KPI tiles, week cards oldest first, Load older weeks |
+| 2 | Week list — Reconciled, newest first, Closed badge, correction waiting |
+| 3 | Week desk shell + Step 1 Upload inputs, step rail, summary column, upload panel |
+| 4 | Step 2 Assign service lines + empty version |
+| 5 | Step 3 Tolls — seven sections, toll seal, no inner stepper |
+| 6 | Step 4 Tag account — wallet sum, statement closing, variance buttons, waiting version |
+| 7 | Step 5 Fuel — km categories, policy, fuel checks, fuel seal |
+| 8 | Step 6 Trips & earnings — sealed, gross line, cash mismatches, activity vs trips |
+| 9 | Step 7 Settlement preview — money tiles, driver table, empty version |
+| 10 | Step 8 Close — open week, fix-before-closing and ready versions |
+| 11 | Step 8 — closed week, corrections, Reopen, History, outputs (light + dark) |
+| 12 | Approvals — dialog, waiting banner, out of date, bell items |
+| 13 | States — calculator paused, updating, delayed, failed, service down, week changed, locked read-only, loading, empty |
+| 14 | Phone 390px — week list, desk with step chips, settlement cards |

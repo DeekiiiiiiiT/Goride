@@ -3,6 +3,7 @@ import { AlertCircle, Bell, CheckCircle2, Loader2, UploadCloud } from 'lucide-re
 import { toast } from 'sonner';
 import { roamFuelExternalCopy, weekDayKeys } from '@roam/finance-core';
 import { ReconApiError, type ReconRunPayload, type ReconRunSource } from '../../../services/reconApi';
+import { RECON_WEEK_CHANGED_EVENT } from '../../../services/reconWeekContext';
 
 type RefreshRun = (payload?: ReconRunPayload) => void | Promise<void>;
 import { usePermissions } from '../../../hooks/usePermissions';
@@ -38,8 +39,10 @@ function removeBusyId(prev: ReadonlySet<string>, id: string): Set<string> {
 
 function toastReconSourceError(err: unknown, onRefresh: RefreshRun, fallback: string) {
   if (err instanceof ReconApiError && err.status === 409) {
-    void onRefresh();
-    toast.error('Updated elsewhere — try again');
+    // Done-test 9: nothing is saved; the week page shows "This week changed — Reload week".
+    window.dispatchEvent(
+      new CustomEvent(RECON_WEEK_CHANGED_EVENT, { detail: { code: /closed/i.test(err.message) ? 'WEEK_CLOSED' : 'WEEK_CHANGED' } }),
+    );
     return;
   }
   const msg = err instanceof Error ? err.message : fallback;

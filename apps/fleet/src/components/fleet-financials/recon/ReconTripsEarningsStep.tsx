@@ -1,71 +1,136 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+/**
+ * Step 6 Trips & earnings (Stitch screen 8). Reads only saved rows (WRA-07):
+ * the calculator's close check and the saved driver weeks. Nothing runs on open.
+ *  - Seal earnings / Reseal is a button (a change through the week wrapper).
+ *  - Statement cash vs trip cash per driver, with Accept statement cash
+ *    (approval dialog: Send for approval or Approve it myself).
+ *  - Activity vs trips per driver (WRA-21): read only, never blocks Close.
+ */
+import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
+import { TRIPS_EARNINGS_BLOCKER_CODES } from '@roam/finance-core';
 import {
-  isCashSourceAckValid,
-  TRIPS_EARNINGS_BLOCKER_CODES,
-  type CloseBlocker,
-} from '@roam/finance-core';
-import type { ReconRunPayload } from '../../../services/reconApi';
-import { api } from '../../../services/api';
-import {
-  weekCloseApi,
-  isWeekCloseUnavailable,
-  WeekCloseApiError,
-  type WeekCloseCashSourceMismatch,
-} from '../../../services/weekCloseApi';
-import {
-  CLOSE_WEEK_SYNC_FIXABLE_CODES,
-  forceResealHintsFromPreview,
-} from '../../../utils/closeWeekAutoSync';
+  fetchWeekActivity,
+  fetchWeekMoney,
+  sealEarnings,
+  sendForApproval,
+  type ReconCashMismatch,
+  type ReconWeekActivity,
+  type ReconRunPayload,
+} from '../../../services/reconApi';
+import { weekCloseApi } from '../../../services/weekCloseApi';
 import { humanBlockerLabel } from '../../../utils/weekCloseBlockers';
 import { CloseWeekUberReimportDialog } from '../CloseWeekUberReimportDialog';
-import { Button } from '../../ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '../../ui/dialog';
-import { Textarea } from '../../ui/textarea';
 import { toast } from 'sonner';
-
-function driverDisplayName(d: {
-  id?: string;
-  driverId?: string;
-  name?: string;
-  fullName?: string;
-  firstName?: string;
-  lastName?: string;
-}): string {
-  const named = String(d.name || d.fullName || '').trim();
-  if (named) return named;
-  return [d.firstName, d.lastName].filter(Boolean).join(' ').trim();
-}
+import { ReconApprovalDialog } from './ReconApprovalDialog';
+import { approvalErrorMessage, assertWeekUnchanged, useReconApprovals } from './useReconApprovals';
+import { formatWeekRange } from './weekListFormat';
 
 const TRIPS_EARNINGS_CODES = new Set<string>(TRIPS_EARNINGS_BLOCKER_CODES);
+const EARNINGS_SEAL_CODES = new Set(['EARNINGS_STATEMENT_MISSING', 'EARNINGS_STATEMENT_UNVERIFIED', 'EARNINGS_ENGINE_DRIFT']);
 
 const MONEY = (n: number | null | undefined) => {
   if (n == null || !Number.isFinite(n)) return '—';
-  const body = Math.abs(n).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  return `${n < 0 ? '-' : ''}$${body}`;
+  const body = Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${n < 0 ? '−' : ''}J$${body}`;
 };
 
-function filterTripsBlockers(blockers: CloseBlocker[]): CloseBlocker[] {
-  return blockers.filter((b) => TRIPS_EARNINGS_CODES.has(String(b.code || '').toUpperCase()));
+type StepBlocker = { code: string; message: string | null; driverId: string | null; severity: string };
+
+/** Trips & earnings items from the saved close check. Exported for tests. */
+export function tripsStepBlockers(closeCheck: ReconRunPayload['closeCheck']): {
+  waiting: boolean;
+  failed: boolean;
+  items: StepBlocker[];
+  needsSeal: boolean;
+} {
+  if (!closeCheck || closeCheck.status === 'none') return { waiting: true, failed: false, items: [], needsSeal: false };
+  if (closeCheck.status === 'error') return { waiting: false, failed: true, items: [], needsSeal: false };
+  const items = closeCheck.blockers
+    .filter((b) => TRIPS_EARNINGS_CODES.has(String(b.code || '').toUpperCase()))
+    .map((b) => ({ code: b.code, message: b.message, driverId: b.driver_id, severity: b.severity }));
+  return {
+    waiting: false,
+    failed: false,
+    items,
+    needsSeal: items.some((b) => EARNINGS_SEAL_CODES.has(String(b.code).toUpperCase())),
+  };
 }
 
-function blockerNeedsEarningsRefresh(code: string): boolean {
-  const c = code.toUpperCase();
+function hoursText(h: number): string {
+  return `${(Number.isFinite(h) && h > 0 ? h : 0).toFixed(1)} h`;
+}
+
+/** WRA-21: one line per driver; Roam's own name when the Uber driver is known to Roam. */
+export function activityCardRows(
+  activity: ReconWeekActivity | undefined,
+  roamNames: Map<string, string>,
+): Array<{ driverId: string; name: string; online: string; onTrip: string; share: string; trips: number }> {
+  if (!activity || activity.status !== 'ok') return [];
+  return activity.drivers.map((d) => ({
+    driverId: d.driverId,
+    name: roamNames.get(d.driverId) || d.name,
+    online: hoursText(d.onlineHours),
+    onTrip: hoursText(d.onTripHours),
+    share: d.onTripPct === null ? '—' : `${d.onTripPct}%`,
+    trips: d.tripsCompleted,
+  }));
+}
+
+function ActivityVsTrips({
+  line,
+  weekKey,
+  roamNames,
+}: {
+  line: 'rideshare' | 'rush_delivery';
+  weekKey: string;
+  roamNames: Map<string, string>;
+}) {
+  const query = useQuery({
+    queryKey: ['recon-week-activity', line, weekKey],
+    queryFn: () => fetchWeekActivity(line, weekKey),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const activity = query.data;
+  const rows = activityCardRows(activity, roamNames);
+
   return (
-    c === 'EARNINGS_STATEMENT_MISSING' ||
-    c === 'EARNINGS_STATEMENT_UNVERIFIED' ||
-    c === 'EARNINGS_ENGINE_DRIFT'
+    <section className="space-y-3 rounded-2xl border border-[#e5eeff] bg-white p-5" data-testid="recon-activity-vs-trips">
+      <div>
+        <p className="text-lg font-semibold text-[#0b1c30]">Activity vs trips</p>
+        <p className="text-sm text-[#47464c]">
+          Uber hours online against hours on a trip, from this week&apos;s Uber upload. For a look only — it never stops Close.
+          InDrive has no activity export.
+        </p>
+      </div>
+      {query.isLoading ? (
+        <p className="flex items-center gap-2 text-sm text-[#47464c]"><Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading activity…</p>
+      ) : query.isError ? (
+        <p className="text-sm text-[#93000a]">Could not load activity. Reload the week.</p>
+      ) : !activity || activity.status === 'no_upload' ? (
+        <p className="text-sm text-[#47464c]">No Uber upload for this week yet.</p>
+      ) : activity.status === 'not_recorded' ? (
+        <p className="text-sm text-[#47464c]">Not recorded for this week. Hours are saved with Uber uploads made from 11 Nov 2026.</p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-[#47464c]">This week&apos;s Uber upload has no driver hours.</p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {rows.map((r) => (
+            <div key={r.driverId} className="rounded-xl bg-[#f8f9ff] p-4 text-sm" data-testid="recon-activity-row">
+              <p className="font-semibold text-[#0b1c30]">{r.name}</p>
+              <dl className="mt-1 grid grid-cols-4 gap-2">
+                <div><dt className="text-[12px] text-[#47464c]">Online</dt><dd className="font-semibold tabular-nums">{r.online}</dd></div>
+                <div><dt className="text-[12px] text-[#47464c]">On a trip</dt><dd className="font-semibold tabular-nums">{r.onTrip}</dd></div>
+                <div><dt className="text-[12px] text-[#47464c]">On a trip %</dt><dd className="font-semibold tabular-nums">{r.share}</dd></div>
+                <div><dt className="text-[12px] text-[#47464c]">Trips</dt><dd className="font-semibold tabular-nums">{r.trips}</dd></div>
+              </dl>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -74,324 +139,225 @@ export function ReconTripsEarningsStep({
   onRefresh,
 }: {
   run: ReconRunPayload;
-  onRefresh?: () => void;
+  onRefresh?: (payload?: ReconRunPayload) => void | Promise<void>;
 }) {
   const weekKey = run.run.weekKey;
   const line = run.run.serviceLine as 'rideshare' | 'rush_delivery';
+  const version = Number(run.run.version);
+  const closed = run.run.state === 'closed';
+  const approvals = useReconApprovals();
   const [uberOpen, setUberOpen] = useState(false);
-  const [cashAckTarget, setCashAckTarget] = useState<WeekCloseCashSourceMismatch | null>(null);
-  const [cashAckReason, setCashAckReason] = useState('');
-  const [cashAckBusy, setCashAckBusy] = useState(false);
-  const [autoSealBusy, setAutoSealBusy] = useState(false);
-  const [autoSealError, setAutoSealError] = useState<string | null>(null);
-  const autoSealKeyRef = useRef<string | null>(null);
+  const [sealing, setSealing] = useState(false);
+  const [cashTarget, setCashTarget] = useState<ReconCashMismatch | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const previewQuery = useQuery({
-    queryKey: ['recon-trips-earnings', weekKey, line],
-    queryFn: () => weekCloseApi.preview(weekKey, line),
+  const state = tripsStepBlockers(run.closeCheck);
+  const moneyQuery = useQuery({
+    queryKey: ['recon-week-money', line, weekKey, version],
+    queryFn: () => fetchWeekMoney(line, weekKey),
     staleTime: 30_000,
     retry: false,
   });
-
-  const driversQuery = useQuery({
-    queryKey: ['drivers', 'recon-trips-earnings'],
-    queryFn: () => api.getDrivers().catch(() => []),
-    staleTime: 60_000,
-  });
-
-  const driverNameById = useMemo(() => {
-    const map = new Map<string, string>();
-    const raw = driversQuery.data;
-    const list = Array.isArray(raw) ? raw : (raw as { data?: unknown[] } | null)?.data || [];
-    for (const row of list) {
-      const d = row as {
-        id?: string;
-        driverId?: string;
-        name?: string;
-        fullName?: string;
-        firstName?: string;
-        lastName?: string;
-      };
-      const id = String(d.id || d.driverId || '').trim();
-      const name = driverDisplayName(d);
-      if (id && name) map.set(id, name);
-    }
-    return map;
-  }, [driversQuery.data]);
-
-  const blockers = useMemo(() => {
-    if (!previewQuery.data) return [];
-    const all = [
-      ...(previewQuery.data.blockers ?? []),
-      ...(previewQuery.data.weekBlockers ?? []),
-    ];
-    return filterTripsBlockers(all);
-  }, [previewQuery.data]);
-
-  const labelForDriver = (driverId: string | undefined | null): string | null => {
-    const id = String(driverId || '').trim();
-    if (!id) return null;
-    return driverNameById.get(id) || `Driver ${id.slice(0, 8)}…`;
-  };
-
-  const openCashMismatches = useMemo(() => {
-    const rows = previewQuery.data?.cashSourceMismatches || [];
-    return rows.filter(
-      (m) => !isCashSourceAckValid(m.ack, Number(m.mismatch) || 0),
-    );
-  }, [previewQuery.data]);
-
-  const weekAlreadyClosed = !!previewQuery.data?.weekClosed;
-
-  const needsEarningsSeal = useMemo(
-    () =>
-      blockers.some((b) => blockerNeedsEarningsRefresh(String(b.code || ''))) ||
-      blockers.some((b) => CLOSE_WEEK_SYNC_FIXABLE_CODES.has(String(b.code || '').toUpperCase())),
-    [blockers],
+  const nameById = useMemo(
+    () => new Map((moneyQuery.data?.drivers ?? []).map((d) => [d.driverId, d.driverName || `Driver ${d.driverId.slice(0, 8)}`])),
+    [moneyQuery.data?.drivers],
   );
+  const openCash = (moneyQuery.data?.cashSourceMismatches ?? []).filter((m) => !m.accepted);
 
-  // Seal earnings from data already uploaded — no manual Refresh.
-  useEffect(() => {
-    if (!previewQuery.data || weekAlreadyClosed || !needsEarningsSeal || autoSealBusy) return;
-    const key = `${weekKey}:${line}:${blockers.map((b) => b.code).sort().join(',')}`;
-    if (autoSealKeyRef.current === key) return;
-    autoSealKeyRef.current = key;
-
-    let cancelled = false;
-    setAutoSealBusy(true);
-    setAutoSealError(null);
-    void (async () => {
-      try {
-        const hints = forceResealHintsFromPreview(previewQuery.data || {});
-        hints.forceEarningsReseal = true;
-        await weekCloseApi.sync(weekKey, { ...hints, serviceLine: line });
-        if (cancelled) return;
-        await previewQuery.refetch();
-        onRefresh?.();
-      } catch (e) {
-        if (cancelled) return;
-        // Keep key so we don't infinite-loop; Re-upload clears the key.
-        if (isWeekCloseUnavailable(e)) {
-          setAutoSealError('Earnings seal is not available on this environment yet.');
-        } else if (e instanceof WeekCloseApiError) {
-          setAutoSealError(e.message);
-        } else {
-          setAutoSealError(e instanceof Error ? e.message : 'Could not seal earnings');
-        }
-      } finally {
-        if (!cancelled) setAutoSealBusy(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-    // Intentionally keyed off preview + needsSeal; busy/ref guard double-fires.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- auto-seal once per blocker set
-  }, [previewQuery.data, needsEarningsSeal, weekAlreadyClosed, weekKey, line]);
-
-  const doAcknowledgeCashSource = async () => {
-    if (!cashAckTarget) return;
-    const reason = cashAckReason.trim();
-    if (reason.length < 8) return;
-    setCashAckBusy(true);
+  const doSeal = async () => {
+    setSealing(true);
     try {
-      await weekCloseApi.acknowledgeCashSource(weekKey, cashAckTarget.driverId, reason);
-      setCashAckTarget(null);
-      setCashAckReason('');
-      await previewQuery.refetch();
-      onRefresh?.();
+      const payload = await sealEarnings(line, weekKey, version);
+      toast.success('Earnings sealed from the uploaded trips');
+      await onRefresh?.(payload && (payload as ReconRunPayload).run ? payload : undefined);
+    } catch (e) {
+      toast.error(approvalErrorMessage(e));
     } finally {
-      setCashAckBusy(false);
+      setSealing(false);
     }
   };
 
-  if (previewQuery.isLoading || autoSealBusy) {
-    return (
-      <div className="flex h-32 items-center justify-center text-sm text-slate-500">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-        {autoSealBusy
-          ? 'Sealing earnings from uploaded trips…'
-          : 'Checking trips & earnings…'}
-      </div>
-    );
-  }
+  const sendCash = async (reason: string) => {
+    if (!cashTarget) return;
+    setBusy(true);
+    try {
+      await sendForApproval({ line, weekKey, action: 'accept_statement_cash', params: { driverId: cashTarget.driverId }, reason, expectedVersion: version });
+      toast.success('Sent for approval');
+      setCashTarget(null);
+      approvals.refresh();
+    } catch (e) {
+      toast.error(approvalErrorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
-  if (previewQuery.isError && isWeekCloseUnavailable(previewQuery.error)) {
-    return (
-      <p className="text-sm text-slate-500">
-        Week-close preview is not available yet — open Settlement preview after fuel and tolls.
-      </p>
-    );
-  }
+  const selfCash = async (reason: string) => {
+    if (!cashTarget) return;
+    setBusy(true);
+    try {
+      await assertWeekUnchanged(line, weekKey, version);
+      await weekCloseApi.acknowledgeCashSource(weekKey, cashTarget.driverId, reason);
+      toast.success('Statement cash accepted');
+      setCashTarget(null);
+      await moneyQuery.refetch();
+      await onRefresh?.();
+    } catch (e) {
+      toast.error(approvalErrorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
-  if (previewQuery.isError) {
-    return <p className="text-sm text-rose-700">Could not load earnings blockers for this week.</p>;
-  }
+  const driverName = (m: { driverId: string; driverName?: string | null }) =>
+    m.driverName || nameById.get(m.driverId) || `Driver ${m.driverId.slice(0, 8)}`;
 
   return (
-    <div className="space-y-4">
-      {autoSealError ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50/70 px-4 py-3 text-sm text-rose-900">
-          {autoSealError}
+    <div className="space-y-5" data-testid="recon-trips-step">
+      {state.waiting ? (
+        <p className="flex items-center gap-2 rounded-2xl bg-[#eff4ff] px-4 py-3 text-sm text-[#0b1c30]">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Waiting for the calculator to check this week.
+        </p>
+      ) : state.failed ? (
+        <p className="rounded-2xl bg-[#fff1f2] px-4 py-3 text-sm text-[#93000a]">Could not load this week&apos;s checks. Reload the week.</p>
+      ) : (
+        <div
+          className={
+            state.needsSeal
+              ? 'flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#fde68a] bg-[#fffbeb] px-5 py-4'
+              : 'flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#a7f3d0] bg-[#ecfdf5] px-5 py-4'
+          }
+          data-testid="recon-earnings-seal"
+        >
+          <p className="flex items-center gap-2 text-sm font-semibold text-[#0b1c30]">
+            {state.needsSeal ? <AlertCircle className="h-5 w-5 text-[#92400e]" aria-hidden /> : <CheckCircle2 className="h-5 w-5 text-[#069669]" aria-hidden />}
+            {state.needsSeal ? 'Earnings are not sealed from the uploaded trips yet.' : 'Earnings sealed from the uploaded trips.'}
+          </p>
+          {!closed ? (
+            <button
+              type="button"
+              onClick={() => void doSeal()}
+              disabled={sealing}
+              data-testid="recon-seal-earnings"
+              className={
+                state.needsSeal
+                  ? 'flex h-10 items-center gap-2 rounded-xl bg-[#030213] px-4 text-sm font-semibold text-white disabled:opacity-60'
+                  : 'flex h-10 items-center gap-2 rounded-xl bg-[#e5eeff] px-4 text-sm font-semibold text-[#0b1c30] hover:bg-[#d3e4fe] disabled:opacity-60'
+              }
+            >
+              {sealing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <RefreshCw className="h-4 w-4" aria-hidden />}
+              {state.needsSeal ? 'Seal earnings' : 'Reseal'}
+            </button>
+          ) : null}
         </div>
+      )}
+
+      {state.items.filter((b) => !EARNINGS_SEAL_CODES.has(String(b.code).toUpperCase())).length > 0 ? (
+        <ul className="space-y-2">
+          {state.items
+            .filter((b) => !EARNINGS_SEAL_CODES.has(String(b.code).toUpperCase()))
+            .map((b, i) => (
+              <li key={`${b.code}-${i}`} className="flex gap-3 rounded-xl border border-[#fde68a] bg-[#fffbeb] px-4 py-3 text-sm text-[#0b1c30]">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#92400e]" aria-hidden />
+                <span>
+                  {humanBlockerLabel(b as never)}
+                  {b.driverId ? ` — ${nameById.get(b.driverId) || `Driver ${b.driverId.slice(0, 8)}`}` : ''}
+                </span>
+              </li>
+            ))}
+        </ul>
       ) : null}
 
-      {openCashMismatches.length > 0 ? (
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-slate-900">Statement cash mismatches</p>
-          <div className="overflow-x-auto rounded-md border border-rose-200 bg-white">
-            <table className="w-full min-w-[32rem] text-left text-xs">
-              <thead className="bg-rose-100/80 text-rose-900">
+      <section className="space-y-3 rounded-2xl border border-[#e5eeff] bg-white p-5" data-testid="recon-cash-check">
+        <div>
+          <p className="text-lg font-semibold text-[#0b1c30]">Statement cash vs trip cash</p>
+          <p className="text-sm text-[#47464c]">Cash on the platform statement against the cash on each driver&apos;s trips.</p>
+        </div>
+        {moneyQuery.isLoading ? (
+          <p className="flex items-center gap-2 text-sm text-[#47464c]"><Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading…</p>
+        ) : moneyQuery.isError ? (
+          <p className="text-sm text-[#ba1a1a]">Could not load the cash check.</p>
+        ) : openCash.length === 0 ? (
+          <p className="text-sm text-[#069669]">Every driver&apos;s cash matches, or was accepted.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[34rem] text-left text-sm">
+              <thead className="text-[12px] uppercase tracking-wider text-[#47464c]">
                 <tr>
-                  <th className="px-3 py-2 font-medium">Driver</th>
-                  <th className="px-3 py-2 font-medium tabular-nums">Statement</th>
-                  <th className="px-3 py-2 font-medium tabular-nums">Trip sum</th>
-                  <th className="px-3 py-2 font-medium tabular-nums">Difference</th>
-                  <th className="px-3 py-2 font-medium" />
+                  <th className="py-2 font-semibold">Driver</th>
+                  <th className="py-2 font-semibold">Statement</th>
+                  <th className="py-2 font-semibold">Trips</th>
+                  <th className="py-2 font-semibold">Difference</th>
+                  <th className="py-2" />
                 </tr>
               </thead>
               <tbody>
-                {openCashMismatches.map((m) => (
-                  <tr key={m.driverId} className="border-t border-rose-100 text-slate-800">
-                    <td className="px-3 py-2">
-                      {m.driverName || labelForDriver(m.driverId) || m.driverId.slice(0, 8)}
-                    </td>
-                    <td className="px-3 py-2 tabular-nums">{MONEY(m.uberCash)}</td>
-                    <td className="px-3 py-2 tabular-nums">{MONEY(m.uberTripCash)}</td>
-                    <td className="px-3 py-2 tabular-nums">{MONEY(m.mismatch)}</td>
-                    <td className="px-3 py-2 text-right">
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="h-8 bg-indigo-700 hover:bg-indigo-800"
-                        disabled={weekAlreadyClosed}
-                        onClick={() => {
-                          setCashAckReason('');
-                          setCashAckTarget(m);
-                        }}
-                      >
-                        Accept statement cash
-                      </Button>
+                {openCash.map((m) => (
+                  <tr key={m.driverId} className="border-t border-[#eff4ff]">
+                    <td className="py-2 font-medium text-[#0b1c30]">{driverName(m)}</td>
+                    <td className="py-2 tabular-nums">{MONEY(m.uberCash)}</td>
+                    <td className="py-2 tabular-nums">{MONEY(m.uberTripCash)}</td>
+                    <td className="py-2 font-semibold tabular-nums text-[#ba1a1a]">{MONEY(m.mismatch)}</td>
+                    <td className="py-2 text-right">
+                      {!closed ? (
+                        <button
+                          type="button"
+                          onClick={() => setCashTarget(m)}
+                          className="h-9 rounded-xl bg-[#030213] px-3 text-[13px] font-semibold text-white"
+                        >
+                          Accept statement cash
+                        </button>
+                      ) : null}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
-      ) : null}
+        )}
+      </section>
 
-      {blockers.length === 0 && openCashMismatches.length === 0 ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-900">
-          Earnings sealed from uploaded trips — continue when ready.
-        </div>
-      ) : blockers.length > 0 ? (
-        <ul className="space-y-2">
-          {blockers.map((b, i) => {
-            const code = String(b.code || '').toUpperCase();
-            const earningsThis = blockerNeedsEarningsRefresh(code);
-            return (
-              <li
-                key={`${b.code}-${i}`}
-                className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-950"
-              >
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-                <div className="min-w-0 flex-1 space-y-1">
-                  <p className="font-medium">{humanBlockerLabel(b)}</p>
-                  {b.driverId ? (
-                    <p className="text-xs text-amber-800/80">{labelForDriver(b.driverId)}</p>
-                  ) : null}
-                  {earningsThis ? (
-                    <p className="text-xs text-amber-900/70">
-                      Still blocked after auto-seal — re-upload the Uber week only if the file looks
-                      wrong.
-                    </p>
-                  ) : null}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
+      <ActivityVsTrips line={line} weekKey={weekKey} roamNames={nameById} />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
+      {!closed ? (
+        <button
           type="button"
-          variant="outline"
-          size="sm"
           onClick={() => setUberOpen(true)}
+          className="h-10 rounded-xl bg-[#e5eeff] px-4 text-sm font-semibold text-[#0b1c30] hover:bg-[#d3e4fe]"
         >
           Re-upload Uber week
-        </Button>
-      </div>
+        </button>
+      ) : null}
 
       {uberOpen ? (
         <CloseWeekUberReimportDialog
           open={uberOpen}
           onOpenChange={setUberOpen}
-          weekLabel={weekKey}
+          weekLabel={formatWeekRange(weekKey)}
           weekKey={weekKey}
           onImported={async () => {
-            autoSealKeyRef.current = null;
-            await previewQuery.refetch();
-            onRefresh?.();
+            await onRefresh?.();
           }}
         />
       ) : null}
 
-      <Dialog
-        open={!!cashAckTarget}
-        onOpenChange={(open) => {
-          if (cashAckBusy) return;
-          if (!open) {
-            setCashAckTarget(null);
-            setCashAckReason('');
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Accept statement cash?</DialogTitle>
-            <DialogDescription>
-              Week of {weekKey}
-              {cashAckTarget?.driverName ? ` · ${cashAckTarget.driverName}` : ''}. Settlement already
-              uses statement cash ({MONEY(cashAckTarget?.uberCash)}); trip sum is{' '}
-              {MONEY(cashAckTarget?.uberTripCash)} (difference {MONEY(cashAckTarget?.mismatch)}).
-              This clears the close block without changing collected cash.
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea
-            value={cashAckReason}
-            onChange={(e) => setCashAckReason(e.target.value)}
-            placeholder="Why statement cash is correct (required)…"
-            rows={3}
-            className="text-sm"
-          />
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={cashAckBusy}
-              onClick={() => {
-                setCashAckTarget(null);
-                setCashAckReason('');
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              className="bg-indigo-700 hover:bg-indigo-800"
-              disabled={cashAckBusy || cashAckReason.trim().length < 8 || weekAlreadyClosed}
-              onClick={() => void doAcknowledgeCashSource()}
-            >
-              {cashAckBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {weekAlreadyClosed ? 'Re-open week first' : cashAckBusy ? 'Saving…' : 'Accept statement cash'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ReconApprovalDialog
+        open={!!cashTarget}
+        onOpenChange={(o) => !o && setCashTarget(null)}
+        title="Accept statement cash?"
+        summary={cashTarget ? `${driverName(cashTarget)} · difference ${MONEY(cashTarget.mismatch)}` : ''}
+        detail={
+          cashTarget
+            ? `Settlement uses the statement cash (${MONEY(cashTarget.uberCash)}); the trips add up to ${MONEY(cashTarget.uberTripCash)}. Accepting clears this check without changing collected cash.`
+            : ''
+        }
+        confirmLabel="Approve & accept"
+        canApprove={approvals.canApprove}
+        otherApprovers={approvals.otherApprovers}
+        busy={busy}
+        onSend={sendCash}
+        onSelfApprove={selfCash}
+      />
     </div>
   );
 }

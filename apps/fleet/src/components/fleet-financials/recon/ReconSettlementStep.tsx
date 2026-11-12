@@ -11,7 +11,9 @@ import type { ReconRunPayload } from '../../../services/reconApi';
 import { useSettlementQueue } from '../../../hooks/useSettlementQueue';
 import { collectCashPayment, payDriverWeek } from '../../../hooks/useCashCollection';
 import { settlementCommandsApi, isPeriodFrozenError } from '../../../services/settlementCommandsApi';
-import { weekCloseApi } from '../../../services/weekCloseApi';
+import { CashWriteOffModal, type CashWriteOffSavePayload } from '../../drivers/CashWriteOffModal';
+import { newIdempotencyKey } from '../../../services/reconApi';
+import { useReconApprovals } from './useReconApprovals';
 import { resolvePayQueueOwed } from '../../../utils/driverSettlementsPayAmount';
 import { computeSettlementLaneMetrics } from '../../../utils/settlementLaneMetrics';
 import { humanBlockerLabel } from '../../../utils/weekCloseBlockers';
@@ -77,6 +79,12 @@ export function ReconSettlementStep({
     name: string;
     amount: number;
   } | null>(null);
+  const { canApprove } = useReconApprovals();
+  const [writeOffTarget, setWriteOffTarget] = useState<{
+    driverId: string;
+    name: string;
+    amount: number;
+  } | null>(null);
   const [settleTarget, setSettleTarget] = useState<{
     driverId: string;
     name: string;
@@ -93,13 +101,6 @@ export function ReconSettlementStep({
         pageSize: 200,
       }),
   });
-  const previewQuery = useQuery({
-    queryKey: ['recon-close-preview', weekKey, run.run.serviceLine],
-    queryFn: () =>
-      weekCloseApi.preview(weekKey, (run.run.serviceLine as 'rideshare' | 'rush_delivery') || 'rideshare'),
-    staleTime: 30_000,
-    retry: false,
-  });
 
   const awaitingDriverIds = useMemo(() => {
     const ids = new Set<string>();
@@ -112,10 +113,14 @@ export function ReconSettlementStep({
     return ids;
   }, [movementsQuery.data?.rows]);
 
+  // Saved close check only (WRA-07): no live week preview on this step.
   const overReturnNotes = useMemo(() => {
-    const all = [...(previewQuery.data?.blockers || []), ...(previewQuery.data?.weekBlockers || [])];
-    return all.filter((b) => String(b.code || '').toUpperCase() === 'CASH_HELD_OVER_RETURNED');
-  }, [previewQuery.data]);
+    const cc = run.closeCheck;
+    if (cc?.status !== 'ok') return [];
+    return cc.blockers
+      .filter((b) => String(b.code || '').toUpperCase() === 'CASH_HELD_OVER_RETURNED')
+      .map((b) => ({ code: b.code, message: b.message ?? b.code, driverId: b.driver_id, persisted: b.persisted }));
+  }, [run.closeCheck]);
 
   const settlement = useMemo(() => {
     return computeSettlementLaneMetrics(
@@ -135,7 +140,7 @@ export function ReconSettlementStep({
     };
     const byId = new Map<
       string,
-      { driverId: string; name: string; owed: number; fleet: number }
+      { driverId: string; name: string; owed: number; fleet: number; held: number }
     >();
     for (const r of (collectQuery.data?.rows || []) as Row[]) {
       const id = String(r.driverId || '').trim();
@@ -145,9 +150,11 @@ export function ReconSettlementStep({
         name: String(r.driverName || id),
         owed: 0,
         fleet: 0,
+        held: 0,
       };
       if (r.driverName) cur.name = String(r.driverName);
       if (r.collectKind !== 'cash_held') cur.owed += collectOwedMajor(r);
+      else cur.held += collectOwedMajor(r);
       byId.set(id, cur);
     }
     for (const r of (payQuery.data?.rows || []) as Row[]) {
@@ -158,6 +165,7 @@ export function ReconSettlementStep({
         name: String(r.driverName || id),
         owed: 0,
         fleet: 0,
+        held: 0,
       };
       if (r.driverName) cur.name = String(r.driverName);
       cur.fleet += resolvePayQueueOwed(r);
@@ -215,12 +223,6 @@ export function ReconSettlementStep({
         </div>
       </dl>
 
-      {previewQuery.data?.fuelCreditExceedsCashInHand && settlement.fleetOwes > MONEY_EPS ? (
-        <p className="text-sm text-slate-600">
-          This pay includes company fuel already covered. Cash returned was not more than cash collected.
-        </p>
-      ) : null}
-
       {overReturnNotes.length > 0 ? (
         <ul className="space-y-1 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
           {overReturnNotes.map((b, i) => (
@@ -233,7 +235,7 @@ export function ReconSettlementStep({
         </ul>
       ) : null}
 
-      {drivers.filter((d) => d.owed > MONEY_EPS || d.fleet > MONEY_EPS || awaitingDriverIds.has(d.driverId)).length === 0 ? (
+      {drivers.filter((d) => d.owed > MONEY_EPS || d.fleet > MONEY_EPS || d.held > MONEY_EPS || awaitingDriverIds.has(d.driverId)).length === 0 ? (
         <p className="text-sm text-slate-500">Nothing left to pay or collect for this week.</p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-slate-200">
@@ -243,12 +245,13 @@ export function ReconSettlementStep({
                 <th className="px-3 py-2 font-medium">Driver</th>
                 <th className="px-3 py-2 font-medium tabular-nums">Driver owes</th>
                 <th className="px-3 py-2 font-medium tabular-nums">Fleet owes</th>
+                <th className="px-3 py-2 font-medium tabular-nums">Cash held</th>
                 <th className="px-3 py-2 font-medium"> </th>
               </tr>
             </thead>
             <tbody>
               {drivers
-                .filter((d) => d.owed > MONEY_EPS || d.fleet > MONEY_EPS || awaitingDriverIds.has(d.driverId))
+                .filter((d) => d.owed > MONEY_EPS || d.fleet > MONEY_EPS || d.held > MONEY_EPS || awaitingDriverIds.has(d.driverId))
                 .map((d) => (
                 <tr key={d.driverId} className="border-t border-slate-100 text-slate-800">
                   <td className="px-3 py-2 font-medium">
@@ -262,6 +265,9 @@ export function ReconSettlementStep({
                   </td>
                   <td className="px-3 py-2 tabular-nums">
                     {d.fleet > MONEY_EPS ? MONEY(d.fleet) : '—'}
+                  </td>
+                  <td className="px-3 py-2 tabular-nums">
+                    {d.held > MONEY_EPS ? MONEY(d.held) : '—'}
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap gap-2">
@@ -291,6 +297,16 @@ export function ReconSettlementStep({
                         >
                           Settle from balance
                         </Button>
+                      ) : null}
+                      {d.held > MONEY_EPS && canApprove ? (
+                        <button
+                          type="button"
+                          className="h-11 rounded-xl bg-[#fff1f2] px-4 text-sm font-semibold text-[#ba1a1a] hover:bg-[#ffdad6]"
+                          data-testid="recon-write-off"
+                          onClick={() => setWriteOffTarget({ driverId: d.driverId, name: d.name, amount: d.held })}
+                        >
+                          Write off
+                        </button>
                       ) : null}
                     </div>
                   </td>
@@ -325,7 +341,6 @@ export function ReconSettlementStep({
               toast.message('Payout logged — awaiting bank clear');
             }
             await qc.invalidateQueries({ queryKey: ['recon-run'] });
-            await previewQuery.refetch();
           } catch (err) {
             if (isPeriodFrozenError(err)) {
               toast.error('Reopen the week first');
@@ -358,7 +373,41 @@ export function ReconSettlementStep({
             expectedOutstanding: collectTarget.amount,
           });
           await qc.invalidateQueries({ queryKey: ['recon-run'] });
-          await previewQuery.refetch();
+        }}
+      />
+
+      <CashWriteOffModal
+        isOpen={!!writeOffTarget}
+        onClose={() => setWriteOffTarget(null)}
+        driverName={writeOffTarget?.name || ''}
+        maxAmount={writeOffTarget?.amount || 0}
+        workPeriodStart={weekKey}
+        workPeriodEnd={periodEnd}
+        weekLabel={weekKey}
+        onSave={async (payload: CashWriteOffSavePayload) => {
+          if (!writeOffTarget) return;
+          if (!String(payload.reason || '').trim()) throw new Error('A reason is required to write off cash.');
+          try {
+            await settlementCommandsApi.writeOff({
+              driverId: writeOffTarget.driverId,
+              weekAnchor: weekKey,
+              amount: Math.abs(Number(payload.amount) || 0),
+              reason: payload.reason,
+              idempotencyKey: newIdempotencyKey(),
+              expectedOutstanding: writeOffTarget.amount,
+            });
+            toast.success(`Wrote off ${MONEY(Math.abs(Number(payload.amount) || 0))} for ${writeOffTarget.name}`);
+            await qc.invalidateQueries({ queryKey: ['settlements'] });
+            await qc.invalidateQueries({ queryKey: ['recon-run'] });
+            await collectQuery.refetch();
+          } catch (err) {
+            if (isPeriodFrozenError(err)) {
+              toast.error('Reopen the week first');
+              throw err;
+            }
+            toast.error(err instanceof Error ? err.message : 'Write off failed');
+            throw err;
+          }
         }}
       />
 
@@ -384,10 +433,8 @@ export function ReconSettlementStep({
             );
             await qc.invalidateQueries({ queryKey: ['settlements'] });
             await qc.invalidateQueries({ queryKey: ['recon-run'] });
-            await qc.invalidateQueries({ queryKey: ['recon-close-preview'] });
             await collectQuery.refetch();
             await payQuery.refetch();
-            await previewQuery.refetch();
           } catch (err) {
             if (isPeriodFrozenError(err)) {
               toast.error('Reopen the week first');

@@ -1,490 +1,369 @@
+/**
+ * Week Reconciliation — week list (Round 4a, Stitch screens 1–2; audit §7.1, WRA-12/14/16/40).
+ * Reads the stored list only (GET /recon/weeks): every week of the line, Outstanding
+ * oldest first, Reconciled newest first, 26 at a time.
+ */
 import React, { useMemo, useState } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
+import { CalendarRange, CheckCircle2, CircleDashed, Clock3, Loader2, Lock, Minus, Upload } from 'lucide-react';
 import {
-  Check,
-  FileSpreadsheet,
-  Fuel,
-  Loader2,
-  MapPin,
-  Minus,
-  Receipt,
-  Truck,
-  Wallet,
-} from 'lucide-react';
-import { RECON_SOURCES, weekDayKeys, type ReconSourceId } from '@roam/finance-core';
-import type { ReconWeekSource, ReconWeekSummary } from '../../../services/reconApi';
-import { Badge } from '../../ui/badge';
-import { Button } from '../../ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
+  fetchWeekList,
+  type ReconWeekList,
+  type ReconWeekListEntry,
+} from '../../../services/reconApi';
+import { ReconCalculatorBanner } from './ReconCalculatorBanner';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '../../ui/dialog';
+  dayDots,
+  formatDay,
+  formatWeekRange,
+  formatWeekTitle,
+  sourceChip,
+  stepNumberFor,
+  type ChipTone,
+} from './weekListFormat';
 import { cn } from '../../ui/utils';
 
-const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
+type Line = 'rideshare' | 'rush_delivery';
+type Tab = 'outstanding' | 'completed';
 
-/** Short landing labels — full names stay on the Sources step. */
-const SOURCE_SHORT_LABEL: Record<string, string> = {
-  uber_bundle: 'Uber',
-  indrive_trips: 'InDrive',
-  roam_trips: 'Roam trips',
-  toll_usage: 'Toll usage',
-  toll_topup: 'Top-ups',
-  cash_tolls: 'Cash tolls',
-  fuel_card_roam: 'Roam fuel',
-  fuel_card_self: 'Own fuel',
-  cash_fuel: 'Cash fuel',
-  rush_deliveries: 'Deliveries',
-  cod_remittance: 'COD',
+const CARD = 'rounded-[20px] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)]';
+
+const CHIP_TONE: Record<ChipTone, string> = {
+  done: 'bg-[#e5eeff] text-[#0b1c30]',
+  needed: 'bg-[#fffbeb] text-[#92400e]',
+  waiting: 'bg-[#fffbeb] text-[#92400e]',
+  optional: 'bg-[#eff4ff] text-[#47464c]',
+  blocks: 'bg-[#fff1f2] text-[#ba1a1a]',
 };
 
-const SOURCE_DEF_BY_ID = Object.fromEntries(RECON_SOURCES.map((s) => [s.id, s]));
-
-/** Manifest optional sources — never scream amber “Needed” when empty. */
-const OPTIONAL_SOURCE_IDS = new Set<string>(
-  RECON_SOURCES.filter((s) => {
-    // Static optional ids from requiredWhen shape (profile-independent optionals).
-    return (
-      s.id === 'roam_trips' ||
-      s.id === 'cash_tolls' ||
-      s.id === 'cash_fuel' ||
-      s.id === 'cod_remittance'
-    );
-  }).map((s) => s.id),
-);
-
-/** Plain-English “what to do” for the landing overlay. */
-const SOURCE_WHAT_TO_DO: Record<string, string> = {
-  uber_bundle: 'Upload the Uber weekly reports (or bundle) that cover this Monday–Sunday week.',
-  indrive_trips: 'Upload the InDrive trip export whose date range covers this week.',
-  roam_trips:
-    'Optional — we read Roam trips automatically. Open the week only if something looks missing.',
-  toll_usage: 'Upload the tag usage / toll statement CSV for this week, then finish the Tolls step.',
-  toll_topup: 'Upload the tag top-up statement that covers this week.',
-  cash_tolls: 'Optional — review driver cash tolls in the week wizard, or skip if you do not use them.',
-  fuel_card_roam:
-    'Upload or match the Roam Fuels / Gas Card statement for this week (card fills in Transaction Logs count once they land).',
-  fuel_card_self: 'Upload the own / self-serve fuel card statement that covers this Monday–Sunday week.',
-  cash_fuel: 'Optional — review cash fuel receipts in the week’s Fuel step when you track them.',
-  rush_deliveries:
-    'Open the Delivery week once readiness is green; we pull deliveries from the platform.',
-  cod_remittance:
-    'Optional — remittance detail lives in courier settlements; shown here for awareness.',
-};
-
-function sourceShortLabel(id: string): string {
-  return SOURCE_SHORT_LABEL[id] ?? SOURCE_DEF_BY_ID[id]?.label ?? id;
+function ChipIcon({ tone }: { tone: ChipTone }) {
+  if (tone === 'done') return <CheckCircle2 className="h-4 w-4 text-[#069669]" aria-hidden />;
+  if (tone === 'waiting') return <Clock3 className="h-4 w-4 text-[#b45309]" aria-hidden />;
+  if (tone === 'needed') return <Upload className="h-4 w-4 text-[#b45309]" aria-hidden />;
+  if (tone === 'blocks') return <CircleDashed className="h-4 w-4 text-[#ba1a1a]" aria-hidden />;
+  return <Minus className="h-4 w-4 text-[#78767d]" aria-hidden />;
 }
 
-function sourceWhatToDo(id: string): string {
+function KpiTile({ label, children, testId }: { label: string; children: React.ReactNode; testId: string }) {
   return (
-    SOURCE_WHAT_TO_DO[id] ?? 'Open the week and complete the Sources step to provide or review it.'
-  );
-}
-
-function SourceIcon({ id }: { id: string }) {
-  const cls = 'h-3.5 w-3.5';
-  switch (id as ReconSourceId) {
-    case 'uber_bundle':
-    case 'indrive_trips':
-    case 'roam_trips':
-    case 'rush_deliveries':
-      return <Truck className={cls} aria-hidden />;
-    case 'toll_usage':
-    case 'toll_topup':
-    case 'cash_tolls':
-      return <MapPin className={cls} aria-hidden />;
-    case 'fuel_card_roam':
-    case 'fuel_card_self':
-    case 'cash_fuel':
-      return <Fuel className={cls} aria-hidden />;
-    case 'cod_remittance':
-      return <Wallet className={cls} aria-hidden />;
-    default:
-      return <FileSpreadsheet className={cls} aria-hidden />;
-  }
-}
-
-type SourceTone = 'done' | 'needs' | 'muted';
-
-function isOptionalSource(id: string): boolean {
-  return OPTIONAL_SOURCE_IDS.has(id);
-}
-
-function sourceTone(status: string, sourceId: string): SourceTone {
-  const s = String(status || '').toLowerCase();
-  if (s === 'received' || s === 'attested_none') return 'done';
-  if (s === 'not_applicable' || s === 'waived') return 'muted';
-  // Optional + empty: quiet “Optional”, not amber Needed.
-  if (isOptionalSource(sourceId) && (s === 'missing' || s === 'partial')) return 'muted';
-  return 'needs';
-}
-
-function sourceStatusText(status: string, sourceId: string): string {
-  const s = String(status || '').toLowerCase();
-  switch (s) {
-    case 'received':
-      return 'Done';
-    case 'attested_none':
-      return 'None attested';
-    case 'waived':
-      return 'Waived';
-    case 'partial':
-      return isOptionalSource(sourceId) ? 'Optional' : 'Partial';
-    case 'waiting_external':
-      return 'Waiting';
-    case 'missing':
-      return isOptionalSource(sourceId) ? 'Optional' : 'Needed';
-    case 'not_applicable':
-      return 'N/A';
-    default:
-      return status || '—';
-  }
-}
-
-/** Mon→Sun day coverage with weekday labels (was unlabeled dots). */
-function CoverageStrip({
-  weekKey,
-  coverage,
-}: {
-  weekKey: string;
-  coverage: Record<string, string>;
-}) {
-  const keys = weekDayKeys(weekKey);
-  return (
-    <div
-      className="flex gap-1"
-      role="group"
-      aria-label="Mon to Sun source coverage"
-      title="Mon → Sun coverage across sources"
-    >
-      {keys.map((d, i) => {
-        const v = coverage[d] ?? 'missing';
-        const ok = v === 'covered' || v === 'zero_attested';
-        return (
-          <div key={d} className="flex w-7 flex-col items-center gap-0.5">
-            <span
-              className={cn(
-                'h-2.5 w-2.5 rounded-sm border',
-                ok ? 'border-emerald-400 bg-emerald-400' : 'border-slate-200 bg-slate-100',
-              )}
-              aria-hidden
-            />
-            <span className="text-[9px] font-medium uppercase tracking-wide text-slate-400">
-              {DAY_LABELS[i]}
-            </span>
-          </div>
-        );
-      })}
+    <div className={cn(CARD, 'flex flex-col justify-between gap-3 p-6')} data-testid={testId}>
+      <span className="text-sm text-[#47464c]">{label}</span>
+      {children}
     </div>
   );
 }
 
-function mergedCoverage(week: ReconWeekSummary): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const s of week.sources) {
-    for (const [day, status] of Object.entries(s.coverage ?? {})) {
-      if (status === 'missing' && out[day] !== 'missing') continue;
-      if (!out[day] || status === 'missing') out[day] = status;
-    }
-  }
-  if (Object.keys(out).length === 0 && week.weekKey) {
-    for (const d of weekDayKeys(week.weekKey)) out[d] = 'missing';
-  }
-  return out;
-}
-
-/** Labeled source cell — same pattern as fuel StepStatusCell. */
-function SourceStatusCell({
-  source,
+function WeekCard({
+  week,
+  line,
   onOpen,
 }: {
-  source: ReconWeekSource;
-  onOpen: () => void;
+  week: ReconWeekListEntry;
+  line: Line;
+  onOpen: (weekKey: string) => void;
 }) {
-  const label = sourceShortLabel(source.id);
-  const tone = sourceTone(source.status, source.id);
-  const statusText = sourceStatusText(source.status, source.id);
-  const isDone = tone === 'done';
-  const isMuted = tone === 'muted';
+  const closed = week.state === 'closed';
+  const chips = week.sources
+    .map((s) => ({ id: s.id, chip: sourceChip(s) }))
+    .filter((c): c is { id: string; chip: NonNullable<ReturnType<typeof sourceChip>> } => c.chip != null);
+  const dots = dayDots(week.weekKey, week.sources);
+  // Weeks adopted from the money record have no closer in Week Reconciliation.
+  const adopted = closed && !week.closedBy;
 
   return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onOpen();
-      }}
+    <article
+      data-testid={`recon-week-${week.weekKey}`}
       className={cn(
-        'flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors',
-        'hover:ring-2 hover:ring-indigo-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1',
-        isMuted && 'border-slate-200 bg-slate-50',
-        isDone && 'border-emerald-100 bg-emerald-50/60',
-        !isDone && !isMuted && 'border-amber-200 bg-amber-50',
+        CARD,
+        'flex flex-col items-start justify-between gap-6 p-6 transition-shadow hover:shadow-[0_2px_4px_rgba(0,0,0,0.03),0_12px_32px_rgba(15,23,42,0.08)] lg:flex-row lg:items-center',
       )}
-      aria-label={`${label}: ${statusText}. Explain this source.`}
     >
-      <span
-        className={cn(
-          'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white',
-          isMuted && 'bg-slate-400',
-          isDone && 'bg-emerald-500',
-          !isDone && !isMuted && 'bg-amber-500',
-        )}
-        aria-hidden
-      >
-        {isDone ? (
-          <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
-        ) : isMuted ? (
-          <Minus className="h-3.5 w-3.5" strokeWidth={2.5} />
-        ) : (
-          <SourceIcon id={source.id} />
-        )}
-      </span>
-      <div className="min-w-0 flex-1">
-        <div
-          className={cn(
-            'truncate text-xs font-semibold leading-tight',
-            isMuted && 'text-slate-600',
-            isDone && 'text-emerald-800',
-            !isDone && !isMuted && 'text-amber-900',
-          )}
-        >
-          {label}
+      <div className="flex min-w-[210px] flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {closed ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#1e293b] px-2 py-0.5 text-[11px] font-bold text-white">
+              <Lock className="h-3 w-3" aria-hidden /> Closed
+            </span>
+          ) : null}
+          <h3 className="text-lg font-semibold text-[#0b1c30]">{formatWeekTitle(week.weekKey)}</h3>
         </div>
-        <div
-          className={cn(
-            'truncate text-[10px] leading-tight',
-            isMuted && 'text-slate-500',
-            isDone && 'text-emerald-700/80',
-            !isDone && !isMuted && 'text-amber-800/90',
-          )}
-        >
-          {statusText}
-        </div>
-      </div>
-    </button>
-  );
-}
-
-type SourceExplainTarget = {
-  weekKey: string;
-  source: ReconWeekSource;
-};
-
-function sourcesForLanding(week: ReconWeekSummary): ReconWeekSource[] {
-  // Hide N/A so the strip matches what ops still need to deal with.
-  return week.sources.filter((s) => String(s.status).toLowerCase() !== 'not_applicable');
-}
-
-function WeekList({
-  weeks,
-  empty,
-  onOpenWeek,
-  onExplain,
-}: {
-  weeks: ReconWeekSummary[];
-  empty: string;
-  onOpenWeek: (weekKey: string) => void;
-  onExplain: (target: SourceExplainTarget) => void;
-}) {
-  if (weeks.length === 0) {
-    return (
-      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center text-sm text-slate-500">
-        {empty}
-      </div>
-    );
-  }
-  return (
-    <ul className="space-y-3">
-      {weeks.map((week) => {
-        const sources = sourcesForLanding(week);
-        return (
-          <li
-            key={week.weekKey}
-            className="rounded-xl border border-slate-200 bg-white p-4 transition-colors hover:border-indigo-200 hover:shadow-sm"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 space-y-2">
-                <button
-                  type="button"
-                  className="text-left text-sm font-semibold text-indigo-700 hover:underline"
-                  onClick={() => onOpenWeek(week.weekKey)}
-                >
-                  Week of {week.weekKey}
-                </button>
-                <CoverageStrip weekKey={week.weekKey} coverage={mergedCoverage(week)} />
-              </div>
-              <p className="max-w-xs text-right text-xs font-medium text-slate-600">
-                {week.nextAction?.label ?? '—'}
-              </p>
+        <span className="text-sm text-[#47464c]">{formatWeekRange(week.weekKey)}</span>
+        <div className="mt-1 flex items-center gap-1.5" aria-label="Days with data">
+          {dots.map((d) => (
+            <div key={d.day} className="flex flex-col items-center gap-1">
+              <span
+                className={cn('h-2.5 w-2.5 rounded-full', d.hasData ? 'bg-[#069669]' : 'bg-[#d3e4fe]')}
+                title={`${formatDay(d.day)}: ${d.hasData ? 'has data' : 'empty'}`}
+              />
+              <span className="text-[9px] font-bold text-[#47464c]">{d.label}</span>
             </div>
+          ))}
+        </div>
+      </div>
 
-            {sources.length > 0 ? (
-              <div
-                className="mt-3 grid w-full grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
-                role="group"
-                aria-label={`Sources for week of ${week.weekKey}`}
-              >
-                {sources.map((source) => (
-                  <SourceStatusCell
-                    key={source.id}
-                    source={source}
-                    onOpen={() => onExplain({ weekKey: week.weekKey, source })}
-                  />
-                ))}
-              </div>
-            ) : (
-              <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
-                <Receipt className="h-3.5 w-3.5" aria-hidden />
-                No applicable sources for this week
+      <div className="flex flex-1 flex-wrap items-center gap-2">
+        {closed ? (
+          <p className="text-sm text-[#47464c]">
+            {adopted
+              ? 'Closed in Driver Settlements'
+              : `Closed${week.closedAt ? ` ${formatDay(week.closedAt.slice(0, 10))}` : ''}`}
+          </p>
+        ) : (
+          chips.map(({ id, chip }) => (
+            <span
+              key={id}
+              className={cn('inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-medium', CHIP_TONE[chip.tone])}
+            >
+              <ChipIcon tone={chip.tone} />
+              {chip.text}
+            </span>
+          ))
+        )}
+      </div>
+
+      <div className="flex w-full flex-row items-center justify-between gap-3 lg:w-auto lg:flex-col lg:items-end">
+        {closed ? null : (
+          <div className="text-left lg:text-right">
+            <p className="text-[13px] font-bold text-[#0b1c30]">Next: {week.nextAction.label}</p>
+            <p className="text-[13px] text-[#47464c]">Step {stepNumberFor(week.nextAction)} of 8</p>
+            {week.earlierOpenWeek ? (
+              <p className="text-[12px] font-medium text-[#b45309]">
+                Close the {formatWeekTitle(week.earlierOpenWeek).replace('Week', 'week')} first
               </p>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+            ) : null}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => onOpen(week.weekKey)}
+          data-testid={`recon-open-${week.weekKey}`}
+          className={cn(
+            'h-11 whitespace-nowrap rounded-xl px-5 text-sm font-semibold shadow-sm transition-colors',
+            closed
+              ? 'border border-[#cbd5e1] bg-white text-[#0b1c30] hover:bg-[#eff4ff]'
+              : 'bg-[#030213] text-white hover:bg-[#213145]',
+          )}
+          aria-label={`${closed ? 'View' : 'Open'} ${formatWeekTitle(week.weekKey)} (${line === 'rideshare' ? 'Rideshare' : 'Delivery'})`}
+        >
+          {closed ? 'View week' : 'Open week'}
+        </button>
+      </div>
+    </article>
   );
 }
 
 export function ReconWeekLanding({
-  weeks,
-  loading,
+  line,
+  onLineChange,
+  showLineToggle,
   onOpenWeek,
-  kpis,
-  deskLine = 'rideshare',
+  onDeliveryActive,
 }: {
-  weeks: ReconWeekSummary[];
-  loading?: boolean;
+  line: Line;
+  onLineChange: (line: Line) => void;
+  /** WRA-15: shown only when Rush deliveries is active (decided by the server). */
+  showLineToggle: boolean;
   onOpenWeek: (weekKey: string) => void;
-  kpis: { openWeeks: number; needsData: number; oldestLabel: string; oldestAction: string };
-  deskLine?: 'rideshare' | 'rush_delivery';
+  onDeliveryActive?: (active: boolean) => void;
 }) {
-  const rows = useMemo(() => weeks.slice(0, 12), [weeks]);
-  const outstanding = useMemo(() => rows.filter((w) => w.state !== 'closed'), [rows]);
-  const reconciled = useMemo(() => rows.filter((w) => w.state === 'closed'), [rows]);
-  const [deskTab, setDeskTab] = useState<'outstanding' | 'reconciled'>('outstanding');
-  const [explain, setExplain] = useState<SourceExplainTarget | null>(null);
+  const thisYear = new Date().getFullYear();
+  const [year, setYear] = useState<number | null>(null);
+  const [tab, setTab] = useState<Tab>('outstanding');
 
-  const explainOpen = explain !== null;
-  const explainHow = explain ? sourceWhatToDo(explain.source.id) : '';
-  const explainLabel = explain ? sourceShortLabel(explain.source.id) : '';
+  const query = useInfiniteQuery({
+    queryKey: ['recon-week-list', line, year, tab],
+    queryFn: ({ pageParam }) =>
+      fetchWeekList(line, { year, status: tab, cursor: pageParam as string | null }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last: ReconWeekList) => last.nextCursor,
+    staleTime: 30_000,
+    retry: false,
+  });
 
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-slate-500">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Loading weeks…
-      </div>
-    );
-  }
+  const first = query.data?.pages[0];
+  const weeks = useMemo(() => (query.data?.pages ?? []).flatMap((p) => p.weeks), [query.data]);
+  const kpis = first?.kpis;
+  React.useEffect(() => {
+    if (first) onDeliveryActive?.(first.deliveryActive);
+  }, [first, onDeliveryActive]);
 
-  if (rows.length === 0) {
-    return (
-      <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-8 text-center">
-        <p className="text-sm font-medium text-slate-800">
-          {deskLine === 'rush_delivery'
-            ? 'No delivery weeks to reconcile'
-            : 'No rideshare weeks to reconcile'}
-        </p>
-        <p className="mt-1 text-xs text-slate-500">
-          {deskLine === 'rush_delivery'
-            ? 'Weeks appear here only after completed Rush deliveries land in Fleet for that Monday–Sunday week.'
-            : 'Weeks appear here only after rideshare trips or Uber/InDrive imports land for that Monday–Sunday week. Blank periods with no activity stay hidden.'}
-        </p>
-      </div>
-    );
-  }
+  const years = useMemo(() => {
+    const out: number[] = [];
+    for (let y = thisYear; y >= 2025; y -= 1) out.push(y);
+    return out;
+  }, [thisYear]);
 
   return (
-    <div className="space-y-4">
-      <section className="grid gap-3 rounded-xl border border-indigo-100 bg-indigo-50/60 p-4 sm:grid-cols-3">
+    <div className="space-y-6" data-testid="recon-week-list">
+      <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Open weeks</p>
-          <p className="text-2xl font-bold tabular-nums text-slate-900">{kpis.openWeeks}</p>
+          <h1 className="text-[28px] font-semibold tracking-tight text-[#0b1c30]">Week Reconciliation</h1>
+          <p className="text-sm text-[#47464c]">Close one week at a time, oldest first.</p>
         </div>
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Needs data</p>
-          <p className="text-2xl font-bold tabular-nums text-slate-900">{kpis.needsData}</p>
-        </div>
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Oldest gap</p>
-          <p className="text-sm font-semibold text-slate-900">{kpis.oldestLabel || '—'}</p>
-          {kpis.oldestAction ? <p className="text-xs text-slate-500">{kpis.oldestAction}</p> : null}
-        </div>
-      </section>
-
-      <Tabs value={deskTab} onValueChange={(v) => setDeskTab(v as 'outstanding' | 'reconciled')}>
-        <TabsList>
-          <TabsTrigger value="outstanding">
-            Outstanding
-            <Badge variant="secondary" className="ml-2 tabular-nums">
-              {outstanding.length}
-            </Badge>
-          </TabsTrigger>
-          <TabsTrigger value="reconciled">
-            Reconciled
-            <Badge variant="secondary" className="ml-2 tabular-nums">
-              {reconciled.length}
-            </Badge>
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="outstanding" className="space-y-3">
-          <p className="text-xs text-slate-500">A required file is still missing, or the week is not closed yet.</p>
-          <WeekList
-            weeks={outstanding}
-            empty="No open weeks."
-            onOpenWeek={onOpenWeek}
-            onExplain={setExplain}
-          />
-        </TabsContent>
-
-        <TabsContent value="reconciled" className="space-y-3">
-          <p className="text-xs text-slate-500">Weeks you have already closed.</p>
-          <WeekList
-            weeks={reconciled}
-            empty="Nothing is reconciled yet. A week moves here after you close it."
-            onOpenWeek={onOpenWeek}
-            onExplain={setExplain}
-          />
-        </TabsContent>
-      </Tabs>
-
-      <Dialog
-        open={explainOpen}
-        onOpenChange={(open) => {
-          if (!open) setExplain(null);
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="sr-only">{explainLabel}</DialogTitle>
-            <DialogDescription className="text-sm text-slate-700">
-              {explainHow || `What to do for ${explainLabel}`}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-2">
-            <Button type="button" variant="outline" onClick={() => setExplain(null)}>
-              Close
-            </Button>
-            <Button
-              type="button"
-              onClick={() => {
-                const weekKey = explain?.weekKey;
-                setExplain(null);
-                if (weekKey) onOpenWeek(weekKey);
-              }}
+        <div className="flex flex-wrap items-center gap-3">
+          {showLineToggle ? (
+            <div className="flex rounded-2xl bg-[#eff4ff] p-1" role="tablist" aria-label="Service line">
+              {(['rideshare', 'rush_delivery'] as const).map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  role="tab"
+                  aria-selected={line === l}
+                  onClick={() => onLineChange(l)}
+                  className={cn(
+                    'rounded-xl px-5 py-2 text-sm font-semibold transition-colors',
+                    line === l ? 'bg-[#030213] text-white shadow-sm' : 'text-[#0b1c30] hover:bg-white',
+                  )}
+                >
+                  {l === 'rideshare' ? 'Rideshare' : 'Delivery'}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <label className="flex items-center gap-2 rounded-2xl border border-[#cbd5e1] bg-white px-3 py-2 text-sm font-semibold text-[#0b1c30]">
+            <CalendarRange className="h-4 w-4" aria-hidden />
+            <span className="sr-only">Year</span>
+            <select
+              className="bg-transparent outline-none"
+              value={year ?? 'all'}
+              onChange={(e) => setYear(e.target.value === 'all' ? null : Number(e.target.value))}
+              data-testid="recon-year-picker"
             >
-              Open this week
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              <option value="all">All years</option>
+              {years.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </header>
+
+      <div className="rounded-2xl bg-[#eff4ff] px-4 py-2.5">
+        <ReconCalculatorBanner calculator={first?.calculator ?? null} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <KpiTile label="Open weeks" testId="recon-kpi-open">
+          <div className="flex items-baseline gap-2">
+            <span className="text-4xl font-bold tracking-tight text-[#0b1c30]">{kpis?.openWeeks ?? '—'}</span>
+            <span className="text-sm text-[#47464c]">{line === 'rideshare' ? 'Rideshare' : 'Delivery'}</span>
+          </div>
+        </KpiTile>
+        <KpiTile label="Required sources missing" testId="recon-kpi-missing">
+          <div className="flex items-baseline gap-2">
+            <span className="text-4xl font-bold tracking-tight text-[#0b1c30]">{kpis?.requiredSourcesMissing ?? '—'}</span>
+            <span className="text-sm text-[#47464c]">across open weeks</span>
+          </div>
+        </KpiTile>
+        <KpiTile label="Oldest open week" testId="recon-kpi-oldest">
+          {kpis?.oldestOpenWeek ? (
+            <div className="flex flex-col gap-3">
+              <div>
+                <p className="text-xl font-semibold text-[#0b1c30]">{formatWeekTitle(kpis.oldestOpenWeek)}</p>
+                <p className="text-[13px] text-[#47464c]">
+                  {formatWeekRange(kpis.oldestOpenWeek)}
+                  {kpis.oldestOpenNextAction ? ` · Next: ${kpis.oldestOpenNextAction}` : ''}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onOpenWeek(kpis.oldestOpenWeek as string)}
+                className="h-9 w-fit rounded-xl border border-[#cbd5e1] bg-white px-4 text-sm font-semibold text-[#0b1c30] hover:bg-[#eff4ff]"
+              >
+                Open week
+              </button>
+            </div>
+          ) : (
+            <p className="text-sm text-[#47464c]">No open weeks.</p>
+          )}
+        </KpiTile>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-1 rounded-2xl bg-[#eff4ff] p-1 shadow-sm" role="tablist" aria-label="Weeks">
+          {([
+            ['outstanding', 'Outstanding', kpis?.openWeeks],
+            ['completed', 'Reconciled', kpis?.reconciledWeeks],
+          ] as const).map(([id, label, count]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={tab === id}
+              onClick={() => setTab(id)}
+              data-testid={`recon-tab-${id}`}
+              className={cn(
+                'flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-semibold transition-colors',
+                tab === id ? 'bg-[#030213] text-white shadow-sm' : 'text-[#0b1c30] hover:bg-white',
+              )}
+            >
+              {label}
+              <span
+                className={cn(
+                  'rounded-full px-2 py-0.5 text-[11px] font-bold',
+                  tab === id ? 'bg-[#213145] text-white' : 'bg-white text-[#0b1c30]',
+                )}
+              >
+                {count ?? '—'}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-4 text-[12px] font-medium text-[#47464c]">
+          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#069669]" />Received</span>
+          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#b45309]" />Needed</span>
+          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#ba1a1a]" />Blocks closing</span>
+        </div>
+      </div>
+
+      {query.isLoading ? (
+        <div className="space-y-4" aria-busy="true">
+          {[0, 1, 2].map((i) => <div key={i} className={cn(CARD, 'h-32 animate-pulse bg-[#eff4ff]')} />)}
+        </div>
+      ) : query.isError ? (
+        <div className="rounded-2xl border border-[#ffdad6] bg-[#fff1f2] px-4 py-3 text-sm text-[#93000a]">
+          <p className="font-semibold">The week list could not load.</p>
+          <button
+            type="button"
+            onClick={() => void query.refetch()}
+            className="mt-2 h-9 rounded-xl bg-[#030213] px-4 text-sm font-semibold text-white"
+          >
+            Retry
+          </button>
+        </div>
+      ) : weeks.length === 0 ? (
+        <div className={cn(CARD, 'flex items-center gap-3 p-6 text-[#0b1c30]')}>
+          <CheckCircle2 className="h-6 w-6 text-[#069669]" aria-hidden />
+          <p className="font-medium">
+            {tab === 'outstanding' ? 'Every ended week is closed.' : 'No closed weeks yet.'}
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {weeks.map((week) => (
+            <WeekCard key={week.weekKey} week={week} line={line} onOpen={onOpenWeek} />
+          ))}
+        </div>
+      )}
+
+      {query.hasNextPage ? (
+        <div className="flex flex-col items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void query.fetchNextPage()}
+            disabled={query.isFetchingNextPage}
+            className="flex h-11 items-center gap-2 rounded-xl border border-[#cbd5e1] bg-white px-6 text-sm font-semibold text-[#0b1c30] hover:bg-[#eff4ff]"
+          >
+            {query.isFetchingNextPage ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+            Load older weeks
+          </button>
+        </div>
+      ) : null}
+      {weeks.length > 0 ? (
+        <p className="text-center text-[12px] text-[#47464c]">
+          Showing {weeks.length} of {tab === 'outstanding' ? kpis?.openWeeks ?? weeks.length : kpis?.reconciledWeeks ?? weeks.length} weeks
+        </p>
+      ) : null}
     </div>
   );
 }

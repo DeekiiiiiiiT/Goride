@@ -1909,14 +1909,18 @@ export function registerResidualMonolithRoutes(app: Hono) {
   });
 
   // Driver Metrics Endpoints
-  app.post("/make-server-37f42386/driver-metrics", async (c) => {
+  // Rev 25: signed-in users only, and every row carries the company. Since the 21 Oct
+  // "every fleet row needs a company" rule, an unstamped row made this 500, which left
+  // every Uber upload stuck at "processing" (the upload saves driver metrics).
+  app.post("/make-server-37f42386/driver-metrics", requireAuth({ requireOrg: true }), async (c) => {
     try {
       const metrics = await c.req.json();
       if (!Array.isArray(metrics)) {
         return c.json({ error: "Expected array of metrics" }, 400);
       }
-      const keys = metrics.map((m: any) => `driver_metric:${m.id}`);
-      await kv.mset(keys, metrics);
+      const stamped = metrics.map((m: Record<string, unknown>) => stampOrg({ ...m }, c));
+      const keys = stamped.map((m) => `driver_metric:${m.id}`);
+      await kv.mset(keys, stamped);
       
       // Invalidate dashboard cache (driver metrics affect dashboard)
       await invalidateDashboardCache();
@@ -1971,14 +1975,18 @@ export function registerResidualMonolithRoutes(app: Hono) {
   // writes; operational vehicle mutations are gated on vehicle/trip routes instead.
   app.post(
     "/make-server-37f42386/vehicle-metrics",
+    // Rev 25: signed-in users only, rows stamped with the company (unstamped rows 500 since 21 Oct;
+    // the Uber upload ignores this error, so vehicle metrics were silently not saved).
+    requireAuth({ requireOrg: true }),
     async (c) => {
     try {
       const metrics = await c.req.json();
       if (!Array.isArray(metrics)) {
         return c.json({ error: "Expected array of metrics" }, 400);
       }
-      const keys = metrics.map((m: any) => `vehicle_metric:${m.id}`);
-      await kv.mset(keys, metrics);
+      const stamped = metrics.map((m: Record<string, unknown>) => stampOrg({ ...m }, c));
+      const keys = stamped.map((m) => `vehicle_metric:${m.id}`);
+      await kv.mset(keys, stamped);
       
       // Invalidate dashboard cache (vehicle metrics affect dashboard)
       await invalidateDashboardCache();

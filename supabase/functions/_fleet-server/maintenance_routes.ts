@@ -57,6 +57,15 @@ import {
   parseRequiredOdometer,
   recomputeScheduleForVehicle,
   reserveMaintenanceLogNumber,
+  computeWoLineTotal,
+  parseDiscount,
+  lineSubtotal,
+  serviceNetTotal,
+  loadDiscountEnabled,
+  respondDiscountRejection,
+  discountTooLarge,
+  discountTooLargeResponse,
+  fetchMaintenanceServiceHistoryPage,
 } from "./maintenance_logging_helpers.ts";
 import {
   canTransitionWorkOrderStatus,
@@ -221,31 +230,6 @@ function parseFieldSchema(raw: unknown): Record<string, unknown> {
   };
 }
 
-function sumLogLines(lines: unknown): number {
-  if (!Array.isArray(lines)) return 0;
-  let total = 0;
-  for (const raw of lines) {
-    if (!raw || typeof raw !== "object") continue;
-    const line = raw as Record<string, unknown>;
-    const values = (line.values && typeof line.values === "object")
-      ? (line.values as Record<string, unknown>)
-      : {};
-    const qty = Number(line.qty ?? values.qty ?? 0) || 0;
-    const unit = Number(line.unitPrice ?? values.unit_price ?? 0) || 0;
-    const material = Number(line.material ?? values.material ?? 0) || 0;
-    let labor = Number(line.labor ?? line.laborAmount ?? values.labor ?? 0) || 0;
-    const hours = Number(line.laborHours ?? values.labor_hours ?? 0) || 0;
-    const rate = Number(line.laborRate ?? values.labor_rate ?? 0) || 0;
-    if (hours > 0 && rate > 0) labor = hours * rate;
-    if (line.complimentary === true) labor = 0;
-    if (line.declined === true) continue;
-    if (qty > 0 && unit > 0) total += qty * unit;
-    else total += material;
-    total += labor;
-  }
-  return Math.round(total * 100) / 100;
-}
-
 function parseCategoryKind(v: unknown): "system" | "component" | null {
   if (v === undefined || v === null || v === "") return null;
   const s = String(v).trim();
@@ -293,23 +277,6 @@ const WO_LINE_ACTIONS = new Set([
   "inspect", "clean", "adjust", "replace", "rotate", "balance", "flush", "top_up", "repair",
   "machine", "rebuild", "other",
 ]);
-
-function computeWoLineTotal(line: Record<string, unknown>): number {
-  if (line.declined === true) return 0;
-  const qty = Number(line.qty ?? 0) || 0;
-  const unit = Number(line.unit_price ?? line.unitPrice ?? 0) || 0;
-  const material = Number(line.material ?? 0) || 0;
-  let labor = Number(line.labor_amount ?? line.laborAmount ?? line.labor ?? 0) || 0;
-  const hours = Number(line.labor_hours ?? line.laborHours ?? 0) || 0;
-  const rate = Number(line.labor_rate ?? line.laborRate ?? 0) || 0;
-  if (hours > 0 && rate > 0) labor = hours * rate;
-  if (line.complimentary === true) labor = 0;
-  let total = 0;
-  if (qty > 0 && unit > 0) total += qty * unit;
-  else total += material;
-  total += labor;
-  return Math.round(total * 100) / 100;
-}
 
 /** camelCase API line → snake_case DB row for maintenance_work_order_lines. */
 function mapApiLineToDb(
@@ -476,6 +443,9 @@ function mapDbWorkOrderToApi(
     notes: wo.notes,
     invoiceUrl: wo.invoice_url,
     totalCost: wo.total_cost != null ? Number(wo.total_cost) : null,
+    discountAmount: Number(wo.discount_amount ?? 0),
+    // CR-04: deleted (voided) jobs are not part of the bill.
+    subtotal: lines ? lineSubtotal(lines.filter((l) => l.voided_at == null)) : null,
     maintenanceRecordId: wo.maintenance_record_id,
     priority: wo.priority,
     vendorId: wo.vendor_id,
@@ -1761,11 +1731,6 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const status = log.status != null ? String(log.status) : "Completed";
         const jobCompleted = status.trim().toLowerCase() === "completed";
 
-        // Auto-sum line items when present; otherwise use explicit cost
-        const cost = Array.isArray(log.lines) && log.lines.length
-          ? sumLogLines(log.lines)
-          : (log.cost != null ? Number(log.cost) : null);
-
         const savedLines: Record<string, unknown>[] = [];
         const lineRows: Record<string, unknown>[] = [];
         for (const raw of Array.isArray(log.lines) ? log.lines as unknown[] : []) {
@@ -1775,6 +1740,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           lineRows.push(row);
           savedLines.push({ ...(raw as Record<string, unknown>), id: row.id });
         }
+
+        const cost = lineRows.length
+          ? serviceNetTotal(lineRows, 0)
+          : (log.cost != null ? Number(log.cost) : null);
 
         const rowInsert = {
           id,
@@ -1804,7 +1773,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (lineRows.length) {
           const woId = crypto.randomUUID();
           const rowsForWo = lineRows.map((r) => ({ ...r, work_order_id: woId }));
-          const lineSum = rowsForWo.reduce((s, r) => s + (Number((r as { line_total?: unknown }).line_total) || 0), 0);
+          const bridgeNetTotal = serviceNetTotal(rowsForWo, 0);
           const logModeDb = logMode === "package" ? "package" : "quick_job";
           const packageComplete = logModeDb === "package" && !!templateId;
           const { error: woErr } = await supabase.from("maintenance_work_orders").insert({
@@ -1823,7 +1792,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             log_mode: logModeDb,
             notes: rowInsert.notes,
             invoice_url: rowInsert.invoice_url,
-            total_cost: cost ?? lineSum,
+            discount_amount: 0,
+            total_cost: bridgeNetTotal,
             maintenance_record_id: null,
             payload_json: { source: "maintenance_logs_bridge", logId: id },
             updated_at: new Date().toISOString(),
@@ -1972,8 +1942,46 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (fetchErr) throw fetchErr;
         if (!existing) return c.json({ error: "Maintenance record not found" }, 404);
 
+        const prevPayloadEarly = (existing.payload_json && typeof existing.payload_json === "object")
+          ? existing.payload_json as Record<string, unknown>
+          : {};
+
         const prevStatus = String(existing.status ?? "").trim().toLowerCase();
         if (prevStatus === "completed") {
+          const hasDiscountField = body.discount !== undefined
+            || body.discount_amount !== undefined
+            || body.discountAmount !== undefined;
+          if (hasDiscountField) {
+            const woIdForDiscount = prevPayloadEarly.workOrderId != null
+              ? String(prevPayloadEarly.workOrderId)
+              : "";
+            let storedDiscount = 0;
+            if (isUuid(woIdForDiscount)) {
+              const { data: woRow } = await supabase
+                .from("maintenance_work_orders")
+                .select("discount_amount")
+                .eq("id", woIdForDiscount)
+                .maybeSingle();
+              storedDiscount = Number(
+                (woRow as { discount_amount?: number } | null)?.discount_amount ?? 0,
+              );
+            }
+            const requested = parseDiscount(
+              body.discount ?? body.discount_amount ?? body.discountAmount,
+            );
+            if (requested === null) {
+              return c.json({ code: "discount_invalid" }, 400);
+            }
+            if (requested !== storedDiscount) {
+              return c.json(
+                {
+                  code: "discount_locked",
+                  error: "A saved service's discount can't be changed. Delete the service and log it again.",
+                },
+                409,
+              );
+            }
+          }
           return c.json(
             { error: "Completed services can't be changed — void it and log again.", code: "immutable" },
             409,
@@ -1996,11 +2004,6 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const lines = body.lines !== undefined
           ? body.lines
           : prevPayload.lines;
-        const cost = Array.isArray(lines) && lines.length
-          ? sumLogLines(lines)
-          : (body.cost !== undefined
-            ? (body.cost != null ? Number(body.cost) : null)
-            : (existing.cost != null ? Number(existing.cost) : null));
 
         const currencyRaw = body.currency != null
           ? String(body.currency).trim().toUpperCase()
@@ -2038,6 +2041,27 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const needsUsage = editLines.some(lineNeedsPartsUsage);
         let usageCommitted = !needsUsage || !jobCompleted;
         let editWorkOrderId = prevPayload.workOrderId != null ? String(prevPayload.workOrderId) : "";
+        let storedDiscount = 0;
+        if (isUuid(editWorkOrderId)) {
+          const { data: woDiscountRow } = await supabase
+            .from("maintenance_work_orders")
+            .select("discount_amount")
+            .eq("id", editWorkOrderId)
+            .maybeSingle();
+          storedDiscount = Number(
+            (woDiscountRow as { discount_amount?: number } | null)?.discount_amount ?? 0,
+          );
+        }
+        // CR-02: edited lines must still cover the stored discount.
+        if (editLines.length && discountTooLarge(editLines, storedDiscount)) {
+          return discountTooLargeResponse(c);
+        }
+        const cost = editLines.length
+          ? serviceNetTotal(editLines, storedDiscount)
+          : (body.cost !== undefined
+            ? (body.cost != null ? Number(body.cost) : null)
+            : (existing.cost != null ? Number(existing.cost) : null));
+
         let warrantyPrompts: unknown[] = [];
         let stockWarnings: unknown[] = [];
         const leftCompleted = prevStatus === "completed" && nextStatusLc !== "completed";
@@ -2047,6 +2071,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             editWorkOrderId = crypto.randomUUID();
             createdHere = true;
             const rowsForWo = editLines.map((r) => ({ ...r, work_order_id: editWorkOrderId }));
+            const editBridgeNet = serviceNetTotal(rowsForWo, 0);
             const { error: woErr } = await supabase.from("maintenance_work_orders").insert({
               id: editWorkOrderId,
               organization_id: orgId,
@@ -2061,7 +2086,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
               template_id: templateId || null,
               notes,
               invoice_url,
-              total_cost: cost,
+              discount_amount: 0,
+              total_cost: editBridgeNet,
               maintenance_record_id: id,
               payload_json: { source: "maintenance_logs_edit", logId: id },
               updated_at: new Date().toISOString(),
@@ -2081,12 +2107,13 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             }
             await syncWorkOrderLines(supabase, editWorkOrderId, editLines);
             if (jobCompleted) {
+              const editNetTotal = serviceNetTotal(editLines, storedDiscount);
               const { error: woUpErr } = await supabase.from("maintenance_work_orders").update({
                 status: "completed",
                 closed_at: new Date().toISOString(),
                 performed_at_date,
                 odometer: performed_at_miles,
-                total_cost: cost,
+                total_cost: editNetTotal,
                 updated_at: new Date().toISOString(),
               }).eq("id", editWorkOrderId);
               if (woUpErr) throw woUpErr;
@@ -3105,6 +3132,17 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (completeNow && idempotencyKey) {
           const existing = await findWorkOrderByIdempotency(supabase, orgId, idempotencyKey);
           if (existing) {
+            // CR-03: a retry must not silently keep an old discount.
+            const replayDiscount = parseDiscount(body.discount ?? body.discount_amount);
+            if (
+              replayDiscount !== null &&
+              replayDiscount !== Number((existing as Record<string, unknown>).discount_amount ?? 0)
+            ) {
+              return c.json({
+                code: "discount_changed",
+                error: "The discount changed since this save was started. Save again.",
+              }, 409);
+            }
             const existingStatus = String(existing.status);
             if (existingStatus === "completed") {
               const { data: lines } = await supabase
@@ -3156,12 +3194,6 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const currencyRaw = body.currency != null ? String(body.currency).trim().toUpperCase() : "JMD";
         const currency = currencyRaw || "JMD";
         const woId = crypto.randomUUID();
-        let logNumber: string | null = null;
-        try {
-          logNumber = await reserveMaintenanceLogNumber(supabase);
-        } catch {
-          logNumber = null;
-        }
         const rawLines = Array.isArray(body.lines) ? body.lines : [];
         const lineRows = rawLines
           .map((raw, i) => {
@@ -3169,7 +3201,19 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             return mapApiLineToDb(raw as Record<string, unknown>, i, woId);
           })
           .filter((r): r is Record<string, unknown> => r != null);
-        const totalCost = lineRows.reduce((s, r) => s + (Number(r.line_total) || 0), 0);
+        const discountParsed = parseDiscount(body.discount ?? body.discount_amount);
+        const discount = discountParsed ?? 0;
+        const discountEnabled = await loadDiscountEnabled(orgId);
+        const discountReject = respondDiscountRejection(c, discountParsed, discountEnabled, lineRows, discount);
+        if (discountReject) return discountReject;
+        const totalCost = serviceNetTotal(lineRows, discount);
+        // CR-08: reserve the log number only after every refusal check has passed.
+        let logNumber: string | null = null;
+        try {
+          logNumber = await reserveMaintenanceLogNumber(supabase);
+        } catch {
+          logNumber = null;
+        }
 
         const header = {
           id: woId,
@@ -3190,6 +3234,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           invoice_url: body.invoiceUrl != null
             ? String(body.invoiceUrl)
             : (body.invoice_url != null ? String(body.invoice_url) : null),
+          discount_amount: discount,
           total_cost: totalCost || null,
           log_number: logNumber,
           idempotency_key: idempotencyKey || null,
@@ -3351,6 +3396,55 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           patch.invoice_url = u == null || u === "" ? null : String(u);
         }
 
+        let effectiveDiscount = Number(existing.discount_amount ?? 0);
+        const discountInBody = body.discount !== undefined || body.discount_amount !== undefined;
+
+        const loadWoLines = async (): Promise<Record<string, unknown>[]> => {
+          const { data: existingLines, error: lineLoadErr } = await supabase
+            .from("maintenance_work_order_lines")
+            .select("*")
+            .eq("work_order_id", id)
+            .order("sort_order", { ascending: true });
+          if (lineLoadErr) throw lineLoadErr;
+          return (existingLines || []) as Record<string, unknown>[];
+        };
+
+        if (discountInBody) {
+          const discountParsed = parseDiscount(body.discount ?? body.discount_amount);
+          const discount = discountParsed ?? 0;
+          const discountEnabled = await loadDiscountEnabled(orgId);
+          let linesForDiscount: Record<string, unknown>[];
+          if (Array.isArray(body.lines)) {
+            linesForDiscount = body.lines
+              .map((raw, i) => {
+                if (!raw || typeof raw !== "object") return null;
+                return mapApiLineToDb(raw as Record<string, unknown>, i, id);
+              })
+              .filter((r): r is Record<string, unknown> => r != null);
+          } else {
+            linesForDiscount = await loadWoLines();
+          }
+          const discountReject = respondDiscountRejection(
+            c,
+            discountParsed,
+            discountEnabled,
+            linesForDiscount,
+            discount,
+          );
+          if (discountReject) return discountReject;
+          patch.discount_amount = discount;
+          effectiveDiscount = discount;
+        } else if (Array.isArray(body.lines) && effectiveDiscount > 0) {
+          // CR-02: new lines must still cover the stored discount.
+          const newLines = body.lines
+            .map((raw, i) => {
+              if (!raw || typeof raw !== "object") return null;
+              return mapApiLineToDb(raw as Record<string, unknown>, i, id);
+            })
+            .filter((r): r is Record<string, unknown> => r != null);
+          if (discountTooLarge(newLines, effectiveDiscount)) return discountTooLargeResponse(c);
+        }
+
         if (Array.isArray(body.lines)) {
           const { error: delErr } = await supabase
             .from("maintenance_work_order_lines")
@@ -3371,7 +3465,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
               .insert(lineRows);
             if (insErr) throw insErr;
           }
-          patch.total_cost = lineRows.reduce((s, r) => s + (Number(r.line_total) || 0), 0);
+          patch.total_cost = serviceNetTotal(lineRows, effectiveDiscount);
+        } else if (discountInBody) {
+          const linesForTotal = await loadWoLines();
+          patch.total_cost = serviceNetTotal(linesForTotal, effectiveDiscount);
         }
 
         const { data: wo, error: upErr } = await supabase
@@ -3448,11 +3545,11 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .order("sort_order", { ascending: true });
         if (lineErr) throw lineErr;
         const lineRows = (lines || []) as Record<string, unknown>[];
-        const totalCost = lineRows.reduce((s, r) => {
-          const lt = r.line_total != null ? Number(r.line_total) : computeWoLineTotal(r);
-          return s + (Number.isFinite(lt) ? lt : 0);
-        }, 0);
-        const roundedTotal = Math.round(totalCost * 100) / 100;
+        const discount = Number(wo.discount_amount ?? 0);
+        // CR-02: never quietly clamp a discount that is bigger than the bill.
+        if (discountTooLarge(lineRows, discount)) return discountTooLargeResponse(c);
+        const subtotal = lineSubtotal(lineRows);
+        const roundedTotal = serviceNetTotal(lineRows, discount);
 
         const performed_at_date = body.performedAtDate != null || body.performed_at_date != null
           ? String(body.performedAtDate ?? body.performed_at_date).slice(0, 10)
@@ -3503,6 +3600,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           odo: performed_at_miles,
           type: service_type,
           cost: roundedTotal,
+          subtotal,
+          discount,
           currency,
           provider: provider || "",
           notes: notes || "",
@@ -4384,27 +4483,15 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const from = c.req.query("from")?.trim() || "";
         const qText = c.req.query("q")?.trim() || "";
         const page = Math.max(1, Number(c.req.query("page") || 1) || 1);
-        const pageSize = 50;
-        const fromIdx = (page - 1) * pageSize;
-        const toIdx = fromIdx + pageSize - 1;
+        const rawPageSize = Number(c.req.query("pageSize") || 50) || 50;
+        const pageSize = Math.min(50, Math.max(1, rawPageSize));
 
-        let q = fleetDb()
-          .from("fleet_maintenance_service_history_v")
-          .select("*", { count: "exact" })
-          .eq("organization_id", orgId)
-          .order("performed_at_date", { ascending: false })
-          .range(fromIdx, toIdx);
-        if (vehicle) q = q.eq("vehicle_id", vehicle);
-        if (part) q = q.or(`category_code.ilike.%${part}%,category_name.ilike.%${part}%`);
-        if (from) q = q.gte("performed_at_date", from);
-        if (qText) {
-          q = q.or(
-            `log_number.ilike.%${qText}%,provider.ilike.%${qText}%,category_name.ilike.%${qText}%`,
-          );
-        }
-        const { data, error, count } = await q;
-        if (error) throw error;
-        return c.json({ items: data || [], page, pageSize, total: count ?? 0 });
+        const { items, total } = await fetchMaintenanceServiceHistoryPage(
+          { orgId, vehicle: vehicle || undefined, part: part || undefined, from: from || undefined, qText: qText || undefined },
+          page,
+          pageSize,
+        );
+        return c.json({ items, page, pageSize, total });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);

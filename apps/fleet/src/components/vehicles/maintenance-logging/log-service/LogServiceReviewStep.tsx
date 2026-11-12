@@ -1,5 +1,5 @@
-import React from "react";
-import { CheckCircle2, Loader2, Scan } from "lucide-react";
+import React, { useEffect, useRef } from "react";
+import { CheckCircle2, Loader2, Plus, Scan } from "lucide-react";
 import { Button } from "../../../ui/button";
 import { Checkbox } from "../../../ui/checkbox";
 import { Input } from "../../../ui/input";
@@ -33,7 +33,18 @@ export type LogServiceReviewStepProps = {
   onScanFile: (e: React.ChangeEvent<HTMLInputElement>) => void;
   lines: MaintenanceLogLine[];
   lineTotalPreview: (line: MaintenanceLogLine) => number;
-  totalCost: number;
+  /** Line sum before discount. */
+  subtotal: number;
+  /** Net total after discount (same as subtotal when no discount). */
+  netTotal: number;
+  discountEnabled?: boolean;
+  discountAmount?: number;
+  discountInputValue?: string;
+  discountRowOpen?: boolean;
+  discountTooLarge?: boolean;
+  onAddDiscount?: () => void;
+  onRemoveDiscount?: () => void;
+  onDiscountChange?: (raw: string) => void;
   onEditLine: (line: MaintenanceLogLine) => void;
   showMarkPackageComplete: boolean;
   markPackageComplete: boolean;
@@ -58,13 +69,30 @@ export function LogServiceReviewStep({
   onScanFile,
   lines,
   lineTotalPreview,
-  totalCost,
+  subtotal,
+  netTotal,
+  discountEnabled = false,
+  discountAmount = 0,
+  discountInputValue = "",
+  discountRowOpen = false,
+  discountTooLarge = false,
+  onAddDiscount,
+  onRemoveDiscount,
+  onDiscountChange,
   onEditLine,
   showMarkPackageComplete,
   markPackageComplete,
   onMarkPackageCompleteChange,
   whatHappensNext,
 }: LogServiceReviewStepProps) {
+  const discountInputRef = useRef<HTMLInputElement>(null);
+  const showDiscountRow = discountRowOpen || discountAmount > 0;
+  const showSubtotalBreakdown = discountAmount > 0;
+
+  useEffect(() => {
+    if (showDiscountRow) discountInputRef.current?.focus();
+  }, [showDiscountRow]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
@@ -195,12 +223,88 @@ export function LogServiceReviewStep({
               </div>
             );
           })}
+          {showDiscountRow ? (
+            <div className="flex items-center justify-between px-4 py-3 gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-on-surface">Discount</p>
+                <div className="mt-1.5 flex flex-col gap-1 max-w-[220px]">
+                  <div className="flex rounded-lg border border-outline-variant/40 bg-surface-container-lowest overflow-hidden">
+                    <span className="px-3 py-2 text-sm font-medium text-stitch-secondary border-r border-outline-variant/40 bg-surface-container-low">
+                      {currency || "JMD"}
+                    </span>
+                    <Input
+                      ref={discountInputRef}
+                      type="text"
+                      inputMode="decimal"
+                      data-testid="log-service-discount-amount"
+                      className="border-0 rounded-none shadow-none focus-visible:ring-0 font-medium"
+                      value={discountInputValue}
+                      placeholder="0"
+                      onChange={(e) => onDiscountChange?.(e.target.value)}
+                    />
+                  </div>
+                  {discountTooLarge ? (
+                    <p className="text-xs text-error" data-testid="log-service-discount-error">
+                      Discount can&apos;t be more than the bill.
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-testid="log-service-remove-discount"
+                className="text-rose-700 border-rose-200 hover:bg-rose-50 shrink-0"
+                onClick={() => onRemoveDiscount?.()}
+              >
+                Remove
+              </Button>
+            </div>
+          ) : null}
         </div>
-        <div className="flex justify-between items-center px-1 pt-1">
-          <span className="text-sm font-semibold text-on-surface-variant">Total</span>
-          <span className="text-base font-semibold text-on-surface">
-            {currency} {totalCost.toLocaleString()}
-          </span>
+        {discountEnabled && !showDiscountRow ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            data-testid="log-service-add-discount"
+            className="w-full sm:w-auto"
+            onClick={() => onAddDiscount?.()}
+          >
+            <Plus className="w-4 h-4 mr-1.5" />
+            Add discount
+          </Button>
+        ) : null}
+        <div className="space-y-1 px-1 pt-1">
+          {showSubtotalBreakdown ? (
+            <>
+              <div
+                className="flex justify-between items-center"
+                data-testid="log-service-review-subtotal"
+              >
+                <span className="text-sm font-semibold text-on-surface-variant">Subtotal</span>
+                <span className="text-base font-semibold text-on-surface">
+                  {currency} {subtotal.toLocaleString()}
+                </span>
+              </div>
+              <div
+                className="flex justify-between items-center"
+                data-testid="log-service-review-discount"
+              >
+                <span className="text-sm font-semibold text-on-surface-variant">Discount</span>
+                <span className="text-base font-semibold text-on-surface">
+                  −{currency} {discountAmount.toLocaleString()}
+                </span>
+              </div>
+            </>
+          ) : null}
+          <div className="flex justify-between items-center" data-testid="log-service-review-total">
+            <span className="text-sm font-semibold text-on-surface-variant">Total</span>
+            <span className="text-base font-semibold text-on-surface">
+              {currency} {(showSubtotalBreakdown ? netTotal : subtotal).toLocaleString()}
+            </span>
+          </div>
         </div>
       </div>
 

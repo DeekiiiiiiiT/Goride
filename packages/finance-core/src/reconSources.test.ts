@@ -3,6 +3,10 @@ import {
   resolveSourceRequirements,
   weekDayKeys,
   computeSourceStatusFromCoverage,
+  orgMainLine,
+  resolveSourceLine,
+  sourcesForLine,
+  RECON_SOURCES,
   type OrgReconProfile,
 } from './reconSources.ts';
 
@@ -87,5 +91,42 @@ describe('computeSourceStatusFromCoverage', () => {
       weekDayKeys('2026-10-12').map((d) => [d, 'missing']),
     );
     expect(computeSourceStatusFromCoverage(cov, 'optional')).toBe('missing');
+  });
+
+  it('reads statement week coverage', () => {
+    expect(computeSourceStatusFromCoverage({ week: 'covered' }, 'required')).toBe('received');
+    expect(computeSourceStatusFromCoverage({ week: 'zero_attested' }, 'required')).toBe(
+      'attested_none',
+    );
+    expect(computeSourceStatusFromCoverage({ week: 'missing' }, 'required')).toBe('missing');
+  });
+});
+
+describe('orgMainLine and sourcesForLine', () => {
+  const rideshareMain: OrgReconProfile = {
+    serviceLines: ['rideshare', 'rush_delivery'],
+    hasUberDrivers: true,
+    hasIndriveDrivers: false,
+    hasTollTags: true,
+    hasRoamFuelCards: true,
+    hasSelfServeJaa: false,
+    rushDeliveryEnabled: true,
+  };
+
+  it('picks rideshare when both lines are active', () => {
+    expect(orgMainLine(rideshareMain)).toBe('rideshare');
+  });
+
+  it('resolves main_line manifest entries from stored run line', () => {
+    const toll = RECON_SOURCES.find((s) => s.id === 'toll_usage')!;
+    expect(resolveSourceLine(toll, 'rideshare')).toBe('rideshare');
+    expect(resolveSourceLine(toll, 'rush_delivery')).toBe('rush_delivery');
+  });
+
+  it('keeps tag sources on the main line desk only', () => {
+    const rideshareDesk = sourcesForLine('rideshare', 'rideshare').map((s) => s.id);
+    const deliveryDesk = sourcesForLine('rush_delivery', 'rideshare').map((s) => s.id);
+    expect(rideshareDesk).toContain('toll_usage');
+    expect(deliveryDesk).not.toContain('toll_usage');
   });
 });

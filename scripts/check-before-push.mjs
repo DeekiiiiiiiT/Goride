@@ -39,6 +39,7 @@ function inventoryDenoFiles() {
 }
 
 const INVENTORY = /(components\/inventory\/|components\/car-kit\/|_fleet-server\/inventory|delivery\/inventory|e2e\/.*inventory|scripts\/.*inventory|packages\/auth-client\/src\/permissions)/;
+const RECON = /(_fleet-server\/(recon_|evaluate_run_mirror|week_close)|packages\/finance-core\/src\/(evaluateRun|reconSources|closeBlockerSteps)|supabase\/tests\/week_recon_|apps\/fleet\/src\/components\/fleet-financials\/recon\/)/;
 const MIGRATIONS = /^supabase\/migrations\//;
 const EDGE = /^supabase\/functions\//;
 
@@ -61,6 +62,14 @@ const checks = [
     when: touched(INVENTORY),
     cmd: `deno test --allow-read --allow-env --allow-net=127.0.0.1:54321 --no-check ${inventoryDenoFiles().join(' ')}`,
   },
+  {
+    name: 'Week Reconciliation: one truth, mirrors and reads-are-reads',
+    when: touched(RECON),
+    cmd: 'deno test --allow-read supabase/functions/_fleet-server/recon_desk_shape.test.ts supabase/functions/_fleet-server/recon_publish_timing.test.ts supabase/functions/_fleet-server/recon_reads_are_reads.test.ts supabase/functions/_fleet-server/recon_data_checks_codemap.test.ts supabase/functions/_fleet-server/recon_week_change.test.ts supabase/functions/_fleet-server/recon_approval_state.test.ts supabase/functions/_fleet-server/recon_approvals.test.ts supabase/functions/_fleet-server/recon_alert_rules.test.ts supabase/functions/_fleet-server/recon_permissions.test.ts supabase/functions/_fleet-server/recon_alerts.test.ts supabase/functions/_fleet-server/recon_desk_reads.test.ts supabase/functions/_fleet-server/team_staff_alert_phone.test.ts supabase/functions/_fleet-server/recon_activity.test.ts supabase/functions/_fleet-server/recon_close_workflow_wake.test.ts supabase/functions/_fleet-server/recon_alerts_while_paused.test.ts supabase/functions/_fleet-server/upload_routes_company.test.ts supabase/functions/_fleet-server/recon_sources_mirror.drift.test.ts supabase/functions/_fleet-server/evaluate_run_mirror.drift.test.ts',
+  },
+  { name: 'Week Reconciliation: page reads run no engines', when: touched(RECON), cmd: 'node scripts/assert-no-engine-on-edge-read.mjs' },
+  { name: 'Week Reconciliation: screens read the saved desk', when: touched(RECON), cmd: 'node scripts/assert-recon-desk-reads-saved.mjs' },
+  { name: 'Week Reconciliation: week-version check is in the lane bundles', when: touched(/(supabase\/functions\/(fleet-toll|fleet-fuel|fleet-pay)\/|recon_week_version_guard)/), cmd: 'node scripts/assert-recon-week-guard-bundled.mjs' },
 ];
 
 const toRun = checks.filter((c) => c.when);

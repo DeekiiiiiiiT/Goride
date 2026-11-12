@@ -324,6 +324,8 @@ export {
   weekSpanLabel,
   computeSourceStatusFromCoverage,
   sourcesForLine,
+  orgMainLine,
+  resolveSourceLine,
 } from './reconSources.ts';
 export {
   coverageInputHash,
@@ -359,6 +361,8 @@ export type {
 export {
   evaluateRun,
   compositeInputsHashForStep,
+  hiddenLaneSteps,
+  HIDEABLE_LANE_STEPS,
   RECON_STEP_ORDER,
   RECON_STEP_LABELS,
 } from './evaluateRun.ts';

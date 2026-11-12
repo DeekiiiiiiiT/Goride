@@ -28,6 +28,8 @@ export function ReconciliationDashboard({
   hideLanding = false,
   serviceLine,
   onPeriodFinished,
+  deskSections,
+  summaryTarget,
 }: {
   initialDriverId?: string;
   /** Monday week start from Close Week Review / Week Reconciliation hub. */
@@ -39,6 +41,8 @@ export function ReconciliationDashboard({
   serviceLine?: 'rideshare' | 'rush_delivery';
   /** Week Recon: after Finish, advance the hub run to the next ready step. */
   onPeriodFinished?: () => void | Promise<void>;
+  deskSections?: boolean;
+  summaryTarget?: HTMLElement | null;
 } = {}) {
   const [drivers, setDrivers] = useState<any[]>([]);
   const [selectedDriverId, setSelectedDriverId] = useState<string>(initialDriverId || '');
@@ -129,6 +133,8 @@ export function ReconciliationDashboard({
         initialStepId={initialStepId}
         serviceLine={serviceLine}
         onPeriodFinished={onPeriodFinished}
+        deskSections={deskSections}
+        summaryTarget={summaryTarget}
         onExit={() => {
           if (hideLanding) return;
           setSelectedPeriod(null);

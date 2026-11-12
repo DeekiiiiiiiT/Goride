@@ -1,7 +1,8 @@
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
-import { RECON_STEP_LABELS, RECON_STEP_ORDER, type RunStepId } from '@roam/finance-core';
+import { ArrowLeft, ArrowRight, Check, Loader2, Lock } from 'lucide-react';
+import { RECON_STEP_LABELS, RECON_STEP_ORDER, serverStepForBlockerCode, type RunStepId } from '@roam/finance-core';
+import { humanBlockerLabel } from '../../../utils/weekCloseBlockers';
 import {
   completeRunStep,
   fetchRun,
@@ -18,9 +19,15 @@ import { ReconTagAccountStep } from './ReconTagAccountStep';
 import { ReconTripsEarningsStep } from './ReconTripsEarningsStep';
 import { ReconSettlementStep } from './ReconSettlementStep';
 import { ReconCloseStep } from './ReconCloseStep';
+import { ReconStepBoundary } from './ReconStepBoundary';
 import { PastWeeksReturnLink } from '../settlements/past-weeks/PastWeeksReturnLink';
 import { TollsCheckFailedBanner, TollsLockedBanner } from './TollsLockedBanner';
+import { ReconCalculatorBanner } from './ReconCalculatorBanner';
+import { ReconPendingApprovalBanner } from './ReconPendingApprovalBanner';
+import { approvalsForWeek, useReconApprovals } from './useReconApprovals';
+import { formatWeekRange, formatWeekTitle } from './weekListFormat';
 import { api } from '../../../services/api';
+import { RECON_WEEK_CHANGED_EVENT, clearReconWeekContext, setReconWeekContext } from '../../../services/reconWeekContext';
 import { useAuth } from '../../auth/AuthContext';
 import { hasAnyJwtRole } from '@roam/auth-client';
 import { Button } from '../../ui/button';
@@ -51,6 +58,18 @@ function stepStatus(run: ReconRunPayload, stepId: RunStepId): string {
   return run.evaluation.steps.find((s) => s.id === stepId)?.status ?? 'locked';
 }
 
+/** The one question each step answers (Stitch headers). */
+const STEP_QUESTION: Record<RunStepId, string> = {
+  sources: 'Are all the files for this week in?',
+  attribution: 'Which service line does each shared toll and fuel row belong to?',
+  tolls: 'Does every toll match a trip, a refund or a dispute?',
+  tag_account: 'Does the toll tag account balance for the week?',
+  fuel: 'Is every fuel fill matched and priced?',
+  trips_earnings: 'Do the trips and earnings match the platform statements?',
+  settlement_preview: 'What does each driver get paid or owe?',
+  close: 'Is the week ready to lock?',
+};
+
 type StepLockedBy = { kind: 'source' | 'step'; id: string; label: string };
 
 function parseLockedBy(raw: unknown): StepLockedBy | undefined {
@@ -75,26 +94,11 @@ function stepRailCaption(status: string, lockedBy: StepLockedBy | undefined): st
   return status.replace(/_/g, ' ');
 }
 
-function stepRailHint(
-  status: string,
-  lockedBy: StepLockedBy | undefined,
-  stepId: RunStepId,
-): string | null {
-  if (status !== 'locked') return null;
-  if (stepId !== 'tolls' && stepId !== 'fuel' && stepId !== 'tag_account' && stepId !== 'trips_earnings') {
-    return null;
-  }
-  if (lockedBy?.kind === 'step') {
-    return `Finish ${lockedBy.label} first.`;
-  }
-  return null;
-}
-
 function AttributionRail({ run }: { run: ReconRunPayload }) {
   const u = run.attribution?.rowCount ?? 0;
   const amt = run.attribution?.amountMajor ?? 0;
   return (
-    <aside className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4 text-sm">
+    <div className="space-y-3 rounded-[20px] bg-white p-5 text-sm shadow-sm" data-testid="recon-summary-split">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
         Service line split
       </p>
@@ -109,22 +113,6 @@ function AttributionRail({ run }: { run: ReconRunPayload }) {
         </div>
       </dl>
       <p className="text-xs text-slate-500">Assign shared toll and fuel in the attribution step.</p>
-    </aside>
-  );
-}
-
-function SourceScoreRail({ run }: { run: ReconRunPayload }) {
-  const required = run.sources.filter((s) => s.requirement === 'required');
-  const done = required.filter(
-    (s) => s.status === 'received' || s.status === 'attested_none' || s.status === 'waived',
-  ).length;
-  return (
-    <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Sources</p>
-      <p className="text-lg font-bold tabular-nums text-slate-900">
-        {done}/{required.length || '—'}
-      </p>
-      <p className="text-xs text-slate-600">{run.evaluation.nextAction.label}</p>
     </div>
   );
 }
@@ -163,6 +151,9 @@ export function ReconRunPage({
   const tollsSealed = sealQuery.isSuccess && sealQuery.data?.sealed === true;
   const tollsCheckFailed = sealQuery.isError;
   const [advancing, setAdvancing] = useState(false);
+  /** Right-column slot a step panel can fill with its own totals card (Stitch). */
+  const [stepSummaryEl, setStepSummaryEl] = useState<HTMLDivElement | null>(null);
+  const approvals = useReconApprovals();
   const autoSkipKey = useRef<string | null>(null);
   const autoSkipInFlight = useRef(false);
 
@@ -218,6 +209,23 @@ export function ReconRunPage({
     return map;
   }, [runQuery.data]);
 
+  // WRA-27: toll / fuel / settlement changes made on this page carry this week's version.
+  const openRun = runQuery.data?.run;
+  useEffect(() => {
+    if (!openRun?.id) return;
+    setReconWeekContext({ runId: openRun.id, version: Number(openRun.version), closed: openRun.state === 'closed' });
+  }, [openRun?.id, openRun?.version, openRun?.state]);
+  useEffect(() => {
+    const id = openRun?.id;
+    return () => clearReconWeekContext(id);
+  }, [openRun?.id]);
+  const [weekChanged, setWeekChanged] = useState<string | null>(null);
+  useEffect(() => {
+    const onChanged = (e: Event) => setWeekChanged(String((e as CustomEvent<{ code?: string }>).detail?.code || 'WEEK_CHANGED'));
+    window.addEventListener(RECON_WEEK_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(RECON_WEEK_CHANGED_EVENT, onChanged);
+  }, []);
+
   /** Apply mutation payload immediately, then refetch so gates/rails stay in sync. */
   const refreshRun = useCallback(
     async (payload?: ReconRunPayload) => {
@@ -244,6 +252,14 @@ export function ReconRunPage({
     },
     [line, weekKey, onStepChange],
   );
+
+  // A closed week opened without a step lands on Close (badge + History).
+  const openState = runQuery.data?.run.state;
+  useEffect(() => {
+    if (openState !== 'closed' || typeof window === 'undefined') return;
+    if (new URLSearchParams(window.location.search).get('step')) return;
+    setActiveStep('close');
+  }, [openState, line, weekKey]);
 
   // Reset step when opening a different week/line.
   useEffect(() => {
@@ -381,6 +397,25 @@ export function ReconRunPage({
     return nextStepId;
   }, [nextStepId, runQuery.data]);
 
+  /** Fuel Finalize (step 5) → complete the Fuel step once the server sees the locked week. */
+  const handleFuelFinalized = useCallback(async () => {
+    setAdvancing(true);
+    try {
+      let payload = await fetchRun(line, weekKey);
+      if (stepStatus(payload, 'fuel') !== 'complete') {
+        payload = await completeRunStep(line, weekKey, 'fuel', { expectedVersion: payload.run.version });
+      }
+      await refreshRun(payload);
+      landAfterAdvance(payload, nextStepId ?? 'trips_earnings', 'fuel');
+      toast.success('Fuel finalized', { description: 'Moved you to the next open week step.' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Could not complete the Fuel step';
+      toast.error('Fuel is locked, but the step did not complete', { description: `${msg}. Use Continue below.` });
+    } finally {
+      setAdvancing(false);
+    }
+  }, [landAfterAdvance, line, nextStepId, refreshRun, weekKey]);
+
   /** Tolls embed Finish → mark run step complete and open next ready left-rail step. */
   const handleTollsPeriodFinished = useCallback(async () => {
     setAdvancing(true);
@@ -441,8 +476,8 @@ export function ReconRunPage({
         <div className="flex h-48 flex-col items-center justify-center gap-2 px-6 text-center text-sm text-slate-600">
           <p>Week calculator is paused by an admin.</p>
           {canResumeCalculator ? (
-            <a href="/admin" className="text-slate-900 underline">
-              Resume it in Week calculator.
+            <a href="/admin" className="inline-flex h-10 items-center rounded-xl bg-[#030213] px-4 text-sm font-semibold text-white">
+              Open Week calculator
             </a>
           ) : (
             <p>Ask a product admin to resume it.</p>
@@ -503,182 +538,371 @@ export function ReconRunPage({
     }
   };
 
+  // WRA-19: steps that do not apply to this line are not shown.
+  const hiddenSteps = new Set(
+    run.evaluation.steps.filter((s) => s.hidden).map((s) => s.id),
+  );
+  const visibleSteps = RECON_STEP_ORDER.filter((id) => !hiddenSteps.has(id));
+  const activeIndex = visibleSteps.indexOf(activeStep);
+  const previousStepId = activeIndex > 0 ? visibleSteps[activeIndex - 1] : null;
+  // A closed week: the Close step always opens (badge, History, corrections); nothing waits on files.
+  const weekClosed = run.run.state === 'closed';
+  const activeLocked = activeGate === 'locked' && activeStep !== 'sources' && !(weekClosed && activeStep === 'close');
+  const activeLockedBy = lockedByStep.get(activeStep);
+  const lineLabel = line === 'rideshare' ? 'Rideshare' : 'Delivery';
+  const requiredSources = run.sources.filter((s) => s.requirement === 'required');
+  const receivedRequired = requiredSources.filter(
+    (s) => s.status === 'received' || s.status === 'attested_none' || s.status === 'waived',
+  ).length;
+
   return (
-    <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)_240px]">
-      <nav className="space-y-1 rounded-xl border border-slate-200 bg-white p-2" aria-label="Steps">
-        <PastWeeksReturnLink onReturn={() => onNavigate?.('driver-settlements')} />
-        <Button type="button" variant="ghost" size="sm" className="mb-2 w-full justify-start" onClick={onBack}>
-          <ArrowLeft className="mr-1 h-4 w-4" />
-          All weeks
-        </Button>
-        {RECON_STEP_ORDER.map((stepId) => {
-          const status = gateByStep.get(stepId) ?? 'locked';
-          const lockedBy = lockedByStep.get(stepId);
-          const active = stepId === activeStep;
-          const hint = stepRailHint(status, lockedBy, stepId);
-          const tollsLocked = stepId === 'tolls' && tollsSealed && status !== 'locked';
-          const tollsUnknown = stepId === 'tolls' && tollsCheckFailed && status !== 'locked';
-          return (
-            <button
-              key={stepId}
-              type="button"
-              disabled={status === 'locked' && stepId !== 'sources'}
-              onClick={() => setStep(stepId)}
-              className={cn(
-                'flex w-full flex-col rounded-lg px-3 py-2 text-left text-sm transition-colors',
-                active ? 'bg-indigo-50 text-indigo-900' : 'text-slate-700 hover:bg-slate-50',
-                status === 'locked' && !active && 'opacity-50',
-              )}
-            >
-              <span className="font-medium">{RECON_STEP_LABELS[stepId]}</span>
-              <span className={cn('text-xs', tollsLocked || tollsUnknown ? 'font-medium text-amber-800' : 'text-slate-500')}>
-                {tollsLocked ? 'Tolls locked' : tollsUnknown ? "Couldn't check tolls" : stepRailCaption(status, lockedBy)}
+    <div className="space-y-4" data-testid="recon-week-desk">
+      <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)_280px]">
+        {/* Left: All weeks + step list (Stitch screen 6 shell) */}
+        <nav className="space-y-4" aria-label="Steps">
+          <PastWeeksReturnLink onReturn={() => onNavigate?.('driver-settlements')} />
+          <button
+            type="button"
+            onClick={onBack}
+            className="flex h-10 w-full items-center gap-2 rounded-xl border border-[#cbd5e1] bg-white px-3 text-sm font-semibold text-[#0b1c30] hover:bg-[#eff4ff]"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden /> All weeks
+          </button>
+          <div className="flex flex-col gap-1 rounded-[20px] bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between pb-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-[#47464c]">Week steps</span>
+              <span className="rounded-full bg-[#e5eeff] px-2 py-0.5 text-[11px] font-semibold text-[#0b1c30]">
+                Step {Math.max(1, activeIndex + 1)} of {visibleSteps.length}
               </span>
-              {hint ? <span className="mt-0.5 text-[10px] leading-snug text-slate-400">{hint}</span> : null}
-            </button>
-          );
-        })}
-      </nav>
-
-      <section className="min-w-0 rounded-xl border border-slate-200 bg-white p-4">
-        <header className="mb-4 space-y-3 border-b border-slate-100 pb-3">
-          <h2 className="text-lg font-bold text-slate-900">
-            Week of {weekKey}{' '}
-            <span className="text-sm font-normal capitalize text-slate-500">({line})</span>
-          </h2>
-          {line === 'rush_delivery' ? (
-            <ReconCodRemittanceBanner onOpenRemittance={onOpenRemittance} />
-          ) : null}
-          {statusQuery.data?.line ? (
-            <p className="flex items-center gap-3 text-sm text-slate-600">
-              <span>{statusQuery.data.line}</span>
-              {statusQuery.data.failedDrivers > 0 ? (
+            </div>
+            {visibleSteps.map((stepId, i) => {
+              const status = gateByStep.get(stepId) ?? 'locked';
+              const lockedBy = lockedByStep.get(stepId);
+              const active = stepId === activeStep;
+              const tollsLocked = stepId === 'tolls' && tollsSealed && status !== 'locked';
+              const caption = tollsLocked
+                ? 'Tolls locked'
+                : stepId === 'tolls' && tollsCheckFailed && status !== 'locked'
+                  ? "Couldn't check tolls"
+                  : weekClosed
+                  ? 'Closed'
+                  : stepRailCaption(status, lockedBy);
+              return (
                 <button
+                  key={stepId}
                   type="button"
-                  className="font-semibold text-[#3525cd] underline"
-                  onClick={() => {
-                    void retryFailedProjection(line, weekKey).then(() => statusQuery.refetch());
-                  }}
+                  onClick={() => setStep(stepId)}
+                  data-testid={`recon-step-${stepId}`}
+                  aria-current={active ? 'step' : undefined}
+                  className={cn(
+                    'flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors',
+                    active ? 'border-l-4 border-[#030213] bg-[#e5eeff] shadow-sm' : 'hover:bg-[#eff4ff]',
+                    status === 'locked' && !active && 'opacity-60',
+                  )}
                 >
-                  Retry
+                  <span
+                    className={cn(
+                      'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold',
+                      status === 'complete'
+                        ? 'bg-[#030213] text-white'
+                        : status === 'locked'
+                          ? 'bg-[#d3e4fe] text-[#47464c]'
+                          : 'bg-[#030213] text-white',
+                    )}
+                  >
+                    {status === 'complete' ? <Check className="h-3.5 w-3.5" aria-hidden /> : status === 'locked' ? <Lock className="h-3 w-3" aria-hidden /> : i + 1}
+                  </span>
+                  <span className="flex min-w-0 flex-col">
+                    <span className={cn('truncate text-sm', active ? 'font-semibold text-[#0b1c30]' : 'text-[#0b1c30]')}>
+                      {i + 1}. {RECON_STEP_LABELS[stepId]}
+                    </span>
+                    <span
+                      className={cn(
+                        'text-[12px]',
+                        status === 'complete' ? 'font-medium text-[#069669]' : status === 'locked' ? 'text-[#78767d]' : 'font-semibold text-[#0051d5]',
+                      )}
+                    >
+                      {caption}
+                    </span>
+                  </span>
                 </button>
-              ) : null}
-            </p>
+              );
+            })}
+          </div>
+          <div className="rounded-[20px] border border-dashed border-[#c9c5cd] bg-[#f8f9ff] p-4 text-[#47464c]" aria-disabled="true" data-testid="recon-telematics-tile">
+            <p className="text-sm font-semibold">Telematics</p>
+            <p className="text-[12px]">Coming soon</p>
+          </div>
+        </nav>
+
+        {/* Middle: the step */}
+        <section className="min-w-0 rounded-[20px] bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)]">
+          <header className="mb-6 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[#0b1c30]">
+              <p>
+                <span className="font-semibold">{formatWeekTitle(weekKey)}</span>
+                <span className="text-[#47464c]"> · {lineLabel} · {formatWeekRange(weekKey)}</span>
+              </p>
+              <ReconCalculatorBanner calculator={run.calculator ?? null} className={run.calculator?.paused ? "w-full" : "rounded-full bg-[#eff4ff] px-3 py-1"} />
+            </div>
+            <h2 className="text-[28px] font-semibold tracking-tight text-[#0b1c30]">{RECON_STEP_LABELS[activeStep]}</h2>
+            <p className="text-base text-[#47464c]">{STEP_QUESTION[activeStep]}</p>
+            {line === 'rush_delivery' ? <ReconCodRemittanceBanner onOpenRemittance={onOpenRemittance} /> : null}
+            {statusQuery.data?.line ? (
+              <div className="flex flex-wrap items-center gap-3 text-sm text-[#47464c]">
+                <span>{statusQuery.data.line}</span>
+                {statusQuery.data.failedDrivers > 0 ? (
+                  <button
+                    type="button"
+                    className="h-9 rounded-xl bg-[#030213] px-4 text-sm font-semibold text-white"
+                    onClick={() => {
+                      void retryFailedProjection(line, weekKey).then(() => statusQuery.refetch());
+                    }}
+                  >
+                    Retry failed drivers
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </header>
+
+          {weekChanged ? (
+            <div
+              className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#fde68a] bg-[#fffbeb] px-5 py-4"
+              role="alert"
+              data-testid="recon-week-changed"
+            >
+              <p className="text-sm font-semibold text-[#0b1c30]">
+                {weekChanged === 'WEEK_CLOSED'
+                  ? 'This week was closed — nothing was saved. Reload the week.'
+                  : 'This week changed — nothing was saved. Reload the week to see the latest.'}
+              </p>
+              <Button
+                type="button"
+                className="h-11"
+                onClick={async () => {
+                  setWeekChanged(null);
+                  // Take the server's version as it is now, not our own count.
+                  clearReconWeekContext();
+                  await refreshRun();
+                }}
+              >
+                Reload week
+              </Button>
+            </div>
           ) : null}
-        </header>
 
-        {activeStep === 'attribution' && (run.attribution?.rowCount ?? 0) === 0 ? (
-          <div className="flex h-40 items-center justify-center text-sm text-slate-500">
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            Nothing to assign — moving on…
-          </div>
-        ) : null}
-
-        {activeStep === 'sources' ? (
-          <ReconSourcesStep run={run} onRefresh={refreshRun} />
-        ) : null}
-
-        {activeStep === 'attribution' && (run.attribution?.rowCount ?? 0) > 0 ? (
-          <ReconAttributionStep run={run} onRefresh={refreshRun} />
-        ) : null}
-
-        {activeStep === 'tolls' ? (
-          <>
-            {tollsCheckFailed ? (
-              <TollsCheckFailedBanner
-                busy={sealQuery.isFetching}
-                onRetry={() => {
-                  void sealQuery.refetch();
-                }}
-              />
-            ) : null}
-            {tollsSealed ? (
-              <TollsLockedBanner
-                weekKey={weekKey}
-                serviceLine={line}
-                onReopened={() => {
-                  void sealQuery.refetch();
-                }}
-              />
-            ) : null}
-            <Suspense fallback={<Loader2 className="mx-auto h-6 w-6 animate-spin" />}>
-              <TollReconciliationLazy
-                key={tollsSealed ? 'tolls-sealed' : 'tolls-open'}
-                embedded
-                hideLanding
-                initialWeekStart={weekKey}
-                serviceLine={line}
-                onPeriodFinished={handleTollsPeriodFinished}
-              />
-            </Suspense>
-          </>
-        ) : null}
-
-        {activeStep === 'fuel' ? (
-          <Suspense fallback={<Loader2 className="mx-auto h-6 w-6 animate-spin" />}>
-            <FuelManagementLazy
-              embedded
-              hideReconLanding
-              defaultTab="reconciliation"
-              initialWeekStart={weekKey}
-              serviceLine={line}
+          <div className="mb-5">
+            <ReconPendingApprovalBanner
+              items={approvalsForWeek(approvals.items, line, weekKey)}
+              me={approvals.me}
+              canApprove={approvals.canApprove}
+              onChanged={() => {
+                approvals.refresh();
+                void refreshRun();
+              }}
             />
-          </Suspense>
-        ) : null}
-
-        {activeStep === 'tag_account' ? (
-          <ReconTagAccountStep run={run} onRefresh={refreshRun} />
-        ) : null}
-
-        {activeStep === 'trips_earnings' ? (
-          <ReconTripsEarningsStep run={run} onRefresh={refreshRun} />
-        ) : null}
-
-        {activeStep === 'settlement_preview' ? (
-          <ReconSettlementStep run={run} onNavigate={onNavigate} />
-        ) : null}
-
-        {activeStep === 'close' ? (
-          <ReconCloseStep run={run} onRefresh={refreshRun} onGoToStep={setStep} />
-        ) : null}
-
-        {activeStep !== 'sources' &&
-        activeStep !== 'attribution' &&
-        activeStep !== 'tolls' &&
-        activeStep !== 'fuel' &&
-        activeStep !== 'tag_account' &&
-        activeStep !== 'trips_earnings' &&
-        activeStep !== 'settlement_preview' &&
-        activeStep !== 'close' ? (
-          <p className="text-sm text-slate-600">
-            {RECON_STEP_LABELS[activeStep]} is not available in this build.
-          </p>
-        ) : null}
-
-        {/* Tolls Finish CTA lives inside the embed — avoid a second Continue. */}
-        {(canMarkComplete || canSkipToNext) && continueLabelStep && activeStep !== 'tolls' ? (
-          <div className="mt-6 flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
-            <p className="text-sm text-slate-600">
-              {canMarkComplete
-                ? 'This step looks complete. Continue to unlock the next one.'
-                : 'This step is done. You can move on whenever you are ready.'}
-            </p>
-            <Button type="button" onClick={() => void advanceToNext()} disabled={advancing}>
-              {advancing ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <ArrowRight className="mr-2 h-4 w-4" />
-              )}
-              Continue to {RECON_STEP_LABELS[continueLabelStep]}
-            </Button>
           </div>
-        ) : null}
-      </section>
 
-      <div className="space-y-3">
-        <SourceScoreRail run={run} />
-        <AttributionRail run={run} />
+          {activeLocked ? (
+            <LockedStepPanel
+              lockedBy={activeLockedBy}
+              weekClosed={weekClosed}
+              items={weekClosed ? [] : lockedStepBlockers(run.closeCheck, activeStep)}
+              onGoTo={(id) => setStep(id as RunStepId)}
+            />
+          ) : (
+            <ReconStepBoundary key={activeStep} step={activeStep}>
+              {activeStep === 'attribution' && (run.attribution?.rowCount ?? 0) === 0 ? (
+                <div className="flex h-40 items-center justify-center text-sm text-[#47464c]">
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Nothing to assign — moving on…
+                </div>
+              ) : null}
+
+              {activeStep === 'sources' ? <ReconSourcesStep run={run} onRefresh={refreshRun} /> : null}
+
+              {activeStep === 'attribution' && (run.attribution?.rowCount ?? 0) > 0 ? (
+                <ReconAttributionStep run={run} onRefresh={refreshRun} />
+              ) : null}
+
+              {activeStep === 'tolls' ? (
+                <>
+                  {tollsCheckFailed ? (
+                    <TollsCheckFailedBanner busy={sealQuery.isFetching} onRetry={() => { void sealQuery.refetch(); }} />
+                  ) : null}
+                  {tollsSealed ? (
+                    <TollsLockedBanner weekKey={weekKey} serviceLine={line} onReopened={() => { void sealQuery.refetch(); }} />
+                  ) : null}
+                  <Suspense fallback={<Loader2 className="mx-auto h-6 w-6 animate-spin" />}>
+                    <TollReconciliationLazy
+                      key={tollsSealed ? 'tolls-sealed' : 'tolls-open'}
+                      embedded
+                      hideLanding
+                      initialWeekStart={weekKey}
+                      serviceLine={line}
+                      onPeriodFinished={handleTollsPeriodFinished}
+                      deskSections
+                      summaryTarget={stepSummaryEl}
+                    />
+                  </Suspense>
+                </>
+              ) : null}
+
+              {activeStep === 'fuel' ? (
+                <Suspense fallback={<Loader2 className="mx-auto h-6 w-6 animate-spin" />}>
+                  <FuelManagementLazy
+                    embedded
+                    hideReconLanding
+                    defaultTab="reconciliation"
+                    initialWeekStart={weekKey}
+                    serviceLine={line}
+                    deskSections
+                    summaryTarget={stepSummaryEl}
+                    onDeskFinalized={handleFuelFinalized}
+                  />
+                </Suspense>
+              ) : null}
+
+              {activeStep === 'tag_account' ? <ReconTagAccountStep run={run} onRefresh={refreshRun} /> : null}
+              {activeStep === 'trips_earnings' ? <ReconTripsEarningsStep run={run} onRefresh={refreshRun} /> : null}
+              {activeStep === 'settlement_preview' ? <ReconSettlementStep run={run} onNavigate={onNavigate} /> : null}
+              {activeStep === 'close' ? <ReconCloseStep run={run} onRefresh={refreshRun} onGoToStep={setStep} onNavigate={(page) => onNavigate?.(page)} /> : null}
+            </ReconStepBoundary>
+          )}
+
+          {/* Footer: Previous / Continue (Tolls keeps its own Finish until Round 4b). */}
+          <footer className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-[#e5eeff] pt-5">
+            {previousStepId ? (
+              <button
+                type="button"
+                onClick={() => setStep(previousStepId)}
+                className="h-11 rounded-xl border border-[#cbd5e1] bg-white px-5 text-sm font-semibold text-[#0b1c30] hover:bg-[#eff4ff]"
+              >
+                Previous: {RECON_STEP_LABELS[previousStepId]}
+              </button>
+            ) : <span />}
+            {(canMarkComplete || canSkipToNext) && continueLabelStep && (activeStep !== 'tolls' || canSkipToNext) && !activeLocked ? (
+              <button
+                type="button"
+                onClick={() => void advanceToNext()}
+                disabled={advancing}
+                data-testid="recon-continue"
+                className="flex h-11 items-center gap-2 rounded-xl bg-[#030213] px-5 text-sm font-semibold text-white hover:bg-[#213145] disabled:opacity-60"
+              >
+                {advancing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Continue to {RECON_STEP_LABELS[continueLabelStep]}
+                {advancing ? null : <ArrowRight className="h-4 w-4" />}
+              </button>
+            ) : null}
+          </footer>
+        </section>
+
+        {/* Right: summary */}
+        <aside className="space-y-4">
+          <div className="rounded-[20px] bg-white p-5 shadow-sm" data-testid="recon-summary-sources">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#47464c]">Sources</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-[#0b1c30]">
+              {receivedRequired} / {requiredSources.length || '—'}
+            </p>
+            <p className="text-[13px] text-[#47464c]">required received</p>
+            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[#e5eeff]">
+              <div
+                className="h-full rounded-full bg-[#030213]"
+                style={{ width: `${requiredSources.length ? Math.round((receivedRequired / requiredSources.length) * 100) : 0}%` }}
+              />
+            </div>
+          </div>
+          <AttributionRail run={run} />
+          <div ref={setStepSummaryEl} />
+        </aside>
       </div>
+    </div>
+  );
+}
+
+/** WRA-24: a locked step opens read-only and says what it is waiting on. */
+/**
+ * Done-tests 2 / 16 (WRA-24): a locked step still shows, read-only, the saved problems it
+ * will have to clear. Close lists every blocking item (same as its Close box).
+ */
+export function lockedStepBlockers(
+  closeCheck: ReconRunPayload['closeCheck'] | undefined,
+  stepId: RunStepId,
+): Array<{ code: string; message: string | null }> {
+  if (!closeCheck || closeCheck.status !== 'ok') return [];
+  return closeCheck.blockers
+    .filter((b) => String(b.severity || 'block') !== 'warn')
+    .filter((b) => stepId === 'close' || serverStepForBlockerCode(String(b.code || '')) === stepId)
+    .map((b) => ({ code: String(b.code), message: b.message ?? null }));
+}
+
+function LockedStepPanel({
+  lockedBy,
+  weekClosed = false,
+  items,
+  onGoTo,
+}: {
+  lockedBy: StepLockedBy | undefined;
+  weekClosed?: boolean;
+  items: Array<{ code: string; message: string | null }>;
+  onGoTo: (stepId: string) => void;
+}) {
+  if (weekClosed) {
+    return (
+      <div className="flex flex-col items-start gap-4 rounded-2xl bg-[#eff4ff] p-6" data-testid="recon-locked-step">
+        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white">
+          <Lock className="h-5 w-5 text-[#47464c]" aria-hidden />
+        </span>
+        <div>
+          <p className="text-lg font-semibold text-[#0b1c30]">This week is closed</p>
+          <p className="text-sm text-[#47464c]">Nothing changes here any more. The Close step shows who closed it and any corrections.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onGoTo('close')}
+          className="h-11 rounded-xl bg-[#030213] px-5 text-sm font-semibold text-white hover:bg-[#213145]"
+        >
+          Go to Close week
+        </button>
+      </div>
+    );
+  }
+  const waitingOnSource = !lockedBy || lockedBy.kind === 'source';
+  return (
+    <div className="flex flex-col items-start gap-4 rounded-2xl bg-[#eff4ff] p-6" data-testid="recon-locked-step">
+      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white">
+        <Lock className="h-5 w-5 text-[#47464c]" aria-hidden />
+      </span>
+      <div>
+        <p className="text-lg font-semibold text-[#0b1c30]">
+          {lockedBy?.label ? `Waiting on ${lockedBy.label}` : 'This step is not open yet'}
+        </p>
+        <p className="text-sm text-[#47464c]">
+          {waitingOnSource
+            ? 'This step opens once its files are in. Upload them, or mark them as no activity.'
+            : 'Finish the earlier step first.'}
+        </p>
+      </div>
+      {items.length > 0 ? (
+        <div className="w-full rounded-xl bg-white p-4" data-testid="recon-locked-blockers">
+          <p className="text-sm font-semibold text-[#0b1c30]">
+            Still to fix here ({items.length})
+          </p>
+          <ul className="mt-2 space-y-1 text-sm text-[#47464c]">
+            {items.map((b, i) => (
+              <li key={`${b.code}-${i}`}>{humanBlockerLabel({ code: b.code, message: b.message ?? '' })}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <button
+        type="button"
+        onClick={() => onGoTo(waitingOnSource ? 'sources' : lockedBy!.id)}
+        className="h-11 rounded-xl bg-[#030213] px-5 text-sm font-semibold text-white hover:bg-[#213145]"
+      >
+        {waitingOnSource ? 'Go to Upload inputs' : `Go to ${lockedBy!.label}`}
+      </button>
     </div>
   );
 }

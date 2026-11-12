@@ -19,6 +19,7 @@ import {
 } from './fleetNavModel';
 import { NavCountBadge, NavNewBadge, useFleetNavModel } from './useFleetNavModel';
 import { FleetMaintenanceAlertsMenu } from './FleetMaintenanceAlertsMenu';
+import { ReconAlertsMenu } from './ReconAlertsMenu';
 import type { NavLeaf } from './nav/types';
 
 type Props = {
@@ -302,6 +303,7 @@ export function AppTopNav({
         </nav>
 
         <div className="flex shrink-0 items-center gap-2">
+          <ReconAlertsMenu onNavigate={go} />
           <FleetMaintenanceAlertsMenu
             onOpenVehicle={() => {
               go('maintenance');

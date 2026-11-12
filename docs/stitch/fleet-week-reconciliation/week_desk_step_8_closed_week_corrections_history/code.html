@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"on-primary-fixed-variant":"#46445b","tertiary-fixed":"#85f8c4","on-primary":"#ffffff","secondary-fixed":"#dbe1ff","on-error":"#ffffff","primary-container":"#1b192e","surface-container-high":"#dce9ff","inverse-on-surface":"#eaf1ff","error-container":"#ffdad6","primary":"#000000","on-secondary":"#ffffff","tertiary":"#000000","on-background":"#0b1c30","surface-container":"#e5eeff","primary-fixed":"#e4dffc","outline-variant":"#c9c5cd","secondary":"#0051d5","outline":"#78767d","tertiary-container":"#002114","secondary-fixed-dim":"#b4c5ff","surface":"#f8f9ff","on-tertiary-fixed-variant":"#005137","on-primary-fixed":"#1b192e","on-secondary-container":"#fefcff","surface-container-low":"#eff4ff","surface-tint":"#5e5c74","surface-variant":"#d3e4fe","on-secondary-fixed":"#00174b","on-surface-variant":"#47464c","surface-bright":"#f8f9ff","background":"#f8f9ff","on-surface":"#0b1c30","error":"#ba1a1a","tertiary-fixed-dim":"#68dba9","inverse-primary":"#c8c3df","on-tertiary-fixed":"#002114","on-tertiary":"#ffffff","inverse-surface":"#213145","on-tertiary-container":"#069669","surface-container-lowest":"#ffffff","surface-container-highest":"#d3e4fe","on-secondary-fixed-variant":"#003ea8","primary-fixed-dim":"#c8c3df","on-error-container":"#93000a","on-primary-container":"#84819a","surface-dim":"#cbdbf5","secondary-container":"#316bf3"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},spacing:{"space-xs":"0.25rem","space-xl":"2rem","gutter-mobile":"1rem",margin:"2.5rem","space-md":"0.75rem",gutter:"1.5rem","margin-mobile":"1rem","space-sm":"0.5rem","space-lg":"1.25rem"},fontFamily:{"label-sm":["Inter"],"headline-md":["Inter"],"body-md":["Inter"],"currency-sm":["Inter"],"headline-sm":["Inter"],"currency-lg":["Inter"],"headline-lg":["Inter"],"currency-md":["Inter"],"label-md":["Inter"],"display-lg":["Inter"],"display-lg-mobile":["Inter"],"body-sm":["Inter"],"body-lg":["Inter"]},fontSize:{"label-sm":["11px",{lineHeight:"14px",letterSpacing:"0.04em",fontWeight:"600"}],"headline-md":["20px",{lineHeight:"28px",letterSpacing:"-0.015em",fontWeight:"600"}],"body-md":["14px",{lineHeight:"20px",fontWeight:"400"}],"currency-sm":["13px",{lineHeight:"18px",fontWeight:"500"}],"headline-sm":["16px",{lineHeight:"24px",letterSpacing:"-0.01em",fontWeight:"600"}],"currency-lg":["28px",{lineHeight:"36px",letterSpacing:"-0.02em",fontWeight:"600"}],"headline-lg":["24px",{lineHeight:"32px",letterSpacing:"-0.02em",fontWeight:"600"}],"currency-md":["16px",{lineHeight:"24px",letterSpacing:"-0.01em",fontWeight:"600"}],"label-md":["13px",{lineHeight:"18px",fontWeight:"500"}],"display-lg":["36px",{lineHeight:"44px",letterSpacing:"-0.025em",fontWeight:"600"}],"display-lg-mobile":["28px",{lineHeight:"36px",letterSpacing:"-0.02em",fontWeight:"600"}],"body-sm":["12px",{lineHeight:"16px",fontWeight:"400"}],"body-lg":["16px",{lineHeight:"24px",fontWeight:"400"}]}}}}</script></head><body class="bg-surface font-body-md text-on-surface antialiased min-h-screen flex flex-col justify-between"><header class="fixed top-0 left-0 w-full z-50 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-14 w-full px-gutter flex items-center justify-between"><div class="flex items-center space-x-space-lg"><div class="bg-primary text-on-primary px-3 py-1.5 rounded-lg flex items-center justify-center tracking-tight font-headline-sm text-headline-sm select-none">Roam Fleet</div><nav class="flex items-center space-x-space-md" data-active-classes="text-on-surface font-semibold border-b-2 border-primary"><a class="text-on-surface-variant hover:text-on-surface font-label-md text-label-md py-4 transition-colors" data-path="dashboard" href="#">Dashboard</a><a class="text-on-surface-variant hover:text-on-surface font-label-md text-label-md py-4 transition-colors" data-path="fleet-operations" href="#">Fleet Operations</a><a class="text-on-surface-variant hover:text-on-surface font-label-md text-label-md py-4 transition-colors" data-path="driver-operations" href="#">Driver Operations</a><a class="text-on-surface-variant hover:text-on-surface font-label-md text-label-md py-4 transition-colors" data-path="money" href="#">Money</a><a class="text-on-surface-variant hover:text-on-surface font-label-md text-label-md py-4 transition-colors" data-path="vehicle-operations" href="#">Vehicle Operations</a><a class="text-on-surface-variant hover:text-on-surface font-label-md text-label-md py-4 transition-colors" data-path="delivery-operations" href="#">Delivery Operations</a><a class="text-on-surface-variant hover:text-on-surface font-label-md text-label-md py-4 transition-colors" data-path="analytics" href="#">Analytics</a><a class="text-on-surface-variant hover:text-on-surface font-label-md text-label-md py-4 transition-colors" data-path="reports" href="#">Reports</a><a class="text-on-surface-variant hover:text-on-surface font-label-md text-label-md py-4 transition-colors" data-path="week-reconciliation" href="#">Business Finance</a></nav></div><div class="flex items-center space-x-space-md"><button class="relative p-2 text-on-surface-variant hover:text-on-surface transition-colors flex items-center justify-center" type="button"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-1.5 right-1.5 bg-error text-on-error rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold leading-none">3</span></button><div class="flex items-center space-x-space-xs pl-space-xs"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><span class="font-label-sm text-label-sm text-on-surface hidden lg:inline-block">DE · Deeki T Admin</span></div></div></div><div class="h-10 bg-primary-container px-gutter flex items-center justify-between text-on-primary"><div class="flex items-center space-x-space-sm w-96"><span class="material-symbols-outlined text-on-primary-container text-[18px]">search</span><input class="bg-transparent text-on-primary placeholder:text-on-primary-container text-body-sm font-body-sm w-full focus:outline-none" placeholder="Switch vehicle or search hub…" type="text"/></div><div class="flex items-center space-x-space-xs text-on-primary-container font-label-sm text-label-sm"><span>09:10:28 PM EST</span><span>·</span><span>America/Jamaica</span><span>·</span><span>JM (JMD)</span><span>·</span><span class="text-on-primary font-medium">DE · Deeki T</span></div></div><div class="h-9 bg-surface-container-low px-gutter flex items-center shadow-[0_1px_4px_rgba(0,0,0,0.02)]"><nav class="flex items-center space-x-space-xs font-label-sm text-label-sm"><span class="text-on-surface-variant">Business Finance</span><span class="material-symbols-outlined text-[14px] text-outline">chevron_right</span><span class="text-on-surface font-semibold">Week Reconciliation</span></nav></div></header><main class="w-full pt-[132px] bg-surface flex-1"><div class="flex flex-col w-full">
+<div class="w-full px-gutter py-space-md">
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter items-start">
+<!-- ================= 1. LEFT COLUMN (220px baseline / col-span-2) ================= -->
+<aside class="lg:col-span-2 flex flex-col space-y-space-md">
+<!-- Back Navigation -->
+<a class="inline-flex items-center space-x-space-xs text-on-surface hover:text-secondary font-label-md text-label-md transition-colors group" href="#">
+<span class="material-symbols-outlined text-[18px] group-hover:-translate-x-0.5 transition-transform">arrow_back</span>
+<span>All weeks</span>
+</a>
+<!-- Week Milestone Rail -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col">
+<div class="flex items-center justify-between pb-space-sm mb-space-sm border-b border-surface-container">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Settlement Steps</span>
+<span class="font-label-sm text-label-sm text-on-tertiary-container bg-tertiary-fixed/40 px-1.5 py-0.5 rounded-full font-semibold">8/8 Done</span>
+</div>
+<nav aria-label="Settlement Steps" class="space-y-1 relative">
+<!-- Step 1 -->
+<div class="flex items-center justify-between p-1.5 rounded-lg text-on-surface text-body-sm font-body-sm hover:bg-surface-container-low transition-colors">
+<div class="flex items-center space-x-space-xs min-w-0">
+<span class="material-symbols-outlined text-on-tertiary-container text-[16px] shrink-0" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="truncate">1. Upload inputs</span>
+</div>
+<span class="font-label-sm text-[10px] text-on-tertiary-container shrink-0 ml-1">Complete</span>
+</div>
+<!-- Step 2 -->
+<div class="flex items-center justify-between p-1.5 rounded-lg text-on-surface text-body-sm font-body-sm hover:bg-surface-container-low transition-colors">
+<div class="flex items-center space-x-space-xs min-w-0">
+<span class="material-symbols-outlined text-on-tertiary-container text-[16px] shrink-0" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="truncate">2. Service lines</span>
+</div>
+<span class="font-label-sm text-[10px] text-on-tertiary-container shrink-0 ml-1">Complete</span>
+</div>
+<!-- Step 3 -->
+<div class="flex items-center justify-between p-1.5 rounded-lg text-on-surface text-body-sm font-body-sm hover:bg-surface-container-low transition-colors">
+<div class="flex items-center space-x-space-xs min-w-0">
+<span class="material-symbols-outlined text-on-tertiary-container text-[16px] shrink-0" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="truncate">3. Tolls</span>
+</div>
+<span class="font-label-sm text-[10px] text-on-tertiary-container shrink-0 ml-1">Complete</span>
+</div>
+<!-- Step 4 -->
+<div class="flex items-center justify-between p-1.5 rounded-lg text-on-surface text-body-sm font-body-sm hover:bg-surface-container-low transition-colors">
+<div class="flex items-center space-x-space-xs min-w-0">
+<span class="material-symbols-outlined text-on-tertiary-container text-[16px] shrink-0" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="truncate">4. Tag account</span>
+</div>
+<span class="font-label-sm text-[10px] text-on-tertiary-container shrink-0 ml-1">Complete</span>
+</div>
+<!-- Step 5 -->
+<div class="flex items-center justify-between p-1.5 rounded-lg text-on-surface text-body-sm font-body-sm hover:bg-surface-container-low transition-colors">
+<div class="flex items-center space-x-space-xs min-w-0">
+<span class="material-symbols-outlined text-on-tertiary-container text-[16px] shrink-0" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="truncate">5. Fuel</span>
+</div>
+<span class="font-label-sm text-[10px] text-on-tertiary-container shrink-0 ml-1">Complete</span>
+</div>
+<!-- Step 6 -->
+<div class="flex items-center justify-between p-1.5 rounded-lg text-on-surface text-body-sm font-body-sm hover:bg-surface-container-low transition-colors">
+<div class="flex items-center space-x-space-xs min-w-0">
+<span class="material-symbols-outlined text-on-tertiary-container text-[16px] shrink-0" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="truncate">6. Trips &amp; earnings</span>
+</div>
+<span class="font-label-sm text-[10px] text-on-tertiary-container shrink-0 ml-1">Complete</span>
+</div>
+<!-- Step 7 -->
+<div class="flex items-center justify-between p-1.5 rounded-lg text-on-surface text-body-sm font-body-sm hover:bg-surface-container-low transition-colors">
+<div class="flex items-center space-x-space-xs min-w-0">
+<span class="material-symbols-outlined text-on-tertiary-container text-[16px] shrink-0" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="truncate">7. Settlement preview</span>
+</div>
+<span class="font-label-sm text-[10px] text-on-tertiary-container shrink-0 ml-1">Complete</span>
+</div>
+<!-- Step 8 (Active / Closed) -->
+<div class="flex items-center justify-between p-1.5 rounded-lg bg-primary text-on-primary text-body-sm font-body-sm shadow-sm">
+<div class="flex items-center space-x-space-xs min-w-0">
+<span class="material-symbols-outlined text-[16px] shrink-0" style="font-variation-settings: 'FILL' 1;">lock</span>
+<span class="truncate font-semibold">8. Close week</span>
+</div>
+<span class="font-label-sm text-[10px] uppercase tracking-wide bg-on-surface-variant/40 text-on-primary px-1.5 py-0.5 rounded shrink-0 ml-1">Closed</span>
+</div>
+</nav>
+</div>
+<!-- Telematics & Ingestion Footnote -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm space-y-space-xs text-on-surface-variant">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface uppercase font-semibold">Telematics Feed</span>
+<span class="w-2 h-2 rounded-full bg-on-tertiary-container"></span>
+</div>
+<p class="font-body-sm text-body-sm leading-relaxed text-outline">Geotab API &amp; Bank Webhook locks matched at 100% integrity.</p>
+<div class="pt-2 flex items-center justify-between text-body-sm font-label-md text-secondary">
+<a class="hover:underline flex items-center space-x-0.5" href="#">
+<span>View Raw Telematics</span>
+<span class="material-symbols-outlined text-[14px]">open_in_new</span>
+</a>
+</div>
+</div>
+</aside>
+<!-- ================= 2. MIDDLE COLUMN: WORKSPACE (col-span-7) ================= -->
+<main class="lg:col-span-7 flex flex-col space-y-space-md">
+<!-- Header Section -->
+<div class="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm space-y-space-sm">
+<div class="flex flex-wrap items-center justify-between gap-space-sm">
+<div class="space-y-1">
+<div class="flex items-center space-x-space-xs">
+<span class="font-label-sm text-label-sm text-secondary font-semibold uppercase tracking-wider">Step 8 of 8 · Close Week</span>
+<span class="text-outline">/</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-medium">Fiscal W38</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Week of 14 Sep 2026 · Rideshare Fleet A</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant">14–20 Sep 2026 · Settlement cycle complete &amp; verified</p>
+</div>
+<!-- Prominent Dark Slate Closed Status Badge -->
+<div class="inline-flex items-center space-x-space-xs bg-primary-container text-on-primary px-3 py-2 rounded-xl shadow-inner">
+<span class="material-symbols-outlined text-[18px] text-tertiary-fixed" style="font-variation-settings: 'FILL' 1;">lock</span>
+<div class="flex flex-col">
+<div class="flex items-center space-x-1.5">
+<span class="font-headline-sm text-[13px] tracking-wide uppercase font-bold text-on-primary">Closed</span>
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary-fixed"></span>
+</div>
+<span class="font-body-sm text-[11px] text-on-primary-container">27 Oct 2026 17:16 by Deeki T</span>
+</div>
+</div>
+</div>
+<div class="pt-space-xs flex items-center space-x-space-xs text-on-surface">
+<span class="material-symbols-outlined text-on-tertiary-container text-[20px]" style="font-variation-settings: 'FILL' 1;">verified</span>
+<span class="font-headline-sm text-headline-sm">Week is locked and reconciled</span>
+</div>
+<!-- Action & Export Bar -->
+<div class="pt-space-sm border-t border-surface-container flex flex-wrap items-center justify-between gap-space-sm">
+<div class="flex flex-wrap items-center gap-space-xs">
+<button class="inline-flex items-center space-x-1 bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md px-3 py-2 rounded-lg transition-colors shadow-sm" type="button">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">picture_as_pdf</span>
+<span>Driver Settlements (PDF)</span>
+</button>
+<button class="inline-flex items-center space-x-1 bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md px-3 py-2 rounded-lg transition-colors shadow-sm" type="button">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">table_chart</span>
+<span>Business P&amp;L (CSV)</span>
+</button>
+<button class="inline-flex items-center space-x-1 bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md px-3 py-2 rounded-lg transition-colors shadow-sm" type="button">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">receipt_long</span>
+<span>Ledgers (XLSX)</span>
+</button>
+</div>
+<!-- Danger Action -->
+<div class="flex flex-col items-end">
+<button class="inline-flex items-center space-x-1 bg-error-container hover:bg-error-container/80 text-error font-label-md text-label-md px-3 py-2 rounded-lg transition-colors shadow-sm" id="reopen-week-btn" type="button">
+<span class="material-symbols-outlined text-[16px]">lock_open</span>
+<span>Reopen week</span>
+</button>
+<span class="font-body-sm text-[10px] text-on-surface-variant mt-0.5 text-right">Approver only · requires justification</span>
+</div>
+</div>
+</div>
+<!-- CARD 1: Corrections (Pending Restatement) -->
+<section aria-labelledby="corrections-heading" class="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm relative overflow-hidden">
+<!-- Subtle warning ambient bar -->
+<div class="absolute top-0 left-0 right-0 h-1.5 bg-amber-500"></div>
+<div class="flex items-start justify-between gap-space-sm mb-space-sm">
+<div class="flex items-center space-x-space-xs">
+<div class="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-800">
+<span class="material-symbols-outlined text-[20px]">warning</span>
+</div>
+<div>
+<div class="flex items-center space-x-space-xs">
+<h2 class="font-headline-sm text-headline-sm text-on-surface" id="corrections-heading">Corrections (Pending Restatement)</h2>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-label-sm font-semibold bg-amber-100 text-amber-900 border border-amber-300">
+                    1 Correction Pending Signature
+                  </span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                  Raised automatically — Uber weekly reports re-uploaded 3 Nov 2026 14:22
+                </p>
+</div>
+</div>
+</div>
+<!-- Comparison Grid -->
+<div class="bg-surface rounded-xl p-space-md space-y-space-sm">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-md">
+<!-- Item 1: Earnings -->
+<div class="bg-surface-container-lowest p-space-sm rounded-lg shadow-sm flex flex-col justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase">Fleet Gross Earnings</span>
+<div class="flex items-baseline space-x-2 mt-1">
+<span class="font-currency-sm text-currency-sm text-outline line-through">J$41,200.00</span>
+<span class="material-symbols-outlined text-[14px] text-outline">arrow_forward</span>
+<span class="font-currency-md text-currency-md text-on-surface font-semibold">J$41,560.00</span>
+</div>
+<div class="mt-1.5 inline-flex items-center text-body-sm font-body-sm text-on-tertiary-container font-medium">
+<span class="material-symbols-outlined text-[14px] mr-1">trending_up</span>
+<span>+J$360.00 driver gross adjustment</span>
+</div>
+</div>
+<!-- Item 2: Driver Payout -->
+<div class="bg-surface-container-lowest p-space-sm rounded-lg shadow-sm flex flex-col justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase">Net Driver Payout</span>
+<div class="flex items-baseline space-x-2 mt-1">
+<span class="font-currency-sm text-currency-sm text-outline line-through">J$28,840.00</span>
+<span class="material-symbols-outlined text-[14px] text-outline">arrow_forward</span>
+<span class="font-currency-md text-currency-md text-on-surface font-semibold">J$29,092.00</span>
+</div>
+<div class="mt-1.5 inline-flex items-center text-body-sm font-body-sm text-secondary font-medium">
+<span class="material-symbols-outlined text-[14px] mr-1">account_balance_wallet</span>
+<span>+J$252.00 net payable delta</span>
+</div>
+</div>
+</div>
+<!-- Clarification Notice -->
+<div class="flex items-start space-x-space-xs text-body-sm text-body-sm text-on-surface-variant bg-surface-container-low p-space-sm rounded-lg">
+<span class="material-symbols-outlined text-[18px] text-outline shrink-0 mt-0.5">info</span>
+<p class="leading-relaxed">
+                The closed figures stay strictly in effect until an authorized approver signs this restatement. Vault balances will remain unaltered until counter-signatures reconcile.
+              </p>
+</div>
+</div>
+<!-- Action Button -->
+<div class="mt-space-md flex items-center justify-end">
+<button class="inline-flex items-center space-x-2 bg-primary hover:bg-primary/90 text-on-primary px-space-md py-2.5 rounded-xl font-label-md text-label-md transition-all shadow-md active:scale-95" id="sign-correction-btn" type="button">
+<span class="material-symbols-outlined text-[18px]">draw</span>
+<span>Sign correction</span>
+</button>
+</div>
+</section>
+<!-- CARD 2: History & Audit Trail -->
+<section aria-labelledby="history-heading" class="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm space-y-space-md">
+<div class="flex flex-wrap items-center justify-between gap-space-sm pb-space-sm border-b border-surface-container">
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface" id="history-heading">History &amp; Audit Trail</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Immutable cryptographically signed action ledger</p>
+</div>
+<!-- Filter Chips -->
+<div class="flex items-center space-x-1.5 bg-surface-container p-1 rounded-xl" role="tablist">
+<button class="px-3 py-1 rounded-lg text-body-sm font-label-md text-on-surface-variant hover:text-on-surface transition-colors" id="filter-all" type="button">
+                All events (4)
+              </button>
+<button class="px-3 py-1 rounded-lg text-body-sm font-label-md bg-surface-container-lowest text-on-surface font-semibold shadow-sm transition-colors" id="filter-self" type="button">
+                Show self-approved (1)
+              </button>
+</div>
+</div>
+<!-- Vertical Timeline -->
+<div class="relative pl-6 space-y-space-lg before:content-[''] before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-surface-container">
+<!-- Entry 1: Uber Ingestion Restatement -->
+<div class="relative flex items-start space-x-space-sm group">
+<div class="absolute -left-6 top-0 w-5 h-5 rounded-full bg-amber-500 text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[13px]">auto_fix_high</span>
+</div>
+<div class="bg-surface rounded-xl p-space-md w-full transition-shadow hover:shadow-sm">
+<div class="flex flex-wrap items-baseline justify-between gap-1">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Raised automatically — Uber weekly reports uploaded</span>
+<span class="font-label-sm text-label-sm text-outline">3 Nov 2026 14:22</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">
+                  Delta detected: <span class="font-medium text-on-tertiary-container">+J$360.00 gross earnings</span> across 12 rideshare dispatches.
+                </p>
+<div class="mt-2 text-[11px] font-label-sm text-outline font-mono">
+                  TRIGGER: DATA_REINGEST_SHA256:7f4a21...cb9
+                </div>
+</div>
+</div>
+<!-- Entry 2: Close Week Action -->
+<div class="relative flex items-start space-x-space-sm group">
+<div class="absolute -left-6 top-0 w-5 h-5 rounded-full bg-on-tertiary-container text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[13px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="bg-surface rounded-xl p-space-md w-full transition-shadow hover:shadow-sm">
+<div class="flex flex-wrap items-baseline justify-between gap-1">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Deeki T closed the week</span>
+<span class="font-label-sm text-label-sm text-outline">27 Oct 2026 17:16</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">
+                  Final ledger hash <code class="font-mono text-secondary bg-surface-container px-1 py-0.5 rounded text-[12px]">#c8e4...901b</code> generated and committed to Vault.
+                </p>
+</div>
+</div>
+<!-- Entry 3: Phillip Bailey Request -->
+<div class="relative flex items-start space-x-space-sm group">
+<div class="absolute -left-6 top-0 w-5 h-5 rounded-full bg-secondary text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[13px]">person</span>
+</div>
+<div class="bg-surface rounded-xl p-space-md w-full transition-shadow hover:shadow-sm">
+<div class="flex flex-wrap items-baseline justify-between gap-1">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Phillip Bailey sent 'Close week' for approval</span>
+<span class="font-label-sm text-label-sm text-outline">27 Oct 2026 16:40</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">
+                  Approved by <span class="font-medium text-on-surface">Deeki T</span> on 27 Oct 2026 17:02.
+                </p>
+<div class="mt-2 bg-surface-container-low rounded-lg p-2.5 text-body-sm text-body-sm text-on-surface-variant italic border-l-2 border-secondary">
+                  "Reason: All 3 driver cash floats collected at hub and lodged with commercial depository."
+                </div>
+</div>
+</div>
+<!-- Entry 4: Self-Approved Waiver -->
+<div class="relative flex items-start space-x-space-sm group" id="timeline-self-approved">
+<div class="absolute -left-6 top-0 w-5 h-5 rounded-full bg-primary-container text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[13px]">verified_user</span>
+</div>
+<div class="bg-surface rounded-xl p-space-md w-full transition-shadow hover:shadow-sm">
+<div class="flex flex-wrap items-baseline justify-between gap-1">
+<div class="flex items-center space-x-1.5">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Deeki T waived Tag account top-ups</span>
+<span class="bg-primary-container text-on-primary text-[10px] font-label-sm uppercase px-1.5 py-0.5 rounded font-bold">
+                      Self-approved
+                    </span>
+</div>
+<span class="font-label-sm text-label-sm text-outline">26 Oct 2026 11:05</span>
+</div>
+<div class="mt-2 bg-surface-container-low rounded-lg p-2.5 text-body-sm text-body-sm text-on-surface-variant italic border-l-2 border-primary-container">
+                  "Reason: No highway top-ups conducted during this fiscal week; verified directly with toll provider statement."
+                </div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- ================= 3. RIGHT COLUMN: SUMMARY (240px baseline / col-span-3) ================= -->
+<aside class="lg:col-span-3 flex flex-col space-y-space-md">
+<!-- Closed Week Financial Ledger Summary -->
+<div class="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm space-y-space-md">
+<div class="flex items-center justify-between pb-space-xs border-b border-surface-container">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase font-semibold">Ledger Summary</span>
+<span class="font-label-sm text-[10px] text-outline font-mono">FIN-W38-2026</span>
+</div>
+<div class="space-y-space-sm">
+<div>
+<span class="font-body-sm text-body-sm text-outline block">Final Gross Fares</span>
+<span class="font-currency-lg text-currency-lg text-on-surface font-semibold tracking-tight">J$148,220.00</span>
+</div>
+<div class="pt-space-xs">
+<div class="flex items-center justify-between">
+<span class="font-body-sm text-body-sm text-outline">Net Driver Payouts</span>
+<span class="font-label-sm text-[10px] bg-tertiary-fixed/60 text-on-tertiary-fixed px-1.5 py-0.5 rounded font-semibold">Paid</span>
+</div>
+<span class="font-currency-md text-currency-md text-on-surface font-medium block mt-0.5">J$38,910.50</span>
+</div>
+<div class="pt-space-xs">
+<span class="font-body-sm text-body-sm text-outline block">Fleet Margin</span>
+<span class="font-currency-md text-currency-md text-on-tertiary-container font-semibold block mt-0.5">+J$18,440.00</span>
+</div>
+</div>
+<!-- Sparkline representation of settlement distribution -->
+<div class="pt-space-xs">
+<div class="flex items-center justify-between text-body-sm font-label-sm text-on-surface-variant mb-1">
+<span>Payout Ratio</span>
+<span class="font-semibold text-on-surface">26.2%</span>
+</div>
+<div class="w-full h-2 rounded-full bg-surface-container overflow-hidden flex">
+<div class="h-full bg-secondary" style="width: 26.2%;"></div>
+<div class="h-full bg-on-tertiary-container" style="width: 12.4%;"></div>
+<div class="h-full bg-surface-container-high" style="width: 61.4%;"></div>
+</div>
+<div class="flex items-center justify-between text-[10px] font-label-sm text-outline mt-1">
+<span>Drivers: 26%</span>
+<span>Margin: 12%</span>
+<span>Operating: 62%</span>
+</div>
+</div>
+<div class="pt-space-sm border-t border-surface-container flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-outline">Vault Status</span>
+<span class="inline-flex items-center space-x-1 font-label-sm text-[11px] text-on-tertiary-container font-semibold">
+<span class="material-symbols-outlined text-[14px]">lock</span>
+<span>Books Locked &amp; Synced</span>
+</span>
+</div>
+</div>
+<!-- Compliance Certificate Card -->
+<div class="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm space-y-space-md relative overflow-hidden">
+<div class="flex items-center space-x-space-xs">
+<span class="material-symbols-outlined text-secondary text-[22px]">workspace_premium</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Compliance Seal</h3>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+            Sealed under Deeki T cryptographic signature. Immutable audit trail ready for statutory tax assessment and external reconciliation.
+          </p>
+<div class="bg-surface rounded-xl p-space-sm space-y-1.5 font-mono text-[11px] text-on-surface-variant">
+<div class="flex items-center justify-between">
+<span class="text-outline">Auditor Ref:</span>
+<span class="font-semibold text-on-surface">DE-JM-2026-981</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-outline">Algorithm:</span>
+<span>ED25519-SHA512</span>
+</div>
+<div class="truncate text-outline" title="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855">
+              HASH: e3b0c44298fc1c14...
+            </div>
+</div>
+<!-- Micro stamp graphic -->
+<div class="flex items-center justify-between pt-space-xs">
+<div class="flex items-center space-x-1 text-on-tertiary-container font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[16px]">verified</span>
+<span>Audit Certified</span>
+</div>
+<button class="text-secondary hover:underline font-label-sm text-label-sm inline-flex items-center space-x-0.5" type="button">
+<span>View Cert</span>
+<span class="material-symbols-outlined text-[13px]">arrow_outward</span>
+</button>
+</div>
+</div>
+<!-- System Metadata Card -->
+<div class="bg-surface-container-low rounded-xl p-space-md space-y-space-xs text-outline">
+<div class="flex items-center justify-between text-body-sm font-body-sm">
+<span>Jurisdiction</span>
+<span class="text-on-surface font-medium">Kingston / JMD</span>
+</div>
+<div class="flex items-center justify-between text-body-sm font-body-sm">
+<span>Settlement Hash</span>
+<span class="text-on-surface font-mono font-medium">#c8e4...901b</span>
+</div>
+<div class="flex items-center justify-between text-body-sm font-body-sm">
+<span>Reconciliation Latency</span>
+<span class="text-on-surface font-medium">0.82s</span>
+</div>
+</div>
+</aside>
+</div>
+</div>
+</div>
+<script>
+  (function initWeekDeskMicroInteractions() {
+    const filterAll = document.getElementById('filter-all');
+    const filterSelf = document.getElementById('filter-self');
+    const timelineSelfApproved = document.getElementById('timeline-self-approved');
+    const signCorrectionBtn = document.getElementById('sign-correction-btn');
+    const reopenWeekBtn = document.getElementById('reopen-week-btn');
+
+    if (filterAll && filterSelf && timelineSelfApproved) {
+      filterAll.addEventListener('click', function() {
+        filterAll.className = 'px-3 py-1 rounded-lg text-body-sm font-label-md bg-surface-container-lowest text-on-surface font-semibold shadow-sm transition-colors';
+        filterSelf.className = 'px-3 py-1 rounded-lg text-body-sm font-label-md text-on-surface-variant hover:text-on-surface transition-colors';
+        timelineSelfApproved.style.display = 'flex';
+      });
+
+      filterSelf.addEventListener('click', function() {
+        filterSelf.className = 'px-3 py-1 rounded-lg text-body-sm font-label-md bg-surface-container-lowest text-on-surface font-semibold shadow-sm transition-colors';
+        filterAll.className = 'px-3 py-1 rounded-lg text-body-sm font-label-md text-on-surface-variant hover:text-on-surface transition-colors';
+      });
+    }
+
+    if (signCorrectionBtn) {
+      signCorrectionBtn.addEventListener('click', function() {
+        signCorrectionBtn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">refresh</span><span>Signing restatement...</span>';
+        signCorrectionBtn.disabled = true;
+        setTimeout(function() {
+          signCorrectionBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">verified</span><span>Restatement Signed</span>';
+          signCorrectionBtn.className = 'inline-flex items-center space-x-2 bg-on-tertiary-container text-on-primary px-space-md py-2.5 rounded-xl font-label-md text-label-md shadow-md';
+        }, 800);
+      });
+    }
+
+    if (reopenWeekBtn) {
+      reopenWeekBtn.addEventListener('click', function() {
+        const confirmed = window.confirm("Approver Authorization Required:\n\nReopening Week of 14 Sep 2026 will invalidate cryptographic locks and notify all drivers. Documented business justification is required. Proceed to authentication?");
+        if (confirmed) {
+          alert("Reopen request logged. Please enter executive bypass token in the security modal.");
+        }
+      });
+    }
+  })();
+</script></main><footer class="w-full bg-surface-container-low py-space-md"><div class="w-full px-gutter flex flex-col sm:flex-row items-center justify-between gap-space-xs text-on-surface-variant font-label-sm text-label-sm"><div>© 2026 Roam Fleet Inc. Financial Settlement &amp; Reconciliation Engine.</div><div class="flex items-center space-x-space-md"><a class="hover:text-on-surface transition-colors" href="#">Audit Logs</a><span>·</span><a class="hover:text-on-surface transition-colors" href="#">Compliance</a><span>·</span><a class="hover:text-on-surface transition-colors" href="#">Terms of Settlement</a></div></div></footer></body></html>

@@ -1,4 +1,5 @@
 import { getServiceClient } from "./service_client.ts";
+import { workflowMoved } from "./recon_worker_wake.ts";
 import { closeWeek } from "./week_close.ts";
 import { advanceCloseWorkflow, plainComputeFailure } from "./recon_projection.ts";
 import { hashDriverWeekFacts, hashVehicleWeekFacts } from "./recon_unit_hash.ts";
@@ -212,15 +213,19 @@ export async function advanceOneCloseWorkflow(row: WorkflowRow): Promise<Workflo
         skipEngineProbe: true,
         serviceLine: line,
       });
-      try {
-        await markReconWeekRunClosed(
-          row.organization_id,
-          week,
-          row.service_line === "rush_delivery" ? "rush_delivery" : "rideshare",
-          row.started_by || "recon-worker",
-        );
-      } catch (e) {
-        console.warn("[recon] mark run closed failed", e);
+      // Rev 24: only a close that went through marks the week closed (it was marked
+      // closed even when the money close refused).
+      if (result.closed) {
+        try {
+          await markReconWeekRunClosed(
+            row.organization_id,
+            week,
+            row.service_line === "rush_delivery" ? "rush_delivery" : "rideshare",
+            row.started_by || "recon-worker",
+          );
+        } catch (e) {
+          console.warn("[recon] mark run closed failed", e);
+        }
       }
       const state = result.closed ? "succeeded" : "blocked";
       const { data } = await recon()
@@ -290,10 +295,14 @@ export async function advanceOpenCloseWorkflows(limit = 1): Promise<number> {
     .eq("state", "running")
     .order("started_at", { ascending: true })
     .limit(limit);
+  // Rev 24: count a workflow only when it actually moved. A close that is still waiting
+  // (calculator units, the nightly check) is not work; counting it kept every wake looping
+  // for its whole 90 s budget (~3,800 rounds of queries) for as long as a close waited.
   let n = 0;
   for (const row of (data ?? []) as WorkflowRow[]) {
-    await advanceOneCloseWorkflow(row);
-    n += 1;
+    const after = await advanceOneCloseWorkflow(row);
+    if (workflowMoved(row, after)) n += 1;
   }
   return n;
 }
+

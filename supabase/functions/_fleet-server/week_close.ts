@@ -1080,80 +1080,106 @@ async function ensureCloseLaneStatements(
   }
 
   if (earningsNeedsSeal || (anyOpenDriver && earningsLaneMissing) || forceEarnings) {
-    const earningsGen = await resolveSealGeneration({
+    await sealEarningsLaneForWeek({
+      orgId,
+      week,
+      actorId,
+      force: forceEarnings,
+      asOf,
+      sealCorrelationId,
+    });
+    didSeal = true;
+  }
+
+  return { didSeal };
+}
+
+/**
+ * Seals the earnings lane for one week (same steps Close sync uses).
+ * Week Reconciliation step 6 calls this from its own button (WRA-07), never on a read.
+ */
+export async function sealEarningsLaneForWeek(args: {
+  orgId: string;
+  week: string;
+  actorId?: string;
+  force: boolean;
+  asOf?: string;
+  sealCorrelationId?: string;
+}): Promise<void> {
+  const { orgId, week, actorId } = args;
+  const forceEarnings = args.force;
+  const asOf = args.asOf ?? new Date().toISOString();
+  const sealCorrelationId = args.sealCorrelationId ?? crypto.randomUUID();
+  const earningsGen = await resolveSealGeneration({
+    organizationId: orgId,
+    weekKey: week,
+    lane: "earnings",
+    force: forceEarnings,
+  });
+  const idem = buildSealIdempotencyKey(orgId, week, "earnings", earningsGen);
+  const useEarningsHttp = Deno.env.get("FLEET_EARNINGS_SEAL_HTTP") !== "false";
+  try {
+    await beginSealAttempt({
       organizationId: orgId,
       weekKey: week,
       lane: "earnings",
-      force: forceEarnings,
+      idempotencyKey: idem,
+      correlationId: sealCorrelationId,
     });
-    const idem = buildSealIdempotencyKey(orgId, week, "earnings", earningsGen);
-    const useEarningsHttp = Deno.env.get("FLEET_EARNINGS_SEAL_HTTP") !== "false";
-    try {
-      await beginSealAttempt({
+    if (useEarningsHttp) {
+      await sealEarningsWeekViaHttp({
         organizationId: orgId,
         weekKey: week,
-        lane: "earnings",
+        actorId,
+        force: forceEarnings,
+        asOf,
         idempotencyKey: idem,
         correlationId: sealCorrelationId,
       });
-      if (useEarningsHttp) {
-        await sealEarningsWeekViaHttp({
-          organizationId: orgId,
-          weekKey: week,
-          actorId,
-          force: forceEarnings,
-          asOf,
-          idempotencyKey: idem,
-          correlationId: sealCorrelationId,
-        });
-      } else {
-        await sealEarningsWeek({
-          organizationId: orgId,
-          weekKey: week,
-          actorId,
-          force: forceEarnings,
-          asOf,
-        });
-      }
+    } else {
+      await sealEarningsWeek({
+        organizationId: orgId,
+        weekKey: week,
+        actorId,
+        force: forceEarnings,
+        asOf,
+      });
+    }
+    await completeSealAttempt({
+      organizationId: orgId,
+      weekKey: week,
+      lane: "earnings",
+      idempotencyKey: idem,
+      correlationId: sealCorrelationId,
+      status: "succeeded",
+      resultJson: { ok: true, transport: useEarningsHttp ? "http" : "in-process" },
+    });
+  } catch (e) {
+    if (e instanceof WeekSealLogError && e.code === "CLOSE_IN_PROGRESS") {
+      throw new WeekCloseError(e.code, e.message, e.status, e.details);
+    }
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[week_close] earnings auto-seal failed — blocking close", week, msg);
+    try {
       await completeSealAttempt({
         organizationId: orgId,
         weekKey: week,
         lane: "earnings",
         idempotencyKey: idem,
         correlationId: sealCorrelationId,
-        status: "succeeded",
-        resultJson: { ok: true, transport: useEarningsHttp ? "http" : "in-process" },
+        status: "failed",
+        lastError: msg,
       });
-      didSeal = true;
-    } catch (e) {
-      if (e instanceof WeekSealLogError && e.code === "CLOSE_IN_PROGRESS") {
-        throw new WeekCloseError(e.code, e.message, e.status, e.details);
-      }
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error("[week_close] earnings auto-seal failed — blocking close", week, msg);
-      try {
-        await completeSealAttempt({
-          organizationId: orgId,
-          weekKey: week,
-          lane: "earnings",
-          idempotencyKey: idem,
-          correlationId: sealCorrelationId,
-          status: "failed",
-          lastError: msg,
-        });
-      } catch (logErr) {
-        console.error("[week_close] earnings seal-log complete failed", logErr);
-      }
-      throw new WeekCloseError(
-        "CLOSE_BLOCKED",
-        `Earnings week seal failed: ${msg}`,
-        503,
-        { week, lane: "earnings", cause: msg },
-      );
+    } catch (logErr) {
+      console.error("[week_close] earnings seal-log complete failed", logErr);
     }
+    throw new WeekCloseError(
+      "CLOSE_BLOCKED",
+      `Earnings week seal failed: ${msg}`,
+      503,
+      { week, lane: "earnings", cause: msg },
+    );
   }
-
-  return { didSeal };
 }
 
 /**
@@ -1377,6 +1403,19 @@ function earlierWeekBlocker(week: string, earlier: string): CloseBlocker {
     delta: 0,
     message: `Close the week of ${earlier} first. An earlier week is still open.`,
   };
+}
+
+/**
+ * WRA-40: the "close weeks in order" blocker, as a stored whole-week row.
+ * Same rule as closeWeek, including its saved override (reason of 8+ characters).
+ */
+export async function earlierWeekCloseBlocker(orgId: string, week: string): Promise<CloseBlocker | null> {
+  const earlier = await earlierOpenWeek(orgId, week);
+  if (!earlier) return null;
+  const kv = await import("./kv_store.tsx");
+  const saved = (await kv.get(`week_close_override:${orgId}:${week}`)) as { reason?: string } | null;
+  if (String(saved?.reason || "").trim().length >= 8) return null;
+  return earlierWeekBlocker(week, earlier);
 }
 
 export async function previewWeekClose(
@@ -2670,7 +2709,9 @@ async function closeWeekBody(
 
   const driversClosed = perDriver.filter((d) => d.closed).length;
   const driversBlocked = perDriver.length - driversClosed;
-  const weekClosed = driversBlocked === 0 && perDriver.length > 0;
+  // Rev 24: a week with no driver weeks at all (no activity, e.g. 13/20/27 Apr 2026) closes
+  // with zero drivers once nothing above refused it; before, it could never close.
+  const weekClosed = driversBlocked === 0 && (perDriver.length > 0 || periodRows.length === 0);
   if (weekClosed) {
     await markReconWeekRunClosed(orgId, week, serviceLine, actorId);
   }
@@ -2894,7 +2935,9 @@ async function retryFreezeWeekBody(
 
   const driversClosed = perDriver.filter((d) => d.closed).length;
   const driversBlocked = perDriver.length - driversClosed;
-  const weekClosed = driversBlocked === 0 && perDriver.length > 0;
+  // Rev 24: a week with no driver weeks at all (no activity, e.g. 13/20/27 Apr 2026) closes
+  // with zero drivers once nothing above refused it; before, it could never close.
+  const weekClosed = driversBlocked === 0 && (perDriver.length > 0 || periodRows.length === 0);
   if (weekClosed) {
     await markReconWeekRunClosed(orgId, week, serviceLine, actorId);
   }

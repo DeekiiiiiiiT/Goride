@@ -1,6 +1,6 @@
 {
   "slug": "fleet-ops",
-  "generatedAt": "2026-11-10T02:21:12.201Z",
+  "generatedAt": "2026-11-11T14:15:56.267Z",
   "routeCount": 143,
   "routes": [
     "DELETE ${ADMIN_CAT}/:id",

@@ -52,8 +52,10 @@ export type LogServiceLineDetailsStepProps = {
   lineTotalLabel: string;
   currency: string;
   lineTotal: number;
-  /** Fixed boxes to hide for this job: "labor_hours", "part_number" (see hiddenLineFieldsFor). */
+  /** Fixed boxes to hide for this job: "labor_hours", "labor_rate", "brand", "part_number" (see hiddenLineFieldsFor). */
   hiddenFields?: string[];
+  /** One-axle jobs (stabilizer links): show these buttons (Left / Right) instead of the four wheels. */
+  sideOptions?: { value: string; label: string }[] | null;
   /** Set for service jobs (alignment, rotation…): shows the short form — wheels + cost only. */
   serviceForm?: {
     costMode: "total" | "per_wheel";
@@ -283,6 +285,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
           />
         </div>
         ) : null}
+        {!props.hiddenFields?.includes("labor_rate") ? (
         <div className="space-y-2">
           <Label htmlFor="labor-rate">Labor rate</Label>
           <Input
@@ -295,6 +298,8 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
             }
           />
         </div>
+        ) : null}
+        {!props.hiddenFields?.includes("brand") ? (
         <div className="space-y-2">
           <Label htmlFor="brand">Brand</Label>
           <Input
@@ -304,6 +309,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
             onChange={(e) => onBrandChange(e.target.value)}
           />
         </div>
+        ) : null}
         {!props.hiddenFields?.includes("part_number") ? (
         <div className="space-y-2">
           <Label htmlFor="part-number">Part number</Label>
@@ -319,14 +325,15 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
 
       {showPositions ? (
         <div className="space-y-2">
-          <Label>Positions</Label>
+          <Label>{props.sideOptions ? "Side" : "Positions"}</Label>
           <div className="flex flex-wrap gap-2">
-            {TIRE_BRAKE_POSITIONS.map((pos) => {
+            {(props.sideOptions ?? TIRE_BRAKE_POSITIONS.map((p) => ({ value: p, label: p }))).map(({ value: pos, label: posLabel }) => {
               const on = positions.includes(pos);
               return (
                 <button
                   key={pos}
                   type="button"
+                  aria-pressed={on}
                   onClick={() => onTogglePosition(pos)}
                   className={`min-h-11 min-w-11 px-3 rounded-lg border text-sm font-semibold ${
                     on
@@ -334,7 +341,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
                       : "border-outline-variant/40 bg-surface-container-lowest text-on-surface-variant"
                   }`}
                 >
-                  {pos}
+                  {posLabel}
                 </button>
               );
             })}

@@ -5,7 +5,7 @@
  * all read one answer. Worker-only: the P&L tie runs every engine.
  */
 import { getServiceClient } from "./service_client.ts";
-import { driverCloseBlockers, periodIsFrozen } from "./week_close.ts";
+import { driverCloseBlockers, earlierWeekCloseBlocker, periodIsFrozen } from "./week_close.ts";
 import { getLatestWeekStatements } from "./week_statements.ts";
 import { listOpenFinanceReconDrifts } from "./finance_recon_drift.ts";
 import { summarizeTollUsageOrphansByDriverForWeek } from "./toll_financial_reset.ts";
@@ -116,8 +116,24 @@ export async function writeWeekLevelBlockers(
   serviceLine: ReconServiceLine,
   opts: { withPnlTie: boolean },
 ): Promise<void> {
+  const blockers = await computeWeekLevelBlockers(orgId, weekKey, serviceLine, opts);
+  await replaceScopeBlockers({ orgId, weekKey, serviceLine, driverId: null }, blockers);
+}
+
+/**
+ * The whole-week blockers, worked out but not saved. The desk publish saves these
+ * in the same transaction as the desk (recon.publish_week_desk).
+ */
+export async function computeWeekLevelBlockers(
+  orgId: string,
+  weekKey: string,
+  serviceLine: ReconServiceLine,
+  opts: { withPnlTie: boolean },
+): Promise<CloseBlocker[]> {
   const context = await loadWeekCloseReconContext(orgId, weekKey, serviceLine);
   const blockers: CloseBlocker[] = [...context.sourceBlockers];
+  const earlier = await earlierWeekCloseBlocker(orgId, weekKey);
+  if (earlier) blockers.push(earlier);
   if (opts.withPnlTie) {
     const { data: periods, error } = await getServiceClient()
       .from("driver_financial_periods")
@@ -134,7 +150,18 @@ export async function writeWeekLevelBlockers(
       probed: true,
     }));
   }
-  await replaceScopeBlockers({ orgId, weekKey, serviceLine, driverId: null }, blockers);
+  return blockers;
+}
+
+/** Whole-week blocker rows ready for recon.publish_week_desk (driver_id always null). */
+export function weekLevelBlockerRows(
+  orgId: string,
+  weekKey: string,
+  serviceLine: ReconServiceLine,
+  blockers: CloseBlocker[],
+  now: string,
+) {
+  return blockerRowsForScope({ orgId, weekKey, serviceLine, driverId: null }, blockers, now);
 }
 
 /** Blocking rows for one week and service line, in plain words. Fails closed. */

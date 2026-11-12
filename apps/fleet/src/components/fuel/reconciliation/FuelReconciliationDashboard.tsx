@@ -78,6 +78,9 @@ function FuelReconciliationWizardView({
   setWizardSession,
   dispositions,
   onOpenIntegrityStopToStop,
+  deskSections,
+  summaryTarget,
+  onDeskFinalized,
 }: {
   period: FuelReconciliationPeriod;
   wizardSession: number;
@@ -121,6 +124,10 @@ function FuelReconciliationWizardView({
   setWizardSession: Dispatch<SetStateAction<number>>;
   dispositions?: import('../../../utils/fuelFlagDisposition').FuelFlagDispositionMap;
   onOpenIntegrityStopToStop?: (args: { weekStart: string; vehicleId?: string }) => void;
+  /** Week Reconciliation step 5 (WRA-01): sections layout, Finalize fuel finishes the step. */
+  deskSections?: boolean;
+  summaryTarget?: HTMLElement | null;
+  onDeskFinalized?: () => void | Promise<void>;
 }) {
   const dateRange: DateRange = {
     from: ymdToLocalDate(period.startDate),
@@ -167,6 +174,9 @@ function FuelReconciliationWizardView({
         onResetPeriod={onResetPeriod}
         dispositions={dispositions}
         onOpenIntegrityStopToStop={onOpenIntegrityStopToStop}
+        deskSections={deskSections}
+        summaryTarget={summaryTarget}
+        onDeskFinalized={onDeskFinalized}
       />
       {resetPeriod && (
         <FuelPeriodResetDialog
@@ -220,6 +230,9 @@ export function FuelReconciliationDashboard({
   hideLanding = false,
   dispositions,
   onOpenIntegrityStopToStop,
+  deskSections,
+  summaryTarget,
+  onDeskFinalized,
 }: {
   outstanding: FuelReconciliationPeriod[];
   inProgress: FuelReconciliationPeriod[];
@@ -270,6 +283,10 @@ export function FuelReconciliationDashboard({
   hideLanding?: boolean;
   dispositions?: import('../../../utils/fuelFlagDisposition').FuelFlagDispositionMap;
   onOpenIntegrityStopToStop?: (args: { weekStart: string; vehicleId?: string }) => void;
+  /** Week Reconciliation step 5 (WRA-01): sections layout, Finalize fuel finishes the step. */
+  deskSections?: boolean;
+  summaryTarget?: HTMLElement | null;
+  onDeskFinalized?: () => void | Promise<void>;
 }) {
   const [view, setView] = useState<View>({ kind: 'landing' });
   const [resetPeriod, setResetPeriod] = useState<FuelReconciliationPeriod | null>(null);
@@ -428,6 +445,9 @@ export function FuelReconciliationDashboard({
         setWizardSession={setWizardSession}
         dispositions={dispositions}
         onOpenIntegrityStopToStop={onOpenIntegrityStopToStop}
+        deskSections={deskSections}
+        summaryTarget={summaryTarget}
+        onDeskFinalized={onDeskFinalized}
       />
     );
   }
