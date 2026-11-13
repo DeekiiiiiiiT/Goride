@@ -156,6 +156,11 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
         status: str(v.status),
         current_driver_id: str(v.currentDriverId),
         toll_tag_id: str(v.tollTagId) ?? str(v.tollTagUuid),
+        plate_aliases: Array.isArray(v.plateAliases)
+          ? (v.plateAliases as unknown[]).map((x) => String(x).trim()).filter(Boolean)
+          : Array.isArray(v.plate_aliases)
+            ? (v.plate_aliases as unknown[]).map((x) => String(x).trim()).filter(Boolean)
+            : [],
         vehicle_catalog_id: str(v.vehicle_catalog_id) ?? str(v.vehicleCatalogId),
         custody_status: str(v.custodyStatus) ?? "none",
         handed_over_at: str(v.handedOverAt),

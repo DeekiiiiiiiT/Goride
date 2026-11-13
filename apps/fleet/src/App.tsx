@@ -71,6 +71,11 @@ const WeekReconciliationPage = lazy(() =>
     default: m.WeekReconciliationPage,
   })),
 );
+const TollHealthPage = lazy(() =>
+  import('./components/fleet-financials/TollHealthPage').then((m) => ({
+    default: m.TollHealthPage,
+  })),
+);
 const FleetFinancialsPage = lazy(() =>
   import('./components/fleet-financials/FleetFinancialsPage').then((m) => ({
     default: m.FleetFinancialsPage,
@@ -370,6 +375,39 @@ function AppContent() {
     }
 
     // Fuel / Toll recon → Week Reconciliation hub
+    if (
+      canUseWeekReconHub &&
+      page === 'week-reconciliation' &&
+      opts &&
+      ('weekKey' in opts || 'step' in opts)
+    ) {
+      const week =
+        opts && 'weekKey' in opts && typeof opts.weekKey === 'string' ? opts.weekKey : undefined;
+      const step = opts && 'step' in opts && opts.step ? String(opts.step) : undefined;
+      const line =
+        opts && 'line' in opts && (opts.line === 'rush_delivery' || opts.line === 'rideshare')
+          ? opts.line
+          : 'rideshare';
+      setWeekReconHubTabHint('tolls');
+      setWeekReconWeekHint(week || null);
+      setWeekReconStepHint(step || null);
+      setWeekReconLineHint(line);
+      clearDriverDetail();
+      setCurrentPage('week-reconciliation');
+      if (typeof window !== 'undefined') {
+        const qs = new URLSearchParams();
+        qs.set('line', line);
+        if (week) qs.set('week', week);
+        if (step) qs.set('step', step);
+        window.history.pushState(
+          { page: 'week-reconciliation', week, step },
+          '',
+          `/week-reconciliation?${qs.toString()}`,
+        );
+      }
+      return;
+    }
+
     if (canUseWeekReconHub && (page === 'fuel-reconciliation' || page === 'toll-tags')) {
       const hubTab: WeekReconciliationHubTab =
         page === 'fuel-reconciliation' ? 'fuel' : 'tolls';
@@ -938,6 +976,13 @@ function AppContent() {
                   handleNavigate('toll-tags', { startYmd, endYmd })
                 }
               />
+            </Suspense>
+          </PermissionGate>
+        )}
+        {currentPage === 'toll-health' && canUseWeekReconHub && (
+          <PermissionGate permission="nav.toll_reconciliation" onNavigate={setCurrentPage}>
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading toll health…</div>}>
+              <TollHealthPage onNavigate={(page, opts) => handleNavigate(page, opts)} />
             </Suspense>
           </PermissionGate>
         )}

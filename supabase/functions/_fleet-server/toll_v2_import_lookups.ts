@@ -15,6 +15,23 @@ import * as kv from "./kv_store.tsx";
 
 export type PlazaLookup = Record<string, string>;
 
+/** Normalized plates for a fleet vehicle row (primary + aliases). */
+export function vehiclePlatesForLookup(v: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  const primary = normalizePlate(
+    String(v.plateNumber ?? v.licensePlate ?? v.plate_number ?? v.license_plate ?? ""),
+  );
+  if (primary) out.push(primary);
+  const aliases = v.plate_aliases ?? v.plateAliases;
+  if (Array.isArray(aliases)) {
+    for (const a of aliases) {
+      const p = normalizePlate(String(a ?? ""));
+      if (p && !out.includes(p)) out.push(p);
+    }
+  }
+  return out;
+}
+
 export async function buildTagStatementCtx(orgId: string): Promise<TagStatementCtx> {
   const tagRes = await queryFleet("toll_tags", {
     org: orgId,
@@ -100,10 +117,9 @@ export async function buildUberCtx(orgId: string): Promise<UberCtx> {
   for (const row of vehRes.data) {
     const v = row as Record<string, unknown>;
     const id = String(v.id ?? "").trim();
-    const plate = normalizePlate(
-      String(v.plateNumber ?? v.licensePlate ?? v.plate_number ?? ""),
-    );
-    if (id && plate) vehicleByPlate[plate] = id;
+    for (const plate of vehiclePlatesForLookup(v)) {
+      if (id && plate) vehicleByPlate[plate] = id;
+    }
   }
   return { driverByUberUuid, vehicleByPlate };
 }
@@ -133,10 +149,9 @@ export async function buildIndriveCtx(orgId: string): Promise<IndriveCtx> {
   for (const row of vehRes.data) {
     const v = row as Record<string, unknown>;
     const id = String(v.id ?? "").trim();
-    const plate = normalizePlate(
-      String(v.plateNumber ?? v.licensePlate ?? v.plate_number ?? ""),
-    );
-    if (id && plate) vehicleByPlate[plate] = id;
+    for (const plate of vehiclePlatesForLookup(v)) {
+      if (id && plate) vehicleByPlate[plate] = id;
+    }
   }
 
   return { driverByExternalId, vehicleByPlate };

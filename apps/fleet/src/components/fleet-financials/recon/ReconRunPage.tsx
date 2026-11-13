@@ -33,12 +33,20 @@ import { hasAnyJwtRole } from '@roam/auth-client';
 import { Button } from '../../ui/button';
 import { cn } from '../../ui/utils';
 import { toast } from 'sonner';
+import { useTollV2Desk, useTollV2Enabled } from './tolls-v2/useTollV2Desk';
+import { resolveTollsStepVariant } from './tolls-v2/resolveTollsStep';
 
 const FuelManagementLazy = lazy(() =>
   import('../../../pages/FuelManagement').then((m) => ({ default: m.FuelManagement })),
 );
 const TollReconciliationLazy = lazy(() =>
   import('../../../pages/TollReconciliation').then((m) => ({ default: m.TollReconciliation })),
+);
+const ReconTollsV2StepLazy = lazy(() =>
+  import('./tolls-v2/ReconTollsV2Step').then((m) => ({ default: m.ReconTollsV2Step })),
+);
+const ReconTollsV2DeliveryCardLazy = lazy(() =>
+  import('./tolls-v2/ReconTollsV2DeliveryCard').then((m) => ({ default: m.ReconTollsV2DeliveryCard })),
 );
 
 function stepFromQuery(): RunStepId {
@@ -124,6 +132,7 @@ export function ReconRunPage({
   onNavigate,
   onStepChange,
   onOpenRemittance,
+  onSwitchToRideshare,
 }: {
   line: 'rideshare' | 'rush_delivery';
   weekKey: string;
@@ -134,6 +143,7 @@ export function ReconRunPage({
   ) => void;
   onStepChange?: (step: RunStepId) => void;
   onOpenRemittance?: () => void;
+  onSwitchToRideshare?: () => void;
 }) {
   const { session } = useAuth();
   const canResumeCalculator = session?.user
@@ -142,20 +152,28 @@ export function ReconRunPage({
   const [activeStep, setActiveStep] = useState<RunStepId>(() => stepFromQuery());
   const queryClient = useQueryClient();
   const runQueryKey = useMemo(() => ['recon-run', line, weekKey] as const, [line, weekKey]);
+  const tollsV2Query = useTollV2Enabled();
+  const tollsV2On = tollsV2Query.data === true;
+  const tollsStepVariant = resolveTollsStepVariant(tollsV2On, line);
+  const tollV2DeskQuery = useTollV2Desk(weekKey, tollsV2On);
   const sealQuery = useQuery({
     queryKey: ['toll-period-seal', line, weekKey],
     queryFn: () => api.getTollPeriodSeal(weekKey, line),
-    enabled: Boolean(weekKey),
+    enabled: Boolean(weekKey) && !tollsV2On,
     retry: false,
   });
-  const tollsSealed = sealQuery.isSuccess && sealQuery.data?.sealed === true;
-  const tollsCheckFailed = sealQuery.isError;
+  const tollsSealedV1 = sealQuery.isSuccess && sealQuery.data?.sealed === true;
+  const tollsSealedV2 = tollV2DeskQuery.data?.sealed === true;
+  const tollsSealed = tollsV2On ? tollsSealedV2 : tollsSealedV1;
+  const tollsCheckFailed = !tollsV2On && sealQuery.isError;
   const [advancing, setAdvancing] = useState(false);
   /** Right-column slot a step panel can fill with its own totals card (Stitch). */
   const [stepSummaryEl, setStepSummaryEl] = useState<HTMLDivElement | null>(null);
   const approvals = useReconApprovals();
   const autoSkipKey = useRef<string | null>(null);
   const autoSkipInFlight = useRef(false);
+  const deliveryTollsSealedKey = useRef<string | null>(null);
+  const deliveryTollsFinishInFlight = useRef(false);
 
   const runQuery = useQuery({
     queryKey: runQueryKey,
@@ -461,6 +479,42 @@ export function ReconRunPage({
     weekKey,
   ]);
 
+  // Delivery week: tolls are sealed in Rideshare — complete step 3 once when desk is sealed.
+  useEffect(() => {
+    const run = runQuery.data;
+    if (!run || !tollsV2On || line !== 'rush_delivery') return;
+    if (!tollV2DeskQuery.data?.sealed) return;
+    const tollsSt = stepStatus(run, 'tolls');
+    if (tollsSt === 'complete' || tollsSt === 'locked') return;
+
+    const key = `${line}:${weekKey}:tolls:sealed`;
+    if (deliveryTollsSealedKey.current === key || deliveryTollsFinishInFlight.current) return;
+    deliveryTollsFinishInFlight.current = true;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        await handleTollsPeriodFinished();
+        if (!cancelled) deliveryTollsSealedKey.current = key;
+      } catch {
+        // handleTollsPeriodFinished already toasts
+      } finally {
+        deliveryTollsFinishInFlight.current = false;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    handleTollsPeriodFinished,
+    line,
+    runQuery.data,
+    tollV2DeskQuery.data?.sealed,
+    tollsV2On,
+    weekKey,
+  ]);
+
   if (runQuery.isLoading) {
     return (
       <div className="flex h-48 items-center justify-center text-sm text-slate-500">
@@ -731,20 +785,34 @@ export function ReconRunPage({
                   {tollsCheckFailed ? (
                     <TollsCheckFailedBanner busy={sealQuery.isFetching} onRetry={() => { void sealQuery.refetch(); }} />
                   ) : null}
-                  {tollsSealed ? (
+                  {!tollsV2On && tollsSealed ? (
                     <TollsLockedBanner weekKey={weekKey} serviceLine={line} onReopened={() => { void sealQuery.refetch(); }} />
                   ) : null}
                   <Suspense fallback={<Loader2 className="mx-auto h-6 w-6 animate-spin" />}>
-                    <TollReconciliationLazy
-                      key={tollsSealed ? 'tolls-sealed' : 'tolls-open'}
-                      embedded
-                      hideLanding
-                      initialWeekStart={weekKey}
-                      serviceLine={line}
-                      onPeriodFinished={handleTollsPeriodFinished}
-                      deskSections
-                      summaryTarget={stepSummaryEl}
-                    />
+                    {tollsStepVariant === 'delivery' ? (
+                      <ReconTollsV2DeliveryCardLazy
+                        weekKey={weekKey}
+                        onGoToRideshare={() => onSwitchToRideshare?.()}
+                      />
+                    ) : tollsStepVariant === 'v2' ? (
+                      <ReconTollsV2StepLazy
+                        weekKey={weekKey}
+                        summaryTarget={stepSummaryEl}
+                        onPeriodFinished={handleTollsPeriodFinished}
+                        onGoToTagAccount={() => setStep('tag_account')}
+                      />
+                    ) : (
+                      <TollReconciliationLazy
+                        key={tollsSealed ? 'tolls-sealed' : 'tolls-open'}
+                        embedded
+                        hideLanding
+                        initialWeekStart={weekKey}
+                        serviceLine={line}
+                        onPeriodFinished={handleTollsPeriodFinished}
+                        deskSections
+                        summaryTarget={stepSummaryEl}
+                      />
+                    )}
                   </Suspense>
                 </>
               ) : null}

@@ -94,6 +94,11 @@ export const FLEET_PAGE_REGISTRY: Record<string, FleetPageDef> = {
     path: '/toll-tags',
     permission: 'nav.toll_reconciliation',
   },
+  'toll-health': {
+    id: 'toll-health',
+    path: '/money/tolls',
+    permission: 'nav.toll_reconciliation',
+  },
 };
 
 const PATH_TO_PAGE = Object.values(FLEET_PAGE_REGISTRY)

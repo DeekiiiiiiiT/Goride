@@ -172,6 +172,14 @@ export function WeekReconciliationPage({
           onBack={backToList}
           onNavigate={onNavigate}
           onOpenRemittance={() => onNavigate?.('courier-settlements')}
+          onSwitchToRideshare={() => {
+            setLine('rideshare');
+            const step =
+              typeof window !== 'undefined'
+                ? new URLSearchParams(window.location.search).get('step') || 'tolls'
+                : 'tolls';
+            pushRunQuery('rideshare', runWeek, step);
+          }}
         />
       )}
     </div>

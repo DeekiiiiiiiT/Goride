@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { AlertCircle, Bell, CheckCircle2, Loader2, UploadCloud } from 'lucide-react';
 import { toast } from 'sonner';
 import { roamFuelExternalCopy, weekDayKeys } from '@roam/finance-core';
@@ -24,6 +24,20 @@ import { CloseWeekUberReimportDialog } from '../CloseWeekUberReimportDialog';
 import { FuelCardSelfUploader } from './FuelCardSelfUploader';
 import { IndriveUploadDialog } from './IndriveUploadDialog';
 import { cn } from '../../ui/utils';
+import { api } from '../../../services/api';
+import { useTollV2Enabled } from './tolls-v2/useTollV2Desk';
+import { useTollV2ImportReports } from './tolls-v2/step1/useTollV2ImportReports';
+import { ReconTollV2SourceEnhancement } from './tolls-v2/step1/ReconTollV2SourceEnhancement';
+import { tollFilesSummary } from './tolls-v2/step1/tollV2ImportReportFormat';
+import type { TollV2ImportReport, TollV2ImportReportRow } from './tolls-v2/step1/tollV2ImportTypes';
+import { TollV2FixDriverDialog } from './tolls-v2/step1/dialogs/TollV2FixDriverDialog';
+import { TollV2WhichCarDialog } from './tolls-v2/step1/dialogs/TollV2WhichCarDialog';
+import { TollV2WhatWasReadDialog } from './tolls-v2/step1/dialogs/TollV2WhatWasReadDialog';
+import {
+  countRowsFromV2ImportResponse,
+  registerTollV2WithRecon,
+  type TollV2ReconSourceId,
+} from '../../../utils/registerTollV2WithRecon';
 
 function addBusyId(prev: ReadonlySet<string>, id: string): Set<string> {
   const next = new Set(prev);
@@ -320,6 +334,10 @@ export function ReconSourcesStep({
   const canUploadExternalSources = can('recon.external_sources');
   const canWaive = can('recon.approve');
   const weekKey = run.run.weekKey;
+  const tollsV2Query = useTollV2Enabled();
+  const tollsV2On = tollsV2Query.data === true;
+  const importReportsQuery = useTollV2ImportReports(weekKey, tollsV2On);
+  const importReports = importReportsQuery.data ?? [];
   const [tollModalOpen, setTollModalOpen] = useState(false);
   const [tollMode, setTollMode] = useState<'usage' | 'topup'>('usage');
   const [fuelModalOpen, setFuelModalOpen] = useState(false);
@@ -331,8 +349,101 @@ export function ReconSourcesStep({
   const [waiveReason, setWaiveReason] = useState('');
   const [waiveBusy, setWaiveBusy] = useState(false);
   const [remindSourceId, setRemindSourceId] = useState<string | null>(null);
+  const tollFileInputRef = useRef<HTMLInputElement>(null);
+  const pendingTollSourceRef = useRef<TollV2ReconSourceId | null>(null);
+  const [tollUploadBusy, setTollUploadBusy] = useState(false);
+  const [uberTollError, setUberTollError] = useState<string | null>(null);
+  const [uberTollFiles, setUberTollFiles] = useState<{
+    paymentsTransaction?: File;
+    tripActivity?: File;
+  } | null>(null);
+  const [fixedProblemKeys, setFixedProblemKeys] = useState<ReadonlySet<string>>(() => new Set());
+  const [whatReadReport, setWhatReadReport] = useState<TollV2ImportReport | null>(null);
+  const [fixDriverRow, setFixDriverRow] = useState<TollV2ImportReportRow | null>(null);
+  const [whichCarRow, setWhichCarRow] = useState<TollV2ImportReportRow | null>(null);
 
   const applicable = run.sources.filter((s) => s.requirement !== 'not_applicable');
+  const tollSummary = tollsV2On ? tollFilesSummary(applicable, importReports) : null;
+
+  const runTollV2Import = useCallback(
+    async (opts: {
+      kind: 'tag_statement' | 'topups' | 'uber';
+      sourceId: TollV2ReconSourceId;
+      file: File;
+      paymentsTransaction?: File;
+      tripActivity?: File;
+    }) => {
+      const commandId = crypto.randomUUID();
+      setTollUploadBusy(true);
+      try {
+        const res = await api.importTollFileV2({
+          kind: opts.kind,
+          commandId,
+          file: opts.file,
+          paymentsTransaction: opts.paymentsTransaction,
+          tripActivity: opts.tripActivity,
+        });
+        await registerTollV2WithRecon({
+          batchId: commandId,
+          sourceId: opts.sourceId,
+          weekKey,
+          rowsCommitted: countRowsFromV2ImportResponse(res as { imports?: Array<{ rows?: number; counts?: Record<string, number> }> }),
+          fileName: opts.file.name,
+        });
+        await importReportsQuery.refetch();
+        await onRefresh();
+        toast.success('Toll file read');
+        setUberTollError(null);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Toll import failed';
+        if (opts.sourceId === 'uber_bundle') setUberTollError(msg);
+        else toast.error(msg);
+        throw err;
+      } finally {
+        setTollUploadBusy(false);
+      }
+    },
+    [importReportsQuery, onRefresh, weekKey],
+  );
+
+  const triggerTollFilePicker = (sourceId: TollV2ReconSourceId) => {
+    pendingTollSourceRef.current = sourceId;
+    tollFileInputRef.current?.click();
+  };
+
+  const onTollFilePicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const sourceId = pendingTollSourceRef.current;
+    e.target.value = '';
+    pendingTollSourceRef.current = null;
+    if (!file || !sourceId || sourceId === 'uber_bundle') return;
+    const kind = sourceId === 'toll_topup' ? 'topups' : 'tag_statement';
+    try {
+      await runTollV2Import({ kind, sourceId, file });
+    } catch {
+      /* toast handled */
+    }
+  };
+
+  const runUberTollFollowUp = useCallback(
+    async (files: { paymentsTransaction?: File; tripActivity?: File }) => {
+      setUberTollFiles(files);
+      const main = files.tripActivity ?? files.paymentsTransaction;
+      if (!main) return;
+      try {
+        await runTollV2Import({
+          kind: 'uber',
+          sourceId: 'uber_bundle',
+          file: main,
+          paymentsTransaction: files.paymentsTransaction,
+          tripActivity: files.tripActivity,
+        });
+      } catch {
+        /* uberTollError set */
+      }
+    },
+    [runTollV2Import],
+  );
 
   const remindRoam = async (sourceId: string) => {
     if (remindSourceId === sourceId) return;
@@ -355,6 +466,10 @@ export function ReconSourcesStep({
 
   const openUpload = (sourceId: string) => {
     if (sourceId === 'toll_usage' || sourceId === 'toll_topup') {
+      if (tollsV2On) {
+        triggerTollFilePicker(sourceId);
+        return;
+      }
       setTollMode(sourceId === 'toll_topup' ? 'topup' : 'usage');
       setTollModalOpen(true);
       return;
@@ -431,23 +546,85 @@ export function ReconSourcesStep({
         Upload or confirm each input for week of {weekKey}. Required items must be complete before
         toll and fuel review unlocks.
       </p>
-      <div className="grid gap-3 md:grid-cols-2">
-        {applicable.map((source) => (
-          <ReconSourceCard
-            key={source.id}
-            source={source}
-            weekKey={weekKey}
-            onUpload={openUpload}
-            onAttestNone={(id, days) => void submitAttestNone(id, days)}
-            onWaive={(id) => setWaiveSourceId(id)}
-            onRemindRoam={(id) => void remindRoam(id)}
-            remindBusy={remindSourceId === source.id}
-            attestBusy={attestBusyIds.has(source.id)}
-            canUploadExternalSources={canUploadExternalSources}
-            canWaive={canWaive}
-          />
-        ))}
+      <div className={cn('grid gap-3', tollsV2On ? 'lg:grid-cols-3' : 'md:grid-cols-2')}>
+        <div className={cn('grid gap-3', tollsV2On ? 'lg:col-span-2 md:grid-cols-2' : 'md:col-span-2 md:grid-cols-2 contents')}>
+          {applicable.map((source) => (
+            <div key={source.id} className="min-w-0">
+              <ReconSourceCard
+                source={source}
+                weekKey={weekKey}
+                onUpload={openUpload}
+                onAttestNone={(id, days) => void submitAttestNone(id, days)}
+                onWaive={(id) => setWaiveSourceId(id)}
+                onRemindRoam={(id) => void remindRoam(id)}
+                remindBusy={remindSourceId === source.id}
+                attestBusy={attestBusyIds.has(source.id)}
+                canUploadExternalSources={canUploadExternalSources}
+                canWaive={canWaive}
+              />
+              {tollsV2On ? (
+                <ReconTollV2SourceEnhancement
+                  source={source}
+                  reports={importReports}
+                  uberTollError={source.id === 'uber_bundle' ? uberTollError : null}
+                  fixedKeys={fixedProblemKeys}
+                  onReplace={() => {
+                    if (source.id === 'uber_bundle') {
+                      setUberOpen(true);
+                      return;
+                    }
+                    triggerTollFilePicker(source.id === 'toll_topup' ? 'toll_topup' : 'toll_usage');
+                  }}
+                  onSeeRead={(r) => setWhatReadReport(r)}
+                  onFixDriver={(row) => setFixDriverRow(row)}
+                  onWhichCar={(row) => setWhichCarRow(row)}
+                  onRetryUberToll={
+                    source.id === 'uber_bundle' && uberTollFiles
+                      ? () => void runUberTollFollowUp(uberTollFiles)
+                      : undefined
+                  }
+                  onUploadAgain={() => {
+                    if (source.id === 'uber_bundle') {
+                      setUberOpen(true);
+                      return;
+                    }
+                    triggerTollFilePicker(source.id === 'toll_topup' ? 'toll_topup' : 'toll_usage');
+                  }}
+                />
+              ) : null}
+            </div>
+          ))}
+        </div>
+        {tollsV2On && tollSummary ? (
+          <aside className="rounded-xl border border-[#e5eeff] bg-white p-4 shadow-sm lg:col-span-1">
+            <h3 className="text-sm font-semibold text-[#0b1c30]">This week&apos;s files</h3>
+            <p className="mt-2 text-sm text-[#47464c]">
+              {tollSummary.received} of {tollSummary.total} toll files received
+            </p>
+            {tollSummary.problems > 0 ? (
+              <p className="mt-1 text-sm font-medium text-amber-800">
+                {tollSummary.problems} rows need a fix
+              </p>
+            ) : (
+              <p className="mt-1 text-sm text-emerald-800">No problems in the last read</p>
+            )}
+            {tollUploadBusy ? (
+              <p className="mt-3 flex items-center gap-2 text-xs text-[#47464c]">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Reading file…
+              </p>
+            ) : null}
+          </aside>
+        ) : null}
       </div>
+
+      <input
+        ref={tollFileInputRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="hidden"
+        onChange={(e) => void onTollFilePicked(e)}
+      />
 
       {uberOpen ? (
         <CloseWeekUberReimportDialog
@@ -458,7 +635,48 @@ export function ReconSourcesStep({
           onImported={async () => {
             await onRefresh();
           }}
+          onUberFilesForToll={tollsV2On ? (files) => runUberTollFollowUp(files) : undefined}
         />
+      ) : null}
+
+      {tollsV2On ? (
+        <>
+          <TollV2WhatWasReadDialog
+            open={!!whatReadReport}
+            onOpenChange={(o) => !o && setWhatReadReport(null)}
+            report={whatReadReport}
+            onFixDriver={(row) => {
+              setWhatReadReport(null);
+              setFixDriverRow(row);
+            }}
+            onWhichCar={(row) => {
+              setWhatReadReport(null);
+              setWhichCarRow(row);
+            }}
+          />
+          <TollV2FixDriverDialog
+            open={!!fixDriverRow}
+            onOpenChange={(o) => !o && setFixDriverRow(null)}
+            problemRow={fixDriverRow}
+            onSaved={() => {
+              if (fixDriverRow) {
+                setFixedProblemKeys((prev) => new Set(prev).add(problemKey(fixDriverRow)));
+              }
+              void importReportsQuery.refetch();
+            }}
+          />
+          <TollV2WhichCarDialog
+            open={!!whichCarRow}
+            onOpenChange={(o) => !o && setWhichCarRow(null)}
+            problemRow={whichCarRow}
+            onSaved={() => {
+              if (whichCarRow) {
+                setFixedProblemKeys((prev) => new Set(prev).add(problemKey(whichCarRow)));
+              }
+              void importReportsQuery.refetch();
+            }}
+          />
+        </>
       ) : null}
 
       {indriveOpen ? (
@@ -473,6 +691,7 @@ export function ReconSourcesStep({
         />
       ) : null}
 
+      {!tollsV2On ? (
       <BulkImportTollTransactionsModal
         isOpen={tollModalOpen}
         onClose={() => setTollModalOpen(false)}
@@ -483,6 +702,7 @@ export function ReconSourcesStep({
           void onRefresh();
         }}
       />
+      ) : null}
 
       <FuelCardSelfUploader
         isOpen={fuelModalOpen}
@@ -528,4 +748,8 @@ export function ReconSourcesStep({
       </Dialog>
     </div>
   );
+}
+
+function problemKey(row: TollV2ImportReportRow): string {
+  return `${row.row ?? ''}:${row.ref ?? ''}:${row.status ?? ''}`;
 }

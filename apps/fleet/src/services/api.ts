@@ -21,6 +21,7 @@ import { API_ENDPOINTS } from './apiConfig';
 import { noteReconWeekResponse, withReconWeekHeader } from './reconWeekContext';
 import { catalogPages } from '@roam/api-client';
 import { tollApiErrorFromResponse } from './tollApiError';
+import { TollV2CommandError } from './tollV2CommandError';
 import type { CompatiblePartsResponse } from '../types/partSourcing';
 import type {
   MaintenanceInspectionFinding,
@@ -3671,6 +3672,32 @@ export const api = {
       throw error;
     }
     return response.json();
+  },
+
+  async tollV2Command(intent: string, body: Record<string, unknown>) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.toll}/toll/v2/commands/${encodeURIComponent(intent)}`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify(body),
+      },
+    );
+    const data = (await response.json().catch(() => ({}))) as {
+      code?: string;
+      error?: string;
+      current_state?: Record<string, unknown>;
+    };
+    if (!response.ok) {
+      const code = String(data.code || 'REQUEST_FAILED');
+      const msg =
+        (typeof data.error === 'string' && data.error.trim()) ||
+        (code === 'VERSION_CHANGED'
+          ? 'Someone else changed this toll.'
+          : 'That toll command could not be completed.');
+      throw new TollV2CommandError(msg, response.status, code, data.current_state ?? {});
+    }
+    return data;
   },
 
   async voidTollLedgerEntry(id: string, reason: string, force?: boolean) {

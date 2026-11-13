@@ -62,6 +62,8 @@ export type BuildFleetNavModelInput = {
   inventoryPhase2Enabled?: boolean;
   /** Week Reconciliation switch-over (§9); off hides Week Reconciliation and keeps the old close path. */
   reconV2Enabled?: boolean;
+  /** Toll rebuild v2 for this company (toll_v2_enabled RPC). */
+  tollV2Enabled?: boolean;
 };
 
 export type FleetNavDesk = {
@@ -144,6 +146,10 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
     canView('toll-tags');
   const canSeeWeekReconciliation =
     input.reconV2Enabled === true && (canView('fuel-reconciliation') || canView('toll-tags'));
+  const canSeeTollHealthNav =
+    input.reconV2Enabled === true &&
+    input.tollV2Enabled === true &&
+    (canView('toll-tags') || canView('fuel-reconciliation'));
   const canSeeFleetOps = hasSharedOps && (canSeeFuelDesk || canSeeTollDesk);
   const canSeeCouriersInDriverOps =
     hasRushDeliveryLine &&
@@ -379,6 +385,10 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
       label: 'Earnings Policy',
     }),
     leaf(canSeeEarningsPolicyNav, { id: 'wallet', label: 'Wallet' }),
+    leaf(canSeeTollHealthNav, {
+      id: 'toll-health',
+      label: 'Tolls',
+    }),
   ]);
 
   return {
@@ -402,7 +412,7 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
       items: driverItems,
     },
     money: {
-      visible: canSeeEarningsPolicyNav && moneyItems.length > 0,
+      visible: moneyItems.length > 0,
       items: moneyItems,
     },
     vehicleOps: {

@@ -300,3 +300,16 @@ Each dialog opens over the real Week Reconciliation page with its real frame and
 2. Nothing listed under Drop appears on any screen.
 3. A company not on v2 sees today's Tolls step unchanged.
 4. The numbers on the Tolls step equal `week_result` for the week at every moment of the sweep.
+
+## Later: screens not yet designed
+| Screen | What's on it | Opened by | Built now as |
+|---|---|---|---|
+| M5 Match to a toll | "Which toll did Uber pay back?": the payback (trip, amount), radio cards of the week's undecided tolls, Cancel / "Use this toll" | "Uber paybacks with no toll" → "Match to a toll" | the app's standard dialog in the Undo dialog's style (P3-R2b). The owner can design it in Stitch any time; it's then ported like the others. |
+
+## Changes found while building (13 Nov)
+- **"Read the file again" → "Upload the file again"** (Screen 1, M1, M2). The server doesn't keep uploaded files, so it can't re-read one on its own. After "Fix driver" or "Which car?", the card says "Fixed — upload the file again to read these rows". Uploading the same file again is safe: rows already in stay "Already in", and only the fixed rows are new.
+- **Take-back (Screen 10) needs a "which payback" choice first.** Uber's take-back row carries the driver, date and amount, not the trip, so the dialog lists the driver's paybacks it could reverse (`takeBacks[].candidates`). The command depends on that payback's week:
+  - sealed and paid → `carry_forward` `take_back` (with the bearer);
+  - still open → `reverse_payback`;
+  - sealed but unpaid → reopen that week first.
+- **Uber files go to both systems for a v2 company.** The existing Uber import (trips, earnings) runs as today, and then the same two files go to the new toll import. Tag statements and top-ups go to the new import **only**, because if both systems got them, every toll would count twice.

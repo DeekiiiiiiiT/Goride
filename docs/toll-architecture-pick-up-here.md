@@ -53,7 +53,9 @@
    - The reads: `public.toll_v2_week_desk(week)`, `toll_v2_weeks()`, `toll_v2_import_reports(week)`.
    - Also: `toll.reported_take_backs` (`import_batch` re-created to keep Uber take-backs) and `fleet.vehicles.plate_aliases`.
    - Smoke run on the real 24 Aug week: 5 sure / 4 likely / 2 pick / 1 no trip; sealed = 12 decided and no Undo offered; take-back listed with candidates; anon / service key refused; nightly ok; `pnpm test:toll` all ok.
-   - **Cursor test prompt: `docs/toll-build/cursor-P3-R1-screen-reads-tests.md`.**
+   - **Cursor test prompt: `docs/toll-build/cursor-P3-R1-screen-reads-tests.md`.** Done; Claude re-ran `pnpm test:toll`: all ok. **P3-R1 committed `ca100929`** (not pushed; reads not live yet).
+11. **P3-R2 built by Cursor; Claude checked it (13 Nov).** Wiring, commands and buttons are right, but the look was simplified, not ported. Two bugs: a Delivery week could never finish step 3, and an unchecked receipt broke the tiles sum. Fixes `cursor-P3-R2b-fixes.md` (12 items): **done + checked by Claude** (14 tests pass). Uncommitted.
+12. **P3-R3 built by Cursor; Claude checked it (13 Nov):** routing, carry-forward and take-back right. 5 fixes with Cursor: **`docs/toll-build/cursor-P3-R3b-fixes.md`** (success toast on a refused command, unhandled errors, confirm-all stops early, "Owner only" untrue, Toll health menu). Phase 3 files still uncommitted.
    - Noted 13 Nov: something else reset the local database mid-run; only one test run at a time.
 7. **Owner, in order (done):**
    1. say commit (R6b + #8 + timer + live file are uncommitted);
