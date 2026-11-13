@@ -8,7 +8,8 @@ export function toMinor(text: string): number | null {
   if (!trimmed) return null;
 
   let negative = false;
-  let work = trimmed.replace(/[\s$€£J]/gi, '');
+  // Currency codes first ("JMD -370.00", "USD 5.00"), then symbols and spaces ("J$", "$").
+  let work = trimmed.replace(/\b(JMD|USD)\b/gi, '').replace(/[\s$€£J]/gi, '');
   if (work.startsWith('(') && work.endsWith(')')) {
     negative = true;
     work = work.slice(1, -1);

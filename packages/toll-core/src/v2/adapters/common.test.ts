@@ -6,6 +6,10 @@ describe('toMinor', () => {
     expect(toMinor('1,917.18')).toBe(191718);
     expect(toMinor('$370')).toBe(37000);
     expect(toMinor('-10.5')).toBe(-1050);
+    // Real tag statement / TransJam format (24–30 Aug 2026 files)
+    expect(toMinor(' JMD -370.00')).toBe(-37000);
+    expect(toMinor('JMD 5,000.00')).toBe(500000);
+    expect(toMinor('J$1,200')).toBe(120000);
   });
 
   it('rejects junk decimals', () => {
