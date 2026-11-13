@@ -36,7 +36,6 @@ describe('recon_v2 switch-over (audit §9)', () => {
       rideshareVisible: true,
       labels: { dashboardTitle: 'Dashboard', drivers: 'Drivers', vehiclesPageTitle: 'Vehicles' },
       reconV2Enabled: true,
-      tollV2Enabled: true,
     });
     const moneyIds = model.money.items.map((i) => i.id);
     const financeIdsOn = model.businessFinance.items.map((i) => i.id);

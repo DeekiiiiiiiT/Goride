@@ -20,7 +20,6 @@ import {
   type TollV2MetricBucket,
 } from './recon/tolls-v2/useTollV2Metrics';
 import { useTollV2Weeks } from './recon/tolls-v2/useTollV2Weeks';
-import { useTollV2Enabled } from './recon/tolls-v2/useTollV2Desk';
 
 /** Week Reconciliation opens a week only after its Sunday (Jamaica time). */
 export function weekOpensAfter(weekKey: string, now: Date = new Date()): string | null {
@@ -80,9 +79,9 @@ export function TollHealthPage({
 }: {
   onNavigate?: TollHealthNavigate;
 }) {
-  const v2 = useTollV2Enabled();
-  const metricsQ = useTollV2Metrics(v2.data === true);
-  const weeksQ = useTollV2Weeks(v2.data === true);
+  // The new toll system is the only one, so Toll Health always reads it.
+  const metricsQ = useTollV2Metrics(true);
+  const weeksQ = useTollV2Weeks(true);
 
   const takeBackCount = weeksQ.data?.takeBacks?.length ?? 0;
   const openWeek = weeksQ.data?.openWeek ?? '';
@@ -144,23 +143,6 @@ export function TollHealthPage({
 
   const nightly = weeksQ.data?.nightly;
   const failedCheck = nightly?.checks?.find((c) => c.ok === false);
-
-  if (v2.isLoading) {
-    return (
-      <div className="flex h-48 items-center justify-center text-sm text-[#47464c]">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-        Loading…
-      </div>
-    );
-  }
-
-  if (v2.data !== true) {
-    return (
-      <p className="p-6 text-sm text-[#47464c]" data-testid="toll-health-v2-off">
-        Toll health is available when your company uses the new toll system.
-      </p>
-    );
-  }
 
   const loading = metricsQ.isLoading || weeksQ.isLoading;
   const errored = metricsQ.isError || weeksQ.isError;

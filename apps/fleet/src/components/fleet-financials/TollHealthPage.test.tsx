@@ -7,10 +7,6 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TollHealthPage, weekOpensAfter } from './TollHealthPage';
 
-vi.mock('./recon/tolls-v2/useTollV2Desk', () => ({
-  useTollV2Enabled: () => ({ isLoading: false, data: true }),
-}));
-
 vi.mock('./recon/tolls-v2/useTollV2Metrics', async (importOriginal) => {
   const mod = await importOriginal<typeof import('./recon/tolls-v2/useTollV2Metrics')>();
   return {

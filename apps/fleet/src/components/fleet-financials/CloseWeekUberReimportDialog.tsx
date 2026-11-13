@@ -7,6 +7,7 @@ import React, { useCallback, useId, useState } from 'react';
 import Papa from 'papaparse';
 import { Loader2, UploadCloud, FileText, X, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
+import { readUberTollsIntoNewSystem } from '../../utils/readUberTollsIntoNewSystem';
 import { Button } from '../ui/button';
 import { cn } from '../ui/utils';
 import {
@@ -192,11 +193,15 @@ export function CloseWeekUberReimportDialog({
       } catch (e) {
         // P3-R4: the same files again (e.g. after "Fix driver" / "Which car?"). Cash is not posted twice, but the
         // toll import still runs: it changes nothing on a repeat and reads the rows that were just fixed.
-        if (!(onUberFilesForToll && (e as { code?: string })?.code === 'DUPLICATE_FILE_HASH')) throw e;
+        if ((e as { code?: string })?.code !== 'DUPLICATE_FILE_HASH') throw e;
         toast.info('These Uber files were already imported, so cash was not posted again. Reading their tolls again.');
       }
+      // Every Uber upload also goes to the new toll system (paybacks and take-backs). Week Reconciliation step 1
+      // passes its own handler (it shows the read on its card); every other place uses the plain toll upload.
       if (onUberFilesForToll) {
         await onUberFilesForToll(tollFiles);
+      } else {
+        await readUberTollsIntoNewSystem(tollFiles);
       }
       reset();
       onOpenChange(false);

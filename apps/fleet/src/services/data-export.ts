@@ -21,7 +21,7 @@ import { addDaysYmd, toEntryYmd } from '../utils/fuelWeekPeriod';
 export type ExportType = 'fuel' | 'service' | 'odometer' | 'checkin' | 'trip'
     | 'drivers' | 'driverMetrics' | 'vehicles' | 'vehicleMetrics'
     | 'transactions' | 'tollTags' | 'tollPlazas' | 'stations'
-    | 'claims' | 'equipment' | 'inventory' | 'tollTransactions';
+    | 'claims' | 'equipment' | 'inventory';
 
 interface ExportState {
     fuel: boolean;
@@ -40,7 +40,6 @@ interface ExportState {
     claims: boolean;
     equipment: boolean;
     inventory: boolean;
-    tollTransactions: boolean;
 }
 
 /**

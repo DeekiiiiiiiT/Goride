@@ -453,7 +453,7 @@ export function ExportCenter() {
     { id: 'drivers', title: 'Drivers & Staff', description: 'Export driver profiles and performance scorecards', icon: <Users className="h-5 w-5" />, iconColor: 'bg-teal-50 text-teal-600', itemCount: 2 },
     { id: 'vehicles', title: 'Fleet & Vehicles', description: 'Export vehicle profiles and performance metrics', icon: <Car className="h-5 w-5" />, iconColor: 'bg-sky-50 text-sky-600', itemCount: 2 },
     { id: 'fuel', title: 'Fuel', description: 'Export fuel logs', icon: <Fuel className="h-5 w-5" />, iconColor: 'bg-amber-50 text-amber-600', itemCount: 1 },
-    { id: 'toll', title: 'Toll Management', description: 'Export toll tags, plazas, and transaction reconciliation data', icon: <CreditCard className="h-5 w-5" />, iconColor: 'bg-emerald-50 text-emerald-600', itemCount: 3 },
+    { id: 'toll', title: 'Toll Management', description: 'Export toll tags and plazas', icon: <CreditCard className="h-5 w-5" />, iconColor: 'bg-emerald-50 text-emerald-600', itemCount: 2 },
     { id: 'finance', title: 'Finance & Assets', description: 'Export transactions, claims, equipment, and inventory', icon: <DollarSign className="h-5 w-5" />, iconColor: 'bg-amber-50 text-amber-700', itemCount: 4 },
     { id: 'maintenance', title: 'Maintenance & Ops', description: 'Export service logs, odometer history, and vehicle handovers', icon: <Wrench className="h-5 w-5" />, iconColor: 'bg-orange-50 text-orange-600', itemCount: 3 },
     { id: 'system', title: 'System & Backup', description: 'Full system backup as a compressed ZIP archive', icon: <HardDrive className="h-5 w-5" />, iconColor: 'bg-slate-100 text-slate-600', itemCount: 1 },

@@ -59,8 +59,6 @@ export type BuildFleetNavModelInput = {
   inventoryPhase2Enabled?: boolean;
   /** Week Reconciliation switch-over (§9); off hides Week Reconciliation and keeps the old close path. */
   reconV2Enabled?: boolean;
-  /** Toll rebuild v2 for this company (toll_v2_enabled RPC). */
-  tollV2Enabled?: boolean;
 };
 
 export type FleetNavDesk = {
@@ -141,7 +139,6 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
     input.reconV2Enabled === true && (canView('fuel-reconciliation') || canView('toll-tags'));
   const canSeeTollHealthNav =
     input.reconV2Enabled === true &&
-    input.tollV2Enabled === true &&
     (canView('toll-tags') || canView('fuel-reconciliation'));
   const canSeeFleetOps = hasSharedOps && (canSeeFuelDesk || canSeeTollDesk);
   const canSeeCouriersInDriverOps =

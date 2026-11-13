@@ -871,7 +871,7 @@ function DeleteCenterInner() {
     { id: 'drivers', title: 'Drivers & Staff', description: 'Delete driver profiles and performance scorecards', icon: <Users className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 2 },
     { id: 'vehicles', title: 'Fleet & Vehicles', description: 'Delete vehicle records and performance metrics', icon: <Car className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 2 },
     { id: 'fuel', title: 'Fuel', description: 'Delete fuel logs and fuel cards', icon: <Fuel className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 2 },
-    { id: 'toll', title: 'Toll Management', description: 'Delete toll tags, plazas, and toll transactions', icon: <CreditCard className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 3 },
+    { id: 'toll', title: 'Toll Management', description: 'Delete toll tags and plazas', icon: <CreditCard className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 2 },
     { id: 'finance', title: 'Finance & Assets', description: 'Delete transactions, claims, equipment, and inventory', icon: <DollarSign className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 4 },
     { id: 'maintenance', title: 'Maintenance & Ops', description: 'Delete service logs, odometer readings, and vehicle handovers', icon: <Wrench className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 3 },
     { id: 'importHistory', title: 'Import History', description: 'Delete an entire import batch — removes all trips, transactions, ledger entries, and metrics it created', icon: <HardDrive className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 1, badge: 'Cascade' },

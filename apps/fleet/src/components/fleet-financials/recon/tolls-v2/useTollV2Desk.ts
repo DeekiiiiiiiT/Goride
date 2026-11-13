@@ -19,15 +19,3 @@ export function useTollV2Desk(weekKey: string, enabled = true) {
   return query;
 }
 
-export function useTollV2Enabled() {
-  return useQuery({
-    queryKey: ['toll-v2-enabled'],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc('toll_v2_enabled');
-      if (error) throw error;
-      return data === true;
-    },
-    staleTime: 60_000,
-    retry: false,
-  });
-}

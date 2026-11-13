@@ -98,6 +98,7 @@ import {
 import { JaaFuelMatchReview } from '../fuel/JaaFuelMatchReview';
 import * as XLSX from 'xlsx';
 import { useFleetTimezone } from '../../utils/timezoneDisplay';
+import { readUberTollsIntoNewSystem, uberTollFilesFrom } from '../../utils/readUberTollsIntoNewSystem';
 import { Trip, FieldDefinition, FieldType, ParsedRow, DriverMetrics, VehicleMetrics, OrganizationMetrics, ImportAuditState, DisputeRefund } from '../../types/data';
 import { FuelEntry, FuelCard, JaaProgram } from '../../types/fuel';
 import { api } from '../../services/api';
@@ -442,6 +443,8 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
             }
             fileData.validationErrors = validateFile(fileData);
             fileData.reportDate = extractReportDate(fileData);
+            // Kept so the Uber files can also go to the new toll system after the trips are saved.
+            (fileData as FileData & { rawFile?: File }).rawFile = file;
             newFiles.push(fileData);
             completed++;
             if (completed === acceptedFiles.length) processQueue();
@@ -1215,8 +1218,8 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
           }
           setCommitProgress(85);
 
-          // Uber support adjustments go to the new toll system through Week Reconciliation step 1 (toll upload);
-          // the old dispute-refund store is gone.
+          // Uber toll paybacks and take-backs go to the new toll system (the old dispute-refund store is gone).
+          await readUberTollsIntoNewSystem(uberTollFilesFrom(uploadedFiles as Array<FileData & { rawFile?: File }>));
           setCommitProgress(95);
 
           queryClient.invalidateQueries({ queryKey: ['driverMetrics'] });

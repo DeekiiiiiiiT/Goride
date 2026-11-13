@@ -8,8 +8,6 @@ import type { NavLeaf } from './nav/types';
 import { useFuelReviewQueueCounts } from '../../hooks/useFuelReviewQueueCounts';
 import { useInventoryPhase2Enabled } from '../../hooks/useInventoryPhase2Flag';
 import { useReconV2 } from '../../hooks/useReconV2';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '../../utils/supabase/client';
 
 export function NavNewBadge() {
   return (
@@ -47,16 +45,6 @@ export function useFleetNavModel(): FleetNavModel {
   const { data: queueCounts } = useFuelReviewQueueCounts(canSeeReviewQueue);
   const inventoryPhase2Enabled = useInventoryPhase2Enabled();
   const reconV2Enabled = useReconV2() === true;
-  const tollV2Q = useQuery({
-    queryKey: ['toll-v2-enabled'],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc('toll_v2_enabled');
-      if (error) throw error;
-      return data === true;
-    },
-    staleTime: 60_000,
-    retry: false,
-  });
 
   return buildFleetNavModel({
     canView,
@@ -74,6 +62,5 @@ export function useFleetNavModel(): FleetNavModel {
     unattributedFuelCount: queueCounts?.unattributedFuelCount ?? 0,
     inventoryPhase2Enabled,
     reconV2Enabled,
-    tollV2Enabled: tollV2Q.data === true,
   });
 }

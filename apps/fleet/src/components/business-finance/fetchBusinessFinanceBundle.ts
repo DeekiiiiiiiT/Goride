@@ -248,13 +248,19 @@ export async function fetchBusinessFinanceBundle(
     else businessBankOrCardOutflows += amount;
   }
 
+  // Toll health = last night's run of the new toll system's checks (the Toll Health page). A failed check, or a run
+  // that failed as a whole, is a flag; no run yet means the number is incomplete. People without toll access skip it.
   let tollVarianceFlags = 0;
   try {
-    // New toll system: the failed checks in last night's toll run (Toll Health).
-    const weeks = await fetchTollV2Weeks();
-    tollVarianceFlags = (weeks.nightly?.checks ?? []).filter((c) => !c.ok).length;
-  } catch {
-    incomplete.push('Toll health');
+    const night = (await fetchTollV2Weeks()).nightly;
+    if (!night) {
+      incomplete.push('Toll health');
+    } else {
+      const failed = (night.checks ?? []).filter((c) => !c.ok).length;
+      tollVarianceFlags = failed > 0 ? failed : night.ok === false ? 1 : 0;
+    }
+  } catch (e) {
+    if (!/FORBIDDEN|NO_COMPANY/.test(String((e as { message?: unknown })?.message ?? e))) incomplete.push('Toll health');
   }
 
   let fuelVarianceFlags = 0;
