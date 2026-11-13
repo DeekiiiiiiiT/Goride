@@ -449,6 +449,9 @@ export function MaintenanceMasterPage() {
         token={token}
         canWrite={canWrite && !analystReadOnly}
         pkg={editingPackage as { id: string; task_name: string } | null}
+        otherPackageNames={packages
+          .filter((p) => p.id !== (editingPackage as { id?: string } | null)?.id)
+          .map((p) => String(p.task_name ?? ""))}
         categories={categories.filter((c) => c.kind === "component")}
         partRulesByComponent={partRulesByComponent}
         onClose={() => setPackageDrawerOpen(false)}

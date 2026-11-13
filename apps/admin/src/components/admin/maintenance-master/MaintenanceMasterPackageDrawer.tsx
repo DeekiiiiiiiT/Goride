@@ -23,6 +23,8 @@ type Props = {
   token: string;
   canWrite: boolean;
   pkg: PackageRow | null;
+  /** Names of every other package, so a rename can't create a duplicate. */
+  otherPackageNames?: string[];
   categories: MaintenanceServiceCategory[];
   partRulesByComponent: Map<string, MaintenanceRule>;
   onClose: () => void;
@@ -34,12 +36,14 @@ export function MaintenanceMasterPackageDrawer({
   token,
   canWrite,
   pkg,
+  otherPackageNames = [],
   categories,
   partRulesByComponent,
   onClose,
   onSaved,
 }: Props) {
   const [members, setMembers] = useState<PackageMember[]>([]);
+  const [pkgName, setPkgName] = useState("");
   const [pkgKm, setPkgKm] = useState("");
   const [pkgMo, setPkgMo] = useState("");
   const [busy, setBusy] = useState(false);
@@ -50,6 +54,7 @@ export function MaintenanceMasterPackageDrawer({
     if (!open || !pkg?.id || !token) return;
     setError("");
     setPartSearch("");
+    setPkgName(pkg.task_name ?? "");
     setPkgKm(pkg.interval_km != null ? String(pkg.interval_km) : "");
     setPkgMo(pkg.interval_months != null ? String(pkg.interval_months) : "");
     void fetchPackageCategories(token, pkg.id).then((rows) => {
@@ -120,8 +125,22 @@ export function MaintenanceMasterPackageDrawer({
       .slice(0, 8);
   }, [components, members, partSearch]);
 
+  const trimmedName = pkgName.trim();
+  const nameTaken = otherPackageNames.some(
+    (n) => n.trim().toLowerCase() === trimmedName.toLowerCase(),
+  );
+  const nameError = !trimmedName
+    ? "Give the package a name."
+    : nameTaken
+      ? "Another package already has this name."
+      : "";
+
   const save = async () => {
     if (!canWrite || !token || !pkg?.id) return;
+    if (nameError) {
+      setError(nameError);
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -132,6 +151,7 @@ export function MaintenanceMasterPackageDrawer({
       }));
       await setPackageCategories(token, pkg.id, items);
       await updateMaintenanceTemplate(token, pkg.id, {
+        ...(trimmedName !== pkg.task_name ? { task_name: trimmedName } : {}),
         interval_km: pkgKm === "" ? null : Number(pkgKm),
         interval_months: pkgMo === "" ? null : Number(pkgMo),
       });
@@ -167,6 +187,18 @@ export function MaintenanceMasterPackageDrawer({
           <div className="rounded-lg border border-secondary-container/50 bg-secondary-container/20 px-3 py-2 text-xs text-on-secondary-container">
             Packages don&apos;t change how often a part is due. To change that, edit the part&apos;s schedule.
           </div>
+          <label className="mt-3 block text-xs text-on-surface-variant">
+            Name
+            <input
+              type="text"
+              className="mt-1 w-full rounded-lg border border-outline-variant/50 bg-white px-3 py-2 text-sm text-on-surface"
+              value={pkgName}
+              onChange={(e) => setPkgName(e.target.value)}
+              maxLength={200}
+              disabled={!canWrite}
+            />
+          </label>
+          {canWrite && nameError ? <p className="mt-1 text-xs text-error">{nameError}</p> : null}
           <p className="mt-3 text-sm text-on-surface-variant">
             Visit rhythm: <span className="font-code text-on-surface">{rhythm}</span>
           </p>
