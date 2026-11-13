@@ -1,5 +1,7 @@
 import {
   getColFromRecord,
+  normalizeIndriveDriverLookupKey,
+  normalizePlate,
   parseCsvDateTimeToJamaicaIso,
   parseCsvRecords,
   toMinor,
@@ -12,6 +14,29 @@ function mapIndrivePaymentMethod(raw: string): 'cash' | 'card' | 'unknown' {
   if (s === 'cash') return 'cash';
   if (s === 'card') return 'card';
   return 'unknown';
+}
+
+function resolveDriverId(
+  raw: Record<string, string>,
+  ctx: IndriveCtx,
+): string {
+  const driverCol = getColFromRecord(raw, 'driverId', 'driver_id', 'inDriveDriverId', 'in_drive_driver_id');
+  const driverName = getColFromRecord(raw, 'driverName', 'driver_name');
+  const map = ctx.driverByExternalId;
+
+  if (driverCol) {
+    const mapped = map?.[driverCol];
+    if (mapped) return mapped;
+    const looksUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(driverCol);
+    if (!looksUuid) return driverCol;
+  }
+
+  if (driverName && map) {
+    const byName = map[normalizeIndriveDriverLookupKey(driverName)];
+    if (byName) return byName;
+  }
+
+  return '';
 }
 
 export function indrive(text: string, ctx: IndriveCtx = {}): IndriveResult {
@@ -29,19 +54,18 @@ export function indrive(text: string, ctx: IndriveCtx = {}): IndriveResult {
       continue;
     }
 
-    const driverName = getColFromRecord(raw, 'driverName', 'driver_name');
-    const driverCol = getColFromRecord(raw, 'driverId', 'driver_id');
-    const driverId =
-      driverCol || (driverName ? ctx.driverByExternalId?.[driverName] : undefined) || '';
+    const driverId = resolveDriverId(raw, ctx);
 
     if (!driverId) {
       problems.push({ row: rowNum, reason: 'Missing driver' });
       continue;
     }
 
+    const plateRaw = getColFromRecord(raw, 'vehiclePlate', 'vehicle_plate');
+    const plateNorm = plateRaw ? normalizePlate(plateRaw) : '';
     const vehicleId =
       getColFromRecord(raw, 'vehicleId', 'vehicle_id') ||
-      ctx.vehicleByPlate?.[getColFromRecord(raw, 'vehiclePlate', 'vehicle_plate')] ||
+      (plateNorm ? ctx.vehicleByPlate?.[plateNorm] : undefined) ||
       '';
 
     if (!vehicleId) {
@@ -74,9 +98,13 @@ export function indrive(text: string, ctx: IndriveCtx = {}): IndriveResult {
       if (dropoffAt) trip.dropoff_at = dropoffAt;
     }
 
-    const tollStr = getColFromRecord(raw, 'tollCharges', 'toll_charges', 'toll_payback_minor');
-    if (tollStr) {
-      const m = toMinor(tollStr);
+    const tollMinorCol = getColFromRecord(raw, 'toll_payback_minor');
+    const tollDollarCol = getColFromRecord(raw, 'tollCharges', 'toll_charges');
+    if (tollMinorCol) {
+      const parsed = parseInt(tollMinorCol.replace(/,/g, '').trim(), 10);
+      if (!Number.isNaN(parsed) && parsed !== 0) trip.toll_payback_minor = Math.abs(parsed);
+    } else if (tollDollarCol) {
+      const m = toMinor(tollDollarCol);
       if (m !== null && m !== 0) trip.toll_payback_minor = Math.abs(m);
     }
 

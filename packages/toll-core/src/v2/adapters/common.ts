@@ -139,6 +139,15 @@ export function parseCsvDateTimeToJamaicaIso(dateStr: string): string | null {
     if (parts) return formatJamaicaIso(parts.y, parts.m, parts.d, parts.h, parts.min, parts.s);
   }
 
+  const hasUtcOrOffset = /Z$/i.test(trimmed) || /[+-]\d{2}:?\d{2}$/.test(trimmed);
+  if (hasUtcOrOffset) {
+    const instant = new Date(trimmed);
+    if (!Number.isNaN(instant.getTime())) {
+      return instantToJamaicaIso(instant);
+    }
+    return null;
+  }
+
   const iso = trimmed.match(
     /^(\d{4})-(\d{2})-(\d{2})[T ](\d{1,2}):(\d{2})(?::(\d{2}))?/,
   );
@@ -154,6 +163,30 @@ export function parseCsvDateTimeToJamaicaIso(dateStr: string): string | null {
   }
 
   return null;
+}
+
+function instantToJamaicaIso(d: Date): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Jamaica',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '00';
+  let hour = parseInt(get('hour'), 10);
+  if (hour === 24) hour = 0;
+  return formatJamaicaIso(
+    parseInt(get('year'), 10),
+    parseInt(get('month'), 10),
+    parseInt(get('day'), 10),
+    hour,
+    parseInt(get('minute'), 10),
+    parseInt(get('second'), 10),
+  );
 }
 
 export interface ParsedWallClock {
@@ -327,6 +360,11 @@ export function normalizeTagForLookup(id: string): string {
 
 export function normalizePlate(plate: string): string {
   return (plate || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+}
+
+/** InDrive driver name / external id lookup key. */
+export function normalizeIndriveDriverLookupKey(name: string): string {
+  return (name || '').trim().replace(/\s+/g, ' ').toUpperCase();
 }
 
 /** Plaza name for tag crossing refs: trim and collapse inner whitespace. */

@@ -271,9 +271,15 @@ BEGIN
                   (r ->> 'request_at')::timestamptz, (r ->> 'pickup_at')::timestamptz, (r ->> 'dropoff_at')::timestamptz,
                   coalesce(nullif(r ->> 'time_precision', ''), 'minute'), coalesce(nullif(r ->> 'payment_method', ''), 'unknown'))
           ON CONFLICT (organization_id, platform, platform_trip_id) DO UPDATE
-            SET driver_id = excluded.driver_id, vehicle_id = excluded.vehicle_id, request_at = excluded.request_at,
-                pickup_at = excluded.pickup_at, dropoff_at = excluded.dropoff_at, time_precision = excluded.time_precision,
-                payment_method = excluded.payment_method;
+            -- A re-import never blanks what an earlier file knew (a missing plate or time keeps the stored value).
+            SET driver_id      = coalesce(excluded.driver_id, toll.platform_trips.driver_id),
+                vehicle_id     = coalesce(excluded.vehicle_id, toll.platform_trips.vehicle_id),
+                request_at     = coalesce(excluded.request_at, toll.platform_trips.request_at),
+                pickup_at      = coalesce(excluded.pickup_at, toll.platform_trips.pickup_at),
+                dropoff_at     = coalesce(excluded.dropoff_at, toll.platform_trips.dropoff_at),
+                time_precision = excluded.time_precision,
+                payment_method = CASE WHEN excluded.payment_method = 'unknown' THEN toll.platform_trips.payment_method
+                                      ELSE excluded.payment_method END;
           v_amt := coalesce((r ->> 'toll_payback_minor')::bigint, 0);
           IF v_amt > 0 THEN
             v_at := coalesce((r ->> 'dropoff_at')::timestamptz, (r ->> 'request_at')::timestamptz);

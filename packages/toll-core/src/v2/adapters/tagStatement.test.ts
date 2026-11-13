@@ -71,7 +71,7 @@ describe('tagStatement', () => {
     );
   });
 
-  it('reports unknown plaza', () => {
+  it('reports unknown plaza for crossings only', () => {
     const csv = `Tag ID,Plaza Name,Plaza Lane ID,Date & Time,Amount
 1234,Unknown Plaza,1,15/03/2024 10:30 am,-370`;
     const out = tagStatement(csv, ctx);
@@ -79,6 +79,15 @@ describe('tagStatement', () => {
     expect(out.problems).toEqual([
       { row: 2, reason: 'Plaza not known: Unknown Plaza' },
     ]);
+  });
+
+  it('accepts top-up without a known plaza', () => {
+    const csv = `Tag ID,Plaza Name,Plaza Lane ID,Date & Time,Amount
+001234,Top Up,1,15/03/2024 11:00 am,500.00`;
+    const out = tagStatement(csv, ctx);
+    expect(out.problems).toHaveLength(0);
+    expect(out.topups).toHaveLength(1);
+    expect(out.topups[0].amount_minor).toBe(50000);
   });
 
   it('is deterministic', () => {

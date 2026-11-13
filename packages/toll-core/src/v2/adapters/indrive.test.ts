@@ -60,4 +60,54 @@ trip-x,Unknown Person,vehicle-a,20/06/2024 14:30`;
   it('is deterministic', () => {
     expect(indrive(text)).toEqual(indrive(text));
   });
+
+  it('normalizes plate for vehicle lookup', () => {
+    const csv = `id,driverId,vehiclePlate,requestTime
+trip-plate,driver-a,1234 ab,20/06/2024 14:30`;
+    const out = indrive(csv, { vehicleByPlate: { '1234AB': 'vehicle-z' } });
+    expect(out.rows[0]?.vehicle_id).toBe('vehicle-z');
+  });
+
+  it('resolves driver by InDrive id and normalized name, not Uber uuid', () => {
+    const uberUuid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    const ctx = {
+      driverByExternalId: {
+        'ind-99': 'driver-ind',
+        'JOHN DOE': 'driver-name',
+      },
+      vehicleByPlate: { X: 'v1' },
+    };
+    const byId = indrive(
+      `id,driverId,vehicleId,requestTime\nt1,ind-99,v1,20/06/2024 14:30`,
+      ctx,
+    );
+    expect(byId.rows[0].driver_id).toBe('driver-ind');
+
+    const byName = indrive(
+      `id,driverName,vehicleId,requestTime\nt2,  john   doe  ,v1,20/06/2024 14:30`,
+      ctx,
+    );
+    expect(byName.rows[0].driver_id).toBe('driver-name');
+
+    const byUber = indrive(
+      `id,driverId,vehicleId,requestTime\nt3,${uberUuid},v1,20/06/2024 14:30`,
+      ctx,
+    );
+    expect(byUber.rows).toHaveLength(0);
+    expect(byUber.problems[0].reason).toBe('Missing driver');
+  });
+
+  it('reads toll_payback_minor as cents and tollCharges as dollars', () => {
+    const minor = indrive(
+      `id,driverId,vehicleId,requestTime,toll_payback_minor
+t-min,driver-a,vehicle-a,20/06/2024 14:30,37000`,
+    );
+    expect(minor.rows[0].toll_payback_minor).toBe(37000);
+
+    const dollars = indrive(
+      `id,driverId,vehicleId,requestTime,tollCharges
+t-dol,driver-a,vehicle-a,20/06/2024 14:30,370`,
+    );
+    expect(dollars.rows[0].toll_payback_minor).toBe(37000);
+  });
 });

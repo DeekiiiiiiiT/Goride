@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { offlineStorage } from '../../services/offlineStorage';
 import { offlineBlobStore } from '../../services/offlineBlobStore';
@@ -17,6 +17,10 @@ import {
   tollSyncPermanentMessage,
   type TollSyncError,
 } from '../../services/syncCashToll';
+import {
+  markRerunWhileSyncing,
+  shouldProcessQueueAfterSync,
+} from './offlineQueueRerun';
 
 interface OfflineContextType {
   isOnline: boolean;
@@ -267,6 +271,7 @@ async function syncSplitFuelFill(action: Extract<OfflineAction, { type: 'SUBMIT_
 }
 
 export function OfflineProvider({ children }: { children: React.ReactNode }) {
+  const deferQueueRerunRef = useRef(false);
   const isOnline = useNetworkStatus();
   const { user } = useAuth();
   const [queue, setQueue] = useState<OfflineAction[]>([]);
@@ -304,9 +309,12 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const processQueue = async (forceRetry = false) => {
-      // Don't sync if offline, already syncing, or no user
       const currentQueue = offlineStorage.getQueue();
-      if (!isOnline || syncStatus === 'SYNCING' || currentQueue.length === 0 || !user) return;
+      if (!isOnline || currentQueue.length === 0 || !user) return;
+      if (syncStatus === 'SYNCING') {
+        deferQueueRerunRef.current = markRerunWhileSyncing(deferQueueRerunRef.current, true);
+        return;
+      }
 
       setSyncStatus('SYNCING');
       
@@ -314,6 +322,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       let errorCount = 0;
       let tripSuccess = 0;
       let fuelSuccess = 0;
+      let tollSuccess = 0;
 
       // Filter actionable items first
       const itemsToProcess = currentQueue.filter(item => {
@@ -368,7 +377,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
               } else if (action.type === 'SUBMIT_CASH_TOLL') {
                   await syncCashTollAction(action);
                   processedIds.push(action.id);
-                  fuelSuccess++;
+                  tollSuccess++;
               } else if (action.type === 'SUBMIT_FUEL_EXPENSE') {
                   await syncFuelExpense(action);
                   processedIds.push(action.id);
@@ -435,6 +444,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
           processedIds.forEach(id => offlineStorage.removeFromQueue(id));
           const parts: string[] = [];
           if (tripSuccess > 0) parts.push(`${tripSuccess} trip${tripSuccess === 1 ? '' : 's'}`);
+          if (tollSuccess > 0) parts.push(`${tollSuccess} toll${tollSuccess === 1 ? '' : 's'}`);
           if (fuelSuccess > 0) parts.push(`${fuelSuccess} fuel log${fuelSuccess === 1 ? '' : 's'}`);
           toast.success(`Synced ${parts.join(' and ') || `${processedIds.length} items`}`);
           refreshQueue();
@@ -444,7 +454,17 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
           toast.error(`Failed to sync ${errorCount} items`);
       }
 
-      setSyncStatus(errorCount > 0 ? 'ERROR' : 'IDLE');
+      const nextStatus = errorCount > 0 ? 'ERROR' : 'IDLE';
+      setSyncStatus(nextStatus);
+
+      const deferred = deferQueueRerunRef.current;
+      deferQueueRerunRef.current = false;
+      const pendingRetryable = offlineStorage.getQueue().some(
+        (item) => (item.retryCount || 0) < MAX_RETRIES && !isClosedWeekSaveError(item.lastError),
+      );
+      if (shouldProcessQueueAfterSync(deferred, pendingRetryable)) {
+        void processQueue(false);
+      }
   };
 
   // Auto-sync when coming online

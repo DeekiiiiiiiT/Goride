@@ -94,11 +94,6 @@ export function tagStatement(text: string, ctx: TagStatementCtx): TagStatementRe
       continue;
     }
     const driverId = ctx.vehicleToDriver[vehicleId];
-    const plazaId = ctx.plazaIdByName[plazaName];
-    if (!plazaId) {
-      problems.push({ row: rowNum, reason: `Plaza not known: ${plazaName}` });
-      continue;
-    }
 
     if (amountMinor > 0) {
       const minuteIso = isoToMinuteKey(occurredAt);
@@ -114,6 +109,12 @@ export function tagStatement(text: string, ctx: TagStatementCtx): TagStatementRe
         account_ref: tagKey,
         vehicle_id: vehicleId,
       });
+      continue;
+    }
+
+    const plazaId = ctx.plazaIdByName[plazaName];
+    if (!plazaId) {
+      problems.push({ row: rowNum, reason: `Plaza not known: ${plazaName}` });
       continue;
     }
 

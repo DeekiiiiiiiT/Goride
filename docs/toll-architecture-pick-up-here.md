@@ -27,7 +27,19 @@
    - **New system:** 12 tag crossings $4,250; top-up $5,000; 11 Uber paybacks $3,975 (= Uber's summary); 27 Aug 12:50 Spanish Town East $275 has no trip → driver_pays (owner to confirm); 2 competing pairs left for a person; nightly checks all pass. Part E #3 confirmed on 3 cash trips (paid = earnings + toll − cash).
    - **Old system (closed statement v12):** the same 12 crossings and 11 paybacks. But it marks trip 1d4a29d3 Cash (the file says card: cash collected 0), links trip 94908b46 to two crossings and a47521e7 to none (it put a47521e7 on a 30 Aug cash toll), counts $5,920 all as **tag** spend (incl. cash), and charged the driver $2,190, which is $245 more than the tolls Uber didn't pay ($1,945; `netLoss −245`). Old-system issue, separate from v2; the owner decides whether to look at it.
    - **Cash tolls (driver app) that week:** 6 in the old ledger: 2 rejected, 1 reconciled, 3 still pending in a closed week. v2 would block the seal until they're decided.
-3. **Next in P2-R6:** commit the reader fix, `/code-review` on Phase 2, the matcher-sweep schedule SQL (Claude), live SQL, then deploy.
+3. **P2-R6 step 2 — `/code-review` (13 Nov, `512492ff..HEAD`): 10 findings, all real.** Reader fix committed `323fa548`.
+   - **#8 fixed by Claude:** a re-imported trip no longer blanks stored fields, edited in place in `20261113001948_toll_v2_import_core.sql` (never live). Not committed; `pnpm test:toll` all ok.
+   - **The other 9 are with Cursor:** `docs/toll-build/cursor-P2-R6b-review-fixes.md` (InDrive plate / driver / cents, top-up plaza check, driver id in the receipt ref, Uber unknown driver / vehicle reported, UTC times, the sweep continues past a failing company, the driver app re-runs the queue).
+4. **R6b checked by Claude (13 Nov):** all 9 fixes right. The real week re-reads identically (87 rows). toll-core 186, Deno 20, driver 52, `pnpm test:toll` all ok.
+5. **Sweep timer (Claude):** `20261113142520_toll_v2_matcher_sweep_cron.sql` (pg_cron every 10 min → `fleet-toll-cron`, which has a cron secret and `verify_jwt = false` in `config.toml` → `fleet-toll /internal/toll-matcher-sweep` with the service key). It calls nothing while `toll.match_queue` is empty.
+6. **Live SQL ready + proven:** `docs/toll-build/toll_v2_phase2_LIVE_apply.sql` (6 migrations + logbook, one transaction).
+   - **Proof:** a local copy rebuilt without the 6, then the file applied. Its check gives `6 | t | t | 1`; the schema + function dump is identical to a normal build (only pg_dump's random tokens differ); all 16 toll SQL tests pass against it.
+   - **If any Phase 2 migration changes, rebuild this file.**
+7. **Owner, in order:**
+   1. say commit (R6b + #8 + timer + live file are uncommitted);
+   2. run the live file when the live database answers normally (Claude's reads timed out on 13 Nov);
+   3. then deploy. `fleet-toll-cron` is a new function to deploy.
+   - Open question: the 27 Aug 12:50 Spanish Town East $275 crossing: personal (driver pays) or fleet work?
 3. **Claude still owes for P2-R6:** the pg_cron schedule SQL for `/internal/toll-matcher-sweep`.
 4. **Never commit the unrelated work** in the same folder with toll work: the `docs/*shop*fees*` files, `supabase/migrations/20261113010913_shop_fees_group.sql`, the two `apps/admin/.../maintenance-master/*` edits and `docs/maintenance-service-discount-audit.md`.
 

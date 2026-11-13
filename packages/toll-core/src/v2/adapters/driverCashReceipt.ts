@@ -17,9 +17,10 @@ export function driverCashReceipt(submission: DriverCashSubmission): DriverCashR
   const plazaKey = (submission.plazaId || '').trim();
   const unknownPlaza = plazaKey === '' || plazaKey === 'unknown';
   const receiptNum = submission.receiptNumber?.trim();
+  const driverKey = (submission.driverId || '').trim();
   const sourceRef =
-    !unknownPlaza && receiptNum
-      ? `receipt:${plazaKey}:${receiptNum}`
+    !unknownPlaza && receiptNum && driverKey
+      ? `receipt:${plazaKey}:${driverKey}:${receiptNum}`
       : `submission:${submission.submissionId}`;
 
   const row: DriverCashRow = {

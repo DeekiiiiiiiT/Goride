@@ -28,4 +28,13 @@ describe('parseCsvDateTimeToJamaicaIso', () => {
     expect(parseCsvDateTimeToJamaicaIso('12/01/2024 12:00 am')).toBe('2024-01-12T00:00:00-05:00');
     expect(parseCsvDateTimeToJamaicaIso('11/11/2024 11:59 pm')).toBe('2024-11-11T23:59:00-05:00');
   });
+
+  it('converts UTC and offset instants to Jamaica wall time', () => {
+    expect(parseCsvDateTimeToJamaicaIso('2026-08-24T15:30:00Z')).toBe(
+      '2026-08-24T10:30:00-05:00',
+    );
+    expect(parseCsvDateTimeToJamaicaIso('2026-08-24 15:30')).toBe(
+      '2026-08-24T15:30:00-05:00',
+    );
+  });
 });

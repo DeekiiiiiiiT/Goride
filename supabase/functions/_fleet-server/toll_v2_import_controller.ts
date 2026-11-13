@@ -36,7 +36,7 @@ import type { AdapterProblem } from "../../../packages/toll-core/src/v2/adapters
 import {
   runTollMatcher,
   runTollMatcherSweep,
-  type MatcherRunReport,
+  type MatcherSweepItem,
   type TollRpc,
 } from "./toll_v2_matcher_run.ts";
 
@@ -381,7 +381,7 @@ export function isUserJwt(authHeader: string): boolean {
   }
 }
 
-export async function handleMatcherSweep(rpc: TollRpc): Promise<MatcherRunReport[]> {
+export async function handleMatcherSweep(rpc: TollRpc): Promise<MatcherSweepItem[]> {
   return await runTollMatcherSweep(rpc);
 }
 

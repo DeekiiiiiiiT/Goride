@@ -20,6 +20,17 @@ export interface MatcherRunReport {
   queueLeft: boolean;
 }
 
+export interface MatcherRunSweepError {
+  organizationId: string;
+  error: string;
+}
+
+export type MatcherSweepItem = MatcherRunReport | MatcherRunSweepError;
+
+export function isMatcherRunReport(item: MatcherSweepItem): item is MatcherRunReport {
+  return !("error" in item);
+}
+
 const COUNT_KEYS = ["new", "unchanged", "replaced", "withdrawn", "skipped"] as const;
 
 export async function runTollMatcher(
@@ -61,11 +72,20 @@ export async function runTollMatcher(
 }
 
 /** Drain every company that has queued work. */
-export async function runTollMatcherSweep(rpc: TollRpc): Promise<MatcherRunReport[]> {
+export async function runTollMatcherSweep(rpc: TollRpc): Promise<MatcherSweepItem[]> {
   const pending = await rpc("toll_sys_match_pending", {});
   if (pending.error) throw new Error(`toll_sys_match_pending: ${pending.error.message}`);
   const rows = Array.isArray(pending.data) ? (pending.data as { organization_id: string }[]) : [];
-  const out: MatcherRunReport[] = [];
-  for (const row of rows) out.push(await runTollMatcher(rpc, String(row.organization_id)));
+  const out: MatcherSweepItem[] = [];
+  for (const row of rows) {
+    const organizationId = String(row.organization_id);
+    try {
+      out.push(await runTollMatcher(rpc, organizationId));
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error(`runTollMatcherSweep failed for ${organizationId}:`, message);
+      out.push({ organizationId, error: message });
+    }
+  }
   return out;
 }

@@ -102,7 +102,7 @@ describe('uber adapter (golden sample from uber-csv-analysis)', () => {
     const tripId = '11111111-1111-1111-1111-111111111111';
     const payments = readFileSync(join(FIXTURES, 'payments_transaction_golden.csv'), 'utf8');
     const extra =
-      `sync-uuid\tdriver-uuid\tX\tY\t${tripId}\tSupport Adjustment:  adj-with-trip-uuid\tOrg\talias\t2026-01-20 12:00:00.000 -0500 EST\t0\t0\t0\t0\t0\t0\t0\t0\t5\t0\t0\t0\t0\t0\n`;
+      `sync-uuid\t52ff47da-ef48-41b8-93d5-80a09b85ce5b\tX\tY\t${tripId}\tSupport Adjustment:  adj-with-trip-uuid\tOrg\talias\t2026-01-20 12:00:00.000 -0500 EST\t0\t0\t0\t0\t0\t0\t0\t0\t5\t0\t0\t0\t0\t0\n`;
     const tripActivity = readFileSync(join(FIXTURES, 'trip_activity_golden.csv'), 'utf8');
     const actExtra = `${tripId}\t52ff47da-ef48-41b8-93d5-80a09b85ce5b\tK\tR\tv\t5179KZ\tsvc\t1/20/2026 8:00\t1/20/2026 9:00\tp\td\t1\tcompleted\tUberX\n`;
     const out = uber({ payments: payments + extra, tripActivity: tripActivity + actExtra }, ctx);
@@ -152,5 +152,35 @@ x\t52ff47da-ef48-41b8-93d5-80a09b85ce5b\tK\tR\t\tSupport Adjustment:  bad-date-c
 
   it('is deterministic', () => {
     expect(uber(files, ctx)).toEqual(uber(files, ctx));
+  });
+
+  it('reports unknown driver and vehicle instead of importing raw ids', () => {
+    const tripId = '33333333-3333-3333-3333-333333333333';
+    const badDriver = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+  const tripActivity = `Trip UUID\tDriver UUID\tLicense plate\tTrip request time\tTrip drop off time
+${tripId}\t${badDriver}\tXXXX\t1/22/2026 8:00\t1/22/2026 9:00`;
+    const payments = `transaction UUID\tDriver UUID\tTrip UUID\tPaid to you:Trip balance:Refunds:Toll
+x\t${badDriver}\t${tripId}\t370`;
+    const out = uber({ payments, tripActivity }, ctx);
+    expect(out.rows.filter((r) => r.row_type === 'trip')).toHaveLength(0);
+    expect(out.problems.some((p) => p.reason === `Driver not found: ${badDriver}`)).toBe(true);
+
+    const trip2 = '44444444-4444-4444-4444-444444444444';
+    const act2 = `Trip UUID\tDriver UUID\tLicense plate\tTrip request time\tTrip drop off time
+${trip2}\t52ff47da-ef48-41b8-93d5-80a09b85ce5b\tNOPE\t1/22/2026 8:00\t1/22/2026 9:00`;
+    const pay2 = `transaction UUID\tDriver UUID\tTrip UUID\tPaid to you:Trip balance:Refunds:Toll
+x\t52ff47da-ef48-41b8-93d5-80a09b85ce5b\t${trip2}\t370`;
+    const out2 = uber({ payments: pay2, tripActivity: act2 }, ctx);
+    expect(out2.rows.filter((r) => r.row_type === 'trip')).toHaveLength(0);
+    expect(out2.problems.some((p) => p.reason === 'Vehicle not found: NOPE')).toBe(true);
+
+    const adjPayments = `transaction UUID\tDriver UUID\tDescription\tvs reporting\tPaid to you:Trip balance:Refunds:Toll
+x\t${badDriver}\tSupport Adjustment:  adj-missing-driver\t2026-01-20\t10`;
+    const out3 = uber(
+      { payments: adjPayments, tripActivity: 'Trip UUID\tTrip request time\n' },
+      ctx,
+    );
+    expect(out3.rows.filter((r) => r.row_type === 'adjustment')).toHaveLength(0);
+    expect(out3.problems.some((p) => p.reason === `Driver not found: ${badDriver}`)).toBe(true);
   });
 });

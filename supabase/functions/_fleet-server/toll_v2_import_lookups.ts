@@ -4,11 +4,12 @@
  */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import {
+  normalizeIndriveDriverLookupKey,
   normalizeTagForLookup,
   normalizePlate,
 } from "../../../packages/toll-core/src/v2/adapters/common.ts";
 import type { IndriveCtx, TagStatementCtx, UberCtx } from "../../../packages/toll-core/src/v2/adapters/types.ts";
-import type { DriverIdentityLike } from "./driver_identity.ts";
+import { getCanonicalDriverName, type DriverIdentityLike } from "./driver_identity.ts";
 import { queryFleet } from "./repos/baseRepo.ts";
 import * as kv from "./kv_store.tsx";
 
@@ -107,12 +108,38 @@ export async function buildUberCtx(orgId: string): Promise<UberCtx> {
   return { driverByUberUuid, vehicleByPlate };
 }
 
+export function buildIndriveDriverMapFromRecords(
+  drivers: DriverIdentityLike[],
+): Record<string, string> {
+  const driverByExternalId: Record<string, string> = {};
+  for (const d of drivers) {
+    const canonical = String(d.id ?? d.driverId ?? "").trim();
+    if (!canonical) continue;
+    const indriveId = String(d.inDriveDriverId ?? "").trim();
+    if (indriveId) driverByExternalId[indriveId] = canonical;
+    const nameKey = normalizeIndriveDriverLookupKey(getCanonicalDriverName(d));
+    if (nameKey) driverByExternalId[nameKey] = canonical;
+  }
+  return driverByExternalId;
+}
+
 export async function buildIndriveCtx(orgId: string): Promise<IndriveCtx> {
-  const uber = await buildUberCtx(orgId);
-  return {
-    driverByExternalId: uber.driverByUberUuid,
-    vehicleByPlate: uber.vehicleByPlate,
-  };
+  const drivers = await loadOrgDrivers(orgId);
+  const driverByExternalId = buildIndriveDriverMapFromRecords(drivers);
+
+  const vehRes = await queryFleet("vehicles", { org: orgId, limit: 5000 });
+  if (vehRes.error) throw vehRes.error;
+  const vehicleByPlate: Record<string, string> = {};
+  for (const row of vehRes.data) {
+    const v = row as Record<string, unknown>;
+    const id = String(v.id ?? "").trim();
+    const plate = normalizePlate(
+      String(v.plateNumber ?? v.licensePlate ?? v.plate_number ?? ""),
+    );
+    if (id && plate) vehicleByPlate[plate] = id;
+  }
+
+  return { driverByExternalId, vehicleByPlate };
 }
 
 export function resolvePlazaId(plazaName: string, map: PlazaLookup): string {

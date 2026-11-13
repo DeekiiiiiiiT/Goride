@@ -1026,7 +1026,11 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
           type: 'SUBMIT_CASH_TOLL',
           payload: queuePayload,
         });
-        toast.success('Toll saved on this phone — will send when you\'re back online');
+        toast.success(
+          isOnline
+            ? 'Toll saved — sending now'
+            : 'Toll saved on this phone — will send when you\'re back online',
+        );
         setViewState('list');
         resetForm();
         if (isOnline) void processQueue();

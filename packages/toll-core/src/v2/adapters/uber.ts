@@ -138,7 +138,11 @@ export function uber(files: UberFiles, ctx: UberCtx): UberResult {
           continue;
         }
         const driverUuid = getColFromRecord(row, 'Driver UUID', 'driver uuid');
-        const driverId = ctx.driverByUberUuid[driverUuid] ?? driverUuid;
+        const driverId = ctx.driverByUberUuid[driverUuid];
+        if (!driverId) {
+          problems.push({ row: rowNum, reason: `Driver not found: ${driverUuid}` });
+          continue;
+        }
         const adj: UberAdjustmentRow = {
           row_type: 'adjustment',
           reference: ref,
@@ -177,9 +181,17 @@ export function uber(files: UberFiles, ctx: UberCtx): UberResult {
 
     const cashSum = cashByTrip.get(tripId) ?? 0;
     const driverUuid = driverByTrip.get(tripId) ?? activity.driverUuid;
-    const driverId = ctx.driverByUberUuid[driverUuid] ?? driverUuid;
+    const driverId = ctx.driverByUberUuid[driverUuid];
+    if (!driverId) {
+      problems.push({ row: 0, reason: `Driver not found: ${driverUuid}` });
+      continue;
+    }
     const plate = normalizePlate(activity.plate);
-    const vehicleId = ctx.vehicleByPlate[plate] ?? plate;
+    const vehicleId = ctx.vehicleByPlate[plate];
+    if (!vehicleId) {
+      problems.push({ row: 0, reason: `Vehicle not found: ${plate}` });
+      continue;
+    }
 
     const trip: UberTripRow = {
       row_type: 'trip',

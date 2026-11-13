@@ -832,6 +832,51 @@ BEGIN
   PERFORM pg_temp._imp_nightly_ok(v_org_a);
 
 
+  -- ── 7b. Uber merge keeps first vehicle, dropoff, payment_method (P2-R6b #8) ──
+  v_drop := v_w_uber::timestamptz + time '18:00';
+  v_resp := pg_temp._imp_cmd('import_batch', jsonb_build_object(
+    'command_id', 'imp-s7-merge1',
+    'kind', 'uber',
+    'rows', jsonb_build_array(jsonb_build_object(
+      'row_type', 'trip', 'platform_trip_id', 'uber-merge-keep',
+      'driver_id', v_driver, 'vehicle_id', v_vehicle,
+      'request_at', v_drop - interval '20 minutes', 'dropoff_at', v_drop,
+      'payment_method', 'card', 'toll_payback_minor', 500
+    ))
+  ));
+  IF pg_temp._imp_rep_status(v_resp, 'uber-merge-keep') <> 'new' THEN
+    RAISE EXCEPTION 's7b first uber merge import';
+  END IF;
+
+  v_resp := pg_temp._imp_cmd('import_batch', jsonb_build_object(
+    'command_id', 'imp-s7-merge2',
+    'kind', 'uber',
+    'file_name', 'uber-merge-pass2.csv',
+    'rows', jsonb_build_array(jsonb_build_object(
+      'row_type', 'trip', 'platform_trip_id', 'uber-merge-keep',
+      'driver_id', v_driver,
+      'request_at', v_drop - interval '20 minutes',
+      'payment_method', 'unknown', 'toll_payback_minor', 500
+    ))
+  ));
+  IF (SELECT vehicle_id FROM toll.platform_trips
+      WHERE organization_id = v_org_a AND platform = 'uber' AND platform_trip_id = 'uber-merge-keep')
+    IS DISTINCT FROM v_vehicle THEN
+    RAISE EXCEPTION 's7b vehicle_id not preserved';
+  END IF;
+  IF (SELECT dropoff_at FROM toll.platform_trips
+      WHERE organization_id = v_org_a AND platform = 'uber' AND platform_trip_id = 'uber-merge-keep')
+    IS NULL THEN
+    RAISE EXCEPTION 's7b dropoff_at not preserved';
+  END IF;
+  IF (SELECT payment_method FROM toll.platform_trips
+      WHERE organization_id = v_org_a AND platform = 'uber' AND platform_trip_id = 'uber-merge-keep')
+    <> 'card' THEN
+    RAISE EXCEPTION 's7b payment_method not preserved';
+  END IF;
+  PERFORM pg_temp._imp_nightly_ok(v_org_a);
+
+
   -- ── 8. InDrive ──
   v_drop := v_w_ind::timestamptz + time '12:00';
   v_resp := pg_temp._imp_cmd('import_batch', jsonb_build_object(
