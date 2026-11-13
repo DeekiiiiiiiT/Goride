@@ -1,7 +1,7 @@
 {
   "slug": "fleet-toll",
-  "generatedAt": "2026-11-12T20:41:13.892Z",
-  "routeCount": 102,
+  "generatedAt": "2026-11-13T14:34:36.377Z",
+  "routeCount": 105,
   "routes": [
     "DELETE /toll-plazas/:id",
     "DELETE /toll-tags/:id",
@@ -93,6 +93,7 @@
     "POST ${TOLL_HTTP_PREFIX}/toll/periods/:weekKey/repair-orphan-events",
     "POST ${TOLL_HTTP_PREFIX}/toll/periods/:weekKey/seal",
     "POST /internal/seal-toll-week",
+    "POST /internal/toll-matcher-sweep",
     "POST /make-server-37f42386/admin/evidence-storage/audit-legacy",
     "POST /make-server-37f42386/admin/evidence-storage/purge-legacy",
     "POST /make-server-37f42386/internal/evidence-cleanup",
@@ -104,6 +105,8 @@
     "POST /toll-tags/assign",
     "POST /toll-tags/unassign",
     "POST /toll/v2/commands/:intent",
+    "POST /toll/v2/driver-cash",
+    "POST /toll/v2/import",
     "PUT ${BASE}/automation-settings"
   ]
 }
