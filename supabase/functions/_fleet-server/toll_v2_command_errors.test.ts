@@ -17,6 +17,11 @@ const MAPPED: Array<{ code: string; status: number }> = [
   { code: "COMPANY_NOT_ACCEPTED", status: 400 },
   { code: "UNKNOWN_INTENT", status: 400 },
   { code: "INTENT_NOT_BUILT", status: 501 },
+  { code: "NOT_FOUND", status: 404 },
+  { code: "WRONG_STATE", status: 409 },
+  { code: "AFTER_SEAL", status: 409 },
+  { code: "AMOUNT_TOO_LARGE", status: 409 },
+  { code: "ALLOCATIONS_EXCEED_AMOUNT", status: 409 },
 ];
 
 for (const { code, status } of MAPPED) {

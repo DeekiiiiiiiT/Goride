@@ -59,6 +59,8 @@ DECLARE
   v_top_w       uuid;
   v_ch_t1       uuid;
   v_ch_t2       uuid;
+  v_ch_t2b      uuid;
+  v_ch_tb       uuid;
   v_ch_cash1    uuid;
   v_ch_pending  uuid;
   v_ch_unver    uuid;
@@ -349,35 +351,52 @@ BEGIN
   ) RETURNING id INTO v_pb3;
   PERFORM toll_system.post(v_org_a, 'P4_payback_fleet', v_pb_part, v_ev, 'toll-wr-p4-part', 16,
     jsonb_build_object('payback_id', v_pb3::text));
+  -- t2 is fully driver-allocated; platform slice for pb3 lives on its own charge (I4 guard).
+  INSERT INTO toll.charges (
+    organization_id, occurred_at, week_key, time_precision, amount_minor,
+    paid_by, source, source_ref, evidence_status, driver_id
+  ) VALUES (
+    v_org_a, v_ev, v_w, 'exact', v_pb_link, 'tag', 'manual', 'toll-wr-t2b', 'verified', v_d1
+  ) RETURNING id INTO v_ch_t2b;
+  PERFORM toll_system.post(v_org_a, 'P2_tag_crossing', v_pb_link, v_ev, 'toll-wr-p2-t2b', 16,
+    jsonb_build_object('charge_id', v_ch_t2b::text));
   INSERT INTO toll.allocations (
     organization_id, charge_id, bearer, amount_minor, payback_id, reason, decision_id
-  ) VALUES (v_org_a, v_ch_t2, 'platform', v_pb_link, v_pb3, 'wr-pb3', v_decision_id);
+  ) VALUES (v_org_a, v_ch_t2b, 'platform', v_pb_link, v_pb3, 'wr-pb3', v_decision_id);
   PERFORM toll_system.post(v_org_a, 'P6_allocate_platform', v_pb_link, v_ev, 'toll-wr-p6-pb3', 17,
-    jsonb_build_object('charge_id', v_ch_t2::text, 'payback_id', v_pb3::text));
+    jsonb_build_object('charge_id', v_ch_t2b::text, 'payback_id', v_pb3::text));
   INSERT INTO toll.payback_unlinked_decisions (
     organization_id, payback_id, amount_minor, reason, decision_id
   ) VALUES (v_org_a, v_pb3, v_unlinked, 'no toll', v_decision_id);
 
-  -- take-back in W (original payback + reversal same week)
+  -- take-back in W (original payback + reversal same week; own charge so I4 holds)
+  INSERT INTO toll.charges (
+    organization_id, occurred_at, week_key, time_precision, amount_minor,
+    paid_by, source, source_ref, evidence_status, driver_id
+  ) VALUES (
+    v_org_a, v_ev, v_w, 'exact', v_take, 'tag', 'manual', 'toll-wr-tb-ch', 'verified', v_d1
+  ) RETURNING id INTO v_ch_tb;
+  PERFORM toll_system.post(v_org_a, 'P2_tag_crossing', v_take, v_ev, 'toll-wr-p2-tb', 18,
+    jsonb_build_object('charge_id', v_ch_tb::text));
   INSERT INTO toll.paybacks (
     organization_id, platform, kind, reference, paid_on, week_key, amount_minor, received_by
   ) VALUES (
     v_org_a, 'uber', 'trip_line', 'toll-wr-pb-tb-y', v_w, v_w, v_take, 'fleet'
   ) RETURNING id INTO v_pb_orig;
-  PERFORM toll_system.post(v_org_a, 'P4_payback_fleet', v_take, v_ev, 'toll-wr-p4-tb', 18,
+  PERFORM toll_system.post(v_org_a, 'P4_payback_fleet', v_take, v_ev, 'toll-wr-p4-tb', 19,
     jsonb_build_object('payback_id', v_pb_orig::text));
   INSERT INTO toll.allocations (
     organization_id, charge_id, bearer, amount_minor, payback_id, reason, decision_id
-  ) VALUES (v_org_a, v_ch_t1, 'platform', v_take, v_pb_orig, 'wr-tb', v_decision_id)
+  ) VALUES (v_org_a, v_ch_tb, 'platform', v_take, v_pb_orig, 'wr-tb', v_decision_id)
   RETURNING id INTO v_alloc;
-  PERFORM toll_system.post(v_org_a, 'P6_allocate_platform', v_take, v_ev, 'toll-wr-p6-tb', 19,
-    jsonb_build_object('charge_id', v_ch_t1::text, 'payback_id', v_pb_orig::text));
+  PERFORM toll_system.post(v_org_a, 'P6_allocate_platform', v_take, v_ev, 'toll-wr-p6-tb', 20,
+    jsonb_build_object('charge_id', v_ch_tb::text, 'payback_id', v_pb_orig::text));
   INSERT INTO toll.paybacks (
     organization_id, platform, kind, reference, paid_on, week_key, amount_minor, received_by, reversal_of
   ) VALUES (
     v_org_a, 'uber', 'trip_line', 'toll-wr-pb-tb-z', v_w, v_w, v_take, 'fleet', v_pb_orig
   ) RETURNING id INTO v_pb_rev;
-  PERFORM pg_temp._p17_takeback(v_org_a, v_pb_orig, v_pb_rev, v_ch_t1, v_alloc, v_take, v_ev, 'toll-wr-p17-tb');
+  PERFORM pg_temp._p17_takeback(v_org_a, v_pb_orig, v_pb_rev, v_ch_tb, v_alloc, v_take, v_ev, 'toll-wr-p17-tb');
 
   -- carried into W
   INSERT INTO toll.charges (
@@ -394,7 +413,7 @@ BEGIN
   ) RETURNING id INTO v_carried_id;
 
   -- ══ 1. Every field on fixture week W (hand totals in comments) ══
-  -- spend: tag 1000+1500+600+500(carried counts in W) + cash 2000+1200; unverified 700 excluded → tag 3600 cash 3200 total 6800
+  -- spend: tag 1000+1500+2000(t2b)+1000(tb)+600+500(carried) + cash 2000+1200; unverified 700 excluded → tag 6600 cash 3200 total 9800
   -- bearers: platform 1000+2000+1000(TB alloc still counts until reversed? after P17 platform on t1 was reversed)
   --   After take-back, t1 platform alloc from tb reversed — platform from t1 alloc 1000 + pb3 2000 = 3000; driver t2 1500; fleet cash1 2000 + pend 400 + await 1200 = 3600
   -- pending: 2 charges (part-pending 600 + carried 500), 700 undecided
@@ -408,15 +427,15 @@ BEGIN
   PERFORM pg_temp._wr_as(v_owner, v_org_a);
   v_j := public.toll_v2_week_result(v_w);
 
-  IF (v_j -> 'spend' ->> 'tagMinor')::bigint <> v_t1 + v_t2 + v_pending + v_carried_amt THEN
+  IF (v_j -> 'spend' ->> 'tagMinor')::bigint <> v_t1 + v_t2 + v_pb_link + v_take + v_pending + v_carried_amt THEN
     RAISE EXCEPTION 's1 spend.tag got % want %', v_j -> 'spend' ->> 'tagMinor',
-      v_t1 + v_t2 + v_pending + v_carried_amt;
+      v_t1 + v_t2 + v_pb_link + v_take + v_pending + v_carried_amt;
   END IF;
   IF (v_j -> 'spend' ->> 'cashMinor')::bigint <> v_cash1 + v_await THEN
     RAISE EXCEPTION 's1 spend.cash got % want %', v_j -> 'spend' ->> 'cashMinor', v_cash1 + v_await;
   END IF;
   IF (v_j -> 'spend' ->> 'totalMinor')::bigint <>
-      v_t1 + v_t2 + v_pending + v_carried_amt + v_cash1 + v_await THEN
+      v_t1 + v_t2 + v_pb_link + v_take + v_pending + v_carried_amt + v_cash1 + v_await THEN
     RAISE EXCEPTION 's1 spend.total';
   END IF;
 
@@ -430,8 +449,9 @@ BEGIN
     RAISE EXCEPTION 's1 bearers.fleet got % want %', v_j -> 'bearers' ->> 'fleetMinor', v_cash1 + 400 + v_await;
   END IF;
 
-  IF (v_j -> 'pending' ->> 'charges')::int <> 2
-    OR (v_j -> 'pending' ->> 'amountMinor')::bigint <> v_pending - 400 + v_carried_amt THEN
+  -- take-back charge reopens as pending after P17 until otherwise decided (+v_take)
+  IF (v_j -> 'pending' ->> 'charges')::int <> 3
+    OR (v_j -> 'pending' ->> 'amountMinor')::bigint <> v_pending - 400 + v_carried_amt + v_take THEN
     RAISE EXCEPTION 's1 pending got charges=% amt=%', v_j -> 'pending' ->> 'charges',
       v_j -> 'pending' ->> 'amountMinor';
   END IF;
@@ -473,11 +493,11 @@ BEGIN
   IF (v_j -> 'tagAccount' ->> 'topUpsMinor')::bigint <> v_tu_w THEN
     RAISE EXCEPTION 's1 tagAccount.topUps';
   END IF;
-  IF (v_j -> 'tagAccount' ->> 'usageMinor')::bigint <> v_t1 + v_t2 + v_pending + v_carried_amt THEN
+  IF (v_j -> 'tagAccount' ->> 'usageMinor')::bigint <> v_t1 + v_t2 + v_pb_link + v_take + v_pending + v_carried_amt THEN
     RAISE EXCEPTION 's1 tagAccount.usage';
   END IF;
   IF (v_j -> 'tagAccount' ->> 'closingMinor')::bigint <>
-      v_tu_wm1 + 5000 + v_tu_w - (v_t1 + v_t2 + v_pending + v_carried_amt) THEN
+      v_tu_wm1 + 5000 + v_tu_w - (v_t1 + v_t2 + v_pb_link + v_take + v_pending + v_carried_amt) THEN
     RAISE EXCEPTION 's1 tagAccount.closing';
   END IF;
 
@@ -547,6 +567,12 @@ BEGIN
   ) VALUES (v_org_a, v_ch_pending, 'fleet', v_pending - 400, NULL, 'wr-pend-rest', v_decision_id);
   PERFORM toll_system.post(v_org_a, 'P8_allocate_fleet', v_pending - 400, v_ev, 'toll-wr-p8-pend2', 24,
     jsonb_build_object('charge_id', v_ch_pending::text));
+
+  INSERT INTO toll.allocations (
+    organization_id, charge_id, bearer, amount_minor, payback_id, reason, decision_id
+  ) VALUES (v_org_a, v_ch_tb, 'fleet', v_take, NULL, 'wr-tb-close', v_decision_id);
+  PERFORM toll_system.post(v_org_a, 'P8_allocate_fleet', v_take, v_ev, 'toll-wr-p8-tb', 25,
+    jsonb_build_object('charge_id', v_ch_tb::text));
 
   PERFORM pg_temp._wr_as(v_owner, v_org_a);
   v_pre_seal := public.toll_v2_week_result(v_w);

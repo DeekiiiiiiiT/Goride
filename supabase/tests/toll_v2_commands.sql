@@ -518,7 +518,7 @@ BEGIN
 
   -- 10. Intents
   PERFORM pg_temp._toll_cmd_as(v_owner, v_org_a);
-  PERFORM pg_temp._toll_cmd_expect('link_payback', jsonb_build_object(
+  PERFORM pg_temp._toll_cmd_expect('reverse_payback', jsonb_build_object(
     'command_id', 'toll-cmd-nb-intent', 'payback_id', v_payback
   ), 'INTENT_NOT_BUILT');
   PERFORM pg_temp._toll_cmd_expect('make_coffee', jsonb_build_object(

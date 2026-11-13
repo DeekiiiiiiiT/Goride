@@ -14,7 +14,7 @@ DECLARE
     'charges', 'charge_changes', 'platform_trips', 'paybacks', 'allocations',
     'carried_facts', 'payback_unlinked_decisions', 'duplicate_reviews', 'decisions',
     'suggestions', 'tag_accounts', 'tag_topups', 'platform_settings', 'plaza_rules',
-    'staff_company_access', 'switch_state', 'audit_log'
+    'staff_company_access', 'switch_state', 'audit_log', 'match_queue'
   ];
   t text;
   missing text[];
@@ -36,7 +36,7 @@ DECLARE
   v_first_col text;
   v_key_cols int;
 BEGIN
-  -- 1. All 17 tables exist in toll
+  -- 1. All 18 tables exist in toll
   SELECT array_agg(x ORDER BY x)
   INTO missing
   FROM unnest(expected_tables) AS x

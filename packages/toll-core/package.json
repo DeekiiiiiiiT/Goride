@@ -33,9 +33,9 @@
     "./v2/adapters/topupProvider": "./src/v2/adapters/topupProvider.ts",
     "./v2/adapters/uber": "./src/v2/adapters/uber.ts",
     "./v2/adapters/indrive": "./src/v2/adapters/indrive.ts",
-    "./v2/adapters/driverCashReceipt": "./src/v2/adapters/driverCashReceipt.ts"
+    "./v2/adapters/driverCashReceipt": "./src/v2/adapters/driverCashReceipt.ts",
+    "./v2/matcher": "./src/v2/matcher/index.ts"
   },
-
   "scripts": {
     "test": "vitest run"
   },

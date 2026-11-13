@@ -27,17 +27,20 @@ DECLARE
   v_ch_tag    uuid;
   v_ch_cash   uuid;
   v_ch_plat   uuid;
+  v_ch_outbox uuid;
   v_pb_fleet  uuid;
   v_j         jsonb;
   v_line      jsonb;
   v_resp      jsonb;
   v_cnt       int;
   v_ob        int;
+  v_msg       text;
   v_fn_drv    regprocedure := 'public.toll_sys_driver_week_tolls(uuid,date,text)'::regprocedure;
   v_amt_tag   bigint := 1500;
   v_amt_cash  bigint := 2000;
   v_amt_plat  bigint := 1000;
   v_amt_pb    bigint := 1000;
+  v_amt_out   bigint := 100;
 BEGIN
   v_week0 := ledger.jamaica_week_start(v_effective);
   v_w := v_week0 + 7 * 40;
@@ -151,6 +154,26 @@ BEGIN
   IF (v_line ->> 'recoveredInPassengerCashMinor')::bigint <> 0 THEN RAISE EXCEPTION 'sec1 recovered'; END IF;
   IF (v_line ->> 'driverId') <> v_d1 THEN RAISE EXCEPTION 'sec1 driverId'; END IF;
 
+  INSERT INTO toll.charges (
+    organization_id, occurred_at, week_key, time_precision, amount_minor,
+    paid_by, source, source_ref, evidence_status, driver_id
+  ) VALUES (
+    v_org, v_ev, v_w, 'exact', 100, 'tag', 'manual', 'toll-sl-outbox', 'verified', v_d1
+  ) RETURNING id INTO v_ch_outbox;
+  PERFORM toll_system.post(v_org, 'P2_tag_crossing', 100, v_ev, 'toll-sl-p2-outbox', 50,
+    jsonb_build_object('charge_id', v_ch_outbox::text));
+  SELECT count(*) INTO v_cnt FROM ledger.financial_outbox
+  WHERE payload ->> 'domain' = 'toll_v2' AND payload ->> 'driver_id' = v_d1;
+  INSERT INTO toll.allocations (organization_id, charge_id, bearer, amount_minor, reason, decision_id)
+  VALUES (v_org, v_ch_outbox, 'fleet', 50, 'sl-outbox-alloc', v_decision);
+  SELECT count(*) INTO v_ob FROM ledger.financial_outbox
+  WHERE payload ->> 'domain' = 'toll_v2' AND payload ->> 'driver_id' = v_d1;
+  IF v_ob <= v_cnt THEN RAISE EXCEPTION 'sec1: allocation should queue outbox'; END IF;
+  INSERT INTO toll.allocations (organization_id, charge_id, bearer, amount_minor, reason, decision_id)
+  VALUES (v_org, v_ch_outbox, 'fleet', 50, 'sl-outbox-close', v_decision);
+  PERFORM toll_system.post(v_org, 'P8_allocate_fleet', 50, v_ev, 'toll-sl-p8-outbox', 51,
+    jsonb_build_object('charge_id', v_ch_outbox::text));
+
   -- Section 2: DFP rows + seal → per-driver toll statements
   INSERT INTO public.driver_financial_periods (
     organization_id, driver_id, period_anchor, period_end, status, metadata
@@ -180,12 +203,12 @@ BEGIN
   SELECT ws.amounts_minor INTO v_j FROM ledger.week_statements ws
   WHERE ws.organization_id = v_org AND ws.kind = 'toll' AND ws.driver_id = v_d1
     AND ws.week_key = v_w AND ws.status = 'closed' ORDER BY ws.version DESC LIMIT 1;
-  IF (v_j ->> 'totalSpend')::bigint <> (v_amt_tag + v_amt_cash + v_amt_plat) THEN RAISE EXCEPTION 'sec2 totalSpend'; END IF;
+  IF (v_j ->> 'totalSpend')::bigint <> (v_amt_tag + v_amt_cash + v_amt_plat + v_amt_out) THEN RAISE EXCEPTION 'sec2 totalSpend'; END IF;
   IF (v_j ->> 'chargedToDriver')::bigint <> v_amt_tag THEN RAISE EXCEPTION 'sec2 charged'; END IF;
   IF (v_j ->> 'reimbursed')::bigint <> v_amt_plat THEN RAISE EXCEPTION 'sec2 reimbursed'; END IF;
-  IF (v_j ->> 'netLoss')::bigint <> v_amt_cash THEN RAISE EXCEPTION 'sec2 netLoss'; END IF;
+  IF (v_j ->> 'netLoss')::bigint <> v_amt_cash + v_amt_out THEN RAISE EXCEPTION 'sec2 netLoss'; END IF;
   IF (v_j ->> 'cashWashSpend')::bigint <> v_amt_cash THEN RAISE EXCEPTION 'sec2 cashWash'; END IF;
-  IF (v_j ->> 'tagSpend')::bigint <> (v_amt_tag + v_amt_plat) THEN RAISE EXCEPTION 'sec2 tagSpend'; END IF;
+  IF (v_j ->> 'tagSpend')::bigint <> (v_amt_tag + v_amt_plat + v_amt_out) THEN RAISE EXCEPTION 'sec2 tagSpend'; END IF;
 
   SELECT ws.amounts_minor INTO v_j FROM ledger.week_statements ws
   WHERE ws.organization_id = v_org AND ws.kind = 'toll' AND ws.driver_id = v_d2
@@ -228,7 +251,7 @@ BEGIN
   -- Section 4: toll_sys_driver_week_tolls
   v_resp := public.toll_sys_driver_week_tolls(v_org, v_w, v_d1);
   IF v_resp ->> 'state' <> 'sealed' THEN RAISE EXCEPTION 'sec4: state sealed'; END IF;
-  IF (v_resp -> 'line' ->> 'spendMinor')::bigint <> (v_amt_tag + v_amt_cash + v_amt_plat) THEN
+  IF (v_resp -> 'line' ->> 'spendMinor')::bigint <> (v_amt_tag + v_amt_cash + v_amt_plat + v_amt_out) THEN
     RAISE EXCEPTION 'sec4: rpc line spend';
   END IF;
   v_resp := public.toll_sys_driver_week_tolls(v_org, v_w, 'unknown-driver-sl');
@@ -242,14 +265,6 @@ BEGIN
   END IF;
 
   -- Section 5: period_projection_refresh outbox (v2 on vs off, no-driver charge)
-  SELECT count(*) INTO v_cnt FROM ledger.financial_outbox
-  WHERE payload ->> 'domain' = 'toll_v2' AND payload ->> 'driver_id' = v_d1;
-  INSERT INTO toll.allocations (organization_id, charge_id, bearer, amount_minor, reason, decision_id)
-  VALUES (v_org, v_ch_plat, 'fleet', 50, 'sl-outbox-alloc', v_decision);
-  SELECT count(*) INTO v_ob FROM ledger.financial_outbox
-  WHERE payload ->> 'domain' = 'toll_v2' AND payload ->> 'driver_id' = v_d1;
-  IF v_ob <= v_cnt THEN RAISE EXCEPTION 'sec5: allocation should queue outbox'; END IF;
-
   SELECT count(*) INTO v_cnt FROM ledger.financial_outbox WHERE payload ->> 'organization_id' = v_org_off::text;
   INSERT INTO toll.charges (
     organization_id, occurred_at, week_key, time_precision, amount_minor,

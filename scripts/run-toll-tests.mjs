@@ -135,6 +135,7 @@ runStep('deno toll edge tests', () => {
     '--allow-env',
     join(root, 'supabase/functions/_fleet-server/toll_v2_command_errors.test.ts'),
     join(root, 'supabase/functions/_fleet-server/toll_seal_before_pay.test.ts'),
+    join(root, 'supabase/functions/_fleet-server/toll_v2_matcher_run.test.ts'),
   ]);
 });
 

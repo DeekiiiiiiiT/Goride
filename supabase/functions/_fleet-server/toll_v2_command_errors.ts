@@ -20,8 +20,14 @@ const STATUS_409 = new Set([
   "REOPEN_INSTEAD",
   "COMMAND_ID_REUSED",
   "TOLLS_V2_OFF",
+  // P2-R4a decisions
+  "WRONG_STATE",
+  "AFTER_SEAL",
+  "AMOUNT_TOO_LARGE",
+  "ALLOCATIONS_EXCEED_AMOUNT",
 ]);
 
+const STATUS_404 = new Set(["NOT_FOUND"]);
 const STATUS_403 = new Set(["FORBIDDEN"]);
 const STATUS_401 = new Set(["NO_COMPANY"]);
 const STATUS_400 = new Set(["BAD_REQUEST", "COMPANY_NOT_ACCEPTED", "UNKNOWN_INTENT"]);
@@ -61,6 +67,7 @@ function parseCurrentState(details: string): Record<string, unknown> {
 
 function statusForCode(businessCode: string): number {
   if (STATUS_409.has(businessCode)) return 409;
+  if (STATUS_404.has(businessCode)) return 404;
   if (STATUS_403.has(businessCode)) return 403;
   if (STATUS_401.has(businessCode)) return 401;
   if (STATUS_400.has(businessCode)) return 400;
