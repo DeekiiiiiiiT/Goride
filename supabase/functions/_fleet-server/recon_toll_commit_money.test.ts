@@ -1,108 +1,20 @@
 /**
- * R4-02 / R5-01: wizard toll commit must post money events (canonical + toll_usage),
- * not only bulk_insert_toll_ledger + kv.set — and only for rows the RPC actually inserted.
+ * Old toll removal S1 (docs/toll-old-system-removal-audit.md): toll files no longer commit through the Week
+ * Reconciliation import path into the old toll ledger. They go through the new toll upload and /register.
  */
 import { assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
 
-const CONTROLLER = new URL("./toll_controller.tsx", import.meta.url);
 const IMPORT_ROUTES = new URL("./recon_import_routes.ts", import.meta.url);
 
-Deno.test("toll_controller exports prepareTollLedgerEntry and afterTollLedgerInsert", async () => {
-  const src = await Deno.readTextFile(CONTROLLER);
-  assert(
-    /async function prepareTollLedgerEntry\(/.test(src),
-    "missing prepareTollLedgerEntry",
-  );
-  assert(
-    /async function afterTollLedgerInsert\(/.test(src),
-    "missing afterTollLedgerInsert",
-  );
-  assert(
-    /export \{\s*[\s\S]*prepareTollLedgerEntry[\s\S]*afterTollLedgerInsert/.test(src) ||
-      /prepareTollLedgerEntry,\s*[\s\S]*afterTollLedgerInsert/.test(src),
-    "prepare/afterInsert must be exported for recon bulk commit",
-  );
-  assert(
-    /saveTollLedgerEntry[\s\S]*prepareTollLedgerEntry[\s\S]*afterTollLedgerInsert/.test(src) ||
-      (/await prepareTollLedgerEntry\(/.test(src) && /await afterTollLedgerInsert\(/.test(src)),
-    "saveTollLedgerEntry must call prepare then afterInsert",
-  );
-});
-
-Deno.test("afterTollLedgerInsert posts canonical toll and toll_usage", async () => {
-  const src = await Deno.readTextFile(CONTROLLER);
-  const afterIdx = src.indexOf("async function afterTollLedgerInsert");
-  assert(afterIdx >= 0, "afterTollLedgerInsert not found");
-  const nextFn = src.indexOf("\nasync function ", afterIdx + 10);
-  const body = src.slice(afterIdx, nextFn > 0 ? nextFn : afterIdx + 3500);
-  assert(
-    /appendCanonicalTollIfEligible/.test(body),
-    "afterInsert must call appendCanonicalTollIfEligible (Business Finance P&L)",
-  );
-  assert(
-    /fleetDualWriteToll/.test(body),
-    "afterInsert must call fleetDualWriteToll",
-  );
-  assert(
-    /ensureActiveTollUsagePostedForEntry/.test(body),
-    "afterInsert must ensure toll_usage financial event",
-  );
-  assert(
-    /ok:\s*errors\.length\s*===\s*0|return \{\s*ok:/.test(body),
-    "afterInsert must return { ok } so recon can count money failures",
-  );
-});
-
-Deno.test("recon import commit uses prepare + afterInsert on bulk path", async () => {
+Deno.test("recon import commit refuses toll files (TOLLS_MOVED) and never writes the old toll ledger", async () => {
   const src = await Deno.readTextFile(IMPORT_ROUTES);
-  assert(
-    /prepareTollLedgerEntry/.test(src),
-    "commit must call prepareTollLedgerEntry before bulk insert",
-  );
-  assert(
-    /afterTollLedgerInsert/.test(src),
-    "commit must call afterTollLedgerInsert after bulk insert",
-  );
-  assert(
-    /bulk_insert_toll_ledger[\s\S]*afterTollLedgerInsert/.test(src),
-    "afterInsert must run on the bulk success path (not only fallback)",
-  );
-});
-
-Deno.test("R5-01: commit money-posts only inserted_ids (skipped rows get 0 events)", async () => {
-  const src = await Deno.readTextFile(IMPORT_ROUTES);
-  assert(
-    /inserted_ids/.test(src),
-    "commit must read inserted_ids from bulk_insert_toll_ledger",
-  );
-  assert(
-    /insertedIdSet/.test(src) || /inserted_ids/.test(src),
-    "commit must build a set of inserted ids",
-  );
-  assert(
-    /if\s*\(\s*!insertedIdSet\.has\(id\)\s*\)\s*continue/.test(src),
-    "afterInsert must skip prepared rows that were not inserted (duplicates)",
-  );
-});
-
-Deno.test("R5-01: afterInsert failure marks staging partial and returns non-success", async () => {
-  const src = await Deno.readTextFile(IMPORT_ROUTES);
-  assert(
-    /moneyFailed/.test(src),
-    "commit must count afterTollLedgerInsert failures",
-  );
-  assert(
-    /status:\s*stagingStatus|status:\s*"partial"/.test(src) &&
-      /partial/.test(src),
-    "money failure must mark staging partial",
-  );
-  assert(
-    /success:\s*false/.test(src) && /422/.test(src),
-    "money failure must return non-success (422)",
-  );
-  assert(
-    /staging\.status\s*!==\s*"parsed"\s*&&\s*staging\.status\s*!==\s*"partial"/.test(src) ||
-      /status\s*!==\s*"partial"/.test(src),
-    "partial staging must be retriable on commit",
-  );
+  const start = src.indexOf('"/make-server-37f42386/recon/imports/:id/commit"');
+  assert(start >= 0, "commit route");
+  const end = src.indexOf("app.post(", start);
+  const body = src.slice(start, end > 0 ? end : undefined);
+  assert(body.includes('error: "TOLLS_MOVED"') && body.includes("410"), "toll commit answers TOLLS_MOVED 410");
+  for (const old of ["saveTollLedgerEntry", "prepareTollLedgerEntry", "afterTollLedgerInsert", "getAllTollLedgerEntries"]) {
+    assert(!src.includes(old), `recon import must not use the old toll ledger (${old})`);
+  }
+  assert(!src.includes("./toll_controller.tsx"), "no import of the old toll controller");
 });

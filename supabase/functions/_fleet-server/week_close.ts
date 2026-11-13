@@ -31,9 +31,7 @@ import {
   listPendingRestatements,
   WEEK_STATEMENT_ENGINE_VERSION,
 } from "./week_statements.ts";
-import { sealTollWeek } from "./toll_week_seal.ts";
 import { sealFuelWeekViaHttp } from "./fuel_seal_http.ts";
-import { sealTollWeekViaHttp } from "./toll_seal_http.ts";
 import { sealEarningsWeek } from "./earnings_week_seal.ts";
 import { sealEarningsWeekViaHttp } from "./earnings_seal_http.ts";
 import {
@@ -915,7 +913,7 @@ async function ensureCloseLaneStatements(
     } else if (toll.status !== "closed") {
       tollNeedsSeal = true;
     } else if (String(toll.closeReason || "") === "zero_activity_na") {
-      // May be stale if late toll_usage arrived — sealTollWeek re-checks events.
+      // An old "no tolls" statement: the week waits for the new toll seal.
       tollStaleZeroNa = true;
     }
     if (!earnings) {
@@ -999,84 +997,15 @@ async function ensureCloseLaneStatements(
     }
   }
 
-  if (
-    tollNeedsSeal ||
-    tollStaleZeroNa ||
-    forceToll ||
-    (anyOpenDriver && tollLaneMissing)
-  ) {
-    const tollForce = Boolean(tollStaleZeroNa || forceToll);
-    const tollGen = await resolveSealGeneration({
-      organizationId: orgId,
-      weekKey: week,
-      lane: "toll",
-      force: tollForce,
-    });
-    const idem = buildSealIdempotencyKey(orgId, week, "toll", tollGen);
-    const useTollHttp = Deno.env.get("FLEET_TOLL_SEAL_HTTP") !== "false";
-    try {
-      await beginSealAttempt({
-        organizationId: orgId,
-        weekKey: week,
-        lane: "toll",
-        idempotencyKey: idem,
-        correlationId: sealCorrelationId,
-      });
-      if (useTollHttp) {
-        await sealTollWeekViaHttp({
-          organizationId: orgId,
-          weekKey: week,
-          actorId,
-          force: tollForce,
-          asOf,
-          idempotencyKey: idem,
-          correlationId: sealCorrelationId,
-        });
-      } else {
-        await sealTollWeek({
-          organizationId: orgId,
-          weekKey: week,
-          actorId,
-          force: tollForce,
-          asOf,
-        });
-      }
-      await completeSealAttempt({
-        organizationId: orgId,
-        weekKey: week,
-        lane: "toll",
-        idempotencyKey: idem,
-        correlationId: sealCorrelationId,
-        status: "succeeded",
-        resultJson: { ok: true, transport: useTollHttp ? "http" : "in-process" },
-      });
-      didSeal = true;
-    } catch (e) {
-      if (e instanceof WeekSealLogError && e.code === "CLOSE_IN_PROGRESS") {
-        throw new WeekCloseError(e.code, e.message, e.status, e.details);
-      }
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error("[week_close] toll auto-seal failed — blocking close", week, msg);
-      try {
-        await completeSealAttempt({
-          organizationId: orgId,
-          weekKey: week,
-          lane: "toll",
-          idempotencyKey: idem,
-          correlationId: sealCorrelationId,
-          status: "failed",
-          lastError: msg,
-        });
-      } catch (logErr) {
-        console.error("[week_close] toll seal-log complete failed", logErr);
-      }
-      throw new WeekCloseError(
-        "CLOSE_BLOCKED",
-        `Toll week seal failed: ${msg}`,
-        503,
-        { week, lane: "toll", cause: msg },
-      );
-    }
+  // Tolls are sealed only in the new toll system (Week Reconciliation step 3), which writes every driver's toll
+  // statement. The old toll seal is gone (docs/toll-old-system-removal-audit.md S1), so close waits for that seal.
+  if (tollNeedsSeal || forceToll || (anyOpenDriver && tollLaneMissing)) {
+    throw new WeekCloseError(
+      "CLOSE_BLOCKED",
+      "This week's tolls aren't sealed yet. Seal them in Week Reconciliation step 3 (Tolls), then close the week.",
+      409,
+      { week, lane: "toll", cause: "TOLL_WEEK_NOT_SEALED" },
+    );
   }
 
   if (earningsNeedsSeal || (anyOpenDriver && earningsLaneMissing) || forceEarnings) {
@@ -1862,8 +1791,9 @@ async function prepareWeekCloseBody(
     rebuildMode: didSeal || anyForce ? "all-open" : "drifted-only",
   });
 
-  // Second pass only when toll books still look wrong after light sync.
-  if (periodSync.preRebuildTollDriftCount > 0 || (await orgWeekNeedsForceTollReseal(orgId, week))) {
+  // Second pass only when a toll statement is still not sealed (the new toll seal writes them; the period rebuild
+  // above already fixes a period that disagreed with its sealed statement).
+  if (await orgWeekNeedsForceTollReseal(orgId, week)) {
     const sealed = await ensureCloseLaneStatements(orgId, week, actorId, {
       forceTollReseal: true,
       forceFuelReseal: force.forceFuelReseal,

@@ -8,7 +8,6 @@ import { getServiceClient } from "./service_client.ts";
 import { driverCloseBlockers, earlierWeekCloseBlocker, periodIsFrozen } from "./week_close.ts";
 import { getLatestWeekStatements } from "./week_statements.ts";
 import { listOpenFinanceReconDrifts } from "./finance_recon_drift.ts";
-import { summarizeTollUsageOrphansByDriverForWeek } from "./toll_financial_reset.ts";
 import { loadWeekCloseReconContext } from "./week_close_recon.ts";
 import { weekPnlTieSides } from "./business_week_pnl.ts";
 import { weekPnlTieBlockers } from "../../../packages/finance-core/src/weekPnlTie.ts";
@@ -84,12 +83,6 @@ export async function writeDriverWeekBlockers(
       engineMinor: Number(item.engine_minor) || 0,
       deltaMinor: Number(item.delta_minor) || 0,
     }));
-  let tollSummary = null;
-  try {
-    tollSummary = (await summarizeTollUsageOrphansByDriverForWeek(weekKey)).get(driverId) ?? null;
-  } catch (e) {
-    console.warn("[recon] toll event ledger skipped", e);
-  }
   const result = await driverCloseBlockers({
     orgId,
     week: weekKey,
@@ -98,7 +91,7 @@ export async function writeDriverWeekBlockers(
     frozen,
     statements,
     storedDrifts,
-    tollSummary,
+    tollSummary: null, // the old toll event check is gone; tolls are sealed in the new system
   });
   // Same rule as the preview: a frozen driver only counts while a restatement waits.
   const counts = !frozen || result.acceptRestatementDrafts;
