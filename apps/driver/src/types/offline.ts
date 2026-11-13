@@ -5,6 +5,7 @@ export type OfflineActionType =
   | 'SUBMIT_FUEL_EXPENSE'
   | 'SUBMIT_GAS_CARD_ANCHOR'
   | 'SUBMIT_SPLIT_FUEL_FILL'
+  | 'SUBMIT_CASH_TOLL'
   | 'SUBMIT_DRIVER_REPORT_UPDATE';
 
 export interface SubmitDriverReportUpdatePayload {
@@ -53,6 +54,24 @@ export interface SubmitGasCardAnchorPayload {
 }
 
 /** Atomic Gas Card + Cash split — both rows or neither. */
+export interface SubmitCashTollPayload {
+  occurredAt: string;
+  amountMinor: number;
+  plazaName?: string;
+  lane?: string;
+  collector?: string;
+  vehicleClass?: string;
+  receiptNumber?: string;
+  notes?: string;
+  merchant?: string;
+  receiptBlobKey?: string;
+  receiptFileName?: string;
+  receiptMimeType?: string;
+  label?: string;
+  /** Legacy KV transaction for TOLLS_V2_OFF fallback (built at sync). */
+  legacyTransaction?: Record<string, unknown>;
+}
+
 export interface SubmitSplitFuelFillPayload {
   fillGroupId: string;
   cashTransaction: Record<string, any>;
@@ -95,6 +114,14 @@ export type OfflineAction =
       id: string;
       type: 'SUBMIT_SPLIT_FUEL_FILL';
       payload: SubmitSplitFuelFillPayload;
+      timestamp: number;
+      retryCount: number;
+      lastError?: string;
+    }
+  | {
+      id: string;
+      type: 'SUBMIT_CASH_TOLL';
+      payload: SubmitCashTollPayload;
       timestamp: number;
       retryCount: number;
       lastError?: string;

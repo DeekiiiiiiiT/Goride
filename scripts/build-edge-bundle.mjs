@@ -21,6 +21,10 @@ const REMOTE_PREFIXES = ["npm:", "jsr:", "node:", "https:", "http:", "data:"];
 const externalRemotePlugin = {
   name: "external-remote-specifiers",
   setup(build) {
+    build.onResolve({ filter: /^papaparse$/ }, () => ({
+      path: "npm:papaparse@5.7.0",
+      external: true,
+    }));
     build.onResolve({ filter: /.*/ }, (args) => {
       if (REMOTE_PREFIXES.some((p) => args.path.startsWith(p))) {
         return { path: args.path, external: true };

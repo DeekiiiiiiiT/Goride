@@ -985,6 +985,69 @@ BEGIN
   END IF;
   PERFORM pg_temp._imp_nightly_ok(v_org_a);
   PERFORM pg_temp._imp_nightly_ok(v_org_b);
+
+  -- ── 11. Driver app cash — same command_id never doubles (I6) ──
+  SET LOCAL ROLE service_role;
+  v_resp := public.toll_sys_import(
+    v_org_a, 'driver_cash',
+    jsonb_build_array(jsonb_build_object(
+      'source_ref', 'submission:imp-driver-cash-i6',
+      'occurred_at', v_ev,
+      'amount_minor', 37000,
+      'plaza_id', v_plaza,
+      'vehicle_id', v_vehicle,
+      'driver_id', v_driver,
+      'evidence_status', 'unverified',
+      'evidence', jsonb_build_object('receipt_url', 'https://example.com/driver-cash.jpg')
+    )),
+    'imp-driver-cash-i6',
+    'driver_app'
+  );
+  v_resp2 := public.toll_sys_import(
+    v_org_a, 'driver_cash',
+    jsonb_build_array(jsonb_build_object(
+      'source_ref', 'submission:imp-driver-cash-i6',
+      'occurred_at', v_ev,
+      'amount_minor', 37000,
+      'plaza_id', v_plaza,
+      'vehicle_id', v_vehicle,
+      'driver_id', v_driver,
+      'evidence_status', 'unverified',
+      'evidence', jsonb_build_object('receipt_url', 'https://example.com/driver-cash.jpg')
+    )),
+    'imp-driver-cash-i6',
+    'driver_app'
+  );
+  RESET ROLE;
+  IF coalesce(v_resp2 ->> 'replay', 'false') <> 'true' THEN
+    RAISE EXCEPTION 's11 driver_cash replay flag';
+  END IF;
+  SELECT count(*)::int INTO v_cnt
+    FROM toll.charges
+   WHERE organization_id = v_org_a
+     AND source_ref = 'submission:imp-driver-cash-i6';
+  IF v_cnt <> 1 THEN
+    RAISE EXCEPTION 's11 expected one driver_cash charge, got %', v_cnt;
+  END IF;
+  SELECT id INTO v_cash_id
+    FROM toll.charges
+   WHERE organization_id = v_org_a
+     AND source_ref = 'submission:imp-driver-cash-i6';
+  IF (SELECT evidence_status FROM toll.charges WHERE id = v_cash_id) <> 'unverified' THEN
+    RAISE EXCEPTION 's11 charge must be unverified';
+  END IF;
+  IF EXISTS (SELECT 1 FROM toll.allocations WHERE organization_id = v_org_a AND charge_id = v_cash_id) THEN
+    RAISE EXCEPTION 's11 unverified charge must have no allocations';
+  END IF;
+  IF pg_temp._imp_led_charge(v_org_a, v_cash_id, 'P3_cash_verified') <> 0 THEN
+    RAISE EXCEPTION 's11 unverified driver_cash must have no ledger rows';
+  END IF;
+  v_status := v_resp -> 'report' -> 0 ->> 'id';
+  IF v_status IS DISTINCT FROM (v_resp2 -> 'report' -> 0 ->> 'id') THEN
+    RAISE EXCEPTION 's11 replay charge id mismatch';
+  END IF;
+  PERFORM pg_temp._imp_nightly_ok(v_org_a);
+
   RAISE NOTICE 'toll_v2_import: all sections passed';
 END $$;
 

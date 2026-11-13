@@ -837,6 +837,35 @@ export const api = {
     return response.json();
   },
 
+  async submitDriverCashTollV2(body: {
+    submission_id: string;
+    receipt_url: string;
+    receipt_number?: string;
+    occurred_at: string;
+    amount_minor: number;
+    plaza_name?: string;
+    lane?: string;
+    collector?: string;
+    vehicle_class?: string;
+  }): Promise<{ charge_id?: string; status?: string; replay?: boolean; code?: string }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll/v2/driver-cash`, {
+      method: 'POST',
+      headers: await getHeaders(),
+      body: JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const err = new Error((data as { code?: string }).code || (data as { error?: string }).error || 'Toll submit failed') as Error & {
+        status?: number;
+        code?: string;
+      };
+      err.status = response.status;
+      err.code = (data as { code?: string }).code;
+      throw err;
+    }
+    return data;
+  },
+
   async saveTransaction(transaction: Partial<FinancialTransaction>) {
     const authHeaders = await getHeaders();
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/transactions`, {

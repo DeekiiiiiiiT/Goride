@@ -11,6 +11,12 @@ import { createManualTrip } from '../../utils/tripFactory';
 import { mapMatchService } from '../../services/mapMatchService';
 import { toast } from 'sonner';
 import { CLOSED_WEEK_TRIP_MESSAGE, isClosedWeekSaveError } from '../../utils/closedWeekTrip';
+import {
+  isPermanentTollSyncError,
+  syncCashToll,
+  tollSyncPermanentMessage,
+  type TollSyncError,
+} from '../../services/syncCashToll';
 
 interface OfflineContextType {
   isOnline: boolean;
@@ -116,6 +122,47 @@ async function syncDriverReportUpdate(
     `offline-${action.id}`,
   );
   await offlineBlobStore.removeMany([payload.photoBlobKey]);
+}
+
+async function syncCashTollAction(action: Extract<OfflineAction, { type: 'SUBMIT_CASH_TOLL' }>) {
+  const outcome = await syncCashToll(action, {
+    uploadReceipt: async (file, sourceId) => {
+      const uploadRes = await uploadEvidenceFile(file, {
+        evidenceType: 'toll_receipt',
+        sourceType: 'transaction',
+        sourceId,
+        retentionClass: 'ephemeral',
+        parentStatus: 'Pending',
+      });
+      return uploadRes.url;
+    },
+    submitDriverCash: async (body) => {
+      try {
+        await api.submitDriverCashTollV2(body as Parameters<typeof api.submitDriverCashTollV2>[0]);
+        return { ok: true as const };
+      } catch (e: unknown) {
+        const err = e as { status?: number; code?: string; message?: string };
+        if (err?.status === 409 && err?.code === 'TOLLS_V2_OFF') {
+          return { ok: false as const, status: 409, code: 'TOLLS_V2_OFF' };
+        }
+        if (err?.status === 400) {
+          return { ok: false as const, status: 400, code: err.code };
+        }
+        throw e;
+      }
+    },
+    saveLegacyTransaction: async (tx) => {
+      await api.saveTransaction(tx as Parameters<typeof api.saveTransaction>[0]);
+    },
+    removeBlob: async (key) => {
+      if (key) await offlineBlobStore.removeMany([key]);
+    },
+  });
+  if (outcome === 'retry') {
+    const err = new Error('Toll sync failed — will retry when online') as TollSyncError;
+    err.code = 'TOLL_SYNC_RETRY';
+    throw err;
+  }
 }
 
 async function syncGasCardAnchor(action: Extract<OfflineAction, { type: 'SUBMIT_GAS_CARD_ANCHOR' }>) {
@@ -318,6 +365,10 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
                   await api.saveTrips([trip]);
                   processedIds.push(action.id);
                   tripSuccess++;
+              } else if (action.type === 'SUBMIT_CASH_TOLL') {
+                  await syncCashTollAction(action);
+                  processedIds.push(action.id);
+                  fuelSuccess++;
               } else if (action.type === 'SUBMIT_FUEL_EXPENSE') {
                   await syncFuelExpense(action);
                   processedIds.push(action.id);
@@ -340,16 +391,29 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
               const code = String(e?.code || "");
               const msg = String(e?.message || "");
               const closedWeek = code === "CLOSED_WEEK" || isClosedWeekSaveError(e);
+              const tollPermanent =
+                action.type === "SUBMIT_CASH_TOLL" && isPermanentTollSyncError(e);
               const permanent =
                 closedWeek ||
+                tollPermanent ||
                 code === "MODULE_DISABLED" ||
                 /MODULE_DISABLED/i.test(msg) ||
                 /not enabled for this organization/i.test(msg);
+
+              const tollMsg =
+                tollPermanent
+                  ? tollSyncPermanentMessage(
+                      (e as TollSyncError).code,
+                      msg,
+                    )
+                  : undefined;
 
               offlineStorage.updateAction(action.id, {
                   retryCount: permanent ? MAX_RETRIES : (action.retryCount || 0) + 1,
                   lastError: closedWeek
                     ? CLOSED_WEEK_TRIP_MESSAGE
+                    : tollMsg
+                    ? tollMsg
                     : permanent
                     ? (msg || "Split fills are not enabled for this fleet")
                     : (msg || "Unknown error"),
@@ -358,7 +422,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
                 toast.error(CLOSED_WEEK_TRIP_MESSAGE);
               } else {
                 errorCount++;
-                if (permanent && action.type === "SUBMIT_SPLIT_FUEL_FILL") {
+                if (tollPermanent) {
+                  toast.error(tollMsg || msg);
+                } else if (permanent && action.type === "SUBMIT_SPLIT_FUEL_FILL") {
                   toast.error("Split fuel fill is not available for your fleet");
                 }
               }

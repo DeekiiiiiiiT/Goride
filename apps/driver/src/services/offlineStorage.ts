@@ -49,6 +49,9 @@ export const offlineStorage = {
         item.payload.receiptBlobKey,
       ]);
     }
+    if (item?.type === 'SUBMIT_CASH_TOLL') {
+      void offlineBlobStore.removeMany([item.payload.receiptBlobKey]);
+    }
     if (item?.type === 'SUBMIT_GAS_CARD_ANCHOR') {
       void offlineBlobStore.removeMany([item.payload.odometerBlobKey]);
     }
@@ -83,6 +86,9 @@ export const offlineStorage = {
           item.payload.odometerBlobKey,
           item.payload.receiptBlobKey,
         ]);
+      }
+      if (item.type === 'SUBMIT_CASH_TOLL') {
+        void offlineBlobStore.removeMany([item.payload.receiptBlobKey]);
       }
     }
     localStorage.removeItem(STORAGE_KEY);

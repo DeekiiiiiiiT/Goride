@@ -14,9 +14,13 @@ export function driverCashReceipt(submission: DriverCashSubmission): DriverCashR
     return { kind: 'driver_cash', rows, problems };
   }
 
-  const sourceRef = submission.receiptNumber?.trim()
-    ? `receipt:${submission.receiptNumber.trim()}`
-  : `submission:${submission.submissionId}`;
+  const plazaKey = (submission.plazaId || '').trim();
+  const unknownPlaza = plazaKey === '' || plazaKey === 'unknown';
+  const receiptNum = submission.receiptNumber?.trim();
+  const sourceRef =
+    !unknownPlaza && receiptNum
+      ? `receipt:${plazaKey}:${receiptNum}`
+      : `submission:${submission.submissionId}`;
 
   const row: DriverCashRow = {
     source_ref: sourceRef,

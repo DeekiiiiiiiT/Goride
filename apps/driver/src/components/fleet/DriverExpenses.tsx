@@ -42,6 +42,7 @@ import { EvidenceRetentionNotice } from '../evidence/EvidenceRetentionNotice';
 import { FinancialTransaction, TransactionCategory } from '../../types/data';
 import { StationProfile } from '../../types/station';
 import { isTollCategory } from '../../utils/tollCategoryHelper';
+import { buildCashTollQueuePayload } from '../../utils/buildCashTollQueuePayload';
 import { resolveFuelEntryStationDisplay } from '../../utils/fuelStationDisplay';
 import { PaymentMethodSelector, type FuelPaymentMethodSelect } from './expenses/PaymentMethodSelector';
 import { GasCardSummary, type FuelPumpStep } from './expenses/GasCardSummary';
@@ -54,6 +55,7 @@ import { findActiveFuelCardForSession } from '../../utils/fuelCardMatch';
 import type { FuelCard } from '../../types/fuel';
 import { useOffline } from '../providers/OfflineProvider';
 import { offlineBlobStore } from '../../services/offlineBlobStore';
+import { offlineStorage } from '../../services/offlineStorage';
 import { useFuelSplitPaymentEnabled } from '../../hooks/useFuelSplitPaymentEnabled';
 import {
   buildCardSplitMetadata,
@@ -250,7 +252,7 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
   const { user } = useAuth();
   const { isFleetDriver } = useDriver();
   const { driverRecord } = useCurrentDriver();
-  const { isOnline, addToQueue, queue } = useOffline();
+  const { isOnline, addToQueue, queue, processQueue } = useOffline();
   const { getLocation } = useGeolocation();
   const { enabled: fuelSplitEnabled, loading: fuelSplitLoading } = useFuelSplitPaymentEnabled();
   const isLogMode = mode === 'log' || (mode == null && defaultOpen);
@@ -958,6 +960,82 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
       console.log('[DriverExpenses] Validation fail:', msg);
       setSubmitError(msg);
       toast.error(msg);
+      return;
+    }
+
+    if (category === 'Tolls') {
+      if (!receiptFile) {
+        const msg = 'Take a photo of the toll receipt first';
+        setSubmitError(msg);
+        toast.error(msg);
+        return;
+      }
+      const tollAmt = parseFloat(amount || '0');
+      if (!amount || Number.isNaN(tollAmt) || tollAmt <= 0) {
+        const msg = 'Enter the toll amount from the receipt';
+        setSubmitError(msg);
+        toast.error(msg);
+        return;
+      }
+      setIsSubmitting(true);
+      try {
+        const vehicles = await api.getVehicles().catch(() => []);
+        const resolvedVehicleId = resolveVehicleIdForDriver(driverRecord, vehicles, user?.id);
+        const resolvedVehicle = resolvedVehicleId
+          ? (vehicles as any[]).find((v: any) => v.id === resolvedVehicleId)
+          : undefined;
+        const { driverId: canonicalDriverId, driverName: canonicalDriverName } = resolveCanonicalDriverIdentity(
+          driverRecord,
+          { id: user?.id, name: user?.user_metadata?.name, email: user?.email },
+        );
+        const ymd = isValid(date) ? format(date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
+        const timeStr = time ? `${time}:00` : format(new Date(), 'HH:mm:ss');
+        const occurredAt = `${ymd}T${timeStr}-05:00`;
+        const receiptBlobKey = `toll-receipt-${crypto.randomUUID()}`;
+        await offlineBlobStore.put(receiptBlobKey, receiptFile);
+        const queuePayload = buildCashTollQueuePayload({
+          occurredAt,
+          amountMinor: Math.round(Math.abs(tollAmt) * 100),
+          tollAmount: tollAmt,
+          ymd,
+          timeStr,
+          plaza,
+          lane,
+          collector,
+          vehicleClass,
+          receiptNumber: referenceNumber,
+          notes,
+          merchant,
+          listDateLabel: format(date, 'MMM d'),
+          receiptBlobKey,
+          receiptFileName: receiptFile.name,
+          receiptMimeType: receiptFile.type,
+          canonicalDriverId,
+          canonicalDriverName,
+          userId: user?.id,
+          resolvedVehicleId,
+          vehiclePlate:
+            driverRecord?.assignedVehiclePlate ||
+            resolvedVehicle?.plateNumber ||
+            resolvedVehicle?.licensePlate ||
+            driverRecord?.assignedVehicleName ||
+            resolvedVehicle?.vehicleName ||
+            undefined,
+        });
+        addToQueue({
+          type: 'SUBMIT_CASH_TOLL',
+          payload: queuePayload,
+        });
+        toast.success('Toll saved on this phone — will send when you\'re back online');
+        setViewState('list');
+        resetForm();
+        if (isOnline) void processQueue();
+      } catch (err) {
+        console.error('[DriverExpenses] Toll queue failed:', err);
+        toast.error(err instanceof Error ? err.message : 'Could not save toll');
+      } finally {
+        setIsSubmitting(false);
+      }
       return;
     }
 
@@ -2965,12 +3043,12 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
                 {/* ✓ Accept & Save button */}
                 <button
                   type="button"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !receiptFile}
                   onClick={() => doSubmit()}
                   className="flex-1 h-14 rounded-xl bg-emerald-600 text-white border-2 border-emerald-700 hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2 font-bold text-lg shadow-lg transition-colors"
                 >
                   {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : <Check className="h-6 w-6" />}
-                  {isSubmitting ? 'Saving...' : 'Accept'}
+                  {isSubmitting ? 'Saving...' : receiptFile ? 'Accept' : 'Take a photo of the toll receipt first'}
                 </button>
               </div>
             </div>

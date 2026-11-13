@@ -3638,6 +3638,41 @@ export const api = {
     return response.json();
   },
 
+  async importTollFileV2(opts: {
+    kind: 'tag_statement' | 'topups' | 'uber' | 'indrive';
+    commandId: string;
+    file: File;
+    paymentsTransaction?: File;
+    tripActivity?: File;
+  }) {
+    const formData = new FormData();
+    formData.append('kind', opts.kind);
+    formData.append('command_id', opts.commandId);
+    formData.append('file', opts.file);
+    if (opts.paymentsTransaction) {
+      formData.append('payments_transaction', opts.paymentsTransaction);
+    }
+    if (opts.tripActivity) {
+      formData.append('trip_activity', opts.tripActivity);
+    }
+    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll/v2/import`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(null),
+      body: formData,
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      const error = new Error(err.code || err.error || 'Toll import failed') as Error & {
+        status?: number;
+        code?: string;
+      };
+      error.status = response.status;
+      error.code = err.code;
+      throw error;
+    }
+    return response.json();
+  },
+
   async voidTollLedgerEntry(id: string, reason: string, force?: boolean) {
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.toll}/toll-ledger/${encodeURIComponent(id)}/void`,

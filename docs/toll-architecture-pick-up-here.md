@@ -1,6 +1,6 @@
 # Pick up here — Toll rebuild
 
-**Updated 2026-11-13 (break after P2-R4).** In a new chat, read `docs/toll-architecture.md` → **Part F (Tracker)** → "Phase 2": first "Where Phase 2 stands (13 Nov, break)", then the "**P2-R5 starting brief**".
+**Updated 2026-11-13 (R4b + R4c committed; R5 prompt written).** In a new chat, read `docs/toll-architecture.md` → **Part F (Tracker)** → "Phase 2": first "Where Phase 2 stands (13 Nov, break)", then the "**P2-R5 starting brief**".
 
 ## Where we are
 - **Design:** agreed. No more review rounds; changes come only from failing tests.
@@ -13,17 +13,18 @@
 | P2-R2 | File readers (adapters) | closed, committed `0bece3c8` |
 | P2-R3 | Matcher (suggestions, shadow only) | closed, committed `0f21cad5` |
 | P2-R4a | Everyday decisions + I4 guard | closed, committed `0f21cad5` |
-| P2-R4b | Take-backs, amount / week corrections | closed, **not committed** |
-| P2-R4c | Carry-forward into the open week | closed, **not committed** |
-| **P2-R5** | **Fleet import route + driver app receipt / offline queue + matcher sweep** | **next** |
+| P2-R4b | Take-backs, amount / week corrections | closed, committed `c0b33a32` |
+| P2-R4c | Carry-forward into the open week | closed, committed `c0b33a32` |
+| **P2-R5** | **Fleet import route + driver app receipt / offline queue + matcher sweep** | **closed 13 Nov, not committed.** Cursor built it; Claude's check found 8 fixes (`cursor-P2-R5b-fixes.md`), all fixed. Claude re-ran: toll-core 180, `pnpm test:toll` all ok, controller Deno 13, driver 7 |
 | P2-R6 | A real week's files end to end, `/code-review`, live SQL, then deploy | after R5 |
 
 - **Branch `parts-auto-match`; nothing pushed.** All Phase 2 migrations are **local only**; they go live together in P2-R6.
 
 ## First things to do when we restart
-1. **Commit R4b + R4c** (toll files only). The uncommitted R4b / R4c files are listed in the tracker under "Where Phase 2 stands (13 Nov, break)".
-   - **Leave out** the unrelated work in the same folder: the `docs/*shop*fees*` files, `supabase/migrations/20261113010913_shop_fees_group.sql`, and the two `apps/admin/.../maintenance-master/*` edits plus `docs/maintenance-service-discount-audit.md`. These belong to other work.
-2. **Start P2-R5:** Claude writes the Cursor build prompt from the starting brief, then checks Cursor's result.
+1. **Commit R5** (toll files only): the new `toll_v2_import_*` server files and tests, `fleet-toll/src/main.ts`, `scripts/build-edge-bundle.mjs` (papaparse external), the driver app toll files (`syncCashToll*`, `buildCashTollQueuePayload*`, `DriverExpenses.tsx`, `OfflineProvider.tsx`, `OfflineSyncManager.tsx`, `offlineStorage.ts`, `types/offline.ts`, `services/api.ts`), `apps/fleet/src/services/api.ts`, the `driverCashReceipt` reader + test, `supabase/tests/toll_v2_import.sql`, the two R5 prompts and this page. Include the rebuilt `fleet-toll/index.ts` (earlier toll commits kept it in git).
+2. **Start P2-R6:** a real week's files end to end, `/code-review`, the matcher-sweep schedule SQL (Claude), live SQL, then deploy.
+3. **Claude still owes for P2-R6:** the pg_cron schedule SQL for `/internal/toll-matcher-sweep`.
+4. **Never commit the unrelated work** in the same folder with toll work: the `docs/*shop*fees*` files, `supabase/migrations/20261113010913_shop_fees_group.sql`, the two `apps/admin/.../maintenance-master/*` edits and `docs/maintenance-service-discount-audit.md`.
 
 ## How we work
 - Cursor does the easy bulk from prompts in `docs/toll-build/`. Claude writes the money SQL and checks every round.

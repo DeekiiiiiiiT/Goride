@@ -8,6 +8,8 @@ import tollApp from "../../_fleet-server/toll_controller.tsx";
 import tollPeriodApp from "../../_fleet-server/toll_period_controller.tsx";
 import tollInventoryApp from "../../_fleet-server/toll_inventory_controller.tsx";
 import tollV2CommandApp from "../../_fleet-server/toll_v2_command_controller.ts";
+import tollV2ImportApp, { handleMatcherSweep } from "../../_fleet-server/toll_v2_import_controller.ts";
+import { createServiceRpcFromModule } from "../../_fleet-server/toll_v2_import_lookups.ts";
 import { sealTollWeek } from "../../_fleet-server/toll_week_seal.ts";
 import { beginSealAttempt, completeSealAttempt } from "../../_fleet-server/week_seal_log.ts";
 
@@ -20,6 +22,18 @@ const app = createFleetFunction({
     parent.use("*", reconWeekVersionGuard);
     // Register before the period/inventory apps. Those apps require a user
     // login on every path, and a later route never runs once that gate answers.
+    parent.post("/internal/toll-matcher-sweep", async (c) => {
+      const rpc = await createServiceRpcFromModule();
+      try {
+        const reports = await handleMatcherSweep(rpc);
+        return c.json({ reports });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error("[fleet-toll] toll-matcher-sweep failed", msg);
+        return c.json({ error: msg }, 500);
+      }
+    });
+
     parent.post("/internal/seal-toll-week", async (c) => {
       const body = await c.req.json();
       const organizationId = String(body.organizationId ?? "");
@@ -84,6 +98,7 @@ const app = createFleetFunction({
       }
     });
 
+    parent.route("/", tollV2ImportApp);
     parent.route("/", tollV2CommandApp);
     parent.route("/", tollPeriodApp);
     parent.route("/", tollInventoryApp);

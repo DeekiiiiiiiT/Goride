@@ -20,7 +20,7 @@ describe('driverCashReceipt', () => {
   it('emits one unverified row with evidence', () => {
     const out = driverCashReceipt(base);
     expect(out.rows).toHaveLength(1);
-    expect(out.rows[0].source_ref).toBe('receipt:RCP-99');
+    expect(out.rows[0].source_ref).toBe('receipt:plaza-main:RCP-99');
     expect(out.rows[0].evidence_status).toBe('unverified');
     expect(out.rows[0].evidence.receipt_url).toBe(base.receiptUrl);
   });
@@ -33,5 +33,31 @@ describe('driverCashReceipt', () => {
 
   it('is deterministic', () => {
     expect(driverCashReceipt(base)).toEqual(driverCashReceipt(base));
+  });
+
+  it('scopes receipt numbers to plaza', () => {
+    const a = driverCashReceipt({ ...base, plazaId: 'plaza-a', receiptNumber: '100' });
+    const b = driverCashReceipt({ ...base, plazaId: 'plaza-b', receiptNumber: '100' });
+    expect(a.rows[0].source_ref).toBe('receipt:plaza-a:100');
+    expect(b.rows[0].source_ref).toBe('receipt:plaza-b:100');
+    expect(a.rows[0].source_ref).not.toBe(b.rows[0].source_ref);
+  });
+
+  it('unknown plaza with same receipt number uses submission id', () => {
+    const a = driverCashReceipt({
+      ...base,
+      submissionId: 'sub-a',
+      plazaId: 'unknown',
+      receiptNumber: '123',
+    });
+    const b = driverCashReceipt({
+      ...base,
+      submissionId: 'sub-b',
+      plazaId: 'unknown',
+      receiptNumber: '123',
+    });
+    expect(a.rows[0].source_ref).toBe('submission:sub-a');
+    expect(b.rows[0].source_ref).toBe('submission:sub-b');
+    expect(a.rows[0].source_ref).not.toBe(b.rows[0].source_ref);
   });
 });
