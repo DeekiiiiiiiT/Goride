@@ -36,6 +36,7 @@ type TileSpec = {
   amountOverride?: number;
   showAmount?: boolean;
   openWeek?: string;
+  footerHint?: string;
 };
 
 export function TollHealthPage({
@@ -70,11 +71,12 @@ export function TollHealthPage({
       },
       {
         key: 'paybacks',
-        label: 'Uber paybacks with no toll',
+        label: 'Uber paybacks not matched yet',
         icon: <Banknote className="h-5 w-5" aria-hidden />,
         bucket: metricsQ.data?.unallocatedPaybacks,
         showAmount: true,
         openWeek,
+        footerHint: 'Confirm their matches in the week',
       },
       {
         key: 'after-seal',
@@ -159,44 +161,42 @@ export function TollHealthPage({
         ))}
       </section>
 
-      {nightly ? (
-        <section
-          className={`rounded-2xl border p-4 ${
-            nightly.ok === false || failedCheck
-              ? 'border-[#ba1a1a]/40 bg-[#ffdad6]/20'
-              : 'border-[#e5eeff] bg-[#eff4ff]/50'
-          }`}
-          data-testid="toll-health-nightly"
-        >
-          <p className="flex items-center gap-2 text-sm font-semibold text-[#0b1c30]">
-            <Landmark className="h-4 w-4" aria-hidden />
-            Nightly money check
+      <section
+        className={`rounded-2xl border p-4 ${
+          nightly && (nightly.ok === false || failedCheck)
+            ? 'border-[#ba1a1a]/40 bg-[#ffdad6]/20'
+            : 'border-[#e5eeff] bg-[#eff4ff]/50'
+        }`}
+        data-testid="toll-health-nightly"
+      >
+        <p className="flex items-center gap-2 text-sm font-semibold text-[#0b1c30]">
+          <Landmark className={`h-4 w-4 ${nightly ? '' : 'text-[#78767d]'}`} aria-hidden />
+          Nightly money check
+        </p>
+        {!nightly ? (
+          <p className="mt-1 text-sm text-[#47464c]">No nightly check has run yet</p>
+        ) : nightly.ok !== false && !failedCheck ? (
+          <p className="mt-1 text-sm text-[#47464c]">
+            All checks passed
+            {nightly.at ? ` last night at ${formatNightlyAt(nightly.at)}` : ''}
           </p>
-          {nightly.ok !== false && !failedCheck ? (
-            <p className="mt-1 text-sm text-[#47464c]">
-              All checks passed
-              {nightly.at ? ` last night at ${formatNightlyAt(nightly.at)}` : ''}
+        ) : (
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium text-[#ba1a1a]">
+              {failedCheck?.name ? `1 check failed — ${plainCheckName(failedCheck.name)}` : '1 check failed'}
             </p>
-          ) : (
-            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-medium text-[#ba1a1a]">
-                {failedCheck?.name
-                  ? `1 check failed — ${plainCheckName(failedCheck.name)}`
-                  : '1 check failed'}
-              </p>
-              {openWeek && onNavigate ? (
-                <button
-                  type="button"
-                  className="rounded-lg border border-[#ba1a1a]/40 px-3 py-1 text-sm font-medium text-[#ba1a1a]"
-                  onClick={() => onNavigate('week-reconciliation', { weekKey: openWeek, step: 'tolls' })}
-                >
-                  Open the week
-                </button>
-              ) : null}
-            </div>
-          )}
-        </section>
-      ) : null}
+            {openWeek && onNavigate ? (
+              <button
+                type="button"
+                className="rounded-lg border border-[#ba1a1a]/40 px-3 py-1 text-sm font-medium text-[#ba1a1a]"
+                onClick={() => onNavigate('week-reconciliation', { weekKey: openWeek, step: 'tolls' })}
+              >
+                Open the week
+              </button>
+            ) : null}
+          </div>
+        )}
+      </section>
 
       <section className="rounded-2xl border border-[#e5eeff] bg-white shadow-sm">
         <h2 className="border-b border-[#e5eeff] px-4 py-3 text-sm font-semibold text-[#0b1c30]">Weeks</h2>
@@ -273,16 +273,20 @@ function HealthTile({
         ) : null}
       </div>
       <div className="my-2 flex items-baseline justify-between gap-2">
-        <span className="font-mono text-2xl font-bold text-[#0b1c30]">{count}</span>
+        <span className="text-2xl font-bold tabular-nums text-[#0b1c30]">{count}</span>
         {spec.showAmount !== false ? (
-          <span className="font-mono text-sm font-semibold text-[#0b1c30]">{fmtTollMinor(amount)}</span>
+          <span className="text-sm font-semibold tabular-nums text-[#0b1c30]">{fmtTollMinor(amount)}</span>
         ) : null}
       </div>
       <div className="flex items-center justify-between border-t border-[#e5eeff] pt-2 text-xs text-[#47464c]">
-        <span className="inline-flex items-center gap-1">
-          <History className="h-3.5 w-3.5" aria-hidden />
-          Oldest {metricAgeLabel(days)}
-        </span>
+        {spec.footerHint ? (
+          <span>{spec.footerHint}</span>
+        ) : (
+          <span className="inline-flex items-center gap-1">
+            <History className="h-3.5 w-3.5" aria-hidden />
+            Oldest {metricAgeLabel(days)}
+          </span>
+        )}
         {count > 0 && openWeek && onNavigate ? (
           <button
             type="button"
@@ -299,11 +303,18 @@ function HealthTile({
 
 function formatNightlyAt(iso: string): string {
   try {
-    return new Date(iso).toLocaleString('en-JM', {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Jamaica',
       hour: 'numeric',
       minute: '2-digit',
-      timeZone: 'America/Jamaica',
-    });
+      hour12: true,
+    }).formatToParts(new Date(iso));
+    const upper = parts
+      .map((p) => (p.type === 'dayPeriod' ? p.value.toUpperCase() : p.value))
+      .join('')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return upper;
   } catch {
     return '—';
   }

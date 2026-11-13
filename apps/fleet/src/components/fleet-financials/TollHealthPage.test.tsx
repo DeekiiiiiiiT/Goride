@@ -29,25 +29,29 @@ vi.mock('./recon/tolls-v2/useTollV2Metrics', async (importOriginal) => {
   };
 });
 
+const weeksOverview = vi.hoisted(() => ({
+  openWeek: '2026-08-24',
+  takeBacks: [{ id: 'tb1' }] as Array<{ id: string }>,
+  nightly: { at: '2026-08-26T04:25:00Z', ok: true, checks: [] as unknown[] } as
+    | { at: string; ok: boolean; checks: unknown[] }
+    | undefined,
+  weeks: [
+    {
+      weekKey: '2026-08-24',
+      sealed: false,
+      tolls: 13,
+      spendMinor: 412890,
+      toDecide: 7,
+      toDecideMinor: 120000,
+    },
+  ],
+}));
+
 vi.mock('./recon/tolls-v2/useTollV2Weeks', () => ({
   useTollV2Weeks: () => ({
     isLoading: false,
     isError: false,
-    data: {
-      openWeek: '2026-08-24',
-      takeBacks: [{ id: 'tb1' }],
-      nightly: { at: '2026-08-26T04:25:00Z', ok: true, checks: [] },
-      weeks: [
-        {
-          weekKey: '2026-08-24',
-          sealed: false,
-          tolls: 13,
-          spendMinor: 412890,
-          toDecide: 7,
-          toDecideMinor: 120000,
-        },
-      ],
-    },
+    data: weeksOverview,
   }),
 }));
 
@@ -66,5 +70,14 @@ describe('TollHealthPage', () => {
     expect(screen.getAllByText('All clear').length).toBeGreaterThan(0);
     expect(screen.getByText(/Still to decide/)).toBeTruthy();
     expect(screen.getByTestId('toll-health-nightly')).toBeTruthy();
+    expect(screen.getByText('Uber paybacks not matched yet')).toBeTruthy();
+    expect(screen.getByText('Confirm their matches in the week')).toBeTruthy();
+  });
+
+  it('shows empty nightly state when no check has run', () => {
+    weeksOverview.nightly = undefined;
+    wrap(<TollHealthPage />);
+    expect(screen.getByText('No nightly check has run yet')).toBeTruthy();
+    weeksOverview.nightly = { at: '2026-08-26T04:25:00Z', ok: true, checks: [] };
   });
 });

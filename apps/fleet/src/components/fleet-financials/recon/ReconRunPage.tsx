@@ -34,7 +34,7 @@ import { Button } from '../../ui/button';
 import { cn } from '../../ui/utils';
 import { toast } from 'sonner';
 import { useTollV2Desk, useTollV2Enabled } from './tolls-v2/useTollV2Desk';
-import { resolveTollsStepVariant } from './tolls-v2/resolveTollsStep';
+import { resolveTollsStepVariant, tollsStepQuestion } from './tolls-v2/resolveTollsStep';
 
 const FuelManagementLazy = lazy(() =>
   import('../../../pages/FuelManagement').then((m) => ({ default: m.FuelManagement })),
@@ -479,10 +479,12 @@ export function ReconRunPage({
     weekKey,
   ]);
 
-  // Delivery week: tolls are sealed in Rideshare — complete step 3 once when desk is sealed.
+  // Toll v2: once the company week's tolls are sealed, complete step 3 (both lines; one try per page load).
+  // One path only: the seal button doesn't complete the step itself, so a refused or dropped completion
+  // (P3-R4 check: 409 right after the seal) is retried the next time the week is opened.
   useEffect(() => {
     const run = runQuery.data;
-    if (!run || !tollsV2On || line !== 'rush_delivery') return;
+    if (!run || !tollsV2On) return;
     if (!tollV2DeskQuery.data?.sealed) return;
     const tollsSt = stepStatus(run, 'tolls');
     if (tollsSt === 'complete' || tollsSt === 'locked') return;
@@ -495,10 +497,10 @@ export function ReconRunPage({
     void (async () => {
       try {
         await handleTollsPeriodFinished();
-        if (!cancelled) deliveryTollsSealedKey.current = key;
       } catch {
-        // handleTollsPeriodFinished already toasts
+        // handleTollsPeriodFinished already toasts; the next page load tries again
       } finally {
+        if (!cancelled) deliveryTollsSealedKey.current = key;
         deliveryTollsFinishInFlight.current = false;
       }
     })();
@@ -700,7 +702,9 @@ export function ReconRunPage({
               <ReconCalculatorBanner calculator={run.calculator ?? null} className={run.calculator?.paused ? "w-full" : "rounded-full bg-[#eff4ff] px-3 py-1"} />
             </div>
             <h2 className="text-[28px] font-semibold tracking-tight text-[#0b1c30]">{RECON_STEP_LABELS[activeStep]}</h2>
-            <p className="text-base text-[#47464c]">{STEP_QUESTION[activeStep]}</p>
+            <p className="text-base text-[#47464c]">
+              {activeStep === 'tolls' ? tollsStepQuestion(tollsV2On) : STEP_QUESTION[activeStep]}
+            </p>
             {line === 'rush_delivery' ? <ReconCodRemittanceBanner onOpenRemittance={onOpenRemittance} /> : null}
             {statusQuery.data?.line ? (
               <div className="flex flex-wrap items-center gap-3 text-sm text-[#47464c]">
@@ -798,7 +802,6 @@ export function ReconRunPage({
                       <ReconTollsV2StepLazy
                         weekKey={weekKey}
                         summaryTarget={stepSummaryEl}
-                        onPeriodFinished={handleTollsPeriodFinished}
                         onGoToTagAccount={() => setStep('tag_account')}
                       />
                     ) : (

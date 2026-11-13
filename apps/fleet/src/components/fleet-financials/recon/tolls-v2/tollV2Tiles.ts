@@ -50,11 +50,14 @@ export function computeTileSubcounts(
   const owingDrivers =
     result.drivers?.filter((d) => (d.owesFleetMinor ?? 0) > 0) ?? [];
   let driverAssignedLabel = driverAssignedCount > 0 ? `${driverAssignedCount} assigned` : '0 assigned';
-  if (owingDrivers.length === 1 && (owingDrivers[0]?.owesFleetMinor ?? 0) > 0) {
-    const name = owingDrivers[0]?.driverName?.trim() || 'Driver';
-    driverAssignedLabel = `1 toll · ${name}`;
-  } else if (driverAssignedCount > 0) {
-    driverAssignedLabel = `${driverAssignedCount} assigned`;
+  if (owingDrivers.length === 1 && (owingDrivers[0]?.owesFleetMinor ?? 0) > 0 && driverAssignedCount > 0) {
+    // week_result carries the driver id only; the name comes from that driver's toll rows (P3-R4 check: "· Driver").
+    const id = owingDrivers[0]?.driverId;
+    const name =
+      owingDrivers[0]?.driverName?.trim() ||
+      charges.find((c) => c.driverId === id && c.driverName)?.driverName?.trim();
+    const tolls = `${driverAssignedCount} toll${driverAssignedCount === 1 ? '' : 's'}`;
+    driverAssignedLabel = name ? `${tolls} · ${name}` : `${driverAssignedCount} assigned`;
   }
   const fleetAbsorbedCount = charges.filter((c) =>
     ['fleet_pays', 'fleet_absorbs'].includes(c.decision?.kind ?? ''),

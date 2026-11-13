@@ -53,6 +53,7 @@ export type TollV2Charge = {
   paidBy?: string;
   plazaName?: string;
   plate?: string;
+  driverId?: string | null;
   driverName?: string;
   confidence?: TollV2Confidence;
   suggestions?: TollV2Suggestion[];

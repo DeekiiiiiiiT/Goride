@@ -324,7 +324,7 @@ export function ReconTollsV2Step({
   }
 
   return (
-    <div className="overflow-x-hidden" data-testid="recon-tolls-v2-step">
+    <div className="overflow-x-hidden pb-24 sm:pb-0" data-testid="recon-tolls-v2-step">
       {desk.matcherBusy ? <TollV2MatcherBanner /> : null}
       {versionConflict ? <TollV2VersionChangedCard onDismiss={clearVersionConflict} /> : null}
       {desk.sealed ? <TollV2SealedRibbon onReopen={() => setReopenOpen(true)} /> : null}
@@ -404,7 +404,12 @@ export function ReconTollsV2Step({
         onScrollTo={(id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })}
       />
 
-      <TollV2SummaryPortal target={summaryTarget} result={desk.result} onGoToTagAccount={onGoToTagAccount} />
+      <TollV2SummaryPortal
+        target={summaryTarget}
+        result={desk.result}
+        charges={desk.charges}
+        onGoToTagAccount={onGoToTagAccount}
+      />
 
       <TollV2PickTripDialog
         open={!!pickCharge}

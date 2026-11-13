@@ -70,8 +70,10 @@ export function sectionTotalMinor(charges: TollV2Charge[], key: string): number 
   return rows.reduce((n, c) => n + (c.openMinor ?? c.amountMinor ?? 0), 0);
 }
 
-export function tollCountLabel(n: number): string {
-  return `${n} toll${n === 1 ? '' : 's'}`;
+/** The count chip's noun follows what the section holds (P3-R4 check: receipts said "0 tolls"). */
+export function tollCountLabel(n: number, sectionKey?: string): string {
+  const noun = sectionKey === 'receipts' ? 'receipt' : sectionKey === 'paybacks' ? 'payback' : 'toll';
+  return `${n} ${noun}${n === 1 ? '' : 's'}`;
 }
 
 export function chargesInSection(charges: TollV2Charge[], key: string): TollV2Charge[] {

@@ -109,8 +109,14 @@ describe('ReconTollsV2Step', () => {
     expect(screen.getByText('Pick the right trip')).toBeTruthy();
     expect(screen.getByText('Tolls with no trip')).toBeTruthy();
     expect(screen.getByText('13 total transactions')).toBeTruthy();
-    expect(screen.getByTestId('toll-v2-compact-empty-duplicates')).toBeTruthy();
-    expect(screen.getByTestId('toll-v2-compact-empty-paybacks')).toBeTruthy();
+    const receipts = document.getElementById('toll-v2-section-receipts');
+    const decided = document.getElementById('toll-v2-section-decided');
+    const compactDup = screen.getByTestId('toll-v2-compact-empty-duplicates');
+    expect(receipts && decided).toBeTruthy();
+    expect(
+      receipts!.compareDocumentPosition(compactDup) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(compactDup.compareDocumentPosition(decided!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByTestId('toll-v2-seal-sum-line').textContent).toMatch(/^Spend /);
   });
 

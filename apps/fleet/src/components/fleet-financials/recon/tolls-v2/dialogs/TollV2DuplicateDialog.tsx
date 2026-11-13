@@ -77,7 +77,7 @@ function ChargeCard({ title, charge }: { title: string; charge: TollV2Charge }) 
       <p className="text-xs font-semibold uppercase text-[#47464c]">{title}</p>
       <p className="mt-1 font-medium">{charge.plazaName || 'Plaza'}</p>
       <p className="text-[#47464c]">{chargeWhen(charge.occurredAt)}</p>
-      <p className="mt-2 font-mono tabular-nums">{fmtTollMinor(charge.amountMinor)}</p>
+      <p className="mt-2 tabular-nums">{fmtTollMinor(charge.amountMinor)}</p>
       {charge.driverName ? <p className="text-[#47464c]">Driver: {charge.driverName}</p> : null}
     </div>
   );

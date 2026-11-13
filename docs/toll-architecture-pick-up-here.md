@@ -78,3 +78,25 @@
 ## Other threads
 - **Week Reconciliation:** tests 5 and 13 wait for toll Phase 4. WRA-41 (Fuel, test 6) and the 9t re-run can be done any time.
 - **Noted for Phase 5:** a carried Roam native charge whose ride cash settles later isn't covered (rare); the old Uber import's `Math.abs` on support adjustments.
+
+## P3-R4 (13 Nov) — real-screen check
+- **How Claude ran it** (local only; repeat this after the fixes):
+  1. `npx supabase db reset` (seeded), then `pnpm testcopy`.
+  2. The test fleet **MM F01** (`cccccccc-…f1`): `feature_flag:recon_v2` with `enabledForOrgs`; `toll.switch_state` on; car 5179KZ → test driver (named Kenny, Uber id set); 4 toll plazas added to `places.place`; one `ledger.driver_financial_periods` row (24 Aug) so `recon.ensure_ended_week_runs` makes the weeks.
+  3. The real 24 Aug files imported via `toll_sys_import` + the matcher.
+  4. The week published with `publishWeekDesk`; the local calculator `scripts/recon-worker-local.ts --loop`.
+  5. In Step 1, "No activity" on Cash tolls, Roam trips and Cash fuel, then "Continue to Tolls".
+  6. Headless screenshots go to the scratchpad only, never into the repo.
+- **Found:** 11 fixes → **`docs/toll-build/cursor-P3-R4a-visual-fixes.md`** (with Cursor). The rest matches Stitch.
+- **Rebuilt `supabase/functions/fleet-toll/index.ts`** for the local run (it was missing the plate-alias lookup). Not committed yet; it goes in the next commit.
+- **Other chats share the local database:** don't run two at once.
+- **Then:** the click-every-button done-test (Cursor), `/code-review`, live SQL for `20261113162537`, then deploy.
+- **P3-R4a done by Cursor; Claude's second real-screen check + own fixes (13 Nov):**
+  - **Pick dialog:** the wording bug "68 mins before dropoff" for a toll 1 min before the trip started (now compared with the start first; `tollTimingNote` + test); the toll line runs through all rows, with time labels and a legend.
+  - **Rows and labels:** the three-line row (no wrapping for long plazas); "0 receipts" / "payback" count words; "1 toll · Kenny Gregory Rattray" (name from the rows; `week_result` has ids only).
+  - **Phone:** the sticky seal bar is rendered on `document.body` (it used to overflow and wrap).
+  - **Step 3 completion:** one path for both lines (an effect once the week is sealed; the seal button no longer completes it), so a refused completion is retried on the next page load.
+  - **Click-through on the real week** (5 sure, 4 likely, picks auto-resolved, driver pays, seal): every number right (J$3,975 Uber + J$275 driver = J$4,250).
+  - **Local-only gap:** the period rebuild fails for the test-copy driver id (not a uuid), so the close check shows a toll mismatch there. Live driver ids are uuids.
+  - **Tests:** 68 vitest pass, 0 tsc errors in touched files. **Uncommitted.**
+- **Next:** commit, `/code-review` (Phase 3), live SQL for `20261113162537`, deploy.

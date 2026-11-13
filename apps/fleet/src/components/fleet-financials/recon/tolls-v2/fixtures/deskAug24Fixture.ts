@@ -156,7 +156,12 @@ export function deskAug24Fixture(over?: Partial<TollV2Desk>): TollV2Desk {
     result: {
       spend: { totalMinor: spend, tagMinor: spend, cashMinor: 0 },
       bearers: { platformMinor: platform, driverMinor: driver, fleetMinor: fleet },
-      tagAccount: { usageMinor: spend, closingMinor: 500000 - spend },
+      tagAccount: {
+        openingMinor: 0,
+        topUpsMinor: 500000,
+        usageMinor: spend,
+        closingMinor: 500000 - spend,
+      },
       drivers: [{ driverId: 'd1', owesFleetMinor: 27500, driverName: 'Kenny G. Rattray' }],
     },
     charges,

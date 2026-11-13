@@ -2,6 +2,18 @@ import type { TollV2Confidence, TollV2Decision, TollV2Trip } from './types';
 
 const JAMAICA = 'America/Jamaica';
 
+function upperPeriod(parts: Intl.DateTimeFormatPart[]): string {
+  return parts.map((p) => (p.type === 'dayPeriod' ? p.value.toUpperCase() : p.value)).join('');
+}
+
+function partsFor(iso: string, opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormatPart[] {
+  return new Intl.DateTimeFormat('en-US', { timeZone: JAMAICA, ...opts }).formatToParts(new Date(iso));
+}
+
+function partVal(parts: Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPartTypes): string {
+  return parts.find((p) => p.type === type)?.value ?? '';
+}
+
 export function fmtTollMinor(minor: number | null | undefined): string {
   if (minor == null || !Number.isFinite(minor)) return '—';
   const major = minor / 100;
@@ -29,11 +41,8 @@ export function confidenceChipClass(c: TollV2Confidence | undefined): string {
 export function formatTimeJm(iso: string | undefined): string {
   if (!iso) return '—';
   try {
-    return new Intl.DateTimeFormat('en-JM', {
-      timeZone: JAMAICA,
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(new Date(iso));
+    const parts = partsFor(iso, { hour: 'numeric', minute: '2-digit', hour12: true });
+    return upperPeriod(parts).replace(/\s+/g, ' ').trim();
   } catch {
     return '—';
   }
@@ -50,13 +59,7 @@ export function formatTripWindow(trip: TollV2Trip | null | undefined): string {
 export function formatDecidedAt(at: string | undefined, by: string | undefined): string {
   if (!at) return by || '—';
   try {
-    const d = new Intl.DateTimeFormat('en-JM', {
-      timeZone: JAMAICA,
-      day: 'numeric',
-      month: 'short',
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(new Date(at));
+    const d = chargeWhen(at);
     return by ? `${by} · ${d}` : d;
   } catch {
     return by || '—';
@@ -129,16 +132,25 @@ export function rejectReasonLabel(code: string | undefined): string {
 export function chargeWhen(iso: string | undefined): string {
   if (!iso) return '—';
   try {
-    return new Intl.DateTimeFormat('en-JM', {
-      timeZone: JAMAICA,
+    const parts = partsFor(iso, {
       day: 'numeric',
       month: 'short',
       hour: 'numeric',
       minute: '2-digit',
-    }).format(new Date(iso));
+      hour12: true,
+    });
+    const day = partVal(parts, 'day');
+    const month = partVal(parts, 'month');
+    const time = `${partVal(parts, 'hour')}:${partVal(parts, 'minute')} ${partVal(parts, 'dayPeriod').toUpperCase()}`;
+    return `${day} ${month}, ${time}`;
   } catch {
     return '—';
   }
+}
+
+/** Green chip copy for pick-trip radio cards. */
+export function uberPaidBackLabel(minor: number | null | undefined): string {
+  return `Uber paid back ${fmtTollMinor(minor ?? 0)}`;
 }
 
 export function tripPill(trip: TollV2Trip | null | undefined, paidBackMinor?: number): string {

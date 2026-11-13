@@ -62,7 +62,7 @@ export function TollV2CheckReceiptDialog({
                 <Input
                   value={amountMajor}
                   onChange={(e) => setAmountMajor(e.target.value)}
-                  className="font-mono tabular-nums"
+                  className="tabular-nums"
                   inputMode="decimal"
                 />
               </dd>

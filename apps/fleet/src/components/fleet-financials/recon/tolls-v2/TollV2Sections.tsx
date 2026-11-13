@@ -51,8 +51,8 @@ export function TollV2Sections({
   const dupCount = chargesInSection(charges, 'duplicates').length;
   const pbCount = paybacks.length + kept.length;
 
-  return (
-    <div className="space-y-4">
+  const compactEmptyCards =
+    dupCount === 0 || pbCount === 0 ? (
       <div className="grid gap-4 md:grid-cols-2">
         {dupCount === 0 ? (
           <CompactEmptyReviewCard title="Possible duplicates" testId="toll-v2-compact-empty-duplicates" />
@@ -61,6 +61,10 @@ export function TollV2Sections({
           <CompactEmptyReviewCard title="Uber paybacks with no toll" testId="toll-v2-compact-empty-paybacks" />
         ) : null}
       </div>
+    ) : null;
+
+  return (
+    <div className="space-y-4">
       {SECTION_ORDER.map((sec) => {
         const rows = sec.key === 'paybacks' ? [] : chargesInSection(charges, sec.key);
         const count = sectionRowCount(charges, sec.key, paybacks, kept);
@@ -83,16 +87,16 @@ export function TollV2Sections({
 
         const empty = count === 0;
 
-        return (
+        const sectionBlock = (
           <section key={sec.key} id={sec.id} className="overflow-hidden rounded-[20px] border border-[#e5eeff] bg-white shadow-sm">
             <header className="border-b border-[#eff4ff] bg-[#f8f9ff] px-4 py-3">
               <div className="flex flex-wrap items-center gap-2">
                 {SECTION_ICONS[sec.key]}
                 <h4 className="text-sm font-semibold text-[#0b1c30]">{sec.title}</h4>
                 <span className="rounded-full bg-[#d5e0f8] px-2.5 py-0.5 text-xs font-semibold text-[#0b1c30]">
-                  {tollCountLabel(count)}
+                  {tollCountLabel(count, sec.key)}
                 </span>
-                <span className="font-mono text-sm font-semibold tabular-nums text-[#0b1c30]">
+                <span className="text-sm font-semibold tabular-nums text-[#0b1c30]">
                   {fmtTollMinor(totalMinor)}
                 </span>
               </div>
@@ -130,6 +134,16 @@ export function TollV2Sections({
             )}
           </section>
         );
+
+        if (sec.key === 'decided') {
+          return (
+            <React.Fragment key={sec.key}>
+              {compactEmptyCards}
+              {sectionBlock}
+            </React.Fragment>
+          );
+        }
+        return sectionBlock;
       })}
     </div>
   );

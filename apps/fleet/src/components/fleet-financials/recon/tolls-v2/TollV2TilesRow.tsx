@@ -62,7 +62,7 @@ export function TollV2TilesRow({
               {it.icon ?? <Banknote className="h-4 w-4 opacity-0" aria-hidden />}
               <p className="text-[11px] font-semibold uppercase tracking-wide text-[#47464c]">{it.label}</p>
             </div>
-            <p className="mt-1 font-mono text-lg font-semibold tabular-nums text-[#0b1c30]">{fmtTollMinor(it.value)}</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums text-[#0b1c30]">{fmtTollMinor(it.value)}</p>
             <p className="text-xs text-[#47464c]">{it.sub}</p>
           </div>
         ))}

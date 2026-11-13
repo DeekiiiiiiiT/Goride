@@ -44,22 +44,31 @@ function TollRowIcon({ charge }: { charge: TollV2Charge }) {
   );
 }
 
+/** Stitch row: line 1 = time · plaza, line 2 = plate + driver, line 3 = amount + Tag/Cash (fixed lines, so a long plaza never pushes chips around). */
 function ChargeMeta({ charge }: { charge: TollV2Charge }) {
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-      <span className="text-sm font-medium tabular-nums text-[#0b1c30]">{chargeWhen(charge.occurredAt)}</span>
-      <span className="text-[#cbd5e1]">·</span>
-      <span className="text-sm font-medium text-[#0b1c30]">{charge.plazaName || 'Toll'}</span>
-      {charge.plate ? (
-        <span className="rounded bg-[#dce9ff] px-2 py-0.5 font-mono text-[11px] font-semibold tracking-wide text-[#0b1c30]">
-          {charge.plate}
-        </span>
+    <div className="min-w-0 space-y-1">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="whitespace-nowrap text-sm font-medium tabular-nums text-[#0b1c30]">{chargeWhen(charge.occurredAt)}</span>
+        <span className="text-[#cbd5e1]">·</span>
+        <span className="truncate text-sm font-medium text-[#0b1c30]">{charge.plazaName || 'Toll'}</span>
+      </div>
+      {charge.plate || charge.driverName ? (
+        <div className="flex min-w-0 items-center gap-2">
+          {charge.plate ? (
+            <span className="shrink-0 rounded bg-[#dce9ff] px-2 py-0.5 text-[11px] font-semibold tracking-wide text-[#0b1c30]">
+              {charge.plate}
+            </span>
+          ) : null}
+          {charge.driverName ? <span className="truncate text-sm text-[#47464c]">{charge.driverName}</span> : null}
+        </div>
       ) : null}
-      {charge.driverName ? <span className="text-sm text-[#47464c]">{charge.driverName}</span> : null}
-      <span className="font-mono text-base font-bold tabular-nums text-[#0b1c30]">{fmtTollMinor(charge.amountMinor)}</span>
-      <span className="rounded-full bg-[#eff4ff] px-2 py-0.5 text-[11px] font-semibold text-[#47464c]">
-        {paidByChipLabel(charge.paidBy)}
-      </span>
+      <div className="flex items-center gap-2">
+        <span className="text-base font-bold tabular-nums text-[#0b1c30]">{fmtTollMinor(charge.amountMinor)}</span>
+        <span className="rounded-full bg-[#eff4ff] px-2 py-0.5 text-[11px] font-semibold text-[#47464c]">
+          {paidByChipLabel(charge.paidBy)}
+        </span>
+      </div>
     </div>
   );
 }
@@ -68,6 +77,69 @@ export function TollV2ChargeRow({ charge, actions }: { charge: TollV2Charge; act
   const sealed = actions.readOnly;
   const conf = confidenceLabel(charge.confidence);
   const topSug = charge.suggestions?.find((x) => x.top !== false) ?? charge.suggestions?.[0];
+
+  if (charge.section === 'pick') {
+    const whenLine = (
+      <>
+        <span className="whitespace-nowrap text-sm font-medium tabular-nums text-[#0b1c30]" data-testid="toll-v2-pick-when">
+          {chargeWhen(charge.occurredAt)}
+        </span>
+        <span className="text-[#cbd5e1]">·</span>
+        <span className="text-sm font-medium text-[#0b1c30]">{charge.plazaName || 'Toll'}</span>
+      </>
+    );
+    return (
+      <li className="flex flex-col gap-3 border-t border-[#eff4ff] px-4 py-3 first:border-t-0 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+          <TollRowIcon charge={charge} />
+          {whenLine}
+          {charge.plate ? (
+            <span className="rounded bg-[#dce9ff] px-2 py-0.5 text-[11px] font-semibold tracking-wide text-[#0b1c30]">
+              {charge.plate}
+            </span>
+          ) : null}
+          {charge.driverName ? <span className="text-sm text-[#47464c]">{charge.driverName}</span> : null}
+          <span className="text-base font-bold tabular-nums text-[#0b1c30]">{fmtTollMinor(charge.amountMinor)}</span>
+          {conf ? (
+            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${confidenceChipClass(charge.confidence)}`}>
+              {conf}
+            </span>
+          ) : null}
+        </div>
+        {!sealed ? (
+          <div className="flex w-full min-w-0 flex-col gap-2 xl:w-auto xl:max-w-md xl:shrink-0">
+            <span className="text-xs font-medium text-[#47464c]">Choose trip:</span>
+            <div className="flex flex-wrap items-center gap-2">
+              {(charge.suggestions ?? []).map((s) => (
+                <TollV2SecondaryButton
+                  key={s.suggestionId}
+                  type="button"
+                  className="text-left"
+                  onClick={() => actions.onPickSuggestion?.(charge, s)}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    <Check className="h-3.5 w-3.5 text-[#47464c]" aria-hidden />
+                    {formatTripChoiceLabel(s.trip)}
+                  </span>
+                </TollV2SecondaryButton>
+              ))}
+            </div>
+            {actions.onCompareTimeline || actions.onPickTrip ? (
+              <TollV2SecondaryButton
+                type="button"
+                className="w-fit"
+                onClick={() =>
+                  actions.onCompareTimeline ? actions.onCompareTimeline(charge) : actions.onPickTrip!(charge)
+                }
+              >
+                Compare on a timeline
+              </TollV2SecondaryButton>
+            ) : null}
+          </div>
+        ) : null}
+      </li>
+    );
+  }
 
   if (charge.section === 'decided') {
     const kind = charge.decision?.kind;
@@ -83,7 +155,7 @@ export function TollV2ChargeRow({ charge, actions }: { charge: TollV2Charge; act
           </span>
           <span className="text-sm font-medium tabular-nums text-[#0b1c30]">{chargeWhen(charge.occurredAt)}</span>
           <span className="text-sm text-[#0b1c30]">{charge.plazaName || 'Toll'}</span>
-          <span className="font-mono text-sm font-bold tabular-nums">{fmtTollMinor(charge.amountMinor)}</span>
+          <span className="text-sm font-bold tabular-nums">{fmtTollMinor(charge.amountMinor)}</span>
           {trip ? (
             <span className="rounded-lg border border-[#cbd5e1] bg-white px-2 py-1 text-xs text-[#0b1c30]">
               Uber trip {formatTimeJm(trip.requestAt)}–{formatTimeJm(trip.dropoffAt || trip.pickupAt)}
@@ -148,34 +220,6 @@ export function TollV2ChargeRow({ charge, actions }: { charge: TollV2Charge; act
               </TollV2SecondaryButton>
             ) : null}
           </>
-        ) : null}
-        {!sealed && charge.section === 'pick' ? (
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
-            <span className="text-xs font-medium text-[#47464c]">Choose trip:</span>
-            {(charge.suggestions ?? []).map((s) => (
-              <TollV2SecondaryButton
-                key={s.suggestionId}
-                type="button"
-                className="text-left"
-                onClick={() => actions.onPickSuggestion?.(charge, s)}
-              >
-                <span className="inline-flex items-center gap-1">
-                  <Check className="h-3.5 w-3.5 text-[#47464c]" aria-hidden />
-                  {formatTripChoiceLabel(s.trip)}
-                </span>
-              </TollV2SecondaryButton>
-            ))}
-            {actions.onCompareTimeline || actions.onPickTrip ? (
-              <TollV2SecondaryButton
-                type="button"
-                onClick={() =>
-                  actions.onCompareTimeline ? actions.onCompareTimeline(charge) : actions.onPickTrip!(charge)
-                }
-              >
-                Compare on a timeline
-              </TollV2SecondaryButton>
-            ) : null}
-          </div>
         ) : null}
         {!sealed && charge.section === 'no_trip' ? (
           <>
