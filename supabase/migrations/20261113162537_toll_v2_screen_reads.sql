@@ -496,7 +496,8 @@ RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
                      'driverName', (SELECT d.name FROM fleet.drivers d WHERE d.organization_id::text = p_company::text
                                       AND (d.id::text = t.driver_id OR d.legacy_kv_id = t.driver_id) LIMIT 1),
                      'paidOn', t.paid_on, 'amountMinor', t.amount_minor, 'reportedAt', t.created_at,
-                     -- the paybacks it may take back: the same driver's active paybacks of at least this amount
+                     -- the paybacks it may take back: the same driver's active paybacks of exactly this amount
+                     -- (a take-back reverses a whole payback; another amount is refused as PARTIAL_TAKE_BACK)
                      'candidates', (SELECT coalesce(jsonb_agg(jsonb_build_object(
                                        'paybackId', p.id, 'version', p.version, 'weekKey', p.week_key, 'paidOn', p.paid_on,
                                        'amountMinor', p.amount_minor, 'kind', p.kind, 'reference', p.reference,
@@ -508,14 +509,21 @@ RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
                                        ORDER BY p.paid_on DESC), '[]'::jsonb)
                                     FROM toll.v_active_paybacks p
                                     WHERE p.organization_id = p_company AND p.platform = t.platform
-                                      AND p.driver_id IS NOT DISTINCT FROM t.driver_id AND p.amount_minor >= t.amount_minor))
+                                      AND p.driver_id IS NOT DISTINCT FROM t.driver_id AND p.amount_minor = t.amount_minor))
                      ORDER BY t.created_at)
                    FROM toll.reported_take_backs t
                    WHERE t.organization_id = p_company
-                     AND NOT EXISTS (SELECT 1 FROM toll.decisions d WHERE d.organization_id::text = p_company::text
-                                       AND d.intent = 'carry_forward' AND d.response ->> 'reference' = t.reference)
+                     -- recorded already: a carried take-back of the same platform's payback with this reference,
+                     -- or a reversing payback of the same platform with this reference
+                     AND NOT EXISTS (SELECT 1 FROM toll.decisions d
+                                     JOIN toll.carried_facts f ON f.organization_id = p_company AND f.decision_id = d.id
+                                                              AND f.kind = 'take_back'
+                                     JOIN toll.paybacks op ON op.organization_id = p_company AND op.id = f.original_id
+                                     WHERE d.organization_id::text = p_company::text AND d.intent = 'carry_forward'
+                                       AND d.response ->> 'reference' = t.reference AND op.platform = t.platform)
                      AND NOT EXISTS (SELECT 1 FROM toll.paybacks r WHERE r.organization_id = p_company
-                                       AND r.reversal_of IS NOT NULL AND r.reference = t.reference)), '[]'::jsonb));
+                                       AND r.reversal_of IS NOT NULL AND r.platform = t.platform
+                                       AND r.reference = t.reference)), '[]'::jsonb));
 $$;
 
 -- 7. Import reports that touched a week ----------------------------------------------------------------------------

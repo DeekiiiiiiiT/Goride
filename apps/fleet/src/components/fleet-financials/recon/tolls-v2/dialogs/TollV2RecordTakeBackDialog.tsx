@@ -94,6 +94,11 @@ export function TollV2RecordTakeBackDialog({
               </span>
             </label>
           ))}
+          {(takeBack.candidates ?? []).length === 0 ? (
+            <p className="text-sm text-[#47464c]">
+              No payback of {fmtTollMinor(takeBack.amountMinor)} for this driver yet. It shows here once its Uber file is in.
+            </p>
+          ) : null}
         </div>
 
         {candidate ? (
@@ -127,7 +132,8 @@ export function TollV2RecordTakeBackDialog({
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <Label htmlFor="tb-ref">Uber reference</Label>
-            <Input id="tb-ref" value={reference} onChange={(e) => setReference(e.target.value)} />
+            {/* The reference from Uber's file ties this record to the reported take-back, so it can't be changed. */}
+            <Input id="tb-ref" value={reference} readOnly className="bg-[#f8f9ff]" />
           </div>
           <div>
             <Label htmlFor="tb-date">Taken back date</Label>
@@ -144,7 +150,7 @@ export function TollV2RecordTakeBackDialog({
             disabled={!canSubmit}
             onClick={() => {
               if (!candidate || !bearer) return;
-              onSubmit({ candidate, bearer, reference: reference.trim(), paidOn });
+              onSubmit({ candidate, bearer, reference, paidOn });
             }}
           >
             Record the take-back

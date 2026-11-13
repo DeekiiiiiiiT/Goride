@@ -73,15 +73,21 @@ export function ReconTollsV2Step({
   const progress = useMemo(() => (desk ? progressCounts(desk.charges) : null), [desk]);
   const sureRows = useMemo(() => (desk ? sureSuggestions(desk.charges) : []), [desk]);
   const groups = useMemo(() => (desk ? blockerGroups(desk.blockers) : []), [desk]);
+  // Take-backs aren't tied to the week on screen (the command picks the right week itself), so they show on any
+  // week that is still open. Week Reconciliation only opens ended weeks, so the calendar's current week never shows.
   const openWeekTakeBacks = useMemo(() => {
     const overview = weeksQuery.data;
-    if (!overview || overview.openWeek !== weekKey) return [];
+    if (!overview || !desk || desk.sealed) return [];
     return overview.takeBacks ?? [];
-  }, [weeksQuery.data, weekKey]);
+  }, [weeksQuery.data, desk]);
   const showEmpty =
     desk &&
     !desk.sealed &&
     desk.charges.length === 0 &&
+    (desk.paybacks?.length ?? 0) === 0 &&
+    (desk.kept?.length ?? 0) === 0 &&
+    (desk.reviewPairs?.length ?? 0) === 0 &&
+    desk.blockers.length === 0 &&
     (desk.late?.length ?? 0) === 0 &&
     openWeekTakeBacks.length === 0;
 
@@ -163,6 +169,9 @@ export function ReconTollsV2Step({
     }) => {
       if (!takeBackTarget) return;
       const { candidate, bearer, reference, paidOn } = opts;
+      // The amount Uber took back goes with the command, so the server refuses a payback of another amount
+      // (PARTIAL_TAKE_BACK) instead of reversing the whole payback.
+      const amountMinor = takeBackTarget.amountMinor;
       try {
         let res: unknown;
         if (candidate.weekSealed && candidate.weekPaid) {
@@ -171,6 +180,7 @@ export function ReconTollsV2Step({
             kind: 'take_back',
             payback_id: candidate.paybackId,
             expected_payback_version: candidate.version,
+            amount_minor: amountMinor,
             reference,
             paid_on: paidOn,
             bearer,
@@ -179,6 +189,7 @@ export function ReconTollsV2Step({
           res = await runCommand('reverse_payback', {
             payback_id: candidate.paybackId,
             expected_payback_version: candidate.version,
+            amount_minor: amountMinor,
             reference,
             paid_on: paidOn,
           });
@@ -429,22 +440,32 @@ export function ReconTollsV2Step({
         onReject={() => setRejectOpen(true)}
         onFine={async (amountMinor, changed) => {
           if (!receiptCharge) return;
+          // Amount first, then the check: if either step is refused, the receipt is never left checked at the
+          // misread amount (an unchecked receipt still blocks the seal, so nothing is lost).
+          let version = receiptCharge.version;
           try {
-            const res = await runCommand('verify_cash_receipt', {
-              charge_id: receiptCharge.id,
-              expected_charge_version: receiptCharge.version,
-            });
-            if (res === null) return;
-            const newVer = (res as { charge_version?: number })?.charge_version ?? receiptCharge.version + 1;
-            if (changed) {
+            if (changed && amountMinor !== receiptCharge.amountMinor) {
               const adj = await runCommand('correct_charge_amount', {
                 charge_id: receiptCharge.id,
-                expected_charge_version: newVer,
+                expected_charge_version: version,
                 amount_minor: amountMinor,
                 reason_code: 'receipt_reading',
               });
               if (adj === null) return;
+              const v = (adj as { charge_version?: number })?.charge_version;
+              if (typeof v !== 'number') {
+                await refetchDesk();
+                setReceiptCharge(null);
+                return;
+              }
+              version = v;
+              setReceiptCharge({ ...receiptCharge, version, amountMinor });
             }
+            const res = await runCommand('verify_cash_receipt', {
+              charge_id: receiptCharge.id,
+              expected_charge_version: version,
+            });
+            if (res === null) return;
             setReceiptCharge(null);
             toast.success('Receipt checked');
           } catch {

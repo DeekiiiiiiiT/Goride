@@ -101,8 +101,10 @@ export function sureSuggestions(
 export type BlockerGroup = { label: string; count: number; sectionId: string };
 
 export function blockerGroups(blockers: TollV2Blocker[]): BlockerGroup[] {
-  const charge = blockers.filter((b) => b.kind === 'charge').length;
-  const receipt = blockers.filter((b) => b.kind === 'unverified' || b.reason === 'receipt').length;
+  // seal_blockers sends an unchecked cash receipt as kind 'charge' with reason (its state) 'unverified'.
+  const isReceipt = (b: TollV2Blocker) => b.kind === 'charge' && b.reason === 'unverified';
+  const charge = blockers.filter((b) => b.kind === 'charge' && !isReceipt(b)).length;
+  const receipt = blockers.filter(isReceipt).length;
   const payback = blockers.filter((b) => b.kind === 'payback' || b.kind === 'carried').length;
   const review = blockers.filter((b) => b.kind === 'review_pair').length;
   const groups: BlockerGroup[] = [];
@@ -113,7 +115,7 @@ export function blockerGroups(blockers: TollV2Blocker[]): BlockerGroup[] {
       sectionId: 'toll-v2-section-suggested',
     });
   }
-  const receiptN = receipt || blockers.filter((b) => b.kind === 'charge' && b.reason?.includes('receipt')).length;
+  const receiptN = receipt;
   if (receiptN > 0) {
     groups.push({
       label: `${receiptN} receipt${receiptN === 1 ? '' : 's'} to check`,

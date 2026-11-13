@@ -454,14 +454,22 @@ type CloseCheck =
  */
 /**
  * Toll v2: "sealed" / "open" for a company on v2, null when it isn't (the old toll period decides).
- * Fails closed without breaking the week: a failed read answers "open" (step 3 stays open), never "sealed".
+ * Fails closed without breaking the week, and never says "sealed" on a failed read:
+ *   - the on/off read fails → null, so the old toll period decides (a v2 company has none, so step 3 stays open;
+ *     a company not on v2 keeps its real old-period state instead of being reopened);
+ *   - the company is on v2 but the seal read fails → "open".
  */
 export async function tollsV2WeekState(orgId: string, weekKey: string): Promise<"sealed" | "open" | null> {
+  const sb = getServiceClient();
   try {
-    const sb = getServiceClient();
     const { data: on, error: onErr } = await sb.rpc("toll_sys_tolls_v2_on", { p_company: orgId });
-    if (onErr) throw new Error(`toll_sys_tolls_v2_on failed: ${onErr.message}`);
+    if (onErr) throw new Error(onErr.message);
     if (on !== true) return null;
+  } catch (e) {
+    console.warn("[recon] toll v2 switch unreadable; old toll period decides", e instanceof Error ? e.message : e);
+    return null;
+  }
+  try {
     const { data, error } = await sb.rpc("toll_sys_week_drivers", { p_company: orgId, p_week: weekKey });
     if (error) throw new Error(`toll_sys_week_drivers failed: ${error.message}`);
     return (data as { state?: string } | null)?.state === "sealed" ? "sealed" : "open";

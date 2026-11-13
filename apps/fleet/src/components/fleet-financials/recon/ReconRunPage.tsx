@@ -501,23 +501,20 @@ export function ReconRunPage({
 
     const key = `${line}:${weekKey}:tolls:sealed`;
     if (deliveryTollsSealedKey.current === key || deliveryTollsFinishInFlight.current) return;
+    // The try is recorded before it starts: the call itself refreshes the run, which re-runs this effect,
+    // and a failed completion must not toast again on every later refresh.
+    deliveryTollsSealedKey.current = key;
     deliveryTollsFinishInFlight.current = true;
 
-    let cancelled = false;
     void (async () => {
       try {
         await handleTollsPeriodFinished();
       } catch {
         // handleTollsPeriodFinished already toasts; the next page load tries again
       } finally {
-        if (!cancelled) deliveryTollsSealedKey.current = key;
         deliveryTollsFinishInFlight.current = false;
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
   }, [
     handleTollsPeriodFinished,
     line,

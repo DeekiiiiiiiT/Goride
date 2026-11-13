@@ -16,6 +16,11 @@ export function importRowStatusLabel(row: TollV2ImportReportRow): string {
   const s = String(row.status ?? '');
   if (s === 'new') return 'New';
   if (s === 'unchanged' || s === 'trip_only') return 'Already in';
+  // Normal outcomes of a read, nothing to fix here:
+  if (s === 'duplicate') return 'Copy of a toll already in (not counted twice)';
+  if (s === 'after_seal') return 'Came after the week was sealed (listed under late items)';
+  if (s === 'corrected') return 'Amount updated';
+  if (s === 'correction_pending') return 'Amount change waiting (listed under late items)';
   if (s === 'unknown_driver') {
     const name = String(row.driver_name ?? '').trim();
     return `Problem: Driver ${name || 'in the file'} isn't set up in Roam Fleet`;
@@ -59,8 +64,9 @@ function hasAmounts(rows: TollV2ImportReportRow[]): boolean {
   return rows.some((r) => typeof r.amount_minor === 'number');
 }
 
+/** Rows that count toward the amount read: not problems, and not a copy of a toll already counted. */
 function usedRows(rows: TollV2ImportReportRow[]): TollV2ImportReportRow[] {
-  return rows.filter((r) => !isImportProblemRow(r));
+  return rows.filter((r) => !isImportProblemRow(r) && r.status !== 'duplicate');
 }
 
 export function resultLineForKind(
@@ -78,7 +84,9 @@ export function resultLineForKind(
       return s === 'new' || s === 'unchanged' || s.includes('charge');
     });
     const n = Number(counts.new ?? 0) + Number(counts.unchanged ?? 0) || tollRows.length || Number(report.rows ?? 0);
-    const spend = hasAmounts(rows) ? ` · ${fmtTollMinor(sumAmountMinor(usedRows(rows)))}` : '';
+    // The amount covers the same rows as the count: tolls of this read (late ones and copies are listed elsewhere).
+    const counted = rows.filter((r) => r.status === 'new' || r.status === 'unchanged');
+    const spend = hasAmounts(rows) ? ` · ${fmtTollMinor(sumAmountMinor(counted))}` : '';
     return `${n} tolls read${spend} · ${problems} problems`;
   }
   if (kind === 'topups') {

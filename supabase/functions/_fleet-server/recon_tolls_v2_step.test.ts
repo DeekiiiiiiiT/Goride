@@ -21,7 +21,10 @@ Deno.test("the v2 week state fails closed and uses the service-only reads", () =
   const fn = source.slice(source.indexOf("export async function tollsV2WeekState"), source.indexOf("async function computeLiveStepCounts("));
   assert(fn.includes('rpc("toll_sys_tolls_v2_on"'), "switch read");
   assert(fn.includes('rpc("toll_sys_week_drivers"'), "seal read");
-  assert(fn.includes('return "open";') && fn.includes("catch (e)"), "a failed read answers open, never sealed, and never breaks the week");
+  assert(fn.includes('return "open";') && fn.includes("catch (e)"), "a failed seal read answers open, never sealed, and never breaks the week");
+  const switchPart = fn.slice(0, fn.indexOf('rpc("toll_sys_week_drivers"'));
+  assert(switchPart.includes("return null;") && !switchPart.includes('return "open"'),
+    "a failed switch read hands step 3 back to the old toll period (a non-v2 company is never reopened)");
 });
 
 Deno.test("a v2 company's sealed toll statement is not compared with the old event-netting engine", async () => {

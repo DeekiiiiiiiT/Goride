@@ -15,12 +15,14 @@ import * as kv from "./kv_store.tsx";
 
 export type PlazaLookup = Record<string, string>;
 
+function primaryPlate(v: Record<string, unknown>): string {
+  return normalizePlate(String(v.plateNumber ?? v.licensePlate ?? v.plate_number ?? v.license_plate ?? ""));
+}
+
 /** Normalized plates for a fleet vehicle row (primary + aliases). */
 export function vehiclePlatesForLookup(v: Record<string, unknown>): string[] {
   const out: string[] = [];
-  const primary = normalizePlate(
-    String(v.plateNumber ?? v.licensePlate ?? v.plate_number ?? v.license_plate ?? ""),
-  );
+  const primary = primaryPlate(v);
   if (primary) out.push(primary);
   const aliases = v.plate_aliases ?? v.plateAliases;
   if (Array.isArray(aliases)) {
@@ -28,6 +30,34 @@ export function vehiclePlatesForLookup(v: Record<string, unknown>): string[] {
       const p = normalizePlate(String(a ?? ""));
       if (p && !out.includes(p)) out.push(p);
     }
+  }
+  return out;
+}
+
+/**
+ * Plate → car id. A car's own plate always wins: an alias ("Which car is this?") never takes over another car's
+ * real plate, and an alias two cars both claim is left unmatched instead of going to whichever row came last.
+ */
+export function buildVehicleByPlate(rows: Record<string, unknown>[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const v of rows) {
+    const id = String(v.id ?? "").trim();
+    const primary = primaryPlate(v);
+    if (id && primary) out[primary] = id;
+  }
+  const aliasOwner: Record<string, string | null> = {};
+  for (const v of rows) {
+    const id = String(v.id ?? "").trim();
+    if (!id) continue;
+    const primary = primaryPlate(v);
+    for (const alias of vehiclePlatesForLookup(v)) {
+      if (alias === primary || alias in out) continue;
+      const seen = aliasOwner[alias];
+      aliasOwner[alias] = seen === undefined || seen === id ? id : null;
+    }
+  }
+  for (const [alias, id] of Object.entries(aliasOwner)) {
+    if (id) out[alias] = id;
   }
   return out;
 }
@@ -113,14 +143,7 @@ export async function buildUberCtx(orgId: string): Promise<UberCtx> {
 
   const vehRes = await queryFleet("vehicles", { org: orgId, limit: 5000 });
   if (vehRes.error) throw vehRes.error;
-  const vehicleByPlate: Record<string, string> = {};
-  for (const row of vehRes.data) {
-    const v = row as Record<string, unknown>;
-    const id = String(v.id ?? "").trim();
-    for (const plate of vehiclePlatesForLookup(v)) {
-      if (id && plate) vehicleByPlate[plate] = id;
-    }
-  }
+  const vehicleByPlate = buildVehicleByPlate(vehRes.data as Record<string, unknown>[]);
   return { driverByUberUuid, vehicleByPlate };
 }
 
@@ -145,14 +168,7 @@ export async function buildIndriveCtx(orgId: string): Promise<IndriveCtx> {
 
   const vehRes = await queryFleet("vehicles", { org: orgId, limit: 5000 });
   if (vehRes.error) throw vehRes.error;
-  const vehicleByPlate: Record<string, string> = {};
-  for (const row of vehRes.data) {
-    const v = row as Record<string, unknown>;
-    const id = String(v.id ?? "").trim();
-    for (const plate of vehiclePlatesForLookup(v)) {
-      if (id && plate) vehicleByPlate[plate] = id;
-    }
-  }
+  const vehicleByPlate = buildVehicleByPlate(vehRes.data as Record<string, unknown>[]);
 
   return { driverByExternalId, vehicleByPlate };
 }

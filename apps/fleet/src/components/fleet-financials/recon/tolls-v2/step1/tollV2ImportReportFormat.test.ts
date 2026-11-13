@@ -1,8 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { resultLineForKind } from './tollV2ImportReportFormat';
+import { countProblems, importRowStatusLabel, resultLineForKind } from './tollV2ImportReportFormat';
 import type { TollV2ImportReport } from './tollV2ImportTypes';
 
 const rep = (r: Partial<TollV2ImportReport>): TollV2ImportReport => r as TollV2ImportReport;
+
+describe('normal read outcomes are not problems', () => {
+  it('duplicate / after_seal / corrected / correction_pending need no fix; a copy is not counted twice', () => {
+    const r = rep({
+      rows: 5,
+      counts: { new: 1 },
+      report: [
+        { row: 1, status: 'new', amount_minor: 10000 },
+        { row: 2, status: 'duplicate', amount_minor: 10000 },
+        { row: 3, status: 'after_seal', amount_minor: 20000 },
+        { row: 4, status: 'corrected', amount_minor: 30000 },
+        { row: 5, status: 'correction_pending', amount_minor: 40000 },
+      ],
+    });
+    expect(countProblems(r)).toBe(0);
+    for (const row of r.report ?? []) expect(importRowStatusLabel(row)).not.toMatch(/^Problem:/);
+    expect(resultLineForKind('tag_statement', r)).toBe('1 tolls read · J$100.00 · 0 problems');
+  });
+});
 
 describe('resultLineForKind', () => {
   it('sums the used tag rows, not the rejected ones', () => {
