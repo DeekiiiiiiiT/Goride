@@ -1,0 +1,112 @@
+ROAM FLEET — TOLLS IN WEEK RECONCILIATION: 4 MORE SCREENS — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Tolls in Week Reconciliation, extra dialogs (Desktop Web App, for the fleet owner, fleet manager and fleet accountant):
+
+Design four more in-app dialogs for the toll part of Week Reconciliation in Roam Fleet. They belong with the screens already made (Upload inputs, the Tolls step and its dialogs) and must look exactly like them. When Roam reads a toll or Uber file, a few rows sometimes can't be used because Roam doesn't know which of the fleet's drivers or cars they belong to. The first two dialogs let the person fix that on the spot, without leaving Week Reconciliation: say which driver an Uber driver is, and which car a plate belongs to. The third shows, row by row, what Roam read from a file. The fourth confirms all of Roam's "sure" toll matches in one go. The person using this is not an accountant. Every dialog asks one plain question and has one obvious button.
+
+
+BRAND IDENTITY:
+- Each dialog sits over the dimmed Week Reconciliation page, inside the existing Roam Fleet app frame (white nav row with the black "Roam Fleet" tile, the dark navy bar with "Switch vehicle or search hub…", the breadcrumb "Business Finance › Week Reconciliation · Week of 24 Aug 2026 · Rideshare"). Do not redesign the frame.
+- Theme: "Calm finance desk" — clear, trustworthy, quiet and modern.
+- LIGHT MODE (default):
+  - Primary: near-black #030213 — main buttons
+  - Page wash: #f8fafc; dialogs and cards: #FFFFFF with a soft shadow and a hairline border rgba(0,0,0,0.06)
+  - Text: #0a0a0a; muted text: #64748b
+  - Done / New: green #059669 on #ecfdf5
+  - Problem / Needs a fix: amber #b45309 on #fffbeb
+  - Already in: slate #475569 on #f1f5f9
+  - Sure match: green #059669 on #ecfdf5
+- DARK MODE: page #1c1c1e, cards #2a2a2d, border #3a3a3d, text #fafafa, muted #a1a1aa, primary buttons white with near-black text; green #34d399 on #064e3b; amber #fbbf24 on #451a03.
+- Shapes: dialogs and cards 20px corners, buttons and inputs 12px, chips fully rounded.
+- Typography: Inter. Dialog titles 22px semibold, body 15px, helper 13px. Money in tabular figures with "J$" and 2 decimals.
+- Dates and times in plain words ("27 Aug, 2:37 PM"). Never ids, codes, hashes, scores or percentages.
+- Buttons always look like buttons:
+  - Primary = solid near-black with white text.
+  - Secondary = white with a visible #cbd5e1 border and dark text.
+  - Cancel = red border and red text.
+  - Never underlined links, never grey text-only buttons.
+- Sample data (real): drivers Kenny Gregory Rattray, Phillip Bailey, Sadiki Abayomi Thomas; cars Toyota Roomy 5179KZ, Toyota Sienta 8834HB, Suzuki Swift 9042PX; the Uber file "payments and trip activity" for 24–30 Aug 2026.
+
+
+DESIGN PRINCIPLES:
+- One question per dialog, one obvious primary button.
+- Fix it here: the person never leaves Week Reconciliation to fix a row.
+- Show what came from the file next to what it will be linked to, so the person can see they match.
+- After a fix, the row is read again on its own; nothing else changes.
+- One view per screen.
+
+
+SCREEN 1: FIX DRIVER — DIALOG
+- The Upload inputs step dimmed behind a centred white dialog, 560px wide.
+- Title "Who is this Uber driver?", close X.
+- A grey card "From the Uber file": name "J. CAMPBELL", "Uber driver", "Seen on 6 trips this week".
+- A search box "Search your drivers".
+- A list of the fleet's drivers as radio rows, each with initials in a circle, the full name and their car: "Kenny Gregory Rattray · 5179KZ", "Phillip Bailey · 8834HB" (selected), "Sadiki Abayomi Thomas · 9042PX".
+- A muted line: "Roam will remember this, so next week's file is read without asking."
+- Footer: red-outline "Cancel", primary "This is the driver".
+
+
+SCREEN 2: WHICH CAR IS THIS? — DIALOG
+- The Upload inputs step dimmed behind a centred white dialog, 560px wide.
+- Title "Which car is this?", close X.
+- A grey card "From the Uber file": plate "9042 PX", "Seen on 3 trips this week".
+- A list of the fleet's cars as radio rows, each with a small car icon, make and model, and the plate in a chip: "Toyota Roomy · 5179KZ", "Toyota Sienta · 8834HB", "Suzuki Swift · 9042PX" (selected).
+- A muted line: "Roam will remember this plate for this car."
+- Footer: red-outline "Cancel", primary "Use this car".
+
+
+SCREEN 3: WHAT WAS READ — DIALOG
+- The Upload inputs step dimmed behind a centred white dialog, 880px wide.
+- Title "What was read from the Uber weekly reports", sub-line "2 files: payments and trip activity · read 13 Nov, 9:12 AM", close X.
+- A row of four filter chips with counts: "All 76", "New 74" (green), "Already in 0" (slate), "Problems 2" (amber). "All" is selected.
+- A summary line: "74 trips · 11 toll paybacks · J$3,975.00".
+- A table with the columns: Row · What · When · Amount · Status. Rows:
+  - "2 · Uber trip, card · 25 Aug, 2:42 PM–3:12 PM · paid back J$370.00 · New" (green chip)
+  - "3 · Uber trip, card · 26 Aug, 7:25 PM–7:52 PM · paid back J$370.00 · New"
+  - "4 · Uber trip, cash · 27 Aug, 3:09 PM–3:44 PM · paid back J$370.00 · New"
+  - "5 · Uber trip, card · 27 Aug, 9:30 AM–9:58 AM · no toll · New"
+  - "14 · Uber trip · 26 Aug, 11:05 AM–11:40 AM · — · Problem: driver not set up" (amber chip) with a small secondary button "Fix driver"
+  - "31 · Uber trip · 28 Aug, 4:10 PM–4:52 PM · — · Problem: car 9042PX not in your fleet" (amber chip) with a small secondary button "Which car?"
+- Under the table, muted: "Showing 6 of 76 rows" and a secondary button "Show more".
+- Footer: secondary "Close".
+
+
+SCREEN 4: CONFIRM ALL SURE MATCHES — DIALOG
+- The Tolls step dimmed behind a centred white dialog, 560px wide.
+- Title "Confirm 5 sure matches?", close X.
+- A muted line: "Each toll happened during an Uber trip, and it's the only trip that fits."
+- A list of five rows, each with a tag icon, the toll, an arrow, the trip and a green chip "Sure match":
+  - "25 Aug, 3:02 PM · Portmore East · J$370.00 → Uber trip 2:42 PM–3:12 PM · card"
+  - "26 Aug, 7:43 PM · Portmore West · J$370.00 → Uber trip 7:25 PM–7:52 PM · card"
+  - "27 Aug, 7:20 AM · Portmore East · J$370.00 → Uber trip 7:07 AM–7:31 AM · card"
+  - "28 Aug, 9:49 AM · Portmore East · J$370.00 → Uber trip 9:07 AM–10:00 AM · card"
+  - "28 Aug, 6:05 PM · Spanish Town West · J$275.00 → Uber trip 5:05 PM–6:22 PM · card"
+- A total line: "Total paid back by Uber J$1,755.00".
+- A muted line: "You can undo any of them afterwards."
+- Footer: red-outline "Cancel", primary "Confirm 5".
+
+
+ADDITIONAL UI COMPONENTS:
+- "From the file" card: light grey, with a small file icon, the value from the file in large text and one muted line under it.
+- Choice row: radio, a circle with initials or a car icon, the name, and a plate chip; the selected row has a near-black border.
+- Status chips: "New" (green), "Already in" (slate), "Problem: …" (amber).
+- Filter chips with counts, fully rounded; the selected one is near-black with white text.
+- Match row: tag icon · toll → trip, with the confidence chip at the end.
+
+
+INTERACTIONS:
+- "This is the driver" and "Use this car" close the dialog, the problem row turns green ("Fixed"), and the file is read again on its own.
+- In "What was read", the filter chips filter the table; "Fix driver" and "Which car?" open Screens 1 and 2 on top.
+- "Confirm 5" closes the dialog, moves the five tolls into "Decided" and shows a toast "5 matched" with a red-outline "Undo" button.
+- Cancel and the close X never change anything.
+
+
+Spec screens / Area
+| Screen | Area |
+| 1 | Fix driver dialog — Uber driver from the file → a fleet driver |
+| 2 | Which car is this? dialog — plate from the file → a fleet car |
+| 3 | What was read dialog — row-by-row report with filters |
+| 4 | Confirm all sure matches dialog — list, total, confirm |

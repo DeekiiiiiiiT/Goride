@@ -1,0 +1,356 @@
+<!DOCTYPE html><html lang="en" rtrvr-mw-ready="1" rtrvr-gl-click="1" rtrvr-gl-input="1" rtrvr-gl-keydown="1" rtrvr-mw-busy="0" rtrvr-ls="5~hs,6~hs,8~hs,9~hs"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><meta content="web_dashboard" name="shell-type"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "on-secondary-fixed": "#131b2e",
+          "primary-fixed": "#e4dffc",
+          "inverse-primary": "#c8c3df",
+          "on-tertiary": "#ffffff",
+          "tertiary": "#000000",
+          "on-error-container": "#93000a",
+          "surface-container-lowest": "#ffffff",
+          "on-primary": "#ffffff",
+          "surface-container-highest": "#d3e4fe",
+          "on-tertiary-fixed": "#002114",
+          "surface-dim": "#cbdbf5",
+          "surface": "#f8f9ff",
+          "error": "#ba1a1a",
+          "on-primary-fixed": "#1b192e",
+          "background": "#f8f9ff",
+          "on-tertiary-fixed-variant": "#005137",
+          "surface-container-low": "#eff4ff",
+          "on-primary-container": "#84819a",
+          "surface-tint": "#5e5c74",
+          "inverse-surface": "#213145",
+          "on-secondary-fixed-variant": "#3f465c",
+          "primary-container": "#1b192e",
+          "on-surface-variant": "#47464c",
+          "surface-bright": "#f8f9ff",
+          "outline-variant": "#c9c5cd",
+          "primary": "#000000",
+          "secondary-container": "#dae2fd",
+          "tertiary-fixed-dim": "#68dba9",
+          "secondary-fixed": "#dae2fd",
+          "on-primary-fixed-variant": "#46445b",
+          "on-background": "#0b1c30",
+          "tertiary-container": "#002114",
+          "on-secondary": "#ffffff",
+          "surface-container": "#e5eeff",
+          "error-container": "#ffdad6",
+          "on-secondary-container": "#5c647a",
+          "secondary": "#565e74",
+          "secondary-fixed-dim": "#bec6e0",
+          "on-tertiary-container": "#069669",
+          "outline": "#78767d",
+          "primary-fixed-dim": "#c8c3df",
+          "on-surface": "#0b1c30",
+          "surface-variant": "#d3e4fe",
+          "inverse-on-surface": "#eaf1ff",
+          "on-error": "#ffffff",
+          "tertiary-fixed": "#85f8c4",
+          "surface-container-high": "#dce9ff"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.25rem",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+        "spacing": {
+          "space-sm": "0.5rem",
+          "space-lg": "1.5rem",
+          "gutter": "1.5rem",
+          "margin": "2rem",
+          "gutter-sm": "1rem",
+          "space-md": "1rem",
+          "space-xl": "2rem",
+          "space-xs": "0.25rem",
+          "margin-mobile": "1rem"
+        },
+        "fontFamily": {
+          "display-lg": [
+            "Inter"
+          ],
+          "headline-md": [
+            "Inter"
+          ],
+          "body-default": [
+            "Inter"
+          ],
+          "label-md": [
+            "Inter"
+          ],
+          "caption": [
+            "Inter"
+          ],
+          "currency-tabular": [
+            "Inter"
+          ],
+          "headline-sm": [
+            "Inter"
+          ],
+          "body-muted": [
+            "Inter"
+          ],
+          "label-sm": [
+            "Inter"
+          ],
+          "title-md": [
+            "Inter"
+          ]
+        },
+        "fontSize": {
+          "display-lg": [
+            "30px",
+            {
+              "lineHeight": "38px",
+              "letterSpacing": "-0.02em",
+              "fontWeight": "600"
+            }
+          ],
+          "headline-md": [
+            "22px",
+            {
+              "lineHeight": "30px",
+              "letterSpacing": "-0.015em",
+              "fontWeight": "600"
+            }
+          ],
+          "body-default": [
+            "15px",
+            {
+              "lineHeight": "22px",
+              "fontWeight": "400"
+            }
+          ],
+          "label-md": [
+            "13px",
+            {
+              "lineHeight": "18px",
+              "fontWeight": "500"
+            }
+          ],
+          "caption": [
+            "11px",
+            {
+              "lineHeight": "14px",
+              "letterSpacing": "0.04em",
+              "fontWeight": "600"
+            }
+          ],
+          "currency-tabular": [
+            "15px",
+            {
+              "lineHeight": "22px",
+              "letterSpacing": "-0.01em",
+              "fontWeight": "600"
+            }
+          ],
+          "headline-sm": [
+            "18px",
+            {
+              "lineHeight": "26px",
+              "letterSpacing": "-0.01em",
+              "fontWeight": "600"
+            }
+          ],
+          "body-muted": [
+            "15px",
+            {
+              "lineHeight": "22px",
+              "fontWeight": "400"
+            }
+          ],
+          "label-sm": [
+            "12px",
+            {
+              "lineHeight": "16px",
+              "fontWeight": "500"
+            }
+          ],
+          "title-md": [
+            "15px",
+            {
+              "lineHeight": "22px",
+              "fontWeight": "600"
+            }
+          ]
+        }
+      },
+    },
+  }</script></head><body class="bg-surface font-body-default text-on-surface antialiased" rtrvr-ls="5~hs,6~hs,8~hs,9~hs"><header class="fixed top-0 left-0 right-0 z-50 flex flex-col"><div class="h-14 bg-surface-container-lowest px-6 flex items-center justify-between border-b border-outline-variant/30 shadow-[0_1px_8px_rgba(0,0,0,0.02)]"><div class="flex items-center gap-space-md"><div class="flex items-center gap-space-sm bg-primary text-on-primary px-space-sm py-1.5 rounded-lg"><span class="material-symbols-outlined text-[18px]">directions_car</span><span class="font-title-md text-title-md tracking-tight">Roam Fleet</span></div><div class="h-4 w-px bg-outline-variant/40"></div><div class="flex items-center gap-space-xs text-on-surface font-label-md text-label-md"><span class="font-semibold">Kingston Rideshare Fleet #4</span><span class="material-symbols-outlined text-outline text-[16px]">unfold_more</span></div><span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-tertiary-container/10 text-on-tertiary-container font-caption text-caption"><span class="w-1.5 h-1.5 rounded-full bg-on-tertiary-container"></span>Operational</span></div><div class="flex items-center gap-space-md"><div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface font-label-sm text-label-sm"><span class="material-symbols-outlined text-secondary text-[16px]">payments</span><span class="font-semibold font-currency-tabular text-currency-tabular">JMD (J$)</span></div><button class="p-1.5 rounded-lg text-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">notifications</span></button><div class="flex items-center gap-space-sm pl-2 border-l border-outline-variant/30"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center font-label-sm text-label-sm font-semibold text-on-primary">OW</div><div class="hidden md:flex flex-col text-left"><span class="font-label-sm text-label-sm leading-none font-semibold text-on-surface">Ops Workplace</span><span class="font-caption text-caption text-secondary">Fractional Desk</span></div></div></div></div><div class="h-12 bg-inverse-surface px-6 flex items-center justify-between text-inverse-on-surface"><div class="flex items-center gap-space-md flex-1 max-w-md"><div class="relative w-full flex items-center"><span class="material-symbols-outlined absolute left-3 text-[18px] text-inverse-on-surface/60">search</span><input class="w-full bg-surface-container-lowest/10 text-inverse-on-surface placeholder:text-inverse-on-surface/50 text-label-md font-label-md pl-9 pr-12 py-1.5 rounded-lg focus:outline-none focus:ring-1 focus:ring-inverse-on-surface/40" placeholder="Switch vehicle or search hub…" type="text"><kbd class="absolute right-2.5 px-1.5 py-0.5 rounded bg-surface-container-lowest/10 text-[10px] text-inverse-on-surface/70 font-caption">⌘K</kbd></div></div><div class="flex items-center gap-space-lg"><div class="flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container-lowest/10 font-label-sm text-label-sm text-inverse-on-surface"><span class="material-symbols-outlined text-[16px] text-tertiary-fixed">calendar_today</span><span>Week 35 (24–30 Aug 2026)</span></div><nav class="flex items-center gap-space-md font-label-md text-label-md" data-active-classes="text-inverse-on-surface font-semibold underline underline-offset-4"><a class="text-inverse-on-surface/70 hover:text-inverse-on-surface transition-colors" data-path="fleet-vehicles" href="#">Vehicles</a><a class="text-inverse-on-surface/70 hover:text-inverse-on-surface transition-colors" data-path="drivers-directory" href="#">Drivers</a><a class="text-inverse-on-surface/70 hover:text-inverse-on-surface transition-colors" data-path="reconciliation-desk" href="#">Statements</a><a class="text-inverse-on-surface/70 hover:text-inverse-on-surface transition-colors" data-path="settlement-history" href="#">Ledgers</a></nav></div></div><div class="h-12 bg-surface-container-lowest px-6 flex items-center justify-between border-b border-outline-variant/30"><div class="flex items-center gap-2 font-label-md text-label-md text-secondary"><span class="hover:text-on-surface cursor-pointer">Business Finance</span><span class="material-symbols-outlined text-[14px]">chevron_right</span><span class="font-medium text-on-surface">Week Reconciliation · Week of 24 Aug 2026 · Rideshare</span></div><nav class="flex items-center gap-space-sm h-full" data-active-classes="border-primary text-on-surface font-semibold"><a aria-current="page" class="h-full flex items-center gap-1.5 px-3 border-primary text-on-surface font-semibold" data-path="upload-inputs" href="#"><span class="material-symbols-outlined text-[16px] text-on-tertiary-container">check_circle</span>1. Upload inputs</a><a class="h-full flex items-center gap-1.5 px-3 border-b-2 border-primary text-on-surface font-semibold text-label-sm font-label-sm" data-path="reconciliation-desk" href="#"><span class="w-2 h-2 rounded-full bg-primary"></span>2. Tolls &amp; Trips</a><a class="h-full flex items-center gap-1.5 px-3 border-b-2 border-transparent text-secondary hover:text-on-surface text-label-sm font-label-sm" data-path="driver-settlements" href="#">3. Driver settlements</a><a class="h-full flex items-center gap-1.5 px-3 border-b-2 border-transparent text-secondary hover:text-on-surface text-label-sm font-label-sm" data-path="review-and-finalize" href="#">4. Review &amp; finalize</a></nav></div></header><main class="w-full pt-40 min-h-screen bg-surface" rtrvr-ls="5~hs,6~hs,8~hs,9~hs"><div class="flex flex-col w-full relative" rtrvr-ls="5~hs,6~hs,8~hs,9~hs">
+<!-- Dimmed Underlay: Simulated Reconciliation Canvas (Calm Ledger Background) -->
+<div class="w-full max-w-[1440px] mx-auto px-6 py-6 opacity-40 blur-[1px] pointer-events-none select-none">
+<div class="flex items-center justify-between pb-6">
+<div>
+<span class="font-caption text-caption text-secondary tracking-widest uppercase">Batch Ledger Audit</span>
+<h1 class="font-headline-md text-headline-md text-on-surface">Tolls &amp; Cross-Platform Trip Reconciliation</h1>
+</div>
+<div class="flex items-center gap-space-sm">
+<div class="bg-surface-container-low px-4 py-2 rounded-xl text-secondary font-label-md text-label-md">
+          Unassigned Items: <span class="font-semibold text-error">1 Unmatched Toll</span>
+</div>
+<div class="bg-primary text-on-primary px-4 py-2 rounded-xl font-label-md text-label-md">
+          Finalize Week 35
+        </div>
+</div>
+</div>
+<!-- Dual Pane Mock Ledger Rows -->
+<div class="grid grid-cols-12 gap-space-lg">
+<div class="col-span-8 space-y-3">
+<div class="bg-surface-container-lowest p-5 rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-secondary">local_taxi</span>
+<div>
+<p class="font-title-md text-title-md text-on-surface">Portmore Toll Pass #44091</p>
+<p class="font-label-sm text-label-sm text-secondary">26 Aug 2026, 08:14 AM · Transponder Read</p>
+</div>
+</div>
+<span class="font-currency-tabular text-currency-tabular text-on-surface">J$ 350.00</span>
+</div>
+<div class="bg-surface-container-lowest p-5 rounded-xl shadow-sm flex items-center justify-between ring-2 ring-error/30">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-error">warning</span>
+<div>
+<p class="font-title-md text-title-md text-on-surface">Uber Driver Trip Toll (9042 PX)</p>
+<p class="font-label-sm text-label-sm text-error">Unregistered Vehicle ID detected</p>
+</div>
+</div>
+<span class="font-currency-tabular text-currency-tabular text-on-surface">J$ 1,050.00</span>
+</div>
+<div class="bg-surface-container-lowest p-5 rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-secondary">local_taxi</span>
+<div>
+<p class="font-title-md text-title-md text-on-surface">Highway 2000 North-South Link</p>
+<p class="font-label-sm text-label-sm text-secondary">27 Aug 2026, 04:32 PM · Toyota Sienta (8834HB)</p>
+</div>
+</div>
+<span class="font-currency-tabular text-currency-tabular text-on-surface">J$ 1,200.00</span>
+</div>
+</div>
+<div class="col-span-4 bg-surface-container-lowest p-6 rounded-xl shadow-sm space-y-4">
+<h3 class="font-title-md text-title-md text-on-surface">Week 35 Ledger Totals</h3>
+<div class="space-y-2">
+<div class="flex justify-between text-label-md font-label-md text-secondary">
+<span>Total Logged Trips</span>
+<span class="font-currency-tabular text-currency-tabular text-on-surface">J$ 412,890.00</span>
+</div>
+<div class="flex justify-between text-label-md font-label-md text-secondary">
+<span>Toll Discrepancies</span>
+<span class="font-currency-tabular text-currency-tabular text-error">J$ 1,050.00</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Modal Backdrop / Tinted Scrim -->
+<div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-inverse-surface/45 backdrop-blur-[3px] transition-opacity duration-200" rtrvr-ls="5~hs,6~hs,8~hs,9~hs">
+<!-- Centered Dialog Modal: 560px wide, Rounded-20px, Shadow-2xl -->
+<div aria-labelledby="dialog-title" aria-modal="true" class="w-full max-w-[560px] bg-surface-container-lowest border border-outline-variant/30 rounded-[20px] shadow-2xl p-6 space-y-5 relative transform transition-all" role="dialog">
+<!-- Dialog Header -->
+<div class="flex items-center justify-between">
+<h2 class="text-[22px] leading-[30px] font-semibold text-[#0a0a0a]" id="dialog-title">Which car is this?</h2>
+<button aria-label="Close modal" class="w-8 h-8 rounded-full bg-surface-container-low text-secondary hover:bg-surface-container hover:text-on-surface flex items-center justify-center transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<!-- Card: "From the Uber file" -->
+<div class="bg-surface-container-low border border-outline-variant/30 rounded-2xl p-4 flex items-start gap-3.5">
+<div class="w-9 h-9 rounded-xl bg-surface-container-lowest border border-outline-variant/30 flex items-center justify-center text-on-surface shadow-sm shrink-0">
+<span class="material-symbols-outlined text-[20px] text-secondary">description</span>
+</div>
+<div class="flex-1 min-w-0">
+<span class="block font-label-md text-label-md text-secondary">
+From the Uber file
+</span>
+<div class="mt-0.5">
+<span class="font-mono text-[24px] leading-8 font-bold text-on-surface tracking-tight">
+9042 PX
+</span>
+</div>
+<p class="font-label-md text-label-md text-secondary mt-0.5">
+Seen on 3 trips this week
+</p>
+</div>
+</div>
+<!-- Fleet Car Radio List -->
+<div aria-label="Registered fleet vehicles" class="space-y-2.5" role="radiogroup">
+<!-- Row 1: Toyota Roomy (Unselected) -->
+<label class="group relative rounded-2xl p-3.5 flex items-center gap-3.5 bg-surface-container-lowest border border-outline-variant/30 hover:bg-surface-container-low cursor-pointer transition-all shadow-sm">
+<input class="sr-only peer" name="fleet-car-selection" type="radio" value="toyota-roomy-5179kz">
+<div class="w-4 h-4 rounded-full border border-outline flex items-center justify-center peer-checked:bg-primary peer-checked:border-primary transition-colors shrink-0">
+<div class="w-1.5 h-1.5 rounded-full bg-surface-container-lowest opacity-0 peer-checked:opacity-100 transition-opacity"></div>
+</div>
+<div class="w-9 h-9 rounded-full bg-surface-container-low flex items-center justify-center text-secondary group-hover:text-on-surface shrink-0">
+<span class="material-symbols-outlined text-[18px]">directions_car</span>
+</div>
+<div class="flex-1 min-w-0 flex items-center justify-between gap-2">
+<div>
+<p class="font-title-md text-title-md text-on-surface font-medium">Toyota Roomy</p>
+</div>
+<span class="font-mono font-medium text-label-sm text-secondary bg-surface-container-low border border-outline-variant/30 px-2 py-0.5 rounded-lg shrink-0">
+5179KZ
+</span>
+</div>
+</label>
+<!-- Row 2: Toyota Sienta (Unselected) -->
+<label class="group relative rounded-2xl p-3.5 flex items-center gap-3.5 bg-surface-container-lowest border border-outline-variant/30 hover:bg-surface-container-low cursor-pointer transition-all shadow-sm">
+<input class="sr-only peer" name="fleet-car-selection" type="radio" value="toyota-sienta-8834hb">
+<div class="w-4 h-4 rounded-full border border-outline flex items-center justify-center peer-checked:bg-primary peer-checked:border-primary transition-colors shrink-0">
+<div class="w-1.5 h-1.5 rounded-full bg-surface-container-lowest opacity-0 peer-checked:opacity-100 transition-opacity"></div>
+</div>
+<div class="w-9 h-9 rounded-full bg-surface-container-low flex items-center justify-center text-secondary group-hover:text-on-surface shrink-0">
+<span class="material-symbols-outlined text-[18px]">directions_car</span>
+</div>
+<div class="flex-1 min-w-0 flex items-center justify-between gap-2">
+<div>
+<p class="font-title-md text-title-md text-on-surface font-medium">Toyota Sienta</p>
+</div>
+<span class="font-mono font-medium text-label-sm text-secondary bg-surface-container-low border border-outline-variant/30 px-2 py-0.5 rounded-lg shrink-0">
+8834HB
+</span>
+</div>
+</label>
+<!-- Row 3: Suzuki Swift (Selected Default) -->
+<label class="group relative rounded-2xl p-3.5 flex items-center gap-3.5 bg-surface-container-lowest border-2 border-primary cursor-pointer shadow-sm transition-all">
+<input checked="" class="sr-only peer" name="fleet-car-selection" type="radio" value="suzuki-swift-9042px">
+<div class="w-4 h-4 rounded-full bg-primary flex items-center justify-center shrink-0">
+<div class="w-1.5 h-1.5 rounded-full bg-surface-container-lowest"></div>
+</div>
+<div class="w-9 h-9 rounded-full bg-primary-container text-on-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px]">directions_car</span>
+</div>
+<div class="flex-1 min-w-0 flex items-center justify-between gap-2">
+<div>
+<p class="font-title-md text-title-md text-on-surface font-semibold">Suzuki Swift</p>
+</div>
+<span class="font-mono font-bold text-label-sm bg-primary text-on-primary px-2.5 py-1 rounded-lg shrink-0 shadow-sm">
+9042PX
+</span>
+</div>
+</label>
+</div>
+<!-- Muted persistence line -->
+<div class="flex items-center gap-2 pt-0.5 text-secondary">
+<span class="material-symbols-outlined text-[16px] text-secondary shrink-0">info</span>
+<p class="font-label-md text-label-md text-secondary">
+Roam will remember this plate for this car.
+</p>
+</div>
+<!-- Footer Actions -->
+<div class="flex items-center justify-between pt-2">
+<button class="px-5 py-2.5 rounded-xl border border-error/30 text-error font-label-md text-label-md font-medium hover:bg-error-container/20 transition-colors" type="button">
+Cancel
+</button>
+<button class="bg-primary text-on-primary px-6 py-2.5 rounded-xl font-label-md text-label-md font-medium hover:bg-primary-container transition-all shadow-sm" type="button">
+Use this car
+</button>
+</div>
+</div>
+</div>
+</div></main>
+
+</body></html>

@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"primary":"#000000","surface":"#f8f9ff","error-container":"#ffdad6","on-secondary":"#ffffff","secondary":"#545f73","on-tertiary-fixed-variant":"#003ea8","on-background":"#0b1c30","primary-fixed":"#e4dffc","tertiary-container":"#00174b","primary-fixed-dim":"#c8c3df","outline":"#78767d","inverse-primary":"#c8c3df","on-primary-fixed":"#1b192e","surface-tint":"#5e5c74","secondary-container":"#d5e0f8","surface-container-lowest":"#ffffff","secondary-fixed-dim":"#bcc7de","on-surface-variant":"#47464c","on-primary":"#ffffff","tertiary":"#000000","tertiary-fixed-dim":"#b4c5ff","on-secondary-fixed-variant":"#3c475a","on-primary-fixed-variant":"#46445b","surface-container-low":"#eff4ff","secondary-fixed":"#d8e3fb","on-tertiary-container":"#497cff","inverse-on-surface":"#eaf1ff","on-primary-container":"#84819a","surface-variant":"#d3e4fe","surface-container":"#e5eeff","on-secondary-container":"#586377","on-secondary-fixed":"#111c2d","surface-bright":"#f8f9ff","tertiary-fixed":"#dbe1ff","on-surface":"#0b1c30","error":"#ba1a1a","background":"#f8f9ff","surface-dim":"#cbdbf5","on-error-container":"#93000a","on-error":"#ffffff","surface-container-high":"#dce9ff","on-tertiary":"#ffffff","surface-container-highest":"#d3e4fe","primary-container":"#1b192e","outline-variant":"#c9c5cd","on-tertiary-fixed":"#00174b","inverse-surface":"#213145"},borderRadius:{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},spacing:{"space-xs":"0.25rem","space-lg":"1.25rem","gutter":"1.25rem","space-sm":"0.5rem","gutter-mobile":"0.75rem","space-2xl":"2.5rem","margin":"2rem","space-xl":"1.75rem","margin-mobile":"1rem","space-md":"0.75rem"},fontFamily:{"body-lg":["Inter"],"label-caps":["Inter"],"headline-sm":["Inter"],"tabular-amount-lg":["Inter"],"headline-lg-mobile":["Inter"],"body-sm":["Inter"],"tabular-amount-sm":["Inter"],"label-md":["Inter"],"display-mobile":["Inter"],"tabular-amount-md":["Inter"],"headline-lg":["Inter"],"body-md":["Inter"],"display":["Inter"]},fontSize:{"body-lg":["16px",{"lineHeight":"24px","letterSpacing":"-0.005em","fontWeight":"400"}],"label-caps":["11px",{"lineHeight":"14px","letterSpacing":"0.04em","fontWeight":"600"}],"headline-sm":["18px",{"lineHeight":"26px","letterSpacing":"-0.01em","fontWeight":"600"}],"tabular-amount-lg":["28px",{"lineHeight":"36px","letterSpacing":"-0.02em","fontWeight":"600"}],"headline-lg-mobile":["20px",{"lineHeight":"28px","letterSpacing":"-0.015em","fontWeight":"600"}],"body-sm":["13px",{"lineHeight":"18px","letterSpacing":"0em","fontWeight":"400"}],"tabular-amount-sm":["13px",{"lineHeight":"18px","letterSpacing":"0em","fontWeight":"500"}],"label-md":["12px",{"lineHeight":"16px","letterSpacing":"0.01em","fontWeight":"500"}],"display-mobile":["28px",{"lineHeight":"36px","letterSpacing":"-0.02em","fontWeight":"600"}],"tabular-amount-md":["16px",{"lineHeight":"24px","letterSpacing":"0em","fontWeight":"500"}],"headline-lg":["24px",{"lineHeight":"32px","letterSpacing":"-0.02em","fontWeight":"600"}],"body-md":["14px",{"lineHeight":"20px","letterSpacing":"0em","fontWeight":"400"}],"display":["36px",{"lineHeight":"44px","letterSpacing":"-0.025em","fontWeight":"600"}]}}}};</script></head><body class="bg-background font-body-md text-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 right-0 z-50 flex flex-col bg-surface-container-lowest border-b border-outline-variant/30"><div class="h-16 px-6 flex items-center justify-between border-b border-outline-variant/20"><div class="flex items-center gap-6"><div class="flex items-center gap-3"><div class="w-9 h-9 bg-primary text-on-primary flex items-center justify-center rounded-lg shadow-sm font-headline-sm font-bold">R</div><span class="font-headline-sm text-headline-sm text-on-surface tracking-tight font-semibold">Roam Fleet</span></div><nav class="hidden xl:flex items-center gap-5 h-16 pt-1" data-active-classes="text-on-surface border-b-2 border-primary font-semibold"><a class="h-full flex items-center px-1 font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="dashboard" href="#">Dashboard</a><a class="h-full flex items-center px-1 font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="fleet-operations" href="#">Fleet Operations</a><a class="h-full flex items-center px-1 font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="driver-operations" href="#">Driver Operations</a><a class="h-full flex items-center px-1 font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="money" href="#">Money</a><a class="h-full flex items-center px-1 font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="vehicle-operations" href="#">Vehicle Operations</a><a class="h-full flex items-center px-1 font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="delivery-operations" href="#">Delivery Operations</a><a class="h-full flex items-center px-1 font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="analytics" href="#">Analytics</a><a class="h-full flex items-center px-1 font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="reports" href="#">Reports</a><a class="h-full flex items-center px-1 font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="business-finance" href="#">Business Finance</a></nav></div><div class="flex items-center gap-4"><button aria-label="Notifications" class="relative p-2 rounded-lg text-secondary hover:bg-surface-container hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-1.5 right-1.5 w-4 h-4 bg-error text-on-error font-label-caps text-[10px] rounded-full flex items-center justify-center font-bold">3</span></button><div class="flex items-center gap-2 pl-2 border-l border-outline-variant/40"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><span class="font-label-md text-label-md text-on-surface font-semibold">DT</span></div></div></div><div class="h-11 px-6 bg-primary-container text-on-primary flex items-center justify-between text-body-sm"><div class="flex items-center"><div class="relative flex items-center"><span class="material-symbols-outlined absolute left-3 text-outline-variant text-[16px]">search</span><input class="h-8 pl-8 pr-3 w-64 md:w-80 bg-inverse-surface/60 text-inverse-on-surface placeholder:text-outline-variant text-body-sm rounded-lg border-none focus:outline-none focus:ring-1 focus:ring-primary-fixed" placeholder="Switch vehicle or search hub…" type="text"/></div></div><div class="flex items-center gap-3 font-label-md text-label-md text-on-primary-container"><span class="hidden md:inline font-tabular-amount-sm text-tabular-amount-sm text-surface-container-lowest font-medium">09:10:28 PM EST</span><span class="hidden md:inline text-outline-variant">•</span><span class="hidden lg:inline">America/Jamaica</span><span class="hidden lg:inline text-outline-variant">•</span><span class="bg-inverse-surface px-2 py-0.5 rounded text-surface-bright font-medium">JM (JMD)</span><span class="bg-inverse-surface px-2.5 py-0.5 rounded-full text-surface-bright font-medium border border-outline/30">DE • Deeki T</span></div></div><div class="px-8 py-3.5 bg-surface-container-lowest border-b border-outline-variant/30 flex flex-wrap items-center justify-between gap-3 text-body-sm"><div class="flex items-center gap-3 flex-wrap"><div class="flex items-center gap-1.5 text-secondary"><a class="hover:text-on-surface transition-colors font-body-sm text-body-sm" href="#">Business Finance</a><span class="text-outline text-xs">›</span><span class="font-body-sm text-body-sm font-semibold text-on-surface">Week Reconciliation</span></div><span class="inline-flex items-center px-2.5 py-1 rounded-full bg-secondary-container/50 text-on-secondary-container font-label-md text-label-md font-medium">Week of 24 Aug 2026 · Rideshare · 24–30 Aug 2026</span></div><div class="flex items-center gap-2"><span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-low text-secondary font-label-md text-label-md font-medium border border-outline-variant/30"><span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>Numbers updated 2 min ago</span></div></div></header><main class="w-full pt-[155px] min-h-[calc(100vh-140px)] bg-background"><div class="flex flex-col w-full">
+<div class="w-full max-w-[1440px] mx-auto px-4 md:px-8 py-6 space-y-6">
+<!-- Global Step Indicator & Overview Header -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2">
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<span class="px-2.5 py-0.5 rounded-full bg-secondary-container/60 text-on-secondary-container font-label-caps text-label-caps uppercase tracking-wider font-semibold">Step 3 of 8</span>
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-container-highest text-on-surface font-label-md text-label-md">
+<span class="material-symbols-outlined text-[14px] text-primary" style="font-variation-settings: 'FILL' 1;">lock_open</span>
+            Pre-seal validation complete
+          </span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight font-semibold">Tolls</h1>
+<p class="font-body-md text-body-md text-secondary">Who pays each toll this week? All electronic plaza debits and driver cash slips audited.</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-surface-container-lowest text-on-surface font-body-sm text-body-sm font-medium shadow-sm hover:bg-surface-container-low transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px] text-secondary">history</span>
+          Audit trail (13 events)
+        </button>
+<button class="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-surface-container-lowest text-on-surface font-body-sm text-body-sm font-medium shadow-sm hover:bg-surface-container-low transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px] text-secondary">download</span>
+          Export CSV
+        </button>
+</div>
+</div>
+<!-- Five Key Metric Money Tiles -->
+<div class="grid grid-cols-2 md:grid-cols-5 gap-3.5">
+<!-- 1. Toll Spend -->
+<div class="p-4 rounded-[20px] bg-surface-container-lowest shadow-sm flex flex-col justify-between min-h-[108px]">
+<div class="flex items-center justify-between">
+<span class="font-label-caps text-label-caps text-secondary uppercase font-semibold">Toll Spend</span>
+<span class="material-symbols-outlined text-secondary text-[18px]">receipt_long</span>
+</div>
+<div>
+<div class="font-tabular-amount-lg text-tabular-amount-lg text-on-surface font-bold tracking-tight">J$4,250.00</div>
+<div class="font-body-sm text-body-sm text-secondary">12 total transactions</div>
+</div>
+</div>
+<!-- 2. Paid Back by Uber -->
+<div class="p-4 rounded-[20px] bg-surface-container-lowest shadow-sm flex flex-col justify-between min-h-[108px]">
+<div class="flex items-center justify-between">
+<span class="font-label-caps text-label-caps text-secondary uppercase font-semibold">Paid Back by Uber</span>
+<span class="material-symbols-outlined text-primary text-[18px]">sync_alt</span>
+</div>
+<div>
+<div class="font-tabular-amount-lg text-tabular-amount-lg text-on-surface font-bold tracking-tight">J$3,975.00</div>
+<div class="inline-flex items-center gap-1 font-body-sm text-body-sm text-secondary font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+            11 verified matches
+          </div>
+</div>
+</div>
+<!-- 3. Driver Pays -->
+<div class="p-4 rounded-[20px] bg-surface-container-lowest shadow-sm flex flex-col justify-between min-h-[108px]">
+<div class="flex items-center justify-between">
+<span class="font-label-caps text-label-caps text-secondary uppercase font-semibold">Driver Pays</span>
+<span class="material-symbols-outlined text-secondary text-[18px]">person</span>
+</div>
+<div>
+<div class="font-tabular-amount-lg text-tabular-amount-lg text-on-surface font-bold tracking-tight">J$275.00</div>
+<div class="font-body-sm text-body-sm text-secondary truncate">1 toll · Kenny G. Rattray</div>
+</div>
+</div>
+<!-- 4. Fleet Pays -->
+<div class="p-4 rounded-[20px] bg-surface-container-lowest shadow-sm flex flex-col justify-between min-h-[108px]">
+<div class="flex items-center justify-between">
+<span class="font-label-caps text-label-caps text-secondary uppercase font-semibold">Fleet Pays</span>
+<span class="material-symbols-outlined text-secondary text-[18px]">corporate_fare</span>
+</div>
+<div>
+<div class="font-tabular-amount-lg text-tabular-amount-lg text-on-surface font-bold tracking-tight">J$0.00</div>
+<div class="font-body-sm text-body-sm text-secondary">0 absorbed costs</div>
+</div>
+</div>
+<!-- 5. Still to Decide -->
+<div class="p-4 rounded-[20px] bg-surface-container-high/60 shadow-sm col-span-2 md:col-span-1 flex flex-col justify-between min-h-[108px]">
+<div class="flex items-center justify-between">
+<span class="font-label-caps text-label-caps text-on-surface uppercase font-semibold">Still to Decide</span>
+<span class="material-symbols-outlined text-primary text-[18px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div>
+<div class="font-tabular-amount-lg text-tabular-amount-lg text-on-surface font-bold tracking-tight">J$0.00</div>
+<div class="inline-flex items-center gap-1 font-body-sm text-body-sm text-on-surface font-medium">
+<span class="material-symbols-outlined text-[15px] text-primary">done_all</span>
+            0 items · Ready to seal
+          </div>
+</div>
+</div>
+</div>
+<!-- 100% Progress Bar Banner -->
+<div class="p-4 rounded-[20px] bg-surface-container-lowest shadow-sm space-y-2">
+<div class="flex items-center justify-between font-label-md text-label-md">
+<span class="font-medium text-on-surface flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+          12 of 12 tolls decided · 0 left to review
+        </span>
+<span class="font-semibold text-on-surface">100% completed</span>
+</div>
+<div class="w-full h-2.5 rounded-full bg-surface-container-high overflow-hidden">
+<div class="h-full bg-primary rounded-full transition-all duration-500" style="width: 100%;"></div>
+</div>
+</div>
+<!-- Main Workspace Layout Grid: 3-column architecture (Rail - Ledger - Sidebar) -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+<!-- LEFT RAIL: Settlement Steps Navigation (3 cols) -->
+<aside class="lg:col-span-3 space-y-5">
+<div class="p-5 rounded-[20px] bg-surface-container-lowest shadow-sm space-y-4">
+<div class="flex items-center justify-between pb-1">
+<span class="font-label-caps text-label-caps text-secondary uppercase font-semibold">Settlement Steps</span>
+<span class="font-label-md text-label-md text-secondary">Step 3 of 8</span>
+</div>
+<nav class="space-y-1">
+<!-- Step 1: Completed -->
+<a class="flex items-center justify-between p-2.5 rounded-xl hover:bg-surface-container-low transition-colors group" href="#">
+<div class="flex items-center gap-3">
+<span class="w-6 h-6 rounded-full bg-surface-container-high text-primary flex items-center justify-center font-label-md text-label-md font-semibold">
+<span class="material-symbols-outlined text-[16px]">check</span>
+</span>
+<span class="font-body-sm text-body-sm text-secondary group-hover:text-on-surface">1. Upload inputs</span>
+</div>
+<span class="font-label-caps text-label-caps text-secondary font-medium">Done</span>
+</a>
+<!-- Step 2: Completed -->
+<a class="flex items-center justify-between p-2.5 rounded-xl hover:bg-surface-container-low transition-colors group" href="#">
+<div class="flex items-center gap-3">
+<span class="w-6 h-6 rounded-full bg-surface-container-high text-primary flex items-center justify-center font-label-md text-label-md font-semibold">
+<span class="material-symbols-outlined text-[16px]">check</span>
+</span>
+<span class="font-body-sm text-body-sm text-secondary group-hover:text-on-surface">2. Service lines</span>
+</div>
+<span class="font-label-caps text-label-caps text-secondary font-medium">Done</span>
+</a>
+<!-- Step 3: ACTIVE & READY TO SEAL -->
+<div class="flex items-center justify-between p-2.5 rounded-xl bg-surface-container-high text-on-surface">
+<div class="flex items-center gap-3">
+<span class="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-md text-label-md font-semibold">3</span>
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">3. Tolls</span>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-lowest text-on-surface font-label-caps text-[10px] font-bold uppercase tracking-wider shadow-sm">Ready</span>
+</div>
+<!-- Step 4: Tag Account -->
+<a class="flex items-center justify-between p-2.5 rounded-xl text-secondary hover:bg-surface-container-low transition-colors" href="#">
+<div class="flex items-center gap-3">
+<span class="w-6 h-6 rounded-full bg-surface-container text-secondary flex items-center justify-center font-label-md text-label-md font-semibold">4</span>
+<span class="font-body-sm text-body-sm">4. Tag account</span>
+</div>
+<span class="font-label-caps text-label-caps text-outline text-[11px]">Next</span>
+</a>
+<!-- Step 5: Fuel -->
+<div class="flex items-center justify-between p-2.5 rounded-xl text-secondary/70">
+<div class="flex items-center gap-3">
+<span class="w-6 h-6 rounded-full bg-surface-container/60 text-secondary/60 flex items-center justify-center font-label-md text-label-md font-medium">5</span>
+<span class="font-body-sm text-body-sm">5. Fuel</span>
+</div>
+</div>
+<!-- Step 6: Trips & earnings -->
+<div class="flex items-center justify-between p-2.5 rounded-xl text-secondary/70">
+<div class="flex items-center gap-3">
+<span class="w-6 h-6 rounded-full bg-surface-container/60 text-secondary/60 flex items-center justify-center font-label-md text-label-md font-medium">6</span>
+<span class="font-body-sm text-body-sm">6. Trips &amp; earnings</span>
+</div>
+</div>
+<!-- Step 7: Settlement -->
+<div class="flex items-center justify-between p-2.5 rounded-xl text-secondary/70">
+<div class="flex items-center gap-3">
+<span class="w-6 h-6 rounded-full bg-surface-container/60 text-secondary/60 flex items-center justify-center font-label-md text-label-md font-medium">7</span>
+<span class="font-body-sm text-body-sm">7. Settlement</span>
+</div>
+</div>
+<!-- Step 8: Close week -->
+<div class="flex items-center justify-between p-2.5 rounded-xl text-secondary/70">
+<div class="flex items-center gap-3">
+<span class="w-6 h-6 rounded-full bg-surface-container/60 text-secondary/60 flex items-center justify-center font-label-md text-label-md font-medium">8</span>
+<span class="font-body-sm text-body-sm">8. Close week</span>
+</div>
+</div>
+</nav>
+</div>
+<!-- Toll Policy Compliance Note -->
+<div class="p-5 rounded-[20px] bg-surface-container-low text-on-surface space-y-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-secondary">verified_user</span>
+<span class="font-label-caps text-label-caps uppercase font-semibold text-secondary">Toll Policy Rules</span>
+</div>
+<p class="font-body-sm text-body-sm text-secondary">
+            Highway 2000 passages occurring while active on trips are automatically reimbursed by Uber. Off-trip passages are assigned to drivers on Step 7.
+          </p>
+<div class="p-3 rounded-xl bg-surface-container-lowest/80 text-secondary font-label-md text-label-md space-y-1">
+<div class="flex justify-between">
+<span>Portmore Plaza</span>
+<span class="font-tabular-amount-sm font-semibold text-on-surface">J$370 / J$400</span>
+</div>
+<div class="flex justify-between">
+<span>Spanish Town</span>
+<span class="font-tabular-amount-sm font-semibold text-on-surface">J$275</span>
+</div>
+<div class="flex justify-between">
+<span>May Pen East</span>
+<span class="font-tabular-amount-sm font-semibold text-on-surface">J$220</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- CENTER COLUMN: Cleared Categories + Decided Peeking List + Seal Action (6 cols) -->
+<main class="lg:col-span-6 space-y-5">
+<!-- Cleared Audit Steps (Sections 1 through 6) Compact Card -->
+<div class="p-5 rounded-[20px] bg-surface-container-lowest shadow-sm space-y-3">
+<div class="flex items-center justify-between pb-2">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]" style="font-variation-settings: 'FILL' 1;">task_alt</span>
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">Toll Triage Workflows</span>
+</div>
+<span class="px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold">6 of 6 cleared</span>
+</div>
+<div class="space-y-1.5 font-body-sm text-body-sm">
+<!-- Section 1 -->
+<div class="flex items-center justify-between p-3 rounded-xl bg-surface-container-low hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<span class="material-symbols-outlined text-primary text-[18px]">check_circle</span>
+<span class="font-medium text-on-surface truncate">1. Suggested matches</span>
+</div>
+<span class="font-body-sm text-body-sm text-secondary truncate pl-2">0 tolls · All 11 Uber matches verified</span>
+</div>
+<!-- Section 2 -->
+<div class="flex items-center justify-between p-3 rounded-xl bg-surface-container-low hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<span class="material-symbols-outlined text-primary text-[18px]">check_circle</span>
+<span class="font-medium text-on-surface truncate">2. Pick the right trip</span>
+</div>
+<span class="font-body-sm text-body-sm text-secondary truncate pl-2">0 tolls · Overlapping trips disambiguated</span>
+</div>
+<!-- Section 3 -->
+<div class="flex items-center justify-between p-3 rounded-xl bg-surface-container-low hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<span class="material-symbols-outlined text-primary text-[18px]">check_circle</span>
+<span class="font-medium text-on-surface truncate">3. Tolls with no trip</span>
+</div>
+<span class="font-body-sm text-body-sm text-secondary truncate pl-2">0 tolls · Personal driving allocated</span>
+</div>
+<!-- Section 4 -->
+<div class="flex items-center justify-between p-3 rounded-xl bg-surface-container-low hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<span class="material-symbols-outlined text-primary text-[18px]">check_circle</span>
+<span class="font-medium text-on-surface truncate">4. Cash receipts to check</span>
+</div>
+<span class="font-body-sm text-body-sm text-secondary truncate pl-2">0 receipts · 1 driver cash ticket audited</span>
+</div>
+<!-- Section 5 -->
+<div class="flex items-center justify-between p-3 rounded-xl bg-surface-container-low hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<span class="material-symbols-outlined text-primary text-[18px]">check_circle</span>
+<span class="font-medium text-on-surface truncate">5. Possible duplicates</span>
+</div>
+<span class="font-body-sm text-body-sm text-secondary">0 flags</span>
+</div>
+<!-- Section 6 -->
+<div class="flex items-center justify-between p-3 rounded-xl bg-surface-container-low hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<span class="material-symbols-outlined text-primary text-[18px]">check_circle</span>
+<span class="font-medium text-on-surface truncate">6. Uber paybacks with no toll</span>
+</div>
+<span class="font-body-sm text-body-sm text-secondary">0 flags</span>
+</div>
+</div>
+</div>
+<!-- Section 7: Decided Records (Collapsed / Peeking View) -->
+<div class="p-5 rounded-[20px] bg-surface-container-lowest shadow-sm space-y-4">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">Decided</span>
+<span class="px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface font-label-caps text-label-caps font-bold">13 items</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-body-sm text-body-sm text-secondary">J$3,975.00 Uber + J$275.00 Driver</span>
+</div>
+</div>
+<!-- Peeking Decided Rows -->
+<div class="space-y-2.5">
+<!-- Row 1: Uber Matched -->
+<div class="p-3.5 rounded-xl bg-surface-container-low hover:bg-surface-container transition-colors flex flex-col md:flex-row md:items-center justify-between gap-3">
+<div class="flex items-start gap-3 min-w-0">
+<div class="w-8 h-8 rounded-lg bg-surface-container-highest text-primary flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[18px]">check</span>
+</div>
+<div class="min-w-0 space-y-0.5">
+<div class="flex items-center gap-2 flex-wrap">
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-on-surface font-label-md text-label-md font-semibold">Matched</span>
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">25 Aug, 3:02 PM · Portmore East</span>
+<span class="font-tabular-amount-sm font-bold text-on-surface">J$370.00</span>
+</div>
+<div class="font-body-sm text-body-sm text-secondary flex items-center gap-2 flex-wrap">
+<span>Uber trip 2:42 PM–3:12 PM · card</span>
+<span>•</span>
+<span class="font-label-md text-label-md text-secondary/80">Audit: Deeki T · 13 Nov, 9:40 AM</span>
+</div>
+</div>
+</div>
+<div class="flex items-center self-end md:self-center shrink-0">
+<button class="px-3 py-1 rounded-lg text-secondary hover:text-on-surface hover:bg-surface-container-highest font-label-md text-label-md font-medium transition-colors" type="button">
+                  Undo
+                </button>
+</div>
+</div>
+<!-- Row 2: Driver Pays -->
+<div class="p-3.5 rounded-xl bg-surface-container-low hover:bg-surface-container transition-colors flex flex-col md:flex-row md:items-center justify-between gap-3">
+<div class="flex items-start gap-3 min-w-0">
+<div class="w-8 h-8 rounded-lg bg-surface-container-highest text-secondary flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[18px]">person</span>
+</div>
+<div class="min-w-0 space-y-0.5">
+<div class="flex items-center gap-2 flex-wrap">
+<span class="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-md text-label-md font-semibold">Driver pays</span>
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">27 Aug, 12:50 PM · Spanish Town East</span>
+<span class="font-tabular-amount-sm font-bold text-on-surface">J$275.00</span>
+<span class="px-1.5 py-0.2 rounded bg-surface-container-highest font-label-caps text-label-caps text-secondary">Tag</span>
+</div>
+<div class="font-body-sm text-body-sm text-secondary flex items-center gap-2 flex-wrap">
+<span class="font-medium text-on-surface">Plate 5179KZ · Kenny Gregory Rattray</span>
+<span>•</span>
+<span>Personal trip / off-duty</span>
+<span>•</span>
+<span class="font-label-md text-label-md text-secondary/80">Audit: Deeki T · 13 Nov, 10:15 AM</span>
+</div>
+</div>
+</div>
+<div class="flex items-center self-end md:self-center shrink-0">
+<button class="px-3 py-1 rounded-lg text-secondary hover:text-on-surface hover:bg-surface-container-highest font-label-md text-label-md font-medium transition-colors" type="button">
+                  Undo
+                </button>
+</div>
+</div>
+<!-- Row 3: Cash Receipt Rejected -->
+<div class="p-3.5 rounded-xl bg-surface-container-low hover:bg-surface-container transition-colors flex flex-col md:flex-row md:items-center justify-between gap-3">
+<div class="flex items-start gap-3 min-w-0">
+<div class="w-8 h-8 rounded-lg bg-error-container/60 text-error flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[18px]">block</span>
+</div>
+<div class="min-w-0 space-y-0.5">
+<div class="flex items-center gap-2 flex-wrap">
+<span class="px-2 py-0.5 rounded-full bg-error-container/60 text-error font-label-md text-label-md font-semibold">Receipt rejected</span>
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">29 Aug, 4:10 PM · Portmore West</span>
+<span class="font-tabular-amount-sm font-medium text-secondary line-through">J$400.00</span>
+<span class="font-label-caps text-label-caps text-secondary">Not counted</span>
+</div>
+<div class="font-body-sm text-body-sm text-secondary flex items-center gap-2 flex-wrap">
+<span>Cash ticket #004512 rejected due to blur/unreadable timestamp</span>
+<span>•</span>
+<span class="font-label-md text-label-md text-secondary/80">Audit: Deeki T · 13 Nov, 10:22 AM</span>
+</div>
+</div>
+</div>
+<div class="flex items-center self-end md:self-center shrink-0">
+<button class="px-3 py-1 rounded-lg text-secondary hover:text-on-surface hover:bg-surface-container-highest font-label-md text-label-md font-medium transition-colors" type="button">
+                  Undo
+                </button>
+</div>
+</div>
+</div>
+<div class="pt-2 flex justify-center">
+<button class="inline-flex items-center gap-1.5 text-on-surface hover:text-primary font-body-sm text-body-sm font-semibold transition-colors" type="button">
+<span>View all 13 decided records (11 matched, 1 driver toll, 1 rejected receipt)</span>
+<span class="material-symbols-outlined text-[16px]">expand_more</span>
+</button>
+</div>
+</div>
+<!-- Seal Tolls Card (Prominent Final Action) -->
+<div class="p-6 rounded-[20px] bg-surface-container-lowest shadow-md space-y-5">
+<div class="space-y-2">
+<div class="flex items-center gap-2">
+<span class="font-label-caps text-label-caps uppercase font-bold text-secondary tracking-wider">Toll Balance Equation · Ready to Seal</span>
+</div>
+<!-- Equation line -->
+<div class="p-3.5 rounded-xl bg-surface-container text-on-surface font-tabular-amount-md text-tabular-amount-md font-semibold tracking-tight">
+              Spend J$4,250.00 = Paid back J$3,975.00 + Driver pays J$275.00 + Fleet pays J$0.00
+            </div>
+</div>
+<!-- Soft Confirmation Banner -->
+<div class="p-4 rounded-xl bg-surface-container-high text-on-surface flex items-start gap-3">
+<span class="material-symbols-outlined text-[20px] text-primary shrink-0 mt-0.5" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div class="space-y-0.5">
+<p class="font-body-md text-body-md font-semibold text-on-surface">Everything adds up perfectly.</p>
+<p class="font-body-sm text-body-sm text-secondary">All 12 tag tolls and 1 cash receipt have been verified, assigned to the correct accounts, and reconciled with Uber statements.</p>
+</div>
+</div>
+<!-- Primary Seal Button & Lock Note -->
+<div class="space-y-3 pt-1">
+<button class="w-full h-12 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-body-md text-body-md font-semibold tracking-tight flex items-center justify-center gap-2 transition-colors shadow-sm" type="button">
+<span class="material-symbols-outlined text-[20px]">lock</span>
+<span>Seal tolls for Week of 24 Aug 2026</span>
+</button>
+<p class="font-body-sm text-body-sm text-secondary text-center">
+              Sealing tolls writes permanent audit journal lines for Week 34 and locks this step. Late items will roll to the next open reconciliation cycle.
+            </p>
+</div>
+</div>
+</main>
+<!-- RIGHT SUMMARY COLUMN: Driver Toll Charges & Tag Ledger Status (3 cols) -->
+<aside class="lg:col-span-3 space-y-5">
+<!-- Driver Toll Charges Card -->
+<div class="p-5 rounded-[20px] bg-surface-container-lowest shadow-sm space-y-4">
+<div class="flex items-center justify-between pb-1">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">Driver toll charges</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold">1 driver</span>
+</div>
+<div class="p-3.5 rounded-xl bg-surface-container-low flex items-center justify-between gap-3">
+<div class="flex items-center gap-2.5 min-w-0">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest text-on-surface font-label-md text-label-md flex items-center justify-center font-bold shrink-0">
+                KR
+              </div>
+<div class="min-w-0">
+<div class="font-body-sm text-body-sm font-semibold text-on-surface truncate">Kenny Gregory Rattray</div>
+<div class="font-label-md text-label-md text-secondary">Plate 5179KZ · Off-duty</div>
+</div>
+</div>
+<span class="font-tabular-amount-md text-tabular-amount-md font-bold text-on-surface shrink-0">J$275.00</span>
+</div>
+<div class="pt-2 space-y-2">
+<div class="flex justify-between items-center text-body-sm font-body-sm">
+<span class="text-secondary font-medium">Total to charge drivers</span>
+<span class="font-tabular-amount-md text-tabular-amount-md font-bold text-on-surface">J$275.00</span>
+</div>
+<p class="font-body-sm text-body-sm text-secondary">
+              1 personal toll will be automatically deducted on Step 7 (Driver Settlement).
+            </p>
+</div>
+</div>
+<!-- Tag Account Balance Block -->
+<div class="p-5 rounded-[20px] bg-surface-container-lowest shadow-sm space-y-4">
+<div class="flex items-center justify-between">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">Tag account</span>
+<span class="font-label-caps text-label-caps text-secondary font-semibold uppercase">TJ-88421</span>
+</div>
+<div class="space-y-2 font-body-sm text-body-sm">
+<div class="flex justify-between text-secondary">
+<span>Opening balance</span>
+<span class="font-tabular-amount-sm text-tabular-amount-sm font-medium">J$0.00</span>
+</div>
+<div class="flex justify-between text-on-surface font-medium">
+<span>+ Top-ups (Week 34)</span>
+<span class="font-tabular-amount-sm text-tabular-amount-sm text-on-surface font-semibold">+ J$5,000.00</span>
+</div>
+<div class="flex justify-between text-secondary">
+<span>− Usage (12 passages)</span>
+<span class="font-tabular-amount-sm text-tabular-amount-sm">− J$4,250.00</span>
+</div>
+<div class="h-px bg-surface-container-high my-2"></div>
+<div class="flex justify-between text-on-surface font-semibold">
+<span>= Closing balance</span>
+<span class="font-tabular-amount-md text-tabular-amount-md font-bold">= J$750.00</span>
+</div>
+</div>
+<button class="w-full py-2.5 px-3 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold flex items-center justify-center gap-1.5 transition-colors" type="button">
+<span>Go to Tag account</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</div>
+<!-- Highway 2000 Corridor Reference Box -->
+<div class="p-4 rounded-[20px] bg-surface-container-low text-on-surface space-y-2">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[18px]">alt_route</span>
+<span class="font-label-caps text-label-caps uppercase font-semibold text-secondary">Toll Plaza Index</span>
+</div>
+<div class="text-body-sm font-body-sm text-secondary space-y-1">
+<div class="flex justify-between">
+<span>Portmore East (Tag)</span>
+<span class="font-tabular-amount-sm text-on-surface font-medium">J$370</span>
+</div>
+<div class="flex justify-between">
+<span>Portmore West (Manual/Cash)</span>
+<span class="font-tabular-amount-sm text-on-surface font-medium">J$400</span>
+</div>
+<div class="flex justify-between">
+<span>Spanish Town Tag</span>
+<span class="font-tabular-amount-sm text-on-surface font-medium">J$275</span>
+</div>
+<div class="flex justify-between">
+<span>May Pen Main Plaza</span>
+<span class="font-tabular-amount-sm text-on-surface font-medium">J$220</span>
+</div>
+</div>
+</div>
+</aside>
+</div>
+</div>
+</div></main><footer class="w-full bg-surface-container-lowest border-t border-outline-variant/30 py-6 mt-auto"><div class="max-w-7xl mx-auto px-6 lg:px-12 flex flex-col md:flex-row items-center justify-between gap-4 text-secondary font-body-sm text-body-sm"><div class="flex items-center gap-2"><span>© 2026 Roam Fleet Systems Inc. Institutional Fleet Operations.</span></div><div class="flex items-center gap-6"><a class="hover:text-on-surface transition-colors" href="#">Security &amp; Compliance</a><a class="hover:text-on-surface transition-colors" href="#">Audit Log</a><a class="hover:text-on-surface transition-colors" href="#">System Status</a></div></div></footer></body></html>

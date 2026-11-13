@@ -1,0 +1,247 @@
+ROAM FLEET — TOLLS IN WEEK RECONCILIATION — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Tolls in Week Reconciliation (Desktop Web App with a phone layout, for the fleet owner, fleet manager and fleet accountant):
+
+Design the toll part of "Week Reconciliation" inside Roam Fleet. Once a week, the fleet manager takes one Monday-to-Sunday week and answers one question: "Who pays each toll?" Roam now reads the toll files itself (the tag usage statement, the tag top-ups and Uber's weekly reports), lines up every toll with the Uber trip it happened on, and SUGGESTS the match. The person confirms the suggestions, picks the right trip when two trips fit, decides who pays for tolls with no trip, checks the photos of cash toll receipts that drivers send from the driver app, and then seals the week's tolls. Nothing is decided behind the person's back: Roam suggests, the person decides, and every decision can be undone until the week is sealed. A sealed week is frozen. Anything that arrives late (a toll the provider sent late, a corrected amount, or Uber taking a toll payment back) waits beside the sealed week and is moved into the week that's open now with one button. The person using this is not an accountant. Every row says what happened in plain words, the amount in J$, and the one or two buttons that settle it. The design must feel modern, calm and effortless, like the best business banking apps.
+
+
+BRAND IDENTITY:
+- Keep the existing Roam Fleet app frame exactly as it is today (do not redesign it):
+  - Top: a white nav row with the black "Roam Fleet" app tile, then: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations, Delivery Operations, Analytics, Reports, Business Finance (active, underlined), a bell with a red count, the avatar.
+  - Dark bar below it: a dark navy strip with a search box "Switch vehicle or search hub…" on the left, and on the right "09:10:28 PM EST", "America/Jamaica", "JM (JMD)" and an org chip "DE · Deeki T".
+  - Breadcrumb: "Business Finance › Week Reconciliation", then "Week of 24 Aug 2026 · Rideshare · 24–30 Aug 2026" and a green dot chip "Numbers updated 2 min ago" on the right.
+  - Everything below the breadcrumb is the design.
+- Keep the existing Week Reconciliation desk layout: a left step rail card "SETTLEMENT STEPS" (1 Upload inputs, 2 Service lines, 3 Tolls, 4 Tag account, 5 Fuel, 6 Trips & earnings, 7 Settlement, 8 Close week), the step in a wide middle card, and a narrow summary column on the right.
+- Theme: "Calm finance desk" — clear, trustworthy, quiet and modern. Not a spreadsheet, not a developer tool.
+- LIGHT MODE (default):
+  - Primary: near-black #030213 — main buttons, the active step
+  - Page wash: #f8fafc; cards: #FFFFFF with a soft shadow (0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(15,23,42,0.06)) and a hairline border rgba(0,0,0,0.06)
+  - Text: #0a0a0a; muted text: #64748b
+  - Done / Matched / Paid back: green #059669 on a soft green #ecfdf5
+  - Needs a decision / Waiting: amber #b45309 on a soft amber #fffbeb
+  - Blocks sealing / Rejected: red #d4183d on #fff1f2
+  - Info / Locked / No activity: slate #475569 on #f1f5f9
+  - Suggested by Roam: blue #2563eb on #eff6ff
+  - Sealed week: a dark slate badge #1e293b with white text
+- DARK MODE:
+  - Page #1c1c1e, cards #2a2a2d, border #3a3a3d
+  - Text #fafafa, muted #a1a1aa, primary buttons white #fafafa with near-black text
+  - Green #34d399 on #064e3b; amber #fbbf24 on #451a03; red #f87171 on #450a0a; blue #60a5fa on #172554
+- Shapes: cards 20px corner radius, buttons and inputs 12px, chips and badges fully rounded.
+- Typography: Inter. Step titles 22px semibold, card titles 18px semibold, body 15px, muted helper text 13px. Money uses tabular figures, right-aligned, always with "J$" and 2 decimals (J$370.00).
+- Dates and times are written in plain words: "27 Aug, 12:50 PM", "Week of 24 Aug 2026". Never "2026-08-27". Never codes, ids or internal words like "driver_pays", "after_seal" or "VERSION_CHANGED".
+- Buttons always look like buttons:
+  - Primary = solid near-black with white text.
+  - Secondary = white with a visible #cbd5e1 border and dark text.
+  - Danger (Undo, Reject receipt, Reopen tolls, Cancel) = red border and red text; the final confirm in a danger dialog is solid red.
+  - Icon buttons are 32px with a visible border.
+  - Never underlined text links, never grey text-only buttons. Every confirm is an in-app dialog, never a browser pop-up.
+- Status chips (fully rounded, icon + word): "Matched" (green check), "Likely match" (blue sparkle), "Two trips fit" (amber split arrows), "Photo to check" (amber camera), "Receipt rejected" (red), "Arrived late" (slate clock), "Tag" (slate tag icon), "Cash" (slate banknote icon), "Sealed" (dark slate padlock).
+- How sure Roam is about a suggestion is said in words, never as a number or a percent: "Sure match" (green), "Likely match" (blue), "Two trips fit" (amber).
+- Sample data (REAL, from Roam's week of 24 Aug 2026, Rideshare):
+  - Driver: Kenny Gregory Rattray. Car: Toyota Roomy · 5179KZ.
+  - 12 tag tolls, J$4,250.00. Uber paid back 11 of them, J$3,975.00 (8 card trips, 3 cash trips).
+  - The 12 tolls and their Uber trips:
+    - 25 Aug 3:02 PM Portmore East J$370.00 → Uber trip 2:42 PM–3:12 PM, card
+    - 26 Aug 7:43 PM Portmore West J$370.00 → Uber trip 7:25 PM–7:52 PM, card
+    - 27 Aug 7:20 AM Portmore East J$370.00 → Uber trip 7:07 AM–7:31 AM, card
+    - 27 Aug 12:50 PM Spanish Town East J$275.00 → no trip (personal; the driver pays)
+    - 27 Aug 2:37 PM Portmore West J$370.00 → Uber trip 2:02 PM–2:59 PM, card
+    - 27 Aug 3:32 PM Portmore East J$370.00 → Uber trip 3:09 PM–3:44 PM, cash
+    - 28 Aug 9:49 AM Portmore East J$370.00 → Uber trip 9:07 AM–10:00 AM, card
+    - 28 Aug 12:22 PM Portmore West J$370.00 → two trips fit: 11:50 AM–12:28 PM cash, and 12:23 PM–1:30 PM card
+    - 28 Aug 12:58 PM Portmore East J$370.00 → Uber trip 12:23 PM–1:30 PM, card
+    - 28 Aug 2:50 PM Portmore West J$370.00 → two trips fit: 2:09 PM–2:55 PM card, and 2:47 PM–3:23 PM cash
+    - 28 Aug 3:08 PM Portmore East J$370.00 → Uber trip 2:47 PM–3:23 PM, cash
+    - 28 Aug 6:05 PM Spanish Town West J$275.00 → Uber trip 5:05 PM–6:22 PM, card
+  - Tag top-up: 24 Aug, TransJam, J$5,000.00. Tag account: opening J$0.00 + top-ups J$5,000.00 − usage J$4,250.00 = closing J$750.00.
+  - A cash toll receipt from the driver app: 29 Aug, 4:10 PM, Portmore West, lane R07, J$400.00, receipt number 004512.
+  - The decider: "Deeki T".
+
+
+DESIGN PRINCIPLES:
+- Roam suggests, the person decides. A suggestion is never applied on its own; every one has a "Confirm" button.
+- One screen for the whole week. Uploads, checks, decisions and the seal all happen inside Week Reconciliation. No step sends the person to Data Center or another page, and there is no second stepper inside the Tolls step.
+- Every row answers three things: what happened (time, plaza, car, driver, amount), what Roam thinks, and the button(s) that settle it.
+- The money always adds up, and the page shows it: "Spend = Paid back by Uber + Driver pays + Fleet pays + Still to decide". The tiles, the progress line, the section totals, the seal box and the right column always show the same numbers.
+- Everything can be undone until the week is sealed. After sealing, the week is frozen; late items wait beside it and move into the open week with one button, never by editing the sealed week.
+- Problems are rows, not error messages: each says what's wrong in plain words and offers the fix.
+- Nothing is hidden: empty sections stay visible with a green check instead of disappearing.
+- Calm, not alarming: red only for things that block sealing, rejected receipts and danger buttons.
+- One view per screen.
+
+
+SCREEN 1: STEP 1 UPLOAD INPUTS — THE TOLL FILES AND WHAT WAS READ
+- The desk with "1. Upload inputs" active in the left rail. Title "Upload inputs", "Step 1 of 8", subtitle "Which files does this week need?".
+- A list of white file cards, each with an icon, a name, a status chip and a result line:
+  - "Tag usage statement" — green chip "Received", file "Aug 24 – Aug 30 2026 - usage.csv", result "12 tolls read · J$4,250.00 · 0 problems".
+  - "Tag top-ups" — green chip "Received", file "Aug 24 – Aug 30 2026 - top up.csv", result "1 top-up read · J$5,000.00".
+  - "Uber weekly reports" — amber chip "2 rows couldn't be used", "2 files: payments and trip activity", result "74 trips read · 11 toll paybacks · J$3,975.00". This card is open and lists two problem rows: "Row 14 · A driver on this file isn't set up in Roam Fleet" with a secondary button "Fix driver", and "Row 31 · Car 9042PX isn't in your fleet" with a secondary button "Add car". Under them a primary button "Read the file again".
+  - "Cash toll receipts" — slate chip "From the driver app", result "1 receipt sent this week".
+- Each green card has two secondary buttons: "See what was read" and "Replace file".
+- A muted note under the toll cards: "Uploading the same file twice changes nothing."
+- Right column: a "This week's files" summary card: "3 of 3 toll files received", "2 rows need a fix".
+
+
+SCREEN 2: STEP 3 TOLLS — HALF-WAY THROUGH THE WEEK
+- The desk with "3. Tolls" active ("In progress" chip). Title "Tolls", "Step 3 of 8", subtitle "Who pays each toll this week?".
+- This screen is one moment: the 5 sure matches are already confirmed and 7 tolls are left.
+- Five money tiles in a row: "TOLL SPEND J$4,250.00", "PAID BACK BY UBER J$1,755.00" (green), "DRIVER PAYS J$0.00", "FLEET PAYS J$0.00", "STILL TO DECIDE J$2,495.00" (amber).
+- A thin progress bar under the tiles: "5 of 12 tolls decided · 7 left".
+- Collapsible section cards, in this order, each with a title, a count chip, a J$ total and a one-line plain explanation:
+  1. "Suggested matches" — "4 tolls" — J$1,480.00 — "The toll happened during an Uber trip, and Uber paid it back." Four rows. Each row: a tag icon, date and time, plaza, plate chip "5179KZ", "Kenny Gregory Rattray", "J$370.00", chip "Tag", then a grey-outline trip pill "Uber trip 2:02 PM–2:59 PM · card · paid back J$370.00", a blue chip "Likely match", a primary "Confirm" button and a secondary "Pick another trip" button. Rows: 27 Aug 2:37 PM Portmore West (trip 2:02 PM–2:59 PM card); 27 Aug 3:32 PM Portmore East (trip 3:09 PM–3:44 PM cash); 28 Aug 12:58 PM Portmore East (trip 12:23 PM–1:30 PM card); 28 Aug 3:08 PM Portmore East (trip 2:47 PM–3:23 PM cash).
+  2. "Pick the right trip" — "2 tolls" — J$740.00 — "Two trips fit this toll. Choose the one it belongs to." Row "28 Aug, 12:22 PM · Portmore West · J$370.00" with an amber chip "Two trips fit" and two secondary choice buttons "11:50 AM–12:28 PM · cash trip" and "12:23 PM–1:30 PM · card trip". Row "28 Aug, 2:50 PM · Portmore West · J$370.00" with "2:09 PM–2:55 PM · card trip" and "2:47 PM–3:23 PM · cash trip".
+  3. "Tolls with no trip" — "1 toll" — J$275.00 — "No Uber trip at this time. Who pays?" Row "27 Aug, 12:50 PM · Spanish Town East · 5179KZ · Kenny Gregory Rattray · J$275.00 · Tag" with secondary buttons "Driver pays" and "Fleet pays", and a muted hint "Personal driving is usually paid by the driver."
+  4. "Cash receipts to check" — "1 receipt" — "The driver paid cash and sent a photo. It doesn't count until it's checked." Row: a 48px receipt photo thumbnail with a camera badge, "29 Aug, 4:10 PM · Portmore West · J$400.00 · Kenny Gregory Rattray", amber chip "Photo to check", primary button "Check receipt".
+  5. "Possible duplicates" — "0" — one muted line with a green check "Nothing to review".
+  6. "Uber paybacks with no toll" — "0" — one muted line with a green check "Nothing to review".
+  7. "Decided" — "5 tolls" — J$1,755.00 — open. Five rows, each with a green "Matched" chip, the trip it was matched to, muted "Deeki T · 13 Nov, 9:40 AM" and a red-outline "Undo" button: 25 Aug 3:02 PM Portmore East J$370.00 · Uber trip 2:42 PM–3:12 PM; 26 Aug 7:43 PM Portmore West J$370.00 · Uber trip 7:25 PM–7:52 PM; 27 Aug 7:20 AM Portmore East J$370.00 · Uber trip 7:07 AM–7:31 AM; 28 Aug 9:49 AM Portmore East J$370.00 · Uber trip 9:07 AM–10:00 AM; 28 Aug 6:05 PM Spanish Town West J$275.00 · Uber trip 5:05 PM–6:22 PM.
+- At the bottom, the "Seal tolls" box: the sum line "Spend J$4,250.00 = Paid back J$1,755.00 + Driver pays J$0.00 + Fleet pays J$0.00 + Still to decide J$2,495.00"; an amber list "Before you can seal: 7 tolls to decide · 1 receipt to check", each item with a small secondary "Show" button; the primary "Seal tolls" button disabled with the text "7 tolls left to decide".
+- Right column: a "Driver toll charges" card ("KR Kenny Gregory Rattray J$0.00", divider, "Total to charge drivers J$0.00"), and a "Tag account" card ("Opening J$0.00", "+ Top-ups J$5,000.00", "− Usage J$4,250.00", "= Closing J$750.00") with a secondary button "Go to Tag account".
+
+
+SCREEN 3: STEP 3 TOLLS — EVERYTHING DECIDED, READY TO SEAL
+- The same desk and week at the end of the review.
+- Tiles: "TOLL SPEND J$4,250.00", "PAID BACK BY UBER J$3,975.00" (green), "DRIVER PAYS J$275.00", "FLEET PAYS J$0.00", "STILL TO DECIDE J$0.00" with a green check.
+- Progress bar full: "12 of 12 tolls decided".
+- Sections 1–6 each show one muted line with a green check: "Nothing to confirm", "Nothing to pick", "Nothing to decide", "Nothing to check", "Nothing to review", "Nothing to review".
+- "Decided" — "13" — collapsed, with three rows peeking: a green "Matched" row; a "Driver pays" row "27 Aug, 12:50 PM · Spanish Town East · J$275.00"; and a red chip "Receipt rejected · Photo unreadable" row "29 Aug, 4:10 PM · Portmore West · J$400.00 · not counted". Each row has a red-outline "Undo".
+- "Seal tolls" box: "Spend J$4,250.00 = Paid back J$3,975.00 + Driver pays J$275.00 + Fleet pays J$0.00", a green check "Everything adds up", and the primary "Seal tolls" button enabled.
+- Right column: "Driver toll charges": "Kenny Gregory Rattray J$275.00", total "J$275.00"; the Tag account card as on Screen 2.
+
+
+SCREEN 4: PICK THE RIGHT TRIP — DIALOG
+- The Tolls step dimmed behind a centred white in-app dialog, 560px wide.
+- Title "Which trip was this toll on?", muted sub-line "28 Aug, 12:22 PM · Portmore West · 5179KZ · J$370.00", close X.
+- A small timeline: a horizontal line from 11:30 AM to 1:45 PM with tick labels; a black dot "Toll 12:22 PM"; two bars for the trips, "11:50 AM–12:28 PM · cash" and "12:23 PM–1:30 PM · card"; a light shaded band before each bar labelled "driving to pickup".
+- Three radio cards: "Uber trip 11:50 AM–12:28 PM · cash trip · Uber paid back J$370.00" (selected); "Uber trip 12:23 PM–1:30 PM · card trip · Uber paid back J$370.00" with a small amber note under it "This trip also fits the 12:58 PM Portmore East toll."; "None of these — decide who pays instead".
+- Footer: red-outline "Cancel", primary "Use this trip".
+
+
+SCREEN 5: CHECK A CASH RECEIPT — DIALOG
+- The Tolls step dimmed behind a centred white in-app dialog, 720px wide, in two halves.
+- Left half: a photo of a paper toll receipt from "Portmore West" (a printed slip showing the plaza, lane, date and amount), large, with three 32px bordered icon buttons under it: zoom in, zoom out, rotate.
+- Right half: title "Check this receipt", then editable boxes filled from the photo: "Date 29 Aug 2026", "Time 4:10 PM", "Plaza Portmore West", "Lane R07", "Amount J$400.00", "Receipt number 004512".
+- Muted line: "Sent by Kenny Gregory Rattray · car 5179KZ · from the driver app, 30 Aug, 9:02 AM".
+- Muted line: "Once checked, this toll counts in the week and needs a decision like any other."
+- Footer: red-outline "Reject receipt", primary "Receipt is fine".
+
+
+SCREEN 6: REJECT A RECEIPT — DIALOG
+- The receipt dialog dimmed behind a small centred in-app dialog, 440px wide.
+- Title "Why are you rejecting it?"
+- Four radio rows: "Photo unreadable" (selected), "Not a toll receipt", "Already claimed", "Other". A box "Add a note (optional)".
+- Muted line: "The driver will see this reason in the app."
+- Footer: secondary "Go back", solid red "Reject receipt".
+
+
+SCREEN 7: POSSIBLE DUPLICATE — DIALOG
+- The Tolls step dimmed behind a centred white in-app dialog, 640px wide.
+- Title "Is this the same toll twice?"
+- Two cards side by side. Left: tag icon, "From the tag statement", "28 Aug, 2:50 PM", "Portmore West · lane R09", "J$370.00". Right: banknote icon, "Cash receipt from the driver", "28 Aug, 2:52 PM", "Portmore West", "J$400.00", a 48px receipt thumbnail.
+- Muted line: "Same car, same plaza, 2 minutes apart."
+- Footer: red-outline "Cancel", secondary "Different tolls — keep both", primary "Same toll — keep the tag one".
+
+
+SCREEN 8: UNDO A DECISION — DIALOG
+- The Tolls step dimmed behind a small centred in-app dialog, 440px wide.
+- Title "Undo this decision?"
+- Body: "27 Aug, 12:50 PM · Spanish Town East · J$275.00", a chip "Driver pays", and muted "Decided by Deeki T · 13 Nov, 9:40 AM".
+- Muted line: "The toll goes back to Tolls with no trip. Nothing else changes."
+- Footer: secondary "Keep it", solid red "Undo".
+
+
+SCREEN 9: A SEALED WEEK WITH LATE ITEMS
+- The desk, "3. Tolls" in the rail with a padlock. Beside the title a dark slate badge "Sealed 13 Nov".
+- Tiles with a small padlock: "TOLL SPEND J$4,250.00", "PAID BACK BY UBER J$3,975.00", "DRIVER PAYS J$275.00", "FLEET PAYS J$0.00".
+- At the top of the middle card, a card with an amber outline: title "Arrived after this week was sealed", chip "3", muted line "These belong to this week but came in late. They move into the week that's open now, so this week's numbers never change." Three rows:
+  - chip "Arrived late", "A toll the provider sent late · 29 Aug, 8:14 AM · Portmore East · J$370.00", primary button "Move to week of 9 Nov".
+  - "Uber took back a toll payment · trip 27 Aug, 2:02 PM–2:59 PM · J$370.00", primary button "Record the take-back".
+  - "Toll amount corrected by the provider · 28 Aug, 6:05 PM · Spanish Town West · J$275.00 → J$250.00", primary button "Move the difference to week of 9 Nov".
+- Below it, the "Decided" section collapsed and read-only (rows have no buttons).
+- At the bottom, a red-outline button "Reopen tolls" with muted text "Owner only".
+- Right column: "Driver toll charges" Kenny Gregory Rattray J$275.00 with a padlock.
+
+
+SCREEN 10: RECORD A TAKE-BACK — DIALOG
+- The sealed week dimmed behind a centred white in-app dialog, 520px wide.
+- Title "Uber took back J$370.00", muted sub-line "Trip 27 Aug, 2:02 PM–2:59 PM · it will be recorded in the week of 9 Nov".
+- Three radio cards: "Uber still owes us — we'll ask Uber" (selected), "The driver pays it back", "The fleet absorbs it".
+- A box "Uber reference" with "SUP-88120", and a date box "Taken back on 10 Nov 2026".
+- Footer: red-outline "Cancel", primary "Record the take-back".
+
+
+SCREEN 11: TOLL HEALTH (MONEY › TOLLS)
+- The same app frame; breadcrumb "Money › Tolls". No step rail on this page.
+- Title "Toll health", muted sub-line "What needs attention across all weeks".
+- A grid of six tiles (3 × 2), each with an icon, a big count, a J$ amount, the age of the oldest one in muted text, and a secondary "Open week" button:
+  - "Tolls waiting for a decision" — 3 — J$1,015.00 — oldest 9 days
+  - "Cash receipts to check" — 2 — J$690.00 — oldest 4 days
+  - "Uber paybacks with no toll" — 1 — J$370.00 — oldest 16 days, with an amber chip "Over 14 days"
+  - "Arrived after sealing" — 2 — J$740.00
+  - "Possible duplicates" — 0 — green check
+  - "Uber take-backs not recovered" — 0 — green check
+- A card "Nightly money check" with a green check: "All checks passed last night at 4:25 AM".
+- A card "Weeks": rows "Week of 24 Aug 2026" with a dark slate chip "Sealed", "Week of 31 Aug 2026" with an amber chip "2 left to decide", "Week of 7 Sep 2026" with an amber chip "5 left to decide", each with a secondary "Open" button.
+
+
+SCREEN 12: STATES OF THE TOLLS STEP
+- One board of six small cards in a 3 × 2 grid, each a state of the Tolls step with an icon, a title, one muted line and, where shown, one button:
+  - slate: "Tolls aren't on the new system yet for this fleet" — "This week uses the current toll screen."
+  - blue spinner: "Matching in progress…" — "New files are being lined up with trips. This takes under a minute."
+  - amber: "Someone else changed this toll" — "Deeki T decided this toll a moment ago. The list has been refreshed." — secondary "OK".
+  - dark slate padlock: "This week is sealed" — "Reopen tolls to change it."
+  - green check: "Nothing to do" — "No tolls this week."
+  - red: "Couldn't load tolls" — "Check your connection." — secondary "Try again".
+
+
+SCREEN 13: PHONE 390px — TOLLS STEP
+- The Tolls step on a 390px phone, the same half-way moment as Screen 2.
+- Top: a compact header "Week of 24 Aug · Rideshare" and a row of step chips that scrolls sideways, with "3 Tolls" active.
+- Money tiles as a 2 × 2 grid: "Toll spend J$4,250.00", "Paid back J$1,755.00", "Still to decide J$2,495.00", "Driver pays J$0.00".
+- Progress bar "5 of 12 decided".
+- Section "Suggested matches (4)": each toll is a card — "27 Aug, 2:37 PM · Portmore West" with "J$370.00" on the right, the trip pill "Uber trip 2:02 PM–2:59 PM · card", a blue "Likely match" chip, and two full-width buttons: primary "Confirm" and secondary "Pick another trip".
+- Section "Tolls with no trip (1)": a card "27 Aug, 12:50 PM · Spanish Town East · J$275.00" with two full-width secondary buttons "Driver pays" and "Fleet pays".
+- A bar stuck to the bottom of the screen: "7 left to decide" and a disabled primary "Seal tolls" button.
+
+
+ADDITIONAL UI COMPONENTS:
+- Toll row: tag or banknote icon, date and time, plaza, plate chip, driver name, amount right-aligned, method chip, then Roam's suggestion and the buttons. The row highlights on hover; the row itself is not a link.
+- Trip pill: "Uber trip 2:09 PM–2:55 PM · card", grey outline, with the paid-back amount in green.
+- Confidence chip: "Sure match" (green), "Likely match" (blue), "Two trips fit" (amber).
+- Decision chip on decided rows: "Matched", "Driver pays", "Fleet pays", "Kept with no toll", "Receipt rejected".
+- Receipt thumbnail 48px with a camera badge; it opens the receipt dialog.
+- Sum line used in the seal box: each part labelled, in tabular figures, ending in a green check when it adds up.
+- Toast at the bottom right after each action: "Matched" with a red-outline "Undo" button inside the toast.
+- Empty-section line: green check + "Nothing to …", same height as one row.
+
+
+INTERACTIONS:
+- "Confirm" on a suggested match moves the row into "Decided" with a short slide, updates the tiles, the progress bar, the section totals, the seal box and the right column at once, and shows the toast with Undo.
+- "Confirm all sure matches" (shown at the top of "Suggested matches" whenever sure matches exist) opens an in-app dialog listing them, with a primary "Confirm 5".
+- Picking a trip that also fits another toll shows the amber note in the dialog; after confirming, the other toll's suggestion updates on its own.
+- "Driver pays" and "Fleet pays" apply at once and show the toast; there is no extra confirm.
+- "Check receipt" opens the receipt dialog; "Receipt is fine" moves the toll into the right section; "Reject receipt" opens the reason dialog.
+- "Seal tolls" opens an in-app dialog: "Seal tolls for the week of 24 Aug 2026? After sealing, this week's tolls can't change. Anything that arrives late moves into the open week." with a primary "Seal tolls".
+- If someone else changed a toll first, the action is refused politely (the "Someone else changed this toll" state), the list refreshes, and nothing is lost.
+- On the phone, sections open one at a time and the seal bar stays visible.
+
+
+Spec screens / Area
+| Screen | Area |
+| 1 | Step 1 Upload inputs — toll file cards, what was read, problem rows with fixes |
+| 2 | Step 3 Tolls — half-way: tiles, 7 sections, seal box blocked, right column |
+| 3 | Step 3 Tolls — everything decided, ready to seal |
+| 4 | Pick the right trip dialog — timeline and trip choices |
+| 5 | Check a cash receipt dialog — photo and editable fields |
+| 6 | Reject a receipt dialog — reasons |
+| 7 | Possible duplicate dialog |
+| 8 | Undo a decision dialog |
+| 9 | Sealed week with late items — move to open week, reopen |
+| 10 | Record a take-back dialog |
+| 11 | Toll health page (Money › Tolls) — tiles, nightly check, weeks |
+| 12 | States of the Tolls step |
+| 13 | Phone 390px — Tolls step |

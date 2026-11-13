@@ -42,6 +42,19 @@
    - The inventory done-test 06 failure was a flake (passed on rerun). It's a test race: it goes offline before the kit list loads.
    - `tolls_v2` is still off everywhere. The driver app changes reach drivers with the next Play release.
    - **Next:** Phase 3 (screens from Stitch).
+9. **PHASE 3 STARTED (13 Nov): Stitch prompts written.**
+   - One file in the owner's standard format: `docs/stitch/toll-week-fleet-prompt.txt` (13 screens, one view each).
+   - Covers: Step 1 toll file results, a new Step 3 Tolls (it replaces the old seven-category design; half-way + ready-to-seal), the pick-trip, check-receipt, reject-reason, duplicate, undo and take-back dialogs, a sealed week with late items, Toll health (Money › Tolls), states, phone.
+   - Step 4 Tag account keeps its existing design. No driver-app screen is needed (receipt photo + queue already built).
+   - Sample data = the real week of 24 Aug 2026.
+   - **Screens made by the owner (13 Nov)**, copied to `docs/stitch/toll-week-fleet/`. **Port audit: `docs/toll-phase3-screens-audit.md` (Rev 1)**: Keep / Drop / Add per screen, a button → command table, 4 screens for the owner to make (M1 Fix driver, M2 Which car, M3 What was read, M4 Confirm all sure matches), rounds P3-R1 to R4.
+   - **Gap found:** no user read lists the rows.
+10. **P3-R1 built by Claude (13 Nov), not committed:** `20261113162537_toll_v2_screen_reads.sql`.
+   - The reads: `public.toll_v2_week_desk(week)`, `toll_v2_weeks()`, `toll_v2_import_reports(week)`.
+   - Also: `toll.reported_take_backs` (`import_batch` re-created to keep Uber take-backs) and `fleet.vehicles.plate_aliases`.
+   - Smoke run on the real 24 Aug week: 5 sure / 4 likely / 2 pick / 1 no trip; sealed = 12 decided and no Undo offered; take-back listed with candidates; anon / service key refused; nightly ok; `pnpm test:toll` all ok.
+   - **Cursor test prompt: `docs/toll-build/cursor-P3-R1-screen-reads-tests.md`.**
+   - Noted 13 Nov: something else reset the local database mid-run; only one test run at a time.
 7. **Owner, in order (done):**
    1. say commit (R6b + #8 + timer + live file are uncommitted);
    2. run the live file when the live database answers normally (Claude's reads timed out on 13 Nov);
