@@ -44,10 +44,7 @@ import {
 import { compareDriverWeekStatementsToEngines } from "./statement_engine_probe.ts";
 import { upsertFinanceReconDrifts, countOpenFinanceReconDrifts, listOpenFinanceReconDrifts } from "./finance_recon_drift.ts";
 import { weekPnlTieSides } from "./business_week_pnl.ts";
-import {
-  summarizeTollUsageOrphansByDriverForWeek,
-  type TollUsageIntegritySummary,
-} from "./toll_financial_reset.ts";
+import type { TollUsageIntegritySummary } from "./toll_financial_reset.ts";
 import { engineDriftsToCloseBlockers } from "../../../packages/finance-core/src/statementEngineCompare.ts";
 import type { StatementEngineDrift } from "../../../packages/finance-core/src/statementEngineCompare.ts";
 import {
@@ -875,12 +872,11 @@ async function ensureCloseLaneStatements(
     .eq("period_anchor", week);
   if (error) throw new Error(error.message);
 
-  let tollLaneMissing = false;
+  // Tolls: an OPEN driver with no closed toll statement means the week's tolls aren't sealed in the new system.
+  let tollUnsealedOpenDriver = false;
   let fuelLaneMissing = false;
   let earningsLaneMissing = false;
   let fuelNeedsSeal = false;
-  let tollNeedsSeal = false;
-  let tollStaleZeroNa = false;
   let earningsNeedsSeal = false;
   let anyOpenDriver = false;
   for (const p of periods ?? []) {
@@ -907,15 +903,7 @@ async function ensureCloseLaneStatements(
     } else if (fuel.status !== "closed") {
       fuelNeedsSeal = true;
     }
-    if (!toll) {
-      tollLaneMissing = true;
-      tollNeedsSeal = true;
-    } else if (toll.status !== "closed") {
-      tollNeedsSeal = true;
-    } else if (String(toll.closeReason || "") === "zero_activity_na") {
-      // An old "no tolls" statement: the week waits for the new toll seal.
-      tollStaleZeroNa = true;
-    }
+    if (!frozen && (!toll || toll.status !== "closed")) tollUnsealedOpenDriver = true;
     if (!earnings) {
       earningsLaneMissing = true;
       earningsNeedsSeal = true;
@@ -926,13 +914,24 @@ async function ensureCloseLaneStatements(
 
   let didSeal = false;
   const forceFuel = Boolean(opts?.forceFuelReseal);
-  const forceToll = Boolean(opts?.forceTollReseal);
   const forceEarnings = Boolean(opts?.forceEarningsReseal);
 
   // Missing/draft → seal. Force flags → closed→closed reseal (engine drift).
   // Never pass allowRestatementDraft from Close sync (draft-over-closed blocked).
   // ADR-0019: all lanes block on hard failure; HTTP seals carry Idempotency-Key.
   const sealCorrelationId = crypto.randomUUID();
+
+  // Tolls are sealed only in the new toll system (Week Reconciliation step 3), which writes every driver's toll
+  // statement; there is no toll seal here any more (docs/toll-old-system-removal-audit.md S1). Checked before any
+  // lane is sealed, so a refusal changes nothing. A toll re-seal request is a no-op: step 3 re-seals.
+  if (tollUnsealedOpenDriver) {
+    throw new WeekCloseError(
+      "CLOSE_BLOCKED",
+      "This week's tolls aren't sealed yet. Seal them in Week Reconciliation step 3 (Tolls), then close the week.",
+      409,
+      { week, lane: "toll", cause: "TOLL_WEEK_NOT_SEALED" },
+    );
+  }
 
   if (fuelNeedsSeal || (anyOpenDriver && fuelLaneMissing) || forceFuel) {
     const fuelGen = await resolveSealGeneration({
@@ -995,17 +994,6 @@ async function ensureCloseLaneStatements(
         { week, lane: "fuel", cause: msg },
       );
     }
-  }
-
-  // Tolls are sealed only in the new toll system (Week Reconciliation step 3), which writes every driver's toll
-  // statement. The old toll seal is gone (docs/toll-old-system-removal-audit.md S1), so close waits for that seal.
-  if (tollNeedsSeal || forceToll || (anyOpenDriver && tollLaneMissing)) {
-    throw new WeekCloseError(
-      "CLOSE_BLOCKED",
-      "This week's tolls aren't sealed yet. Seal them in Week Reconciliation step 3 (Tolls), then close the week.",
-      409,
-      { week, lane: "toll", cause: "TOLL_WEEK_NOT_SEALED" },
-    );
   }
 
   if (earningsNeedsSeal || (anyOpenDriver && earningsLaneMissing) || forceEarnings) {
@@ -1134,7 +1122,7 @@ async function assessCloseWeekSyncNeed(
 
   const statementsByDriver = await getLatestWeekStatementsForOrgWeek(orgId, week);
   let needsSeal = false;
-  let needsForceTollReseal = false;
+  const needsForceTollReseal = false; // tolls are re-sealed only in step 3 (new toll system)
   let periodDriftCount = 0;
 
   for (const p of periods ?? []) {
@@ -1149,11 +1137,7 @@ async function assessCloseWeekSyncNeed(
     const earnings = byKind.get("earnings");
 
     if (!fuel || fuel.status !== "closed") needsSeal = true;
-    if (!toll || toll.status !== "closed") needsSeal = true;
-    else if (String(toll.closeReason || "") === "zero_activity_na") {
-      needsSeal = true;
-      needsForceTollReseal = true;
-    }
+    if (!toll || toll.status !== "closed") needsSeal = true; // the lane check refuses: seal tolls in step 3
     if (!earnings || earnings.status !== "closed") needsSeal = true;
 
     let drifted = false;
@@ -1281,26 +1265,6 @@ async function syncOpenPeriodsToStatementsAfterSeal(
 }
 
 /** True when any open driver still has missing/draft/stale-zero toll seal. */
-async function orgWeekNeedsForceTollReseal(orgId: string, week: string): Promise<boolean> {
-  const { data: periods, error } = await sb()
-    .from("driver_financial_periods")
-    .select("driver_id, settlement_status, metadata")
-    .eq("organization_id", orgId)
-    .eq("period_anchor", week);
-  if (error) throw new Error(error.message);
-
-  for (const p of periods ?? []) {
-    const driverId = String(p.driver_id || "");
-    if (!driverId) continue;
-    if (periodIsFrozen(p as Record<string, unknown>)) continue;
-    const statements = await getLatestWeekStatements(orgId, driverId, week);
-    const toll = statements.find((s) => s.kind === "toll");
-    if (!toll || toll.status !== "closed") return true;
-    if (String(toll.closeReason || "") === "zero_activity_na") return true;
-  }
-  return false;
-}
-
 /**
  * H-1: Pure read preview — does NOT seal lanes or write recon drifts.
  * Use {@link prepareWeekClose} before close when lanes need sealing.
@@ -1402,13 +1366,8 @@ export async function previewWeekClose(
     { skipEngineProbe },
   );
 
-  // P-3: one week-scoped toll orphan scan, indexed by driver.
-  let orphansByDriver = new Map<string, TollUsageIntegritySummary>();
-  try {
-    orphansByDriver = await summarizeTollUsageOrphansByDriverForWeek(week);
-  } catch (e) {
-    console.warn("[week_close] toll orphan week summarize failed (non-fatal)", week, e);
-  }
+  // The old toll-event orphan check is gone with the old toll system (S1): tolls come from the new seal.
+  const orphansByDriver = new Map<string, TollUsageIntegritySummary>();
 
   // H-3 / N-3: week-level P&L — block on mismatch (non-tautological statements↔engines).
   // Shared with the background worker so both write the same week blockers (R19-01).
@@ -1787,23 +1746,12 @@ async function prepareWeekCloseBody(
     didSeal = sealed.didSeal;
   }
 
-  let periodSync = await syncOpenPeriodsToStatementsAfterSeal(orgId, week, {
+  const periodSync = await syncOpenPeriodsToStatementsAfterSeal(orgId, week, {
     rebuildMode: didSeal || anyForce ? "all-open" : "drifted-only",
   });
 
-  // Second pass only when a toll statement is still not sealed (the new toll seal writes them; the period rebuild
-  // above already fixes a period that disagreed with its sealed statement).
-  if (await orgWeekNeedsForceTollReseal(orgId, week)) {
-    const sealed = await ensureCloseLaneStatements(orgId, week, actorId, {
-      forceTollReseal: true,
-      forceFuelReseal: force.forceFuelReseal,
-      forceEarningsReseal: force.forceEarningsReseal,
-    });
-    didSeal = didSeal || sealed.didSeal;
-    periodSync = await syncOpenPeriodsToStatementsAfterSeal(orgId, week, {
-      rebuildMode: "all-open",
-    });
-  }
+  // No toll second pass: tolls are re-sealed only in step 3, and the rebuild above already fixes a period that
+  // disagreed with its sealed toll statement.
 
   // Persist engine drifts only when we wrote seals/books (preview already compares).
   if (didSeal || periodSync.rebuilt > 0) {
@@ -2169,13 +2117,8 @@ async function closeWeekBody(
     }
   }
 
-  // P-3: hoist toll orphan summary once per week.
-  let orphansByDriver = new Map<string, TollUsageIntegritySummary>();
-  try {
-    orphansByDriver = await summarizeTollUsageOrphansByDriverForWeek(week);
-  } catch (e) {
-    console.warn("[week_close] toll orphan week summarize failed (non-fatal)", week, e);
-  }
+  // The old toll-event orphan check is gone with the old toll system (S1): tolls come from the new seal.
+  const orphansByDriver = new Map<string, TollUsageIntegritySummary>();
 
   const closeDriftBatch: Array<{
     driverId: string;

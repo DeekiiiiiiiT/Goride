@@ -114,6 +114,15 @@ function isTollSource(sourceId: string): boolean {
   return TOLL_SOURCE_IDS.has(sourceId);
 }
 
+/** Toll files go through the new toll upload (toll_v2_import_controller) and are registered with /register; the
+ *  old toll ledger import is gone (docs/toll-old-system-removal-audit.md S1). */
+function tollsMoved(c: Context) {
+  return c.json({
+    error: "TOLLS_MOVED",
+    message: "Toll files now go through the new toll upload in Week Reconciliation step 1.",
+  }, 410);
+}
+
 type ImportStagingRow = {
   import_id: string;
   row_index: number;
@@ -341,17 +350,6 @@ async function getStagingImport(orgId: string, importId: string) {
   return data;
 }
 
-async function loadStagingRows(importId: string): Promise<ImportStagingRow[]> {
-  const sb = getServiceClient();
-  const { data, error } = await sb
-    .from("recon_import_staging_rows")
-    .select("*")
-    .eq("import_id", importId)
-    .order("row_index", { ascending: true });
-  if (error) throw error;
-  return (data || []) as ImportStagingRow[];
-}
-
 function classifyNormalizedRows(
   orgId: string,
   importId: string,
@@ -502,7 +500,8 @@ export function registerReconImportRoutes(app: Hono) {
         const body = await c.req.json().catch(() => ({}));
         const sourceId = String(body.sourceId || "").trim();
         if (!sourceId) return c.json({ error: "sourceId required" }, 400);
-        if (!isTollSource(sourceId) && !isFuelSource(sourceId) && sourceId !== "uber_bundle") {
+        if (isTollSource(sourceId)) return tollsMoved(c);
+        if (!isFuelSource(sourceId) && sourceId !== "uber_bundle") {
           return c.json({ error: "INVALID_SOURCE", message: "Unsupported recon import sourceId" }, 400);
         }
         const weekKey = body.weekKey ? String(body.weekKey).slice(0, 10) : null;
@@ -723,12 +722,11 @@ export function registerReconImportRoutes(app: Hono) {
           });
         }
 
-        // Toll files (toll_usage / toll_topup) go through the new toll upload (toll_v2_import_controller) and are
-        // registered with /register; the old toll ledger path is gone (docs/toll-old-system-removal-audit.md S1).
+        if (isTollSource(sourceId)) return tollsMoved(c);
         return c.json({
-          error: "TOLLS_MOVED",
-          message: "Toll files now go through the new toll upload in step 1.",
-        }, 410);
+          error: "INVALID_SOURCE",
+          message: "Only fuel files commit here; other files are registered with /register.",
+        }, 400);
       } catch (e) {
         return safeErrorResponse(c, e, "recon-import-commit");
       }
