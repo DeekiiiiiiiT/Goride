@@ -22,6 +22,7 @@ const MAPPED: Array<{ code: string; status: number }> = [
   { code: "AFTER_SEAL", status: 409 },
   { code: "AMOUNT_TOO_LARGE", status: 409 },
   { code: "ALLOCATIONS_EXCEED_AMOUNT", status: 409 },
+  { code: "PARTIAL_TAKE_BACK", status: 409 },
 ];
 
 for (const { code, status } of MAPPED) {

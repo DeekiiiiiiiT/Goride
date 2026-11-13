@@ -25,6 +25,7 @@ const STATUS_409 = new Set([
   "AFTER_SEAL",
   "AMOUNT_TOO_LARGE",
   "ALLOCATIONS_EXCEED_AMOUNT",
+  "PARTIAL_TAKE_BACK",
 ]);
 
 const STATUS_404 = new Set(["NOT_FOUND"]);

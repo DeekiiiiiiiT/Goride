@@ -734,16 +734,29 @@ Spend and reimbursed are reported and checked only. The rider's toll on a cash t
 7. **Driver cash:** a receipt photo is **required**, and the submission goes through the driver app's offline queue (I6, `driver_outbox_crash`). It arrives `unverified` (no posting) until `verify_cash_receipt`.
 8. **Old import bug (separate, small):** the old Uber import's `Math.abs` on support adjustments. It is harmless today (no negatives) and fixed when the old path retires (Phase 5); v2 never repeats it.
 
-**Where Phase 2 stands (12 Nov, end of day):** P2-R1 and P2-R2 closed and committed (`0bece3c8` on `parts-auto-match`, not pushed). The import core migration `20261113001948_toll_v2_import_core.sql` is **local only**; it goes live with the rest of Phase 2 in P2-R6. **P2-R3 built 13 Nov (SQL smoke run still due); see the round table.**
+**Where Phase 2 stands (13 Nov, break):**
+- **Closed, all tests green from a reset:** P2-R1 import core, P2-R2 file readers, P2-R3 matcher, P2-R4a everyday decisions + the I4 guard, P2-R4b take-backs and corrections, P2-R4c carry-forward.
+- **Commits** (branch `parts-auto-match`, **none pushed**):
+  - `0bece3c8` = R1 + R2;
+  - `0f21cad5` = R3 + R4a;
+  - **R4b + R4c are not committed yet.** Their files: migrations `20261113030328_toll_v2_fact_corrections.sql` and `20261113031959_toll_v2_carry_forward.sql`; tests `toll_v2_fact_corrections.sql` and `toll_v2_carry_forward.sql`; smoke runs `docs/toll-build/p2_r4b_*` and `p2_r4c_*`; Cursor prompts `cursor-P2-R4b-*` and `cursor-P2-R4c-*`; plus edits to `toll_v2_commands.sql`, `toll_v2_command_errors.ts` and its test, and the CI workflow.
+- **Every Phase 2 migration is local only.** All six go live together in P2-R6, live SQL first, then the deploy.
+- **Phase 2 migrations in order:** `20261113001948_toll_v2_import_core`, `20261113011349_toll_v2_matcher`, `20261113023100_toll_v2_decisions`, `20261113030328_toll_v2_fact_corrections`, `20261113031959_toll_v2_carry_forward`.
 
-**P2-R3 starting brief (for a fresh chat):**
-- **Read first:** B4 (matching rules), B2 (`toll.suggestions`: append-only), B3 (`apply_suggestion` is a P2-R4 intent, not this round), and the adapter row shapes in `packages/toll-core/src/v2/adapters/types.ts`.
-- **What it matches:** a tag or driver-cash **charge** to a platform **trip** (`toll.platform_trips`: same vehicle, `occurred_at` inside request → dropoff, widened only by the coarser of the two time precisions), and a trip's **payback** to the charge(s) on that trip. Roam crossings are native and are never matched.
+**P2-R5 starting brief (for a fresh chat):**
+- **Read first:** Part F → Phase 2 "Look first (12 Nov)" and decisions 1–8 (above), B3 (`import_batch`), B9, and I6 (`driver_outbox_crash`).
+- **What is already built, so R5 only wires it up:**
+  - pure file readers in `packages/toll-core/src/v2/adapters/` (tag statement, TransJam top-ups, Uber `payments_transaction` + `trip_activity`, InDrive, driver cash receipt);
+  - `public.toll_v2_command('import_batch', {command_id, kind, file_name, rows})` for people (user token), and `public.toll_sys_import(company, kind, rows, command_id, actor_job)` for the system (service key; repeat-safe per `command_id`);
+  - the matcher runner `supabase/functions/_fleet-server/toll_v2_matcher_run.ts` (`runTollMatcher`, `runTollMatcherSweep`). Triggers already queue every record that changes.
 - **Build:**
-  1. A pure engine in `packages/toll-core/src/v2/matcher/`. Inputs → candidates, each with score parts, the rules fired and an `engine_version`. No clock, no I/O.
-  2. A SQL side that stores suggestions append-only with their inputs, runs after `import_batch` writes (only when data arrives), and leaves `auto_apply` off by default (shadow first).
-- **Excluded from candidates:** duplicates, legacy, `after_seal`, and reversed or reversing paybacks.
-- **Then:** a Cursor test prompt (golden cases plus SQL storage tests).
+  1. **Fleet import route** on the Fleet server, user token: file → the right adapter → `import_batch` → `runTollMatcher` for that company → the row report back. Today's browser parsing (`apps/fleet/src/components/vehicles/BulkImportTollTransactionsModal.tsx`) and `recon_import_routes.ts` stay as they are while `tolls_v2` is off (B11).
+  2. **Driver app cash toll** (`apps/driver/src/components/fleet/DriverExpenses.tsx`): a receipt photo is **required**, and the submission goes through the driver app's offline queue (`apps/driver/src/services/offlineStorage.ts`, `components/offline/OfflineSyncManager.tsx`). The server calls `toll_sys_import(company, 'driver_cash', rows, command_id = the outbox item's id, 'driver_app')`, so a resend never doubles (I6). It arrives `unverified`.
+  3. **A matcher sweep** on a schedule (or after each import): it drains anything an import didn't (for example, queue rows from decisions).
+- **Keep:**
+  - auto-apply **off** (suggestions in shadow; only a person's `apply_suggestion` applies one);
+  - **company from the user's token only** (B7).
+- **Who:** Cursor builds R5 from a Claude prompt. Claude writes that prompt first and checks the result.
 - **Open owner facts still due before Phase 2 exits:** Part E #3 and #4 (checked on a real week in P2-R6).
 
 **Phase 2 rounds**
@@ -775,7 +788,19 @@ Full `pnpm test:toll` from a reset: all green. **P2-R3 is closed.** The migratio
 - Cursor wrote `toll_v2_decisions.sql` (10 sections), the error-map cases and the CI wiring.
 - Claude added a nightly check after **every** section (Cursor had one only at the end), plus the missing payback-lowered guard probe. All pass.
 - Full `pnpm test:toll` from a reset: green. Local only; not committed. |
-| P2-R4b | **Decisions that change facts:** reverse_payback (P17), correct_charge_amount (P16 + proportional), correct_charge_week (PB2), carry_forward (P18 / P19 / P20, late charge / payback), leave_payback_unlinked on a carried P19 leftover | Claude core, Cursor tests | |
+| P2-R4b | **Decisions that change facts:** reverse_payback (P17), correct_charge_amount (P16 + proportional), correct_charge_week (PB2) | Claude core, Cursor tests | **Built by Claude 13 Nov** (`20261113030328_toll_v2_fact_corrections.sql`). **Decisions (one each):**<br>1. A take-back reverses the **whole** payback; a partial one → `PARTIAL_TAKE_BACK` (B2 makes reversed final; no partial exists in the data).<br>2. Slices a take-back reverses carry `reversed_by` = the reversing payback (the Phase 1 test convention), so the checks can tell a platform take-back from a person's undo.<br>3. A person on a sealed week → `WEEK_SEALED`; the paid-week path is carry_forward (R4c).<br>4. **Check 3 corrected:** for a take-back in a *later* open week of a payback with a leftover, the old line expected the leftover to vanish from the original week, a false alarm on correct postings. Now the original week keeps its figures (PB4).<br>Shrinking below the slices splits by bearer (C3 rounding, newest slice first); a shrunk platform slice leaves a payback leftover. **Smoke run** (`docs/toll-build/p2_r4b_fact_corrections_smoke.sql`): same-week and next-week take-backs, the refusals, down 500→300 (driver 180 / fleet 120), up, down with a platform slice (payback leftover 100), a week move; the seal refused while that leftover was undecided, then sealed; nightly ok after every step. `toll_v2_commands.sql`'s "not built" probe moved to the carried-leftover path. Full `pnpm test:toll` green. **Closed 13 Nov.**
+- Cursor wrote `toll_v2_fact_corrections.sql` (10 sections, nightly after each, plus the proof that the old check-3 formula disagreed by the leftover) and added `PARTIAL_TAKE_BACK` → 409.
+- Claude added the missing `AFTER_SEAL` probe. It was not covered elsewhere, as Cursor had said; now it's a block that undoes itself.
+- Full suite green. |
+| P2-R4c | **carry_forward** (late charge, late payback, take-back P18, down correction P19, up correction) + leave_payback_unlinked on a carried P19 leftover. Needs a **counted week for paybacks** (like `charge_counted_week`) in the week result, seal blockers and nightly checks 3–5, plus a posting time for carried charges inside the open week | Claude core, Cursor tests | **Built by Claude 13 Nov** (`20261113031959_toll_v2_carry_forward.sql`). **Decisions (one each):**<br>1. A carried **charge** keeps its `week_key` and counts in `to_week` (Phase 0's `charge_counted_week`). Every posting of a charge now uses `charge_post_at` (crossing time, or noon Monday of the counted week); 6 functions are switched to it.<br>2. A carried **payback**'s `week_key` becomes `to_week` (from_week stays on the carried row). Sealed hashes never included after_seal paybacks, so no reader of a payback's week changes.<br>3. **One carried row per posted leg** (a P18 leftover / covered part, each P19 share; `bearer` NULL = platform or leftover), so the checks count rows and never re-split money.<br>4. A take-back is whole (as R4b); a second one is refused.<br>**Also:** the platform share blocks `to_week`'s seal until decided on its carried row (`leave_payback_unlinked` + `carried_fact_id`; undo works); drivers' week lines carry P18 / P19; `carriedMoney` appears only in weeks with carried rows, so every other facts hash is unchanged; nightly check 3 counts P18 / P19 legs (check 1 already did). **Smoke run** (`docs/toll-build/p2_r4c_carry_forward_smoke.sql`): unpaid → REOPEN_INSTEAD; late charge, late payback, take-back 160 + 340, down 500→300 (driver 120 / fleet 80), platform share blocks the seal → decided → undone, up 300→350; nightly ok after each step; the paid week's hash unchanged; the driver line is fleetOwes 170 (50 cash + 120). Full suite green.
+
+**Closed 13 Nov.**
+- Cursor wrote `toll_v2_carry_forward.sql`: 9 sections, nightly + the paid-week hash after each, no hand-made money rows.
+- Claude's check found its refusals tested only the code, not the reason. The helper now checks the `state` too, and the 7 `WRONG_STATE` cases are tagged.
+- One had passed for the wrong reason: its "duplicate" charge was refused as `not_after_seal`. An after_seal charge can't become a duplicate (imports into a sealed week skip the duplicate rules; confirm_duplicate refuses a sealed week), so that refusal is a safety net real data can't reach. The test now says so.
+- Full suite green.
+
+**Not covered (by design, note for Phase 5):** a carried Roam native charge's cash settlement path. |
 | P2-R5 | **Driver app:** receipt required + toll offline outbox; the import route on the Fleet server (file → adapter → `import_batch`, user token) | Cursor | |
 | P2-R6 | Phase 2 exits (Part D) end to end on a real week's files; confirm Uber cash includes the toll; `/code-review`; live migrations first, then deploy | All | |
 

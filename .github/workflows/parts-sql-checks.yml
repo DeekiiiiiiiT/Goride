@@ -40,6 +40,10 @@ on:
       - 'supabase/migrations/20261113011349_toll_v2_matcher.sql'
       - 'supabase/tests/toll_v2_decisions.sql'
       - 'supabase/migrations/20261113023100_toll_v2_decisions.sql'
+      - 'supabase/tests/toll_v2_fact_corrections.sql'
+      - 'supabase/migrations/20261113030328_toll_v2_fact_corrections.sql'
+      - 'supabase/tests/toll_v2_carry_forward.sql'
+      - 'supabase/migrations/20261113031959_toll_v2_carry_forward.sql'
       - 'packages/toll-core/src/v2/weekRuleCases.json'
       - '.github/workflows/parts-sql-checks.yml'
   push:
@@ -78,6 +82,10 @@ on:
       - 'supabase/migrations/20261113011349_toll_v2_matcher.sql'
       - 'supabase/tests/toll_v2_decisions.sql'
       - 'supabase/migrations/20261113023100_toll_v2_decisions.sql'
+      - 'supabase/tests/toll_v2_fact_corrections.sql'
+      - 'supabase/migrations/20261113030328_toll_v2_fact_corrections.sql'
+      - 'supabase/tests/toll_v2_carry_forward.sql'
+      - 'supabase/migrations/20261113031959_toll_v2_carry_forward.sql'
       - 'packages/toll-core/src/v2/weekRuleCases.json'
       - '.github/workflows/parts-sql-checks.yml'
   workflow_dispatch:
@@ -184,3 +192,7 @@ jobs:
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_v2_matcher.sql
           docker cp supabase/tests/toll_v2_decisions.sql "$db_container":/tmp/toll_v2_decisions.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_v2_decisions.sql
+          docker cp supabase/tests/toll_v2_fact_corrections.sql "$db_container":/tmp/toll_v2_fact_corrections.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_v2_fact_corrections.sql
+          docker cp supabase/tests/toll_v2_carry_forward.sql "$db_container":/tmp/toll_v2_carry_forward.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_v2_carry_forward.sql

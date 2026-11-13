@@ -424,13 +424,15 @@ BEGIN
   -- 7. carry_forward
   v_week := v_week0 + 7 * 30;
   PERFORM pg_temp._toll_cmd_expect('carry_forward', jsonb_build_object(
-    'command_id', 'toll-cmd-cf-open', 'from_week', v_week
+    'command_id', 'toll-cmd-cf-open', 'from_week', v_week,
+    'to_week', v_week + 7, 'kind', 'take_back'
   ), 'WEEK_NOT_SEALED');
   PERFORM public.toll_v2_command('seal_week', jsonb_build_object(
     'command_id', 'toll-cmd-cf-seal-unpaid', 'week_key', v_week, 'expected_week_version', 0
   ));
   PERFORM pg_temp._toll_cmd_expect('carry_forward', jsonb_build_object(
-    'command_id', 'toll-cmd-cf-unpaid', 'from_week', v_week
+    'command_id', 'toll-cmd-cf-unpaid', 'from_week', v_week,
+    'to_week', v_week + 7, 'kind', 'take_back'
   ), 'REOPEN_INSTEAD');
   v_week := v_week0 + 7 * 31;
   PERFORM public.toll_v2_command('seal_week', jsonb_build_object(
@@ -444,8 +446,9 @@ BEGIN
   );
   PERFORM pg_temp._toll_cmd_as(v_owner, v_org_a);
   PERFORM pg_temp._toll_cmd_expect('carry_forward', jsonb_build_object(
-    'command_id', 'toll-cmd-cf-paid', 'from_week', v_week
-  ), 'INTENT_NOT_BUILT');
+    'command_id', 'toll-cmd-cf-paid', 'from_week', v_week,
+    'to_week', v_week + 7, 'kind', 'take_back'
+  ), 'BAD_REQUEST');
 
   -- 8. Who may act
   v_week := v_week0 + 7 * 32;
@@ -518,9 +521,10 @@ BEGIN
 
   -- 10. Intents
   PERFORM pg_temp._toll_cmd_as(v_owner, v_org_a);
-  PERFORM pg_temp._toll_cmd_expect('reverse_payback', jsonb_build_object(
-    'command_id', 'toll-cmd-nb-intent', 'payback_id', v_payback
-  ), 'INTENT_NOT_BUILT');
+  -- P2-R4b built reverse_payback; the carried P19 leftover path is still P2-R4c.
+  PERFORM pg_temp._toll_cmd_expect('leave_payback_unlinked', jsonb_build_object(
+    'command_id', 'toll-cmd-nb-intent', 'carried_fact_id', gen_random_uuid(), 'reason_code', 'x'
+  ), 'NOT_FOUND');
   PERFORM pg_temp._toll_cmd_expect('make_coffee', jsonb_build_object(
     'command_id', 'toll-cmd-unknown'
   ), 'UNKNOWN_INTENT');
