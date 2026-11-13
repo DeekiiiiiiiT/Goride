@@ -452,6 +452,25 @@ type CloseCheck =
  * (calculator or a user's own change), never on a page read (WRA-08).
  * `blockers` = the saved driver rows + this build's whole-week rows; null = the read failed.
  */
+/**
+ * Toll v2: "sealed" / "open" for a company on v2, null when it isn't (the old toll period decides).
+ * Fails closed without breaking the week: a failed read answers "open" (step 3 stays open), never "sealed".
+ */
+export async function tollsV2WeekState(orgId: string, weekKey: string): Promise<"sealed" | "open" | null> {
+  try {
+    const sb = getServiceClient();
+    const { data: on, error: onErr } = await sb.rpc("toll_sys_tolls_v2_on", { p_company: orgId });
+    if (onErr) throw new Error(`toll_sys_tolls_v2_on failed: ${onErr.message}`);
+    if (on !== true) return null;
+    const { data, error } = await sb.rpc("toll_sys_week_drivers", { p_company: orgId, p_week: weekKey });
+    if (error) throw new Error(`toll_sys_week_drivers failed: ${error.message}`);
+    return (data as { state?: string } | null)?.state === "sealed" ? "sealed" : "open";
+  } catch (e) {
+    console.warn("[recon] toll v2 week state unreadable; step 3 stays open", e instanceof Error ? e.message : e);
+    return "open";
+  }
+}
+
 async function computeLiveStepCounts(
   orgId: string,
   weekKey: string,
@@ -485,7 +504,11 @@ async function computeLiveStepCounts(
     .limit(1)
     .maybeSingle();
   const tollDoneViaStatement = Boolean(tollStmt);
-  if (tollDoneViaStatement) {
+  // P3-R4: a company on toll v2 has no old toll period; its step 3 is done once the company's toll week is sealed.
+  const tollsV2 = await tollsV2WeekState(orgId, weekKey);
+  if (tollsV2 !== null) {
+    tollActionable = tollsV2 === "sealed" ? 0 : 1;
+  } else if (tollDoneViaStatement) {
     tollActionable = 0;
   } else if (!tollPeriod) {
     tollActionable = 1;

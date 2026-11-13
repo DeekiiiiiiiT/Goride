@@ -19,6 +19,17 @@ import {
 } from "./fuel_week_seal.ts";
 import { resolveTollCloseAmounts } from "./toll_close_amounts.ts";
 import { logReconPhase } from "./recon_phase_log.ts";
+import { getServiceClient } from "./service_client.ts";
+
+/** True only when the company is on toll v2. A failed read answers false, so the old compare still runs (fails closed). */
+async function companyOnTollsV2(organizationId: string): Promise<boolean> {
+  try {
+    const { data, error } = await getServiceClient().rpc("toll_sys_tolls_v2_on", { p_company: organizationId });
+    return !error && data === true;
+  } catch {
+    return false;
+  }
+}
 
 const round2 = (n: number): number => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -113,8 +124,15 @@ export async function compareDriverWeekStatementsToEngines(opts: {
     }
   }
 
+  // P3-R4: on toll v2 the sealed v2 result is the toll answer; the old event-netting engine has no rows for the
+  // company, so comparing against it always "drifts" and blocks the week. v2 has its own nightly money checks.
+  const tollsV2 = statements.some((s) => s.status === "closed" && s.kind === "toll")
+    ? await companyOnTollsV2(organizationId)
+    : false;
+
   for (const s of statements) {
     if (s.status !== "closed") continue;
+    if (s.kind === "toll" && tollsV2) continue;
     if (s.kind === "fuel") {
       const engine = await probeFuelEngine(organizationId, weekKey, driverId, fuelRebuild);
       if (engine) drifts.push(...compareFuelStatementVsEngine(s, engine));

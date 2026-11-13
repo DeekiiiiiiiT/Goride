@@ -18,6 +18,8 @@ type DriverRow = {
   name: string;
   plate?: string;
   uberDriverId?: string;
+  /** The full driver record. Saving a driver replaces the whole record, so it is sent back whole. */
+  raw: Record<string, unknown>;
 };
 
 export function TollV2FixDriverDialog({
@@ -51,6 +53,7 @@ export function TollV2FixDriverDialog({
           name: String(d.name ?? d.driverName ?? [d.firstName, d.lastName].filter(Boolean).join(' ')),
           plate: String(d.assignedVehiclePlate ?? d.plate ?? '').trim() || undefined,
           uberDriverId: d.uberDriverId ? String(d.uberDriverId) : undefined,
+          raw: d,
         }));
         setDrivers(rows.filter((d) => d.id));
       })
@@ -70,7 +73,8 @@ export function TollV2FixDriverDialog({
     if (!driver) return;
     setBusy(true);
     try {
-      await api.saveDriver({ ...driver, id: driver.id, uberDriverId: uberId });
+      // Only the Uber id changes; everything else on the driver is kept as it is.
+      await api.saveDriver(driverWithUberId(driver.raw, driver.id, uberId));
       toast.success('Driver linked — upload the file again to read these rows');
       onSaved();
       onOpenChange(false);
@@ -140,4 +144,9 @@ export function TollV2FixDriverDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+/** The driver record to save: the whole record as loaded, with only the Uber id set. */
+export function driverWithUberId(raw: Record<string, unknown>, id: string, uberId: string): Record<string, unknown> {
+  return { ...raw, id, uberDriverId: uberId };
 }

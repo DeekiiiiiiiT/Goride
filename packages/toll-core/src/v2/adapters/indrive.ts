@@ -69,7 +69,11 @@ export function indrive(text: string, ctx: IndriveCtx = {}): IndriveResult {
       '';
 
     if (!vehicleId) {
-      problems.push({ row: rowNum, reason: 'Missing vehicle' });
+      problems.push(
+        plateNorm
+          ? { row: rowNum, reason: `Vehicle not found: ${plateNorm}`, code: 'unknown_plate', value: plateNorm }
+          : { row: rowNum, reason: 'Missing vehicle' },
+      );
       continue;
     }
 

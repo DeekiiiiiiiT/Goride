@@ -374,9 +374,11 @@ export async function commitUberCashRefresh(
       } catch (err: any) {
         if (err?.code === 'DUPLICATE_FILE_HASH') {
           if (closeWeekMode) {
-            throw new Error(
+            const dup = new Error(
               'These CSVs were already imported (same fingerprint). Close Week will not post a second copy of statement cash. Use Accept statement cash, or Data Imports only if you intend a visible restatement.',
-            );
+            ) as Error & { code?: string };
+            dup.code = 'DUPLICATE_FILE_HASH';
+            throw dup;
           }
           throw err;
         }

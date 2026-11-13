@@ -80,6 +80,9 @@ export function uber(files: UberFiles, ctx: UberCtx): UberResult {
     requestAt?: string;
     dropoffAt?: string;
     driverUuid: string;
+    /** File row (header = 1), for the Step 1 problem list. */
+    row: number;
+    driverName: string;
   };
   const tripActivity = new Map<string, TripAct>();
 
@@ -99,6 +102,11 @@ export function uber(files: UberFiles, ctx: UberCtx): UberResult {
     const act: TripAct = {
       plate,
       driverUuid: getColFromRecord(row, 'Driver UUID', 'driver uuid'),
+      row: i + 2,
+      driverName: [
+        getColFromRecord(row, 'Driver first name', 'driver first name'),
+        getColFromRecord(row, 'Driver last name', 'driver last name'),
+      ].filter(Boolean).join(' '),
     };
 
     if (reqVal) {
@@ -140,7 +148,16 @@ export function uber(files: UberFiles, ctx: UberCtx): UberResult {
         const driverUuid = getColFromRecord(row, 'Driver UUID', 'driver uuid');
         const driverId = ctx.driverByUberUuid[driverUuid];
         if (!driverId) {
-          problems.push({ row: rowNum, reason: `Driver not found: ${driverUuid}` });
+          problems.push({
+            row: rowNum,
+            reason: `Driver not found: ${driverUuid}`,
+            code: 'unknown_driver',
+            value: driverUuid,
+            name: [
+              getColFromRecord(row, 'Driver first name', 'driver first name'),
+              getColFromRecord(row, 'Driver last name', 'driver last name'),
+            ].filter(Boolean).join(' ') || undefined,
+          });
           continue;
         }
         const adj: UberAdjustmentRow = {
@@ -183,13 +200,19 @@ export function uber(files: UberFiles, ctx: UberCtx): UberResult {
     const driverUuid = driverByTrip.get(tripId) ?? activity.driverUuid;
     const driverId = ctx.driverByUberUuid[driverUuid];
     if (!driverId) {
-      problems.push({ row: 0, reason: `Driver not found: ${driverUuid}` });
+      problems.push({
+        row: activity.row,
+        reason: `Driver not found: ${driverUuid}`,
+        code: 'unknown_driver',
+        value: driverUuid,
+        name: activity.driverName || undefined,
+      });
       continue;
     }
     const plate = normalizePlate(activity.plate);
     const vehicleId = ctx.vehicleByPlate[plate];
     if (!vehicleId) {
-      problems.push({ row: 0, reason: `Vehicle not found: ${plate}` });
+      problems.push({ row: activity.row, reason: `Vehicle not found: ${plate}`, code: 'unknown_plate', value: plate });
       continue;
     }
 

@@ -598,6 +598,11 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v_imps) i WHERE i ->> 'kind' = 'uber') THEN
     RAISE EXCEPTION 's9 uber';
   END IF;
+  -- P3-R4: car saves write plate_aliases through the public wrapper view; it must expose the column.
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_schema = 'public' AND table_name = 'fleet_vehicles' AND column_name = 'plate_aliases') THEN
+    RAISE EXCEPTION 's9 public.fleet_vehicles has no plate_aliases (every car save would fail)';
+  END IF;
   -- P3-R4: every used tag / top-up row carries its amount ("12 tolls read · J$4,250.00").
   IF EXISTS (
     SELECT 1 FROM jsonb_array_elements(v_imps) i, jsonb_array_elements(i -> 'report') rep

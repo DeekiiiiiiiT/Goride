@@ -26,6 +26,7 @@ export function ReconTollV2SourceEnhancement({
   onRetryUberToll,
   onUploadAgain,
   fixedKeys,
+  readProblems = [],
 }: {
   source: ReconRunSource;
   reports: TollV2ImportReport[];
@@ -37,6 +38,8 @@ export function ReconTollV2SourceEnhancement({
   onRetryUberToll?: () => void;
   onUploadAgain?: () => void;
   fixedKeys: ReadonlySet<string>;
+  /** The latest upload's reader problems (unknown driver / car), which are never saved. */
+  readProblems?: TollV2ImportReportRow[];
 }) {
   if (!TOLL_SOURCE_IDS.has(source.id)) return null;
 
@@ -45,12 +48,12 @@ export function ReconTollV2SourceEnhancement({
     source.id === 'toll_usage' ? 'tag_statement' : source.id === 'toll_topup' ? 'topups' : 'uber',
     report,
   );
-  const problems = problemRows(report).filter((r) => !fixedKeys.has(problemKey(r)));
-  const problemCount = countProblems(report);
+  const problems = [...problemRows(report), ...readProblems].filter((r) => !fixedKeys.has(problemKey(r)));
+  const problemCount = countProblems(report) + readProblems.length;
 
-  const showResult = source.status === 'received' || report;
+  const showResult = source.status === 'received' || report || readProblems.length > 0;
   const showFixed = fixedKeys.size > 0 && Boolean(onUploadAgain);
-  if (!uberTollError && !(showResult && resultLine) && problems.length === 0 && !showFixed) return null;
+  if (!uberTollError && !showResult && problems.length === 0 && !showFixed) return null;
 
   return (
     <div className="mt-3 space-y-3 border-t border-[#e5eeff] pt-3">
@@ -65,13 +68,15 @@ export function ReconTollV2SourceEnhancement({
         </div>
       ) : null}
 
-      {showResult && resultLine ? (
+      {/* P3-R4: a received file always offers "Replace file", even when no toll rows were saved
+          (e.g. every row needed a fix), so the person can upload it again after fixing. */}
+      {showResult ? (
         <div className="rounded-xl border border-[#e5eeff] bg-[#f8f9ff] p-3">
-          <p className="text-sm font-medium text-[#0b1c30]">{resultLine}</p>
+          <p className="text-sm font-medium text-[#0b1c30]">{resultLine ?? 'No toll rows read from the last file yet'}</p>
           {problemCount > 0 ? (
             <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">
               <AlertTriangle className="h-3 w-3" aria-hidden />
-              {problemCount} rows couldn&apos;t be used
+              {problemCount} {problemCount === 1 ? 'row' : 'rows'} couldn&apos;t be used
             </span>
           ) : null}
           <div className="mt-3 flex flex-wrap gap-2">
@@ -95,7 +100,7 @@ export function ReconTollV2SourceEnhancement({
               className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2"
             >
               <span className="text-[#47464c]">
-                Row {row.row ?? idx + 1}: {importRowStatusLabel(row).replace('Problem: ', '')}
+                Row {row.row ?? idx + 1} · {importRowStatusLabel(row).replace('Problem: ', '')}
               </span>
               <span className="flex gap-2">
                 {String(row.reason ?? '').includes('driver') || row.status === 'unknown_driver' ? (

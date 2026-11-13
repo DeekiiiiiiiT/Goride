@@ -172,24 +172,31 @@ export function CloseWeekUberReimportDialog({
       return;
     }
     setBusy(true);
+    const paymentFile = files.find((f) => f.type === 'uber_payment' && 'rawFile' in f);
+    const tripFile = files.find((f) => f.type === 'uber_trip' && 'rawFile' in f);
+    const tollFiles = {
+      paymentsTransaction:
+        paymentFile && 'rawFile' in paymentFile ? (paymentFile as { rawFile?: File }).rawFile : undefined,
+      tripActivity: tripFile && 'rawFile' in tripFile ? (tripFile as { rawFile?: File }).rawFile : undefined,
+    };
     try {
       if (!preview) {
         const p = await previewUberCashRefresh(files, weekKey);
         setPreview(p);
       }
-      const result = await commitUberCashRefresh(files, weekKey, { closeWeekMode: true });
-      toast.success(
-        `Cash refresh saved · ${result.tripCount} trip(s) · statement ${MONEY(result.statementCashTotal)}`,
-      );
-      const paymentFile = files.find((f) => f.type === 'uber_payment' && 'rawFile' in f);
-      const tripFile = files.find((f) => f.type === 'uber_trip' && 'rawFile' in f);
+      try {
+        const result = await commitUberCashRefresh(files, weekKey, { closeWeekMode: true });
+        toast.success(
+          `Cash refresh saved · ${result.tripCount} trip(s) · statement ${MONEY(result.statementCashTotal)}`,
+        );
+      } catch (e) {
+        // P3-R4: the same files again (e.g. after "Fix driver" / "Which car?"). Cash is not posted twice, but the
+        // toll import still runs: it changes nothing on a repeat and reads the rows that were just fixed.
+        if (!(onUberFilesForToll && (e as { code?: string })?.code === 'DUPLICATE_FILE_HASH')) throw e;
+        toast.info('These Uber files were already imported, so cash was not posted again. Reading their tolls again.');
+      }
       if (onUberFilesForToll) {
-        await onUberFilesForToll({
-          paymentsTransaction:
-            paymentFile && 'rawFile' in paymentFile ? (paymentFile as { rawFile?: File }).rawFile : undefined,
-          tripActivity:
-            tripFile && 'rawFile' in tripFile ? (tripFile as { rawFile?: File }).rawFile : undefined,
-        });
+        await onUberFilesForToll(tollFiles);
       }
       reset();
       onOpenChange(false);

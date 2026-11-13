@@ -38,7 +38,7 @@
 ## Still to do, in order
 1. ~~Commit R4a~~ — done `ac3c2eb0`.
 2. ~~Click-through~~ — done 13 Nov (Rev 4 section below). **The Rev 4 fixes are not committed yet.**
-3. **Left from the click-through** (do on the next test-copy pass):
+3. **Left from the click-through** — done 13 Nov except the take-back on screen (see "Second pass"):
    - **Take-back on screen** (the three week cases). Its card shows only on the open toll week, and Week Reconciliation opens a week only after it ends; locally the open week was 9 Nov (not openable until 16 Nov). Money rules are covered by `toll_v2_carry_forward.sql` + the step tests.
    - **Step 1 problem rows**: "Fix driver" (M1), "Which car?" (M2), "Upload the file again". Needs a file with an unknown driver and an unknown plate.
    - **Delivery run** completing step 3 after the seal.
@@ -70,7 +70,22 @@
 | R4-13 | Reopen on a paid week showed "That toll command could not be completed." (server says `DRIVERS_ALREADY_PAID`, screen only knew `REOPEN_INSTEAD`) | both codes give the paid-week message; plain words for every server refusal |
 | R4-14 | Toll health "Open the week" led to a week that can't open yet | says "Opens after Sun 15 Nov" until the week ends |
 
-**Tests:** fleet recon + Toll health + services 130/130; toll-core 186; Deno guard 2; `pnpm test:toll` all ok (incl. two new checks in `toll_v2_screen_reads.sql`); no type errors in touched files.
+**Second pass (same day, the left-over items):**
+| # | Found | Fix |
+|---|---|---|
+| R4-15 | **"Fix driver" / "Which car?" never appeared**: the reader drops unknown driver / car rows before anything is saved, and the card only read saved reports; the reader's problems also said `row 0` | the reader gives each problem its file row, a code and the driver name / plate; Step 1 shows them ("Row 2 · Driver JAMAL CAMPBELL isn't set up in Roam Fleet"), kept for the browser session |
+| R4-16 | **"Fix driver" would wipe the driver** (saving a driver replaces the whole record; the dialog sent 4 fields) | sends the full record with only the Uber id changed (checked: email, phone, licence, car kept) |
+| R4-17 | **"Which car?" would wipe the car** (same, and the catalogue check would then set it Inactive) | sends the full record with only the extra plates changed (checked) |
+| R4-18 | **Every car save would fail once deployed**: the server writes `plate_aliases` through `public.fleet_vehicles`, which didn't have the column | the reads migration refreshes the view (not live yet); SQL test check added |
+| R4-19 | **Every v2 Uber upload failed to record** (500): the replaced batch was linked as `batch:<id>` instead of the row id (also breaks re-uploading a week's Uber file on live today) | the link uses the row id (`batchRowId`) |
+| R4-20 | Uploading the same Uber files again (needed after a fix) stopped at "already imported", so the toll rows were never re-read | on that answer the panel still runs the toll import (repeat-safe) and says so |
+| R4-21 | A received Uber card with no saved toll rows had no button at all | "Replace file" always shows once received; fixed rows clear after a new read; "1 row" wording |
+| R4-22 | **Step 3 could never complete for a v2 company**: the week page counted it from the old toll period, which v2 companies don't have | step 3 follows the v2 seal (`tollsV2WeekState`, fails closed); Delivery's step 3 reads complete too |
+| R4-23 | **A v2 week could never close**: the old "toll engine drift" check compared the v2 seal with the old toll system (empty) → `TOLL_ENGINE_DRIFT` | skipped for v2 companies (v2 has its own nightly money checks); a failed switch read keeps comparing |
+
+Checked on screen: problem rows → Fix driver → Which car? → upload again → "2 trips read · 2 toll paybacks · J$740.00", no problems; the real week sealed again (J$3,975 + J$275 = J$4,250) and step 3 completed by itself; phone 390px has no sideways scroll. **Not checkable locally:** the Delivery week page (its readiness check is a Rush function the test copy doesn't run); its step 3 reads complete on the server. The take-back on screen still waits for an openable open week.
+
+**Tests:** fleet recon + Toll health + services 130/130 (second pass: fleet-financials + services + utils 1554); toll-core 186; Deno guard 2; `pnpm test:toll` all ok (incl. two new checks in `toll_v2_screen_reads.sql`); no type errors in touched files.
 
 **For Phase 4 (not Phase 3):** Reopen tolls leaves Week Reconciliation step 3 "Complete" — the recon server doesn't read the v2 seal yet. Money stays safe (paying drivers is refused until tolls are sealed, Phase 1).
 

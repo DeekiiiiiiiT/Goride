@@ -16,6 +16,14 @@ export function importRowStatusLabel(row: TollV2ImportReportRow): string {
   const s = String(row.status ?? '');
   if (s === 'new') return 'New';
   if (s === 'unchanged' || s === 'trip_only') return 'Already in';
+  if (s === 'unknown_driver') {
+    const name = String(row.driver_name ?? '').trim();
+    return `Problem: Driver ${name || 'in the file'} isn't set up in Roam Fleet`;
+  }
+  if (s === 'unknown_plate') {
+    const plate = String(row.plate ?? row.ref ?? '').trim();
+    return `Problem: Car ${plate || 'in the file'} isn't in your fleet`;
+  }
   if (PROBLEM_STATUSES.has(s) || s.includes('needs_person') || s.includes('unknown')) {
     const reason = row.reason ? String(row.reason) : s.replace(/_/g, ' ');
     return `Problem: ${reason}`;
@@ -109,13 +117,33 @@ export function reportForSource(
 export function tollFilesSummary(
   sources: Array<{ id: string; status: string; requirement: string }>,
   reports: TollV2ImportReport[],
+  readProblems: Partial<Record<string, TollV2ImportReportRow[]>> = {},
 ): { received: number; total: number; problems: number } {
   const tollIds = new Set(['toll_usage', 'toll_topup', 'uber_bundle']);
   const applicable = sources.filter((s) => tollIds.has(s.id) && s.requirement !== 'not_applicable');
   const total = applicable.length;
   const received = applicable.filter((s) => s.status === 'received').length;
-  const problems = reports.reduce((acc, r) => acc + countProblems(r), 0);
+  // The latest read of each file only; an older upload's problems are already replaced.
+  const problems = applicable.reduce(
+    (acc, s) => acc + countProblems(reportForSource(reports, s.id)) + (readProblems[s.id]?.length ?? 0),
+    0,
+  );
   return { received, total, problems };
+}
+
+/** The reader's problem rows (never saved: the file isn't kept) in the report-row shape the card uses. */
+export function readProblemRows(
+  problems: Array<{ row?: number; reason?: string; code?: string; value?: string; name?: string }> | undefined,
+): TollV2ImportReportRow[] {
+  return (problems ?? [])
+    .filter((p) => p.code === 'unknown_driver' || p.code === 'unknown_plate')
+    .map((p) => ({
+      row: p.row,
+      status: p.code,
+      reason: p.reason,
+      ref: p.value,
+      ...(p.code === 'unknown_driver' ? { driver_id: p.value, driver_name: p.name } : { plate: p.value }),
+    }));
 }
 
 export function normalizePlateAlias(raw: string): string {

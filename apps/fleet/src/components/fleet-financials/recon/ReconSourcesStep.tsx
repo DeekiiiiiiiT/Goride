@@ -28,7 +28,7 @@ import { api } from '../../../services/api';
 import { useTollV2Enabled } from './tolls-v2/useTollV2Desk';
 import { useTollV2ImportReports } from './tolls-v2/step1/useTollV2ImportReports';
 import { ReconTollV2SourceEnhancement } from './tolls-v2/step1/ReconTollV2SourceEnhancement';
-import { tollFilesSummary } from './tolls-v2/step1/tollV2ImportReportFormat';
+import { readProblemRows, tollFilesSummary } from './tolls-v2/step1/tollV2ImportReportFormat';
 import type { TollV2ImportReport, TollV2ImportReportRow } from './tolls-v2/step1/tollV2ImportTypes';
 import { TollV2FixDriverDialog } from './tolls-v2/step1/dialogs/TollV2FixDriverDialog';
 import { TollV2WhichCarDialog } from './tolls-v2/step1/dialogs/TollV2WhichCarDialog';
@@ -365,9 +365,38 @@ export function ReconSourcesStep({
   const [whatReadReport, setWhatReadReport] = useState<TollV2ImportReport | null>(null);
   const [fixDriverRow, setFixDriverRow] = useState<TollV2ImportReportRow | null>(null);
   const [whichCarRow, setWhichCarRow] = useState<TollV2ImportReportRow | null>(null);
+  // The reader's unknown driver / car rows from each file's latest upload (never saved: the file isn't kept).
+  const readProblemsKey = `toll-v2-read-problems:${weekKey}`;
+  const [readProblems, setReadProblemsState] = useState<Partial<Record<string, TollV2ImportReportRow[]>>>(() => {
+    try {
+      const raw = sessionStorage.getItem(readProblemsKey);
+      return raw ? (JSON.parse(raw) as Partial<Record<string, TollV2ImportReportRow[]>>) : {};
+    } catch {
+      return {};
+    }
+  });
+  // Kept for this browser session only (the file itself isn't kept), so a reload doesn't hide rows still to fix.
+  const setReadProblems = useCallback(
+    (
+      update: (
+        prev: Partial<Record<string, TollV2ImportReportRow[]>>,
+      ) => Partial<Record<string, TollV2ImportReportRow[]>>,
+    ) => {
+      setReadProblemsState((prev) => {
+        const next = update(prev);
+        try {
+          sessionStorage.setItem(readProblemsKey, JSON.stringify(next));
+        } catch {
+          /* storage unavailable: rows still show until the page is left */
+        }
+        return next;
+      });
+    },
+    [readProblemsKey],
+  );
 
   const applicable = run.sources.filter((s) => s.requirement !== 'not_applicable');
-  const tollSummary = tollsV2On ? tollFilesSummary(applicable, importReports) : null;
+  const tollSummary = tollsV2On ? tollFilesSummary(applicable, importReports, readProblems) : null;
 
   const runTollV2Import = useCallback(
     async (opts: {
@@ -387,6 +416,10 @@ export function ReconSourcesStep({
           paymentsTransaction: opts.paymentsTransaction,
           tripActivity: opts.tripActivity,
         });
+        setReadProblems((prev) => ({
+          ...prev,
+          [opts.sourceId]: readProblemRows((res as { problems?: Parameters<typeof readProblemRows>[0] }).problems),
+        }));
         await registerTollV2WithRecon({
           batchId: commandId,
           sourceId: opts.sourceId,
@@ -396,6 +429,8 @@ export function ReconSourcesStep({
         });
         await importReportsQuery.refetch();
         await onRefresh();
+        // The file was read again: rows fixed before this read are now in (or listed again if still wrong).
+        setFixedProblemKeys(new Set());
         toast.success('Toll file read');
         setUberTollError(null);
       } catch (err) {
@@ -407,7 +442,7 @@ export function ReconSourcesStep({
         setTollUploadBusy(false);
       }
     },
-    [importReportsQuery, onRefresh, weekKey],
+    [importReportsQuery, onRefresh, setReadProblems, weekKey],
   );
 
   const triggerTollFilePicker = (sourceId: TollV2ReconSourceId) => {
@@ -590,6 +625,7 @@ export function ReconSourcesStep({
                   reports={importReports}
                   uberTollError={source.id === 'uber_bundle' ? uberTollError : null}
                   fixedKeys={fixedProblemKeys}
+                  readProblems={readProblems[source.id] ?? []}
                   onReplace={() => {
                     if (source.id === 'uber_bundle') {
                       setUberOpen(true);
@@ -633,7 +669,7 @@ export function ReconSourcesStep({
             </p>
             {tollSummary.problems > 0 ? (
               <p className="mt-1 text-sm font-medium text-amber-800">
-                {tollSummary.problems} rows need a fix
+                {tollSummary.problems} {tollSummary.problems === 1 ? 'row needs' : 'rows need'} a fix
               </p>
             ) : (
               <p className="mt-1 text-sm text-emerald-800">No problems in the last read</p>

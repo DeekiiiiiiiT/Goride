@@ -183,4 +183,22 @@ x\t${badDriver}\tSupport Adjustment:  adj-missing-driver\t2026-01-20\t10`;
     expect(out3.rows.filter((r) => r.row_type === 'adjustment')).toHaveLength(0);
     expect(out3.problems.some((p) => p.reason === `Driver not found: ${badDriver}`)).toBe(true);
   });
+
+  it('problems carry the file row and what to fix (Step 1 "Fix driver" / "Which car?")', () => {
+    const badDriver = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+    const t1 = '55555555-5555-5555-5555-555555555555';
+    const t2 = '66666666-6666-6666-6666-666666666666';
+    const tripActivity = `Trip UUID\tDriver UUID\tDriver first name\tDriver last name\tLicense plate\tTrip request time\tTrip drop off time
+${t1}\t${badDriver}\tJAMAL\tCAMPBELL\t5179KZ\t1/22/2026 8:00\t1/22/2026 9:00
+${t2}\t52ff47da-ef48-41b8-93d5-80a09b85ce5b\tKENNY\tRATTRAY\t9042PX\t1/22/2026 10:00\t1/22/2026 11:00`;
+    const payments = `transaction UUID\tDriver UUID\tTrip UUID\tPaid to you:Trip balance:Refunds:Toll
+x\t${badDriver}\t${t1}\t370
+y\t52ff47da-ef48-41b8-93d5-80a09b85ce5b\t${t2}\t370`;
+    const out = uber({ payments, tripActivity }, ctx);
+    expect(out.problems).toContainEqual({
+      row: 2, reason: `Driver not found: ${badDriver}`, code: 'unknown_driver', value: badDriver, name: 'JAMAL CAMPBELL',
+    });
+    expect(out.problems).toContainEqual({ row: 3, reason: 'Vehicle not found: 9042PX', code: 'unknown_plate', value: '9042PX' });
+    expect(out.problems.every((p) => p.row > 0)).toBe(true);
+  });
 });

@@ -19,6 +19,8 @@ type VehicleRow = {
   model?: string;
   plate?: string;
   plateAliases?: string[];
+  /** The full car record. Saving a car replaces the whole record, so it is sent back whole. */
+  raw: Record<string, unknown>;
 };
 
 export function TollV2WhichCarDialog({
@@ -55,6 +57,7 @@ export function TollV2WhichCarDialog({
             : Array.isArray(v.plate_aliases)
               ? (v.plate_aliases as string[])
               : [],
+          raw: v,
         }));
         setVehicles(rows.filter((v) => v.id));
       })
@@ -69,10 +72,8 @@ export function TollV2WhichCarDialog({
     const aliases = new Set([...(vehicle.plateAliases ?? []).map(normalizePlateAlias), filePlate]);
     setBusy(true);
     try {
-      await api.saveVehicle({
-        id: vehicle.id,
-        plateAliases: [...aliases],
-      });
+      // Only the extra plate is added; everything else on the car is kept as it is.
+      await api.saveVehicle(vehicleWithPlateAliases(vehicle.raw, vehicle.id, [...aliases]));
       toast.success('Plate saved — upload the file again to read these rows');
       onSaved();
       onOpenChange(false);
@@ -138,4 +139,13 @@ export function TollV2WhichCarDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+/** The car record to save: the whole record as loaded, with only the extra plates set. */
+export function vehicleWithPlateAliases(
+  raw: Record<string, unknown>,
+  id: string,
+  aliases: string[],
+): Record<string, unknown> {
+  return { ...raw, id, plateAliases: aliases };
 }

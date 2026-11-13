@@ -62,6 +62,11 @@ async function refuseFrozenImportWeek(
   return c.json({ error: "PERIOD_FROZEN", message: "Reopen the week first" }, 409);
 }
 
+/** The fleet.import_batches row id for a batch named either "<id>" or "batch:<id>". */
+export function batchRowId(name: string): string {
+  return name.startsWith("batch:") ? name.slice("batch:".length) : name;
+}
+
 /** Queue a desk publish for every existing week run (any line) of these weeks. Never fails the upload. */
 async function queueDeskRefresh(orgId: string, weekKeys: string[]): Promise<void> {
   const weeks = [...new Set(weekKeys.map((w) => String(w).slice(0, 10)))].filter((w) => /^\d{4}-\d{2}-\d{2}$/.test(w));
@@ -1141,7 +1146,8 @@ export function registerReconImportRoutes(app: Hono) {
               ? `uber:${orgId}:${coverageStart}:${coverageEnd}`
               : null)
             : null);
-        const supersedes = body.supersedes ? String(body.supersedes) : null;
+        // P3-R4: `supersedes` is a foreign key to fleet.import_batches.id — never the key-value name "batch:<id>".
+        const supersedes = body.supersedes ? batchRowId(String(body.supersedes)) : null;
         // Rev 25: work the weeks out when the screen sends none (none does).
         const weekKeys = Array.isArray(body.weekKeys) && body.weekKeys.length > 0
           ? body.weekKeys.map(String)
@@ -1168,7 +1174,7 @@ export function registerReconImportRoutes(app: Hono) {
                 "",
             );
             if (!peerId || peerId === batchId) continue;
-            if (!effectiveSupersedes) effectiveSupersedes = peerId;
+            if (!effectiveSupersedes) effectiveSupersedes = String((peer as { id?: string }).id || batchRowId(peerId));
             const peerKey = peerId.startsWith("batch:") ? peerId : `batch:${peerId}`;
             const peerBatch = await kv.get(peerKey);
             if (peerBatch) {

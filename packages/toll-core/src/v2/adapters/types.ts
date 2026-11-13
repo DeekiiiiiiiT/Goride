@@ -1,6 +1,12 @@
 export interface AdapterProblem {
   row: number;
   reason: string;
+  /** Rows a person can fix in Step 1: "Fix driver" (unknown_driver) / "Which car?" (unknown_plate). */
+  code?: 'unknown_driver' | 'unknown_plate';
+  /** The file's driver id (Uber UUID) or the plate as written. */
+  value?: string;
+  /** The driver's name as the file gives it. */
+  name?: string;
 }
 
 export interface TagStatementChargeRow {

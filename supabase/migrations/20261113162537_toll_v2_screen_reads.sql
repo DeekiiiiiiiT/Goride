@@ -179,6 +179,11 @@ REVOKE ALL ON FUNCTION toll_system.import_batch(uuid, text, jsonb, uuid, text) F
 ALTER TABLE fleet.vehicles ADD COLUMN IF NOT EXISTS plate_aliases text[] NOT NULL DEFAULT '{}'::text[];
 COMMENT ON COLUMN fleet.vehicles.plate_aliases IS
   'Other plates this car appears under on platform files (normalized, no spaces). Set from Week Reconciliation "Which car is this?".';
+-- P3-R4: every car save writes plate_aliases through this wrapper, so it must expose the new column
+-- (same refresh as 20261106131700); without it every Fleet car save fails once fleet-core is deployed.
+CREATE OR REPLACE VIEW public.fleet_vehicles AS
+  SELECT * FROM fleet.vehicles;
+ALTER VIEW public.fleet_vehicles SET (security_invoker = true);
 
 -- 4. Helpers -----------------------------------------------------------------------------------------------------
 -- What undo_decision needs for one decision: its id and the version of every charge and payback it touched.

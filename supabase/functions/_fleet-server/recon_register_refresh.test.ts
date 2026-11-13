@@ -26,3 +26,13 @@ Deno.test("the refresh uses the calculator's queue and never fails the upload", 
   assert(fn.includes('rpc("recon_enqueue_week_desk"'), "uses recon_enqueue_week_desk");
   assert(fn.includes("catch (e)"), "errors are caught, never thrown to the upload");
 });
+
+Deno.test("a replaced batch is linked by its row id, never the key-value name (supersedes is a foreign key)", () => {
+  const start = source.indexOf('"/make-server-37f42386/recon/imports/:id/register"');
+  const block = source.slice(start);
+  assert(block.includes("batchRowId(String(body.supersedes))"), "the screen's supersedes is turned into a row id");
+  assert(block.includes("effectiveSupersedes = String((peer as { id?: string }).id || batchRowId(peerId))"),
+    "a live peer is linked by its row id");
+  const fn = source.slice(source.indexOf("export function batchRowId"), source.indexOf("/** Queue a desk publish"));
+  assert(fn.includes('name.startsWith("batch:")'), "batchRowId strips the key-value prefix");
+});
