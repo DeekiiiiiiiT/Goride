@@ -1264,7 +1264,6 @@ async function syncOpenPeriodsToStatementsAfterSeal(
   return { preRebuildTollDriftCount, rebuilt, failedDriverIds };
 }
 
-/** True when any open driver still has missing/draft/stale-zero toll seal. */
 /**
  * H-1: Pure read preview — does NOT seal lanes or write recon drifts.
  * Use {@link prepareWeekClose} before close when lanes need sealing.
