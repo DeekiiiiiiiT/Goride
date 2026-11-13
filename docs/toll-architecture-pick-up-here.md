@@ -108,3 +108,6 @@
 - Test-copy setup: `docs/toll-build/p3r4-testcopy-setup.sql`.
 - **Next:** commit the toll files; the four left-over click-through items (audit "Still to do" 3); `/code-review`; live SQL; deploy.
 - **Phase 4 note:** Reopen tolls leaves Week Recon step 3 "Complete" (recon server doesn't read the v2 seal).
+
+## 13 Nov (end of day) — START HERE NEXT
+Everything still to do is in **`docs/toll-phase3-screens-audit.md` (Rev 5)**: code review → live SQL for `20261113162537` → deploy (`fleet-core` + `fleet-toll` + Fleet site) → owner picks the first v2 company. Last commit `9892fe11` (branch `parts-auto-match`, not pushed). Owner gave full permission for these steps.
