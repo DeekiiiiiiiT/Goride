@@ -25,13 +25,25 @@
     "./unlinkedShortfallEligibility": "./src/unlinkedShortfallEligibility.ts",
     "./tollSpend": "./src/tollSpend.ts",
     "./tollPeriodReadiness": "./src/tollPeriodReadiness.ts",
-    "./v2/weekResultV1": "./src/v2/weekResultV1.ts"
+    "./v2/weekResultV1": "./src/v2/weekResultV1.ts",
+    "./v2/adapters": "./src/v2/adapters/index.ts",
+    "./v2/adapters/common": "./src/v2/adapters/common.ts",
+    "./v2/adapters/types": "./src/v2/adapters/types.ts",
+    "./v2/adapters/tagStatement": "./src/v2/adapters/tagStatement.ts",
+    "./v2/adapters/topupProvider": "./src/v2/adapters/topupProvider.ts",
+    "./v2/adapters/uber": "./src/v2/adapters/uber.ts",
+    "./v2/adapters/indrive": "./src/v2/adapters/indrive.ts",
+    "./v2/adapters/driverCashReceipt": "./src/v2/adapters/driverCashReceipt.ts"
   },
 
   "scripts": {
     "test": "vitest run"
   },
+  "dependencies": {
+    "papaparse": "*"
+  },
   "devDependencies": {
+    "@types/papaparse": "^5.5.2",
     "vitest": "^3.2.4"
   }
 }

@@ -1,0 +1,3 @@
+Tag ID,Transaction ID,Date & Time,Topup Amount,Top up type,Payment Status
+001234,tx-ok-1,15/03/2024 12:00 pm,1000.00,Card,Success
+001234,tx-fail-1,15/03/2024 01:00 pm,500.00,Card,Failure

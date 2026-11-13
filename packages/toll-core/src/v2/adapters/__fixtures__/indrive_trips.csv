@@ -1,0 +1,3 @@
+id,driverId,vehicleId,requestTime,dropoffTime,paymentMethod,tollCharges
+trip-ind-1,driver-a,vehicle-a,20/06/2024 14:30,20/06/2024 15:10,card,4.50
+trip-ind-2,driver-a,vehicle-a,21/06/2024 08:00,21/06/2024 08:45,,0
