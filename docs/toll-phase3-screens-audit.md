@@ -11,11 +11,11 @@
 
 ## Still to do, in order
 1. ~~`/code-review`~~ **DONE 13 Nov (Rev 6):** 10 findings, all real, all fixed (take-back sends its amount + only same-amount paybacks offered; take-back reference locked + "recorded" check matches platform; take-backs card on any unsealed week; empty state counts paybacks/kept/pairs/blockers; receipts blocker label; Step 1 normal outcomes not "Problem"; failed v2 switch read → old path; step-3 auto-complete tries once; receipt amount fixed before the check; car's own plate beats aliases). `pnpm test:toll` green from reset, Fleet recon vitest 79/79.
-2. **Live SQL file** for `supabase/migrations/20261113162537_toll_v2_screen_reads.sql` (all-or-nothing, with its logbook line). It was edited after commit `ca100929` (report amounts, duplicate decider, `public.fleet_vehicles` view refresh for `plate_aliases`) — build the file from the current version, prove it on a local copy (rebuild without it, apply, all toll SQL tests pass), then the owner runs it (the Supabase tool wasn't connected this session).
-3. **Deploy** (after the live SQL): push to `main`; edge **`fleet-core`** and **`fleet-toll`**; Fleet site. Order matters: the SQL first — `fleet-core` writes `plate_aliases` on every car save and needs the view column.
-4. **Take-back on screen** (the three week cases). Not checkable until a v2 company's open toll week has ended (Week Recon only opens ended weeks). Money rules already covered by `toll_v2_carry_forward.sql` + step tests.
-5. **Delivery week page** with v2: its readiness check is a Rush function the test copy doesn't run; server side already reads step 3 complete. Check on live or with Rush functions served.
-6. **First company on v2** — owner decides when and which fleet (Phase 3 exit, `docs/toll-architecture.md` Part D).
+2. ~~Live SQL~~ **DONE 13 Nov:** owner ran `docs/toll-build/toll_v2_phase3_LIVE_apply.sql`; verify row all true (logbook 1, table, view column, 3 reads).
+3. ~~Deploy~~ **DONE 13 Nov:** `9faec2af` pushed to `main`; GitHub deployed fleet-toll + fleet-core (+ fleet-fuel/ops/claims/pay, evidence-cleanup), smoke passed; Vercel hook fired for roam-fleet. (Claude can't deploy by hand — auto-mode blocks production deploys; the push route does it.)
+4. ~~Take-back / Delivery week on-screen checks~~ **DROPPED 13 Nov** by the owner: checked in normal use.
+5. **Switch the owner's fleet on:** owner runs `docs/toll-build/tolls_v2_switch_ON.sql` (undo: `..._OFF.sql`). Owner is the only Fleet company.
+6. **Remove the old toll system** (owner, 13 Nov: "rip it out completely"). Own job after the switch: map old screens / routes / KV / tables, delete, keep posted ledger money. No more work on "companies not on v2".
 
 ## Known, not Phase 3 (leave unless the owner asks)
 - **Phase 4:** Reopen tolls leaves Week Recon step 3 "Complete" until the week refreshes; driver pay stays blocked until re-sealed.
