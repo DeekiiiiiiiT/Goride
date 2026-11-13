@@ -38,7 +38,6 @@ interface RecordCounts {
   learntLocations: number | null;
   tollTags: number | null;
   tollPlazas: number | null;
-  tollTransactions: number | null;
   transactions: number | null;
   claims: number | null;
   equipment: number | null;
@@ -67,7 +66,6 @@ const CATEGORY_SEARCH_TERMS: Record<string, string> = {
   learntLocations: "learnt locations unverified stations addresses source delete remove purge",
   tollTags: "toll tags inventory numbers providers statuses vehicle assignments ezpass delete remove purge",
   tollPlazas: "toll plazas highways gps coordinates rates locations database delete remove purge",
-  tollTransactions: "toll transactions usage charges deductions delete remove purge",
   transactions: "financial transactions money fare payouts fuel charges tolls adjustments payments billing delete remove purge",
   claims: "claims disputes losses resolution history claimable deductions delete remove purge",
   equipment: "equipment phones mounts cameras accessories assignments devices delete remove purge",
@@ -88,7 +86,7 @@ const DELETE_GROUP_CARDS: Record<string, string[]> = {
   'drivers': ['drivers', 'driverMetrics'],
   'vehicles': ['vehicles', 'vehicleMetrics'],
   'fuel': ['fuel', 'fuelCards'],
-  'toll': ['tollTags', 'tollPlazas', 'tollTransactions'],
+  'toll': ['tollTags', 'tollPlazas'],
   'finance': ['transactions', 'claims', 'equipment', 'inventory'],
   'maintenance': ['service', 'odometer', 'checkins'],
   'importHistory': ['importHistory'],
@@ -214,21 +212,6 @@ const TOLL_PLAZA_COLUMNS: DeletePreviewColumn[] = [
     },
   },
   { key: 'rate', label: 'Rate', render: (v: any) => v != null ? `$${Number(v).toFixed(2)}` : '—' },
-];
-
-const TOLL_TXN_COLUMNS: DeletePreviewColumn[] = [
-  { key: 'date', label: 'Date', render: (val: any) => val ? new Date(val).toLocaleDateString() : '—' },
-  { key: 'type', label: 'Type', render: (v: any) => {
-    const t = String(v || '').toLowerCase().replace(/_/g, '-');
-    if (t === 'top-up' || t === 'topup') return 'Top-up';
-    if (t === 'usage') return 'Usage';
-    if (t === 'refund') return 'Refund';
-    return v || '—';
-  }},
-  { key: 'amount', label: 'Amount', render: (v: any) => v != null ? `$${Number(v).toFixed(2)}` : '—' },
-  { key: 'description', label: 'Description', render: (v: any) => v || '—' },
-  { key: 'driverName', label: 'Driver', render: (v: any) => v || '—' },
-  { key: 'batchName', label: 'Import file', render: (v: any) => v || '—' },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -452,101 +435,6 @@ async function fetchTollPlazas(_config: DeleteConfig) {
 // Shared helpers — Factory Reset (Phase 7)
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Prefer ledger row when both ledger + legacy transaction exist with same id. */
-function isLegacyTollCategory(item: { category?: string }): boolean {
-  const cat = (item.category || '').toLowerCase();
-  return cat.includes('toll') || cat.includes('top-up') || cat.includes('topup');
-}
-
-function mergeTollLedgerAndLegacyItems(
-  ledgerItemsRaw: any[],
-  legacyItemsRaw: any[],
-): any[] {
-  const ledgerItems = (ledgerItemsRaw || []).map((item: any) => ({
-    ...item,
-    description: item.description || item.location || item.plaza || '—',
-    type: item.type || 'usage',
-    _source: 'toll_ledger' as const,
-  }));
-  const ledgerIds = new Set(ledgerItems.map((i: any) => i.id).filter(Boolean));
-  const legacyItems = (legacyItemsRaw || [])
-    .filter((item: any) => isLegacyTollCategory(item))
-    .filter((item: any) => item.id && !ledgerIds.has(item.id))
-    .map((item: any) => ({
-      ...item,
-      type: item.type || item.category || 'usage',
-      _source: 'transaction' as const,
-    }));
-  return [...ledgerItems, ...legacyItems];
-}
-
-async function countTollTransactionsMerged(): Promise<number> {
-  const [ledger, legacy] = await Promise.all([
-    api.bulkDeletePreview({ prefix: 'toll_ledger:', fields: ['id'] }),
-    api.bulkDeletePreview({ prefix: 'transaction:', fields: ['id', 'category'] }),
-  ]);
-  const merged = mergeTollLedgerAndLegacyItems(ledger.items || [], legacy.items || []);
-  return merged.length;
-}
-
-async function fetchTollTransactions(config: DeleteConfig) {
-  // Toll Logs merges toll_ledger:* (SSOT) + leftover legacy transaction:* tolls.
-  // Delete Center must use the same sources or date filters look "empty" while
-  // the old card count (legacy only) still shows hundreds of rows.
-  const startDate = config.isAllTime ? '1970-01-01' : config.startDate;
-  const endDate = config.isAllTime ? '2100-01-01' : config.endDate;
-  const driverId = config.driverId && config.driverId !== '__all__' ? config.driverId : undefined;
-
-  const [ledgerRes, legacyRes] = await Promise.all([
-    api.bulkDeletePreview({
-      prefix: 'toll_ledger:',
-      startDate,
-      endDate,
-      dateField: 'date',
-      driverId,
-      fields: ['id', 'date', 'amount', 'description', 'location', 'plaza', 'driverName', 'type', 'batchName', 'vehiclePlate'],
-    }),
-    api.bulkDeletePreview({
-      prefix: 'transaction:',
-      startDate,
-      endDate,
-      dateField: 'date',
-      driverId,
-      fields: ['id', 'date', 'amount', 'description', 'driverName', 'category', 'batchName', 'type'],
-    }),
-  ]);
-
-  const merged = mergeTollLedgerAndLegacyItems(ledgerRes.items || [], legacyRes.items || []);
-
-  // Client-side date clamp — belt-and-suspenders if PostgREST JSON date ops miss a row
-  const inRange = (item: any) => {
-    if (config.isAllTime || !startDate || !endDate) return true;
-    const d = String(item.date || '').slice(0, 10);
-    if (!d) return false;
-    return d >= startDate && d <= endDate;
-  };
-
-  return merged.filter(inRange);
-}
-
-async function tollTxnDeleteItems(keys: string[]): Promise<number> {
-  // Mix of toll_ledger:* and transaction:* keys from the merged preview
-  const result = await api.bulkDeleteExecute({ keys, cleanupStorage: true });
-  const tollIds = keys
-    .map((k) => k.replace(/^toll_ledger:/, '').replace(/^transaction:/, ''))
-    .filter(Boolean);
-  const CHUNK = 80;
-  try {
-    for (let i = 0; i < tollIds.length; i += CHUNK) {
-      const chunk = tollIds.slice(i, i + CHUNK);
-      await api.deleteLedgerBySource({ sourceType: 'transaction', sourceIds: chunk });
-    }
-  } catch (ledgerErr) {
-    console.warn('[TollTxnDelete] Ledger cleanup failed (non-fatal):', ledgerErr);
-  }
-  return result.deletedCount;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
 // Shared helpers — Finance & Assets (Phase 6)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -727,7 +615,7 @@ function DeleteCenterInner() {
     trips: null, drivers: null, driverMetrics: null,
     vehicles: null, vehicleMetrics: null, fuel: null,
     fuelCards: null, stations: null, learntLocations: null,
-    tollTags: null, tollPlazas: null, tollTransactions: null,
+    tollTags: null, tollPlazas: null,
     transactions: null, claims: null, equipment: null,
     inventory: null, service: null, odometer: null, checkins: null,
   });
@@ -806,12 +694,6 @@ function DeleteCenterInner() {
     bulkCount('odometer', 'odometer_reading:');
     bulkCount('checkins', 'checkin:');
 
-    // Toll transactions: live ledger + leftover legacy tolls (same universe as Toll Logs)
-    safeCount('tollTransactions', async () => {
-      const total = await countTollTransactionsMerged();
-      return { total };
-    });
-
     return () => { cancelled = true; };
   }, []);
 
@@ -839,7 +721,6 @@ function DeleteCenterInner() {
           api.bulkDeletePreview({ prefix: 'checkin:', fields: ['id'] }).catch(() => null),
         ]);
         setPlazasUnavailable(tollPlazas == null);
-        const tollMergedCount = await countTollTransactionsMerged().catch(() => null);
         if (vehicles && typeof vehicles.truncated === 'boolean') {
           setVehiclesTruncated(vehicles.truncated);
         }
@@ -861,7 +742,6 @@ function DeleteCenterInner() {
           service: serviceResult ? (serviceResult.totalCount ?? serviceResult.items?.length ?? prev.service) : prev.service,
           odometer: odoResult ? (odoResult.totalCount ?? odoResult.items?.length ?? prev.odometer) : prev.odometer,
           checkins: checkinResult ? (checkinResult.totalCount ?? checkinResult.items?.length ?? prev.checkins) : prev.checkins,
-          tollTransactions: tollMergedCount != null ? tollMergedCount : prev.tollTransactions,
         }));
       } catch (e) {
         console.error('[DeleteCenter] count refresh failed', e);
@@ -1090,7 +970,6 @@ function DeleteCenterInner() {
       return renderCardGrid([
         { key: 'tollTags', title: 'Toll Tags', description: 'Delete toll tag inventory and assignments', icon: <Tag className="h-5 w-5" />, recordCount: counts.tollTags, modalId: 'deleteTollTags' },
         { key: 'tollPlazas', title: 'Toll Plazas', description: plazasUnavailable ? 'Plaza names unavailable. The rest of this page still works.' : 'Delete toll plaza database with GPS coordinates and rates', icon: <Building2 className="h-5 w-5" />, recordCount: counts.tollPlazas, modalId: 'deleteTollPlazas' },
-        { key: 'tollTransactions', title: 'Toll Transactions', description: 'Delete toll usage, top-up, and deduction records', icon: <CreditCard className="h-5 w-5" />, recordCount: counts.tollTransactions, modalId: 'deleteTollTransactions' },
       ]);
     }
 
@@ -1642,11 +1521,6 @@ function DeleteCenterInner() {
         title="Delete Toll Plazas" entityLabel="toll plazas" fetchItems={fetchTollPlazas} deleteItems={(keys) => genericBulkDelete(keys)}
         columns={TOLL_PLAZA_COLUMNS} showDateFilter={false} dangerThreshold={20}
         configNote="Deleting toll plazas removes the GPS coordinate database used for automatic toll detection." />
-
-      <DeleteFlowModal isOpen={activeModal === 'deleteTollTransactions'} onClose={() => setActiveModal(null)} onSuccess={handleDeleteSuccess}
-        title="Delete Toll Transactions" entityLabel="toll transactions" fetchItems={fetchTollTransactions} deleteItems={tollTxnDeleteItems}
-        columns={TOLL_TXN_COLUMNS} showDateFilter showDriverFilter dangerThreshold={100}
-        configNote="Lists the same toll data as Toll Logs (live toll ledger + any leftover legacy toll rows). Filter by date, uncheck what to keep, then delete." />
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {/* DELETE FLOW MODALS — Finance & Assets (Phase 6)                   */}

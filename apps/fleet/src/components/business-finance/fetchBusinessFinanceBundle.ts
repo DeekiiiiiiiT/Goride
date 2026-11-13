@@ -29,6 +29,7 @@ import type {
 import { round2, formatMoney } from './money';
 import type { ServiceLineScope } from '../../contexts/ServiceLineScopeContext';
 import { filterLedgerEventsByServiceLineScope } from '../../utils/filterLedgerByServiceLineScope';
+import { fetchTollV2Weeks } from '../fleet-financials/recon/tolls-v2/useTollV2Weeks';
 
 const fetchAllCanonical = fetchAllCanonicalEvents;
 
@@ -249,9 +250,9 @@ export async function fetchBusinessFinanceBundle(
 
   let tollVarianceFlags = 0;
   try {
-    const periodsRes = await api.getTollReconciliationPeriods();
-    const missing = Number((periodsRes as any)?.totals?.missingCanonicalChargeCount) || 0;
-    tollVarianceFlags = missing > 0 ? missing : 0;
+    // New toll system: the failed checks in last night's toll run (Toll Health).
+    const weeks = await fetchTollV2Weeks();
+    tollVarianceFlags = (weeks.nightly?.checks ?? []).filter((c) => !c.ok).length;
   } catch {
     incomplete.push('Toll health');
   }

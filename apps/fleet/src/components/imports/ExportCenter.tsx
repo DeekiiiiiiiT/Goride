@@ -7,7 +7,6 @@ import {
   fetchAllVehicles, fetchAllVehicleMetrics, fetchAllTransactions,
   fetchAllTollTags, fetchAllTollPlazas, fetchAllStations,
   fetchAllClaims, fetchAllEquipment, fetchAllInventory,
-  fetchAllTollTransactions,
   exportFetchAllFuelLogs, exportFetchAllServiceLogs,
   exportFetchAllOdometerReadings, exportFetchAllCheckIns,
   BACKUP_CATEGORIES,
@@ -19,7 +18,6 @@ import {
   TOLL_TAG_CSV_COLUMNS, TOLL_PLAZA_CSV_COLUMNS, STATION_CSV_COLUMNS,
   CLAIM_CSV_COLUMNS, EQUIPMENT_CSV_COLUMNS, INVENTORY_CSV_COLUMNS,
   FUEL_CSV_COLUMNS, SERVICE_CSV_COLUMNS, ODOMETER_CSV_COLUMNS, CHECKIN_CSV_COLUMNS,
-  TOLL_TRANSACTION_CSV_COLUMNS,
 } from '../../types/csv-schemas';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
@@ -60,7 +58,6 @@ interface RecordCounts {
   claims: number | null;
   equipment: number | null;
   inventory: number | null;
-  tollTransactions: number | null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -83,7 +80,6 @@ const CATEGORY_SEARCH_TERMS: Record<string, string> = {
   checkins: "vehicle handover handovers checkins submissions odometer vehicle condition inspection",
   tollTags: "toll tags inventory numbers providers statuses vehicle assignments ezpass",
   tollPlazas: "toll plazas highways gps coordinates rates locations database",
-  tollTransactions: "toll transactions reconciliation matched unmatched refunds charges amounts vehicles drivers export",
   stations: "gas stations fuel brands coordinates plus codes locations database verified",
   claims: "claims disputes losses resolution history claimable deductions",
   equipment: "equipment phones mounts cameras accessories assignments devices",
@@ -100,7 +96,7 @@ const EXPORT_GROUP_CARDS: Record<string, string[]> = {
   'drivers': ['drivers', 'driverMetrics'],
   'vehicles': ['vehicles', 'vehicleMetrics'],
   'fuel': ['fuel'],
-  'toll': ['tollTags', 'tollPlazas', 'tollTransactions'],
+  'toll': ['tollTags', 'tollPlazas'],
   'finance': ['transactions', 'claims', 'equipment', 'inventory'],
   'maintenance': ['service', 'odometer', 'checkins'],
   'system': ['backup'],
@@ -192,7 +188,6 @@ export function ExportCenter() {
     fuel: null, service: null, odometer: null, checkins: null,
     tollTags: null, tollPlazas: null, stations: null,
     claims: null, equipment: null, inventory: null,
-    tollTransactions: null,
   });
   const [vehiclesTruncated, setVehiclesTruncated] = useState(false);
   const [plazasUnavailable, setPlazasUnavailable] = useState(false);
@@ -278,7 +273,6 @@ export function ExportCenter() {
     safeCount('claims', () => api.getClaims());
     safeCount('equipment', async () => []);
     safeCount('inventory', async () => []);
-    safeCount('tollTransactions', () => api.getTollTransactionsExport());
 
     (async () => {
       try {
@@ -386,9 +380,6 @@ export function ExportCenter() {
   const exportInventory = useCallback((fmt?: ExportFormat) =>
     handleGenericExport('inventory', fetchAllInventory, INVENTORY_CSV_COLUMNS, 'inventory', undefined, fmt), []);
 
-  const exportTollTransactions = useCallback((fmt?: ExportFormat) =>
-    handleGenericExport('toll transactions', fetchAllTollTransactions, TOLL_TRANSACTION_CSV_COLUMNS, 'toll_transactions', undefined, fmt), []);
-
   // ─── Export All ────────────────────────────────────────────────────────
 
   const handleExportAll = useCallback(async () => {
@@ -417,7 +408,6 @@ export function ExportCenter() {
           { label: 'claims', fn: () => handleGenericExport('claims', fetchAllClaims, CLAIM_CSV_COLUMNS, 'claims', undefined, 'csv', { nested: true }) },
           { label: 'equipment', fn: () => handleGenericExport('equipment', fetchAllEquipment, EQUIPMENT_CSV_COLUMNS, 'equipment', undefined, 'csv', { nested: true }) },
           { label: 'inventory', fn: () => handleGenericExport('inventory', fetchAllInventory, INVENTORY_CSV_COLUMNS, 'inventory', undefined, 'csv', { nested: true }) },
-          { label: 'toll transactions', fn: () => handleGenericExport('toll transactions', fetchAllTollTransactions, TOLL_TRANSACTION_CSV_COLUMNS, 'toll_transactions', undefined, 'csv', { nested: true }) },
         ];
 
         let totalRecords = 0;
@@ -833,18 +823,6 @@ export function ExportCenter() {
             />
             )}
 
-            {/* ═══ 18. TOLL TRANSACTIONS ═══ */}
-            {isInActiveGroup('tollTransactions') && matchesSearch(CATEGORY_SEARCH_TERMS.tollTransactions) && (
-            <ExportCategoryCard
-              title="Toll Transactions"
-              description="All toll transactions with reconciliation status, matched trips, confidence scores, and amounts."
-              icon={<CreditCard className="h-5 w-5" />}
-              recordCount={counts.tollTransactions}
-              badge="Reconciliation"
-              onExport={exportTollTransactions}
-              showFormatToggle
-            />
-            )}
           </div>
 
           {/* No results state */}

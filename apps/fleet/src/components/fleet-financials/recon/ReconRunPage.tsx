@@ -21,7 +21,6 @@ import { ReconSettlementStep } from './ReconSettlementStep';
 import { ReconCloseStep } from './ReconCloseStep';
 import { ReconStepBoundary } from './ReconStepBoundary';
 import { PastWeeksReturnLink } from '../settlements/past-weeks/PastWeeksReturnLink';
-import { TollsCheckFailedBanner, TollsLockedBanner } from './TollsLockedBanner';
 import { ReconCalculatorBanner } from './ReconCalculatorBanner';
 import { ReconPendingApprovalBanner } from './ReconPendingApprovalBanner';
 import { approvalsForWeek, useReconApprovals } from './useReconApprovals';
@@ -33,14 +32,11 @@ import { hasAnyJwtRole } from '@roam/auth-client';
 import { Button } from '../../ui/button';
 import { cn } from '../../ui/utils';
 import { toast } from 'sonner';
-import { useTollV2Desk, useTollV2Enabled } from './tolls-v2/useTollV2Desk';
-import { resolveTollsStepVariant, tollsStepQuestion } from './tolls-v2/resolveTollsStep';
+import { useTollV2Desk } from './tolls-v2/useTollV2Desk';
+import { resolveTollsStepVariant, TOLLS_STEP_QUESTION } from './tolls-v2/resolveTollsStep';
 
 const FuelManagementLazy = lazy(() =>
   import('../../../pages/FuelManagement').then((m) => ({ default: m.FuelManagement })),
-);
-const TollReconciliationLazy = lazy(() =>
-  import('../../../pages/TollReconciliation').then((m) => ({ default: m.TollReconciliation })),
 );
 const ReconTollsV2StepLazy = lazy(() =>
   import('./tolls-v2/ReconTollsV2Step').then((m) => ({ default: m.ReconTollsV2Step })),
@@ -152,20 +148,10 @@ export function ReconRunPage({
   const [activeStep, setActiveStep] = useState<RunStepId>(() => stepFromQuery());
   const queryClient = useQueryClient();
   const runQueryKey = useMemo(() => ['recon-run', line, weekKey] as const, [line, weekKey]);
-  const tollsV2Query = useTollV2Enabled();
-  const tollsV2On = tollsV2Query.data === true;
-  const tollsStepVariant = resolveTollsStepVariant(tollsV2On, line);
-  const tollV2DeskQuery = useTollV2Desk(weekKey, tollsV2On);
-  const sealQuery = useQuery({
-    queryKey: ['toll-period-seal', line, weekKey],
-    queryFn: () => api.getTollPeriodSeal(weekKey, line),
-    enabled: Boolean(weekKey) && !tollsV2On,
-    retry: false,
-  });
-  const tollsSealedV1 = sealQuery.isSuccess && sealQuery.data?.sealed === true;
-  const tollsSealedV2 = tollV2DeskQuery.data?.sealed === true;
-  const tollsSealed = tollsV2On ? tollsSealedV2 : tollsSealedV1;
-  const tollsCheckFailed = !tollsV2On && sealQuery.isError;
+  // Tolls: the new toll system is the only one (the old one is removed: docs/toll-old-system-removal-audit.md).
+  const tollsStepVariant = resolveTollsStepVariant(line);
+  const tollV2DeskQuery = useTollV2Desk(weekKey, true);
+  const tollsSealed = tollV2DeskQuery.data?.sealed === true;
   const [advancing, setAdvancing] = useState(false);
   /** Right-column slot a step panel can fill with its own totals card (Stitch). */
   const [stepSummaryEl, setStepSummaryEl] = useState<HTMLDivElement | null>(null);
@@ -494,7 +480,7 @@ export function ReconRunPage({
   // (P3-R4 check: 409 right after the seal) is retried the next time the week is opened.
   useEffect(() => {
     const run = runQuery.data;
-    if (!run || !tollsV2On) return;
+    if (!run) return;
     if (!tollV2DeskQuery.data?.sealed) return;
     const tollsSt = stepStatus(run, 'tolls');
     if (tollsSt === 'complete' || tollsSt === 'locked') return;
@@ -520,7 +506,6 @@ export function ReconRunPage({
     line,
     runQuery.data,
     tollV2DeskQuery.data?.sealed,
-    tollsV2On,
     weekKey,
   ]);
 
@@ -645,9 +630,7 @@ export function ReconRunPage({
               const tollsLocked = stepId === 'tolls' && tollsSealed && status !== 'locked';
               const caption = tollsLocked
                 ? 'Tolls locked'
-                : stepId === 'tolls' && tollsCheckFailed && status !== 'locked'
-                  ? "Couldn't check tolls"
-                  : weekClosed
+                : weekClosed
                   ? 'Closed'
                   : stepRailCaption(status, lockedBy);
               return (
@@ -710,7 +693,7 @@ export function ReconRunPage({
             </div>
             <h2 className="text-[28px] font-semibold tracking-tight text-[#0b1c30]">{RECON_STEP_LABELS[activeStep]}</h2>
             <p className="text-base text-[#47464c]">
-              {activeStep === 'tolls' ? tollsStepQuestion(tollsV2On) : STEP_QUESTION[activeStep]}
+              {activeStep === 'tolls' ? TOLLS_STEP_QUESTION : STEP_QUESTION[activeStep]}
             </p>
             {line === 'rush_delivery' ? <ReconCodRemittanceBanner onOpenRemittance={onOpenRemittance} /> : null}
             {statusQuery.data?.line ? (
@@ -793,34 +776,17 @@ export function ReconRunPage({
 
               {activeStep === 'tolls' ? (
                 <>
-                  {tollsCheckFailed ? (
-                    <TollsCheckFailedBanner busy={sealQuery.isFetching} onRetry={() => { void sealQuery.refetch(); }} />
-                  ) : null}
-                  {!tollsV2On && tollsSealed ? (
-                    <TollsLockedBanner weekKey={weekKey} serviceLine={line} onReopened={() => { void sealQuery.refetch(); }} />
-                  ) : null}
                   <Suspense fallback={<Loader2 className="mx-auto h-6 w-6 animate-spin" />}>
                     {tollsStepVariant === 'delivery' ? (
                       <ReconTollsV2DeliveryCardLazy
                         weekKey={weekKey}
                         onGoToRideshare={() => onSwitchToRideshare?.()}
                       />
-                    ) : tollsStepVariant === 'v2' ? (
+                    ) : (
                       <ReconTollsV2StepLazy
                         weekKey={weekKey}
                         summaryTarget={stepSummaryEl}
                         onGoToTagAccount={() => setStep('tag_account')}
-                      />
-                    ) : (
-                      <TollReconciliationLazy
-                        key={tollsSealed ? 'tolls-sealed' : 'tolls-open'}
-                        embedded
-                        hideLanding
-                        initialWeekStart={weekKey}
-                        serviceLine={line}
-                        onPeriodFinished={handleTollsPeriodFinished}
-                        deskSections
-                        summaryTarget={stepSummaryEl}
                       />
                     )}
                   </Suspense>

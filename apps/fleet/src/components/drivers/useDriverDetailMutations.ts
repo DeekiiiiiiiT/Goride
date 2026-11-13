@@ -27,7 +27,6 @@ export type UseDriverDetailMutationsArgs = {
   driverName: string;
   driver?: any;
   transactions: FinancialTransaction[];
-  rqTollLogs: unknown[];
   allTrips: Trip[];
   txQueryKey: QueryKey;
   queryClient: QueryClient;
@@ -51,7 +50,6 @@ export function useDriverDetailMutations({
   driverName,
   driver,
   transactions,
-  rqTollLogs,
   allTrips,
   txQueryKey,
   queryClient,
@@ -206,8 +204,7 @@ export function useDriverDetailMutations({
     if (!transactionToDelete) return;
 
     const deletedTx = transactions.find((t) => t.id === transactionToDelete);
-    const tollIds = new Set((rqTollLogs || []).map((t: any) => t?.id).filter(Boolean));
-    const originalRqSlice = transactions.filter((t) => t?.id && !tollIds.has(t.id));
+    const originalRqSlice = transactions.filter((t) => t?.id);
     patchTransactionsCache((prev) => prev.filter((t) => t.id !== transactionToDelete));
 
     try {

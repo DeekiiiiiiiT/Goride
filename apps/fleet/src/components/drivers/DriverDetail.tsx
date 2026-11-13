@@ -121,7 +121,6 @@ export function DriverDetail({
     driverName,
     driver,
     transactions: data.transactions,
-    rqTollLogs: data.rqTollLogs as any[],
     allTrips: data.allTrips,
     txQueryKey: data.txQueryKey,
     queryClient,

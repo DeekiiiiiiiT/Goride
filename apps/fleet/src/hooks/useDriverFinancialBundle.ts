@@ -103,16 +103,6 @@ export function useDriverFinancialBundle(
     staleTime: DRIVER_FINANCIAL_STALE_MS,
   });
 
-  const disputeQuery = useQuery({
-    queryKey: ['disputeRefunds', expandedIds],
-    queryFn: () =>
-      expandedIds.length === 0
-        ? Promise.resolve({ data: [] as DisputeRefund[], total: 0 })
-        : api.getDisputeRefunds({ driverIds: expandedIds }),
-    staleTime: DRIVER_FINANCIAL_STALE_MS,
-    enabled: enabled && expandedIds.length > 0,
-  });
-
   const finalizedReports = useMemo(() => {
     const all = finalizedQuery.data || [];
     const nativeSet = new Set(nativeIds);
@@ -128,12 +118,11 @@ export function useDriverFinancialBundle(
 
   const isCoreLoading =
     enabled &&
-    (vehiclesQuery.isLoading || finalizedQuery.isLoading || disputeQuery.isLoading);
+    (vehiclesQuery.isLoading || finalizedQuery.isLoading);
 
   const isCoreError =
     vehiclesQuery.isError ||
-    finalizedQuery.isError ||
-    disputeQuery.isError;
+    finalizedQuery.isError;
 
   return {
     driverId,
@@ -143,7 +132,7 @@ export function useDriverFinancialBundle(
     vehicles: driverVehicles,
     vehicleIds,
     finalizedReports,
-    disputeRefunds: disputeQuery.data?.data || [],
+    disputeRefunds: [] as DisputeRefund[], // the old dispute-refund store is gone with the old toll system
     unifiedToll: true,
     isCoreLoading,
     isCoreError,

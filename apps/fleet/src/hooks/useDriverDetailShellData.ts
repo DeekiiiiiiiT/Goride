@@ -20,7 +20,6 @@ import {
   useDriverTransactions,
   mergeDriverMoneyTransactions,
 } from './useDriverTransactions';
-import { useDriverTollLogs } from './useDriverTollLogs';
 import { useDriverDetailWalletPayments } from './useDriverDetailWalletPayments';
 import { useDriverWalletDeskTotals } from './useDriverWalletDeskTotals';
 import { useDriverFinancialBundle } from './useDriverFinancialBundle';
@@ -204,13 +203,11 @@ export function useDriverDetailShellData({
     endDate: txFetchRange.endDate,
     maxRows: txFetchRange.maxRows,
   });
-  const { tollLogs: rqTollLogs } = useDriverTollLogs(moneyExpandedIds, {
-    enabled: moneyTabActive,
-  });
 
   const transactions = React.useMemo(
-    () => mergeDriverMoneyTransactions(rqTransactions, rqTollLogs as FinancialTransaction[]),
-    [rqTransactions, rqTollLogs],
+    // The old toll log rows are gone with the old toll system; toll money reaches drivers through settlement.
+    () => mergeDriverMoneyTransactions(rqTransactions, []),
+    [rqTransactions],
   );
 
   const walletPayments = useDriverDetailWalletPayments(transactions);
@@ -326,7 +323,6 @@ export function useDriverDetailShellData({
     setLedgerRefreshKey,
     allTrips,
     transactions,
-    rqTollLogs,
     txQueryKey,
     walletPayments,
     quotaConfig,

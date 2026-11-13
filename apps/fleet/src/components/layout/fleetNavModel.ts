@@ -21,11 +21,8 @@ export const FUEL_PAGE_IDS = [
 ] as const;
 
 export const TOLL_PAGE_IDS = [
-  'toll-logs',
   'toll-tags',
   'tag-inventory',
-  'toll-rate-drift',
-  'toll-low-balance',
 ] as const;
 
 export function fleetOpsActive(page: string) {
@@ -128,11 +125,7 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
   const canSeeTollDesk =
     isModuleEnabled('tollManagement') &&
     isSidebarItemVisible('toll-management', businessType) &&
-    (canView('toll-logs') ||
-      canView('toll-tags') ||
-      canView('tag-inventory') ||
-      canView('toll-rate-drift') ||
-      canView('toll-low-balance'));
+    (canView('toll-tags') || canView('tag-inventory'));
   const canSeeBusinessFinanceHome =
     isModuleEnabled('businessFinance') && canView('business-finance');
   const canSeeBusinessFinanceNav =
@@ -179,7 +172,6 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
     (hasSharedOps &&
       (canView('fuel-analytics') ||
         canView('fuel-overview') ||
-        canView('toll-analytics') ||
         canView('vehicle-analytics'))) ||
     (rideshareVisible &&
       (canView('driver-analytics') || canView('drivers') || canView('trips'))) ||
@@ -219,13 +211,7 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
   ]);
 
   const tollItems = compactLeaves([
-    leaf(canView('toll-logs'), { id: 'toll-logs', label: 'Toll Logs' }),
     leaf(canView('tag-inventory'), { id: 'tag-inventory', label: 'Tag Inventory' }),
-    leaf(canView('toll-low-balance'), {
-      id: 'toll-low-balance',
-      label: 'Low Balance Queue',
-    }),
-    leaf(canView('toll-rate-drift'), { id: 'toll-rate-drift', label: 'Rate Drift' }),
   ]);
 
   const driverItems = compactLeaves([
@@ -321,17 +307,6 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
         id: 'fuel-analytics',
         label: 'Fuel Analytics',
         activeIds: ['fuel-management', 'fuel-overview'],
-        showNewBadge: true,
-      },
-    ),
-    leaf(
-      hasSharedOps &&
-        isModuleEnabled('tollManagement') &&
-        isSidebarItemVisible('toll-management', businessType) &&
-        canView('toll-analytics'),
-      {
-        id: 'toll-analytics',
-        label: 'Toll Analytics',
         showNewBadge: true,
       },
     ),

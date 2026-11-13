@@ -408,12 +408,8 @@ export async function commitUberCashRefresh(
       (chunk) => api.importPaymentLedgerLines(chunk),
     );
   }
-  if ((merged.disputeRefunds || []).length > 0) {
-    await chunkedImport(
-      (merged.disputeRefunds || []).map((r) => ({ ...r, batchId })),
-      (chunk) => api.importDisputeRefunds(chunk),
-    );
-  }
+  // Uber support adjustments (toll paybacks and take-backs) are read by the new toll upload of the same files;
+  // the old dispute-refund store is gone (docs/toll-old-system-removal-audit.md C1).
 
   await api.patchImportBatch(batchId, { status: 'completed' });
 

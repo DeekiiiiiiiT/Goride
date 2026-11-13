@@ -17,12 +17,10 @@ import { DriverPayoutHistory } from './DriverPayoutHistory';
 import { SettlementSummaryView } from './SettlementSummaryView';
 import { useDriverFinancialBundle, type DriverFinancialBundle, type DriverLike } from '../../hooks/useDriverFinancialBundle';
 import { useDriverFinancialPeriods } from '../../hooks/useDriverFinancialPeriods';
-import { useDriverTollCharges } from '../../hooks/useDriverTollCharges';
 import { useDriverReconciliation } from '../../hooks/useDriverReconciliation';
 import type { PayoutPeriodRow } from '../../types/driverPayoutPeriod';
 import type { CashWeekData } from '../../utils/cashSettlementCalc';
 import { endOfWeek, format, startOfWeek } from 'date-fns';
-import { resolvePeriodTollCashWash } from '../../utils/periodTollCashSpend';
 import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
 import type { PeriodWeekOption } from '../../utils/periodWeekOptions';
 
@@ -101,34 +99,6 @@ export function FinancialSubTabs({
       (p) => String(p.periodAnchor || '').slice(0, 10) === anchor,
     ) || null;
   }, [sharedPeriodsQuery.data, weekBounds.from]);
-
-  // Driver toll disposition (charged / written-off / business / refunded /
-  // reconciled) — server-computed from toll_ledger for the Reconciliation tab.
-  // Cash wash for week scope prefers period SSOT (resolvePeriodTollCashWash).
-  const tollFrom = reconScope === 'week' ? format(weekBounds.from, 'yyyy-MM-dd') : undefined;
-  const tollTo = reconScope === 'week' ? format(weekBounds.to, 'yyyy-MM-dd') : undefined;
-  const { tollTotals } = useDriverTollCharges({
-    driverId,
-    from: tollFrom,
-    to: tollTo,
-  });
-
-  // Cash Wash is a new bucket that only appears once the unified settlement
-  // model is trusted — gate its display so the card grid doesn't change for
-  // fleets that haven't opted in yet.
-  const unifiedTollSettlementEnabled = financialBundle.unifiedToll;
-
-  // Prefer period cash wash when week scope matches shared period; else fall back
-  // to the disposition API cashWash bucket.
-  const periodCashWash = React.useMemo(() => {
-    if (reconScope !== 'week') return null;
-    const anchor = format(weekBounds.from, 'yyyy-MM-dd');
-    const period = (sharedPeriodsQuery.data || []).find(
-      (p) => String(p.periodAnchor || '').slice(0, 10) === anchor
-    );
-    if (!period) return null;
-    return Number(resolvePeriodTollCashWash(period) || 0);
-  }, [reconScope, weekBounds.from, sharedPeriodsQuery.data]);
 
   // Server reconciliation (GET /drivers/:id/reconciliation) — SSOT vs ledger nets for Financials window.
   const reconFrom = periodFrom ? format(periodFrom, 'yyyy-MM-dd') : undefined;
@@ -419,55 +389,6 @@ export function FinancialSubTabs({
         )}
 
         {/* Toll disposition — how this driver's tolls were resolved. */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              Toll Reconciliation
-              <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
-                {reconScope === 'week' ? 'Financials week' : 'All-time'}
-              </span>
-            </CardTitle>
-            <CardDescription className="text-xs text-slate-500">
-              How this driver's tolls were resolved by the admin
-              {reconScope === 'week'
-                ? ` (Mon–Sun of Financials period end: ${format(weekBounds.from, 'MMM d')} – ${format(weekBounds.to, 'MMM d')}).`
-                : ' across all time.'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {!tollTotals ? (
-              <div className="text-sm text-slate-400 py-4">Loading toll disposition…</div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {([
-                  { label: 'Charged to Driver', value: tollTotals.chargedToDriver, tone: 'text-rose-600', hint: 'Personal-use tolls billed to this driver.' },
-                  { label: 'Reconciled', value: tollTotals.reconciled, tone: 'text-emerald-600', hint: 'Matched to a trip (platform reimbursed).' },
-                  { label: 'Refunded', value: tollTotals.refunded, tone: 'text-emerald-600', hint: 'Refunded by the provider.' },
-                  { label: 'Business Expense', value: tollTotals.business, tone: 'text-slate-700', hint: 'Absorbed by the fleet as a business cost.' },
-                  { label: 'Written Off', value: tollTotals.writtenOff, tone: 'text-slate-700', hint: 'Written off as a loss.' },
-                  ...(unifiedTollSettlementEnabled
-                    ? [{
-                        label: 'Cash Wash',
-                        value: periodCashWash != null ? periodCashWash : Number(tollTotals?.cashWash || 0),
-                        tone: 'text-sky-600',
-                        hint: 'Cash toll, no resolution yet — nets against what the driver is owed, not a real loss.',
-                      }] as const
-                    : []),
-                  { label: 'Unresolved', value: tollTotals.unresolved, tone: 'text-amber-600', hint: 'Still pending reconciliation.' },
-                ] as const).map(item => (
-                  <div key={item.label} className="rounded-lg border border-slate-200 p-3">
-                    <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">{item.label}</p>
-                    <p className={`text-lg font-bold mt-1 ${item.tone}`}>
-                      {formatJMD(item.value, 2)}
-                    </p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">{item.hint}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

@@ -19,13 +19,11 @@ import {
 import { Textarea } from '../../ui/textarea';
 import { Label } from '../../ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../ui/tooltip';
-import { BulkImportTollTransactionsModal } from '../../vehicles/BulkImportTollTransactionsModal';
 import { CloseWeekUberReimportDialog } from '../CloseWeekUberReimportDialog';
 import { FuelCardSelfUploader } from './FuelCardSelfUploader';
 import { IndriveUploadDialog } from './IndriveUploadDialog';
 import { cn } from '../../ui/utils';
 import { api } from '../../../services/api';
-import { useTollV2Enabled } from './tolls-v2/useTollV2Desk';
 import { useTollV2ImportReports } from './tolls-v2/step1/useTollV2ImportReports';
 import { ReconTollV2SourceEnhancement } from './tolls-v2/step1/ReconTollV2SourceEnhancement';
 import { readProblemRows, tollFilesSummary } from './tolls-v2/step1/tollV2ImportReportFormat';
@@ -338,12 +336,9 @@ export function ReconSourcesStep({
   const canUploadExternalSources = can('recon.external_sources');
   const canWaive = can('recon.approve');
   const weekKey = run.run.weekKey;
-  const tollsV2Query = useTollV2Enabled();
-  const tollsV2On = tollsV2Query.data === true;
-  const importReportsQuery = useTollV2ImportReports(weekKey, tollsV2On);
+  // Toll files go through the new toll upload only (the old toll import is removed).
+  const importReportsQuery = useTollV2ImportReports(weekKey, true);
   const importReports = importReportsQuery.data ?? [];
-  const [tollModalOpen, setTollModalOpen] = useState(false);
-  const [tollMode, setTollMode] = useState<'usage' | 'topup'>('usage');
   const [fuelModalOpen, setFuelModalOpen] = useState(false);
   const [fuelSourceId, setFuelSourceId] = useState<'fuel_card_self' | 'fuel_card_roam'>('fuel_card_self');
   const [uberOpen, setUberOpen] = useState(false);
@@ -396,7 +391,7 @@ export function ReconSourcesStep({
   );
 
   const applicable = run.sources.filter((s) => s.requirement !== 'not_applicable');
-  const tollSummary = tollsV2On ? tollFilesSummary(applicable, importReports, readProblems) : null;
+  const tollSummary = tollFilesSummary(applicable, importReports, readProblems);
 
   const runTollV2Import = useCallback(
     async (opts: {
@@ -505,12 +500,7 @@ export function ReconSourcesStep({
 
   const openUpload = (sourceId: string) => {
     if (sourceId === 'toll_usage' || sourceId === 'toll_topup') {
-      if (tollsV2On) {
-        triggerTollFilePicker(sourceId);
-        return;
-      }
-      setTollMode(sourceId === 'toll_topup' ? 'topup' : 'usage');
-      setTollModalOpen(true);
+      triggerTollFilePicker(sourceId);
       return;
     }
     if (sourceId === 'fuel_card_self') {
@@ -588,7 +578,7 @@ export function ReconSourcesStep({
       onImported={async () => {
         await onRefresh();
       }}
-      onUberFilesForToll={tollsV2On ? (files) => runUberTollFollowUp(files) : undefined}
+      onUberFilesForToll={(files) => runUberTollFollowUp(files)}
     />
   ) : null;
 
@@ -598,13 +588,8 @@ export function ReconSourcesStep({
         Upload or confirm each input for week of {weekKey}. Required items must be complete before
         toll and fuel review unlocks.
       </p>
-      <div className={cn('grid gap-3', tollsV2On ? 'lg:grid-cols-3' : 'md:grid-cols-2')}>
-        <div
-          className={cn(
-            'gap-3',
-            tollsV2On ? 'flex flex-col lg:col-span-2' : 'grid md:col-span-2 md:grid-cols-2 contents',
-          )}
-        >
+      <div className={'grid gap-3 lg:grid-cols-3'}>
+        <div className="flex flex-col gap-3 lg:col-span-2">
           {applicable.map((source) => (
             <div key={source.id} className="min-w-0">
               <ReconSourceCard
@@ -619,7 +604,7 @@ export function ReconSourcesStep({
                 canUploadExternalSources={canUploadExternalSources}
                 canWaive={canWaive}
               >
-              {tollsV2On ? (
+              {(
                 <ReconTollV2SourceEnhancement
                   source={source}
                   reports={importReports}
@@ -649,19 +634,17 @@ export function ReconSourcesStep({
                     triggerTollFilePicker(source.id === 'toll_topup' ? 'toll_topup' : 'toll_usage');
                   }}
                 />
-              ) : null}
-              {tollsV2On && source.id === 'uber_bundle' ? uberPanel : null}
+              )}
+              {source.id === 'uber_bundle' ? uberPanel : null}
               </ReconSourceCard>
             </div>
           ))}
-          {tollsV2On ? (
-            <p className="flex items-start gap-2 pt-1 text-xs text-[#47464c]">
-              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-              Uploading the same file twice changes nothing.
-            </p>
-          ) : null}
+          <p className="flex items-start gap-2 pt-1 text-xs text-[#47464c]">
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+            Uploading the same file twice changes nothing.
+          </p>
         </div>
-        {tollsV2On && tollSummary ? (
+        {tollSummary ? (
           <aside className="self-start rounded-xl border border-[#e5eeff] bg-white p-4 shadow-sm lg:col-span-1">
             <h3 className="text-sm font-semibold text-[#0b1c30]">This week&apos;s files</h3>
             <p className="mt-2 text-sm text-[#47464c]">
@@ -692,10 +675,8 @@ export function ReconSourcesStep({
         onChange={(e) => void onTollFilePicked(e)}
       />
 
-      {/* v2 opens the Uber panel inside the Uber card (next to its Upload button); others keep it here. */}
-      {!tollsV2On ? uberPanel : null}
-
-      {tollsV2On ? (
+      {/* The Uber panel opens inside the Uber card, next to its Upload button. */}
+      {(
         <>
           <TollV2WhatWasReadDialog
             open={!!whatReadReport}
@@ -733,7 +714,7 @@ export function ReconSourcesStep({
             }}
           />
         </>
-      ) : null}
+      )}
 
       {indriveOpen ? (
         <IndriveUploadDialog
@@ -745,19 +726,6 @@ export function ReconSourcesStep({
             await onRefresh();
           }}
         />
-      ) : null}
-
-      {!tollsV2On ? (
-      <BulkImportTollTransactionsModal
-        isOpen={tollModalOpen}
-        onClose={() => setTollModalOpen(false)}
-        mode={tollMode}
-        weekKey={weekKey}
-        onSuccess={() => {
-          setTollModalOpen(false);
-          void onRefresh();
-        }}
-      />
       ) : null}
 
       <FuelCardSelfUploader

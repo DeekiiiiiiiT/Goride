@@ -76,10 +76,6 @@ import { CloseWeekLaneCard, CloseWeekIdentityRow } from '../components/fleet-fin
 import { CloseWeekDialogs } from '../components/fleet-financials/close-week/CloseWeekDialogs';
 import { resolvePayQueueOwed } from '../utils/driverSettlementsPayAmount';
 import { api } from '../services/api';
-import {
-  tollReadinessBlockerLabel,
-  tollStepFromDrillPath,
-} from '../utils/tollReadinessBlockers';
 import type { StepId } from '../utils/tollPeriodGating';
 
 const MONEY = (n: number | null | undefined) => {
@@ -366,20 +362,6 @@ export function CloseWeekPage({
   const fuelStatus = laneStatusFromBlockers(byLane.fuel, { loading: previewLoading });
   const tollStatus = laneStatusFromBlockers(byLane.toll, { loading: previewLoading });
 
-  // Phase 7: when tolls are blocked / awaiting_tolls, surface named readiness blockers
-  // with deep links into the exact wizard step.
-  const tollAwaiting =
-    tollStatus === 'blocked' ||
-    tollStatus === 'unverified' ||
-    byLane.toll.some((b) => String(b.code || '').toUpperCase().startsWith('TOLL'));
-  const tollReadinessQuery = useQuery({
-    queryKey: ['toll-period-readiness', weekKey],
-    queryFn: () => api.getTollPeriodReadiness(weekKey),
-    enabled: tollAwaiting && weekEnded && !preview?.weekClosed,
-    staleTime: 30_000,
-    retry: false,
-  });
-  const tollReadinessBlockers = tollReadinessQuery.data?.readiness?.blockers ?? [];
   const openSettlementExposure =
     settlement.fleetOwes + settlement.driversOwe + settlement.cashHeld > MONEY_EPS;
   const settlementStatus: CloseLaneStatus = settlementLoading
@@ -1275,40 +1257,6 @@ export function CloseWeekPage({
           onReview={() => reviewLane('settlement')}
         />
       </div>
-
-      {tollAwaiting && tollReadinessBlockers.length > 0 ? (
-        <div
-          role="status"
-          className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-950"
-        >
-          <p className="font-medium">
-            This week is blocked on {tollReadinessBlockers.length} toll item
-            {tollReadinessBlockers.length === 1 ? '' : 's'} — fix them here
-          </p>
-          <ul className="mt-2 space-y-1.5">
-            {tollReadinessBlockers.map((b) => {
-              const step = (b.stepId as StepId | undefined) || tollStepFromDrillPath(b.drillPath);
-              return (
-                <li key={`${b.code}-${b.stepId || ''}-${b.count}`}>
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1.5 text-left text-xs font-semibold text-rose-800 underline-offset-2 hover:underline"
-                    onClick={() => reviewLane('toll', step)}
-                  >
-                    {tollReadinessBlockerLabel(b)}
-                    <ArrowRight className="h-3.5 w-3.5 shrink-0" />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ) : tollAwaiting && tollReadinessQuery.isFetching ? (
-        <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs text-slate-600">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Loading toll readiness…
-        </div>
-      ) : null}
 
       {isCashResidualOnlyBlockers(preview?.blockers, preview?.weekBlockers) ||
       (settlementStatus === 'blocked' &&

@@ -103,18 +103,6 @@ const TripAnalyticsPage = lazy(() =>
 const TransactionsPage = lazy(() =>
   import('./components/transactions/TransactionsPage').then((m) => ({ default: m.TransactionsPage })),
 );
-const TollLogsPage = lazy(() =>
-  import('./pages/TollLogs').then((m) => ({ default: m.TollLogsPage })),
-);
-const TollAnalytics = lazy(() =>
-  import('./components/toll/TollAnalytics').then((m) => ({ default: m.TollAnalytics })),
-);
-const TollRateDriftPage = lazy(() =>
-  import('./pages/TollRateDriftPage').then((m) => ({ default: m.TollRateDriftPage })),
-);
-const TollLowBalancePage = lazy(() =>
-  import('./pages/TollLowBalancePage').then((m) => ({ default: m.TollLowBalancePage })),
-);
 const TagInventory = lazy(() =>
   import('./pages/TagInventory').then((m) => ({ default: m.TagInventory })),
 );
@@ -1012,34 +1000,6 @@ function AppContent() {
           <PermissionGate permission="nav.toll_tag_inventory" onNavigate={setCurrentPage}>
             <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading tag inventory…</div>}>
               <TagInventory onNavigate={handleNavigate} />
-            </Suspense>
-          </PermissionGate>
-        )}
-        {currentPage === 'toll-logs' && (
-          <PermissionGate permission="nav.toll_logs" onNavigate={setCurrentPage}>
-            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading toll logs…</div>}>
-              <TollLogsPage />
-            </Suspense>
-          </PermissionGate>
-        )}
-        {currentPage === 'toll-analytics' && (
-          <PermissionGate permission="nav.toll_analytics" onNavigate={setCurrentPage}>
-            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading toll analytics…</div>}>
-              <TollAnalytics onNavigate={setCurrentPage} />
-            </Suspense>
-          </PermissionGate>
-        )}
-        {currentPage === 'toll-rate-drift' && (
-          <PermissionGate permission="nav.toll_analytics" onNavigate={setCurrentPage}>
-            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading toll rate drift…</div>}>
-              <TollRateDriftPage />
-            </Suspense>
-          </PermissionGate>
-        )}
-        {currentPage === 'toll-low-balance' && (
-          <PermissionGate permission="nav.toll_tag_inventory" onNavigate={setCurrentPage}>
-            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading toll low balance…</div>}>
-              <TollLowBalancePage onNavigate={handleNavigate} />
             </Suspense>
           </PermissionGate>
         )}

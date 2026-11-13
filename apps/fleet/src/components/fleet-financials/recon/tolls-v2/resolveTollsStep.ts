@@ -1,18 +1,9 @@
-export type TollsStepVariant = 'legacy' | 'delivery' | 'v2';
+export type TollsStepVariant = 'delivery' | 'v2';
 
-const LEGACY_TOLLS_QUESTION = 'Does every toll match a trip, a refund or a dispute?';
-const V2_TOLLS_QUESTION = 'Who pays each toll this week?';
+/** Week Reconciliation step 3's question (the new toll system is the only one). */
+export const TOLLS_STEP_QUESTION = 'Who pays each toll this week?';
 
-export function tollsStepQuestion(tollsV2On: boolean | undefined): string {
-  return tollsV2On ? V2_TOLLS_QUESTION : LEGACY_TOLLS_QUESTION;
-}
-
-/** B11: which Tolls step body Week Reconciliation shows. */
-export function resolveTollsStepVariant(
-  tollsV2On: boolean | undefined,
-  line: 'rideshare' | 'rush_delivery',
-): TollsStepVariant {
-  if (!tollsV2On) return 'legacy';
-  if (line === 'rush_delivery') return 'delivery';
-  return 'v2';
+/** Which Tolls step body Week Reconciliation shows: the delivery line points to the rideshare desk. */
+export function resolveTollsStepVariant(line: 'rideshare' | 'rush_delivery'): TollsStepVariant {
+  return line === 'rush_delivery' ? 'delivery' : 'v2';
 }

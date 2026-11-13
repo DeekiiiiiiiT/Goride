@@ -213,28 +213,6 @@ function TagInventoryInner({
                   onRequestAssign={() => {
                     setAssignModalState({ isOpen: true, tag: selectedTag });
                   }}
-                  onNavigateToReconciliation={onNavigate ? async (vehicleId: string) => {
-                      try {
-                        const vehicles = await api.getVehicles();
-                        const vehicle = vehicles.find((v: Vehicle) => v.id === vehicleId);
-                        const driverId =
-                          (vehicle as any)?.currentDriverId ||
-                          (vehicle as any)?.assignedDriverId ||
-                          (vehicle as any)?.driverId ||
-                          undefined;
-                        const vehicleLabel =
-                          vehicle?.licensePlate ||
-                          selectedTag.assignedVehicleName ||
-                          vehicleId;
-                        onNavigate('toll-tags', { vehicleId, driverId, vehicleLabel });
-                      } catch (error) {
-                        console.error("Failed to resolve vehicle for reconciliation:", error);
-                        onNavigate('toll-tags', {
-                          vehicleId,
-                          vehicleLabel: selectedTag.assignedVehicleName || vehicleId,
-                        });
-                      }
-                  } : undefined}
               />
               {assignModalState.tag && (
                 <AssignTagModal

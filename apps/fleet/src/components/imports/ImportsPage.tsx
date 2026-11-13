@@ -70,7 +70,6 @@ import { Label } from "../ui/label";
 import { Input } from "../ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { toast } from "sonner";
-import { BulkImportTollTransactionsModal } from '../vehicles/BulkImportTollTransactionsModal';
 import { ExportCenter } from './ExportCenter';
 import { DeleteCenter } from './DeleteCenter';
 
@@ -98,7 +97,6 @@ import {
 } from '../../utils/jaaFuelStatementMatcher';
 import { JaaFuelMatchReview } from '../fuel/JaaFuelMatchReview';
 import * as XLSX from 'xlsx';
-import { fetchFullTollHistory, generateBackupCSV } from '../../utils/exportHelpers';
 import { useFleetTimezone } from '../../utils/timezoneDisplay';
 import { Trip, FieldDefinition, FieldType, ParsedRow, DriverMetrics, VehicleMetrics, OrganizationMetrics, ImportAuditState, DisputeRefund } from '../../types/data';
 import { FuelEntry, FuelCard, JaaProgram } from '../../types/fuel';
@@ -308,7 +306,6 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
   const [manageFieldsOpen, setManageFieldsOpen] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string>('Uber');
   const [disabledColumns, setDisabledColumns] = useState<Record<string, string[]>>({});
-  const [tollImportMode, setTollImportMode] = useState<'usage' | 'topup' | 'recovery' | null>(null);
   const [showTripReImport, setShowTripReImport] = useState<string | null>(null);
   const [bulkImportType, setBulkImportType] = useState<'driver' | 'vehicle' | 'transaction' | 'tollTag' | 'tollPlaza' | 'station' | 'equipment' | 'inventory' | 'claim' | null>(null);
   const [showFullRestore, setShowFullRestore] = useState(false);
@@ -1218,28 +1215,8 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
           }
           setCommitProgress(85);
 
-          // Dispute Refunds: Persist to server
-          let disputeFailed = 0;
-          if (processedDisputeRefunds.length > 0) {
-              try {
-                  const drResult = await chunkedImport(
-                      processedDisputeRefunds.map((r) => ({ ...r, batchId })),
-                      (chunk) => api.importDisputeRefunds(chunk),
-                  );
-                  if (drResult.imported > 0) {
-                      const msg = drResult.skipped > 0
-                          ? `Imported ${drResult.imported} dispute refund(s) (${drResult.skipped} already existed)`
-                          : `Imported ${drResult.imported} dispute refund(s)`;
-                      toast.success(msg);
-                  } else if (drResult.skipped > 0) {
-                      toast.info(`${drResult.skipped} dispute refund(s) already imported — no new refunds`);
-                  }
-              } catch (drErr: any) {
-                  disputeFailed = 1;
-                  console.error('[Import] Failed to import dispute refunds:', drErr);
-                  toast.error(`Dispute refund import failed: ${drErr.message}`);
-              }
-          }
+          // Uber support adjustments go to the new toll system through Week Reconciliation step 1 (toll upload);
+          // the old dispute-refund store is gone.
           setCommitProgress(95);
 
           queryClient.invalidateQueries({ queryKey: ['driverMetrics'] });
@@ -1250,8 +1227,7 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
           const verifyPassed =
               canonFailed === 0 &&
               paymentLinesFailed === 0 &&
-              qualityFailed === 0 &&
-              disputeFailed === 0;
+              qualityFailed === 0;
 
           try {
               await api.patchImportBatch(batchId, {
@@ -1324,36 +1300,6 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
       setImportCanonicalSummary(null);
   };
 
-  const handleTollBackup = async () => {
-      await runBackgroundJobToast(
-        async () => {
-          const rows = await fetchFullTollHistory();
-          if (rows.length === 0) {
-            throw new Error('No toll transactions found to export.');
-          }
-          const csvContent = generateBackupCSV(rows);
-          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.setAttribute('download', `toll_backup_${new Date().toISOString().split('T')[0]}.csv`);
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-          return rows.length;
-        },
-        {
-          loading: 'Preparing Toll Backup…',
-          success: (n) => `Exported ${n} toll records.`,
-          error: (err) => {
-            const msg = (err as Error)?.message || 'Toll export failed.';
-            if (/No toll transactions/i.test(msg)) return msg;
-            return 'Toll export failed.';
-          },
-        },
-      );
-  };
 
   // --- Field Management Handlers (Simplified for this view) ---
   const [fieldNameInput, setFieldNameInput] = useState('');
@@ -1726,8 +1672,6 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
             ? [{ id: 'Fuel', icon: <Fuel className="h-6 w-6" />, color: 'bg-amber-500 text-white', description: 'Upload your own self-serve gas card statement. Roam-issued cards are uploaded by Roam.' }]
             : [],
           'toll': [
-            { id: 'Toll Top-up', icon: <CreditCard className="h-6 w-6" />, color: 'bg-emerald-600 text-white', description: 'Import toll account top-up and recharge transactions from CSV', action: () => setTollImportMode('topup') },
-            { id: 'Toll Usage', icon: <MinusCircle className="h-6 w-6" />, color: 'bg-slate-600 text-white', description: 'Import toll usage records showing plaza charges and deductions', action: () => setTollImportMode('usage') },
             { id: 'Toll Tag Import', icon: <Tag className="h-6 w-6" />, color: 'bg-orange-600 text-white', subtext: 'Bulk CSV', description: 'Import toll tag inventory with tag numbers and vehicle assignments', action: () => setBulkImportType('tollTag') },
             { id: 'Toll Plaza Import', icon: <Building2 className="h-6 w-6" />, color: 'bg-stone-600 text-white', subtext: 'Bulk CSV', description: 'Import toll plaza database with GPS coordinates and rates', action: () => setBulkImportType('tollPlaza') },
           ],
@@ -1738,8 +1682,6 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
             { id: 'Claim Import', icon: <ShieldAlert className="h-6 w-6" />, color: 'bg-red-600 text-white', subtext: 'Bulk CSV', description: 'Bulk import claims and dispute records from CSV', action: () => setBulkImportType('claim') },
           ],
           'system': [
-            { id: 'Disaster Recovery', icon: <CloudDownload className="h-6 w-6" />, color: 'bg-white border-2 border-slate-200 text-slate-600', subtext: 'Export Backup', description: 'Export a full toll data backup as CSV for safekeeping', action: handleTollBackup },
-            { id: 'Restore Backup', icon: <UploadCloud className="h-6 w-6" />, color: 'bg-rose-50 border-2 border-rose-100 text-rose-600', subtext: 'Import Recovery CSV', description: 'Restore toll data from a previously exported recovery CSV', action: () => setTollImportMode('recovery') },
             { id: 'Full Restore', icon: <HardDrive className="h-6 w-6" />, color: 'bg-slate-900 text-white', subtext: 'ZIP Backup', description: 'Restore entire system from a previously exported ZIP backup', action: () => setShowFullRestore(true) },
           ],
         };
@@ -1751,7 +1693,7 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
           { id: 'drivers', title: 'Drivers & Staff', description: 'Bulk import driver profiles from CSV', icon: <Users className="h-5 w-5" />, iconColor: 'bg-teal-50 text-teal-600', itemCount: allImportCards['drivers'].length },
           { id: 'vehicles', title: 'Fleet & Vehicles', description: 'Bulk import vehicle records from CSV', icon: <Car className="h-5 w-5" />, iconColor: 'bg-sky-50 text-sky-600', itemCount: allImportCards['vehicles'].length },
           { id: 'fuel', title: 'Fuel', description: 'Upload a self-serve gas card statement. Roam-issued cards are uploaded by Roam.', icon: <Fuel className="h-5 w-5" />, iconColor: 'bg-amber-50 text-amber-600', itemCount: allImportCards['fuel'].length },
-          { id: 'toll', title: 'Toll Management', description: 'Import toll top-ups, usage records, tags, and plaza databases', icon: <CreditCard className="h-5 w-5" />, iconColor: 'bg-emerald-50 text-emerald-600', itemCount: allImportCards['toll'].length },
+          { id: 'toll', title: 'Toll Management', description: 'Import toll tags and plaza databases (toll files go in Week Reconciliation step 1)', icon: <CreditCard className="h-5 w-5" />, iconColor: 'bg-emerald-50 text-emerald-600', itemCount: allImportCards['toll'].length },
           { id: 'finance', title: 'Finance & Assets', description: 'Import transactions, equipment, inventory, and claims', icon: <DollarSign className="h-5 w-5" />, iconColor: 'bg-amber-50 text-amber-700', itemCount: allImportCards['finance'].length },
           { id: 'system', title: 'System & Backup', description: 'Export data backups or restore from a previous backup file', icon: <HardDrive className="h-5 w-5" />, iconColor: 'bg-slate-100 text-slate-600', itemCount: allImportCards['system'].length },
         ];
@@ -3176,12 +3118,6 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
         </div>
       )}
 
-      <BulkImportTollTransactionsModal
-        isOpen={!!tollImportMode}
-        onClose={() => setTollImportMode(null)}
-        mode={tollImportMode || 'usage'}
-        onSuccess={() => setTollImportMode(null)}
-      />
 
       </>)}
     </div>
