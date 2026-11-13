@@ -23,6 +23,8 @@ describe('driverCashReceipt', () => {
     expect(out.rows[0].source_ref).toBe('receipt:plaza-main:driver-a:RCP-99');
     expect(out.rows[0].evidence_status).toBe('unverified');
     expect(out.rows[0].evidence.receipt_url).toBe(base.receiptUrl);
+    // P3-R4: the screen shows the printed number, never the internal reference.
+    expect(out.rows[0].evidence.receipt_number).toBe('RCP-99');
   });
 
   it('requires receipt URL', () => {

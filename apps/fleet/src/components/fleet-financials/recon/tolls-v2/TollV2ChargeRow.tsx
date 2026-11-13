@@ -164,7 +164,9 @@ export function TollV2ChargeRow({ charge, actions }: { charge: TollV2Charge; act
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
           <span className="text-xs text-[#47464c]">
-            {formatDecidedAt(charge.decision?.at, charge.decision?.by)}
+            {charge.decision?.kind === 'duplicate' && !charge.decision?.at && !charge.decision?.by
+              ? 'Found automatically'
+              : formatDecidedAt(charge.decision?.at, charge.decision?.by)}
           </span>
           {!sealed && decisionUndoPayload(charge.decision) && actions.onUndo ? (
             <TollV2DangerOutlineButton type="button" onClick={() => actions.onUndo!(charge)}>

@@ -17,8 +17,8 @@ import {
 } from './tollV2DeskLogic';
 import type { TollV2Charge, TollV2KeptPayback, TollV2Payback } from './types';
 import { TollV2ChargeRow, type TollV2RowActions } from './TollV2ChargeRow';
-import { TollV2PrimaryButton, TollV2SecondaryButton } from './TollV2Buttons';
-import { fmtTollMinor, tripPill } from './tollV2Format';
+import { TollV2DangerOutlineButton, TollV2PrimaryButton, TollV2SecondaryButton } from './TollV2Buttons';
+import { fmtTollMinor, formatDecidedAt, paybackLine } from './tollV2Format';
 
 const SECTION_ICONS: Record<string, React.ReactNode> = {
   suggested: <Sparkles className="h-5 w-5 text-[#47464c]" aria-hidden />,
@@ -52,8 +52,8 @@ export function TollV2Sections({
   const pbCount = paybacks.length + kept.length;
 
   const compactEmptyCards =
-    dupCount === 0 || pbCount === 0 ? (
-      <div className="grid gap-4 md:grid-cols-2">
+    !sealed && (dupCount === 0 || pbCount === 0) ? (
+      <div className={dupCount === 0 && pbCount === 0 ? 'grid gap-4 md:grid-cols-2' : 'grid gap-4'}>
         {dupCount === 0 ? (
           <CompactEmptyReviewCard title="Possible duplicates" testId="toll-v2-compact-empty-duplicates" />
         ) : null}
@@ -86,6 +86,8 @@ export function TollV2Sections({
         }
 
         const empty = count === 0;
+        // Stitch sealed week: only what was decided is listed; empty work sections are hidden.
+        if (sealed && empty) return null;
 
         const sectionBlock = (
           <section key={sec.key} id={sec.id} className="overflow-hidden rounded-[20px] border border-[#e5eeff] bg-white shadow-sm">
@@ -120,9 +122,7 @@ export function TollV2Sections({
                   <PaybackRow key={p.id} payback={p} rowActions={rowActions} readOnly={!!rowActions.readOnly} />
                 ))}
                 {kept.map((k) => (
-                  <li key={k.id} className="px-4 py-3 text-sm text-[#47464c]">
-                    Kept with no toll · {fmtTollMinor(k.amountMinor)}
-                  </li>
+                  <KeptRow key={k.id} kept={k} rowActions={rowActions} readOnly={!!rowActions.readOnly} />
                 ))}
               </ul>
             ) : (
@@ -164,6 +164,32 @@ function CompactEmptyReviewCard({ title, testId }: { title: string; testId: stri
   );
 }
 
+function KeptRow({
+  kept,
+  rowActions,
+  readOnly,
+}: {
+  kept: TollV2KeptPayback;
+  rowActions: TollV2RowActions & { onUndoKept?: (kept: TollV2KeptPayback) => void };
+  readOnly: boolean;
+}) {
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-2 px-4 py-3" data-testid="toll-v2-kept-row">
+      <div className="text-sm">
+        <p className="font-medium text-[#0b1c30]">{paybackLine(kept.trip, undefined, kept.amountMinor)}</p>
+        <p className="text-xs text-[#47464c]">
+          Kept with no toll · {formatDecidedAt(kept.at, kept.by)}
+        </p>
+      </div>
+      {!readOnly && kept.undo && rowActions.onUndoKept ? (
+        <TollV2DangerOutlineButton type="button" onClick={() => rowActions.onUndoKept?.(kept)}>
+          Undo
+        </TollV2DangerOutlineButton>
+      ) : null}
+    </li>
+  );
+}
+
 function PaybackRow({
   payback,
   rowActions,
@@ -179,7 +205,7 @@ function PaybackRow({
   return (
     <li className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
       <div className="text-sm">
-        <p className="font-medium text-[#0b1c30]">{tripPill(payback.trip, payback.amountMinor)}</p>
+        <p className="font-medium text-[#0b1c30]">{paybackLine(payback.trip, payback.paidOn, payback.amountMinor)}</p>
         <p className="text-xs text-[#47464c]">Open {fmtTollMinor(payback.openMinor)}</p>
       </div>
       {!readOnly ? (

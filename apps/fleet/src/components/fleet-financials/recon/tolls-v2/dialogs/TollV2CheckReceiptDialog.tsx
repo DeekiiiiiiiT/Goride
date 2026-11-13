@@ -39,7 +39,9 @@ export function TollV2CheckReceiptDialog({
 
   if (!charge) return null;
 
-  const amountChanged = Math.round(parseFloat(amountMajor || '0') * 100) !== charge.amountMinor;
+  const enteredMinor = Math.round(parseFloat(amountMajor || '0') * 100);
+  const amountValid = /^\s*\d+(\.\d{1,2})?\s*$/.test(amountMajor) && enteredMinor > 0;
+  const amountChanged = enteredMinor !== charge.amountMinor;
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -55,7 +57,7 @@ export function TollV2CheckReceiptDialog({
           <dl className="space-y-3 text-sm">
             <ReadOnly label="Plaza" value={String(receipt.plaza || charge.plazaName || '—')} />
             <ReadOnly label="Lane" value={String(receipt.lane || '—')} />
-            <ReadOnly label="Receipt number" value={String(receipt.receipt_number || receipt.sourceRef || '—')} />
+            <ReadOnly label="Receipt number" value={receiptNumberLabel(receipt)} />
             <div>
               <dt className="text-xs font-semibold uppercase text-[#47464c]">Amount</dt>
               <dd className="mt-1">
@@ -64,7 +66,12 @@ export function TollV2CheckReceiptDialog({
                   onChange={(e) => setAmountMajor(e.target.value)}
                   className="tabular-nums"
                   inputMode="decimal"
+                  aria-label="Amount"
+                  aria-invalid={!amountValid}
                 />
+                {!amountValid ? (
+                  <p className="mt-1 text-xs text-rose-700">Enter the amount on the receipt, like 370.00.</p>
+                ) : null}
               </dd>
             </div>
             <p className="text-xs text-[#47464c]">
@@ -79,11 +86,8 @@ export function TollV2CheckReceiptDialog({
           <AlertDialogCancel type="button">Go back</AlertDialogCancel>
           <TollV2PrimaryButton
             type="button"
-            disabled={busy}
-            onClick={() => {
-              const minor = Math.round(parseFloat(amountMajor || '0') * 100);
-              onFine(minor, amountChanged);
-            }}
+            disabled={busy || !amountValid}
+            onClick={() => onFine(enteredMinor, amountChanged)}
           >
             Receipt is fine
           </TollV2PrimaryButton>
@@ -91,6 +95,19 @@ export function TollV2CheckReceiptDialog({
       </AlertDialogContent>
     </AlertDialog>
   );
+}
+
+/** The number printed on the receipt. Older receipts only have it inside the internal reference
+ *  (`receipt:<plaza>:<driver>:<number>`); never show that reference itself. */
+export function receiptNumberLabel(receipt: Record<string, unknown>): string {
+  const direct = String(receipt.receipt_number ?? receipt.receiptNumber ?? '').trim();
+  if (direct) return direct;
+  const ref = String(receipt.sourceRef ?? '');
+  if (ref.startsWith('receipt:')) {
+    const last = ref.split(':').slice(3).join(':').trim();
+    if (last) return last;
+  }
+  return '—';
 }
 
 function ReadOnly({ label, value }: { label: string; value: string }) {

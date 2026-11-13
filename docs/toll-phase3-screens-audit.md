@@ -1,6 +1,6 @@
 # Toll Phase 3 — screens audit
 
-**Rev 3 · 13 Nov 2026.** Rev 3 cut the finished work and kept the status, the open items and the next steps. The full per-screen Keep / Drop / Add lists of Rev 1–2 are in git history (`ca100929`). The Drop words are enforced by `tolls-v2/tollsV2DropWords.test.ts`.
+**Rev 4 · 13 Nov 2026.** Rev 4 adds the click-through on the test copy (section "Click-through, Rev 4") and its fixes. Rev 3 cut the finished work and kept the status, the open items and the next steps. The full per-screen Keep / Drop / Add lists of Rev 1–2 are in git history (`ca100929`). The Drop words are enforced by `tolls-v2/tollsV2DropWords.test.ts`.
 
 - **Designs:** `docs/stitch/toll-week-fleet/` (17 screens) — prompts `docs/stitch/toll-week-fleet-prompt.txt` + `toll-week-fleet-extra-prompt.txt`.
 - **Code:** `apps/fleet/src/components/fleet-financials/recon/tolls-v2/`, `TollHealthPage.tsx`, the Step 1 toll cards in `ReconSourcesStep.tsx`.
@@ -36,18 +36,45 @@
 | Click-through on real data | **Partly done.** Confirm all sure (5), the likely confirms (4), the two picks (resolved themselves), driver pays, seal. Every number right: J$3,975 Uber + J$275 driver = J$4,250. |
 
 ## Still to do, in order
-1. **Commit** the R4a work + Claude's fixes + the rebuilt `fleet-toll/index.ts` (toll files only).
-2. **Finish the click-through**, on the test copy with seeded cases the 24 Aug week doesn't have. Each button must run its command, and the numbers (tiles, progress, seal box, right column) must agree with `week_result`:
-   - Step 1: a tag statement + top-up + Uber upload through the screen (the test fleet needs a toll tag and an Uber driver id for those cards to show); "See what was read" (M3); "Fix driver" (M1); "Which car?" (M2); "Upload the file again".
-   - A cash receipt: Check → Receipt is fine (amount change) / Reject with a reason.
-   - A duplicate pair: keep the tag one / keep both.
-   - Undo from a decided row and from the toast; "Keep with no toll" and "Match to a toll" (M5) on a payback with no toll.
-   - After the seal: a late toll / a late payback / a corrected amount → "Move to week of …" (the week paid, and not paid → reopen message); a take-back (three week cases); Reopen (owner / manager, `REOPEN_INSTEAD`).
-   - A Delivery run completes step 3 once the week is sealed.
-   - **Local limit:** the test-copy driver id isn't a uuid, so the driver pay-period rebuild fails locally and the close check shows `TOLL_SPEND_MISMATCH`. Use a uuid driver for this pass.
-3. **`/code-review`** of Phase 3 (`512492ff..HEAD`, toll files).
-4. **Live SQL** for `20261113162537_toll_v2_screen_reads` (Claude writes the all-or-nothing file, proven on a copy first), then **deploy** (push to `main`; edge + Fleet site).
-5. **First company on v2.** The owner decides when, and which fleet; it's a separate step (Phase 3 exit in `docs/toll-architecture.md` Part D).
+1. ~~Commit R4a~~ — done `ac3c2eb0`.
+2. ~~Click-through~~ — done 13 Nov (Rev 4 section below). **The Rev 4 fixes are not committed yet.**
+3. **Left from the click-through** (do on the next test-copy pass):
+   - **Take-back on screen** (the three week cases). Its card shows only on the open toll week, and Week Reconciliation opens a week only after it ends; locally the open week was 9 Nov (not openable until 16 Nov). Money rules are covered by `toll_v2_carry_forward.sql` + the step tests.
+   - **Step 1 problem rows**: "Fix driver" (M1), "Which car?" (M2), "Upload the file again". Needs a file with an unknown driver and an unknown plate.
+   - **Delivery run** completing step 3 after the seal.
+   - **Phone (390px)** look of the new sealed layout and late card.
+4. **`/code-review`** of Phase 3 (`512492ff..HEAD`, toll files).
+5. **Live SQL** for `20261113162537_toll_v2_screen_reads` (Claude writes the all-or-nothing file, proven on a copy first), then **deploy** (push to `main`; edge `fleet-core` + `fleet-toll` + Fleet site).
+6. **First company on v2.** The owner decides when, and which fleet; it's a separate step (Phase 3 exit in `docs/toll-architecture.md` Part D).
+
+## Click-through, Rev 4 (13 Nov, test copy, real week of 24 Aug)
+**Setup used** (local only; `pnpm test:toll` resets it): MM F01 with a uuid driver (`d1f01000-…`, Uber id set, on 5179KZ), toll tag `212100286450`, the 4 plazas, `recon_v2` **and `recon_wizard`** flags, `tolls_v2` on, one past Uber import (so the Uber card shows), the test driver's login linked to the uuid driver. Setup SQL: `docs/toll-build/p3r4-testcopy-setup.sql` (header says how to run it). The Uber **trip** import can't run for this test car (it sends the plate as the car id), so Uber toll rows went in through `POST /toll/v2/import` directly and the Uber card was waived.
+
+**Worked as designed:** tag + top-up uploads through Step 1 (repeat upload changes nothing); Uber toll rows 74 trips / 11 paybacks / J$3,975.00; matcher ran inline; receipt fine with amount change (J$370 → J$350, spend +J$350); reject with reason; automatic duplicate (cash within 10 min of the tag → never charged); review pair → "Same toll"; Keep with no toll; Match to a toll (M5); Undo from a row, from the toast and from the undo dialog; confirm-all; seal; late payback + late cash toll moved to the open week (week paid); Reopen refused on a paid week and allowed on an unpaid one. **Every number agreed:** J$3,975.00 Uber + J$275.00 driver + J$350.00 fleet = J$4,600.00 spend.
+
+**Fixed (uncommitted):**
+| # | Found | Fix |
+|---|---|---|
+| R4-01 | Step 1 cards in two narrow columns; buttons ran out of the card; "Uploading the same file twice…" sat outside the cards and broke the grid | v2 cards in one column (Stitch), toll results inside each card, the note once at the bottom, "This week's files" box no longer stretches |
+| R4-02 | Card said "12 tolls read · **J$0.00**" | import report rows now carry `amount_minor` (reads migration, not live yet); the screen sums used rows only and leaves the amount out for older reports |
+| R4-03 | After a v2 file upload, Step 1 kept saying **Missing** until the nightly check | recording an upload now queues a week refresh (`queueDeskRefresh`, guard test `recon_register_refresh.test.ts`) |
+| R4-04 | Uber Upload opened its panel at the very bottom of the page (looked like nothing happened) | for v2, the panel opens inside the Uber card |
+| R4-05 | Receipt dialog showed `receipt:plz-…:<driver uuid>:R-1001` | the reader keeps `receipt_number`; the dialog shows only the number ("—" if none); invalid amounts can't be sent |
+| R4-06 | Kept payback had no Undo and "Keep with no toll" had no toast; payback rows had no date | kept rows show who · when + red Undo; toast with Undo; rows start with the day ("29 Aug · Uber trip …") |
+| R4-07 | A duplicate a person confirmed showed "—" for who/when | read adds the decider; automatic ones say "Found automatically" |
+| R4-08 | One empty "Possible duplicates" card was half width | full width unless both empty cards show |
+| R4-09 | Step 3 completion refused (409) right after sealing | the page reads the week fresh before completing and retries once on a version change |
+| R4-10 | "Matching in progress…" on a sealed week | hidden once sealed |
+| R4-11 | Sealed week didn't follow Stitch (empty work sections, Decided twice, late items at the bottom) | ported: tiles → late items → decided; empty sections and the second Decided list removed |
+| R4-12 | Late items showed `trip:<uuid>`, no date, and called a driver cash receipt "a toll the provider sent" | Stitch card (count, explanation, chip, solid button) with plain lines |
+| R4-13 | Reopen on a paid week showed "That toll command could not be completed." (server says `DRIVERS_ALREADY_PAID`, screen only knew `REOPEN_INSTEAD`) | both codes give the paid-week message; plain words for every server refusal |
+| R4-14 | Toll health "Open the week" led to a week that can't open yet | says "Opens after Sun 15 Nov" until the week ends |
+
+**Tests:** fleet recon + Toll health + services 130/130; toll-core 186; Deno guard 2; `pnpm test:toll` all ok (incl. two new checks in `toll_v2_screen_reads.sql`); no type errors in touched files.
+
+**For Phase 4 (not Phase 3):** Reopen tolls leaves Week Reconciliation step 3 "Complete" — the recon server doesn't read the v2 seal yet. Money stays safe (paying drivers is refused until tolls are sealed, Phase 1).
+
+**Separate from tolls (not changed):** the Uber card shows only after a fleet's first Uber import (`hasUberDrivers` counts trips / batches, not drivers' Uber ids), so a brand-new fleet can't upload its first Uber file in Step 1. The old Uber trip import sends the plate as the car id, which the car check refuses when a car's id isn't its plate (local test car only; live cars not checked — the live database tool wasn't connected).
 
 ## Rules that still apply when changing these screens
 - **Look and content:** Stitch decides the look; content comes only from the reads. No ids, hashes, scores, percentages, "Week 34", audit or export cards (the guard test lists the words).

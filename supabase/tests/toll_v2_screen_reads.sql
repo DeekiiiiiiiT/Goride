@@ -508,6 +508,10 @@ BEGIN
      OR jsonb_typeof(v_row -> 'decision' -> 'undo') = 'object' THEN
     RAISE EXCEPTION 's3 duplicate';
   END IF;
+  -- P3-R4: a duplicate a person confirmed shows who and when.
+  IF v_row -> 'decision' ->> 'at' IS NULL OR v_row -> 'decision' ->> 'by' IS NULL THEN
+    RAISE EXCEPTION 's3 confirmed duplicate has no decider: %', v_row -> 'decision';
+  END IF;
 
   PERFORM pg_temp._scr_nightly_ok(v_org_a);
 
@@ -593,6 +597,14 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v_imps) i WHERE i ->> 'kind' = 'uber') THEN
     RAISE EXCEPTION 's9 uber';
+  END IF;
+  -- P3-R4: every used tag / top-up row carries its amount ("12 tolls read · J$4,250.00").
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(v_imps) i, jsonb_array_elements(i -> 'report') rep
+    WHERE i ->> 'kind' IN ('tag_statement', 'topups') AND rep ->> 'status' IN ('new', 'unchanged')
+      AND (rep ->> 'amount_minor') IS NULL
+  ) THEN
+    RAISE EXCEPTION 's9 report row without amount_minor';
   END IF;
   PERFORM pg_temp._scr_as(v_owner, v_org_a);
   IF EXISTS (

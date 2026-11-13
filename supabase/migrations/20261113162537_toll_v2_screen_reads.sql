@@ -156,8 +156,13 @@ BEGIN
     END IF;
 
     IF v_res ? 'line' THEN v_line := (v_res ->> 'line')::int; END IF;
+    -- P3-R4: each report row carries its amount, so Step 1 can show "12 tolls read · J$4,250.00".
     v_report := v_report || jsonb_build_array((v_res - 'line') || jsonb_build_object('row', v_i,
-                  'ref', coalesce(r ->> 'source_ref', r ->> 'reference', r ->> 'platform_trip_id')));
+                  'ref', coalesce(r ->> 'source_ref', r ->> 'reference', r ->> 'platform_trip_id'))
+                  || CASE WHEN v_res ? 'amount_minor' THEN '{}'::jsonb
+                          ELSE jsonb_strip_nulls(jsonb_build_object('amount_minor',
+                                 coalesce(nullif(r ->> 'toll_payback_minor', '')::bigint, nullif(r ->> 'amount_minor', '')::bigint)))
+                     END);
   END LOOP;
 
   RETURN jsonb_build_object(
@@ -321,7 +326,13 @@ BEGIN
                  WHERE d.organization_id::text = p_company::text AND d.intent = 'reject_cash_receipt'
                    AND d.targets ->> 'charge_id' = r.id::text
                  ORDER BY d.created_at DESC LIMIT 1)
+               -- P3-R4: a duplicate a person confirmed shows who and when; an automatic one has no decider.
                WHEN r.state = 'duplicate' THEN jsonb_build_object('kind', 'duplicate', 'keptChargeId', r.duplicate_of, 'undo', NULL)
+                 || coalesce((SELECT toll_system.decider(p_company, d.id)
+                              FROM toll.decisions d
+                              WHERE d.organization_id::text = p_company::text AND d.intent = 'confirm_duplicate'
+                                AND d.targets ->> 'charge_id' = r.id::text
+                              ORDER BY d.created_at DESC LIMIT 1), '{}'::jsonb)
                WHEN r.state = 'decided' OR r.allocated > 0 THEN (
                  SELECT jsonb_build_object(
                           'kind', CASE WHEN a.payback_id IS NOT NULL THEN 'matched'

@@ -49,6 +49,8 @@ export function ReconTollV2SourceEnhancement({
   const problemCount = countProblems(report);
 
   const showResult = source.status === 'received' || report;
+  const showFixed = fixedKeys.size > 0 && Boolean(onUploadAgain);
+  if (!uberTollError && !(showResult && resultLine) && problems.length === 0 && !showFixed) return null;
 
   return (
     <div className="mt-3 space-y-3 border-t border-[#e5eeff] pt-3">
@@ -123,8 +125,6 @@ export function ReconTollV2SourceEnhancement({
           </Button>
         </div>
       ) : null}
-
-      <p className="text-xs text-[#47464c]">Uploading the same file twice changes nothing.</p>
     </div>
   );
 }

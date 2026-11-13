@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '../../../../services/api';
-import { TollV2CommandError, tollV2UserMessage } from '../../../../services/tollV2CommandError';
+import { isPaidWeekRefusal, TollV2CommandError, tollV2UserMessage } from '../../../../services/tollV2CommandError';
 import type { TollV2CommandIntent } from './types';
 
 type ClickState = {
@@ -44,7 +44,7 @@ export function useTollV2Commands(weekKey: string) {
           pendingClick.current = null;
           return null;
         }
-        if (err instanceof TollV2CommandError && err.code === 'REOPEN_INSTEAD') {
+        if (isPaidWeekRefusal(err)) {
           throw err;
         }
         toast.error(tollV2UserMessage(err, 'That toll command could not be completed.'));

@@ -438,14 +438,25 @@ export function ReconRunPage({
   const handleTollsPeriodFinished = useCallback(async () => {
     setAdvancing(true);
     try {
-      let payload = runQuery.data;
-      if (!payload) payload = await fetchRun(line, weekKey);
+      // P3-R4: always read the week fresh. Sealing changes the week's version a moment before this
+      // runs, so the cached copy was refused with 409; one more fresh read covers a change in between.
+      let payload = await fetchRun(line, weekKey);
       const status = stepStatus(payload, 'tolls');
       // completeThroughSkips only auto-completes ready/stale — force in_progress too.
       if (status === 'in_progress') {
-        payload = await completeRunStep(line, weekKey, 'tolls', {
-          expectedVersion: payload.run.version,
-        });
+        try {
+          payload = await completeRunStep(line, weekKey, 'tolls', {
+            expectedVersion: payload.run.version,
+          });
+        } catch (err) {
+          if (!(err instanceof ReconApiError && err.status === 409)) throw err;
+          payload = await fetchRun(line, weekKey);
+          if (stepStatus(payload, 'tolls') === 'in_progress') {
+            payload = await completeRunStep(line, weekKey, 'tolls', {
+              expectedVersion: payload.run.version,
+            });
+          }
+        }
       }
       if (stepStatus(payload, 'tolls') !== 'complete' && stepStatus(payload, 'tolls') !== 'locked') {
         payload = await completeThroughSkips('tolls', payload);
@@ -475,7 +486,6 @@ export function ReconRunPage({
     line,
     nextStepId,
     refreshRun,
-    runQuery.data,
     weekKey,
   ]);
 

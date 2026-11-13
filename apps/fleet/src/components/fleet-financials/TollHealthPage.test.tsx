@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { TollHealthPage } from './TollHealthPage';
+import { TollHealthPage, weekOpensAfter } from './TollHealthPage';
 
 vi.mock('./recon/tolls-v2/useTollV2Desk', () => ({
   useTollV2Enabled: () => ({ isLoading: false, data: true }),
@@ -79,5 +79,18 @@ describe('TollHealthPage', () => {
     wrap(<TollHealthPage />);
     expect(screen.getByText('No nightly check has run yet')).toBeTruthy();
     weeksOverview.nightly = { at: '2026-08-26T04:25:00Z', ok: true, checks: [] };
+  });
+});
+
+describe('weekOpensAfter', () => {
+  it('a week that has not ended says when it opens', () => {
+    expect(weekOpensAfter('2026-11-09', new Date('2026-11-13T17:00:00Z'))).toBe('Opens after Sun 15 Nov');
+  });
+  it('an ended week can be opened', () => {
+    expect(weekOpensAfter('2026-08-24', new Date('2026-11-13T17:00:00Z'))).toBeNull();
+  });
+  it('Sunday night in Jamaica is still the same week', () => {
+    // 16 Nov 03:00 UTC is Sun 15 Nov 10 PM in Jamaica.
+    expect(weekOpensAfter('2026-11-09', new Date('2026-11-16T03:00:00Z'))).toBe('Opens after Sun 15 Nov');
   });
 });

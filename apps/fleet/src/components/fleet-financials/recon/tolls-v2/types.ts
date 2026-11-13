@@ -127,6 +127,8 @@ export type TollV2LateItem = {
   direction?: 'down' | 'up' | string;
   occurredAt?: string;
   changeId?: string;
+  /** Late payback: the Uber trip it came with. */
+  trip?: TollV2Trip | null;
 };
 
 export type TollV2TakeBackCandidate = {

@@ -100,3 +100,11 @@
   - **Local-only gap:** the period rebuild fails for the test-copy driver id (not a uuid), so the close check shows a toll mismatch there. Live driver ids are uuids.
   - **Tests:** 68 vitest pass, 0 tsc errors in touched files. **Uncommitted.**
 - **Next:** commit, `/code-review` (Phase 3), live SQL for `20261113162537`, deploy.
+
+## P3-R4 click-through (13 Nov, later) — done, fixes uncommitted
+- R4a work committed `ac3c2eb0`.
+- Click-through on the test copy: every Tolls-step button run on the real 24 Aug week plus seeded cases (cash receipt fine / reject, auto duplicate, review pair, kept payback, match to a toll, undo three ways, seal, late items moved, reopen paid / unpaid). Numbers agree: J$3,975 Uber + J$275 driver + J$350 fleet = J$4,600.
+- **14 fixes R4-01…R4-14** — list in `docs/toll-phase3-screens-audit.md` (section "Click-through, Rev 4"). Two touch the **not-live** reads migration `20261113162537` (report amounts, duplicate decider) — rebuild the live SQL file from it. One touches `fleet-core` (`recon_import_routes.ts`: an upload queues a week refresh) and one `toll-core` (receipt number kept) → `fleet-core` and `fleet-toll` both need deploying.
+- Test-copy setup: `docs/toll-build/p3r4-testcopy-setup.sql`.
+- **Next:** commit the toll files; the four left-over click-through items (audit "Still to do" 3); `/code-review`; live SQL; deploy.
+- **Phase 4 note:** Reopen tolls leaves Week Recon step 3 "Complete" (recon server doesn't read the v2 seal).

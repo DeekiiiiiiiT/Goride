@@ -33,6 +33,7 @@ export function driverCashReceipt(submission: DriverCashSubmission): DriverCashR
     evidence_status: 'unverified',
     evidence: {
       receipt_url: submission.receiptUrl.trim(),
+      receipt_number: receiptNum || undefined,
       plaza: submission.plaza,
       lane: submission.lane,
       collector: submission.collector,

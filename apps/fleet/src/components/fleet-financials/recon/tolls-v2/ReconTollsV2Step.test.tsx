@@ -284,9 +284,9 @@ describe('ReconTollsV2Step', () => {
     });
   });
 
-  it('reopen_week shows REOPEN_INSTEAD in dialog', async () => {
+  it('reopen_week on a paid week (DRIVERS_ALREADY_PAID, the real server code) shows the plain reason in the dialog', async () => {
     tollV2Command.mockRejectedValue(
-      new TollV2CommandError('paid', 409, 'REOPEN_INSTEAD', {}),
+      new TollV2CommandError('paid', 409, 'DRIVERS_ALREADY_PAID', {}),
     );
     fetchDesk.mockReturnValue(
       deskAug24Fixture({ sealed: true, paid: true, blockers: [] }),

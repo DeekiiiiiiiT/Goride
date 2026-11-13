@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { AlertCircle, Bell, CheckCircle2, Loader2, UploadCloud } from 'lucide-react';
+import { AlertCircle, Bell, CheckCircle2, Info, Loader2, UploadCloud } from 'lucide-react';
 import { toast } from 'sonner';
 import { roamFuelExternalCopy, weekDayKeys } from '@roam/finance-core';
 import { ReconApiError, type ReconRunPayload, type ReconRunSource } from '../../../services/reconApi';
@@ -209,7 +209,10 @@ export function ReconSourceCard({
   attestBusy,
   canUploadExternalSources = false,
   canWaive = false,
+  children,
 }: {
+  /** Extra content shown inside the card (toll v2 file results). */
+  children?: React.ReactNode;
   source: ReconRunSource;
   weekKey: string;
   onUpload?: (sourceId: string) => void;
@@ -319,6 +322,7 @@ export function ReconSourceCard({
           ) : null}
         </div>
       ) : null}
+      {children}
     </article>
   );
 }
@@ -540,6 +544,19 @@ export function ReconSourcesStep({
     }
   };
 
+  const uberPanel = uberOpen ? (
+    <CloseWeekUberReimportDialog
+      open={uberOpen}
+      onOpenChange={setUberOpen}
+      weekLabel={weekKey}
+      weekKey={weekKey}
+      onImported={async () => {
+        await onRefresh();
+      }}
+      onUberFilesForToll={tollsV2On ? (files) => runUberTollFollowUp(files) : undefined}
+    />
+  ) : null;
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-600">
@@ -547,7 +564,12 @@ export function ReconSourcesStep({
         toll and fuel review unlocks.
       </p>
       <div className={cn('grid gap-3', tollsV2On ? 'lg:grid-cols-3' : 'md:grid-cols-2')}>
-        <div className={cn('grid gap-3', tollsV2On ? 'lg:col-span-2 md:grid-cols-2' : 'md:col-span-2 md:grid-cols-2 contents')}>
+        <div
+          className={cn(
+            'gap-3',
+            tollsV2On ? 'flex flex-col lg:col-span-2' : 'grid md:col-span-2 md:grid-cols-2 contents',
+          )}
+        >
           {applicable.map((source) => (
             <div key={source.id} className="min-w-0">
               <ReconSourceCard
@@ -561,7 +583,7 @@ export function ReconSourcesStep({
                 attestBusy={attestBusyIds.has(source.id)}
                 canUploadExternalSources={canUploadExternalSources}
                 canWaive={canWaive}
-              />
+              >
               {tollsV2On ? (
                 <ReconTollV2SourceEnhancement
                   source={source}
@@ -592,11 +614,19 @@ export function ReconSourcesStep({
                   }}
                 />
               ) : null}
+              {tollsV2On && source.id === 'uber_bundle' ? uberPanel : null}
+              </ReconSourceCard>
             </div>
           ))}
+          {tollsV2On ? (
+            <p className="flex items-start gap-2 pt-1 text-xs text-[#47464c]">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+              Uploading the same file twice changes nothing.
+            </p>
+          ) : null}
         </div>
         {tollsV2On && tollSummary ? (
-          <aside className="rounded-xl border border-[#e5eeff] bg-white p-4 shadow-sm lg:col-span-1">
+          <aside className="self-start rounded-xl border border-[#e5eeff] bg-white p-4 shadow-sm lg:col-span-1">
             <h3 className="text-sm font-semibold text-[#0b1c30]">This week&apos;s files</h3>
             <p className="mt-2 text-sm text-[#47464c]">
               {tollSummary.received} of {tollSummary.total} toll files received
@@ -626,18 +656,8 @@ export function ReconSourcesStep({
         onChange={(e) => void onTollFilePicked(e)}
       />
 
-      {uberOpen ? (
-        <CloseWeekUberReimportDialog
-          open={uberOpen}
-          onOpenChange={setUberOpen}
-          weekLabel={weekKey}
-          weekKey={weekKey}
-          onImported={async () => {
-            await onRefresh();
-          }}
-          onUberFilesForToll={tollsV2On ? (files) => runUberTollFollowUp(files) : undefined}
-        />
-      ) : null}
+      {/* v2 opens the Uber panel inside the Uber card (next to its Upload button); others keep it here. */}
+      {!tollsV2On ? uberPanel : null}
 
       {tollsV2On ? (
         <>

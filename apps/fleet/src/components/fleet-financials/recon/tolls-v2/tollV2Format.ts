@@ -148,6 +148,18 @@ export function chargeWhen(iso: string | undefined): string {
   }
 }
 
+/** "29 Aug · Uber trip 7:58 PM–8:40 PM · card · paid back J$275.00" — a payback row's first line. */
+export function paybackLine(
+  trip: TollV2Trip | null | undefined,
+  paidOn: string | undefined,
+  paidBackMinor?: number,
+): string {
+  const when = trip?.dropoffAt || trip?.requestAt;
+  const day = when ? chargeWhen(when).split(',')[0] : paidOn ? chargeWhen(`${paidOn}T12:00:00-05:00`).split(',')[0] : '';
+  const body = trip ? `Uber trip ${tripPill(trip, paidBackMinor)}` : `Uber payback${paidBackMinor ? ` ${fmtTollMinor(paidBackMinor)}` : ''}`;
+  return day && day !== '—' ? `${day} · ${body}` : body;
+}
+
 /** Green chip copy for pick-trip radio cards. */
 export function uberPaidBackLabel(minor: number | null | undefined): string {
   return `Uber paid back ${fmtTollMinor(minor ?? 0)}`;

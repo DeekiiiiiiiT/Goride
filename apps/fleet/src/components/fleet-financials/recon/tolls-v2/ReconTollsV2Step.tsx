@@ -1,11 +1,11 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { TollV2CommandError } from '../../../../services/tollV2CommandError';
+import { isPaidWeekRefusal } from '../../../../services/tollV2CommandError';
 import { useTollV2Desk } from './useTollV2Desk';
 import { formatConfirmAllSureToast, runConfirmAllSure, useTollV2Commands } from './useTollV2Commands';
 import { computeTiles, computeTileSubcounts, progressCounts } from './tollV2Tiles';
-import { toastAfterTollDecision } from './tollV2DecisionToast';
+import { toastAfterKeptPayback, toastAfterTollDecision } from './tollV2DecisionToast';
 import { blockerGroups, pairChargesForReview, sureSuggestions, chargesInSection } from './tollV2DeskLogic';
 import { decisionUndoPayload } from './tollV2Format';
 import { TollV2TilesRow } from './TollV2TilesRow';
@@ -14,7 +14,7 @@ import { TollV2SealBox } from './TollV2SealBox';
 import { TollV2SummaryPortal } from './TollV2SummaryPortal';
 import { TollV2MatcherBanner } from './TollV2MatcherBanner';
 import { TollV2VersionChangedCard } from './TollV2VersionChangedCard';
-import type { TollV2Charge, TollV2Payback, TollV2ReviewPair, TollV2Suggestion } from './types';
+import type { TollV2Charge, TollV2KeptPayback, TollV2Payback, TollV2ReviewPair, TollV2Suggestion } from './types';
 import { TollV2PickTripDialog } from './dialogs/TollV2PickTripDialog';
 import { TollV2CheckReceiptDialog } from './dialogs/TollV2CheckReceiptDialog';
 import { TollV2RejectReceiptDialog } from './dialogs/TollV2RejectReceiptDialog';
@@ -31,7 +31,6 @@ import { TollV2ReopenDialog } from './TollV2ReopenDialog';
 import { TollV2SealedRibbon } from './TollV2SealedRibbon';
 import { TollV2EmptyCard, TollV2ErrorCard, TollV2LoadingState } from './TollV2StateCards';
 import { TollV2MobileSealBar } from './TollV2MobileSealBar';
-import { decisionKindLabel, fmtTollMinor, chargeWhen } from './tollV2Format';
 import type { TollV2LateItem, TollV2TakeBack, TollV2TakeBackCandidate } from './types';
 
 export function ReconTollsV2Step({
@@ -74,10 +73,6 @@ export function ReconTollsV2Step({
   const progress = useMemo(() => (desk ? progressCounts(desk.charges) : null), [desk]);
   const sureRows = useMemo(() => (desk ? sureSuggestions(desk.charges) : []), [desk]);
   const groups = useMemo(() => (desk ? blockerGroups(desk.blockers) : []), [desk]);
-  const decidedRows = useMemo(
-    () => (desk ? desk.charges.filter((c) => c.section === 'decided') : []),
-    [desk],
-  );
   const openWeekTakeBacks = useMemo(() => {
     const overview = weeksQuery.data;
     if (!overview || overview.openWeek !== weekKey) return [];
@@ -151,7 +146,7 @@ export function ReconTollsV2Step({
         setReopenOpen(false);
         invalidateWeeks();
       } catch (err) {
-        if (err instanceof TollV2CommandError && err.code === 'REOPEN_INSTEAD') {
+        if (isPaidWeekRefusal(err)) {
           setReopenInstead('Paid weeks can\'t be reopened — late items move to the open week.');
         }
       }
@@ -205,6 +200,20 @@ export function ReconTollsV2Step({
       if (!body) return;
       try {
         await runCommand('undo_decision', body);
+      } catch {
+        /* error toast shown by runCommand */
+      }
+    },
+    [runCommand],
+  );
+
+  const undoKept = useCallback(
+    async (kept: TollV2KeptPayback) => {
+      const body = decisionUndoPayload({ kind: 'kept_unlinked', undo: kept.undo });
+      if (!body) return;
+      try {
+        const res = await runCommand('undo_decision', body);
+        if (res !== null) toast.success('Undone — the payback is open again');
       } catch {
         /* error toast shown by runCommand */
       }
@@ -285,6 +294,7 @@ export function ReconTollsV2Step({
   const rowActions: TollV2RowActions & {
     onLinkPayback?: (p: TollV2Payback) => void;
     onLeaveUnlinked?: (p: TollV2Payback) => void;
+    onUndoKept?: (k: TollV2KeptPayback) => void;
   } = {
     readOnly: desk?.sealed,
     onConfirm: (c) => void applyTopSuggestion(c),
@@ -301,15 +311,18 @@ export function ReconTollsV2Step({
     onUndo: (c) => setUndoCharge(c),
     onLeaveUnlinked: async (p) => {
       try {
-        await runCommand('leave_payback_unlinked', {
+        const res = await runCommand('leave_payback_unlinked', {
           payback_id: p.id,
           expected_payback_version: p.version,
           reason_code: 'no_toll_found',
         });
+        if (res === null) return;
+        await toastAfterKeptPayback(queryClient, weekKey, p.id, undoKept);
       } catch {
         /* error toast shown by runCommand */
       }
     },
+    onUndoKept: (k: TollV2KeptPayback) => void undoKept(k),
     onLinkPayback: (p) => setLinkPayback(p),
   };
 
@@ -325,7 +338,7 @@ export function ReconTollsV2Step({
 
   return (
     <div className="overflow-x-hidden pb-24 sm:pb-0" data-testid="recon-tolls-v2-step">
-      {desk.matcherBusy ? <TollV2MatcherBanner /> : null}
+      {desk.matcherBusy && !desk.sealed ? <TollV2MatcherBanner /> : null}
       {versionConflict ? <TollV2VersionChangedCard onDismiss={clearVersionConflict} /> : null}
       {desk.sealed ? <TollV2SealedRibbon onReopen={() => setReopenOpen(true)} /> : null}
 
@@ -335,7 +348,20 @@ export function ReconTollsV2Step({
 
       <TollV2TilesRow tiles={tiles} tilesAddUp={tiles.tilesAddUp} subcounts={subcounts} locked={desk.sealed} />
 
-      <div className="mt-4">
+      {/* Stitch "sealed week with late items": late items come right after the tiles. */}
+      {desk.sealed && (desk.late?.length ?? 0) > 0 ? (
+        <div className="mt-4">
+          <TollV2LateItemsCard
+            items={desk.late ?? []}
+            openWeek={desk.openWeek}
+            weekPaid={desk.paid}
+            busy={busy}
+            onCarry={(item) => void handleCarryLate(item)}
+          />
+        </div>
+      ) : null}
+
+      <div className={desk.sealed ? 'hidden' : 'mt-4'}>
         <div className="mb-2 flex items-center justify-between text-sm text-[#47464c]">
           <span data-testid="toll-v2-progress">
             {progress.decided} of {progress.total} tolls decided · {progress.left} left
@@ -360,36 +386,6 @@ export function ReconTollsV2Step({
           sealed={desk.sealed}
           onConfirmAll={() => setConfirmAllOpen(true)}
         />
-      ) : null}
-
-      {desk.sealed && decidedRows.length > 0 ? (
-        <section className="mt-6 rounded-2xl border border-[#e5eeff] bg-white p-4">
-          <h3 className="text-sm font-semibold text-[#0b1c30]">Decided · Read-only</h3>
-          <ul className="mt-2 divide-y divide-[#e5eeff]">
-            {decidedRows.map((c) => (
-              <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
-                <span>
-                  {c.plazaName ?? 'Toll'} · {chargeWhen(c.occurredAt)} · {fmtTollMinor(c.amountMinor)}
-                </span>
-                <span className="rounded-full bg-[#eff4ff] px-2 py-0.5 text-xs font-semibold text-[#47464c]">
-                  {decisionKindLabel(c.decision?.kind)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {desk.sealed && (desk.late?.length ?? 0) > 0 ? (
-        <div className="mt-4">
-          <TollV2LateItemsCard
-            items={desk.late ?? []}
-            openWeek={desk.openWeek}
-            weekPaid={desk.paid}
-            busy={busy}
-            onCarry={(item) => void handleCarryLate(item)}
-          />
-        </div>
       ) : null}
 
       <TollV2SealBox

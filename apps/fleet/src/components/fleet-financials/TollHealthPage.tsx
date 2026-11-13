@@ -22,6 +22,42 @@ import {
 import { useTollV2Weeks } from './recon/tolls-v2/useTollV2Weeks';
 import { useTollV2Enabled } from './recon/tolls-v2/useTollV2Desk';
 
+/** Week Reconciliation opens a week only after its Sunday (Jamaica time). */
+export function weekOpensAfter(weekKey: string, now: Date = new Date()): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) return null;
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Jamaica' }).format(now);
+  const end = new Date(`${weekKey}T12:00:00Z`);
+  end.setUTCDate(end.getUTCDate() + 6);
+  const endKey = end.toISOString().slice(0, 10);
+  if (today > endKey) return null;
+  const label = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(end);
+  return `Opens after Sun ${label}`;
+}
+
+function OpenWeekButton({
+  weekKey,
+  onNavigate,
+  label,
+  className,
+}: {
+  weekKey: string;
+  onNavigate: TollHealthNavigate;
+  label: string;
+  className: string;
+}) {
+  const wait = weekOpensAfter(weekKey);
+  if (wait) return <span className="text-xs text-[#47464c]">{wait}</span>;
+  return (
+    <button
+      type="button"
+      className={className}
+      onClick={() => onNavigate('week-reconciliation', { weekKey, step: 'tolls' })}
+    >
+      {label}
+    </button>
+  );
+}
+
 type TollHealthNavigate = (
   page: string,
   opts?: { weekKey?: string; step?: string; line?: 'rideshare' | 'rush_delivery' },
@@ -186,13 +222,12 @@ export function TollHealthPage({
               {failedCheck?.name ? `1 check failed — ${plainCheckName(failedCheck.name)}` : '1 check failed'}
             </p>
             {openWeek && onNavigate ? (
-              <button
-                type="button"
+              <OpenWeekButton
+                weekKey={openWeek}
+                onNavigate={onNavigate}
+                label="Open the week"
                 className="rounded-lg border border-[#ba1a1a]/40 px-3 py-1 text-sm font-medium text-[#ba1a1a]"
-                onClick={() => onNavigate('week-reconciliation', { weekKey: openWeek, step: 'tolls' })}
-              >
-                Open the week
-              </button>
+              />
             ) : null}
           </div>
         )}
@@ -221,13 +256,12 @@ export function TollHealthPage({
                   {w.sealed ? 'Sealed' : `${w.toDecide ?? 0} left to decide`}
                 </span>
                 {onNavigate ? (
-                  <button
-                    type="button"
+                  <OpenWeekButton
+                    weekKey={w.weekKey}
+                    onNavigate={onNavigate}
+                    label="Open"
                     className="w-full rounded-lg border border-[#cbd5e1] px-3 py-1.5 text-sm font-medium sm:w-auto"
-                    onClick={() => onNavigate('week-reconciliation', { weekKey: w.weekKey, step: 'tolls' })}
-                  >
-                    Open
-                  </button>
+                  />
                 ) : null}
               </div>
             </li>
@@ -288,13 +322,12 @@ function HealthTile({
           </span>
         )}
         {count > 0 && openWeek && onNavigate ? (
-          <button
-            type="button"
+          <OpenWeekButton
+            weekKey={openWeek}
+            onNavigate={onNavigate}
+            label="Open week"
             className="rounded-lg border border-[#cbd5e1] px-2 py-1 text-xs font-medium"
-            onClick={() => onNavigate('week-reconciliation', { weekKey: openWeek, step: 'tolls' })}
-          >
-            Open week
-          </button>
+          />
         ) : null}
       </div>
     </article>

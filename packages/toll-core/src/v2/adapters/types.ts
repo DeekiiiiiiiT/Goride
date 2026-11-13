@@ -57,6 +57,8 @@ export interface IndriveTripRow {
 
 export interface DriverCashEvidence {
   receipt_url: string;
+  /** The number printed on the receipt (shown on the check-receipt screen). */
+  receipt_number?: string;
   plaza?: string;
   lane?: string;
   collector?: string;

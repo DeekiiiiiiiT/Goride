@@ -46,6 +46,15 @@ function sumAmountMinor(rows: TollV2ImportReportRow[]): number {
   }, 0);
 }
 
+/** Reports saved before amounts were stored have none; then the amount is left out, never shown as J$0.00. */
+function hasAmounts(rows: TollV2ImportReportRow[]): boolean {
+  return rows.some((r) => typeof r.amount_minor === 'number');
+}
+
+function usedRows(rows: TollV2ImportReportRow[]): TollV2ImportReportRow[] {
+  return rows.filter((r) => !isImportProblemRow(r));
+}
+
 export function resultLineForKind(
   kind: string | undefined,
   report: TollV2ImportReport | undefined,
@@ -61,21 +70,22 @@ export function resultLineForKind(
       return s === 'new' || s === 'unchanged' || s.includes('charge');
     });
     const n = Number(counts.new ?? 0) + Number(counts.unchanged ?? 0) || tollRows.length || Number(report.rows ?? 0);
-    const spend = sumAmountMinor(rows.filter((r) => typeof r.amount_minor === 'number'));
-    return `${n} tolls read · ${fmtTollMinor(spend)} · ${problems} problems`;
+    const spend = hasAmounts(rows) ? ` · ${fmtTollMinor(sumAmountMinor(usedRows(rows)))}` : '';
+    return `${n} tolls read${spend} · ${problems} problems`;
   }
   if (kind === 'topups') {
-    const n = Number(counts.new ?? 0) || rows.length || 1;
-    const spend = sumAmountMinor(rows);
-    return `${n} top-up read · ${fmtTollMinor(spend)}`;
+    const n = Number(counts.new ?? 0) + Number(counts.unchanged ?? 0) || usedRows(rows).length || rows.length;
+    const spend = hasAmounts(rows) ? ` · ${fmtTollMinor(sumAmountMinor(usedRows(rows)))}` : '';
+    return `${n} ${n === 1 ? 'top-up' : 'top-ups'} read${spend}`;
   }
   if (kind === 'uber') {
-    const trips = rows.filter((r) => r.status === 'trip_only' || r.platform_trip_id || r.status === 'new');
-    const tripN = trips.length || Number(report.rows ?? 0);
-    const paybacks = rows.filter((r) => typeof r.amount_minor === 'number' && (r.amount_minor as number) > 0);
+    const tripN = Number(report.rows ?? 0) || rows.length;
+    const paybacks = usedRows(rows).filter(
+      (r) => r.status !== 'trip_only' && typeof r.amount_minor === 'number' && (r.amount_minor as number) > 0,
+    );
     const payN = paybacks.length;
-    const paySum = sumAmountMinor(paybacks);
-    return `${tripN} trips read · ${payN} toll paybacks · ${fmtTollMinor(paySum)}`;
+    const paySum = hasAmounts(rows) ? ` · ${fmtTollMinor(sumAmountMinor(paybacks))}` : '';
+    return `${tripN} trips read · ${payN} toll ${payN === 1 ? 'payback' : 'paybacks'}${paySum}`;
   }
   return null;
 }
