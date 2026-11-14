@@ -7,8 +7,14 @@ steps:
       - --build-arg
       - CACHEBUST=$BUILD_ID
       - -t
+      - gcr.io/$PROJECT_ID/recon-worker:$BUILD_ID
+      - -t
       - gcr.io/$PROJECT_ID/recon-worker
       - .
+  # Push BEFORE deploy. The `images:` list below is only pushed when the whole build ends,
+  # so deploying the bare tag here ran the PREVIOUS build's image (one version behind).
+  - name: gcr.io/cloud-builders/docker
+    args: [push, gcr.io/$PROJECT_ID/recon-worker:$BUILD_ID]
   # Asleep until the database wakes it. Minimum 0, one job at a time, CPU only while that job runs.
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: gcloud
@@ -21,7 +27,7 @@ steps:
       - --region
       - us-east1
       - --image
-      - gcr.io/$PROJECT_ID/recon-worker
+      - gcr.io/$PROJECT_ID/recon-worker:$BUILD_ID
       - --platform
       - managed
       - --quiet
