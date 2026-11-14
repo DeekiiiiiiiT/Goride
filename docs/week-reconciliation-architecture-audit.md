@@ -1,55 +1,49 @@
 # Week Reconciliation — Architecture Audit
 
-**Rev 28 · 2026-11-12 · Status: BUILDING — Round 5 (browser done-tests) part-way.** 17 of 21 browser done-tests pass (9b new). The 4 left (5, 6, 9t, 13) found 7 real problems: 4 fixed, 3 open (WRA-41, 42, 43 below). Nothing committed, nothing live.
+**Rev 30 · 2026-11-14 · Status: LIVE — Step 5 (owner real week-by-week test).** 3 empty weeks closed; 21 Sep at step 4 Tag account. See START HERE.
 
-## ⏸ START HERE (paused 14 Nov 2026 ~05:15 UTC, owner on a break — new chat picks up here)
+## ⏸ START HERE (paused 14 Nov 2026 ~16:30 UTC, owner on a break — new chat picks up here)
 
-**Exact next steps (one per reply, owner sends screenshots / SQL results):**
-1. **Owner pushes** `a1da2d94` (not pushed yet): `cd C:\Roam\Goride` then `git push origin parts-auto-match:main`.
-2. **Claude checks the calculator deploy** went live with the NEW image: `gh run list --limit 8` (wait for "Deploy recon-worker" success), then
-   `gcloud run revisions list --service recon-worker --region us-east1 --project goride-recon --limit 2` and
-   `gcloud container images list-tags gcr.io/goride-recon/recon-worker --limit 3 --project goride-recon` — the active revision's image (`gcloud run revisions describe <rev> --region us-east1 --project goride-recon --format='value(status.imageDigest)'`) must be the newest pushed digest. (Claude may read gcloud; Claude may NOT run `gcloud run deploy` — denied as a live change.)
-3. **Owner queues the week** in the SQL Editor:
-   `select public.recon_enqueue_week_desk(organization_id::text, 'rideshare', '2026-04-13', 0) from recon.week_runs where week_key = '2026-04-13' and service_line = 'rideshare' and organization_id::text like '8cfa606a-%';`
-   (org = `8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823`). Wait ~1 min.
-4. **Owner checks** (read-only): `select now(), desk_computed_at, desk_snapshot->'closeCheck'->>'status' from recon.week_runs where week_key='2026-04-13' and service_line='rideshare' and organization_id::text like '8cfa606a-%';` → must say **`ok`** (it said `none` before). If still `none` with the new image live, the fix in `computeLiveStepCounts` (recon_routes.ts ~546) has a gap — debug there.
-5. **Owner refreshes the week page** (step 6 Trips & earnings) — the "Waiting for the calculator" spinner should be gone → **Continue to Settlement preview** → walk step 7 → **Close week** (step 8). Then repeat the same walk for **20 Apr** and **27 Apr 2026**.
+**Where the owner is:** Week of **21 Sep 2026** (Rideshare), on **step 4 Tag account**. Steps 1–3 complete (all 8 inputs green, tolls decided + sealed). Everything below is pushed and live (main `8dcb7c19`, edge deploy success).
 
-**Week of 13 Apr 2026 — where it stands (live):** steps 1–5 complete. All 8 files marked "No activity" (Uber, InDrive, Roam app trips, Tag usage, Tag top-ups, Cash tolls, Roam fuel card, Cash fuel); tolls sealed (0 tolls); Tag account closing saved as 0 (ties); Fuel complete with nothing to finalize. Stuck on step 6: `closeCheck = none` → Trips shows "Waiting for the calculator", Settlement preview stays locked (actionable 1).
+**Exact next steps (one per reply, owner sends screenshots):**
+1. Owner refreshes the 21 Sep page (step 4 Tag account). Opening should now say "(first week — enter the statement closing below; it sets the opening)" — no longer "starts at 0" / expected −595.
+2. Owner types the **TransJam tag balance at the end of 27 Sep 2026** into *Statement closing balance* → **Save closing**. With no earlier saved closing, that figure anchors the account (opening = closing − 3,000 top-ups + 3,595 usage) and the step ties. If the owner does not know the balance, help find the nearest one they have (TransJam app / statement) — do NOT invent a number.
+3. **Continue to Fuel** (step 5): 7 Roam card fills (J$35,000) + driver fills; review / finalize the Fuel week. Then step 6 Trips & earnings → 7 Settlement preview (driver Kenny Gregory Rattray — real money this time, check the numbers) → 8 Close.
+4. Then the next open weeks, oldest first: **28 Sep, 5 Oct, 19 Oct, 26 Oct, 2 Nov 2026** (12 Oct is not open). For each: Uber files via the Uber card's Replace file (Uber cash refresh — also feeds tolls); TransJam usage + top-up CSVs. Owner's folders: `C:\Users\deeki\Documents\Business\Roam\Reports\Toll Tag\Usage\2026`, `...\Toll Tag\Top Up\2026`, `...\Reports\RideShare Trips\Uber\2026\<week>`. **Roam card weeks 19 Oct, 26 Oct, 2 Nov have no Roam statement yet** → Roam uploads it first in Fleet Admin → Gas cards → Statement import (`docs/roam-fuel-card-statement-audit.md`).
+5. Heads-up from the owner's top-up files: "Aug 31 – Sept 6" holds a top-up dated **29 Apr**; "Oct 19" and "Oct 26" hold the **same** top-up (EAA3FBCCE3, 27 Oct) — check when those weeks come up.
 
-**Found and fixed this session (14 Nov):**
-- **b1653613 (pushed, live on edge + website):** (a) Roam-issued fuel card had no "No activity" button while "Waiting on Roam" — now shown to staff who can upload the statement (`ReconSourcesStep.tsx`; server already accepted it). (b) **Continue** refused with "This week changed" after the background recalculation (~2 min after any change) moved the week version — Continue now re-reads the week and retries once (`ReconRunPage.tsx` `advanceToNext`). (c) **A no-activity week never gets a driver check** (the calculator only checks drivers with activity), so `closeCheck` stayed `none` for ever and Trips / Settlement / Close waited — new `weekHadNoActivity` (`recon_desk_shape.ts`, every applicable file `attested_none`; waived does NOT count) used in `computeLiveStepCounts`. Tests: recon screen vitest 78/78, `recon_desk_shape.test.ts` 9/9.
-- **a1da2d94 (committed, NOT pushed): the week calculator deploy was always ONE VERSION BEHIND.** `cloudbuild.recon-worker.yaml` deployed the bare `recon-worker` tag, but `images:` is only pushed when the build ends, so Cloud Run got the previous push's image (proof: revision 00078 runs `555ec…`, the b1653613 build made `2e2c…`). Fix: push `:$BUILD_ID` before deploy, deploy `:$BUILD_ID`. Every earlier calculator deploy was one behind — the current live calculator runs pre-b1653613 code, which is why (c) did not take effect.
+**Closed today:** 13 Apr, 20 Apr, 27 Apr 2026 (empty weeks, self-approved).
 
-- **14 Nov later:** a1da2d94 pushed; calculator revision 00079 runs the newest image (checked). **13 Apr 2026 CLOSED** (owner, self-approved).
-- **36a8efde (pushed, live; edge + calculator rev 00080 checked): Close week always said "Tolls reviewed before new data arrived".** `week_close_recon.ts` `fetchCoverageMap` used the raw `{week: status}` coverage for week-judged sources (Uber, InDrive, Tag account, fuel cards), the wizard spreads it over 7 days (`expandWeekCoverage`) — step hashes never matched, so the first step fed by them (Tolls) was always STEP_STALE at close. Now both use `expandWeekCoverage`. Deno recon tests 119/119.
-- **Fuel step tab counts (uncommitted → see commit after this line):** All / Rideshare / Delivery showed every fill ever (377) instead of the week's. `FuelManagement.tsx` `serviceLineCounts` now counts only the desk week's fills when opened from Week Reconciliation.
+**Fixed + live this session (14 Nov, in order):**
+- `a1da2d94` calculator deploy was one version behind (push `:$BUILD_ID` before deploy).
+- `36a8efde` Close week always said "Tolls reviewed before new data arrived" (`week_close_recon.ts` now spreads `{week: status}` coverage with `expandWeekCoverage`, same as the wizard).
+- `c064cb1c` Fuel step tab counts = the week's fills (were all-time 377).
+- `096d1acd` Tolls tile "Paid back by platforms" (Uber + InDrive both pay back).
+- `0df22ef0` Continue spun for ever after the empty "Assign service lines" auto-skip.
+- `07677e5d` toll reader: plaza names with a direction ("Portmore West" → "Portmore"); a fully refused toll file is no longer marked received.
+- `50fe5ced` **edge deploy skipped toll-core / fuel-core / finance-core / types-only pushes** — now redeploys the fleet functions.
+- `73cc2f4f` + migration `20261114141537_recon_ignore_calculator_version_moves` (owner ran it + logbook line): a calculator publish no longer makes the next click "WEEK_CHANGED".
+- `edfbf97b` toll reader: TransJam top-up dates "21 Sep 2026 / 08:23 AM" on two lines, blank rows skipped, the refusal check counts every refused row. All 11 top-up + 15 usage files in the owner's folders read.
+- `3c07a767`…`16ac8812` **Roam fuel card statement** (WRA-45 → `docs/roam-fuel-card-statement-audit.md` RF-01…RF-08): Fleet Admin → Gas cards → Statement import marks every Roam-card fleet's week received; Dominion keeps programs only; week page Roam card is read-only; 11 past statements (3 Aug–12 Oct) registered (`63e1e50c` added week_keys; owner ran the backfill SQL).
+- `ed3077d8` the page takes the server's real week version after each change (`X-Recon-Week-Version`) — fixed WEEK_CHANGED part-way through confirming tolls.
+- `8dcb7c19` Tag account: the first week's statement closing sets the opening (go-live adopted May–14 Sep as closed with no saved closing, so the opening was 0).
 
-**Still open from this session (fix after the empty weeks close):**
-- **WRA-45 — now its own audit: `docs/roam-fuel-card-statement-audit.md` (RF-01…RF-08); the fix below is superseded there.** Roam-issued fuel card is treated as a fleet upload (design gap). Owner rule: two fuel-card options — (1) Roam gas card: Roam logs the usage on its side and the fleet's fuel transactions update; the fleet never handles a statement; (2) own card: the fleet uploads its own statement. Today: (a) `fuel_card_roam` only counts as received when an import batch with that source exists for the week (`recon._week_statement_received`); Roam's logged card transactions (`fleet_fuel_entries` Card_Transaction / cardId, already counted in `recon_volume.ts`) do not count, so the fleet sees "Waiting on Roam" and has to press "No activity"; (b) the Roam staff queue (`GET /external-queue`, `fetchExternalQueue` in `reconApi.ts`) has no screen; (c) which option applies is guessed — any `fleet_fuel_cards` row = Roam card, own card = KV `jaa_program:` `mode: self_serve`, and `week_close_recon.ts` hard-codes `hasSelfServeJaa: false`. Fix: one stored per-fleet fuel-card setting (roam / own / none) read by both wizard and close; Roam card coverage = covered from Roam's logged transactions (zero rows on a closed Roam day = covered, not missing), shown read-only "From Roam", no upload / no-activity button for the fleet; own card stays a fleet upload.
-- **WRA-46 — owner asked for a reason on self-approve.** `ReconApprovalDialog.tsx` + server Close/Reopen require an 8-character reason for self-approval; for the company owner (sole approver) it is noise (owner typed "sdfsdfsd"). Fix: owner skips the reason box; close still logged and tagged Self-approved; staff unchanged.
-- Settlement preview shows `$` not `J$` and the raw date "2026-04-13"; Close week History shows raw lines like "lane change:POST /fleet-fuel/fuel/periods/…/compute" — needs plain words.
-- **Decision saves still hit "This week changed"** after the background recalculation (seen on Tag account Save closing; Reload week + redo works). Continue is fixed; saves were left strict on purpose (done-tests 9 / 9b / 9t expect a refusal when another tab changed the week). Better fix: the page should notice its week version moved (e.g. refetch the run when the calculator publishes) before the user clicks.
-- Tolls step on an empty week says "0 of 0 tolls decided · **0% completed**" — should read 100% / done.
-- Fuel Money Check shows `$` instead of `J$`.
-
-**Where we are:** Week Reconciliation is **LIVE** for the owner's fleet (`recon_v2` on, 14 Nov 03:28 UTC). Go-live Step 4 is fully done: 11 migrations, code deployed (main `6f0dd254` incl. WRA-41/43 + fuel no-GPS fix), week calculator resumed, Uber week fix run (37 → 0), switch on, and the missing calculator wake job added (migration `20261114040154_recon_worker_wake_cron.sql`, owner ran it + logbook line; the calculator then ran its first nightly since 26 Oct). Week list now: **"Numbers are up to date", 9 open, 39 reconciled** — December etc. were adopted as closed automatically.
-
-**Now in Step 5 (owner's real week-by-week test), weeks close oldest first:**
-1. **13 Apr, 20 Apr, 27 Apr 2026** — no activity: open the week, mark every needed file "no activity", walk the steps, close. **Next action = owner opens Week of 13 Apr 2026 and sends a screenshot; guide ONE step per reply.**
-2. **21 Sep, 28 Sep, 5 Oct 2026** — real weeks; also the 3 old-toll weeks from `docs/toll-old-system-removal-audit.md` D0 (Kenny Gregory Rattray): upload Uber / InDrive / toll files, decide, **seal tolls in step 3**, then close.
-3. **19 Oct, 26 Oct, 2 Nov 2026** — real weeks.
-4. During Step 5 the 14-night side-by-side check runs (section "Step 5" below).
+**Still open (fix after the real weeks close):**
+- **WRA-46** — owner is asked for a reason on self-approve (`ReconApprovalDialog.tsx` + server Close/Reopen 8-character rule). Fix: the company owner skips the reason box; still logged Self-approved; staff unchanged.
+- **WRA-47** — "Activity vs trips" card (step 6) shows Uber hours only; the Roam app records went_online / job events (`driver_activity_logic.ts`) but the card does not use them. Fix: add Roam hours to the card.
+- Display: Settlement preview `$` not `J$` + raw date "2026-04-13"; Fuel Money Check `$`; Close week History raw "lane change:POST /fleet-fuel/…" lines; Tolls on an empty week "0 of 0 · 0% completed" (should read done).
+- Tag account step has no render test for the first-week rule (covered by server tests + live use).
 
 **Open items (not blocking the owner):**
-- **Done-tests 5, 6, 9t, 13** still need rework for the new toll system: 5/9t/13 import tolls the old way (`importTolls` in `e2e/helpers/weekReconDoneTest.ts` → must use the new toll upload `/toll/v2/import`); test 6 passes the WRA-41 point but its seeded "flagged fill" shows Clear before it is resolved (find what re-saves/re-checks the fill). A run on 14 Nov was also disturbed by another chat writing files under `supabase/functions` mid-run.
-- **`fuel/periods/ensure` answered 500 twice** in one test-6 run (two at the same instant — likely a create race); not yet looked at.
-- **Nightly finance check fails every night at 04:00 UTC** (`fleet-finance-recon-nightly` → `finance-recon`): it selects `debit_account_key, credit_account_key` from `public.financial_events`, which has never had those columns (`supabase/functions/finance-recon/index.ts` ~123). `week_close.ts` ~2194 (M-2 fuel account-key check) asks for the same columns but ignores the error, so that check never runs. Separate fix, its own audit — not this one.
-- Accepted from WRA-43: a change made outside Week Reconciliation (no week header) still waits for the nightly run.
+- Done-tests 5, 6, 9t, 13 still need rework for the new toll system (old `importTolls` in `e2e/helpers/weekReconDoneTest.ts` → `/toll/v2/import`; test 6 flagged fill shows Clear too early).
+- `fuel/periods/ensure` answered 500 twice in one test-6 run (likely a create race).
+- Nightly finance check fails at 04:00 UTC (`finance-recon` selects `debit_account_key, credit_account_key` that `public.financial_events` never had) — its own audit.
+- Accepted from WRA-43: a change made outside Week Reconciliation still waits for the nightly run.
 
-**After Step 5's first weeks:** back to `docs/toll-old-system-removal-audit.md` (round S3 → D1 → T1).
+**After the real weeks:** back to `docs/toll-old-system-removal-audit.md` (round S3 → D1 → T1).
 
-**Working rules learned this session:** owner is not a coder — short plain replies, one step at a time; owner pushes to `main` (Claude's push to `main` is blocked): `cd C:\Roam\Goride` then `git push origin parts-auto-match:main`; give live SQL for the SQL Editor ending with the `schema_migrations` logbook line for migrations; other chats have uncommitted files (maintenance, parts, service items) — never stage them, never commit built `*/index.ts` bundles; after any `deno test`, run `pnpm install --frozen-lockfile` before vitest/builds; the Supabase connector may be down — ask the owner to run read-only SQL instead.
+**Working rules learned:** owner is not a coder — short plain replies, one step at a time; owner pushes (`cd C:\Roam\Goride` then `git push origin parts-auto-match:main`); give live SQL for the SQL Editor (migrations end with the `schema_migrations` logbook line); never stage other chats' files (maintenance, parts, service items, `fleet-core` / `fleet-ops` routes.generated.json) or built `*/index.ts` bundles; after `deno test` run `pnpm install --frozen-lockfile`; Claude may read live data with the Supabase connector and gcloud read commands; **run the owner's real files through the reader before they upload** (`deno run --config deno.json` on the adapter with the file path) — today's toll-reader bugs were all found that way; keep CRLF files CRLF (`fuel_controller.tsx`) or the whole file shows as changed; Python is not installed — use Node for scripted edits.
 
 ---
 

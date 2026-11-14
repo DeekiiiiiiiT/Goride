@@ -1,6 +1,6 @@
 # Roam fuel card statement → Week Reconciliation — audit
 
-**Rev 1 · 14 Nov 2026 · OPEN (nothing built yet)**
+**Rev 2 · 14 Nov 2026 · CLOSED — RF-01…RF-08 built, pushed and live (3c07a767, 63e1e50c week_keys fix, 16ac8812 screen cleanup); 11 past statements registered; 21 Sep Roam card shows Received from Roam.** Open: Roam statements for 19 Oct, 26 Oct, 2 Nov not uploaded yet (Roam uploads them in Fleet Admin → Gas cards → Statement import). Screen cleanup done: title Gas cards, Statement week in the review step, Upload statement, history shows Week + Received, duplicate Match pending logs removed (stays on Matched).
 Goal in one sentence: **Roam uploads each JAA (Roam-issued gas card) statement once, in Fleet Admin, and every fleet with a Roam card gets its fills and a "received" Roam-card file for every week the statement covers — the fleet never uploads or confirms it.**
 
 Parent: `docs/week-reconciliation-architecture-audit.md` WRA-45 (this audit replaces that finding's fix).
