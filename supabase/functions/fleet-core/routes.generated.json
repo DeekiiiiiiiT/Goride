@@ -1,7 +1,7 @@
 {
   "slug": "fleet-core",
-  "generatedAt": "2026-11-14T01:29:23.323Z",
-  "routeCount": 820,
+  "generatedAt": "2026-11-14T01:51:24.085Z",
+  "routeCount": 821,
   "routes": [
     "ALL /make-server-37f42386/webhooks/wipay-fleet-modules",
     "DELETE ${ADMIN_CAT}/:id",
@@ -597,6 +597,7 @@
     "POST /make-server-37f42386/admin/catalog/parts/undo",
     "POST /make-server-37f42386/admin/catalog/reference-offer",
     "POST /make-server-37f42386/admin/catalog/refresh-demand",
+    "POST /make-server-37f42386/admin/catalog/related-supplies",
     "POST /make-server-37f42386/admin/catalog/seed-in-use",
     "POST /make-server-37f42386/admin/catalog/specs",
     "POST /make-server-37f42386/admin/catalog/specs/bulk",
