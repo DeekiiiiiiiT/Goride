@@ -47,7 +47,7 @@ function fakeRecon(
     rpc(name: string) {
       if (name === "claim_week_change") claimCalls.length += 1;
       if (name === "week_version_current_enough") return Promise.resolve({ data: currentEnough, error: null });
-      return Promise.resolve({ data: { status: claimStatus }, error: null });
+      return Promise.resolve({ data: { status: claimStatus, version: (run?.version ?? 0) + 1 }, error: null });
     },
   } as unknown as WeekReconClient;
 }
@@ -203,4 +203,16 @@ Deno.test("week moved by a person → WEEK_CHANGED and no claim", async () => {
   assertEquals(res.status, 409);
   assertEquals((await res.json()).error, "WEEK_CHANGED");
   assertEquals(claimCalls.length, 0);
+});
+
+Deno.test("a saved change answers with the week's real new version", async () => {
+  const claimCalls = { length: 0 };
+  const deps: WeekGuardDeps = {
+    requireAuthStrict: signedIn(),
+    reconClient: () => fakeRecon({ ...RUN_ROW, version: 5 }, claimCalls, "ok", true),
+    refreshWeek: async () => {},
+  };
+  const res = await mountApp(deps).request("/change", { method: "POST", headers: { "x-recon-week": HEADER } });
+  assertEquals(res.status, 200);
+  assertEquals(res.headers.get("X-Recon-Week-Version"), "6");
 });

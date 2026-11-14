@@ -53,6 +53,16 @@ describe('WRA-27 week version on toll / fuel / settlement changes', () => {
     expect(getReconWeekContext()?.version).toBe(10);
   });
 
+  it('the server-told version wins when the calculator published in between (21 Sep, v31 → v33)', async () => {
+    setReconWeekContext({ runId: RUN, version: 31, closed: false });
+    const sent = withReconWeekHeader(`${API_ENDPOINTS.toll}/a`, { method: 'POST' }).sent;
+    await noteReconWeekResponse(
+      sent,
+      new Response('{}', { status: 200, headers: { 'X-Recon-Week-Version': '33' } }),
+    );
+    expect(getReconWeekContext()?.version).toBe(33);
+  });
+
   it('done-test 9: a refusal raises "This week changed"', async () => {
     setReconWeekContext({ runId: RUN, version: 7, closed: false });
     const seen: string[] = [];

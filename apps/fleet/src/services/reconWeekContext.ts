@@ -75,7 +75,11 @@ export async function noteReconWeekResponse(sent: string | null, response: Respo
   if (!sent || !current || !sent.startsWith(`${current.runId}@`)) return;
   if (response.ok) {
     const sentVersion = Number(sent.split('@')[1]);
-    if (current.version === sentVersion) current = { ...current, version: sentVersion + 1 };
+    // The server says the week's real version after our change (a calculator publish in between
+    // makes it more than +1). Without it, count our own change as +1.
+    const told = Number(response.headers.get('X-Recon-Week-Version'));
+    if (Number.isFinite(told) && told > current.version) current = { ...current, version: told };
+    else if (current.version === sentVersion) current = { ...current, version: sentVersion + 1 };
     return;
   }
   if (response.status !== 409) return;

@@ -117,6 +117,12 @@ export async function runWeekVersionGuardCore(
     p_correlation_id: correlationIdFrom(c),
     p_self_approved: false,
   });
+  // The page counts its own changes; tell it the real version (a calculator publish in between
+  // makes it more than +1, and a guess left its next click refused as WEEK_CHANGED).
+  const newVersion = Number((claim as { version?: unknown } | null)?.version);
+  if (!claimErr && Number.isFinite(newVersion) && newVersion > 0) {
+    c.res.headers.set("X-Recon-Week-Version", String(newVersion));
+  }
   if (claimErr) {
     console.warn("[recon] lane change history failed", claimErr.message);
   } else if ((claim as { status?: string } | null)?.status !== "ok" && (claim as { status?: string } | null)?.status !== "replay") {

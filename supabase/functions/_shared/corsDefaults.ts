@@ -33,6 +33,8 @@ export const CORS_EXPOSE_HEADERS = [
   "X-Cache",
   "X-Total-Count",
   "X-Request-Id",
+  // Week Reconciliation: the week's version after a saved change (recon_week_version_guard.ts).
+  "X-Recon-Week-Version",
 ] as const;
 
 export const CORS_MAX_AGE = 600;
