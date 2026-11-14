@@ -28,6 +28,7 @@ import {
   isReconHumanSourceStatus,
 } from "../../../packages/finance-core/src/coverageInputHash.ts";
 import { sourceVolumeMetrics } from "./recon_volume.ts";
+import { expandWeekCoverage } from "./recon_desk_shape.ts";
 
 export type WeekCloseServiceLine = "rideshare" | "rush_delivery";
 
@@ -135,7 +136,9 @@ async function fetchCoverageMap(
     const days = weekDayKeys(weekKey);
     return Object.fromEntries(days.map((d) => [d, "missing"]));
   }
-  return (data as Record<string, string>) ?? {};
+  // Same shape as the wizard (recon_routes): week-judged sources come back as
+  // {week: status}; spread over the 7 days so step hashes match at close.
+  return expandWeekCoverage(data as Record<string, string> | null, weekKey);
 }
 
 function missingDaysFromCoverage(coverage: Record<string, string>): string[] {
