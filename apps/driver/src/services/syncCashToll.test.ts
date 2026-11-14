@@ -12,7 +12,6 @@ const baseAction = (overrides?: Partial<OfflineAction>): Extract<OfflineAction, 
     amountMinor: 37000,
     plazaName: 'Main',
     receiptBlobKey: 'toll-receipt-queue-item-uuid',
-    legacyTransaction: { category: 'Tolls', amount: -370 },
     ...((overrides as { payload?: object })?.payload),
   },
   ...overrides,
@@ -28,7 +27,6 @@ describe('syncCashToll', () => {
     const outcome = await syncCashToll(baseAction(), {
       uploadReceipt: async () => 'https://cdn/r.jpg',
       submitDriverCash: submit,
-      saveLegacyTransaction: vi.fn(),
       removeBlob,
     });
 
@@ -37,20 +35,19 @@ describe('syncCashToll', () => {
     expect(removeBlob).toHaveBeenCalled();
   });
 
-  it('TOLLS_V2_OFF falls back to saveTransaction with item id', async () => {
-    const saveLegacy = vi.fn().mockResolvedValue(undefined);
+  it('a 409 keeps the receipt on the phone and retries (never saved the old way)', async () => {
+    const removeBlob = vi.fn();
     const { offlineBlobStore } = await import('./offlineBlobStore');
     vi.spyOn(offlineBlobStore, 'get').mockResolvedValue(new Blob(['x'], { type: 'image/jpeg' }));
 
     const outcome = await syncCashToll(baseAction(), {
       uploadReceipt: async () => 'https://cdn/r.jpg',
       submitDriverCash: async () => ({ ok: false, status: 409, code: 'TOLLS_V2_OFF' }),
-      saveLegacyTransaction: saveLegacy,
-      removeBlob: vi.fn(),
+      removeBlob,
     });
 
-    expect(outcome).toBe('legacy_done');
-    expect(saveLegacy).toHaveBeenCalledWith(expect.objectContaining({ id: 'queue-item-uuid' }));
+    expect(outcome).toBe('retry');
+    expect(removeBlob).not.toHaveBeenCalled();
   });
 
   it('network error keeps item via retry', async () => {
@@ -61,7 +58,6 @@ describe('syncCashToll', () => {
     const outcome = await syncCashToll(baseAction(), {
       uploadReceipt: async () => 'https://cdn/r.jpg',
       submitDriverCash: submit,
-      saveLegacyTransaction: vi.fn(),
       removeBlob: vi.fn(),
     });
     expect(outcome).toBe('retry');
@@ -69,7 +65,6 @@ describe('syncCashToll', () => {
     const outcome2 = await syncCashToll(baseAction(), {
       uploadReceipt: async () => 'https://cdn/r.jpg',
       submitDriverCash: submit,
-      saveLegacyTransaction: vi.fn(),
       removeBlob: vi.fn(),
     });
     expect(submit.mock.calls[1][0].submission_id).toBe('queue-item-uuid');
@@ -78,7 +73,6 @@ describe('syncCashToll', () => {
 
   it('missing photo is permanent and sends nothing', async () => {
     const submit = vi.fn();
-    const saveLegacy = vi.fn();
     const { offlineBlobStore } = await import('./offlineBlobStore');
     vi.spyOn(offlineBlobStore, 'get').mockResolvedValue(null);
 
@@ -86,12 +80,10 @@ describe('syncCashToll', () => {
       syncCashToll(baseAction(), {
         uploadReceipt: async () => 'https://cdn/r.jpg',
         submitDriverCash: submit,
-        saveLegacyTransaction: saveLegacy,
         removeBlob: vi.fn(),
       }),
     ).rejects.toMatchObject({ code: 'MISSING_RECEIPT_PHONE', permanent: true });
     expect(submit).not.toHaveBeenCalled();
-    expect(saveLegacy).not.toHaveBeenCalled();
     expect(isPermanentTollSyncError({ code: 'MISSING_RECEIPT_PHONE', permanent: true })).toBe(true);
   });
 
@@ -103,8 +95,7 @@ describe('syncCashToll', () => {
         {
           uploadReceipt: async () => 'https://cdn/r.jpg',
           submitDriverCash: submit,
-          saveLegacyTransaction: vi.fn(),
-          removeBlob: vi.fn(),
+              removeBlob: vi.fn(),
         },
       ),
     ).rejects.toMatchObject({ code: 'MISSING_RECEIPT_PHONE', permanent: true });
@@ -118,7 +109,6 @@ describe('syncCashToll', () => {
     const err = await syncCashToll(baseAction(), {
       uploadReceipt: async () => 'https://cdn/r.jpg',
       submitDriverCash: async () => ({ ok: false, status: 400, code: 'NO_VEHICLE' }),
-      saveLegacyTransaction: vi.fn(),
       removeBlob: vi.fn(),
     }).catch((e) => e);
 

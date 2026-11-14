@@ -9,7 +9,7 @@ describe('assessTollDetectionHealth', () => {
     const h = assessTollDetectionHealth({
       settings: { toll_detection_enabled: true },
       plazas: [plaza('unverified')],
-      tollLogRows: [],
+      crossingsLastNDays: 0,
     });
     expect(h.verificationGateClosed).toBe(true);
     expect(h.zeroCrossingAlarm).toBe(false);
@@ -19,24 +19,16 @@ describe('assessTollDetectionHealth', () => {
     const h = assessTollDetectionHealth({
       settings: { toll_detection_enabled: true },
       plazas: [plaza('verified')],
-      tollLogRows: [],
-      nowMs: Date.parse('2026-08-31T12:00:00Z'),
+      crossingsLastNDays: 0,
     });
     expect(h.zeroCrossingAlarm).toBe(true);
   });
 
-  it('counts recent fleet_replay crossings', () => {
+  it('uses the recorded crossing count', () => {
     const h = assessTollDetectionHealth({
       settings: { toll_detection_enabled: true },
       plazas: [plaza('verified')],
-      nowMs: Date.parse('2026-08-31T12:00:00Z'),
-      tollLogRows: [
-        {
-          date: '2026-08-30',
-          referenceNumber: 'fleet_replay:t1:p1:0',
-          paymentMethod: 'fleet_account',
-        },
-      ],
+      crossingsLastNDays: 1,
     });
     expect(h.crossingsLastNDays).toBe(1);
     expect(h.zeroCrossingAlarm).toBe(false);

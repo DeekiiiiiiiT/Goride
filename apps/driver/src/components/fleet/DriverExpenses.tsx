@@ -996,9 +996,6 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
         const queuePayload = buildCashTollQueuePayload({
           occurredAt,
           amountMinor: Math.round(Math.abs(tollAmt) * 100),
-          tollAmount: tollAmt,
-          ymd,
-          timeStr,
           plaza,
           lane,
           collector,
@@ -1010,17 +1007,6 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
           receiptBlobKey,
           receiptFileName: receiptFile.name,
           receiptMimeType: receiptFile.type,
-          canonicalDriverId,
-          canonicalDriverName,
-          userId: user?.id,
-          resolvedVehicleId,
-          vehiclePlate:
-            driverRecord?.assignedVehiclePlate ||
-            resolvedVehicle?.plateNumber ||
-            resolvedVehicle?.licensePlate ||
-            driverRecord?.assignedVehicleName ||
-            resolvedVehicle?.vehicleName ||
-            undefined,
         });
         addToQueue({
           type: 'SUBMIT_CASH_TOLL',

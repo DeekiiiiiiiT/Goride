@@ -108,6 +108,23 @@ app.get("/admin/policies", async (c) => {
   return c.json({ policies: (data ?? []).map((r) => policyToApi(r as Record<string, unknown>)) });
 });
 
+/** Roam ride toll crossings recorded in the last N days (admin Toll Settings health; read-only). */
+app.get("/admin/crossing-count", async (c) => {
+  const auth = await requirePlatformAdmin(c);
+  if (auth instanceof Response) return auth;
+  const days = Math.min(365, Math.max(1, Math.round(Number(c.req.query("days")) || 30)));
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  const { count, error } = await svc()
+    .from("ride_toll_crossings")
+    .select("id", { count: "exact", head: true })
+    .gte("crossed_at", since);
+  if (error) {
+    logLine({ event: "admin_crossing_count_failed", error: error.message });
+    return c.json({ error: "count_failed", message: error.message }, 500);
+  }
+  return c.json({ days, crossings: count ?? 0 });
+});
+
 app.put("/admin/policies", async (c) => {
   const auth = await requirePlatformAdmin(c);
   if (auth instanceof Response) return auth;

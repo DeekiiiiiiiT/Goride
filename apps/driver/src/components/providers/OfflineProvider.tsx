@@ -146,17 +146,11 @@ async function syncCashTollAction(action: Extract<OfflineAction, { type: 'SUBMIT
         return { ok: true as const };
       } catch (e: unknown) {
         const err = e as { status?: number; code?: string; message?: string };
-        if (err?.status === 409 && err?.code === 'TOLLS_V2_OFF') {
-          return { ok: false as const, status: 409, code: 'TOLLS_V2_OFF' };
-        }
         if (err?.status === 400) {
           return { ok: false as const, status: 400, code: err.code };
         }
         throw e;
       }
-    },
-    saveLegacyTransaction: async (tx) => {
-      await api.saveTransaction(tx as Parameters<typeof api.saveTransaction>[0]);
     },
     removeBlob: async (key) => {
       if (key) await offlineBlobStore.removeMany([key]);

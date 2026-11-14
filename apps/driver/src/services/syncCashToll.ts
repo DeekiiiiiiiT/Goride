@@ -47,14 +47,13 @@ export type SyncCashTollDeps = {
     | { ok: true }
     | { ok: false; status: number; code?: string }
   >;
-  saveLegacyTransaction: (tx: Record<string, unknown>) => Promise<void>;
   removeBlob: (key?: string) => Promise<void>;
 };
 
 export async function syncCashToll(
   action: Extract<OfflineAction, { type: 'SUBMIT_CASH_TOLL' }>,
   deps: SyncCashTollDeps,
-): Promise<'done' | 'retry' | 'legacy_done'> {
+): Promise<'done' | 'retry'> {
   const { payload } = action;
   const submissionId = action.id;
 
@@ -92,17 +91,6 @@ export async function syncCashToll(
   if (result.ok) {
     await deps.removeBlob(payload.receiptBlobKey);
     return 'done';
-  }
-
-  if (result.status === 409 && result.code === 'TOLLS_V2_OFF') {
-    const tx = {
-      ...(payload.legacyTransaction || {}),
-      id: submissionId,
-      receiptUrl,
-    };
-    await deps.saveLegacyTransaction(tx);
-    await deps.removeBlob(payload.receiptBlobKey);
-    return 'legacy_done';
   }
 
   if (result.status === 400) {

@@ -19,8 +19,24 @@ import {
 import { api } from '../services/api';
 import {
   assessTollDetectionHealth,
+  TOLL_HEALTH_WINDOW_DAYS,
   type TollDetectionHealth,
 } from '../utils/tollDetectionHealth';
+import { getSupabaseFunctionsBaseUrl } from '../utils/supabase/info';
+
+/** Roam ride toll crossings in the last N days, or null when they can't be read. */
+async function fetchCrossingCount(token: string, days: number): Promise<number | null> {
+  try {
+    const res = await fetch(`${getSupabaseFunctionsBaseUrl()}/toll-brain/admin/crossing-count?days=${days}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { crossings?: unknown };
+    return typeof body.crossings === 'number' ? body.crossings : null;
+  } catch {
+    return null;
+  }
+}
 
 const WRITE_ROLES = new Set(['platform_owner', 'superadmin', 'rides_admin', 'super_admin', 'super admin']);
 
@@ -70,9 +86,9 @@ export function TollSettingsPage({ onNavigate }: Props) {
       const plazaResult = await api.getTollPlazas()
         .then((rows) => ({ ok: true as const, rows }))
         .catch(() => ({ ok: false as const, rows: [] }));
-      const [next, tollLogs] = await Promise.all([
+      const [next, crossings] = await Promise.all([
         getTollDispatchSettings(token),
-        api.getTollLogs({ limit: 500 }).catch(() => ({ data: [] })),
+        fetchCrossingCount(token, TOLL_HEALTH_WINDOW_DAYS),
       ]);
       setPlazasUnavailable(!plazaResult.ok);
       const plazas = plazaResult.rows;
@@ -81,7 +97,7 @@ export function TollSettingsPage({ onNavigate }: Props) {
         assessTollDetectionHealth({
           settings: next,
           plazas,
-          tollLogRows: (tollLogs?.data || []) as Array<Record<string, unknown>>,
+          crossingsLastNDays: crossings,
         }),
       );
     } catch (e: unknown) {

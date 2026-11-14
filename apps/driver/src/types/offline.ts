@@ -68,8 +68,6 @@ export interface SubmitCashTollPayload {
   receiptFileName?: string;
   receiptMimeType?: string;
   label?: string;
-  /** Legacy KV transaction for TOLLS_V2_OFF fallback (built at sync). */
-  legacyTransaction?: Record<string, unknown>;
 }
 
 export interface SubmitSplitFuelFillPayload {
