@@ -382,7 +382,9 @@ export function ReconRunPage({
         toast.error(msg);
       } finally {
         autoSkipInFlight.current = false;
-        if (!cancelled) setAdvancing(false);
+        // Always clear: refreshRun above changes runQuery.data, which re-runs this effect and
+        // marks this pass cancelled — skipping the reset left Continue spinning for ever.
+        setAdvancing(false);
       }
     })();
 
