@@ -412,15 +412,23 @@ export function ReconSourcesStep({
           paymentsTransaction: opts.paymentsTransaction,
           tripActivity: opts.tripActivity,
         });
-        setReadProblems((prev) => ({
-          ...prev,
-          [opts.sourceId]: readProblemRows((res as { problems?: Parameters<typeof readProblemRows>[0] }).problems),
-        }));
+        const problems = readProblemRows((res as { problems?: Parameters<typeof readProblemRows>[0] }).problems);
+        setReadProblems((prev) => ({ ...prev, [opts.sourceId]: problems }));
+        const rowsCommitted = countRowsFromV2ImportResponse(
+          res as { imports?: Array<{ rows?: number; counts?: Record<string, number> }> },
+        );
+        const importedSomething = ((res as { imports?: unknown[] }).imports?.length ?? 0) > 0;
+        // Every row refused: the week must not count this file as received.
+        if (!importedSomething && problems.length > 0) {
+          throw new Error(
+            `No rows read from ${opts.file.name} — all ${problems.length} were refused. Fix the rows listed below and upload again.`,
+          );
+        }
         await registerTollV2WithRecon({
           batchId: commandId,
           sourceId: opts.sourceId,
           weekKey,
-          rowsCommitted: countRowsFromV2ImportResponse(res as { imports?: Array<{ rows?: number; counts?: Record<string, number> }> }),
+          rowsCommitted,
           fileName: opts.file.name,
         });
         await importReportsQuery.refetch();

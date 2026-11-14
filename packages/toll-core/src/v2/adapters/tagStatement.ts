@@ -7,6 +7,7 @@ import {
   normalizeTagForLookup,
   parseCsvDateTimeToJamaicaIso,
   parseCsvRows,
+  resolvePlazaIdByName,
   toMinor,
 } from './common.ts';
 import type {
@@ -112,7 +113,7 @@ export function tagStatement(text: string, ctx: TagStatementCtx): TagStatementRe
       continue;
     }
 
-    const plazaId = ctx.plazaIdByName[plazaName];
+    const plazaId = resolvePlazaIdByName(plazaName, ctx.plazaIdByName);
     if (!plazaId) {
       problems.push({ row: rowNum, reason: `Plaza not known: ${plazaName}` });
       continue;

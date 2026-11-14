@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseCsvDateTimeToJamaicaIso, toMinor } from './common.ts';
+import { parseCsvDateTimeToJamaicaIso, resolvePlazaIdByName, toMinor } from './common.ts';
 
 describe('toMinor', () => {
   it('parses comma decimals and currency noise', () => {
@@ -36,5 +36,20 @@ describe('parseCsvDateTimeToJamaicaIso', () => {
     expect(parseCsvDateTimeToJamaicaIso('2026-08-24 15:30')).toBe(
       '2026-08-24T15:30:00-05:00',
     );
+  });
+});
+
+describe('resolvePlazaIdByName', () => {
+  const map = { Portmore: 'p1', 'Spanish Town': 'p2' };
+  it('matches the plaza when the statement adds a direction', () => {
+    expect(resolvePlazaIdByName('Portmore West', map)).toBe('p1');
+    expect(resolvePlazaIdByName('Portmore East', map)).toBe('p1');
+    expect(resolvePlazaIdByName('Spanish Town East', map)).toBe('p2');
+    expect(resolvePlazaIdByName('spanish town  west', map)).toBe('p2');
+  });
+  it('keeps exact names and rejects unknown plazas', () => {
+    expect(resolvePlazaIdByName('Portmore', map)).toBe('p1');
+    expect(resolvePlazaIdByName('May Pen', map)).toBeNull();
+    expect(resolvePlazaIdByName('', map)).toBeNull();
   });
 });

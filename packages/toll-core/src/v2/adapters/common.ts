@@ -372,6 +372,32 @@ export function normalizePlazaNameForRef(name: string): string {
   return (name || '').trim().replace(/\s+/g, ' ');
 }
 
+const PLAZA_DIRECTION_SUFFIX = /\s+(east|west|north|south|eastbound|westbound|northbound|southbound|eb|wb|nb|sb)$/i;
+
+/**
+ * Plaza id for a statement's plaza name. The tag statement names the plaza with its direction
+ * ("Portmore West", "Spanish Town East"); the plaza list holds the plaza ("Portmore").
+ * Exact name first, then ignoring case, then without the trailing direction word.
+ */
+export function resolvePlazaIdByName(
+  plazaName: string,
+  plazaIdByName: Record<string, string>,
+): string | null {
+  const name = normalizePlazaNameForRef(plazaName);
+  if (!name) return null;
+  if (plazaIdByName[name]) return plazaIdByName[name];
+  const byLower = new Map<string, string>();
+  for (const [k, id] of Object.entries(plazaIdByName)) {
+    const key = normalizePlazaNameForRef(k).toLowerCase();
+    if (key && !byLower.has(key)) byLower.set(key, id);
+  }
+  const lower = name.toLowerCase();
+  if (byLower.has(lower)) return byLower.get(lower)!;
+  const base = lower.replace(PLAZA_DIRECTION_SUFFIX, '').trim();
+  if (base && base !== lower && byLower.has(base)) return byLower.get(base)!;
+  return null;
+}
+
 export function isoToMinuteKey(iso: string): string {
   const m = iso.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/);
   return m ? m[1] : iso;
