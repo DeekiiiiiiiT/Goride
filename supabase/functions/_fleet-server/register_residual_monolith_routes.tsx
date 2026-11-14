@@ -81,6 +81,7 @@ import {
   type FilterStats,
 } from "./org_scope.ts";
 import { loadTollPlazaStats, attachPlazaStats } from "./toll_plaza_stats.ts";
+import { isTollCategory } from "./toll_category_flags.ts";
 import { assertExpectedUpdatedAt, stripConcurrencyToken } from "./optimistic_concurrency.ts";
 import {
   resolveProductLine,
@@ -119,9 +120,6 @@ import {
   countCanonicalLedgerByBatchId,
   importFileHashAlreadyPosted,
 } from "./ledger_canonical.ts";
-import { isUnifiedTollSettlementEnabled } from "./driver_toll_charge.ts";
-import { upsertClaim, deleteClaim, executeClaimDateBackfill } from "./claim_service.ts";
-import { addToTollDisposition, emptyTollDisposition, roundTollDisposition } from "./driver_toll_disposition.ts";
 import {
   appendCanonicalFuelExpenseIfEligible,
   appendCanonicalTripFaresIfEligible,
@@ -129,17 +127,13 @@ import {
   buildCanonicalTripFareEventsFromTrip,
   appendCanonicalWalletCreditIfEligible,
   appendCanonicalFuelReimbursementIfEligible,
-  appendCanonicalTollReimbursementIfEligible,
   buildCanonicalFuelExpenseEvent,
   buildCanonicalWalletCreditEvent,
   buildCanonicalFuelReimbursementEvent,
-  buildCanonicalTollReimbursementEvent,
-  buildCanonicalTollEventFromTollLedger,
   appendCanonicalFixedExpenseIfEligible,
   buildCanonicalFixedExpenseEvents,
   appendCanonicalGenericTransactionIfEligible,
   buildCanonicalGenericTransactionEvent,
-  type TollLedgerLike,
 } from "./canonical_from_ops.ts";
 import {
   aggregateCanonicalEventsToLedgerDriverOverview,
@@ -187,28 +181,7 @@ import { normalizeAdminCashFuelTransaction } from "./fuel_transaction_normalize.
 import auditApp from "./audit_controller.tsx";
 import safetyApp from "./safety_controller.tsx";
 import syncApp from "./sync_controller.tsx";
-// RETIRED: tollApp / tollPeriodApp live on fleet-toll (ADR-0021 F1)
-import {
-  saveTollLedgerEntry,
-  getTollLedgerEntry,
-  getAllTollLedgerEntries,
-  transactionToTollLedgerServer,
-  isTollCategory as isTollCategoryServer,
-  updateTollLedgerEntry,
-  deleteTollLedgerEntry,
-  buildTollLedgerFullBackupPayload,
-  executeTollLedgerRepairDates,
-  executeTollResetForReconciliation,
-  computeAndPersistTollMatchOnIngest,
-  reconsiderTollsForNewTrips,
-  invalidateStaleTollMatchesForTrip,
-  voidTollLedgerEntryHandler,
-} from "./toll_controller.tsx";
-import {
-  mondayWeekKeyFromCalendarDay,
-  refuseIfTollPeriodSealed,
-} from "./toll_period_writable.ts";
-import { replayFleetTripsWithRoutes } from "./fleet_trip_toll_replay.ts";
+// The old toll system (toll_controller, toll periods, route replay) is removed: docs/toll-old-system-removal-audit.md
 import { resolveDriverFromFleetRecords, collectDriverAliasIds } from "./driver_identity.ts";
 // RETIRED: disputeRefundApp / driverFinancialPeriodApp / settlementCommandsApp / paymentLedgerLineApp → fleet-pay (F4)
 import weekCloseApp from "./week_close_controller.tsx";
@@ -560,35 +533,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
   registerFuelScenarioRoutes(app);
   registerEarningsPolicyRoutes(app);
   registerFleetBankRoutes(app);
-
-  // ─── Toll Ledger Primary Write Helper (Phase 6) ──────────────────────────
-  // Tolls are now written ONLY to toll_ledger:* (single source of truth).
-  // The transaction:* store is no longer used for toll data.
-  // ───────────────────────────────────────────────────────────────────────
-  async function writeTollToLedger(transaction: any, c: Context): Promise<void> {
-    if (!isTollCategoryServer(transaction.category)) return;
-
-    const drivers = await loadDriverCache();
-    const normalized = resolveDriverFromFleetRecords(
-      { driverId: transaction.driverId, driverName: transaction.driverName },
-      drivers,
-    );
-    if (normalized.resolved) {
-      transaction.driverId = normalized.canonicalId;
-      transaction.driverName = normalized.driverName;
-    }
-
-    const tollRecord = stampOrg(transactionToTollLedgerServer(transaction), c);
-    const saved = await saveTollLedgerEntry(tollRecord, c);
-    if (!saved) return;
-
-    console.log(`[TollLedger] Saved toll_ledger:${tollRecord.id}`);
-    // Canonical append is inside saveTollLedgerEntry (idempotent).
-    // MOI-3: compute+persist a match-on-ingest suggestion (no-ops unless the
-    // matchOnIngestEnabled flag is on; never throws — failures here must never
-    // break toll creation itself).
-    await computeAndPersistTollMatchOnIngest(tollRecord);
-  }
 
   // ─── Driver ID Resolution ─────────────────────────────────────────────
   // Resolves any driver identifier (Roam UUID, Uber UUID, InDrive UUID,
@@ -1634,118 +1578,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
         console.error("[DFP] rebuild after trip save failed:", dfpErr);
       }
 
-      // Phase 4 fleet detection: post-trip replay of saved Trip.route through
-      // the shared segment geofence matcher (no live GPS stream for fleet).
-      try {
-        let fallbackRadiusM = 100;
-        let cooldownMs = 5 * 60 * 1000;
-        try {
-          const { data: ds } = await supabase
-            .from("rides_dispatch_settings")
-            .select("toll_geofence_radius_m, toll_round_trip_cooldown_ms")
-            .eq("id", 1)
-            .maybeSingle();
-          if (ds) {
-            const r = Number((ds as any).toll_geofence_radius_m);
-            const c = Number((ds as any).toll_round_trip_cooldown_ms);
-            if (Number.isFinite(r) && r > 0) fallbackRadiusM = Math.min(500, Math.max(50, r));
-            if (Number.isFinite(c) && c >= 0) cooldownMs = Math.min(3_600_000, c);
-          }
-        } catch {
-          /* settings optional — keep defaults */
-        }
-
-        const replayTrips = processedTrips.map((t: any) => ({
-          id: String(t.id || ""),
-          driverId: t.driverId ?? null,
-          driverName: t.driverName ?? null,
-          vehicleId: t.vehicleId ?? null,
-          vehiclePlate: t.vehiclePlate ?? null,
-          route: t.route,
-          organizationId: t.organizationId ?? writeOrgId,
-          date: t.date ?? t.completed_at ?? null,
-          isLiveRecorded: t.isLiveRecorded === true,
-        }));
-
-        const replay = await replayFleetTripsWithRoutes({
-          db: supabase,
-          trips: replayTrips,
-          saveTollUsage: async (entry) => saveTollLedgerEntry(entry as any),
-          fallbackRadiusM,
-          cooldownMs,
-        });
-
-        // Stamp tollDetection coverage onto saved trips (honest UI for imports).
-        const byId = new Map(replay.results.map((r) => [r.tripId, r]));
-        const stampKeys: string[] = [];
-        const stampVals: any[] = [];
-        for (const t of processedTrips) {
-          const id = String(t?.id || "").trim();
-          if (!id) continue;
-          const r = byId.get(id);
-          const pts = Array.isArray(t.route) ? t.route.length : 0;
-          let tollDetection: Record<string, unknown>;
-          if (pts < 2 || r?.reason === "no_route_polyline") {
-            tollDetection = {
-              status: "not_applicable",
-              crossingCount: 0,
-              reason: "no_route_polyline",
-            };
-          } else if (!r) {
-            tollDetection = { status: "eligible", crossingCount: 0 };
-          } else if (r.hits.length > 0) {
-            tollDetection = {
-              status: "detected",
-              crossingCount: r.hits.length,
-              written: r.written,
-            };
-          } else {
-            tollDetection = {
-              status: "no_plazas",
-              crossingCount: 0,
-              reason: r.reason,
-            };
-          }
-          stampKeys.push(`trip:${id}`);
-          stampVals.push(stampWriteOrg({ ...t, tollDetection }));
-        }
-        if (stampKeys.length > 0) {
-          await kv.mset(stampKeys, stampVals);
-        }
-
-        if (replay.tripsScanned > 0) {
-          console.log(
-            `[FleetTollReplay] POST /trips: tripsScanned=${replay.tripsScanned} crossingsWritten=${replay.crossingsWritten}`,
-          );
-        }
-      } catch (replayErr) {
-        console.warn("[FleetTollReplay] POST /trips failed (non-fatal):", replayErr);
-      }
-
-      // MOI-4: reverse re-match — finds tolls uploaded before this trip existed
-      // and persists match fields + workflowStage when matchOnIngestEnabled is on.
-      // Never throws; no-ops unless the flag is enabled.
-      try {
-        const rematchResult = await reconsiderTollsForNewTrips(processedTrips, { persist: true });
-        console.log(
-          `[MatchOnIngest] reconsiderTollsForNewTrips (POST /trips): scanned=${rematchResult.scanned} wouldUpdate=${rematchResult.wouldUpdate} wouldFlag=${rematchResult.wouldFlag}`,
-        );
-      } catch (rematchErr) {
-        console.warn("[MatchOnIngest] reconsiderTollsForNewTrips (POST /trips) failed:", rematchErr);
-      }
-
-      // MOI-4 (edit case): if any of these trips already had a toll pointing
-      // at them and this re-sync moved the trip's date/time, re-validate and
-      // clear/flag stale suggestions when matchOnIngestEnabled is on.
-      try {
-        for (const trip of processedTrips) {
-          if (trip?.id) {
-            await invalidateStaleTollMatchesForTrip(String(trip.id), { persist: true, currentTrip: trip });
-          }
-        }
-      } catch (invalidateErr) {
-        console.warn("[MatchOnIngest] invalidateStaleTollMatchesForTrip (POST /trips) failed:", invalidateErr);
-      }
+      // Trip route toll replay and old toll matching are gone with the old toll system. Tolls now come from tag
+      // statements, driver cash receipts and Roam ride crossings, matched by the new toll system's matcher.
 
       // Invalidate stats cache since data has changed
       await cache.invalidateCacheVersion("stats");
@@ -1870,13 +1704,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
         console.warn(`[DELETE /trips/:id] Ledger cleanup failed (non-fatal) trip=${id}:`, ledgerErr?.message);
       }
 
-      // MOI-4: clear/flag any toll whose match suggestion pointed at this now-
-      // deleted trip when matchOnIngestEnabled is on.
-      try {
-        await invalidateStaleTollMatchesForTrip(id, { persist: true, currentTrip: undefined });
-      } catch (invalidateErr) {
-        console.warn(`[MatchOnIngest] invalidateStaleTollMatchesForTrip (DELETE /trips/:id) failed:`, invalidateErr);
-      }
 
       let weekRebuilt = false;
       if (decision.rebuild && decision.driverId && decision.anchor) {
@@ -2875,6 +2702,14 @@ export function registerResidualMonolithRoutes(app: Hono) {
   app.post("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }), async (c) => {
     try {
       const transaction = await c.req.json();
+      // Tolls live only in the new toll system (driver cash receipts, tag statements and Uber files in Week
+      // Reconciliation step 1). The old toll ledger write is gone (docs/toll-old-system-removal-audit.md S2).
+      if (isTollCategory(transaction?.category)) {
+        return c.json({
+          error: "TOLLS_MOVED",
+          message: "Tolls are recorded in Week Reconciliation (toll files) or from the driver app (cash receipts).",
+        }, 410);
+      }
       if (!transaction.id) {
           transaction.id = crypto.randomUUID();
       }
@@ -3333,12 +3168,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
               };
               console.log(`[StationGate] Transaction ${transaction.id} held — station locationStatus="${locationStatus || 'none'}", skipping auto-approval and fuel entry creation.`);
               
-              // Phase 6: Toll transactions write ONLY to toll_ledger, not transaction:*
-              if (isTollCategoryServer(transaction.category)) {
-                  await writeTollToLedger(transaction, c);
-                  return c.json({ success: true, transaction, held: true, reason: 'station_unverified' });
-              }
-              
               await kv.set(`transaction:${transaction.id}`, stampOrg(transaction, c));
               return c.json({ success: true, transaction, held: true, reason: 'station_unverified' });
           }
@@ -3368,12 +3197,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
                               : 'Manual odometer override — pending admin verification'),
                   };
               }
-              // Phase 6: Toll transactions write ONLY to toll_ledger, not transaction:*
-              if (isTollCategoryServer(transaction.category)) {
-                  await writeTollToLedger(transaction, c);
-                  return c.json({ success: true, data: transaction });
-              }
-              
               await kv.set(`transaction:${transaction.id}`, stampOrg(transaction, c));
               return c.json({ success: true, data: transaction });
           }
@@ -3415,12 +3238,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
           }
       }
 
-      // Phase 6: Toll transactions write ONLY to toll_ledger, not transaction:*
-      if (isTollCategoryServer(transaction.category)) {
-          await writeTollToLedger(transaction, c);
-          return c.json({ success: true, data: transaction });
-      }
-      
       await kv.set(`transaction:${transaction.id}`, stampOrg(transaction, c));
 
       // ── Canonical ledger for wallet + generic business transactions ──
@@ -3524,18 +3341,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
       const callerOrgId = getOrgId(c);
       const cascadeParam = (c.req.query("cascade") || "").toLowerCase();
       const cascade = cascadeParam !== "false" && cascadeParam !== "0";
-
-      // Phase 6: Check toll_ledger first (tolls are now stored there, not in transaction:*)
-      const tollEntry = await getTollLedgerEntry(id);
-      if (tollEntry) {
-        // S1-2b: org ownership before mutating another tenant's money row.
-        if (!mayMutateTransactionOrg(tollEntry.organizationId, callerOrgId)) {
-          return c.json({ error: "Not found" }, 404);
-        }
-        await deleteTollLedgerEntry(id);
-        console.log(`[TollLedger] Deleted toll_ledger:${id}`);
-        return c.json({ success: true, deletedTransactionIds: [id] });
-      }
 
       const tx = await kv.get(`transaction:${id}`);
       if (!tx || typeof tx !== "object") {
@@ -3703,30 +3508,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
 
   // GET /ledger registered via registerLedgerQuerySummaryRoutes(app)
   // GET /ledger/count registered via registerLedgerQuerySummaryRoutes(app)
-
-  /** Whether a canonical ledger row's source record still exists in KV. */
-  async function canonicalLedgerSourceStillExists(sourceType: string, sourceId: string): Promise<boolean> {
-    const sid = String(sourceId).trim();
-    if (!sid) return false;
-    switch (sourceType) {
-      case "trip":
-        return !!(await kv.get(`trip:${sid}`));
-      case "import_batch":
-        return !!(await kv.get(`batch:${sid}`));
-      case "transaction": {
-        if (await kv.get(`transaction:${sid}`)) return true;
-        if (await kv.get(`fuel_entry:${sid}`)) return true;
-        const toll = await getTollLedgerEntry(sid);
-        return !!toll;
-      }
-      case "adjustment":
-      case "reconciliation":
-      case "statement":
-        return true;
-      default:
-        return true;
-    }
-  }
 
   // ─── GET /admin/ledger-source-orphan-audit — RETIRED ─────
   app.get(
@@ -4057,23 +3838,10 @@ export function registerResidualMonolithRoutes(app: Hono) {
   // Toll ledger utilities (backup, date repair) still work via query params.
   app.post("/make-server-37f42386/ledger/backfill", requireAuth(), requirePermission('data.backfill'), async (c) => {
       try {
-          // ── Toll ledger: backup + date repair (still supported) ──
-          if (c.req.query("tollLedgerBackup") === "1") {
-              const backup = await buildTollLedgerFullBackupPayload();
-              return c.json(backup);
-          }
-          if (c.req.query("tollLedgerDateRepair") === "1") {
-              const repairDryRun = c.req.query("repairDryRun") !== "false";
-              const batchSize = Math.min(Number(c.req.query("repairBatchSize")) || 200, 500);
-              const results = await executeTollLedgerRepairDates({ dryRun: repairDryRun, batchSize });
-              return c.json({ success: true, results });
-          }
-
           // Main legacy backfill is retired — use POST /ledger/canonical-backfill
           return c.json(
               {
                   error: "Legacy ledger backfill is retired. Use POST /ledger/canonical-backfill instead.",
-                  hint: "Toll ledger backup/repair still works via ?tollLedgerBackup=1 or ?tollLedgerDateRepair=1",
               },
               410,
           );
@@ -4083,106 +3851,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
       }
   });
 
-  // ─── Toll ledger backup + date repair (aliases on main router) ───────────────
-  // Same behavior as toll_controller routes under /toll-reconciliation/toll-ledger/*.
-  // Exposed here under /ledger/* next to backfill so admin tools share one URL family.
-  app.get("/make-server-37f42386/ledger/toll-ledger-backup", requireAuth(), requirePermission('data.backfill'), async (c) => {
-    try {
-      const backup = await buildTollLedgerFullBackupPayload();
-      const filename = `toll_ledger_backup_${new Date().toISOString().split("T")[0]}.json`;
-      c.header("Content-Type", "application/json");
-      c.header("Content-Disposition", `attachment; filename="${filename}"`);
-      return c.json(backup);
-    } catch (e: any) {
-      console.log(`[TollLedgerBackup] Error (ledger alias): ${e.message}`);
-      return c.json({ error: e.message }, 500);
-    }
-  });
-
-  app.post("/make-server-37f42386/toll-ledger/:id/void", requireAuth(), requirePermission('toll.manage'), voidTollLedgerEntryHandler);
-
-  app.post("/make-server-37f42386/ledger/toll-ledger-repair-dates", requireAuth(), requirePermission('data.backfill'), async (c) => {
-    try {
-      const body = await c.req.json().catch(() => ({}));
-      const results = await executeTollLedgerRepairDates(body);
-      return c.json({ success: true, results });
-    } catch (e: any) {
-      console.log(`[TollLedgerRepairDates] Error (alias): ${e.message}`);
-      return c.json({ error: e.message }, 500);
-    }
-  });
-
-  // Debug endpoint (helps confirm the deployed bundle includes the route).
-  // Call: GET /functions/v1/make-server-37f42386/toll-reconciliation/reset-for-reconciliation-debug
-  app.get("/make-server-37f42386/toll-reconciliation/reset-for-reconciliation-debug", requireAuth(), async (c) => {
-    return c.json({
-      ok: true,
-      route: "reset-for-reconciliation-debug",
-      now: new Date().toISOString(),
-    });
-  });
-
-  // Toll reset for reconciliation — registered on main router (same URL as toll_controller)
-  // so production always matches; nested app.route("/", tollApp) was returning 404 for some deploys.
-  app.post("/make-server-37f42386/toll-reconciliation/reset-for-reconciliation", requireAuth({ strict: true }), requirePermission('toll.manage'), async (c) => {
-    try {
-      const body = await c.req.json().catch(() => ({}));
-      const transactionId = body.transactionId;
-      if (transactionId) {
-        // Resolve week via toll date (same as toll_controller).
-        const entry = await getTollLedgerEntry(String(transactionId));
-        if (entry?.date) {
-          const tz = await getFleetTimezone();
-          const wk = mondayWeekKeyFromCalendarDay(fleetCalendarDay(String(entry.date), tz));
-          const sealed = await refuseIfTollPeriodSealed(c, wk, "POST /reset-for-reconciliation");
-          if (sealed) return sealed;
-        }
-      }
-      const result = await executeTollResetForReconciliation(transactionId);
-      return c.json(result);
-    } catch (e: any) {
-      const status =
-        typeof e.status === "number" && e.status >= 400 && e.status < 600
-          ? e.status
-          : 500;
-      console.log(`[TollReset] Error (main router): ${e.message}`);
-      return c.json({ error: e.message }, status);
-    }
-  });
-
-  app.post("/make-server-37f42386/toll-reconciliation/reset-period", requireAuth({ strict: true }), requirePermission('toll.manage'), async (c) => {
-    try {
-      const body = await c.req.json().catch(() => ({}));
-      const startDate = String(body.startDate || "").slice(0, 10);
-      if (/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
-        const sealed = await refuseIfTollPeriodSealed(
-          c,
-          mondayWeekKeyFromCalendarDay(startDate),
-          "POST /reset-period",
-        );
-        if (sealed) return sealed;
-      }
-      const { executePeriodReconciliationReset } = await import("./period_reset.ts");
-      const result = await executePeriodReconciliationReset(
-        {
-          startDate: body.startDate,
-          endDate: body.endDate,
-          driverIds: Array.isArray(body.driverIds) ? body.driverIds : undefined,
-          dryRun: body.dryRun === true,
-          confirmationLabel: String(body.confirmationLabel || ""),
-        },
-        c,
-      );
-      return c.json({ success: true, ...result });
-    } catch (e: any) {
-      const status =
-        typeof e.status === "number" && e.status >= 400 && e.status < 600
-          ? e.status
-          : 500;
-      console.log(`[PeriodReset] Error (main router): ${e.message}`);
-      return c.json({ error: e.message }, status);
-    }
-  });
 
   // ─── POST /ledger/repair-driver-ids — RETIRED ──────
   app.post("/make-server-37f42386/ledger/repair-driver-ids", requireAuth(), requirePermission('data.backfill'), async (c) => {
@@ -4498,53 +4166,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
       if ((tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement') && tx.status === 'Approved') {
           console.log(`[FuelCredit] Skipped approve-time wallet credit for ${id} (Finalize-only settlement)`);
       }
-
-      // Phase 4b: Auto-create Cash Wallet credit for approved Toll reimbursements (Manual Resolve: WriteOff/Business)
-      const isTollCash = tx.paymentMethod === 'Cash' || !!tx.receiptUrl;
-
-      if (isTollCategoryServer(tx.category) && tx.status === 'Approved' && isTollCash) {
-          if (!tx.driverId || tx.driverId === 'fleet') {
-              console.log(`[TollCredit] Skipping wallet credit: driverId is '${tx.driverId}' (fleet-absorbed, no driver to credit) for transaction ${id}`);
-          } else {
-              const tollCreditId = `toll-credit-${id}`;
-              const existingTollCredit = await kv.get(`transaction:${tollCreditId}`);
-
-              if (!existingTollCredit) {
-                  const tollWalletCredit = {
-                      id: tollCreditId,
-                      driverId: tx.driverId,
-                      driverName: tx.driverName || '',
-                      vehicleId: tx.vehicleId,
-                      date: new Date().toISOString().split('T')[0],
-                      time: new Date().toISOString().split('T')[1].substring(0, 8),
-                      type: 'Payment_Received',
-                      category: 'Toll Reimbursement Credit',
-                      description: `Toll Reimbursement Credit: ${tx.description || tx.vendor || tx.merchant || 'Toll Charge'}`,
-                      amount: Math.abs(Number(tx.amount) || 0),
-                      paymentMethod: 'Cash',
-                      status: 'Completed',
-                      isReconciled: true,
-                      referenceNumber: tx.id,
-                      metadata: {
-                          tollCreditSourceId: tx.id,
-                          source: 'toll_reimbursement_approval',
-                          automated: true,
-                          approvedAt: new Date().toISOString(),
-                          originalAmount: tx.amount,
-                          originalCategory: tx.category,
-                          resolutionNotes: tx.metadata?.notes
-                      }
-                  };
-
-                  await kv.set(`transaction:${tollCreditId}`, stampOrg(tollWalletCredit, c));
-                  await appendCanonicalTollReimbursementIfEligible(tollWalletCredit, c);
-                  console.log(`[TollCredit] Created wallet credit ${tollCreditId} for driver ${tx.driverId}, amount: ${tollWalletCredit.amount}`);
-              } else {
-                  console.log(`[TollCredit] Wallet credit already exists for ${id}, skipping (idempotent)`);
-              }
-          }
-      }
-
       await kv.set(`transaction:${id}`, stampOrg(tx, c));
       const resolvedAt = new Date();
       const deleteAfter = await applyEvidenceResolution(supabase, "transaction", id, resolvedAt);
@@ -4782,7 +4403,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
       const dryRun = body?.dryRun === true;
       const typesParam = typeof body?.types === 'string' ? body.types : '';
       const allowedTypes = new Set(typesParam ? typesParam.split(',').map((t: string) => t.trim().toLowerCase()) : [
-        'trips', 'fuel', 'tolls', 'indrive', 'fuel_reimburse', 'toll_reimburse',
+        // Old toll records are not re-posted: toll money comes only from the new toll system.
+        'trips', 'fuel', 'indrive', 'fuel_reimburse',
         'fixed_expenses', 'generic_transactions'
       ]);
 
@@ -4791,10 +4413,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
       const stats = {
         trips: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
         fuel: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
-        tolls: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
         indrive: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
         fuel_reimburse: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
-        toll_reimburse: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
         fixed_expenses: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
         generic_transactions: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
       };
@@ -4869,46 +4489,10 @@ export function registerResidualMonolithRoutes(app: Hono) {
         console.log(`[CanonicalBackfill] Fuel: scanned=${stats.fuel.scanned} eligible=${stats.fuel.eligible} appended=${stats.fuel.appended}`);
       }
 
-      // 3. Toll ledger → toll_charge / toll_refund
-      if (allowedTypes.has('tolls')) {
-        console.log('[CanonicalBackfill] Processing toll ledger...');
-        const allTolls = await kv.getByPrefix('toll_ledger:');
-        stats.tolls.scanned = allTolls.length;
-
-        const batch: Record<string, unknown>[] = [];
-        for (const entry of allTolls) {
-          if (!entry?.id) continue;
-          const ev = buildCanonicalTollEventFromTollLedger(entry as TollLedgerLike);
-          if (ev) {
-            stats.tolls.eligible++;
-            batch.push(ev);
-          }
-        }
-
-        if (!dryRun && batch.length > 0) {
-          const CHUNK = 200;
-          for (let i = 0; i < batch.length; i += CHUNK) {
-            const slice = batch.slice(i, i + CHUNK);
-            try {
-              const r = await appendCanonicalLedgerEvents(slice, c);
-              stats.tolls.appended += r.inserted;
-              stats.tolls.skipped += r.skipped;
-            } catch (e: any) {
-              stats.tolls.errors++;
-              console.error('[CanonicalBackfill] tolls append error:', e?.message);
-            }
-          }
-        } else if (dryRun) {
-          stats.tolls.appended = batch.length;
-        }
-        console.log(`[CanonicalBackfill] Tolls: scanned=${stats.tolls.scanned} eligible=${stats.tolls.eligible} appended=${stats.tolls.appended}`);
-      }
-
       // 4-6. Transaction-based wallet credits
       const allTransactions = (
         allowedTypes.has('indrive') ||
         allowedTypes.has('fuel_reimburse') ||
-        allowedTypes.has('toll_reimburse') ||
         allowedTypes.has('generic_transactions')
       )
         ? filterByOrg(await kv.getByPrefix('transaction:'), c)
@@ -4982,41 +4566,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
           stats.fuel_reimburse.appended = batch.length;
         }
         console.log(`[CanonicalBackfill] Fuel Reimburse: scanned=${stats.fuel_reimburse.scanned} eligible=${stats.fuel_reimburse.eligible} appended=${stats.fuel_reimburse.appended}`);
-      }
-
-      // 6. Toll Reimbursement Credit → adjustment
-      if (allowedTypes.has('toll_reimburse')) {
-        console.log('[CanonicalBackfill] Processing Toll Reimbursement Credits...');
-        const tollCreditTx = allTransactions.filter((tx: any) => tx?.category === 'Toll Reimbursement Credit');
-        stats.toll_reimburse.scanned = tollCreditTx.length;
-
-        const batch: Record<string, unknown>[] = [];
-        for (const tx of tollCreditTx) {
-          if (!tx?.id) continue;
-          const ev = buildCanonicalTollReimbursementEvent(tx as Record<string, unknown>);
-          if (ev) {
-            stats.toll_reimburse.eligible++;
-            batch.push(ev);
-          }
-        }
-
-        if (!dryRun && batch.length > 0) {
-          const CHUNK = 200;
-          for (let i = 0; i < batch.length; i += CHUNK) {
-            const slice = batch.slice(i, i + CHUNK);
-            try {
-              const r = await appendCanonicalLedgerEvents(slice, c);
-              stats.toll_reimburse.appended += r.inserted;
-              stats.toll_reimburse.skipped += r.skipped;
-            } catch (e: any) {
-              stats.toll_reimburse.errors++;
-              console.error('[CanonicalBackfill] toll_reimburse append error:', e?.message);
-            }
-          }
-        } else if (dryRun) {
-          stats.toll_reimburse.appended = batch.length;
-        }
-        console.log(`[CanonicalBackfill] Toll Reimburse: scanned=${stats.toll_reimburse.scanned} eligible=${stats.toll_reimburse.eligible} appended=${stats.toll_reimburse.appended}`);
       }
 
       // 7. Fixed expense rules → dated fixed_expense occurrences.
@@ -7095,27 +6644,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
               console.error("[FleetSync] Canonical trip fare append failed:", canonErr);
           }
 
-          // MOI-4: reverse re-match (same as POST /trips). Persists when
-          // matchOnIngestEnabled is on; never throws.
-          try {
-              const rematchResult = await reconsiderTollsForNewTrips(uniqueTrips, { persist: true });
-              console.log(
-                  `[MatchOnIngest] reconsiderTollsForNewTrips (fleet/sync): scanned=${rematchResult.scanned} wouldUpdate=${rematchResult.wouldUpdate} wouldFlag=${rematchResult.wouldFlag}`,
-              );
-          } catch (rematchErr) {
-              console.warn("[MatchOnIngest] reconsiderTollsForNewTrips (fleet/sync) failed:", rematchErr);
-          }
-
-          // MOI-4 (edit case): same stale-match re-validation as POST /trips.
-          try {
-              for (const trip of uniqueTrips) {
-                  if (trip?.id) {
-                      await invalidateStaleTollMatchesForTrip(String(trip.id), { persist: true, currentTrip: trip });
-                  }
-              }
-          } catch (invalidateErr) {
-              console.warn("[MatchOnIngest] invalidateStaleTollMatchesForTrip (fleet/sync) failed:", invalidateErr);
-          }
       }
 
       // 4. Financials (Singleton)
@@ -9255,21 +8783,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
       }
   });
 
-  /** Alias: historical `/toll-ledger` guess → native fleet_toll_ledger list. */
-  app.get("/make-server-37f42386/toll-ledger", requireAuth(), async (c) => {
-    try {
-      const orgId = getOrgId(c);
-      const res = await queryFleet("toll_ledger", {
-        org: orgId || undefined,
-        order: { col: "date", ascending: false },
-        limit: 5000,
-      });
-      if (res.error) throw res.error;
-      return c.json(filterByOrg(res.data as Record<string, unknown>[], c));
-    } catch (e: any) {
-      return c.json({ error: e.message }, 500);
-    }
-  });
 
   // Fleet Equipment Endpoints
   /** Alias: UI/docs historically guessed `/equipment` — same payload as all-equipment list. */
@@ -13921,34 +13434,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
       const CHUNK_SIZE = 100;
       const FILE_CHUNK_SIZE = 50;
       const filesByBucket = new Map<string, string[]>();
-
-      // Reverse toll_usage events before wiping toll_ledger / transaction keys.
-      try {
-        const { tollSourceIdsFromKeys, reverseTollUsageEventsForSourceIds } = await import(
-          "./toll_financial_reset.ts"
-        );
-        const tollIds = tollSourceIdsFromKeys(
-          keys.filter(
-            (k: string) =>
-              String(k).startsWith("toll_ledger:") || String(k).startsWith("transaction:"),
-          ),
-        );
-        if (tollIds.length > 0) {
-          const rev = await reverseTollUsageEventsForSourceIds(tollIds, "toll_ledger_deleted");
-          if (rev.errors.length) {
-            console.warn(
-              `bulk-delete-execute: toll_usage reverse warnings: ${rev.errors.join("; ")}`,
-            );
-          }
-          console.log(
-            `bulk-delete-execute: reversed ${rev.eventsReversed} toll_usage event(s) for ${tollIds.length} source id(s)`,
-          );
-        }
-      } catch (revErr: any) {
-        console.warn(
-          `bulk-delete-execute: toll_usage reverse failed (continuing delete): ${revErr?.message || revErr}`,
-        );
-      }
 
       for (let i = 0; i < keys.length; i += CHUNK_SIZE) {
         const chunk = keys.slice(i, i + CHUNK_SIZE);

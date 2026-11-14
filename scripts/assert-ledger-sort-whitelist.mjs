@@ -14,7 +14,6 @@ const fleetServer = join(__dirname, "..", "supabase", "functions", "_fleet-serve
 const FILES = [
   { file: "trip_sort.ts", mapName: "TRIP_SORT_MAP" },
   { file: "fuel_sort.ts", mapName: "FUEL_SORT_MAP" },
-  { file: "toll_sort.ts", mapName: "TOLL_SORT_MAP" },
 ];
 
 /** Keys / JSON path tails that must not be sorted via text JSON extraction. */

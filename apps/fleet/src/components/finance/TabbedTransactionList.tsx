@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Car, Fuel, Receipt, FileText } from 'lucide-react';
+import { Car, Fuel, FileText } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { TripLedgerWithManualAdd } from './TripLedgerWithManualAdd';
-import { FuelLedgerPage, TollLedgerPage, mergeTripLedgerColumnConfig } from '@roam/platform-ops-ui';
+import { FuelLedgerPage, mergeTripLedgerColumnConfig } from '@roam/platform-ops-ui';
 import { FuelExpenseLedgerPage } from '../database/FuelExpenseLedgerPage';
 import { PlatformStatementSummary } from './PlatformStatementSummary';
 import { LedgerPeriodProvider, useLedgerPeriod } from '../../contexts/LedgerPeriodContext';
@@ -12,7 +12,7 @@ import { useBusinessConfig } from '../auth/BusinessConfigContext';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { BusinessType } from '../../types/data';
 
-type TransactionTab = 'trips' | 'fuel' | 'toll' | 'statement';
+type TransactionTab = 'trips' | 'fuel' | 'statement';
 type FuelView = 'fills' | 'accounting';
 
 type LedgerTab = 'main' | 'trip' | 'fuel' | 'toll';
@@ -33,7 +33,6 @@ interface LedgerConfig {
 const TRANSACTION_TABS: { id: TransactionTab; label: string; icon: React.ElementType; description: string }[] = [
   { id: 'trips', label: 'Trip Ledger', icon: Car, description: 'Individual trip records with earnings breakdown' },
   { id: 'fuel', label: 'Fuel', icon: Fuel, description: 'Fill-ups and approved fuel expenses' },
-  { id: 'toll', label: 'Toll Ledger', icon: Receipt, description: 'Toll transactions and reconciliation status' },
   { id: 'statement', label: 'Statement Summary', icon: FileText, description: 'Period payouts, bank transfers, and statement totals' },
 ];
 
@@ -43,7 +42,7 @@ function readTabFromUrl(): TransactionTab {
     const t = sp.get('ledgerTab');
     // Legacy Review Queue Closed / expense-ledger deep links
     if (t === 'history' || t === 'fuel-expense-ledger' || t === 'fuel-expenses') return 'fuel';
-    if (t === 'trips' || t === 'fuel' || t === 'toll' || t === 'statement') return t;
+    if (t === 'trips' || t === 'fuel' || t === 'statement') return t;
   } catch { /* ignore */ }
   return 'trips';
 }
@@ -96,7 +95,6 @@ function LedgersInner({
     [ledgerConfig?.columns?.trip],
   );
   const fuelColumnConfig = ledgerConfig?.columns?.fuel;
-  const tollColumnConfig = ledgerConfig?.columns?.toll;
 
   useEffect(() => {
     writeTabToUrl(activeTab);
@@ -154,7 +152,7 @@ function LedgersInner({
             Ledgers
           </h1>
           <p className="text-slate-500 dark:text-slate-400">
-            Trip, fuel, and toll records with full financial detail.
+            Trip and fuel records with full financial detail.
           </p>
         </div>
         <div className="flex min-w-[220px] items-end gap-2">
@@ -230,7 +228,6 @@ function LedgersInner({
                       {fuelView === 'fills' ? <FuelLedgerPage columnConfig={fuelColumnConfig} /> : <FuelExpenseLedgerPage />}
                     </div>
                   )}
-                  {tab.id === 'toll' && <TollLedgerPage columnConfig={tollColumnConfig} onOpenTollRecon={onOpenTollRecon} />}
                   {tab.id === 'statement' && (
                     <PlatformStatementSummary onOpenTollRecon={onOpenTollRecon} />
                   )}

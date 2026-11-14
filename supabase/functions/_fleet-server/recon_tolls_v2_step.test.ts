@@ -8,28 +8,34 @@ import { dirname, fromFileUrl, join } from "https://deno.land/std@0.224.0/path/m
 const here = dirname(fromFileUrl(import.meta.url));
 const source = await Deno.readTextFile(join(here, "recon_routes.ts"));
 
-Deno.test("step 3 count asks toll v2 first and is clear only when the toll week is sealed", () => {
+Deno.test("step 3 count follows only the new toll system's seal (no old toll period)", () => {
   const start = source.indexOf("async function computeLiveStepCounts(");
   const fn = source.slice(start, source.indexOf("let fuelActionable", start));
-  const v2 = fn.indexOf("await tollsV2WeekState(orgId, weekKey)");
-  const oldPeriod = fn.indexOf("} else if (!tollPeriod) {");
-  assert(v2 >= 0 && oldPeriod > v2, "v2 state decides before the old toll period");
-  assert(fn.includes('tollActionable = tollsV2 === "sealed" ? 0 : 1;'), "sealed → 0, open → 1");
+  assert(
+    fn.includes('let tollActionable = (await tollsV2WeekState(orgId, weekKey)) === "sealed" || (await isReconWeekFrozen(orgId, weekKey))'),
+    "sealed or closed week → 0, else 1",
+  );
+  assert(!fn.includes("toll_reconciliation_period"), "no old toll period read");
 });
 
-Deno.test("the v2 week state fails closed and uses the service-only reads", () => {
+Deno.test("the v2 week state never says sealed on a failed read and uses the service-only reads", () => {
   const fn = source.slice(source.indexOf("export async function tollsV2WeekState"), source.indexOf("async function computeLiveStepCounts("));
   assert(fn.includes('rpc("toll_sys_tolls_v2_on"'), "switch read");
   assert(fn.includes('rpc("toll_sys_week_drivers"'), "seal read");
-  assert(fn.includes('return "open";') && fn.includes("catch (e)"), "a failed seal read answers open, never sealed, and never breaks the week");
-  const switchPart = fn.slice(0, fn.indexOf('rpc("toll_sys_week_drivers"'));
-  assert(switchPart.includes("return null;") && !switchPart.includes('return "open"'),
-    "a failed switch read hands step 3 back to the old toll period (a non-v2 company is never reopened)");
+  assert(fn.includes('return "open";') && fn.includes("catch (e)"), "a failed seal read answers open");
+  assert(!fn.includes('return "sealed"'), "sealed only from the data");
 });
 
-Deno.test("a v2 company's sealed toll statement is not compared with the old event-netting engine", async () => {
+Deno.test("a sealed toll statement is never compared with the old toll engine (S2)", async () => {
   const probe = await Deno.readTextFile(join(here, "statement_engine_probe.ts"));
-  assert(probe.includes('if (s.kind === "toll" && tollsV2) continue;'), "toll compare skipped on v2");
-  const fn = probe.slice(probe.indexOf("async function companyOnTollsV2"), probe.indexOf("export async function compareDriverWeekStatementsToEngines"));
-  assert(fn.includes("return !error && data === true;"), "only a clear yes skips; a failed read keeps comparing");
+  assert(!probe.includes('s.kind === "toll"'), "no toll branch in the statement compare");
+  assert(!probe.includes("toll_close_amounts") && !probe.includes("probeTollEngine"), "old toll engine gone");
+});
+
+Deno.test("the week P&L tie reads tolls from the new toll system and fails closed (S2)", async () => {
+  const pnl = await Deno.readTextFile(join(here, "business_week_pnl.ts"));
+  assert(pnl.includes('rpc("toll_sys_week_drivers"'), "reads the new toll week result");
+  assert(pnl.includes("toll.fleetMinor"), "uses the same net loss the toll statement records");
+  const failed = pnl.slice(pnl.indexOf("if (tollErr)"), pnl.indexOf("if (tollErr)") + 200);
+  assert(failed.includes("throw new Error("), "a failed toll read stops close (a null would only warn)");
 });

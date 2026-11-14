@@ -8,7 +8,6 @@ import {
   Database,
   Loader2,
   BookOpen,
-  Link2,
   Plus,
 } from 'lucide-react';
 import { api } from '../services/tollOpsApi';
@@ -19,7 +18,6 @@ import { VerifiedTollPlazasTab } from './VerifiedTollPlazasTab';
 import { TollSpatialAuditMap } from './TollSpatialAuditMap';
 import { TollPlazaDetailPanel } from './TollPlazaDetailPanel';
 import { LearntTollPlazasTab } from './LearntTollPlazasTab';
-import { TollPlazaAttributionDialog } from './TollPlazaAttributionDialog';
 import { toast } from 'sonner';
 import { ErrorBoundary } from '@roam/roam-shared';
 
@@ -32,7 +30,6 @@ export function TollDatabaseView() {
   const [selectedPlaza, setSelectedPlaza] = useState<TollPlaza | null>(null);
   const [editingPlaza, setEditingPlaza] = useState<TollPlaza | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [isAttributionOpen, setIsAttributionOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TollOpsTab>('overview');
 
   const fetchData = useCallback(async () => {
@@ -198,14 +195,6 @@ export function TollDatabaseView() {
           >
             <Plus className="h-4 w-4" />
             Add Plaza
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsAttributionOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700"
-          >
-            <Link2 className="h-4 w-4" />
-            Fix Plaza Attribution
           </button>
           <button
             type="button"
@@ -444,12 +433,6 @@ export function TollDatabaseView() {
           />
         </div>
       ) : null}
-
-      <TollPlazaAttributionDialog
-        open={isAttributionOpen}
-        onOpenChange={setIsAttributionOpen}
-        onApplied={fetchData}
-      />
 
       <AddTollPlazaModal
         isOpen={isAddModalOpen}

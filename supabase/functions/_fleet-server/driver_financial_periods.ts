@@ -6,13 +6,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 import { format, addDays } from "npm:date-fns";
 import * as kv from "./kv_store.tsx";
 import { getFleetTimezone, fleetCalendarDay } from "./timezone_helper.tsx";
-import {
-  loadTollLedgerWithTripsForDrivers,
-  isReconcilableTollExpense,
-  filterByDriver,
-  loadAllByPrefix,
-  collectLinkedTripIds,
-} from "./toll_period_inputs.ts";
+import { loadDriverTripsForDrivers, filterByDriver } from "./driver_period_trips.ts";
 import { periodAnchorFor, periodEndForAnchor, minorToMajor } from "./financial_ledger.ts";
 import {
   findDriverTollLineInWeek,
@@ -60,7 +54,6 @@ import { derivePeriodStatus } from "./period_projector.ts";
 import { persistPeriodRowWithVersion, updatePeriodCashWithVersion } from "./period_persist.ts";
 import { isPeriodFrozen, periodGateFromRow } from "./settlement_period_freeze.ts";
 import { getServiceClientWithSchema } from "./service_client.ts";
-import { isPlatformReimbursedPlazaToll } from "./toll_platform_reimbursed.ts";
 import {
   isTollIncludedInSpend,
   isTollLedgerVoided,
@@ -226,17 +219,12 @@ export type DriverFinancialPeriodRow = {
 /** Shared rebuild context — required by rebuildDriverFinancialPeriod (P-1). */
 export type RebuildContext = {
   timezone: string;
-  scopedTolls: any[];
-  /** Reconcilable tolls for the driver including spend-excluded (quarantine) rows. */
-  allScopedTolls: any[];
   scopedTrips: any[];
   chargeTxAll: any[];
   driverTxAll: any[];
-  disputes: any[];
   fuelReports: any[];
   /** org fuel_reconciliation_period by week_start YYYY-MM-DD */
   fuelReconByWeekStart: Map<string, FuelReconPeriodLockRow>;
-  claims: any[];
   fareEntries: any[];
   tipEntries: any[];
   payoutCashByAnchor: Map<string, number>;
@@ -254,10 +242,6 @@ export type RebuildContext = {
   periodMetaByAnchor?: Map<string, Record<string, unknown>>;
   /** When set, trips and fare entries are filtered to this line (omit for combined settlement). */
   filterServiceLine?: "rideshare" | "rush_delivery";
-  /** Perf: spend-included tolls pre-bucketed by week key (avoids per-week rescan). */
-  tollsByWeek?: Map<string, any[]>;
-  /** Perf: all reconcilable tolls (incl. quarantine) pre-bucketed by week key. */
-  allTollsByWeek?: Map<string, any[]>;
   /** Perf: driver toll-charge transactions pre-bucketed by week key. */
   chargeTxByWeek?: Map<string, any[]>;
   /** Perf: finalized fuel reports pre-bucketed by their week-start anchor. */
@@ -692,48 +676,32 @@ export async function loadRebuildContext(
   const idSet = new Set(driverIds.map(String));
   const organizationIdEarly = await resolveDriverOrganizationId(driverId);
 
+  // Old toll rows, dispute refunds and claims are no longer read: toll money and the toll gate come only from
+  // the new toll system (resolveTollInputs + the week's seal below). docs/toll-old-system-removal-audit.md S2.
   const [
-    { tollTx, trips },
-    disputesAll,
+    trips,
     fuelAll,
-    claimsAll,
     ledgerEvents,
     prefsEH,
     policyItemsRaw,
   ] = await Promise.all([
-    // Driver-scoped — full-fleet dump was timing out Expenses rebuild after toll reconcile.
-    loadTollLedgerWithTripsForDrivers(driverIds),
-    (async () => {
-      const { loadIndexedDocs } = await import("./kv_doc_index.ts");
-      return loadIndexedDocs({ kind: "dispute_refund", driverIds });
-    })(),
+    loadDriverTripsForDrivers(driverIds),
     (async () => {
       const { loadIndexedDocs } = await import("./kv_doc_index.ts");
       return loadIndexedDocs({ kind: "finalized_report", driverIds });
     })(),
-    loadAllByPrefix("claim:"),
     loadLedgerEventsForDriverIds(driverIds, organizationIdEarly),
     kv.get("preferences:general"),
     kv.getByPrefix("earnings_policy:"),
   ]);
 
-  // Same spend gate as Toll Recon: voided + true Audit 1.1 quarantine out.
-  // Keep allScopedTolls so periods can report excludedCash* for Expenses UI.
-  const allScopedTolls = filterByDriver(tollTx, driverId).filter(
-    (tx: any) => isReconcilableTollExpense(tx) && !isTopUpLike(tx),
-  );
-  const scopedTolls = allScopedTolls.filter((tx: any) => isTollIncludedInSpend(tx));
   const scopedTrips = filterTripsForServiceLine(filterByDriver(trips, driverId), opts?.serviceLine);
   const driverTxAll = await loadDriverTransactionsForSettlement(driverId, idSet);
   const chargeTxAll = driverTxAll.filter(
     (t: any) => String(t.category || "") === "Toll Charge",
   );
-  const disputes = filterByDriver(disputesAll, driverId);
   const fuelReports = (fuelAll || []).filter(
     (r: any) => r?.status === "Finalized" && String(r.driverId) === String(driverId),
-  );
-  const claims = (claimsAll || []).filter(
-    (cl: any) => cl && String(cl.driverId) === String(driverId),
   );
 
   const fareEntries = (ledgerEvents || []).filter(
@@ -796,8 +764,6 @@ export async function loadRebuildContext(
 
   // Perf: pre-bucket the big per-week rescans once (tolls, charges, fuel) so
   // rebuild does a Map lookup per week instead of filtering the whole array W times.
-  const tollsByWeek = bucketByWeekKey(scopedTolls, (t: any) => t?.date, timezone);
-  const allTollsByWeek = bucketByWeekKey(allScopedTolls, (t: any) => t?.date, timezone);
   const chargeTxByWeek = bucketByWeekKey(chargeTxAll, (t: any) => t?.date, timezone);
   const fuelReportsByWeek = new Map<string, any[]>();
   for (const r of fuelReports || []) {
@@ -810,15 +776,11 @@ export async function loadRebuildContext(
 
   return {
     timezone,
-    scopedTolls,
-    allScopedTolls,
     scopedTrips,
     chargeTxAll,
     driverTxAll,
-    disputes,
     fuelReports,
     fuelReconByWeekStart,
-    claims,
     fareEntries,
     tipEntries,
     payoutCashByAnchor,
@@ -828,8 +790,6 @@ export async function loadRebuildContext(
     persistLines: false,
     periodMetaByAnchor,
     filterServiceLine: opts?.serviceLine,
-    tollsByWeek,
-    allTollsByWeek,
     chargeTxByWeek,
     fuelReportsByWeek,
   };
@@ -872,25 +832,9 @@ export async function rebuildDriverFinancialPeriod(
   const timezone = context.timezone;
   const periodEnd = periodEndForAnchor(periodAnchor);
   const persistLines = !!context.persistLines;
-  const scopedTolls = context.scopedTolls;
-  // Prefer O(1) week bucket; fall back to a scan when ctx was built externally.
-  const weekTolls = context.tollsByWeek
-    ? context.tollsByWeek.get(periodAnchor) ?? []
-    : scopedTolls.filter((tx: any) => {
-        const d = fleetCalendarDay(String(tx.date || ""), timezone);
-        return d >= periodAnchor && d <= periodEnd;
-      });
-  const allWeekTolls = context.allTollsByWeek
-    ? context.allTollsByWeek.get(periodAnchor) ?? []
-    : (context.allScopedTolls || scopedTolls).filter((tx: any) => {
-        const d = fleetCalendarDay(String(tx.date || ""), timezone);
-        return d >= periodAnchor && d <= periodEnd;
-      });
-  const { excludedCashSpend, excludedCashCount } = sumExcludedCashFromWeek(
-    allWeekTolls,
-    (t) => isTollIncludedInSpend(t as any),
-  );
-
+  // The old toll system's per-week counting (toll_ledger rows, trip toll links, dispute refunds, claims) is gone
+  // (docs/toll-old-system-removal-audit.md S2). Toll money comes from the new toll system (resolveTollInputs
+  // below) and the toll gate from that week's seal; these old counters stay at zero for the row's shape.
   const lines: DriverFinancialPeriodRow["lines"] = [];
   let tollSpend = 0;
   let tollCashSpend = 0;
@@ -898,115 +842,15 @@ export async function rebuildDriverFinancialPeriod(
   let tollCashWashEligible = 0;
   let tollUnknownPmCount = 0;
   let tollUnknownPmAmount = 0;
-  let tollReconciledCount = 0;
-  let tollUnmatchedCount = 0;
-  let tollWorkflowActionable = 0;
-  let plazaReimbursed = 0;
-
+  const tollReconciledCount = 0;
+  const tollUnmatchedCount = 0;
+  const tollWorkflowActionable = 0;
+  const plazaReimbursed = 0;
+  const excludedCashSpend = 0;
+  const excludedCashCount = 0;
+  const disputeRefundMatched = 0;
+  const disputeRefundUnmatched = 0;
   const useTollEvents = projectionReadsEventsForTolls();
-
-  for (const tx of weekTolls) {
-    const amt = Math.abs(Number(tx.amount) || 0);
-    const handled = isHandledToll(tx);
-    const pmClass = classifyTollPaymentMethod(tx?.paymentMethod);
-    const cash = pmClass === "cash";
-    // Spend from ledger unless PROJECTION_EVENTS_TOLLS (events aggregated after finEvents load).
-    if (!useTollEvents) {
-      tollSpend += amt;
-      if (cash) tollCashSpend += amt;
-      else if (pmClass === "tag") tollTagSpend += amt;
-      else {
-        // Unknown PM counts in total only, so the split breaks by exactly this
-        // amount. Track it so close reports TOLL_PAYMENT_METHOD_UNKNOWN (which
-        // names the fix) rather than a bare TOLL_SPEND_SPLIT.
-        tollUnknownPmCount += 1;
-        tollUnknownPmAmount += amt;
-      }
-      if (cash && handled) tollCashWashEligible += amt;
-    }
-    if (isPlatformReimbursedPlazaToll(tx)) plazaReimbursed += amt;
-    if (handled) tollReconciledCount++;
-    else {
-      tollUnmatchedCount++;
-      tollWorkflowActionable++;
-    }
-    if (persistLines) {
-      lines.push({
-        lineType: handled ? "toll_handled" : "toll_unmatched",
-        domain: "toll",
-        sourceSystem: "toll_ledger",
-        sourceId: String(tx.id),
-        description: tx.description || tx.vendor || "Toll usage",
-        amount: -amt,
-        occurredAt: tx.date,
-        metadata: {
-          workflowStage: tx.workflowStage,
-          isReconciled: !!tx.isReconciled,
-          resolution: tx.resolution,
-          tripId: tx.tripId,
-          paymentMethod: tx.paymentMethod,
-        },
-      });
-    }
-  }
-
-  // Cash-wash trips with no linked tag = extra plaza cash (same as Toll Recon).
-  // Pending unlinked trips block finalization without crediting wash.
-  // When toll spend is event-sourced, trip wash must not double-count spend (§6.5).
-  const linkedTripIds = collectLinkedTripIds(weekTolls);
-  for (const trip of context.scopedTrips || []) {
-    const anchorDate = fleetCalendarDay(String(trip.dropoffTime || trip.date || ""), timezone);
-    if (!anchorDate || anchorDate < periodAnchor || anchorDate > periodEnd) continue;
-
-    if (isTripCashWashSpend(trip, linkedTripIds)) {
-      const amt = Math.abs(Number(trip.tollCharges) || 0);
-      if (!useTollEvents) {
-        tollSpend += amt;
-        tollCashSpend += amt;
-      }
-      tollCashWashEligible += amt;
-      tollReconciledCount++;
-      if (persistLines) {
-        lines.push({
-          lineType: "toll_handled",
-          domain: "toll",
-          sourceSystem: "trip_cash_wash",
-          sourceId: String(trip.id),
-          description: `Cash wash · ${trip.platform || "trip"} toll`,
-          amount: -amt,
-          occurredAt: trip.dropoffTime || trip.date,
-          metadata: {
-            resolution: "cash_wash",
-            platform: trip.platform,
-            tollCharges: trip.tollCharges,
-          },
-        });
-      }
-      continue;
-    }
-
-    if (isTripTollActionable(trip, linkedTripIds)) {
-      tollUnmatchedCount++;
-      tollWorkflowActionable++;
-      if (persistLines) {
-        const amt = Math.abs(Number(trip.tollCharges) || 0);
-        lines.push({
-          lineType: "toll_unmatched",
-          domain: "toll",
-          sourceSystem: "trip_pending",
-          sourceId: String(trip.id),
-          description: `Pending trip toll · ${trip.platform || "trip"}`,
-          amount: -amt,
-          occurredAt: trip.dropoffTime || trip.date,
-          metadata: {
-            resolution: trip?.tollRefundResolution?.status || "pending",
-            platform: trip.platform,
-            tollCharges: trip.tollCharges,
-          },
-        });
-      }
-    }
-  }
 
   const chargeTx = context.chargeTxByWeek
     ? context.chargeTxByWeek.get(periodAnchor) ?? []
@@ -1018,66 +862,6 @@ export async function rebuildDriverFinancialPeriod(
   // events; KV "Toll Charge" txs are fallback only when no canonical events exist.
   let tollChargedToDriver = 0;
   let tollChargedSource: "events" | "kv" = "kv";
-
-  let disputeRefundMatched = 0;
-  let disputeRefundUnmatched = 0;
-  for (const r of context.disputes) {
-    const d = fleetCalendarDay(String(r.date || r.matchedAt || ""), timezone);
-    let weekDate = d;
-    if (r.matchedTollId) {
-      const toll =
-        weekTolls.find((t: any) => String(t.id) === String(r.matchedTollId)) ||
-        scopedTolls.find((t: any) => String(t.id) === String(r.matchedTollId));
-      if (toll?.date) weekDate = fleetCalendarDay(String(toll.date), timezone);
-    }
-    if (!(weekDate >= periodAnchor && weekDate <= periodEnd)) continue;
-    const amt = Math.abs(Number(r.amount) || 0);
-    const matched = r.status === "matched" || r.status === "auto_resolved";
-    if (matched) disputeRefundMatched += amt;
-    else {
-      disputeRefundUnmatched += amt;
-      tollWorkflowActionable++;
-    }
-    if (persistLines) {
-      lines.push({
-        lineType: matched ? "dispute_matched" : "dispute_unmatched",
-        domain: "toll",
-        sourceSystem: "dispute_refund",
-        sourceId: String(r.id),
-        description: `Dispute refund ${r.supportCaseId || ""}`.trim(),
-        amount: amt,
-        occurredAt: weekDate,
-      });
-    }
-  }
-
-  // Open + Rejected claims keep the week actionable (matches Toll Recon wizard).
-  // claim_filed is terminal per-toll, but the claim itself may still need work.
-  let tollOpenClaimCount = 0;
-  for (const cl of context.claims) {
-    const claimStatus = String(cl?.status || "");
-    if (claimStatus !== "Open" && claimStatus !== "Rejected") continue;
-    const tollId = String(cl.transactionId || "");
-    const toll = tollId ? scopedTolls.find((t: any) => String(t.id) === tollId) : null;
-    const d = toll?.date
-      ? fleetCalendarDay(String(toll.date), timezone)
-      : fleetCalendarDay(String(cl.date || cl.createdAt || ""), timezone);
-    if (d >= periodAnchor && d <= periodEnd) {
-      tollOpenClaimCount++;
-      tollWorkflowActionable++;
-      if (persistLines) {
-        lines.push({
-          lineType: claimStatus === "Rejected" ? "claim_rejected" : "claim_open",
-          domain: "toll",
-          sourceSystem: "claim",
-          sourceId: String(cl.id),
-          description: `${claimStatus} claim${toll ? ` on toll ${tollId}` : ""}`,
-          amount: -(Math.abs(Number(cl.amount) || 0)),
-          occurredAt: d,
-        });
-      }
-    }
-  }
 
   const { data: finEvents } = await sb()
     .from("financial_events")
@@ -1342,6 +1126,8 @@ export async function rebuildDriverFinancialPeriod(
   }
   const weekKey = String(periodAnchor || "").slice(0, 10);
   let tollSource: TollSource = "legacy";
+  /** The company's toll week state in the new toll system ("sealed" | "open"), read with the driver's line. */
+  let v2WeekState: string | null = null;
   try {
     const resolvedTolls = await resolveTollInputs(orgIdForTolls, driverId, weekKey, {
       tollChargedToDriver,
@@ -1371,6 +1157,7 @@ export async function rebuildDriverFinancialPeriod(
             return parseWeekDriversRpc(data);
           },
         );
+        v2WeekState = bundle.state;
         const line = findDriverTollLineInWeek(bundle, drv);
         return { line };
       },
@@ -1420,47 +1207,19 @@ export async function rebuildDriverFinancialPeriod(
     !!forceMeta.at ||
     !!priorMeta.forceReleasedAt;
 
-  const legacyTollStatus =
-    weekTolls.length === 0 && tollReconciledCount === 0 && tollUnmatchedCount === 0
-      ? "n/a"
-      : tollUnmatchedCount > 0
-        ? "unmatched"
-        : tollWorkflowActionable > 0
-          ? "in_progress"
-          : "reconciled";
+  // The driver's week has toll money in the new toll system (either direction).
+  const hasV2TollMoney =
+    Math.abs(tollSpend) > 0.005 ||
+    Math.abs(tollChargedToDriver) > 0.005 ||
+    Math.abs(tollCashWashEligible) > 0.005 ||
+    Math.abs(tollReimbursed) > 0.005;
 
-  let readinessActionableTotal: number | null = null;
-  try {
-    const orgIdForReadiness = context.organizationId;
-    const authoritative = await isFeatureEnabled(
-      FEATURE_FLAGS.TOLL_READINESS_SERVER_AUTHORITATIVE,
-      orgIdForReadiness,
-    );
-    if (authoritative && orgIdForReadiness) {
-      const { buildWeekReadiness } = await import("./toll_period_readiness_build.ts");
-      const { readiness } = await buildWeekReadiness({
-        weekKey: periodAnchor,
-        orgId: orgIdForReadiness,
-        driverId,
-      });
-      readinessActionableTotal = readiness.actionableTotal;
-    }
-  } catch (e) {
-    console.warn("[dfp] toll readiness authoritative probe skipped", e);
-  }
-
-  // TR-C1a: when readiness is authoritative, derive tollStatus from it (downgrade unmatched→reconciled).
-  let tollStatus = legacyTollStatus;
-  if (readinessActionableTotal != null) {
-    if (readinessActionableTotal === 0) {
-      tollStatus =
-        weekTolls.length === 0 && tollReconciledCount === 0 && tollUnmatchedCount === 0
-          ? "n/a"
-          : "reconciled";
-    } else if (legacyTollStatus === "n/a") {
-      tollStatus = "unmatched";
-    }
-  }
+  // Toll gate = the new toll system's seal (the only toll system): a driver's week waits on tolls until the company's
+  // toll week is sealed in Week Reconciliation step 3 (same rule as pay and close). No company, or a company the switch
+  // read did not confirm on the new system, never clears the gate (fails closed).
+  const readinessActionableTotal: number =
+    tollSource === "toll_v2" && v2WeekState === "sealed" ? 0 : 1;
+  const tollStatus = readinessActionableTotal === 0 ? (hasV2TollMoney ? "reconciled" : "n/a") : "unmatched";
 
   const derived = derivePeriodStatus({
     fuelFinalized,
@@ -1626,7 +1385,7 @@ export async function rebuildDriverFinancialPeriod(
 
   // Keep weeks with settlement activity (earnings/cash/fuel/tolls); drop empty phantoms.
   const hasSettlementActivity =
-    weekTolls.length > 0 ||
+    hasV2TollMoney ||
     chargeTx.length > 0 ||
     hasFuelActivity ||
     disputeRefundMatched > 0 ||
@@ -2348,10 +2107,6 @@ export async function rebuildAllPeriodsForDriver(
 ): Promise<{ rebuilt: number; skippedSigned: number }> {
   const ctx = await loadRebuildContext(driverId);
   const anchors = new Set<string>();
-  for (const tx of ctx.scopedTolls) {
-    if (!tx?.date) continue;
-    anchors.add(await periodAnchorFor(tx.date, ctx.timezone));
-  }
   // Cash-wash / open unlinked trip credits (no toll_ledger row) still create Expenses weeks.
   for (const trip of ctx.scopedTrips || []) {
     const status = trip?.tollRefundResolution?.status;

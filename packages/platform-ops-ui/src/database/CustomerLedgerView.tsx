@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, HardDrive, Table2, Fuel, Tags, Loader2 } from 'lucide-react';
+import { ArrowLeft, HardDrive, Table2, Fuel, Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '@roam/api-client';
 import { usePlatformSession } from '../auth/PlatformSessionContext';
 import { BusinessType } from '@roam/types';
 import { TripLedgerPage } from './TripLedgerPage';
 import { FuelLedgerPage } from './FuelLedgerPage';
-import { TollLedgerPage } from './TollLedgerPage';
 import { DatabaseLedgerPage } from './DatabaseLedgerPage';
 import { mergeTripLedgerColumnConfig } from './LedgerColumnSettings';
 
@@ -40,10 +39,9 @@ const LEDGER_TABS: { id: LedgerTab; label: string; icon: React.ElementType }[] =
   { id: 'main', label: 'Main Ledger', icon: HardDrive },
   { id: 'trip', label: 'Trip Ledger', icon: Table2 },
   { id: 'fuel', label: 'Fuel Ledger', icon: Fuel },
-  { id: 'toll', label: 'Toll Ledger', icon: Tags },
 ];
 
-const DEFAULT_ENABLED_LEDGERS: LedgerTab[] = ['trip', 'fuel', 'toll'];
+const DEFAULT_ENABLED_LEDGERS: LedgerTab[] = ['trip', 'fuel'];
 
 export function CustomerLedgerView({ customerId, customerData, onBack }: CustomerLedgerViewProps) {
   const { accessToken } = usePlatformSession();
@@ -141,12 +139,6 @@ export function CustomerLedgerView({ customerId, customerData, onBack }: Custome
               <FuelLedgerPage 
                 organizationId={customerId}
                 columnConfig={ledgerConfig?.columns?.fuel}
-              />
-            )}
-            {activeTab === 'toll' && (
-              <TollLedgerPage 
-                organizationId={customerId}
-                columnConfig={ledgerConfig?.columns?.toll}
               />
             )}
           </div>

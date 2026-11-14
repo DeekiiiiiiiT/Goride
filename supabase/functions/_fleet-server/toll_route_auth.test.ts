@@ -1,18 +1,17 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 
 /**
- * Access-control guard for every toll route on the fleet-toll controllers.
+ * Access-control guard for every toll route on the fleet-toll Toll Tags / plazas / toll-info controller.
  *
- * `POST /toll-reconciliation/reset-for-reconciliation` (destructive reset) and
- * money-mutating recon routes must carry `requirePermission('toll.manage')` in
+ * Every route that changes state must carry `requirePermission('toll.manage')` in
  * addition to the controller-wide `requireAuth({ strict: true })` blanket.
  *
  * Reading the source is deliberate: importing the boot module starts the whole
  * server and needs a live database, so the registration site is the cheapest
  * honest assertion available.
  *
- * Routes live in toll_controller.tsx / toll_period_controller.tsx and register
- * as template literals (`${BASE}/approve`), not double-quoted monolith paths.
+ * The old toll controllers (toll_controller / toll_period_controller) are gone
+ * (docs/toll-old-system-removal-audit.md S2); the new toll system's routes have their own tests.
  */
 
 const REGISTRATION_RE = /app\.(get|post|put|patch|delete)\(/g;
@@ -25,8 +24,6 @@ const BLANKET_AUTH_RE =
 const MUTATING = new Set(["post", "put", "patch", "delete"]);
 
 const CONTROLLER_FILES = [
-  "./toll_controller.tsx",
-  "./toll_period_controller.tsx",
   "./toll_inventory_controller.tsx",
 ] as const;
 
@@ -45,16 +42,8 @@ interface PathEnv {
 }
 
 async function loadPathEnv(): Promise<PathEnv> {
-  const prefixSource = await Deno.readTextFile(
-    new URL("./toll_http_prefix.ts", import.meta.url),
-  );
-  const prefixMatch = prefixSource.match(
-    /export\s+const\s+TOLL_HTTP_PREFIX\s*=\s*["']([^"']*)["']/,
-  );
-  const TOLL_HTTP_PREFIX = prefixMatch?.[1] ?? "";
-  // Controllers: const BASE = `${TOLL_HTTP_PREFIX}/toll-reconciliation`
-  const BASE = `${TOLL_HTTP_PREFIX}/toll-reconciliation`;
-  return { BASE, TOLL_HTTP_PREFIX };
+  // fleet-toll mounts these routes with no extra prefix (Hono basePath("/fleet-toll") wraps the app).
+  return { BASE: "", TOLL_HTTP_PREFIX: "" };
 }
 
 /** First path argument of `app.<method>(…)` — string literal or `${BASE|TOLL_HTTP_PREFIX}…` template. */
@@ -180,11 +169,10 @@ Deno.test("the guard actually sees the toll routes it claims to cover", async ()
   // A scan that silently matched nothing would make both tests above pass.
   for (
     const expected of [
-      "/toll-reconciliation/approve",
-      "/toll-reconciliation/reset-for-reconciliation",
-      "/toll-reconciliation/reconcile",
-      "/toll-ledger/:id/void",
-      "/toll/periods/:weekKey/seal",
+      "/toll-tags/assign",
+      "/toll-tags/unassign",
+      "/toll-plazas",
+      "/toll-info",
     ]
   ) {
     assertEquals(paths.includes(expected), true, `route scan missed ${expected}`);
@@ -203,56 +191,14 @@ Deno.test("the guard actually sees the toll routes it claims to cover", async ()
 const MUTATING_ROUTE_INVENTORY = [
   "DELETE /toll-plazas/:id",
   "DELETE /toll-tags/:id",
-  "PATCH /toll-reconciliation/edit",
   "PATCH /toll-tags/:id",
   "POST /toll-info",
   "POST /toll-info/impact-preview",
-  "POST /toll-ledger/:id/void",
   "POST /toll-plazas",
-  "POST /toll-reconciliation/approve",
-  "POST /toll-reconciliation/auto-match",
-  "POST /toll-reconciliation/auto-resolve-refunds",
-  "POST /toll-reconciliation/backfill-linked-trip-resolutions",
-  "POST /toll-reconciliation/bridge-rides",
-  "POST /toll-reconciliation/bulk-reconcile",
-  "POST /toll-reconciliation/claims-toll-sync/repair",
-  "POST /toll-reconciliation/match-index/backfill",
-  "POST /toll-reconciliation/periods/:weekKey/finish",
-  "POST /toll-reconciliation/periods/:weekKey/reopen",
-  "POST /toll-reconciliation/personal-rematch/backfill",
-  "POST /toll-reconciliation/personal-use/auto-charge",
-  "POST /toll-reconciliation/reconcile",
-  "POST /toll-reconciliation/reject",
-  "POST /toll-reconciliation/rematch-candidates/:id/dismiss",
-  "POST /toll-reconciliation/repair-dispute-partial-claims",
-  "POST /toll-reconciliation/reset-for-reconciliation",
-  "POST /toll-reconciliation/reset-period",
-  "POST /toll-reconciliation/resolve",
-  "POST /toll-reconciliation/resolve-refund",
-  "POST /toll-reconciliation/resolve-refund/bulk",
-  "POST /toll-reconciliation/settlement-allocations/backfill",
-  "POST /toll-reconciliation/toll-ledger/:id/plaza",
-  "POST /toll-reconciliation/toll-ledger/:id/void",
-  "POST /toll-reconciliation/toll-ledger/backfill",
-  "POST /toll-reconciliation/toll-ledger/plaza-backfill",
-  "POST /toll-reconciliation/toll-ledger/repair-dates",
-  "POST /toll-reconciliation/toll-ledger/tag-backfill",
-  "POST /toll-reconciliation/toll-pnl-offset-backfill/backfill",
-  "POST /toll-reconciliation/toll-pnl-offset-backfill/repair-orphans",
-  "POST /toll-reconciliation/unlinked-refunds/apply-to-claim",
-  "POST /toll-reconciliation/unlinked-refunds/repair-split",
-  "POST /toll-reconciliation/unlinked-refunds/undo-apply",
-  "POST /toll-reconciliation/unreconcile",
-  "POST /toll-reconciliation/workflow-stage/backfill",
   "POST /toll-tags",
   "POST /toll-tags/:id/topup-requested",
   "POST /toll-tags/assign",
   "POST /toll-tags/unassign",
-  "POST /toll/heal/personal-pnl-events",
-  "POST /toll/periods/:weekKey/ineligible-usage-report",
-  "POST /toll/periods/:weekKey/repair-orphan-events",
-  "POST /toll/periods/:weekKey/seal",
-  "PUT /toll-reconciliation/automation-settings",
 ];
 
 Deno.test("mutating toll route inventory snapshot", async () => {
@@ -265,29 +211,5 @@ Deno.test("mutating toll route inventory snapshot", async () => {
     mutating,
     MUTATING_ROUTE_INVENTORY,
     "Mutating toll route inventory changed — update MUTATING_ROUTE_INVENTORY and ensure the new route has requirePermission('toll.manage')",
-  );
-});
-
-Deno.test("toll_controller binds org context and stamps ledger writes", async () => {
-  const source = await Deno.readTextFile(new URL("./toll_controller.tsx", import.meta.url));
-  assertEquals(
-    /runWithTollContext/.test(source),
-    true,
-    "toll_controller must bind runWithTollContext so all routes get organization_id",
-  );
-  assertEquals(
-    /from\s+[\"']\.\/org_scope\.ts[\"']/.test(source),
-    true,
-    "toll_controller must import org_scope helpers",
-  );
-  assertEquals(
-    /stampOrg\s*\(/.test(source),
-    true,
-    "toll_controller must call stampOrg on write paths",
-  );
-  assertEquals(
-    /tollOrgSqlFilters/.test(source),
-    true,
-    "toll_controller must push organization_id into SQL via tollOrgSqlFilters",
   );
 });

@@ -44,7 +44,6 @@ import {
 import { compareDriverWeekStatementsToEngines } from "./statement_engine_probe.ts";
 import { upsertFinanceReconDrifts, countOpenFinanceReconDrifts, listOpenFinanceReconDrifts } from "./finance_recon_drift.ts";
 import { weekPnlTieSides } from "./business_week_pnl.ts";
-import type { TollUsageIntegritySummary } from "./toll_financial_reset.ts";
 import { engineDriftsToCloseBlockers } from "../../../packages/finance-core/src/statementEngineCompare.ts";
 import type { StatementEngineDrift } from "../../../packages/finance-core/src/statementEngineCompare.ts";
 import {
@@ -113,7 +112,6 @@ import {
   type WeekCloseReconEvidence,
   type WeekCloseServiceLine,
 } from "./week_close_recon.ts";
-import { probeTollPeriodSealed, reopenTollPeriodForWeek } from "./toll_period_writable.ts";
 
 export type { CloseLaneForceOpts, CloseWeekOpts, PrepareWeekCloseOpts } from "./week_close_force_opts.ts";
 export { closeWeekLaneForceOpts, resolveCloseLaneForceOpts } from "./week_close_force_opts.ts";
@@ -565,35 +563,6 @@ const PERIOD_CLOSE_SELECT = [
   "closed_at",
 ].join(", ");
 
-function tollEventLedgerFromSummary(
-  sum: TollUsageIntegritySummary | undefined | null,
-): {
-  orphanCount: number;
-  orphanAmountMajor: number;
-  eventSpendMajor: number;
-  ledgerSpendMajor: number;
-  missingEventCount: number;
-  missingEventAmountMajor: number;
-  ineligibleEventCount: number;
-  ineligibleEventAmountMajor: number;
-  amountMismatchCount: number;
-  amountMismatchAmountMajor: number;
-} | null {
-  if (!sum) return null;
-  return {
-    orphanCount: sum.orphanCount,
-    orphanAmountMajor: sum.orphanAmountMajor,
-    eventSpendMajor: sum.eventSpendMajor,
-    ledgerSpendMajor: sum.ledgerSpendMajor,
-    missingEventCount: sum.missingEventCount,
-    missingEventAmountMajor: sum.missingEventAmountMajor,
-    ineligibleEventCount: sum.ineligibleEventCount,
-    ineligibleEventAmountMajor: sum.ineligibleEventAmountMajor,
-    amountMismatchCount: sum.amountMismatchCount,
-    amountMismatchAmountMajor: sum.amountMismatchAmountMajor,
-  };
-}
-
 function fuelFromStatement(
   s: WeekStatement | undefined,
   acceptRestatementDrafts = false,
@@ -631,7 +600,6 @@ export async function driverCloseBlockers(opts: {
   frozen: boolean;
   statements: WeekStatement[];
   storedDrifts: StatementEngineDrift[] | null;
-  tollSummary: TollUsageIntegritySummary | undefined | null;
 }): Promise<{
   blockers: CloseBlocker[];
   acceptRestatementDrafts: boolean;
@@ -670,11 +638,6 @@ export async function driverCloseBlockers(opts: {
     }
   }
 
-  const tollEventLedger =
-    !frozen || acceptRestatementDrafts
-      ? tollEventLedgerFromSummary(opts.tollSummary)
-      : null;
-
   const blockers = checkCloseInvariants(assembleCloseInvariantInput({
     period: period as ClosePeriodRow,
     fuelStatement,
@@ -682,7 +645,6 @@ export async function driverCloseBlockers(opts: {
     earningsStatement: earningsFromStatement(byKind.get("earnings"), acceptRestatementDrafts),
     skipSettlementDeskClear: acceptRestatementDrafts,
     engineDrifts: engineBlockers,
-    tollEventLedger,
   }));
   // N-3: custody target must exist before freeze — surface on preview.
   if (!frozen || acceptRestatementDrafts) {
@@ -1108,7 +1070,6 @@ async function assessCloseWeekSyncNeed(
   week: string,
 ): Promise<{
   needsSeal: boolean;
-  needsForceTollReseal: boolean;
   periodDriftCount: number;
 }> {
   const { data: periods, error } = await sb()
@@ -1122,7 +1083,6 @@ async function assessCloseWeekSyncNeed(
 
   const statementsByDriver = await getLatestWeekStatementsForOrgWeek(orgId, week);
   let needsSeal = false;
-  const needsForceTollReseal = false; // tolls are re-sealed only in step 3 (new toll system)
   let periodDriftCount = 0;
 
   for (const p of periods ?? []) {
@@ -1170,7 +1130,7 @@ async function assessCloseWeekSyncNeed(
     if (drifted) periodDriftCount += 1;
   }
 
-  return { needsSeal, needsForceTollReseal, periodDriftCount };
+  return { needsSeal, periodDriftCount };
 }
 
 /**
@@ -1365,8 +1325,6 @@ export async function previewWeekClose(
     { skipEngineProbe },
   );
 
-  // The old toll-event orphan check is gone with the old toll system (S1): tolls come from the new seal.
-  const orphansByDriver = new Map<string, TollUsageIntegritySummary>();
 
   // H-3 / N-3: week-level P&L — block on mismatch (non-tautological statements↔engines).
   // Shared with the background worker so both write the same week blockers (R19-01).
@@ -1484,7 +1442,6 @@ export async function previewWeekClose(
       statements,
       // Page preview reads the last saved drift. It does not recompute engines.
       storedDrifts: skipEngineProbe ? (storedDriftsByDriver.get(driverId) ?? []) : null,
-      tollSummary: orphansByDriver.get(driverId),
     });
     // Already-frozen without restatement drafts are done — not blockers.
     // Frozen WITH drafts surface blockers for Sign restatements.
@@ -1724,7 +1681,6 @@ async function prepareWeekCloseBody(
   if (
     !anyForce &&
     !assess.needsSeal &&
-    !assess.needsForceTollReseal &&
     assess.periodDriftCount === 0
   ) {
     const preview = await previewWeekClose(orgId, week, {
@@ -1736,10 +1692,10 @@ async function prepareWeekCloseBody(
   }
 
   let didSeal = false;
-  if (anyForce || assess.needsSeal || assess.needsForceTollReseal) {
+  if (anyForce || assess.needsSeal) {
     const sealed = await ensureCloseLaneStatements(orgId, week, actorId, {
       forceFuelReseal: force.forceFuelReseal,
-      forceTollReseal: force.forceTollReseal || assess.needsForceTollReseal,
+      forceTollReseal: force.forceTollReseal,
       forceEarningsReseal: force.forceEarningsReseal,
     });
     didSeal = sealed.didSeal;
@@ -2116,8 +2072,6 @@ async function closeWeekBody(
     }
   }
 
-  // The old toll-event orphan check is gone with the old toll system (S1): tolls come from the new seal.
-  const orphansByDriver = new Map<string, TollUsageIntegritySummary>();
 
   const closeDriftBatch: Array<{
     driverId: string;
@@ -2224,32 +2178,6 @@ async function closeWeekBody(
       }
     }
 
-    const sum = orphansByDriver.get(driverId);
-    const tollEventLedger = tollEventLedgerFromSummary(sum);
-    if (
-      sum &&
-      (sum.orphanCount > 0 ||
-        sum.ineligibleEventCount > 0 ||
-        sum.amountMismatchCount > 0 ||
-        Math.abs(sum.eventSpendMajor - sum.ledgerSpendMajor) > CLOSE_INVARIANT_EPS)
-    ) {
-      closeDriftBatch.push({
-        driverId,
-        drifts: [
-          {
-            kind: "toll",
-            field: "orphan_event_spend",
-            statementMinor: Math.round(sum.eventSpendMajor * 100),
-            engineMinor: Math.round(sum.ledgerSpendMajor * 100),
-            deltaMinor: Math.round(
-              (sum.orphanAmountMajor || sum.eventSpendMajor - sum.ledgerSpendMajor) * 100,
-            ),
-          },
-        ],
-        statementVersion: statements[0]?.version ?? null,
-      });
-    }
-
     const blockers = checkCloseInvariants(assembleCloseInvariantInput({
       period: period as ClosePeriodRow,
       fuelStatement: fuelFromStatement(byKind.get("fuel"), acceptRestatementDrafts),
@@ -2257,7 +2185,6 @@ async function closeWeekBody(
       earningsStatement: earningsFromStatement(byKind.get("earnings"), acceptRestatementDrafts),
       skipSettlementDeskClear: acceptRestatementDrafts,
       engineDrifts: engineBlockers,
-      tollEventLedger,
     }));
 
     // M-2: refuse close when active fuel_* events lack account keys.
@@ -2941,33 +2868,8 @@ export async function acknowledgeCashSourceMismatch(
 }
 
 /**
- * A closed toll statement keeps toll edits sealed until the toll period row
- * says reopened. Week reopen uses the same writer as the Tolls button.
- * No-op when tolls are already writable. Throws if the toll reopen fails,
- * before driver rows change.
- */
-async function reopenSealedTollPeriod(
-  orgId: string,
-  weekKey: string,
-  actorId: string,
-  reason: string,
-  serviceLine: string,
-): Promise<void> {
-  const probe = await probeTollPeriodSealed(orgId, weekKey, serviceLine);
-  if (!probe.sealed) return;
-  await reopenTollPeriodForWeek({
-    organizationId: orgId,
-    weekKey,
-    reason,
-    actorId,
-    serviceLine,
-    audit: { source: "week_reopen" },
-  });
-}
-
-/**
  * Admin calendar reopen: clear period freeze for every driver in the org-week.
- * Also reopens tolls when a closed toll statement still seals the week.
+ * Tolls are not reopened here: the new toll system reopens a toll week in Week Reconciliation step 3.
  * Does not reopen fuel recon or rewrite week_statements. Requires
  * acknowledgeSettlementRisk when any driver has settlement_paid moved.
  */
@@ -3011,7 +2913,6 @@ export async function reopenWeek(
   }
 
   if (frozenRows.length === 0) {
-    await reopenSealedTollPeriod(orgId, week, actorId, trimmedReason, serviceLine);
     return {
       organizationId: orgId,
       weekKey: week,
@@ -3068,8 +2969,6 @@ export async function reopenWeek(
       );
     }
   }
-
-  await reopenSealedTollPeriod(orgId, week, actorId, trimmedReason, serviceLine);
 
   const now = new Date().toISOString();
   let driversReopened = 0;

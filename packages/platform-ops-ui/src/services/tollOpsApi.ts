@@ -104,28 +104,6 @@ export const tollOpsApi = {
     return response.json();
   },
 
-  async getTollPlazaBackfillStatus() {
-    const response = await fetchWithRetry(
-      `${API_ENDPOINTS.toll}/toll-reconciliation/toll-ledger/plaza-backfill/status`,
-      { headers: await authHeaders(null) },
-    );
-    if (!response.ok) throw new Error('Failed to load plaza attribution status');
-    return response.json();
-  },
-
-  async runTollPlazaBackfill(dryRun: boolean) {
-    const response = await fetchWithRetry(
-      `${API_ENDPOINTS.toll}/toll-reconciliation/toll-ledger/plaza-backfill`,
-      {
-        method: 'POST',
-        headers: await authHeaders(),
-        body: JSON.stringify({ dryRun }),
-      },
-    );
-    if (!response.ok) throw new Error('Failed to attribute tolls to plazas');
-    return response.json();
-  },
-
   /** Geocode for AddTollPlazaModal Plus Code / locality lookup. */
   async geocodeAddress(
     address: string,

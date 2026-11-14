@@ -157,55 +157,6 @@ export const ledgerApi = {
     return response.json();
   },
 
-  async getTollLedger(params?: {
-    organizationId?: string;
-    startDate?: string;
-    endDate?: string;
-    driverId?: string;
-    vehicleId?: string;
-    status?: string;
-    search?: string;
-    reconciliationStatus?: string;
-    type?: string;
-    vehiclePlate?: string;
-    driverName?: string;
-    sortKey?: string;
-    sortDir?: 'asc' | 'desc';
-    limit?: number;
-    offset?: number;
-  }): Promise<{ data: Record<string, unknown>[]; total: number; sortKey?: string; sortDir?: string }> {
-    const qs = new URLSearchParams();
-    if (params?.organizationId) qs.set('organizationId', params.organizationId);
-    if (params?.startDate) qs.set('startDate', params.startDate);
-    if (params?.endDate) qs.set('endDate', params.endDate);
-    if (params?.driverId) qs.set('driverId', params.driverId);
-    if (params?.vehicleId) qs.set('vehicleId', params.vehicleId);
-    if (params?.status) qs.set('status', params.status);
-    if (params?.search) qs.set('search', params.search);
-    if (params?.reconciliationStatus) qs.set('reconciliationStatus', params.reconciliationStatus);
-    if (params?.type) qs.set('type', params.type);
-    if (params?.vehiclePlate) qs.set('vehiclePlate', params.vehiclePlate);
-    if (params?.driverName) qs.set('driverName', params.driverName);
-    if (params?.sortKey) qs.set('sortKey', params.sortKey);
-    if (params?.sortDir) qs.set('sortDir', params.sortDir);
-    qs.set('limit', String(params?.limit ?? 500));
-    qs.set('offset', String(params?.offset ?? 0));
-    const response = await fetchWithRetry(
-      `${API_ENDPOINTS.toll}/toll-reconciliation/ledger?${qs.toString()}`,
-      { headers: await authHeaders(null) },
-    );
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error((err as { error?: string }).error || 'Failed to fetch toll ledger');
-    }
-    const result = await response.json();
-    return {
-      data: result.data || [],
-      total: result.total ?? 0,
-      sortKey: result.sortKey,
-      sortDir: result.sortDir,
-    };
-  },
 
   async getPaymentLedgerLines(params?: {
     tripId?: string;

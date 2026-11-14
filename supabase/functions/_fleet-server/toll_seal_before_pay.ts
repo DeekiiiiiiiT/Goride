@@ -4,7 +4,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
 import { getServiceClient } from "./service_client.ts";
-import { probeTollPeriodSealed } from "./toll_period_writable.ts";
 import { SettlementCommandError } from "./settlement_commands.ts";
 
 export type TollSealBeforePayInput = {
@@ -18,7 +17,6 @@ export type DecideTollSealedForPayInput = {
   flagOn: boolean;
   isV2: boolean;
   latestTollWeekStatus: string | null;
-  oldSystemSealed: boolean;
   /** When true, v2 company check failed — fail closed. */
   v2EnabledRpcFailed?: boolean;
 };
@@ -33,11 +31,6 @@ export type TollSealBeforePayDeps = {
     organizationId: string,
     weekAnchor: string,
   ) => Promise<string | null>;
-  probeOldSystemSealed?: (
-    organizationId: string,
-    weekAnchor: string,
-    serviceLine?: string | null,
-  ) => Promise<boolean>;
 };
 
 /** Log Cash / collect — never gated. */
@@ -52,10 +45,8 @@ export function shouldCheckTollSeal(
 export function decideTollSealedForPay(input: DecideTollSealedForPayInput): boolean {
   if (!input.flagOn) return true;
   if (input.v2EnabledRpcFailed) return false;
-  if (input.isV2) {
-    return input.latestTollWeekStatus === "closed";
-  }
-  return input.oldSystemSealed;
+  // The new toll system is the only one: pay waits for the week's sealed (closed) toll statement.
+  return input.isV2 && input.latestTollWeekStatus === "closed";
 }
 
 export function serviceLineFromPeriodRow(
@@ -110,19 +101,6 @@ async function defaultFetchLatestTollWeekStatus(
   return data.status != null ? String(data.status) : null;
 }
 
-async function defaultProbeOldSystemSealed(
-  organizationId: string,
-  weekAnchor: string,
-  serviceLine?: string | null,
-): Promise<boolean> {
-  const probe = await probeTollPeriodSealed(
-    organizationId,
-    weekAnchor,
-    serviceLine,
-  );
-  return probe.sealed;
-}
-
 function refuseNotSealed(weekKey: string): never {
   throw new SettlementCommandError(
     "TOLL_WEEK_NOT_SEALED",
@@ -151,22 +129,11 @@ export async function assertTollWeekSealedForPay(
   const isV2 = v2Result === true;
 
   let latestTollWeekStatus: string | null = null;
-  let oldSystemSealed = false;
-
-  if (v2EnabledRpcFailed) {
-    // fail closed — leave status null / old false
-  } else if (isV2) {
+  if (!v2EnabledRpcFailed && isV2) {
     latestTollWeekStatus = await (deps?.fetchLatestTollWeekStatus ??
       defaultFetchLatestTollWeekStatus)(
         input.organizationId,
         weekKey,
-      );
-  } else {
-    oldSystemSealed = await (deps?.probeOldSystemSealed ??
-      defaultProbeOldSystemSealed)(
-        input.organizationId,
-        weekKey,
-        input.serviceLine,
       );
   }
 
@@ -174,7 +141,6 @@ export async function assertTollWeekSealedForPay(
     flagOn: true,
     isV2,
     latestTollWeekStatus,
-    oldSystemSealed,
     v2EnabledRpcFailed,
   });
   if (!allowed) refuseNotSealed(weekKey);

@@ -453,11 +453,8 @@ type CloseCheck =
  * `blockers` = the saved driver rows + this build's whole-week rows; null = the read failed.
  */
 /**
- * Toll v2: "sealed" / "open" for a company on v2, null when it isn't (the old toll period decides).
- * Fails closed without breaking the week, and never says "sealed" on a failed read:
- *   - the on/off read fails → null, so the old toll period decides (a v2 company has none, so step 3 stays open;
- *     a company not on v2 keeps its real old-period state instead of being reopened);
- *   - the company is on v2 but the seal read fails → "open".
+ * The company's toll week in the new toll system: "sealed" / "open", or null when the company isn't on it or the
+ * on/off read fails. Never says "sealed" on a failed read; callers treat anything but "sealed" as open.
  */
 export async function tollsV2WeekState(orgId: string, weekKey: string): Promise<"sealed" | "open" | null> {
   const sb = getServiceClient();
@@ -466,7 +463,7 @@ export async function tollsV2WeekState(orgId: string, weekKey: string): Promise<
     if (onErr) throw new Error(onErr.message);
     if (on !== true) return null;
   } catch (e) {
-    console.warn("[recon] toll v2 switch unreadable; old toll period decides", e instanceof Error ? e.message : e);
+    console.warn("[recon] toll v2 switch unreadable; step 3 stays open", e instanceof Error ? e.message : e);
     return null;
   }
   try {
@@ -493,40 +490,12 @@ async function computeLiveStepCounts(
   const sb = getServiceClient();
   const attribution = await loadUnattributedForWeek(orgId, weekKey);
 
-  let tollActionable = 0;
-  const { data: tollPeriod } = await sb
-    .from("toll_reconciliation_period")
-    .select("state, blockers")
-    .eq("organization_id", orgId)
-    .eq("week_key", weekKey)
-    .eq("service_line", line)
-    .maybeSingle();
-  // R3-04: also treat closed toll week_statement as complete (historical path).
-  const { data: tollStmt } = await sb
-    .from("week_statements")
-    .select("id")
-    .eq("organization_id", orgId)
-    .eq("week_key", weekKey)
-    .eq("kind", "toll")
-    .eq("status", "closed")
-    .limit(1)
-    .maybeSingle();
-  const tollDoneViaStatement = Boolean(tollStmt);
-  // P3-R4: a company on toll v2 has no old toll period; its step 3 is done once the company's toll week is sealed.
-  const tollsV2 = await tollsV2WeekState(orgId, weekKey);
-  if (tollsV2 !== null) {
-    tollActionable = tollsV2 === "sealed" ? 0 : 1;
-  } else if (tollDoneViaStatement) {
-    tollActionable = 0;
-  } else if (!tollPeriod) {
-    tollActionable = 1;
-  } else {
-    const state = String((tollPeriod as { state?: string }).state || "");
-    if (state !== "ready" && state !== "sealed") {
-      const blockers = (tollPeriod as { blockers?: unknown }).blockers;
-      tollActionable = Array.isArray(blockers) && blockers.length > 0 ? blockers.length : 1;
-    }
-  }
+  // Step 3 is done once the company's toll week is sealed in the new toll system (the only one). A company not on it,
+  // or an unreadable state, keeps step 3 open. A closed (frozen) week is history: its tolls were settled when it
+  // closed (before the switch, by the old system), so step 3 shows done rather than an uncloseable blocker.
+  let tollActionable = (await tollsV2WeekState(orgId, weekKey)) === "sealed" || (await isReconWeekFrozen(orgId, weekKey))
+    ? 0
+    : 1;
 
   let fuelActionable = 0;
   const { data: fuelPeriod } = await sb

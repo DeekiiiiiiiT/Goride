@@ -3,12 +3,9 @@
  */
 import {
   compareFuelStatementVsEngine,
-  compareTollStatementVsEngine,
   compareEarningsStatementVsEngine,
-  shouldSkipZeroActivityTollCompare,
   type StatementEngineDrift,
   type FuelEngineAmounts,
-  type TollEngineAmounts,
 } from "../../../packages/finance-core/src/statementEngineCompare.ts";
 import type { WeekStatement } from "../../../packages/finance-core/src/weekStatement.ts";
 import { computeEarningsEngineAmountsForWeek } from "./earnings_week_seal.ts";
@@ -17,19 +14,6 @@ import {
   resolveFuelCloseAmounts,
   type FuelCloseAmounts,
 } from "./fuel_week_seal.ts";
-import { resolveTollCloseAmounts } from "./toll_close_amounts.ts";
-import { logReconPhase } from "./recon_phase_log.ts";
-import { getServiceClient } from "./service_client.ts";
-
-/** True only when the company is on toll v2. A failed read answers false, so the old compare still runs (fails closed). */
-async function companyOnTollsV2(organizationId: string): Promise<boolean> {
-  try {
-    const { data, error } = await getServiceClient().rpc("toll_sys_tolls_v2_on", { p_company: organizationId });
-    return !error && data === true;
-  } catch {
-    return false;
-  }
-}
 
 const round2 = (n: number): number => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -67,39 +51,6 @@ async function probeFuelEngine(
   return probeFuelEngineAmounts(organizationId, weekKey, driverId, fromRebuild);
 }
 
-export async function probeTollEngineAmounts(
-  organizationId: string,
-  weekKey: string,
-  driverId: string,
-): Promise<TollEngineAmounts> {
-  const started = Date.now();
-  try {
-    // Shared preference with sealTollWeek (toll_close_amounts).
-    const amounts = await resolveTollCloseAmounts({
-      organizationId,
-      weekKey,
-      driverId,
-    });
-    logReconPhase("probeTollEngineAmounts", started, { organizationId, weekKey, driverId, rows: 1 });
-    return {
-      totalSpend: amounts.totalSpend,
-      chargedToDriver: amounts.chargedToDriver,
-      reimbursed: amounts.reimbursed,
-    };
-  } catch (e) {
-    console.warn("[statement_engine_probe] toll probe failed", driverId, weekKey, e);
-    return { totalSpend: 0, chargedToDriver: 0, reimbursed: 0 };
-  }
-}
-
-async function probeTollEngine(
-  organizationId: string,
-  weekKey: string,
-  driverId: string,
-): Promise<TollEngineAmounts> {
-  return probeTollEngineAmounts(organizationId, weekKey, driverId);
-}
-
 /**
  * Compare closed statements for one driver-week to fresh engines.
  * Skips draft/missing lanes (those already block via closeInvariants).
@@ -124,23 +75,12 @@ export async function compareDriverWeekStatementsToEngines(opts: {
     }
   }
 
-  // P3-R4: on toll v2 the sealed v2 result is the toll answer; the old event-netting engine has no rows for the
-  // company, so comparing against it always "drifts" and blocks the week. v2 has its own nightly money checks.
-  const tollsV2 = statements.some((s) => s.status === "closed" && s.kind === "toll")
-    ? await companyOnTollsV2(organizationId)
-    : false;
-
   for (const s of statements) {
     if (s.status !== "closed") continue;
-    if (s.kind === "toll" && tollsV2) continue;
+    // Tolls: the toll statement is the new toll system's sealed result; that system runs its own nightly money checks.
     if (s.kind === "fuel") {
       const engine = await probeFuelEngine(organizationId, weekKey, driverId, fuelRebuild);
       if (engine) drifts.push(...compareFuelStatementVsEngine(s, engine));
-    } else if (s.kind === "toll") {
-      const engine = await probeTollEngine(organizationId, weekKey, driverId);
-      // Genuine empty-week N/A only — late tolls after $0 seal must drift.
-      if (shouldSkipZeroActivityTollCompare(s.closeReason, engine)) continue;
-      drifts.push(...compareTollStatementVsEngine(s, engine));
     } else if (s.kind === "earnings") {
       const engine = await computeEarningsEngineAmountsForWeek(driverId, weekKey);
       if (engine) drifts.push(...compareEarningsStatementVsEngine(s, engine));

@@ -59,7 +59,6 @@ const VIOLATION_RE = new RegExp(
  */
 const ALLOWLIST = [
   { file: 'packages/finance-core/src/payoutCashC1.ts', needle: "String(e.effectiveAt || '').slice(0, 10)" },
-  { file: 'supabase/functions/_fleet-server/toll_controller.tsx', needle: 'tx.createdAt?.split("T")[0]' },
   { file: 'supabase/functions/_fleet-server/expense_hub_routes.ts', needle: 'tx.date || tx.createdAt' },
   // Diagnostic per-day cache key for rate-limit stats — not a settlement bucket.
   { file: 'supabase/functions/_fleet-server/org_scope.ts', needle: 'filter_stats:${stats.timestamp' },

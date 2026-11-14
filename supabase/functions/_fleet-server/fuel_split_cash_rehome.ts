@@ -8,7 +8,7 @@ import {
   type SplitCashPeriodLandingDecision,
 } from "../../../packages/fuel-core/src/fuelSplitCashLifecycle.ts";
 import { getServiceClient } from "./service_client.ts";
-import { weekKeyForDateStr } from "./period_reset.ts";
+import { weekKeyForDateStr } from "./week_key_for_date.ts";
 import { getFleetTimezone } from "./timezone_helper.tsx";
 import { getLatestWeekStatement } from "./week_statements.ts";
 

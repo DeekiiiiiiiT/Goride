@@ -13,7 +13,6 @@ Deno.test("decideTollSealedForPay: flag off → allowed", () => {
       flagOn: false,
       isV2: true,
       latestTollWeekStatus: null,
-      oldSystemSealed: false,
     }),
     true,
   );
@@ -25,7 +24,6 @@ Deno.test("decideTollSealedForPay: v2 closed → allowed", () => {
       flagOn: true,
       isV2: true,
       latestTollWeekStatus: "closed",
-      oldSystemSealed: false,
     }),
     true,
   );
@@ -37,7 +35,6 @@ Deno.test("decideTollSealedForPay: v2 draft → refused", () => {
       flagOn: true,
       isV2: true,
       latestTollWeekStatus: "draft",
-      oldSystemSealed: true,
     }),
     false,
   );
@@ -49,31 +46,17 @@ Deno.test("decideTollSealedForPay: v2 no statement → refused", () => {
       flagOn: true,
       isV2: true,
       latestTollWeekStatus: null,
-      oldSystemSealed: true,
     }),
     false,
   );
 });
 
-Deno.test("decideTollSealedForPay: old system sealed → allowed", () => {
-  assertEquals(
-    decideTollSealedForPay({
-      flagOn: true,
-      isV2: false,
-      latestTollWeekStatus: null,
-      oldSystemSealed: true,
-    }),
-    true,
-  );
-});
-
-Deno.test("decideTollSealedForPay: old system not sealed → refused", () => {
+Deno.test("decideTollSealedForPay: not on the new toll system → refused (the old system is gone)", () => {
   assertEquals(
     decideTollSealedForPay({
       flagOn: true,
       isV2: false,
       latestTollWeekStatus: "closed",
-      oldSystemSealed: false,
     }),
     false,
   );
@@ -85,7 +68,6 @@ Deno.test("decideTollSealedForPay: v2 rpc failed → refused", () => {
       flagOn: true,
       isV2: false,
       latestTollWeekStatus: "closed",
-      oldSystemSealed: true,
       v2EnabledRpcFailed: true,
     }),
     false,
@@ -116,7 +98,6 @@ Deno.test("assertTollWeekSealedForPay throws with injected deps", async () => {
         isFeatureEnabled: () => Promise.resolve(true),
         fetchV2Enabled: () => Promise.resolve(true),
         fetchLatestTollWeekStatus: () => Promise.resolve("draft"),
-        probeOldSystemSealed: () => Promise.resolve(true),
       },
     );
   } catch (e) {
@@ -148,9 +129,9 @@ Deno.test("assertTollWeekSealedForPay: flag off is no-op", async () => {
 Deno.test("settle-from-balance: either week not sealed refuses", async () => {
   const deps = {
     isFeatureEnabled: () => Promise.resolve(true),
-    fetchV2Enabled: () => Promise.resolve(false),
-    probeOldSystemSealed: (_org: string, week: string) =>
-      Promise.resolve(week === "2026-03-10"),
+    fetchV2Enabled: () => Promise.resolve(true as const),
+    fetchLatestTollWeekStatus: (_org: string, week: string) =>
+      Promise.resolve(week === "2026-03-10" ? "closed" : "draft"),
   };
   await assertTollWeekSealedForPay(
     { organizationId: "org", weekAnchor: "2026-03-10", authHeader: "Bearer x" },

@@ -19,7 +19,7 @@ import {
 } from "../../../packages/roam-shared/src/fuel/jaaMatchSeal.ts";
 import { persistFuelMatchPair } from "./fuel_jaa_match.ts";
 import { isFeatureEnabled, FEATURE_FLAGS } from "./feature_flags.ts";
-import { weekKeyForDateStr } from "./period_reset.ts";
+import { weekKeyForDateStr } from "./week_key_for_date.ts";
 import { getServiceClient } from "./service_client.ts";
 import { getFleetTimezone } from "./timezone_helper.tsx";
 

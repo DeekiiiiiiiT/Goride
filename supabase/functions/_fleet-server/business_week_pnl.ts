@@ -3,7 +3,7 @@
  *
  * Non-tautological by construction:
  *   - settlement composition = sealed week_statements (desk / signed facts)
- *   - business P&L          = fresh engine recomputes (fuel/toll/earnings probes)
+ *   - business P&L          = fresh engine recomputes (fuel/earnings probes; tolls = new toll system's week result)
  *
  * Comparing statement↔statement after cutover was x≈x; this can still fail.
  */
@@ -14,10 +14,8 @@ import {
 } from "./week_statements.ts";
 import { statementAmountMajor } from "../../../packages/finance-core/src/weekStatement.ts";
 import type { WeekStatement } from "../../../packages/finance-core/src/weekStatement.ts";
-import {
-  probeFuelEngineAmounts,
-  probeTollEngineAmounts,
-} from "./statement_engine_probe.ts";
+import { probeFuelEngineAmounts } from "./statement_engine_probe.ts";
+import { findDriverTollLineInWeek, parseWeekDriversRpc } from "./toll_v2_settlement_inputs.ts";
 import { computeEarningsEngineAmountsForWeek } from "./earnings_week_seal.ts";
 
 function sb() {
@@ -84,14 +82,26 @@ export async function sumBusinessWeekPnlMajor(
     ids = (periods ?? []).map((p) => String(p.driver_id || "")).filter(Boolean);
   }
 
+  // Tolls come from the new toll system (one read per company-week): the sealed result once sealed, live before.
+  // Its driver line's fleetMinor is the toll net loss the toll statement records. A failed read throws, so close stops
+  // (a null here would only be a warning and the tie would go unchecked).
+  const { data: tollWeek, error: tollErr } = await sb().rpc("toll_sys_week_drivers", {
+    p_company: orgId,
+    p_week: week,
+  });
+  if (tollErr) {
+    throw new Error(`[business_week_pnl] toll week read failed: ${tollErr.message}`);
+  }
+  const tollBundle = parseWeekDriversRpc(tollWeek);
+
   let total = 0;
   let any = false;
   for (const driverId of ids) {
-    const [fuel, toll, earn] = await Promise.all([
+    const [fuel, earn] = await Promise.all([
       probeFuelEngineAmounts(orgId, week, driverId),
-      probeTollEngineAmounts(orgId, week, driverId),
       computeEarningsEngineAmountsForWeek(driverId, week),
     ]);
+    const toll = findDriverTollLineInWeek(tollBundle, driverId);
     if (earn) {
       any = true;
       total = round2(total + Number(earn.companyShare || 0));
@@ -102,12 +112,7 @@ export async function sumBusinessWeekPnlMajor(
     }
     if (toll) {
       any = true;
-      total = round2(
-        total +
-          Number(toll.totalSpend || 0) -
-          Number(toll.reimbursed || 0) -
-          Number(toll.chargedToDriver || 0),
-      );
+      total = round2(total + (Number(toll.fleetMinor) || 0) / 100);
     }
   }
 

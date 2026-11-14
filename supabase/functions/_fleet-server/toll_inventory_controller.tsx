@@ -427,9 +427,6 @@ app.post(
       if (error) return c.json({ error: error.message }, 500);
       const result = (data || {}) as { tag?: Record<string, unknown>; vehicles?: Array<{ id?: string; kind?: string; payload?: Record<string, unknown> }> };
       await mirrorPayloads(result);
-      void import("./toll_controller.tsx").then((m) => m.applyTagIdentityBackfill()).catch((err) => {
-        console.log(`[TagBackfill] auto after assign failed: ${err?.message || err}`);
-      });
       return c.json({ success: true, data: result.tag });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -455,9 +452,6 @@ app.post("/toll-tags/unassign", requirePermission("toll.manage"), async (c) => {
     if (error) return c.json({ error: error.message }, 500);
     const result = (data || {}) as { tag?: Record<string, unknown>; vehicles?: Array<{ id?: string; kind?: string; payload?: Record<string, unknown> }> };
     await mirrorPayloads(result);
-    void import("./toll_controller.tsx").then((m) => m.applyTagIdentityBackfill()).catch((err) => {
-      console.log(`[TagBackfill] auto after unassign failed: ${err?.message || err}`);
-    });
     return c.json({ success: true, data: result.tag });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

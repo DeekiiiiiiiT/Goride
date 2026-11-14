@@ -19,12 +19,6 @@ import {
   getTierForEarningsEH,
   mondayYmdFromYmd,
 } from "./earnings_policy_runtime.ts";
-import { isUnifiedTollSettlementEnabled } from "./driver_toll_charge.ts";
-import {
-  emptyTollDisposition,
-  addToTollDisposition,
-  roundTollDisposition,
-} from "./driver_toll_disposition.ts";
 
 const PREFIX = "/make-server-37f42386";
 
@@ -256,21 +250,6 @@ export function registerLedgerDriverEarningsHistoryRoutes(app: Hono) {
         .filter((e: any) => e.eventType === "fare_earning")
         .sort((a: any, b: any) => a._dateMs - b._dateMs);
 
-      // ── Unified toll settlement (flag-gated): load this driver's toll_ledger
-      //    entries and bucket them by period into a reconciliation-aware
-      //    disposition (cashWash / personal / fleet / unresolved). Additive —
-      //    the client only reads it when the flag is ON. ──
-      const unifiedTollOn = await isUnifiedTollSettlementEnabled();
-      const driverIdSetEH = new Set<string>(Array.from(driverIdsResolved || []).map((d: any) => String(d)));
-      let tollLedgerEH: any[] = [];
-      if (unifiedTollOn) {
-        const rawToll = await kv.getByPrefix("toll_ledger:");
-        tollLedgerEH = (rawToll || [])
-          .filter((e: any) => e && driverIdSetEH.has(String(e.driverId)))
-          .map((e: any) => ({ ...e, _dateMs: e.date ? new Date(e.date + "T00:00:00").getTime() : NaN }))
-          .filter((e: any) => !isNaN(e._dateMs));
-      }
-
       // ── Step 6: Aggregate each bucket ──
       const expenseTypes = new Set(["fuel_expense", "maintenance", "insurance", "other_expense"]);
 
@@ -341,14 +320,6 @@ export function registerLedgerDriverEarningsHistoryRoutes(app: Hono) {
         const fleetShare = grossRevenue - driverShare;
         const netEarnings = driverShare - expenses;
 
-        // Reconciliation-aware toll disposition for this period (flag-gated).
-        const tollDisposition = emptyTollDisposition();
-        if (unifiedTollOn && tollLedgerEH.length > 0) {
-          for (const te of tollLedgerEH) {
-            if (te._dateMs >= bStart && te._dateMs <= bEnd) addToTollDisposition(tollDisposition, te);
-          }
-        }
-
         const qPercent = (quotaTargetEH !== null && quotaTargetEH > 0) ? (periodEarnings / quotaTargetEH) * 100 : null;
 
         return {
@@ -367,9 +338,9 @@ export function registerLedgerDriverEarningsHistoryRoutes(app: Hono) {
           transactionCount,
           tips: Math.round(tips * 100) / 100,
           tolls: Math.round(tolls * 100) / 100,
-          // Reconciliation-aware toll disposition (unified settlement). Zeroes when
-          // the flag is OFF; the client only consumes it when ON.
-          tollDisposition: roundTollDisposition(tollDisposition),
+          // Old toll ledger is gone (toll-old-system-removal S2); always zero. T1 drops the field
+          // together with the Fleet payout screen's read of it.
+          tollDisposition: { cashWash: 0, personal: 0, fleet: 0, unresolved: 0 },
           platformFees: Math.round(platformFees * 100) / 100,
           quotaTarget: quotaTargetEH,
           quotaPercent: qPercent !== null ? Math.round(qPercent * 100) / 100 : null,

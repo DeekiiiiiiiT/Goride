@@ -1,5 +1,5 @@
 /**
- * Week Reconciliation P2 — staged toll import API.
+ * Week Reconciliation P2 — staged import API (fuel parse/commit; other files register here).
  * See WEEK_RECONCILIATION_WIZARD_AUDIT.md §4.5.
  */
 import type { Hono } from "npm:hono@4.3.11";
@@ -11,18 +11,12 @@ import { getServiceClient } from "./service_client.ts";
 import { stampOrg } from "./org_scope.ts";
 import * as kv from "./kv_store.tsx";
 import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
-import {
-  classifyTollImportRow,
-  normalizeProviderRefForIndex,
-  stagingRowOverrideId,
-  type StagedTollRowClassification,
-} from "../../../packages/finance-core/src/reconTollImport.ts";
+import { stagingRowOverrideId } from "../../../packages/finance-core/src/reconTollImport.ts";
 import {
   classifyFuelImportRow,
   fuelReceiptKey,
   type StagedFuelRowClassification,
 } from "../../../packages/finance-core/src/reconFuelImport.ts";
-import type { TollIntegrityLike } from "../../../packages/finance-core/src/tollLedgerIntegrity.ts";
 import { periodKeyFor } from "../../../packages/finance-core/src/periodKey.ts";
 import {
   asYmd,
@@ -127,29 +121,10 @@ type ImportStagingRow = {
   import_id: string;
   row_index: number;
   payload: Record<string, unknown>;
-  classification: StagedTollRowClassification | StagedFuelRowClassification;
+  classification: StagedFuelRowClassification;
   week_key: string | null;
   override_keep: boolean;
 };
-
-function rowToIntegrity(payload: Record<string, unknown>): TollIntegrityLike {
-  const meta = (payload.metadata as Record<string, unknown>) || {};
-  return {
-    id: payload.id != null ? String(payload.id) : undefined,
-    vehicleId: payload.vehicleId != null ? String(payload.vehicleId) : null,
-    driverId: payload.driverId != null ? String(payload.driverId) : null,
-    date: payload.date != null ? String(payload.date).slice(0, 10) : null,
-    amount: typeof payload.amount === "number" ? payload.amount : Number(payload.amount),
-    paymentMethod: payload.paymentMethod != null ? String(payload.paymentMethod) : null,
-    referenceNumber:
-      (payload.referenceNumber != null ? String(payload.referenceNumber) : null) ||
-      (typeof meta.referenceNumber === "string" ? meta.referenceNumber : null),
-    status: payload.status != null ? String(payload.status) : null,
-    metadata: meta,
-    plaza: payload.vendor != null ? String(payload.vendor) : null,
-    batchId: payload.batchId != null ? String(payload.batchId) : null,
-  };
-}
 
 async function loadExistingFuelReceipts(orgId: string): Promise<Set<string>> {
   const sb = getServiceClient();
@@ -169,78 +144,6 @@ async function loadExistingFuelReceipts(orgId: string): Promise<Set<string>> {
     if (key) out.add(key);
   }
   return out;
-}
-
-async function loadExistingTollRows(orgId: string): Promise<TollIntegrityLike[]> {
-  const sb = getServiceClient();
-  const { data, error } = await sb
-    .from("fleet_toll_ledger")
-    .select(
-      "id, vehicle_id, driver_id, date, amount, payment_method, status, metadata, payload_json, batch_id, trip_id, plaza, provider_ref",
-    )
-    .eq("organization_id", orgId)
-    .limit(100000);
-  if (error) {
-    console.warn("[recon-import] fleet_toll_ledger load failed", error.message);
-    return [];
-  }
-  return (data || []).map((row: Record<string, unknown>) => {
-    const meta = {
-      ...((row.metadata as Record<string, unknown>) || {}),
-      ...(((row.payload_json as Record<string, unknown>)?.metadata as Record<string, unknown>) || {}),
-    };
-    const ref =
-      (row.provider_ref as string) ||
-      (row.payload_json as Record<string, unknown>)?.referenceNumber ||
-      meta.referenceNumber;
-    return {
-      id: String(row.id),
-      vehicleId: row.vehicle_id != null ? String(row.vehicle_id) : null,
-      driverId: row.driver_id != null ? String(row.driver_id) : null,
-      date: row.date != null ? String(row.date).slice(0, 10) : null,
-      amount: Number(row.amount),
-      paymentMethod: row.payment_method != null ? String(row.payment_method) : null,
-      status: row.status != null ? String(row.status) : null,
-      referenceNumber: ref != null ? String(ref) : null,
-      metadata: meta,
-      plaza: row.plaza != null ? String(row.plaza) : null,
-      batchId: row.batch_id != null ? String(row.batch_id) : null,
-      tripId: row.trip_id != null ? String(row.trip_id) : null,
-    } satisfies TollIntegrityLike;
-  });
-}
-
-function primaryWeekKeyFromRows(rows: ImportStagingRow[]): string | null {
-  const counts = new Map<string, number>();
-  for (const r of rows) {
-    if (r.classification === "rejected" || !r.week_key) continue;
-    const wk = String(r.week_key).slice(0, 10);
-    counts.set(wk, (counts.get(wk) ?? 0) + 1);
-  }
-  let best: string | null = null;
-  let bestN = 0;
-  for (const [wk, n] of counts) {
-    if (n > bestN) {
-      best = wk;
-      bestN = n;
-    }
-  }
-  return best;
-}
-
-function applySpillClassification(
-  rows: ImportStagingRow[],
-  selectedWeekKey: string | null,
-): ImportStagingRow[] {
-  const anchor = selectedWeekKey || primaryWeekKeyFromRows(rows);
-  if (!anchor) return rows;
-  return rows.map((r) => {
-    if (r.classification === "rejected" || r.classification === "duplicate_ref") return r;
-    if (!r.week_key) return r;
-    const wk = String(r.week_key).slice(0, 10);
-    if (wk === anchor) return r;
-    return { ...r, classification: "spill" as StagedTollRowClassification };
-  });
 }
 
 function buildPreviewFromRows(
@@ -268,11 +171,7 @@ function buildPreviewFromRows(
   for (const r of rows) {
     const p = r.payload;
     const amt = Math.round(Math.abs(Number(p.amount) || 0) * 100);
-    if (
-      r.classification === "new" ||
-      r.classification === "duplicate_fingerprint" ||
-      r.classification === "duplicate_receipt"
-    ) {
+    if (r.classification === "new" || r.classification === "duplicate_receipt") {
       preview.totals_minor += amt;
     }
     const day = p.date != null ? String(p.date).slice(0, 10) : null;
@@ -289,20 +188,11 @@ function buildPreviewFromRows(
       case "new":
         preview.new.push(item);
         break;
-      case "duplicate_ref":
-        preview.duplicate.byRef.push(item);
-        break;
-      case "duplicate_fingerprint":
-        preview.duplicate.byFingerprint.push(item);
-        break;
       case "duplicate_receipt":
         preview.duplicate.byRef.push(item);
         break;
       case "rejected":
         preview.rejected.push(item);
-        break;
-      case "spill":
-        preview.spill.push(item);
         break;
       default:
         break;
@@ -311,13 +201,7 @@ function buildPreviewFromRows(
   const data = ymdSpan(dates);
   const savedDays: string[] = [];
   for (const r of rows) {
-    if (
-      r.classification === "spill" ||
-      r.classification === "rejected" ||
-      r.classification === "duplicate_ref"
-    ) {
-      continue;
-    }
+    if (r.classification === "rejected") continue;
     const day = asYmd(r.payload?.date);
     if (day) savedDays.push(day);
   }
@@ -348,76 +232,6 @@ async function getStagingImport(orgId: string, importId: string) {
     .maybeSingle();
   if (error) throw error;
   return data;
-}
-
-function classifyNormalizedRows(
-  orgId: string,
-  importId: string,
-  sourceId: string,
-  mode: "usage" | "topup",
-  rows: Array<Record<string, unknown>>,
-  existing: TollIntegrityLike[],
-): ImportStagingRow[] {
-  const intraRefs = new Set<string>();
-  const out: ImportStagingRow[] = [];
-
-  for (let i = 0; i < rows.length; i += 1) {
-    const raw = { ...rows[i] };
-    if (!raw.id) raw.id = crypto.randomUUID();
-
-    if (!raw.vehicleId) {
-      out.push({
-        import_id: importId,
-        row_index: i,
-        payload: raw,
-        classification: "rejected",
-        week_key: null,
-        override_keep: false,
-      });
-      continue;
-    }
-
-    const day = raw.date != null ? String(raw.date).slice(0, 10) : "";
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
-      out.push({
-        import_id: importId,
-        row_index: i,
-        payload: { ...raw, rejectReason: "invalid_date" },
-        classification: "rejected",
-        week_key: null,
-        override_keep: false,
-      });
-      continue;
-    }
-
-    const weekKey = periodKeyFor(day, FLEET_TZ);
-    let classification: StagedTollRowClassification = "new";
-    const like = rowToIntegrity(raw);
-    const result = classifyTollImportRow(like, existing, { intraBatchRefs: intraRefs });
-    classification = result.classification;
-    const ref = normalizeProviderRefForIndex(
-      like.referenceNumber as string | undefined,
-    );
-    if (ref) intraRefs.add(ref);
-    if (classification === "new") {
-      existing.push(like);
-    }
-
-    out.push({
-      import_id: importId,
-      row_index: i,
-      payload: {
-        ...raw,
-        importMode: mode,
-        sourceId,
-        organizationId: orgId,
-      },
-      classification,
-      week_key: weekKey,
-      override_keep: false,
-    });
-  }
-  return out;
 }
 
 function classifyFuelNormalizedRows(
@@ -547,7 +361,11 @@ export function registerReconImportRoutes(app: Hono) {
 
         const body = await c.req.json().catch(() => ({}));
         const stagingSourceId = String(staging.source_id);
-        const mode = body.mode === "topup" ? "topup" : body.mode === "fuel" ? "fuel" : "usage";
+        // Only fuel files are parsed here; toll files go through the new toll upload.
+        if (isTollSource(stagingSourceId)) return tollsMoved(c);
+        if (!isFuelSource(stagingSourceId) && body.mode !== "fuel") {
+          return c.json({ error: "INVALID_SOURCE", message: "Only fuel files are parsed here." }, 400);
+        }
         let rows = Array.isArray(body.rows) ? body.rows : [];
         const csvText = typeof body.csvText === "string" ? body.csvText : "";
         if (rows.length === 0 && csvText.trim()) {
@@ -578,29 +396,15 @@ export function registerReconImportRoutes(app: Hono) {
           ? String(body.weekKey).slice(0, 10)
           : (staging.week_key ? String(staging.week_key).slice(0, 10) : null);
 
-        let classified: ImportStagingRow[];
-        if (isFuelSource(stagingSourceId) || mode === "fuel") {
-          const receipts = await loadExistingFuelReceipts(orgId);
-          classified = classifyFuelNormalizedRows(
-            orgId,
-            importId,
-            stagingSourceId,
-            rows,
-            receipts,
-            parseWeekKey,
-          );
-        } else {
-          const existing = await loadExistingTollRows(orgId);
-          classified = classifyNormalizedRows(
-            orgId,
-            importId,
-            stagingSourceId,
-            mode === "topup" ? "topup" : "usage",
-            rows,
-            existing,
-          );
-          classified = applySpillClassification(classified, parseWeekKey);
-        }
+        const receipts = await loadExistingFuelReceipts(orgId);
+        const classified = classifyFuelNormalizedRows(
+          orgId,
+          importId,
+          stagingSourceId,
+          rows,
+          receipts,
+          parseWeekKey,
+        );
         await persistStagingRows(classified);
         const banner = parseStatementPeriodBanner(csvText);
         const preview = buildPreviewFromRows(classified, {

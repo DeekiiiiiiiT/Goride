@@ -23,6 +23,16 @@ Deno.test("toll files are refused at create (before review) and at commit, with 
   assert(commit.includes('error: "INVALID_SOURCE"'), "a non-fuel, non-toll file gets INVALID_SOURCE, not a toll message");
 });
 
+Deno.test("parse refuses toll files and only classifies fuel rows (S2)", () => {
+  const parse = routeBody("/make-server-37f42386/recon/imports/:id/parse");
+  assert(parse.includes("if (isTollSource(stagingSourceId)) return tollsMoved(c);"), "parse refuses toll files");
+  assert(parse.includes('error: "INVALID_SOURCE"'), "a non-fuel file gets INVALID_SOURCE");
+  assert(parse.includes("classifyFuelNormalizedRows("), "fuel rows are classified");
+  for (const old of ["loadExistingTollRows", "classifyNormalizedRows(", "applySpillClassification", "fleet_toll_ledger"]) {
+    assert(!src.includes(old), `old toll parse code gone (${old})`);
+  }
+});
+
 Deno.test("recon import never writes the old toll ledger", () => {
   for (const old of ["saveTollLedgerEntry", "prepareTollLedgerEntry", "afterTollLedgerInsert", "getAllTollLedgerEntries"]) {
     assert(!src.includes(old), `no old toll ledger use (${old})`);

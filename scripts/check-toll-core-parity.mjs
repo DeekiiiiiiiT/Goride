@@ -32,11 +32,6 @@ const SHIMS = [
     forbidden: /function\s+classifyOrphanToll\s*\(/,
   },
   {
-    rel: 'supabase/functions/_fleet-server/orphanTollClassifier.ts',
-    mustMatch: /packages\/toll-core\/src\/orphanTollClassifier/,
-    forbidden: /function\s+classifyOrphanToll\s*\(/,
-  },
-  {
     rel: 'apps/fleet/src/utils/tollDate.ts',
     mustMatch: /from\s+['"]@roam\/toll-core['"]/,
     forbidden: /function\s+parseTollDate\s*\(/,

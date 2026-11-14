@@ -1,5 +1,5 @@
 /**
- * fleet-pay — settlements, driver financial periods, dispute refunds, payment ledger lines.
+ * fleet-pay — settlements, driver financial periods, payment ledger lines.
  * Week-close conductor stays on the monolith (ADR-0021 F4).
  * Built exclusively via createFleetFunction (ADR-0020).
  */
@@ -7,7 +7,6 @@ import { reconWeekVersionGuard } from "../../_fleet-server/recon_week_version_gu
 import { createFleetFunction } from "../../_shared/edgeKernel.ts";
 import settlementCommandsApp from "../../_fleet-server/settlement_commands_controller.tsx";
 import driverFinancialPeriodApp from "../../_fleet-server/driver_financial_period_controller.tsx";
-import disputeRefundApp from "../../_fleet-server/dispute_refund_controller.tsx";
 import paymentLedgerLineApp from "../../_fleet-server/payment_ledger_line_controller.tsx";
 import { sealEarningsWeek } from "../../_fleet-server/earnings_week_seal.ts";
 import { beginSealAttempt, completeSealAttempt } from "../../_fleet-server/week_seal_log.ts";
@@ -84,7 +83,6 @@ const app = createFleetFunction({
     });
 
     parent.route("/", driverFinancialPeriodApp);
-    parent.route("/", disputeRefundApp);
     parent.route("/", paymentLedgerLineApp);
   },
 });

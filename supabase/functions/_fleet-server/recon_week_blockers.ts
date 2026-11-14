@@ -91,7 +91,6 @@ export async function writeDriverWeekBlockers(
     frozen,
     statements,
     storedDrifts,
-    tollSummary: null, // the old toll event check is gone; tolls are sealed in the new system
   });
   // Same rule as the preview: a frozen driver only counts while a restatement waits.
   const counts = !frozen || result.acceptRestatementDrafts;

@@ -39,12 +39,7 @@ import {
   periodAnchorFor,
   majorToMinor,
 } from "./financial_ledger.ts";
-import {
-  loadAllTollLedgerWithTrips,
-  isReconcilableTollExpense,
-  filterByDriver,
-  getDriverAliasMap,
-} from "./toll_controller.tsx";
+import { getDriverAliasMap } from "./driver_alias_map.ts";
 import { driverIdsReferToSamePerson } from "./driver_identity.ts";
 import { getOrgId } from "./org_scope.ts";
 import { requireInternalSecret } from "../_shared/requireInternalSecret.ts";
@@ -726,8 +721,8 @@ app.post(`${BASE}/process-outbox`, requirePermission('transactions.edit'), async
 });
 
 /**
- * Backfill financial_events from toll_ledger usage + driver charges + fuel finalized.
- * Then rebuild all period projections for the driver (or all drivers with tolls).
+ * Backfill financial_events from finalized fuel, then rebuild the period projections for those drivers.
+ * (Old toll usage / Toll Charge rows are never re-posted: toll money comes only from the new toll system.)
  */
 app.post(`${BASE}/backfill`, requirePermission('transactions.edit'), async (c) => {
   try {
@@ -739,93 +734,14 @@ app.post(`${BASE}/backfill`, requirePermission('transactions.edit'), async (c) =
       return c.json({ error: "ORG_REQUIRED", message: "organizationId is required for backfill posts" }, 400);
     }
 
-    const { tollTx } = await loadAllTollLedgerWithTrips();
-    const usage = tollTx.filter(
-      (tx: any) =>
-        isReconcilableTollExpense(tx) &&
-        String(tx.type || "").toLowerCase() !== "top-up" &&
-        String(tx.type || "").toLowerCase() !== "top_up" &&
-        (!onlyDriver || String(tx.driverId) === onlyDriver),
-    );
-
     const report = {
       dryRun,
-      tollUsageWouldPost: 0,
-      tollUsagePosted: 0,
-      chargesPosted: 0,
       fuelPosted: 0,
       periodsRebuilt: 0,
       errors: [] as string[],
     };
 
     const driverIds = new Set<string>();
-
-    for (const tx of usage) {
-      if (!tx?.id || !tx?.driverId) continue;
-      driverIds.add(String(tx.driverId));
-      report.tollUsageWouldPost++;
-      if (dryRun) continue;
-      const amt = Math.abs(Number(tx.amount) || 0);
-      if (amt <= 0) continue;
-      const r = await postFinancialEvent({
-        idempotencyKey: `backfill:toll_usage:${tx.id}`,
-        organizationId: String(tx.organizationId || requestOrgId),
-        domain: "toll",
-        eventType: "toll_usage",
-        sourceSystem: "backfill",
-        sourceId: String(tx.id),
-        driverId: String(tx.driverId),
-        vehicleId: tx.vehicleId || null,
-        occurredAt: tx.date,
-        amountMajor: -amt,
-        direction: "outflow",
-        debitAccountKey: "platform:fleet_toll_expense",
-        creditAccountKey: "platform:toll_tag_clearing",
-        payload: {
-          description: tx.description || tx.vendor,
-          workflowStage: tx.workflowStage,
-          paymentMethod: tx.paymentMethod,
-        },
-        allocations: [
-          {
-            allocation_type: "fleet_share",
-            amount_minor: majorToMinor(amt),
-            toll_id: String(tx.id),
-            driver_id: String(tx.driverId),
-          },
-        ],
-      });
-      if (r.ok && (r.inserted || r.skipped)) report.tollUsagePosted++;
-      else if (r.error) report.errors.push(`toll ${tx.id}: ${r.error}`);
-    }
-
-    // Driver charges
-    const allTx = (await kv.getByPrefix("transaction:")) || [];
-    for (const t of allTx) {
-      if (String(t?.category || "") !== "Toll Charge") continue;
-      if (!t?.driverId || !t?.id) continue;
-      if (onlyDriver && String(t.driverId) !== onlyDriver) continue;
-      driverIds.add(String(t.driverId));
-      if (dryRun) continue;
-      const amt = Number(t.amount) || 0;
-      if (amt === 0) continue;
-      const r = await postFinancialEvent({
-        idempotencyKey: `backfill:driver_charge:${t.id}`,
-        organizationId: String(t.organizationId || requestOrgId),
-        domain: "toll",
-        eventType: amt < 0 ? "toll_charged_to_driver" : "toll_charge_reversed",
-        sourceSystem: "backfill",
-        sourceId: String(t.id),
-        driverId: String(t.driverId),
-        occurredAt: t.date,
-        amountMajor: amt,
-        direction: amt < 0 ? "outflow" : "inflow",
-        product: "roam_driver",
-        payload: { description: t.description, projection: true },
-      });
-      if (r.ok) report.chargesPosted++;
-      else if (r.error) report.errors.push(`charge ${t.id}: ${r.error}`);
-    }
 
     // Finalized fuel
     const reports = (await loadIndexedDocs({

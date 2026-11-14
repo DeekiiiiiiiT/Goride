@@ -31,7 +31,6 @@ export {
 } from './database/LedgerColumnSettings';
 export { TripLedgerPage } from './database/TripLedgerPage';
 export { FuelLedgerPage } from './database/FuelLedgerPage';
-export { TollLedgerPage } from './database/TollLedgerPage';
 export { DatabaseLedgerPage } from './database/DatabaseLedgerPage';
 
 export {
@@ -66,7 +65,6 @@ export { VerifiedTollPlazasTab } from './toll/VerifiedTollPlazasTab';
 export { TollSpatialAuditMap } from './toll/TollSpatialAuditMap';
 export { TollPlazaDetailPanel } from './toll/TollPlazaDetailPanel';
 export { LearntTollPlazasTab } from './toll/LearntTollPlazasTab';
-export { TollPlazaAttributionDialog } from './toll/TollPlazaAttributionDialog';
 export { TollRateHistoryDialog } from './toll/TollRateHistoryDialog';
 export { TollRatePublishPreviewDialog } from './toll/TollRatePublishPreviewDialog';
 export { tollOpsApi } from './services/tollOpsApi';

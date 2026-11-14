@@ -85,9 +85,6 @@ jobs:
       - name: Check no naive date slice (one-week rule)
         run: node scripts/check-no-naive-date-slice.mjs
 
-      - name: Check toll org-scope
-        run: node scripts/check-toll-org-scope.mjs
-
       - name: Check toll week-rule SQL drift
         run: node scripts/gen-toll-week-rule-sql.mjs --check
 
@@ -201,7 +198,6 @@ jobs:
           supabase/functions/_fleet-server/fuel_station_match.test.ts
           supabase/functions/_fleet-server/fuel_station_match_places_parity.test.ts
           supabase/functions/_fleet-server/fuel_station_match_replay.test.ts
-          supabase/functions/_fleet-server/fleet_trip_toll_replay.test.ts
           supabase/functions/_fleet-server/fuel_split_fill_station.test.ts
           supabase/functions/_fleet-server/geo_matcher_near_miss.test.ts
           supabase/functions/_fleet-server/fuel_station_match_provisional.test.ts
@@ -295,16 +291,10 @@ jobs:
           supabase/functions/_fleet-server/fuel_week_phase4_server_cats.test.ts
           supabase/functions/_shared/directionsRoute.test.ts
 
-      - name: Deno test toll recon durability (Phase 8)
+      - name: Deno test toll route auth + v2 command errors
         run: >
           deno test --allow-read --allow-env --no-check
-          supabase/functions/_fleet-server/toll_period_writable.test.ts
-          supabase/functions/_fleet-server/toll_finish_seal_path.test.ts
-          supabase/functions/_fleet-server/toll_auto_match.test.ts
           supabase/functions/_fleet-server/toll_route_auth.test.ts
-          supabase/functions/_fleet-server/toll_request_idempotency.test.ts
-          supabase/functions/_fleet-server/toll_period_seal_guard.test.ts
-          supabase/functions/_fleet-server/toll_ledger_request_cache.test.ts
           supabase/functions/_fleet-server/toll_v2_command_errors.test.ts
           supabase/functions/_fleet-server/period_projector.test.ts
           supabase/functions/rides/tolls/nativeTollPayload.test.ts
