@@ -97,6 +97,29 @@ async function refuseFrozenReconWeek(
   return c.json({ error: "PERIOD_FROZEN", message: "Reopen the week first" }, 409);
 }
 
+/** WRA-50: re-save every driver's blockers for the week after an earnings seal. Never fails the seal. */
+async function refreshDriverBlockersAfterSeal(
+  orgId: string,
+  weekKey: string,
+  line: "rideshare" | "rush_delivery",
+): Promise<void> {
+  try {
+    const { writeDriverWeekBlockers } = await import("./recon_week_blockers.ts");
+    const { data, error } = await getServiceClient()
+      .from("driver_financial_periods")
+      .select("driver_id")
+      .eq("organization_id", orgId)
+      .eq("period_anchor", weekKey);
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) {
+      const driverId = String((row as { driver_id?: unknown }).driver_id || "");
+      if (driverId) await writeDriverWeekBlockers(orgId, weekKey, driverId, line);
+    }
+  } catch (e) {
+    console.warn("[recon-seal-earnings] blocker refresh failed", e instanceof Error ? e.message : e);
+  }
+}
+
 const BASE = "/make-server-37f42386/recon";
 const WEEK_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -2161,6 +2184,9 @@ export function registerReconRoutes(app: Hono) {
           idempotencyKey: idempotencyKeyFrom(c, body as { idempotencyKey?: unknown }),
           apply: async () => {
             await sealEarningsLaneForWeek({ orgId, week: weekKey, actorId: actor, force: true });
+            // WRA-50: the step reads the saved blocker list. Refresh each driver's
+            // rows now (as toll seal and fuel finalize do) or "not sealed" stays.
+            await refreshDriverBlockersAfterSeal(orgId, weekKey, line);
           },
         });
         return weekChangeResponse(c, outcome, orgId, line, weekKey, actor);
