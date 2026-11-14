@@ -2,6 +2,28 @@
 
 **Rev 28 · 2026-11-12 · Status: BUILDING — Round 5 (browser done-tests) part-way.** 17 of 21 browser done-tests pass (9b new). The 4 left (5, 6, 9t, 13) found 7 real problems: 4 fixed, 3 open (WRA-41, 42, 43 below). Nothing committed, nothing live.
 
+## ⏸ START HERE (paused 14 Nov 2026 ~04:10 UTC, out of credit)
+
+**Where we are:** Week Reconciliation is **LIVE** for the owner's fleet (`recon_v2` on, 14 Nov 03:28 UTC). Go-live Step 4 is fully done: 11 migrations, code deployed (main `6f0dd254` incl. WRA-41/43 + fuel no-GPS fix), week calculator resumed, Uber week fix run (37 → 0), switch on, and the missing calculator wake job added (migration `20261114040154_recon_worker_wake_cron.sql`, owner ran it + logbook line; the calculator then ran its first nightly since 26 Oct). Week list now: **"Numbers are up to date", 9 open, 39 reconciled** — December etc. were adopted as closed automatically.
+
+**Now in Step 5 (owner's real week-by-week test), weeks close oldest first:**
+1. **13 Apr, 20 Apr, 27 Apr 2026** — no activity: open the week, mark every needed file "no activity", walk the steps, close. **Next action = owner opens Week of 13 Apr 2026 and sends a screenshot; guide ONE step per reply.**
+2. **21 Sep, 28 Sep, 5 Oct 2026** — real weeks; also the 3 old-toll weeks from `docs/toll-old-system-removal-audit.md` D0 (Kenny Gregory Rattray): upload Uber / InDrive / toll files, decide, **seal tolls in step 3**, then close.
+3. **19 Oct, 26 Oct, 2 Nov 2026** — real weeks.
+4. During Step 5 the 14-night side-by-side check runs (section "Step 5" below).
+
+**Open items (not blocking the owner):**
+- **Done-tests 5, 6, 9t, 13** still need rework for the new toll system: 5/9t/13 import tolls the old way (`importTolls` in `e2e/helpers/weekReconDoneTest.ts` → must use the new toll upload `/toll/v2/import`); test 6 passes the WRA-41 point but its seeded "flagged fill" shows Clear before it is resolved (find what re-saves/re-checks the fill). A run on 14 Nov was also disturbed by another chat writing files under `supabase/functions` mid-run.
+- **`fuel/periods/ensure` answered 500 twice** in one test-6 run (two at the same instant — likely a create race); not yet looked at.
+- **Nightly finance check fails every night at 04:00 UTC** (`fleet-finance-recon-nightly` → `finance-recon`): it selects `debit_account_key, credit_account_key` from `public.financial_events`, which has never had those columns (`supabase/functions/finance-recon/index.ts` ~123). `week_close.ts` ~2194 (M-2 fuel account-key check) asks for the same columns but ignores the error, so that check never runs. Separate fix, its own audit — not this one.
+- Accepted from WRA-43: a change made outside Week Reconciliation (no week header) still waits for the nightly run.
+
+**After Step 5's first weeks:** back to `docs/toll-old-system-removal-audit.md` (round S3 → D1 → T1).
+
+**Working rules learned this session:** owner is not a coder — short plain replies, one step at a time; owner pushes to `main` (Claude's push to `main` is blocked): `cd C:\Roam\Goride` then `git push origin parts-auto-match:main`; give live SQL for the SQL Editor ending with the `schema_migrations` logbook line for migrations; other chats have uncommitted files (maintenance, parts, service items) — never stage them, never commit built `*/index.ts` bundles; after any `deno test`, run `pnpm install --frozen-lockfile` before vitest/builds; the Supabase connector may be down — ask the owner to run read-only SQL instead.
+
+---
+
 ## Rev 29 · 2026-11-14 · re-checked after the new toll system + old toll removal
 
 - **Why now:** the live `feature_flag:recon_v2` row does not exist (owner checked 14 Nov), so Week Reconciliation and Toll Health are hidden on live. The owner's fleet is on the new toll system and the old toll pages are deleted (`docs/toll-old-system-removal-audit.md`), so on live there is **no screen to upload / decide / seal tolls** until this go-live is done. This audit now goes before toll removal round S3.
@@ -14,6 +36,8 @@
 - **WRA-41 fixed in code (14 Nov, uncommitted):** the week Week Reconciliation opens the Fuel step for (always its Monday) is added to the Fuel screen's own week list (real Monday–Sunday bounds and label, newest-first order) and to the server read range, so its lock and reviews come from the server like every other week; it is kept even with no fuel, but only once every fill has loaded (not after a failed or cut-short load). `FuelManagement.tsx`, `fuelPeriodStatus.ts` (`keepWeekStarts`).
 - Tests: Deno `_fleet-server` + Fleet vitest green; two `/code-review` passes (20 findings, fixed or accepted above). WRA-41 + WRA-43 live 14 Nov (f1ffc67b, all deploys + CI green). Week calculator resumed by the owner 14 Nov.
 - **Go-live Step 4.5 (Uber week fix) ✅ 14 Nov:** run on live with the new self-checking `supabase/scripts/recon_uber_batch_restamp_LIVE.sql` (backup in one KV row `recon_uber_restamp_backup:wra-09`, no table change; cancels itself unless 0 are left off-week). Result: before 37, after 0. Undo: `recon_uber_batch_restamp_LIVE_undo.sql`. Both rehearsed on a local database first (fix, refuse a second run, undo, cancel on an odd upload). The old `recon_uber_batch_restamp*.sql` (hand-added columns, psql-only) is not used.
+- **Go-live Step 4.6 ✅ 14 Nov 03:28 UTC:** owner ran the switch SQL: `feature_flag:recon_v2` = `enabledForOrgs: [8cfa606a-…]` (owner's fleet only); `feature_flag:recon_wizard` was already on for all. Undo: `delete from kv_store_37f42386 where key = 'feature_flag:recon_v2';`. Decision: switched on before the last browser done-tests (5, 6, 9t, 13), because the old toll pages are gone and live had no toll screen; those tests are test-setup rework (old toll import, a fake flagged fill), carried as cleanup. **Step 5 (owner's real week-by-week test) starts now**, first job: the 3 old toll weeks (21 Sep, 28 Sep, 5 Oct) in step 3.
+- **Fuel no-GPS save fix (14 Nov, d64f9247, live):** the "held" transaction for a fill with no GPS now carries the fill's company; before, that save answered 500 (`fuel_controller.tsx`).
 - **Done-tests re-pointed at the new toll system (14 Nov):** the test seed puts the test companies on the new toll system; tolls are sealed with `seal_week` (`sealTollsWeek` / `tollWeekCommandAs` in `e2e/helpers/weekReconDoneTest.ts`); tests 6, 8d, 9b and `seed-week-recon-closable.mjs` updated. Test 6 now passes the WRA-41 point (the Fuel step shows the week) and then fails on a **new finding**: resolving the flagged fill answers 500 (`fuel-entries`: "transaction … is missing a company"; `fuel/periods/ensure` 500). Tests 5, 9t, 13 still import tolls the old way (`importTolls`) and need the new toll upload.
 - **Next:** re-run the done-tests that cover them (5, 6, 9t, 13, re-pointed at the new toll step) → owner checks the week calculator is on and the Uber week fix (Step 4.5) → turn `recon_v2` on for the owner's company (Step 4.6) → owner redoes the 3 old toll weeks inside step 3.
 
