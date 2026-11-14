@@ -152,7 +152,7 @@ export function TollSettingsPage({ onNavigate }: Props) {
   if (!formData) return null;
 
   const disabled = isSectionDisabled(canEdit, isEditing);
-  const showHealthAlarm = health?.verificationGateClosed || health?.zeroCrossingAlarm;
+  const showHealthAlarm = health?.verificationGateClosed || health?.zeroCrossingAlarm || health?.countUnavailable;
 
   return (
     <div className="max-w-3xl space-y-6">

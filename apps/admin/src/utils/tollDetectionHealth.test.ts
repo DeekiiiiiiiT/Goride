@@ -33,4 +33,15 @@ describe('assessTollDetectionHealth', () => {
     expect(h.crossingsLastNDays).toBe(1);
     expect(h.zeroCrossingAlarm).toBe(false);
   });
+
+  it('warns when the crossing count cannot be read (no silent healthy look)', () => {
+    const h = assessTollDetectionHealth({
+      settings: { toll_detection_enabled: true },
+      plazas: [plaza('verified')],
+      crossingsLastNDays: null,
+    });
+    expect(h.countUnavailable).toBe(true);
+    expect(h.zeroCrossingAlarm).toBe(false);
+    expect(h.summary).toMatch(/Couldn't read the Roam ride toll crossings/);
+  });
 });

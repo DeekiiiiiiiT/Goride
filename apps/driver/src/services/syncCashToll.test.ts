@@ -35,20 +35,22 @@ describe('syncCashToll', () => {
     expect(removeBlob).toHaveBeenCalled();
   });
 
-  it('a 409 keeps the receipt on the phone and retries (never saved the old way)', async () => {
+  it('fleet not on the new toll system: a plain permanent message, the receipt stays on the phone', async () => {
     const removeBlob = vi.fn();
     const { offlineBlobStore } = await import('./offlineBlobStore');
     vi.spyOn(offlineBlobStore, 'get').mockResolvedValue(new Blob(['x'], { type: 'image/jpeg' }));
 
-    const outcome = await syncCashToll(baseAction(), {
-      uploadReceipt: async () => 'https://cdn/r.jpg',
-      submitDriverCash: async () => ({ ok: false, status: 409, code: 'TOLLS_V2_OFF' }),
-      removeBlob,
-    });
-
-    expect(outcome).toBe('retry');
+    await expect(
+      syncCashToll(baseAction(), {
+        uploadReceipt: async () => 'https://cdn/r.jpg',
+        submitDriverCash: async () => ({ ok: false, status: 409, code: 'TOLLS_V2_OFF' }),
+        removeBlob,
+      }),
+    ).rejects.toMatchObject({ code: 'TOLLS_V2_OFF', permanent: true });
     expect(removeBlob).not.toHaveBeenCalled();
+    expect(isPermanentTollSyncError({ code: 'TOLLS_V2_OFF' })).toBe(true);
   });
+
 
   it('network error keeps item via retry', async () => {
     const { offlineBlobStore } = await import('./offlineBlobStore');
@@ -95,7 +97,7 @@ describe('syncCashToll', () => {
         {
           uploadReceipt: async () => 'https://cdn/r.jpg',
           submitDriverCash: submit,
-              removeBlob: vi.fn(),
+        removeBlob: vi.fn(),
         },
       ),
     ).rejects.toMatchObject({ code: 'MISSING_RECEIPT_PHONE', permanent: true });

@@ -12,6 +12,7 @@ import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supa
 import { applyCors } from "../_shared/corsAllowlist.ts";
 import { requireInternalSecret } from "../_shared/requireInternalSecret.ts";
 import { requirePlatformAdmin } from "../_shared/platformAdmin.ts";
+import { requireProductAdmin } from "../_shared/productAdmin.ts";
 import { classifyTollMatch, mergePolicy, DEFAULT_POLICY } from "./classify.ts";
 import { evaluatePoint, estimateRoute, loadPlazas, invalidatePlazaCache } from "./detect.ts";
 import { STABLE_GET_CACHE } from "../_shared/cacheControl.ts";
@@ -108,13 +109,18 @@ app.get("/admin/policies", async (c) => {
   return c.json({ policies: (data ?? []).map((r) => policyToApi(r as Record<string, unknown>)) });
 });
 
-/** Roam ride toll crossings recorded in the last N days (admin Toll Settings health; read-only). */
+/**
+ * Roam ride toll crossings recorded in the last N days (admin Toll Settings health; read-only, a count only).
+ * Same sign-in check as the Toll Settings page itself (rides product admin). The table lives in the rides schema.
+ */
 app.get("/admin/crossing-count", async (c) => {
-  const auth = await requirePlatformAdmin(c);
+  const auth = await requireProductAdmin(c, "rides");
   if (auth instanceof Response) return auth;
-  const days = Math.min(365, Math.max(1, Math.round(Number(c.req.query("days")) || 30)));
+  const asked = Number(c.req.query("days"));
+  const days = Number.isFinite(asked) ? Math.min(365, Math.max(1, Math.round(asked))) : 30;
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
   const { count, error } = await svc()
+    .schema("rides")
     .from("ride_toll_crossings")
     .select("id", { count: "exact", head: true })
     .gte("crossed_at", since);

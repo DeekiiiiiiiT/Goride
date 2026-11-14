@@ -15,6 +15,8 @@ export function tollSyncPermanentMessage(code?: string, fallback?: string): stri
       return "This toll couldn't be sent: no vehicle is assigned to you. Ask your fleet manager.";
     case 'DRIVER_NOT_FOUND':
       return "This toll couldn't be sent: your driver profile wasn't found. Ask your fleet manager.";
+    case 'TOLLS_V2_OFF':
+      return "This toll couldn't be sent: your fleet isn't taking toll receipts right now. It stays on this phone. Ask your fleet manager.";
     case 'RECEIPT_REQUIRED':
       return "This toll couldn't be sent: receipt photo didn't upload. Delete this toll and add it again.";
     default:
@@ -27,7 +29,7 @@ export function isPermanentTollSyncError(e: unknown): boolean {
   if (err?.permanent === true) return true;
   const code = String(err?.code || '');
   if (code === 'MISSING_RECEIPT_PHONE') return true;
-  if (['RECEIPT_REQUIRED', 'NO_VEHICLE', 'DRIVER_NOT_FOUND'].includes(code)) return true;
+  if (['RECEIPT_REQUIRED', 'NO_VEHICLE', 'DRIVER_NOT_FOUND', 'TOLLS_V2_OFF'].includes(code)) return true;
   if (err?.status === 400) return true;
   return false;
 }
@@ -91,6 +93,12 @@ export async function syncCashToll(
   if (result.ok) {
     await deps.removeBlob(payload.receiptBlobKey);
     return 'done';
+  }
+
+  // The fleet is not on the new toll system: say so plainly. The receipt is never sent anywhere else (the old
+  // toll system is gone) and stays on the phone.
+  if (result.status === 409 && result.code === 'TOLLS_V2_OFF') {
+    throw makePermanentError(tollSyncPermanentMessage('TOLLS_V2_OFF'), 'TOLLS_V2_OFF');
   }
 
   if (result.status === 400) {
