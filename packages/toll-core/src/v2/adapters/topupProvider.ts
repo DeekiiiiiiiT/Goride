@@ -36,7 +36,8 @@ export function topupProvider(text: string, ctx: TopupProviderCtx = {}): TopupPr
 
   for (let i = headerIndex + 1; i < matrix.length; i++) {
     const parts = matrix[i].map((c) => (c || '').trim());
-    if (parts.length === 0) continue;
+    // Blank lines (",,,,") at the end of an export are not rows.
+    if (parts.every((c) => c === '')) continue;
     const rowNum = i + 1;
 
     const paymentStatus = getColByMap(parts, headerMap, 'payment status', 'payment').toLowerCase();

@@ -53,3 +53,10 @@ describe('resolvePlazaIdByName', () => {
     expect(resolvePlazaIdByName('', map)).toBeNull();
   });
 });
+
+describe('parseCsvDateTimeToJamaicaIso — spaced month names', () => {
+  it('reads a top-up date wrapped onto two lines', () => {
+    expect(parseCsvDateTimeToJamaicaIso('21 Sep 2026 \n08:23 AM')).toBe(parseCsvDateTimeToJamaicaIso('21/9/2026 8:23'));
+    expect(parseCsvDateTimeToJamaicaIso('21 September 2026 08:23 PM')).toBe(parseCsvDateTimeToJamaicaIso('21/9/2026 20:23'));
+  });
+});

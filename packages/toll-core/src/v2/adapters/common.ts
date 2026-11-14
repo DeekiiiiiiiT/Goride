@@ -97,8 +97,24 @@ function applyTimeToParts(
  * TransJam / tag statement dates — DD/MM/YYYY first (BulkImportTollTransactionsModal).
  */
 export function parseCsvDateTimeToJamaicaIso(dateStr: string): string | null {
-  const trimmed = (dateStr || '').trim();
+  // Statements can wrap the time onto a second line inside the cell ("21 Sep 2026 <newline> 08:23 AM").
+  const trimmed = (dateStr || '').replace(/\s+/g, ' ').trim();
   if (!trimmed) return null;
+
+  // "21 Sep 2026 08:23 AM" / "21 September 2026 8:23" — month as a word, spaces between.
+  const spacedMon = trimmed.match(/^(\d{1,2})\s+([A-Za-z]{3,})\.?,?\s+(\d{4})\s*(.*)?$/);
+  if (spacedMon) {
+    const [, dayStr, monStr, yearStr, timePart] = spacedMon;
+    const months: Record<string, number> = {
+      jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+      jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+    };
+    const month = months[monStr.slice(0, 3).toLowerCase()];
+    if (month !== undefined) {
+      const parts = applyTimeToParts(timePart, parseInt(yearStr, 10), month, parseInt(dayStr, 10));
+      if (parts) return formatJamaicaIso(parts.y, parts.m, parts.d, parts.h, parts.min, parts.s);
+    }
+  }
 
   const monMatch = trimmed.match(/^(\d{1,2})[\-\/]([A-Za-z]{3})[\-\/](\d{2,4})\s*(.*)?$/);
   if (monMatch) {

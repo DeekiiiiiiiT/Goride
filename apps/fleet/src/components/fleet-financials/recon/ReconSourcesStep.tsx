@@ -412,16 +412,19 @@ export function ReconSourcesStep({
           paymentsTransaction: opts.paymentsTransaction,
           tripActivity: opts.tripActivity,
         });
-        const problems = readProblemRows((res as { problems?: Parameters<typeof readProblemRows>[0] }).problems);
+        const rawProblems = (res as { problems?: Parameters<typeof readProblemRows>[0] }).problems ?? [];
+        const problems = readProblemRows(rawProblems);
         setReadProblems((prev) => ({ ...prev, [opts.sourceId]: problems }));
         const rowsCommitted = countRowsFromV2ImportResponse(
           res as { imports?: Array<{ rows?: number; counts?: Record<string, number> }> },
         );
         const importedSomething = ((res as { imports?: unknown[] }).imports?.length ?? 0) > 0;
         // Every row refused: the week must not count this file as received.
-        if (!importedSomething && problems.length > 0) {
+        // (rawProblems: the list shown on screen keeps only the fixable driver / plate rows.)
+        if (!importedSomething && rawProblems.length > 0) {
+          const first = rawProblems[0]?.reason ? ` First: row ${rawProblems[0].row ?? '?'} — ${rawProblems[0].reason}.` : '';
           throw new Error(
-            `No rows read from ${opts.file.name} — all ${problems.length} were refused. Fix the rows listed below and upload again.`,
+            `No rows read from ${opts.file.name} — all ${rawProblems.length} were refused.${first}`,
           );
         }
         await registerTollV2WithRecon({

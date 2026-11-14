@@ -55,7 +55,8 @@ export function tagStatement(text: string, ctx: TagStatementCtx): TagStatementRe
 
   for (let i = headerIndex + 1; i < matrix.length; i++) {
     const parts = matrix[i].map((c) => (c || '').trim());
-    if (parts.length === 0) continue;
+    // Blank lines (",,,,") at the end of an export are not rows.
+    if (parts.every((c) => c === '')) continue;
     const rowNum = i + 1;
     const first = (parts[0] || '').toLowerCase();
     if (first.startsWith('tag id') || first.startsWith('plaza name')) continue;
