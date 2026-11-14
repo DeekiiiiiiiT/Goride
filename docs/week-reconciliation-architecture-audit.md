@@ -2,7 +2,29 @@
 
 **Rev 28 · 2026-11-12 · Status: BUILDING — Round 5 (browser done-tests) part-way.** 17 of 21 browser done-tests pass (9b new). The 4 left (5, 6, 9t, 13) found 7 real problems: 4 fixed, 3 open (WRA-41, 42, 43 below). Nothing committed, nothing live.
 
-## ⏸ START HERE (paused 14 Nov 2026 ~04:10 UTC, out of credit)
+## ⏸ START HERE (paused 14 Nov 2026 ~05:15 UTC, owner on a break — new chat picks up here)
+
+**Exact next steps (one per reply, owner sends screenshots / SQL results):**
+1. **Owner pushes** `a1da2d94` (not pushed yet): `cd C:\Roam\Goride` then `git push origin parts-auto-match:main`.
+2. **Claude checks the calculator deploy** went live with the NEW image: `gh run list --limit 8` (wait for "Deploy recon-worker" success), then
+   `gcloud run revisions list --service recon-worker --region us-east1 --project goride-recon --limit 2` and
+   `gcloud container images list-tags gcr.io/goride-recon/recon-worker --limit 3 --project goride-recon` — the active revision's image (`gcloud run revisions describe <rev> --region us-east1 --project goride-recon --format='value(status.imageDigest)'`) must be the newest pushed digest. (Claude may read gcloud; Claude may NOT run `gcloud run deploy` — denied as a live change.)
+3. **Owner queues the week** in the SQL Editor:
+   `select public.recon_enqueue_week_desk(organization_id::text, 'rideshare', '2026-04-13', 0) from recon.week_runs where week_key = '2026-04-13' and service_line = 'rideshare' and organization_id::text like '8cfa606a-%';`
+   (org = `8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823`). Wait ~1 min.
+4. **Owner checks** (read-only): `select now(), desk_computed_at, desk_snapshot->'closeCheck'->>'status' from recon.week_runs where week_key='2026-04-13' and service_line='rideshare' and organization_id::text like '8cfa606a-%';` → must say **`ok`** (it said `none` before). If still `none` with the new image live, the fix in `computeLiveStepCounts` (recon_routes.ts ~546) has a gap — debug there.
+5. **Owner refreshes the week page** (step 6 Trips & earnings) — the "Waiting for the calculator" spinner should be gone → **Continue to Settlement preview** → walk step 7 → **Close week** (step 8). Then repeat the same walk for **20 Apr** and **27 Apr 2026**.
+
+**Week of 13 Apr 2026 — where it stands (live):** steps 1–5 complete. All 8 files marked "No activity" (Uber, InDrive, Roam app trips, Tag usage, Tag top-ups, Cash tolls, Roam fuel card, Cash fuel); tolls sealed (0 tolls); Tag account closing saved as 0 (ties); Fuel complete with nothing to finalize. Stuck on step 6: `closeCheck = none` → Trips shows "Waiting for the calculator", Settlement preview stays locked (actionable 1).
+
+**Found and fixed this session (14 Nov):**
+- **b1653613 (pushed, live on edge + website):** (a) Roam-issued fuel card had no "No activity" button while "Waiting on Roam" — now shown to staff who can upload the statement (`ReconSourcesStep.tsx`; server already accepted it). (b) **Continue** refused with "This week changed" after the background recalculation (~2 min after any change) moved the week version — Continue now re-reads the week and retries once (`ReconRunPage.tsx` `advanceToNext`). (c) **A no-activity week never gets a driver check** (the calculator only checks drivers with activity), so `closeCheck` stayed `none` for ever and Trips / Settlement / Close waited — new `weekHadNoActivity` (`recon_desk_shape.ts`, every applicable file `attested_none`; waived does NOT count) used in `computeLiveStepCounts`. Tests: recon screen vitest 78/78, `recon_desk_shape.test.ts` 9/9.
+- **a1da2d94 (committed, NOT pushed): the week calculator deploy was always ONE VERSION BEHIND.** `cloudbuild.recon-worker.yaml` deployed the bare `recon-worker` tag, but `images:` is only pushed when the build ends, so Cloud Run got the previous push's image (proof: revision 00078 runs `555ec…`, the b1653613 build made `2e2c…`). Fix: push `:$BUILD_ID` before deploy, deploy `:$BUILD_ID`. Every earlier calculator deploy was one behind — the current live calculator runs pre-b1653613 code, which is why (c) did not take effect.
+
+**Still open from this session (fix after the empty weeks close):**
+- **Decision saves still hit "This week changed"** after the background recalculation (seen on Tag account Save closing; Reload week + redo works). Continue is fixed; saves were left strict on purpose (done-tests 9 / 9b / 9t expect a refusal when another tab changed the week). Better fix: the page should notice its week version moved (e.g. refetch the run when the calculator publishes) before the user clicks.
+- Tolls step on an empty week says "0 of 0 tolls decided · **0% completed**" — should read 100% / done.
+- Fuel Money Check shows `$` instead of `J$`.
 
 **Where we are:** Week Reconciliation is **LIVE** for the owner's fleet (`recon_v2` on, 14 Nov 03:28 UTC). Go-live Step 4 is fully done: 11 migrations, code deployed (main `6f0dd254` incl. WRA-41/43 + fuel no-GPS fix), week calculator resumed, Uber week fix run (37 → 0), switch on, and the missing calculator wake job added (migration `20261114040154_recon_worker_wake_cron.sql`, owner ran it + logbook line; the calculator then ran its first nightly since 26 Oct). Week list now: **"Numbers are up to date", 9 open, 39 reconciled** — December etc. were adopted as closed automatically.
 
