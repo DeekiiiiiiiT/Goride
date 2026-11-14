@@ -63,8 +63,12 @@ export function ReconTagAccountStep({
 
   const liveRoll = useMemo(() => {
     if (!rollQuery.data) return null;
+    // First week (no earlier closing): the statement closing sets the opening, same as the server.
+    const firstWeek = !rollQuery.data.priorWeekKey && statementMinor != null;
     return computeTagAccountRollForward({
-      openingMinor: rollQuery.data.openingMinor,
+      openingMinor: firstWeek
+        ? statementMinor - rollQuery.data.topUpsMinor + rollQuery.data.tagUsageMinor
+        : rollQuery.data.openingMinor,
       topUpsMinor: rollQuery.data.topUpsMinor,
       tagUsageMinor: rollQuery.data.tagUsageMinor,
       statementClosingMinor: statementMinor,
@@ -153,8 +157,14 @@ export function ReconTagAccountStep({
             {fmtMajor(data.openingMinor)}
             {data.priorWeekKey ? (
               <span className="ml-2 text-xs font-normal text-slate-500">after week {data.priorWeekKey}</span>
+            ) : data.openingFromStatement ? (
+              <span className="ml-2 text-xs font-normal text-slate-500">
+                (first week — worked out from the statement closing below)
+              </span>
             ) : (
-              <span className="ml-2 text-xs font-normal text-slate-500">(no prior close — starts at 0)</span>
+              <span className="ml-2 text-xs font-normal text-slate-500">
+                (first week — enter the statement closing below; it sets the opening)
+              </span>
             )}
           </dd>
         </div>

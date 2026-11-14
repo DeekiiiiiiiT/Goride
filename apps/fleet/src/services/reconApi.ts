@@ -336,6 +336,8 @@ export type TagAccountRollForwardPayload = {
   weekKey: string;
   priorWeekKey: string | null;
   openingMinor: number;
+  /** First week with no earlier closing: the opening is worked out from this week's statement closing. */
+  openingFromStatement?: boolean;
   topUpsMinor: number;
   tagUsageMinor: number;
   statementClosingMinor: number | null;

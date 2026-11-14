@@ -544,15 +544,7 @@ async function computeLiveStepCounts(
 
   let tagActionable = 0;
   try {
-    const { openingMinor } = await loadPriorTagClosingMinor(orgId, weekKey);
-    const { topUpsMinor, tagUsageMinor } = await sumTagLedgerWeekMinor(orgId, weekKey);
-    const statementClosingMinor = await loadStoredStatementClosingMinor(runId);
-    const roll = computeTagAccountRollForward({
-      openingMinor,
-      topUpsMinor,
-      tagUsageMinor,
-      statementClosingMinor,
-    });
+    const roll = await tagAccountRollFor(orgId, weekKey, runId);
     if (roll.varianceMinor != null && !roll.ties) tagActionable = 1;
   } catch (e) {
     console.warn("[recon] tag_account actionable probe failed", e);
@@ -1203,6 +1195,32 @@ async function loadExternalQueue(): Promise<ExternalQueueItem[]> {
   return items;
 }
 
+/**
+ * The tag account roll-forward for one week. When no earlier closed week saved a statement
+ * closing (the first week on Week Reconciliation, or weeks adopted as closed at go-live), the
+ * account has no known opening: the statement closing entered for this week anchors it, so
+ * opening = closing − top-ups + usage, and later weeks open from this week's closing.
+ */
+async function tagAccountRollFor(orgId: string, weekKey: string, runId: string | null) {
+  const prior = await loadPriorTagClosingMinor(orgId, weekKey);
+  const { topUpsMinor, tagUsageMinor } = await sumTagLedgerWeekMinor(orgId, weekKey);
+  const statementClosingMinor = runId ? await loadStoredStatementClosingMinor(runId) : null;
+  const openingFromStatement = prior.priorWeekKey === null && statementClosingMinor != null;
+  const openingMinor = openingFromStatement
+    ? Math.round(Number(statementClosingMinor)) - topUpsMinor + tagUsageMinor
+    : prior.openingMinor;
+  const roll = computeTagAccountRollForward({ openingMinor, topUpsMinor, tagUsageMinor, statementClosingMinor });
+  return {
+    priorWeekKey: prior.priorWeekKey,
+    openingMinor,
+    openingFromStatement,
+    topUpsMinor,
+    tagUsageMinor,
+    statementClosingMinor,
+    ...roll,
+  };
+}
+
 async function loadPriorTagClosingMinor(
   orgId: string,
   weekKey: string,
@@ -1675,26 +1693,9 @@ export function registerReconRoutes(app: Hono) {
         }
 
         const run = await loadWeekRun(orgId, line, weekKey);
-        const { openingMinor, priorWeekKey } = await loadPriorTagClosingMinor(orgId, weekKey);
-        const { topUpsMinor, tagUsageMinor } = await sumTagLedgerWeekMinor(orgId, weekKey);
-        const statementClosingMinor = run ? await loadStoredStatementClosingMinor(run.id) : null;
-        const roll = computeTagAccountRollForward({
-          openingMinor,
-          topUpsMinor,
-          tagUsageMinor,
-          statementClosingMinor,
-        });
+        const roll = await tagAccountRollFor(orgId, weekKey, run ? run.id : null);
 
-        return c.json({
-          success: true,
-          weekKey,
-          priorWeekKey,
-          openingMinor,
-          topUpsMinor,
-          tagUsageMinor,
-          statementClosingMinor,
-          ...roll,
-        });
+        return c.json({ success: true, weekKey, ...roll });
       } catch (e) {
         return safeErrorResponse(c, e, "recon-tag-account");
       }
