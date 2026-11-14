@@ -156,10 +156,33 @@ describe('ReconSourceCard', () => {
         }}
         onRemindRoam={() => {}}
         onUpload={() => {}}
+        onAttestNone={() => {}}
         canUploadExternalSources
       />,
     );
     expect(screen.getByRole('button', { name: /Remind Roam/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Upload statement/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /No activity on empty days/i })).toBeTruthy();
+  });
+
+  it('hides No activity on waiting Roam fuel without recon.external_sources', () => {
+    render(
+      <ReconSourceCard
+        weekKey="2026-10-05"
+        source={{
+          id: 'fuel_card_roam',
+          label: 'Roam-issued fuel card statement',
+          kind: 'external_dependency',
+          requirement: 'required',
+          status: 'waiting_external',
+          coverage: {},
+        }}
+        onRemindRoam={() => {}}
+        onUpload={() => {}}
+        onAttestNone={() => {}}
+        canUploadExternalSources={false}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: /No activity/i })).toBeNull();
   });
 });

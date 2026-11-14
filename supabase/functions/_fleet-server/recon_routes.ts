@@ -41,6 +41,7 @@ import {
   deskInputsHash,
   expandWeekCoverage,
   fuelHasNothingToFinalize,
+  weekHadNoActivity,
   requiredSourcesMissing,
   sortWeekList,
   weekListEntry,
@@ -541,7 +542,8 @@ async function computeLiveStepCounts(
     previewBlockers = blockers.map((row) => ({ code: row.code, severity: row.severity }));
     const { loadWeekProjectionStatus } = await import("./recon_projection_read.ts");
     const projection = await loadWeekProjectionStatus(orgId, weekKey);
-    if (projection.totalDrivers > 0) {
+    // A no-activity week has no drivers to check, so its saved week-level checks are the whole check.
+    if (projection.totalDrivers > 0 || weekHadNoActivity(sources)) {
       closeCheck = { status: "ok", blockers };
       tripsActionable = countTripsEarningsBlockers(previewBlockers);
       settlementActionable = countSettlementPreviewBlockers(previewBlockers);

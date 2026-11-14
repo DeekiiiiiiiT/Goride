@@ -89,6 +89,15 @@ Deno.test("Rev 24: Fuel has nothing to finalize only when every fuel file that a
   assertEquals(fuelHasNothingToFinalize([s("fuel_card_roam", "not_applicable", "not_applicable"), s("uber_bundle", "required", "attested_none")]), false);
 });
 
+Deno.test("No-activity week: every file that applies is marked no activity (waived does not count)", async () => {
+  const { weekHadNoActivity } = await import("./recon_desk_shape.ts");
+  const s = (id: string, requirement: string, status: string) => ({ id, requirement, status });
+  assertEquals(weekHadNoActivity([s("uber_bundle", "required", "attested_none"), s("roam_trips", "optional", "attested_none"), s("rush_deliveries", "not_applicable", "not_applicable")]), true);
+  assertEquals(weekHadNoActivity([s("uber_bundle", "required", "attested_none"), s("roam_trips", "optional", "received")]), false);
+  assertEquals(weekHadNoActivity([s("uber_bundle", "required", "waived"), s("cash_fuel", "optional", "attested_none")]), false);
+  assertEquals(weekHadNoActivity([s("uber_bundle", "not_applicable", "not_applicable")]), false);
+});
+
 Deno.test("Rev 25: an upload's weeks — the week it was made for, else every Monday it touches", async () => {
   const { uploadWeekKeys } = await import("./recon_desk_shape.ts");
   assertEquals(uploadWeekKeys({ weekKey: "2026-03-16", coverageStart: "2026-03-16", coverageEnd: "2026-03-22" }), ["2026-03-16"]);

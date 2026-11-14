@@ -296,7 +296,8 @@ export function ReconSourceCard({
           ) : null}
           {source.requirement !== 'not_applicable'
             && onAttestNone
-            && !roamWait
+            // Roam fuel card: only Roam staff (who hold the statement) can say the week had none.
+            && (!roamWait || canUploadExternalSources)
             && uncoveredDays.length > 0 ? (
             <ActionTip label={attestTip}>
               <Button

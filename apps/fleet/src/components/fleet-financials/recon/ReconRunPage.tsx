@@ -557,19 +557,30 @@ export function ReconRunPage({
 
   const advanceToNext = async () => {
     if (!nextStepId) return;
+    if (!canMarkComplete && !canSkipToNext) return;
     setAdvancing(true);
+    // Decides from the given copy of the week, so a retry uses the fresh copy's gates.
+    const advanceFrom = async (base: ReconRunPayload): Promise<ReconRunPayload> => {
+      const st = stepStatus(base, activeStep);
+      if (st === 'ready' || st === 'stale') return completeThroughSkips(activeStep, base);
+      if (st !== 'complete') return base;
+      // Already complete — still chain past empty following steps if needed.
+      const following = nextStepId;
+      if (isEmptyAutoSkip(base, following) && stepStatus(base, following) !== 'complete') {
+        return completeThroughSkips(following, base);
+      }
+      return base;
+    };
     try {
-      let payload = run;
-      if (canMarkComplete) {
-        payload = await completeThroughSkips(activeStep, run);
-      } else if (canSkipToNext) {
-        // Already complete — still chain past empty following steps if needed.
-        const following = nextStepId;
-        if (isEmptyAutoSkip(run, following) && stepStatus(run, following) !== 'complete') {
-          payload = await completeThroughSkips(following, run);
-        }
-      } else {
-        return;
+      let payload: ReconRunPayload;
+      try {
+        payload = await advanceFrom(run);
+      } catch (err) {
+        // The background recalculation (about 2 min after any change) moves the week's
+        // version, so the page's copy is refused. Read the week fresh and try once more;
+        // the server checks the step again against the current numbers.
+        if (!(err instanceof ReconApiError && err.status === 409) || /closed/i.test(err.message)) throw err;
+        payload = await advanceFrom(await fetchRun(line, weekKey));
       }
       await refreshRun(payload);
       landAfterAdvance(payload, nextStepId, activeStep);

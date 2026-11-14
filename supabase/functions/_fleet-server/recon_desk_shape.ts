@@ -159,6 +159,20 @@ export function fuelHasNothingToFinalize(
 }
 
 /**
+ * A week where nothing came in: every file that applies is marked "no activity".
+ * The calculator only checks drivers who had activity, so such a week never gets a
+ * driver check, and Trips / Settlement / Close would wait for one for ever. Strict on
+ * purpose: a waived file (skipped, not confirmed empty) does not count as no activity.
+ */
+export function weekHadNoActivity(
+  sources: Array<{ id: string; requirement: string; status: string }>,
+): boolean {
+  const applicable = sources.filter((s) => s.requirement !== "not_applicable");
+  if (applicable.length === 0) return false;
+  return applicable.every((s) => s.status === "attested_none");
+}
+
+/**
  * Rev 25: the weeks an upload covers (its `week_keys`), worked out when the screen sends none.
  * Week Reconciliation finds a statement source's week through `week_keys[1]`, and no screen
  * sends the list, so new uploads had an empty list and the week kept showing Uber "missing".
