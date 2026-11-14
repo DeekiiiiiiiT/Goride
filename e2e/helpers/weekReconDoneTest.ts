@@ -147,6 +147,47 @@ export async function apiAs(who: WrUser, method: string, path: string, body?: un
   }
 }
 
+/**
+ * Seal the week's tolls in the new toll system (Week Reconciliation step 3), the way the Seal button does:
+ * read the toll desk for its week version, then send seal_week. Already sealed → nothing to do. The old
+ * toll period "finish" route is gone (docs/toll-old-system-removal-audit.md).
+ */
+export async function tollDeskAs(who: WrUser, week: string): Promise<{ sealed: boolean; weekVersion: number }> {
+  const { base, anonKey } = await getLocalSupabaseKeys();
+  const signed = await signInPlatformAal2(base, anonKey, WR_USERS[who], WR_PASSWORD);
+  const res = await fetch(`${base}/rest/v1/rpc/toll_v2_week_desk`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${signed.access_token}`, apikey: anonKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_week: week }),
+  });
+  const desk = (await res.json()) as { sealed?: boolean; weekVersion?: number };
+  if (!res.ok) throw new Error(`toll desk ${week}: ${res.status} ${JSON.stringify(desk)}`);
+  return { sealed: Boolean(desk.sealed), weekVersion: Number(desk.weekVersion ?? 0) };
+}
+
+/** Send a new-toll-system week command (seal_week / reopen_week) at the desk's current week version. */
+export async function tollWeekCommandAs(
+  who: WrUser,
+  week: string,
+  intent: 'seal_week' | 'reopen_week',
+  extra: Record<string, unknown> = {},
+  headers: Record<string, string> = {},
+) {
+  const desk = await tollDeskAs(who, week);
+  return apiAs(who, 'POST', `/fleet-toll/toll/v2/commands/${intent}`, {
+    week_key: week,
+    expected_week_version: desk.weekVersion,
+    command_id: crypto.randomUUID(),
+    ...extra,
+  }, { 'Idempotency-Key': crypto.randomUUID(), ...headers });
+}
+
+export async function sealTollsWeek(who: WrUser, week: string) {
+  if ((await tollDeskAs(who, week)).sealed) return;
+  const r = await tollWeekCommandAs(who, week, 'seal_week');
+  if (r.status >= 300) throw new Error(`seal tolls ${week}: ${r.status} ${JSON.stringify(r.body)}`);
+}
+
 export function weekState(org: string, week: string): string {
   return queryInventoryDb(
     `SELECT state FROM recon.week_runs WHERE organization_id = '${q(org)}' AND service_line = 'rideshare' AND week_key = '${q(week)}'`,

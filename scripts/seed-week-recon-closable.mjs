@@ -2,7 +2,7 @@
 /**
  * Week Reconciliation done-tests (LOCAL only): bring the oldest open weeks to
  * "ready to close" through the app's own server calls, the way a person would:
- *   every file "no activity" → toll week marked reviewed → each step completed.
+ *   every file "no activity" → toll week sealed in the new toll system → each step completed.
  * Runs after the edge functions are up. Needs SUPABASE_URL + SUPABASE_ANON_KEY.
  * Adds `closable` (oldest first) to node_modules/.cache/week-recon-seed.json.
  */
@@ -62,7 +62,21 @@ for (const week of closable) {
   for (const s of desk.sources.filter((x) => x.requirement !== 'not_applicable' && x.status === 'missing')) {
     await call('POST', `${runPath(week)}/sources/${s.id}/attest-none`, { days, reason: 'No activity this week', expectedVersion: await version(week) });
   }
-  await call('POST', `/fleet-toll/toll-reconciliation/periods/${week}/finish`, {});
+  // Tolls: seal the week in the new toll system, as step 3's Seal button does (the old period "finish" is gone).
+  const tollDeskRes = await fetch(`${api}/rest/v1/rpc/toll_v2_week_desk`, {
+    method: 'POST',
+    headers: H,
+    body: JSON.stringify({ p_week: week }),
+  });
+  const tollDesk = await tollDeskRes.json();
+  if (!tollDeskRes.ok) throw new Error(`toll desk ${week} → ${tollDeskRes.status} ${JSON.stringify(tollDesk).slice(0, 300)}`);
+  if (!tollDesk.sealed) {
+    await call('POST', '/fleet-toll/toll/v2/commands/seal_week', {
+      week_key: week,
+      expected_week_version: Number(tollDesk.weekVersion ?? 0),
+      command_id: crypto.randomUUID(),
+    });
+  }
   for (const step of ['sources', 'attribution', 'tolls', 'fuel', 'trips_earnings', 'settlement_preview']) {
     const d = await call('GET', runPath(week));
     const s = d.evaluation.steps.find((x) => x.id === step);

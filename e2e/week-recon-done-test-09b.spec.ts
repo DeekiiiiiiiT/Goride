@@ -6,7 +6,7 @@
  */
 import { expect, test } from '@playwright/test';
 import {
-  apiAs, blockLiveSupabase, historyCount, openWeekStep, requireLocalRun, runIdFor, seedPlan, signInAs, walkWeekToTolls,
+  apiAs, blockLiveSupabase, historyCount, openWeekStep, requireLocalRun, runIdFor, sealTollsWeek, seedPlan, signInAs, walkWeekToTolls,
 } from './helpers/weekReconDoneTest';
 
 test('done-test 9b: two tabs on Tag account — the second Save gets "This week changed"', async ({ browser }) => {
@@ -16,10 +16,9 @@ test('done-test 9b: two tabs on Tag account — the second Save gets "This week 
   const runId = runIdFor(plan.tagOrg, week);
   const path = `/fleet-core/recon/runs/rideshare/${week}`;
 
-  // Bring the week to Tag account: files marked "no activity", Tolls finished and completed.
+  // Bring the week to Tag account: files marked "no activity", Tolls sealed in the new toll system and completed.
   await walkWeekToTolls('tagco', week);
-  const finish = await apiAs('tagco', 'POST', `/fleet-toll/toll-reconciliation/periods/${week}/finish`, {});
-  expect(finish.status, `toll finish: ${JSON.stringify(finish.body)}`).toBeLessThan(300);
+  await sealTollsWeek('tagco', week);
   const desk = (await apiAs('tagco', 'GET', path)).body;
   const tolls = desk.evaluation.steps.find((s: { id: string }) => s.id === 'tolls');
   if (tolls && !tolls.hidden && tolls.status !== 'complete') {

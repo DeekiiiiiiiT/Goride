@@ -5,7 +5,7 @@
  * complete only after Finalize, never on its own. Phase 2 (calculator running).
  */
 import { expect, test } from '@playwright/test';
-import { apiAs, execDb, openWeekStep, pageAs, requireLocalRun, seedPlan, walkWeekToTolls } from './helpers/weekReconDoneTest';
+import { apiAs, execDb, openWeekStep, pageAs, requireLocalRun, sealTollsWeek, seedPlan, walkWeekToTolls } from './helpers/weekReconDoneTest';
 
 const KENNY = '52ff47da-ef48-41b8-93d5-80a09b85ce5b';
 const WEEK = '2026-03-23';
@@ -38,10 +38,9 @@ test('done-test 6: resolve a fuel check, then Finalize fuel → Fuel complete on
   const live: string[] = [];
   seedFlaggedFill(plan.uploadOrg, '2026-03-25');
 
-  // Bring the week to Fuel: files "no activity", then Tolls finished (no tolls) and completed.
+  // Bring the week to Fuel: files "no activity", then Tolls sealed in the new toll system (no tolls) and completed.
   await walkWeekToTolls('uploader', week);
-  const finish = await apiAs('uploader', 'POST', `/fleet-toll/toll-reconciliation/periods/${week}/finish`, {});
-  expect(finish.status, `toll finish: ${JSON.stringify(finish.body)}`).toBeLessThan(300);
+  await sealTollsWeek('uploader', week);
   const path = `/fleet-core/recon/runs/rideshare/${week}`;
   const desk = (await apiAs('uploader', 'GET', path)).body;
   const tolls = desk.evaluation.steps.find((x: { id: string }) => x.id === 'tolls');

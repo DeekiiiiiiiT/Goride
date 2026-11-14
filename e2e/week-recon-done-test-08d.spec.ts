@@ -1,6 +1,6 @@
 /** Done-test 8d (WRA-38): a week change makes a pending request out of date; the sender withdraws it. */
 import { expect, test } from '@playwright/test';
-import { apiAs, closablePlan, openWeekStep, pageAs, requireLocalRun, runIdFor, seedPlan, startClose } from './helpers/weekReconDoneTest';
+import { apiAs, closablePlan, openWeekStep, pageAs, requireLocalRun, runIdFor, seedPlan, startClose, tollWeekCommandAs } from './helpers/weekReconDoneTest';
 
 test('done-test 8d: sent → out of date → withdrawn; no Approve on an out-of-date request', async ({ browser }) => {
   requireLocalRun();
@@ -15,9 +15,9 @@ test('done-test 8d: sent → out of date → withdrawn; no Approve on an out-of-
   await acc.page.getByTestId('recon-approval-submit').click();
   await expect(acc.page.getByTestId('recon-approval-waiting')).toBeVisible();
 
-  // A third person changes the week (a toll decision on the same week and line).
+  // A third person changes the week (a toll decision on the same week and line: reopen the sealed toll week).
   const desk = await apiAs('owner', 'GET', `/fleet-core/recon/runs/rideshare/${week}`);
-  const res = await apiAs('owner', 'POST', `/fleet-toll/toll-reconciliation/periods/${week}/finish`, {}, {
+  const res = await tollWeekCommandAs('owner', week, 'reopen_week', { reason: 'Done-test 8d third-person change' }, {
     'x-recon-week': `${runIdFor(plan.org, week)}@${desk.body.run.version}`,
   });
   expect(res.status, JSON.stringify(res.body)).toBeLessThan(300);

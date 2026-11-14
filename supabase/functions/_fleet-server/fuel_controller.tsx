@@ -4618,6 +4618,9 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
         const learntId = entry.metadata?.learntLocationId;
         const heldTransaction = {
             id: entry.id,
+            // The fill's company (stamped above). Without it the transactions table refuses the row and the
+            // whole save answered 500 for every fill with no GPS (found by Week Reconciliation done-test 6).
+            organizationId: entry.organizationId,
             type: entry.type || "Reimbursement",
             date: entry.date,
             time: entry.time || "",

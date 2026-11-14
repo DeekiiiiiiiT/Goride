@@ -115,6 +115,15 @@ BEGIN
   )
   ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 
+  -- Every test company with Week Reconciliation on is on the new toll system (the old one is gone,
+  -- docs/toll-old-system-removal-audit.md): step 3 is the new toll step and seals there.
+  INSERT INTO toll.switch_state (organization_id, tolls_v2)
+  VALUES (v_org_uuid, true), (v_up_org_uuid, true), (v_tag_org_uuid, true)
+  ON CONFLICT (organization_id) DO UPDATE SET tolls_v2 = true;
+  PERFORM toll_system.ensure_accounts(v_org_uuid);
+  PERFORM toll_system.ensure_accounts(v_up_org_uuid);
+  PERFORM toll_system.ensure_accounts(v_tag_org_uuid);
+
   -- Toll charges post to the driver's money (production setting: "Sync charges to driver
   -- financials" on). Off, every Charge Driver stops on a "Charge sync is off" box.
   INSERT INTO public.kv_store_37f42386 (key, value)
