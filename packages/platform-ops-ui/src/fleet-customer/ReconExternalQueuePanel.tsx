@@ -24,7 +24,7 @@ export async function fetchReconExternalQueue(): Promise<ReconExternalQueueItem[
   return fleetCustomerOpsApi.fetchReconExternalQueue();
 }
 
-export function ReconExternalQueuePanel() {
+export function ReconExternalQueuePanel({ onOpenImport }: { onOpenImport?: () => void } = {}) {
   const [items, setItems] = useState<ReconExternalQueueItem[] | null>(null);
   const [forbidden, setForbidden] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -87,17 +87,28 @@ export function ReconExternalQueuePanel() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-slate-600">
-          Fleets waiting on Roam to upload the JAA / Roam-issued fuel statement for a week. Upload via
-          CSV Import when ready.
+          Fleets waiting on Roam&apos;s JAA statement for a week. Upload it once in Statement import —
+          every fleet with a Roam card is then marked received for that week.
         </p>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="inline-flex items-center gap-1.5 text-sm text-slate-600 hover:text-slate-900"
-        >
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {onOpenImport ? (
+            <button
+              type="button"
+              onClick={onOpenImport}
+              className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
+            >
+              Open Statement import
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {!items?.length ? (

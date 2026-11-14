@@ -142,7 +142,7 @@ describe('ReconSourceCard', () => {
     expect(screen.queryByRole('button', { name: /Upload/i })).toBeNull();
   });
 
-  it('shows Upload on Roam fuel only when recon.external_sources', () => {
+  it('RF-06: Roam fuel card is read-only on the week page, even for Roam staff', () => {
     render(
       <ReconSourceCard
         weekKey="2026-10-05"
@@ -161,8 +161,30 @@ describe('ReconSourceCard', () => {
       />,
     );
     expect(screen.getByRole('button', { name: /Remind Roam/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Upload statement/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /No activity on empty days/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Upload statement/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /No activity on empty days/i })).toBeNull();
+  });
+
+  it('RF-06: a received Roam fuel card says "Received from Roam" and has no buttons', () => {
+    render(
+      <ReconSourceCard
+        weekKey="2026-09-21"
+        source={{
+          id: 'fuel_card_roam',
+          label: 'Roam-issued fuel card statement',
+          kind: 'external_dependency',
+          requirement: 'required',
+          status: 'received',
+          coverage: {},
+        }}
+        onRemindRoam={() => {}}
+        onUpload={() => {}}
+        onAttestNone={() => {}}
+        canUploadExternalSources
+      />,
+    );
+    expect(screen.getByText('Received from Roam')).toBeTruthy();
+    expect(screen.queryByRole('button')).toBeNull();
   });
 
   it('hides No activity on waiting Roam fuel without recon.external_sources', () => {

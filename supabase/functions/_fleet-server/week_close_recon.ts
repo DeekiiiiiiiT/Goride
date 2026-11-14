@@ -28,6 +28,7 @@ import {
   isReconHumanSourceStatus,
 } from "../../../packages/finance-core/src/coverageInputHash.ts";
 import { sourceVolumeMetrics } from "./recon_volume.ts";
+import { fuelCardProgramsForOrg } from "./fuel_card_programs.ts";
 import { expandWeekCoverage } from "./recon_desk_shape.ts";
 
 export type WeekCloseServiceLine = "rideshare" | "rush_delivery";
@@ -100,10 +101,8 @@ async function loadOrgReconProfile(orgId: string): Promise<OrgReconProfile> {
     .select("id", { count: "exact", head: true })
     .eq("organization_id", orgId);
 
-  const { count: fuelCardCount } = await sb()
-    .from("fleet_fuel_cards")
-    .select("id", { count: "exact", head: true })
-    .eq("organization_id", orgId);
+  // RF-05: Roam card vs own card, the same rule as the wizard.
+  const fuelPrograms = await fuelCardProgramsForOrg(orgId);
 
   const modules = (orgRow?.enabled_modules as Record<string, boolean> | null) ?? {};
   const rushDeliveryEnabled = Boolean(modules.rush_delivery ?? modules.rush);
@@ -113,8 +112,8 @@ async function loadOrgReconProfile(orgId: string): Promise<OrgReconProfile> {
     hasUberDrivers: (uberTripCount ?? 0) > 0 || (uberBatchCount ?? 0) > 0,
     hasIndriveDrivers: (indriveCount ?? 0) > 0,
     hasTollTags: (tagCount ?? 0) > 0,
-    hasRoamFuelCards: (fuelCardCount ?? 0) > 0,
-    hasSelfServeJaa: false,
+    hasRoamFuelCards: fuelPrograms.roam,
+    hasSelfServeJaa: fuelPrograms.own,
     rushDeliveryEnabled,
   };
 }

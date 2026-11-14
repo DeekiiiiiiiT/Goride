@@ -63,7 +63,7 @@ import { startWeekWorkflow } from "./recon_close_workflow.ts";
 import { registerReconImportRoutes } from "./recon_import_routes.ts";
 import { shapeWeekActivity } from "./recon_activity.ts";
 import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
-import * as kv from "./kv_store.tsx";
+import { fuelCardProgramsForOrg } from "./fuel_card_programs.ts";
 import {
   periodEndForAnchor,
 } from "../../../packages/finance-core/src/periodKey.ts";
@@ -257,32 +257,19 @@ async function loadOrgReconProfile(orgId: string): Promise<OrgReconProfile> {
     .select("id", { count: "exact", head: true })
     .eq("organization_id", orgId);
 
-  const { count: fuelCardCount } = await sb
-    .from("fleet_fuel_cards")
-    .select("id", { count: "exact", head: true })
-    .eq("organization_id", orgId);
+  // RF-05: Roam card vs own card, the same rule as the close check.
+  const fuelPrograms = await fuelCardProgramsForOrg(orgId);
 
   const modules = (orgRow?.enabled_modules as Record<string, boolean> | null) ?? {};
   const rushDeliveryEnabled = Boolean(modules.rush_delivery ?? modules.rush);
-
-  let hasSelfServeJaa = false;
-  try {
-    const programs = (await kv.getByPrefix("jaa_program:")) || [];
-    hasSelfServeJaa = programs.some(
-      (p: { organizationId?: string; mode?: string }) =>
-        String(p.organizationId || "") === orgId && p.mode === "self_serve",
-    );
-  } catch {
-    hasSelfServeJaa = false;
-  }
 
   return {
     serviceLines,
     hasUberDrivers: (uberTripCount ?? 0) > 0 || (uberBatchCount ?? 0) > 0,
     hasIndriveDrivers: (indriveCount ?? 0) > 0,
     hasTollTags: (tagCount ?? 0) > 0,
-    hasRoamFuelCards: (fuelCardCount ?? 0) > 0,
-    hasSelfServeJaa,
+    hasRoamFuelCards: fuelPrograms.roam,
+    hasSelfServeJaa: fuelPrograms.own,
     rushDeliveryEnabled,
   };
 }
@@ -1563,6 +1550,13 @@ export function registerReconRoutes(app: Hono) {
         if (frozen) return frozen;
         if (!RECON_SOURCES.some((s) => s.id === sourceId)) {
           return c.json({ error: "INVALID_SOURCE", message: "Unknown source id" }, 400);
+        }
+        // RF-06: Roam's statement covers this file (Fleet Admin → Gas cards → Statement import).
+        if (sourceId === "fuel_card_roam") {
+          return c.json({
+            error: "ROAM_SOURCE",
+            message: "Roam provides this statement. It is marked received when Roam uploads it.",
+          }, 409);
         }
 
         const body = await c.req.json().catch(() => ({})) as {

@@ -114,6 +114,13 @@ import {
 import { splitCashAwaitingSaveBlocked } from "../../../packages/fuel-core/src/fuelSplitCashLifecycle.ts";
 import { assessFillPlausibility, fillPlausibilityBlocksSave } from "../../../packages/fuel-core/src/fillPlausibility.ts";
 import { getServiceClient } from "./service_client.ts";
+import {
+  normalizeStatementWeeks,
+  registerRoamStatementWeeks,
+  statementWeeksOfImport,
+  unregisterRoamStatementWeeks,
+  type RoamRegisterResult,
+} from "./roam_fuel_statement.ts";
 
 const app = new Hono();
 
@@ -674,9 +681,40 @@ app.post(`${BASE_PATH}/jaa-csv-imports`, requirePlatformStaff(), async (c) => {
       failedSaves: Number(body.failedSaves ?? existing?.failedSaves) || 0,
       status: body.status || existing?.status || "completed",
       summary: body.summary ?? existing?.summary ?? null,
+      // RF-02: the Monday-to-Sunday weeks this statement covers.
+      statementWeeks: normalizeStatementWeeks(body.statementWeeks ?? existing?.statementWeeks),
     };
     await kv.set(`jaa_csv_import:${id}`, record);
-    return c.json({ success: true, data: record });
+    // RF-01: a finished statement marks its weeks received for every Roam-card fleet.
+    let reconRegister: RoamRegisterResult | null = null;
+    if (record.status === "completed" && record.statementWeeks.length > 0) {
+      reconRegister = await registerRoamStatementWeeks(record.statementWeeks, record.fileName);
+    }
+    return c.json({ success: true, data: record, reconRegister });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+/** RF-08: statements saved before weeks were recorded — work out their weeks and register them. */
+app.post(`${BASE_PATH}/jaa-csv-imports/register-past`, requirePlatformStaff(), async (c) => {
+  try {
+    const imports = ((await kv.getByPrefix("jaa_csv_import:")) || []) as Array<Record<string, unknown>>;
+    const weeks = new Set<string>();
+    let updated = 0;
+    for (const rec of imports) {
+      if (String(rec?.status || "") !== "completed") continue;
+      let recWeeks = normalizeStatementWeeks(rec?.statementWeeks);
+      if (recWeeks.length === 0) {
+        recWeeks = await statementWeeksOfImport(String(rec.id || ""));
+        if (recWeeks.length === 0) continue;
+        await kv.set(`jaa_csv_import:${rec.id}`, { ...rec, statementWeeks: recWeeks, updatedAt: new Date().toISOString() });
+        updated += 1;
+      }
+      for (const w of recWeeks) weeks.add(w);
+    }
+    const reconRegister = await registerRoamStatementWeeks([...weeks], null);
+    return c.json({ success: true, importsUpdated: updated, reconRegister });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -715,6 +753,10 @@ app.delete(`${BASE_PATH}/jaa-csv-imports/:id`, requirePlatformStaff(), async (c)
       return c.json({ error: "Use /jaa-csv-imports/untracked" }, 400);
     }
     const existing = await kv.get(`jaa_csv_import:${id}`);
+    // RF-03: read the statement's weeks before its fills are removed.
+    const droppedWeeks: string[] = normalizeStatementWeeks(existing?.statementWeeks).length
+      ? normalizeStatementWeeks(existing?.statementWeeks)
+      : await statementWeeksOfImport(id);
     const entries = await loadFuelEntriesPreferSql();
     const targets = entries.filter((e: any) => String(e?.metadata?.jaaImportId || "") === id);
     const prep = await prepareStatementPurge(targets.map((e: any) => String(e.id)));
@@ -730,6 +772,13 @@ app.delete(`${BASE_PATH}/jaa-csv-imports/:id`, requirePlatformStaff(), async (c)
     if (!existing && entriesDeleted === 0 && unmatchedDeleted === 0) {
       return c.json({ error: "Import not found" }, 404);
     }
+    const others = ((await kv.getByPrefix("jaa_csv_import:")) || []) as Array<{ id?: string; statementWeeks?: unknown }>;
+    const stillCovered = new Set<string>();
+    for (const o of others) {
+      if (String(o?.id || "") === id) continue;
+      for (const w of normalizeStatementWeeks(o?.statementWeeks)) stillCovered.add(w);
+    }
+    await unregisterRoamStatementWeeks(droppedWeeks, stillCovered);
 
     return c.json({
       success: true,

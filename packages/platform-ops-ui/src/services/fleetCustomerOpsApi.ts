@@ -48,6 +48,8 @@ export type JaaCsvImport = {
   failedSaves?: number;
   status?: string;
   summary?: string | null;
+  /** RF-02: Monday-to-Sunday weeks this statement covers (yyyy-mm-dd Mondays). */
+  statementWeeks?: string[];
 };
 
 export type JaaCsvImportsResponse = {
@@ -261,6 +263,20 @@ export const fleetCustomerOpsApi = {
     if (!response.ok) throw new Error(await readError(response, 'Failed to save CSV import record'));
     const result = await response.json();
     return result.data || result;
+  },
+
+  /** RF-08: give statements saved before weeks were recorded their weeks, and mark them received. */
+  async registerPastJaaStatements(): Promise<{
+    importsUpdated: number;
+    reconRegister: { fleets: number; weeks: string[]; registered: number; failed: string[] };
+  }> {
+    const response = await fetch(`${API_ENDPOINTS.fuel}/jaa-csv-imports/register-past`, {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: '{}',
+    });
+    if (!response.ok) throw new Error(await readError(response, 'Failed to register past statements'));
+    return response.json();
   },
 
   async deleteJaaCsvImport(id: string): Promise<{ entriesDeleted: number; unmatchedDeleted: number }> {

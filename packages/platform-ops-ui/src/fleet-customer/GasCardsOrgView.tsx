@@ -30,6 +30,7 @@ import {
 import type { FuelEntry } from '../types/fuel';
 import {
   isJaaRawFuelCsv,
+  parseJaaTransDate,
   processJaaRawFuelData,
   type ParsedRow,
 } from './jaaRawFuelCsvParser';
@@ -39,6 +40,45 @@ import {
   collectJaaStatementReceiptNumbers,
   isJaaStatementLedgerRow,
 } from '@roam/roam-shared';
+
+/** Monday (yyyy-mm-dd) of a yyyy-mm-dd date. */
+function mondayOfYmd(ymd: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null;
+  const d = new Date(`${ymd}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+/** RF-02: the Monday-to-Sunday weeks a statement's dates fall in. */
+export function statementWeeksFromYmd(dates: string[]): string[] {
+  const weeks = new Set<string>();
+  for (const d of dates) {
+    const m = mondayOfYmd(String(d || '').slice(0, 10));
+    if (m) weeks.add(m);
+  }
+  return [...weeks].sort();
+}
+
+function recentMondays(count: number): string[] {
+  const today = new Date().toISOString().slice(0, 10);
+  const start = mondayOfYmd(today) ?? today;
+  const out: string[] = [];
+  const d = new Date(`${start}T00:00:00Z`);
+  for (let i = 0; i < count; i++) {
+    out.push(d.toISOString().slice(0, 10));
+    d.setUTCDate(d.getUTCDate() - 7);
+  }
+  return out;
+}
+
+function weekLabel(monday: string): string {
+  const a = new Date(`${monday}T00:00:00Z`);
+  const b = new Date(a);
+  b.setUTCDate(b.getUTCDate() + 6);
+  const fmt = (x: Date, withYear: boolean) =>
+    x.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', ...(withYear ? { year: 'numeric' } : {}), timeZone: 'UTC' });
+  return `${fmt(a, false)} – ${fmt(b, true)}`;
+}
 
 type JaaCardType = 'rental' | 'driver_tied';
 type GasCardScope = 'platform' | 'org';
@@ -104,6 +144,10 @@ export function GasCardsOrgView({ scope = 'org' }: { scope?: GasCardScope }) {
   const [importPreview, setImportPreview] = useState<JaaCsvImportPreview | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [matchingLogs, setMatchingLogs] = useState(false);
+  // RF-02: the weeks the statement covers — from the file's dates unless staff pick one.
+  const [fileWeeks, setFileWeeks] = useState<string[]>([]);
+  const [statementWeekChoice, setStatementWeekChoice] = useState('');
+  const [registeringPast, setRegisteringPast] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Program form
@@ -283,6 +327,12 @@ export function GasCardsOrgView({ scope = 'org' }: { scope?: GasCardScope }) {
         return;
       }
 
+      setFileWeeks(
+        statementWeeksFromYmd(
+          rows.map((r) => parseJaaTransDate(String(r.TRANS_DATE ?? r['Trans Date'] ?? ''))?.date ?? ''),
+        ),
+      );
+
       const knownCodes = new Set(programs.map((p) => p.companyCode.replace(/\D/g, '')));
       const companyCodesInFile = new Set(
         rows
@@ -436,6 +486,8 @@ export function GasCardsOrgView({ scope = 'org' }: { scope?: GasCardScope }) {
         failedSaves: failed,
         summary,
         status: failed && !saved ? 'failed' : 'completed',
+        // RF-01: the server marks these weeks received for every Roam-card fleet.
+        statementWeeks: statementWeekChoice ? [statementWeekChoice] : fileWeeks,
       });
 
       setLastImportSummary(summary);
@@ -673,10 +725,26 @@ export function GasCardsOrgView({ scope = 'org' }: { scope?: GasCardScope }) {
     }
   };
 
+  const registerPastStatements = async () => {
+    setRegisteringPast(true);
+    try {
+      const res = await fleetCustomerOpsApi.registerPastJaaStatements();
+      const r = res.reconRegister;
+      const msg = `Marked ${r.weeks.length} statement week(s) received for ${r.fleets} fleet(s).`;
+      if (r.failed.length) toast.error(`${msg} ${r.failed.length} failed.`);
+      else toast.success(msg);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not register past statements');
+    } finally {
+      setRegisteringPast(false);
+    }
+  };
+
   const allTabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
     { id: 'programs', label: 'Programs', icon: <Building2 className="h-4 w-4" /> },
     { id: 'cards', label: 'Cards', icon: <CreditCard className="h-4 w-4" /> },
-    { id: 'import', label: 'CSV Import', icon: <Upload className="h-4 w-4" /> },
+    { id: 'import', label: 'Statement import', icon: <Upload className="h-4 w-4" /> },
     {
       id: 'matched',
       label: `Matched (${matchedCards.length})`,
@@ -686,9 +754,14 @@ export function GasCardsOrgView({ scope = 'org' }: { scope?: GasCardScope }) {
     { id: 'waiting-roam', label: 'Waiting on Roam', icon: <Clock className="h-4 w-4" /> },
   ];
   const tabs = allTabs.filter((item) =>
+    // RF-04: Roam's statement is uploaded here (Fleet Admin); Dominion keeps programs only.
     scope === 'org'
-      ? item.id === 'cards' || item.id === 'matched' || item.id === 'unmatched' || item.id === 'waiting-roam'
-      : item.id === 'programs' || item.id === 'import',
+      ? item.id === 'cards' ||
+        item.id === 'import' ||
+        item.id === 'matched' ||
+        item.id === 'unmatched' ||
+        item.id === 'waiting-roam'
+      : item.id === 'programs',
   );
 
   if (loading && !programs.length && !cards.length) {
@@ -797,7 +870,7 @@ export function GasCardsOrgView({ scope = 'org' }: { scope?: GasCardScope }) {
         ))}
       </div>
 
-      {tab === 'waiting-roam' && <ReconExternalQueuePanel />}
+      {tab === 'waiting-roam' && <ReconExternalQueuePanel onOpenImport={() => setTab('import')} />}
 
       {tab === 'programs' && (
         <div className="grid gap-6 lg:grid-cols-2">
@@ -972,8 +1045,30 @@ export function GasCardsOrgView({ scope = 'org' }: { scope?: GasCardScope }) {
         <div className="space-y-4 max-w-2xl">
           <p className="text-sm text-slate-600 dark:text-slate-400">
             Choose a JAA Raw CSV to open the review wizard. Matched rows go to customer cards;
-            unmatched rows can be queued or dropped before anything is saved.
+            unmatched rows can be queued or dropped before anything is saved. Every fleet with a Roam
+            card is then marked received for the statement week in Week Reconciliation.
           </p>
+          <label className="block max-w-sm text-sm">
+            <span className="font-medium text-slate-800">Statement week</span>
+            <select
+              value={statementWeekChoice}
+              onChange={(e) => setStatementWeekChoice(e.target.value)}
+              disabled={importing}
+              className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+              data-testid="jaa-statement-week"
+            >
+              <option value="">
+                {fileWeeks.length
+                  ? `From the file: ${fileWeeks.map(weekLabel).join(', ')}`
+                  : "From the file's dates"}
+              </option>
+              {recentMondays(26).map((w) => (
+                <option key={w} value={w}>
+                  {weekLabel(w)}
+                </option>
+              ))}
+            </select>
+          </label>
           <input
             ref={fileInputRef}
             type="file"
@@ -1013,6 +1108,18 @@ export function GasCardsOrgView({ scope = 'org' }: { scope?: GasCardScope }) {
               )}
               Match pending logs
             </button>
+            {csvImports.some((i) => i.status === 'completed' && !(i.statementWeeks?.length)) && (
+              <button
+                type="button"
+                disabled={registeringPast || importing}
+                onClick={() => void registerPastStatements()}
+                className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+                data-testid="jaa-register-past"
+              >
+                {registeringPast ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                Register past statements
+              </button>
+            )}
             {selectedFileName && (
               <span className="text-sm text-slate-500 truncate max-w-[240px]">{selectedFileName}</span>
             )}

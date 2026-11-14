@@ -190,10 +190,10 @@ function canShowUpload(
   source: ReconRunSource,
   canUploadExternalSources: boolean,
 ): boolean {
-  if (FLEET_UPLOAD_SOURCES.has(source.id)) return true;
-  // R2-28: Roam gas card upload is staff-only (recon.external_sources).
-  if (source.id === 'fuel_card_roam') return canUploadExternalSources;
-  return false;
+  void canUploadExternalSources;
+  // RF-06: the Roam gas card file is never uploaded here — Roam's statement import in Fleet Admin
+  // (Gas cards → Statement import) marks it received for every Roam-card fleet.
+  return FLEET_UPLOAD_SOURCES.has(source.id);
 }
 
 export function ReconSourceCard({
@@ -255,6 +255,8 @@ export function ReconSourceCard({
             <p className={cn('text-xs font-medium', roamCopy.isOverdue ? 'text-amber-800' : 'text-slate-700')}>
               {roamCopy.statusLine}
             </p>
+          ) : source.id === 'fuel_card_roam' && source.status === 'received' ? (
+            <p className="text-xs font-medium text-emerald-800">Received from Roam</p>
           ) : (
             <p className="text-xs capitalize text-slate-600">{source.status.replace(/_/g, ' ')}</p>
           )}
@@ -296,8 +298,8 @@ export function ReconSourceCard({
           ) : null}
           {source.requirement !== 'not_applicable'
             && onAttestNone
-            // Roam fuel card: only Roam staff (who hold the statement) can say the week had none.
-            && (!roamWait || canUploadExternalSources)
+            // RF-06: nobody marks the Roam fuel card "no activity" — Roam's statement covers it.
+            && source.id !== 'fuel_card_roam'
             && uncoveredDays.length > 0 ? (
             <ActionTip label={attestTip}>
               <Button

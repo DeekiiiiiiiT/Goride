@@ -62,7 +62,8 @@ async function queueDeskRefresh(orgId: string, weekKeys: string[]): Promise<void
 const IMPORTS = "/make-server-37f42386/recon/imports";
 const FLEET_TZ = "America/Jamaica";
 
-const FUEL_SOURCE_IDS = new Set(["fuel_card_self", "fuel_card_roam"]);
+// RF-06: the Roam-card file is written only by Roam's statement import (roam_fuel_statement.ts).
+const FUEL_SOURCE_IDS = new Set(["fuel_card_self"]);
 const TOLL_SOURCE_IDS = new Set(["toll_usage", "toll_topup"]);
 
 function isFuelSource(sourceId: string): boolean {
