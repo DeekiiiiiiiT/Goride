@@ -925,6 +925,18 @@ function FuelManagementInner({
 
   const serviceLineCounts = useMemo(() => {
     if (!showTabs) return undefined;
+    // Inside Week Reconciliation the tabs count that week's fills only, not every fill ever.
+    if (deskWeekStart) {
+      if (!fuelLogsHydrated || fuelLogsLoadError) return undefined;
+      const { startDate, endDate } = fuelWeekBoundsFromPeriodId(deskWeekStart);
+      const week = computeFuelLineConservation(
+        logs.filter((e) => {
+          const d = String(e.date || '').slice(0, 10);
+          return d >= startDate && d <= endDate;
+        }),
+      );
+      return { all: week.allCount, rideshare: week.rideshareCount, delivery: week.deliveryCount };
+    }
     // Truncated: omit badges until server totals land — never show understated counts.
     if (fuelDataTruncated) {
       if (serverLineCountsLoading || !serverLineCounts) return undefined;
@@ -939,7 +951,17 @@ function FuelManagementInner({
       rideshare: lineConservation.rideshareCount,
       delivery: lineConservation.deliveryCount,
     };
-  }, [showTabs, fuelDataTruncated, serverLineCounts, serverLineCountsLoading, lineConservation]);
+  }, [
+    showTabs,
+    deskWeekStart,
+    fuelLogsHydrated,
+    fuelLogsLoadError,
+    logs,
+    fuelDataTruncated,
+    serverLineCounts,
+    serverLineCountsLoading,
+    lineConservation,
+  ]);
 
   const unattributedCountForUi = useMemo(() => {
     if (fuelDataTruncated && serverLineCounts) return serverLineCounts.unattributed;
