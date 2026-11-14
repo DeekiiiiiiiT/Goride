@@ -802,11 +802,11 @@ export function GasCardsOrgView({ scope = 'org' }: { scope?: GasCardScope }) {
 
       <div className={scope === 'platform' ? 'mb-8' : ''}>
         <h1 className="text-2xl font-bold leading-tight tracking-tight text-slate-900 dark:text-slate-100">
-          JAA card catalogue
+          {scope === 'org' ? 'Gas cards' : 'JAA card catalogue'}
         </h1>
         <p className="mt-1 text-xs leading-normal text-slate-500">
           {scope === 'org'
-            ? 'Cards assigned to a fleet, unmatched codes, and spend.'
+            ? "Roam gas cards, Roam's weekly statement, and matching to driver fuel logs."
             : 'Platform gas-card programs.'}
         </p>
       </div>
@@ -1044,31 +1044,10 @@ export function GasCardsOrgView({ scope = 'org' }: { scope?: GasCardScope }) {
       {tab === 'import' && (
         <div className="space-y-4 max-w-2xl">
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            Choose a JAA Raw CSV to open the review wizard. Matched rows go to customer cards;
-            unmatched rows can be queued or dropped before anything is saved. Every fleet with a Roam
-            card is then marked received for the statement week in Week Reconciliation.
+            Upload Roam's weekly JAA statement (the JAA Raw CSV). You review it first: rows go to the
+            fleet holding each card, and every fleet with a Roam card is marked received for that week
+            in Week Reconciliation.
           </p>
-          <label className="block max-w-sm text-sm">
-            <span className="font-medium text-slate-800">Statement week</span>
-            <select
-              value={statementWeekChoice}
-              onChange={(e) => setStatementWeekChoice(e.target.value)}
-              disabled={importing}
-              className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-              data-testid="jaa-statement-week"
-            >
-              <option value="">
-                {fileWeeks.length
-                  ? `From the file: ${fileWeeks.map(weekLabel).join(', ')}`
-                  : "From the file's dates"}
-              </option>
-              {recentMondays(26).map((w) => (
-                <option key={w} value={w}>
-                  {weekLabel(w)}
-                </option>
-              ))}
-            </select>
-          </label>
           <input
             ref={fileInputRef}
             type="file"
@@ -1093,20 +1072,7 @@ export function GasCardsOrgView({ scope = 'org' }: { scope?: GasCardScope }) {
               ) : (
                 <Upload className="h-4 w-4" />
               )}
-              {importing && !wizardOpen ? 'Reading…' : 'Choose CSV file'}
-            </button>
-            <button
-              type="button"
-              disabled={matchingLogs || importing}
-              onClick={() => void matchPendingDriverLogs()}
-              className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
-            >
-              {matchingLogs ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Link2 className="h-4 w-4" />
-              )}
-              Match pending logs
+              {importing && !wizardOpen ? 'Reading…' : 'Upload statement'}
             </button>
             {csvImports.some((i) => i.status === 'completed' && !(i.statementWeeks?.length)) && (
               <button
@@ -1146,9 +1112,11 @@ export function GasCardsOrgView({ scope = 'org' }: { scope?: GasCardScope }) {
               <thead className="bg-white text-left text-xs text-slate-500">
                 <tr>
                   <th className="px-3 py-2">File</th>
+                  <th className="px-3 py-2">Week</th>
                   <th className="px-3 py-2">When</th>
                   <th className="px-3 py-2">Saved</th>
                   <th className="px-3 py-2">Unmatched</th>
+                  <th className="px-3 py-2">Week Reconciliation</th>
                   <th className="px-3 py-2" />
                 </tr>
               </thead>
@@ -1161,9 +1129,11 @@ export function GasCardsOrgView({ scope = 'org' }: { scope?: GasCardScope }) {
                         {untrackedImport.entryCount} statement · {untrackedImport.unmatchedCount} unmatched
                       </span>
                     </td>
+                    <td className="px-3 py-2 text-xs text-slate-500">—</td>
                     <td className="px-3 py-2 text-xs text-slate-500">Before tracking</td>
                     <td className="px-3 py-2">{untrackedImport.entryCount}</td>
                     <td className="px-3 py-2">{untrackedImport.unmatchedCount}</td>
+                    <td className="px-3 py-2 text-xs text-slate-500">—</td>
                     <td className="px-3 py-2 text-right">
                       <button
                         type="button"
@@ -1174,7 +1144,7 @@ export function GasCardsOrgView({ scope = 'org' }: { scope?: GasCardScope }) {
                             label: 'earlier untracked upload(s)',
                           })
                         }
-                        className="inline-flex items-center gap-1 text-xs text-rose-700 hover:text-rose-900 disabled:opacity-50"
+                        className="inline-flex items-center gap-1 rounded-md border border-rose-300 bg-white px-2.5 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
                       >
                         {deletingImportId === '__untracked__' ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1191,6 +1161,9 @@ export function GasCardsOrgView({ scope = 'org' }: { scope?: GasCardScope }) {
                     <td className="px-3 py-2 truncate max-w-[200px]" title={imp.fileName}>
                       {imp.fileName}
                     </td>
+                    <td className="px-3 py-2 text-xs text-slate-700 whitespace-nowrap">
+                      {imp.statementWeeks?.length ? imp.statementWeeks.map(weekLabel).join(', ') : '—'}
+                    </td>
                     <td className="px-3 py-2 text-xs text-slate-500">
                       {imp.uploadedAt
                         ? new Date(imp.uploadedAt).toLocaleString()
@@ -1198,6 +1171,15 @@ export function GasCardsOrgView({ scope = 'org' }: { scope?: GasCardScope }) {
                     </td>
                     <td className="px-3 py-2">{imp.savedEntries}</td>
                     <td className="px-3 py-2">{imp.unmatchedCount}</td>
+                    <td className="px-3 py-2 text-xs">
+                      {imp.status === 'completed' && imp.statementWeeks?.length ? (
+                        <span className="inline-flex items-center gap-1 font-medium text-emerald-700">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Received
+                        </span>
+                      ) : (
+                        <span className="text-amber-700">Not registered</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-right">
                       <button
                         type="button"
@@ -1205,7 +1187,7 @@ export function GasCardsOrgView({ scope = 'org' }: { scope?: GasCardScope }) {
                         onClick={() =>
                           setPendingDelete({ id: imp.id, label: imp.fileName })
                         }
-                        className="inline-flex items-center gap-1 text-xs text-rose-700 hover:text-rose-900 disabled:opacity-50"
+                        className="inline-flex items-center gap-1 rounded-md border border-rose-300 bg-white px-2.5 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
                       >
                         {deletingImportId === imp.id ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1347,6 +1329,14 @@ export function GasCardsOrgView({ scope = 'org' }: { scope?: GasCardScope }) {
           if (!open) setImportPreview(null);
         }}
         onSubmit={(payload) => void submitImportFromWizard(payload)}
+        statementWeek={{
+          value: statementWeekChoice,
+          autoLabel: fileWeeks.length
+            ? `${fileWeeks.map(weekLabel).join(', ')} (from the file)`
+            : "From the file's dates",
+          choices: recentMondays(26).map((w) => ({ value: w, label: weekLabel(w) })),
+          onChange: setStatementWeekChoice,
+        }}
       />
 
       <AlertDialog

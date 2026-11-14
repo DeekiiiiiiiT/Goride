@@ -46,6 +46,13 @@ type Props = {
     matchedEntries: FuelEntry[];
     unmatchedRows: JaaPreviewUnmatched[];
   }) => void;
+  /** RF-02: the statement week, shown and changeable in the review (Fleet Admin only). */
+  statementWeek?: {
+    value: string;
+    autoLabel: string;
+    choices: { value: string; label: string }[];
+    onChange: (value: string) => void;
+  };
 };
 
 function unmatchedKey(row: JaaPreviewUnmatched, index: number): string {
@@ -115,6 +122,7 @@ export function JaaCsvImportWizard({
   submitting,
   onOpenChange,
   onSubmit,
+  statementWeek,
 }: Props) {
   const [wizardTab, setWizardTab] = useState<'matched' | 'unmatched'>('matched');
   const [selectedUnmatched, setSelectedUnmatched] = useState<Set<string>>(new Set());
@@ -180,6 +188,28 @@ export function JaaCsvImportWizard({
             {' · '}
             nothing is saved until you submit.
           </DialogDescription>
+          {statementWeek ? (
+            <label className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-medium text-slate-800">Statement week</span>
+              <select
+                value={statementWeek.value}
+                onChange={(e) => statementWeek.onChange(e.target.value)}
+                disabled={submitting}
+                className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm"
+                data-testid="jaa-statement-week"
+              >
+                <option value="">{statementWeek.autoLabel}</option>
+                {statementWeek.choices.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs text-slate-500">
+                Every fleet with a Roam card is marked received for this week in Week Reconciliation.
+              </span>
+            </label>
+          ) : null}
         </DialogHeader>
 
         <div className="px-6 py-3 flex flex-wrap gap-2 border-b border-slate-100 bg-slate-50/80">
