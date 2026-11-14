@@ -21,7 +21,12 @@ function user(orgId: string): RbacUser {
 
 type FakeRun = { id: string; organization_id: string; version: number; state: string; service_line?: string; week_key?: string };
 
-function fakeRecon(run: FakeRun | null, claimCalls: { length: number }, claimStatus = "ok") {
+function fakeRecon(
+  run: FakeRun | null,
+  claimCalls: { length: number },
+  claimStatus = "ok",
+  currentEnough = false,
+) {
   return {
     from() {
       return {
@@ -41,6 +46,7 @@ function fakeRecon(run: FakeRun | null, claimCalls: { length: number }, claimSta
     },
     rpc(name: string) {
       if (name === "claim_week_change") claimCalls.length += 1;
+      if (name === "week_version_current_enough") return Promise.resolve({ data: currentEnough, error: null });
       return Promise.resolve({ data: { status: claimStatus }, error: null });
     },
   } as unknown as WeekReconClient;
@@ -172,4 +178,29 @@ Deno.test("WRA-43: a failed queue never fails the saved change", async () => {
 
 Deno.test("parseWeekHeader unchanged", () => {
   assertEquals(parseWeekHeader(`${RUN_A}@3`), { runId: RUN_A, version: 3 });
+});
+
+Deno.test("week moved only by the calculator → change goes through", async () => {
+  const claimCalls = { length: 0 };
+  const deps: WeekGuardDeps = {
+    requireAuthStrict: signedIn(),
+    reconClient: () => fakeRecon({ ...RUN_ROW, version: 5 }, claimCalls, "ok", true),
+    refreshWeek: async () => {},
+  };
+  const res = await mountApp(deps).request("/change", { method: "POST", headers: { "x-recon-week": HEADER } });
+  assertEquals(res.status, 200);
+  assertEquals(claimCalls.length, 1);
+});
+
+Deno.test("week moved by a person → WEEK_CHANGED and no claim", async () => {
+  const claimCalls = { length: 0 };
+  const deps: WeekGuardDeps = {
+    requireAuthStrict: signedIn(),
+    reconClient: () => fakeRecon({ ...RUN_ROW, version: 5 }, claimCalls, "ok", false),
+    refreshWeek: async () => {},
+  };
+  const res = await mountApp(deps).request("/change", { method: "POST", headers: { "x-recon-week": HEADER } });
+  assertEquals(res.status, 409);
+  assertEquals((await res.json()).error, "WEEK_CHANGED");
+  assertEquals(claimCalls.length, 0);
 });

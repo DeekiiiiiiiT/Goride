@@ -84,7 +84,16 @@ export async function runWeekVersionGuardCore(
   if ((run as { state: string }).state === "closed") {
     return c.json({ error: "WEEK_CLOSED", message: "This week is closed. Changes go through a correction." }, 409);
   }
-  if (Number((run as { version: number }).version) !== parsed.version) {
+  let versionOk = Number((run as { version: number }).version) === parsed.version;
+  if (!versionOk) {
+    // The week calculator's own publish bumps the version too; only a change by a person refuses.
+    const { data: enough, error: enoughErr } = await recon.rpc("week_version_current_enough", {
+      p_run_id: parsed.runId,
+      p_expected_version: parsed.version,
+    });
+    versionOk = !enoughErr && enough === true;
+  }
+  if (!versionOk) {
     return c.json({
       error: "WEEK_CHANGED",
       message: "This week changed while you were working. Reload the week and try again.",
