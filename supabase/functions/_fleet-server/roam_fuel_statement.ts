@@ -90,6 +90,7 @@ export async function registerRoamStatementWeeks(
         fileName,
         type: "fuel_card_roam",
         status: "completed",
+        weekKeys: [week],
       });
       if (res.ok) registered += 1;
       else failed.push(`${orgId}:${week}:${res.error ?? "failed"}`);

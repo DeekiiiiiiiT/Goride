@@ -44,6 +44,11 @@ export type EnsureReconImportBatchInput = {
   rowsCommitted?: number | null;
   fileName?: string | null;
   type?: string | null;
+  /**
+   * The Monday week(s) the file covers. Week Reconciliation finds a statement source through
+   * week_keys[1]; callers that do not pass it rely on the kv batch sync (fleet_domains.ts) to fill it.
+   */
+  weekKeys?: string[];
 };
 
 /**
@@ -105,6 +110,7 @@ export async function ensureReconImportBatch(
     data_end: dataEnd,
     semantic_key: semanticKey,
     rows_committed: input.rowsCommitted ?? null,
+    ...(input.weekKeys?.length ? { week_keys: input.weekKeys } : {}),
     updated_at: now,
     payload_json: {
       sourceId: input.sourceId,
