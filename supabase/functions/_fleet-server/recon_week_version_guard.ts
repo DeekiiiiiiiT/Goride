@@ -7,10 +7,13 @@
  *
  * Before the change: a moved week → 409 WEEK_CHANGED; a closed week → 409 WEEK_CLOSED.
  * After a successful change: recon.claim_week_change bumps the version, writes the
- * history row and sets the 2-minute publish hold, like every desk change.
+ * history row and sets the 2-minute publish hold, like every desk change; then the week's
+ * calculator unit is queued (WRA-43), so the change is recalculated whatever table it
+ * landed in (new toll system, fuel, pay, claims). The calculator waits out the hold itself.
  */
 import type { Context, Next } from "npm:hono@4.3.11";
 import { getServiceClientWithSchema } from "./service_client.ts";
+import { queueWeekDeskRefresh } from "./recon_desk_queue.ts";
 import { requireAuth } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
 import { correlationIdFrom, idempotencyKeyFrom } from "./recon_week_change.ts";
@@ -42,7 +45,10 @@ export type WeekReconClient = {
 export type WeekGuardDeps = {
   reconClient: () => WeekReconClient;
   requireAuthStrict: (c: Context, next: () => Promise<void | Response>) => Promise<void | Response>;
+  /** Queue the week's calculator units, every service line (recon_desk_queue.ts). Defaults to the real queue. */
+  refreshWeek?: (orgId: string, weekKey: string, heldLine: string) => Promise<void>;
 };
+
 
 const defaultDeps: WeekGuardDeps = {
   reconClient: () => getServiceClientWithSchema("recon") as unknown as WeekReconClient,
@@ -69,7 +75,7 @@ export async function runWeekVersionGuardCore(
   }
   const recon = deps.reconClient();
   const { data: run, error } = await recon.from("week_runs")
-    .select("id, version, state")
+    .select("id, version, state, week_key, service_line")
     .eq("id", parsed.runId)
     .eq("organization_id", orgId)
     .maybeSingle();
@@ -107,6 +113,24 @@ export async function runWeekVersionGuardCore(
   } else if ((claim as { status?: string } | null)?.status !== "ok" && (claim as { status?: string } | null)?.status !== "replay") {
     console.warn("[recon] lane change claim", (claim as { status?: string } | null)?.status);
   }
+
+  // WRA-43: the change is saved, so ask for the week to be worked out again (even if the history row failed),
+  // for every service line: a toll or fuel change can move both the Rideshare and the Delivery week.
+  // A replay changed nothing and was queued the first time. The worker drops repeats (recon_worker.ts).
+  if (!claimErr && (claim as { status?: string } | null)?.status === "replay") return;
+  const week = String((run as { week_key?: unknown }).week_key ?? "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(week)) return;
+  const heldLine = String((run as { service_line?: unknown }).service_line ?? "");
+  const refreshWeek = deps.refreshWeek ??
+    ((org: string, wk: string, held: string) => queueWeekDeskRefresh(org, [wk], { heldLine: held }));
+  const refresh = refreshWeek(orgId, week, heldLine).catch((e) => {
+    // The change is saved; the nightly run still picks the week up.
+    console.warn("[recon] queue week recalculation failed", e instanceof Error ? e.message : e);
+  });
+  // Do not hold the answer for it on the live server; tests (no EdgeRuntime) wait.
+  const edge = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime;
+  if (edge?.waitUntil) edge.waitUntil(refresh);
+  else await refresh;
 }
 
 export function reconWeekVersionGuardWith(deps: WeekGuardDeps = defaultDeps) {

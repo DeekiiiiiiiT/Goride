@@ -33,11 +33,12 @@ import {
   resolveFuelActivityEarliestMonday,
   buildFuelReconciliationWeekOptions,
   fuelListWindow,
+  fuelWeekBoundsFromPeriodId,
   generateFuelWeekOptions,
 } from '../utils/fuelWeekPeriod';
 import { useFleetTimezone, ymdToLocalDate } from '../utils/timezoneDisplay';
 import { type PeriodWeekOption } from '../utils/periodWeekOptions';
-import { format } from 'date-fns';
+import { format, parseISO, startOfWeek } from 'date-fns';
 import { DisputeResolutionModal } from '../components/fuel/DisputeResolutionModal';
 import { FuelReimbursementTable } from '../components/fuel/FuelReimbursementTable';
 import { SubmitExpenseModal } from '../components/fuel/SubmitExpenseModal';
@@ -401,6 +402,17 @@ function FuelManagementInner({
   const [scenarios, setScenarios] = useState<FuelScenario[]>([]);
   const [finalizedReports, setFinalizedReports] = useState<FinalizedFuelReport[]>([]);
 
+  // WRA-41: the week Week Reconciliation opened the Fuel step for. It always belongs on this
+  // screen's list (even outside its usual window, or with no fuel), so the step shows that week
+  // instead of "This week is no longer on the list". It goes through the normal path below, so its
+  // lock, reviews and flag counts come from the server like every other week.
+  const deskWeekStart = useMemo(() => {
+    const raw = deskSections && hideReconLanding ? String(initialWeekStart || '').split('T')[0] : '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return '';
+    // Always the Monday of that week, so it lines up with the screen's own Monday-based weeks.
+    return format(startOfWeek(parseISO(raw), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+  }, [deskSections, hideReconLanding, initialWeekStart]);
+
   // Week list starts at first real fuel activity (not a hard-coded Dec 2025 launch date)
   const reconciliationWeekOptions = useMemo(() => {
     const earliest = resolveFuelActivityEarliestMonday(
@@ -408,17 +420,28 @@ function FuelManagementInner({
       finalizedReports.map((f) => f.weekStart),
       fleetTz || undefined,
     );
-    return buildFuelReconciliationWeekOptions(earliest, fleetTz || undefined);
-  }, [activityMinDate, logs, finalizedReports, fleetTz]);
+    const options = buildFuelReconciliationWeekOptions(earliest, fleetTz || undefined);
+    if (deskWeekStart && !options.some((o) => o.startDate === deskWeekStart)) {
+      const { startDate, endDate, label } = fuelWeekBoundsFromPeriodId(deskWeekStart);
+      options.push({ id: startDate, label, startDate, endDate });
+      // Same order as the rest of the list (newest first).
+      options.sort((a, b) => (a.startDate < b.startDate ? 1 : a.startDate > b.startDate ? -1 : 0));
+    }
+    return options;
+  }, [activityMinDate, logs, finalizedReports, fleetTz, deskWeekStart]);
 
   // Instant landing: query last ~52 weeks from "now" — do not wait for activity bounds.
+  // The Week Reconciliation week is always inside the range, so its server row (lock, reviews) loads.
   const landingPeriodRange = useMemo(() => {
     const opts = generateFuelWeekOptions(52, fleetTz || undefined);
-    return {
-      from: opts[opts.length - 1]?.startDate,
-      to: opts[0]?.startDate,
-    };
-  }, [fleetTz]);
+    let from = opts[opts.length - 1]?.startDate;
+    let to = opts[0]?.startDate;
+    if (deskWeekStart && from && to) {
+      if (deskWeekStart < from) from = deskWeekStart;
+      if (deskWeekStart > to) to = deskWeekStart;
+    }
+    return { from, to };
+  }, [fleetTz, deskWeekStart]);
 
   const [periodsQueryReady, setPeriodsQueryReady] = useState(false);
   useEffect(() => {
@@ -472,8 +495,12 @@ function FuelManagementInner({
         flagDispositions,
       );
     }
+    // The Week Reconciliation week is kept even with no fuel, but only once every fill has loaded (a failed or
+    // cut-short load must never show a week with fuel as empty), so the step never opens on a half-loaded week.
+    const keepDeskWeek =
+      Boolean(deskWeekStart) && fuelLogsHydrated && !fuelLogsLoadError && !fuelDataTruncated;
     const derived =
-      vehicles.length > 0 || logs.length > 0
+      vehicles.length > 0 || logs.length > 0 || keepDeskWeek
         ? deriveFuelReconciliationPeriods({
             weekOptions: reconciliationWeekOptions,
             vehicles,
@@ -486,6 +513,7 @@ function FuelManagementInner({
             lockedWeekStarts: serverLockedWeekStarts(serverFuelPeriods),
             dataQualityReviewedByWeek,
             dispositions: flagDispositions,
+            keepWeekStarts: keepDeskWeek ? new Set([deskWeekStart]) : undefined,
           }).filter((d) => !coveringWeekStarts.has(d.startDate))
         : [];
     return enrichLandingPeriodsWithFlagCounts(
@@ -502,6 +530,10 @@ function FuelManagementInner({
     scenarios,
     serverFuelPeriods,
     flagDispositions,
+    deskWeekStart,
+    fuelLogsHydrated,
+    fuelLogsLoadError,
+    fuelDataTruncated,
   ]);
 
   const reconLandingLoading =

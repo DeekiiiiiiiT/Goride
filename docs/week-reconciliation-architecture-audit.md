@@ -2,6 +2,21 @@
 
 **Rev 28 · 2026-11-12 · Status: BUILDING — Round 5 (browser done-tests) part-way.** 17 of 21 browser done-tests pass (9b new). The 4 left (5, 6, 9t, 13) found 7 real problems: 4 fixed, 3 open (WRA-41, 42, 43 below). Nothing committed, nothing live.
 
+## Rev 29 · 2026-11-14 · re-checked after the new toll system + old toll removal
+
+- **Why now:** the live `feature_flag:recon_v2` row does not exist (owner checked 14 Nov), so Week Reconciliation and Toll Health are hidden on live. The owner's fleet is on the new toll system and the old toll pages are deleted (`docs/toll-old-system-removal-audit.md`), so on live there is **no screen to upload / decide / seal tolls** until this go-live is done. This audit now goes before toll removal round S3.
+- **Code:** committed and on `main` (2b7d4b31 and later; toll Phase 3 reworked step 3 onto the new toll system).
+- **Go-live Step 4.1 (11 migrations):** ✅ all 11 are in live `schema_migrations` (owner checked 14 Nov).
+- **WRA-42 and WRA-44:** ❌ no longer apply. Both were about the old toll system (old dispute refunds, `toll_period_readiness_build.ts`), which is deleted; step 3 now seals in the new toll system.
+- **WRA-43:** still open, and it now covers the new toll system: a toll decision or seal made through the new toll commands (`toll_v2_command_controller.ts`) never calls `recon_enqueue_week_desk`, so the week's numbers wait for the next nightly run. Same fix as below (the shared week check queues the week's calculator unit after a successful change), applied to the new toll commands too.
+- **WRA-41:** still open (the Fuel step still has "This week is no longer on the list", `FuelReconciliationDashboard.tsx`).
+- **WRA-43 fixed in code (14 Nov, uncommitted):** the shared week check (`recon_week_version_guard.ts`) asks for the week to be worked out again after every saved change made from Week Reconciliation (new toll commands included, they carry the week header); every service line of the week is asked, the one being worked in at once (it already has the 2-minute hold), the others after 120 s so a burst of edits ends in one publish; it runs after the answer (`EdgeRuntime.waitUntil`). One shared helper `recon_desk_queue.ts` makes every such request (upload refresh, worker re-queue, missing-desk sweep). The calculator drops a request that a build which **started** after it already covers (the build stamps `computeStartedAt` in the desk before reading; 5 s margin for clock gaps), so many requests = one publish. Correction: the upload refresh's 3-value call was **not** broken (the baseline has a 3-value database function too). Accepted: a change made outside Week Reconciliation (no week header) still waits for the nightly run.
+- **WRA-41 fixed in code (14 Nov, uncommitted):** the week Week Reconciliation opens the Fuel step for (always its Monday) is added to the Fuel screen's own week list (real Monday–Sunday bounds and label, newest-first order) and to the server read range, so its lock and reviews come from the server like every other week; it is kept even with no fuel, but only once every fill has loaded (not after a failed or cut-short load). `FuelManagement.tsx`, `fuelPeriodStatus.ts` (`keepWeekStarts`).
+- Tests: Deno `_fleet-server` + Fleet vitest green; two `/code-review` passes (20 findings, fixed or accepted above).
+- **Next:** re-run the done-tests that cover them (5, 6, 9t, 13, re-pointed at the new toll step) → owner checks the week calculator is on and the Uber week fix (Step 4.5) → turn `recon_v2` on for the owner's company (Step 4.6) → owner redoes the 3 old toll weeks inside step 3.
+
+---
+
 This file now lists **only what is left**. Everything already built (Rounds 0–4c, the `recon_v2` switch, Revs 1–26) is in git history of this file (Rev 26, 2026-11-11) and in the code.
 
 ---

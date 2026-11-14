@@ -19,12 +19,16 @@ Deno.test("register queues a desk refresh for the file's weeks before answering"
   assert(answer > refresh, "the refresh is queued before the success answer");
 });
 
-Deno.test("the refresh uses the calculator's queue and never fails the upload", () => {
+Deno.test("the refresh uses the calculator's queue and never fails the upload", async () => {
   const start = source.indexOf("async function queueDeskRefresh");
   assert(start >= 0, "queueDeskRefresh not found");
   const fn = source.slice(start, source.indexOf("\n}\n", start));
-  assert(fn.includes('rpc("recon_enqueue_week_desk"'), "uses recon_enqueue_week_desk");
-  assert(fn.includes("catch (e)"), "errors are caught, never thrown to the upload");
+  assert(fn.includes("queueWeekDeskRefresh("), "goes through the shared desk queue");
+  const queue = await Deno.readTextFile(new URL("./recon_desk_queue.ts", import.meta.url));
+  assert(queue.includes('rpc("recon_enqueue_week_desk"'), "uses recon_enqueue_week_desk");
+  assert(queue.includes("p_delay_seconds"), "sends all 4 arguments (the database function has no 3-argument form)");
+  const refresh = queue.slice(queue.indexOf("export async function queueWeekDeskRefresh"));
+  assert(refresh.includes("catch (e)"), "errors are caught, never thrown to the upload");
 });
 
 Deno.test("a replaced batch is linked by its row id, never the key-value name (supersedes is a foreign key)", () => {

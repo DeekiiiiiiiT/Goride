@@ -31,6 +31,7 @@ import {
 } from "./recon_batch_bridge.ts";
 import { isReconWeekFrozen } from "./recon_week_writable.ts";
 import { uploadWeekKeys } from "./recon_desk_shape.ts";
+import { queueWeekDeskRefresh } from "./recon_desk_queue.ts";
 
 function actorCanApproveWideCoverage(c: Context): boolean {
   const user = c.get("rbacUser") as { resolvedRole?: Role } | undefined;
@@ -55,26 +56,7 @@ export function batchRowId(name: string): string {
 
 /** Queue a desk publish for every existing week run (any line) of these weeks. Never fails the upload. */
 async function queueDeskRefresh(orgId: string, weekKeys: string[]): Promise<void> {
-  const weeks = [...new Set(weekKeys.map((w) => String(w).slice(0, 10)))].filter((w) => /^\d{4}-\d{2}-\d{2}$/.test(w));
-  if (weeks.length === 0) return;
-  try {
-    const sb = getServiceClient();
-    const { data: runs, error } = await sb.schema("recon").from("week_runs")
-      .select("service_line, week_key")
-      .eq("organization_id", orgId)
-      .in("week_key", weeks);
-    if (error) throw error;
-    for (const run of (runs ?? []) as Array<{ service_line: string; week_key: string }>) {
-      const { error: qErr } = await sb.rpc("recon_enqueue_week_desk", {
-        p_org: orgId,
-        p_line: run.service_line,
-        p_week: String(run.week_key).slice(0, 10),
-      });
-      if (qErr) console.warn("[recon] desk refresh after upload failed", qErr.message);
-    }
-  } catch (e) {
-    console.warn("[recon] desk refresh after upload failed", e instanceof Error ? e.message : e);
-  }
+  await queueWeekDeskRefresh(orgId, weekKeys);
 }
 
 const IMPORTS = "/make-server-37f42386/recon/imports";

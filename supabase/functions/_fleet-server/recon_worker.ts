@@ -24,6 +24,7 @@ import { advanceOpenCloseWorkflows } from "./recon_close_workflow.ts";
 import { logReconPhase } from "./recon_phase_log.ts";
 import { writeDriverWeekBlockers } from "./recon_week_blockers.ts";
 import { decideDeskPublish } from "./recon_publish_timing.ts";
+import { enqueueWeekDesk } from "./recon_desk_queue.ts";
 import { runAlertPass } from "./recon_alerts.ts";
 import { postDueFixedExpensesThroughToday } from "./fixed_expense_nightly.ts";
 import { lockSealedFinanceWeeks } from "./business_finance_week_read.ts";
@@ -355,11 +356,33 @@ function parseMs(value: unknown): number | null {
  * while a user hold is active (capped at 15 minutes in a row). A deferred publish
  * is queued again with a delay, so it is never dropped.
  */
+/** WRA-43: a build must start this long after a request was queued to count as covering it. */
+const REQUEST_COVERED_MARGIN_MS = 5_000;
+
 async function publishDeskWhenQuiet(
   orgId: string,
   line: "rideshare" | "rush_delivery",
   weekKey: string,
-): Promise<"published" | "deferred"> {
+  /** When this request was queued. A week already published after it needs no second publish (WRA-43). */
+  enqueuedAt?: string | null,
+): Promise<"published" | "deferred" | "already_published"> {
+  const { data: run, error: runErr } = await recon()
+    .from("week_runs")
+    .select("id, desk_snapshot->>computeStartedAt")
+    .eq("organization_id", orgId)
+    .eq("service_line", line)
+    .eq("week_key", weekKey)
+    .maybeSingle();
+  if (runErr) throw new Error(`week run read failed: ${runErr.message}`);
+  // WRA-43: many changes in a row each queue a request; the first build that STARTED after a request was
+  // queued covers it (a build that started earlier may have read the data before the change). The margin
+  // covers the gap between the database clock (enqueued_at) and this server's clock (computeStartedAt).
+  const builtFromMs = parseMs((run as { computeStartedAt?: string | null } | null)?.computeStartedAt);
+  const enqueuedAtMs = parseMs(enqueuedAt);
+  if (builtFromMs != null && enqueuedAtMs != null && builtFromMs - enqueuedAtMs >= REQUEST_COVERED_MARGIN_MS) {
+    logReconPhase("desk_already_published", Date.now(), { orgId, weekKey, line });
+    return "already_published";
+  }
   const { data: lastUnit, error: unitErr } = await recon()
     .from("projection_state")
     .select("updated_at")
@@ -369,14 +392,6 @@ async function publishDeskWhenQuiet(
     .limit(1)
     .maybeSingle();
   if (unitErr) throw new Error(`week units read failed: ${unitErr.message}`);
-  const { data: run, error: runErr } = await recon()
-    .from("week_runs")
-    .select("id")
-    .eq("organization_id", orgId)
-    .eq("service_line", line)
-    .eq("week_key", weekKey)
-    .maybeSingle();
-  if (runErr) throw new Error(`week run read failed: ${runErr.message}`);
   type Hold = { hold_until?: string | null; held_since?: string | null };
   let hold: Hold | null = null;
   if (run) {
@@ -395,13 +410,11 @@ async function publishDeskWhenQuiet(
     heldSinceMs: parseMs(hold?.held_since),
   });
   if (!decision.publish) {
-    const { error } = await sb().rpc("recon_enqueue_week_desk", {
-      p_org: orgId,
-      p_line: line,
-      p_week: weekKey,
-      p_delay_seconds: decision.retryInSeconds,
-    });
-    if (error) throw new Error(`desk re-queue failed: ${error.message}`);
+    try {
+      await enqueueWeekDesk(orgId, line, weekKey, decision.retryInSeconds);
+    } catch (e) {
+      throw new Error(`desk re-queue failed: ${e instanceof Error ? e.message : e}`);
+    }
     logReconPhase("desk_deferred", Date.now(), { orgId, weekKey, line, reason: decision.reason, retryInSeconds: decision.retryInSeconds });
     return "deferred";
   }
@@ -448,13 +461,10 @@ export async function ensureWeekRunsAndDesks(nowMs = Date.now()): Promise<{ orgs
   if (missingErr) throw new Error(`missing desks read failed: ${missingErr.message}`);
   let queued = 0;
   for (const row of (missing ?? []) as Array<{ id: string; organization_id: string; service_line: string; week_key: string }>) {
-    const { error } = await sb().rpc("recon_enqueue_week_desk", {
-      p_org: row.organization_id,
-      p_line: row.service_line,
-      p_week: String(row.week_key).slice(0, 10),
-    });
-    if (error) {
-      console.warn("[recon] desk enqueue failed", error.message);
+    try {
+      await enqueueWeekDesk(row.organization_id, row.service_line, String(row.week_key).slice(0, 10));
+    } catch (e) {
+      console.warn("[recon] desk enqueue failed", e instanceof Error ? e.message : e);
       continue;
     }
     await recon().from("week_runs").update({ desk_requested_at: new Date(nowMs).toISOString() }).eq("id", row.id);
@@ -524,7 +534,7 @@ export async function processReconQueueBatch(qty = 1): Promise<{ processed: numb
   }
   let processed = 0;
   const touched: DeskTouch[] = [];
-  for (const row of (data ?? []) as Array<{ msg_id: number; message: UnitMessage }>) {
+  for (const row of (data ?? []) as Array<{ msg_id: number; message: UnitMessage; enqueued_at?: string | null }>) {
     const message = row.message || {};
     if (message.unitKind === "week_desk") {
       const line = message.serviceLine === "rush_delivery" ? "rush_delivery" : "rideshare";
@@ -532,7 +542,7 @@ export async function processReconQueueBatch(qty = 1): Promise<{ processed: numb
       const weekKey = String(message.weekKey || "").slice(0, 10);
       try {
         if (orgId && weekKey) {
-          await publishDeskWhenQuiet(orgId, line, weekKey);
+          await publishDeskWhenQuiet(orgId, line, weekKey, row.enqueued_at ?? null);
         }
         await sb().rpc("recon_archive_recompute", { p_msg_id: row.msg_id });
         processed += 1;

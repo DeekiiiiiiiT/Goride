@@ -865,7 +865,10 @@ async function buildRunPayload(
 ) {
   const run = await loadWeekRun(orgId, line, weekKey);
   if (!run) return null;
-  const build = await computeWeekDesk(orgId, line, weekKey, run);
+  // WRA-43: when this build started reading. A refresh request queued after this is not covered by it.
+  const computeStartedAt = new Date().toISOString();
+  const built = await computeWeekDesk(orgId, line, weekKey, run);
+  const build = { ...built, payload: { ...built.payload, computeStartedAt } };
   const version = await publishDeskBuild(run, build);
   await logDataRestatements(run, build.payload.corrections as PendingCorrection[]);
   const calculator = await loadCalculatorStatus(orgId, new Date().toISOString());

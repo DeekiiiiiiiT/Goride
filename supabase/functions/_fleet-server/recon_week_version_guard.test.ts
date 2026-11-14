@@ -19,7 +19,9 @@ function user(orgId: string): RbacUser {
   };
 }
 
-function fakeRecon(run: { id: string; organization_id: string; version: number; state: string } | null, claimCalls: { length: number }) {
+type FakeRun = { id: string; organization_id: string; version: number; state: string; service_line?: string; week_key?: string };
+
+function fakeRecon(run: FakeRun | null, claimCalls: { length: number }, claimStatus = "ok") {
   return {
     from() {
       return {
@@ -39,7 +41,7 @@ function fakeRecon(run: { id: string; organization_id: string; version: number; 
     },
     rpc(name: string) {
       if (name === "claim_week_change") claimCalls.length += 1;
-      return Promise.resolve({ data: { status: "ok" }, error: null });
+      return Promise.resolve({ data: { status: claimStatus }, error: null });
     },
   } as unknown as WeekReconClient;
 }
@@ -97,6 +99,7 @@ Deno.test("S3: own fleet run at version → route runs and claim is called", asy
       return await next();
     },
     reconClient: () => fakeRecon({ id: RUN_A, organization_id: ORG_A, version: 3, state: "collecting" }, claimCalls),
+    refreshWeek: async () => {},
   };
   const res = await mountApp(deps).request("/change", {
     method: "POST",
@@ -104,6 +107,67 @@ Deno.test("S3: own fleet run at version → route runs and claim is called", asy
   });
   assertEquals(res.status, 200);
   assertEquals(claimCalls.length, 1);
+});
+
+const RUN_ROW: FakeRun = {
+  id: RUN_A,
+  organization_id: ORG_A,
+  version: 3,
+  state: "collecting",
+  service_line: "rideshare",
+  week_key: "2026-09-21",
+};
+
+function signedIn(): WeekGuardDeps["requireAuthStrict"] {
+  return async (c: Context, next: () => Promise<void | Response>) => {
+    c.set("rbacUser", user(ORG_A));
+    return await next();
+  };
+}
+
+Deno.test("WRA-43: a saved change queues the week's recalculation", async () => {
+  const queued: string[] = [];
+  const deps: WeekGuardDeps = {
+    requireAuthStrict: signedIn(),
+    reconClient: () => fakeRecon(RUN_ROW, { length: 0 }),
+    refreshWeek: async (org, week, heldLine) => {
+      queued.push(`${org}|${week}|${heldLine}`);
+    },
+  };
+  const res = await mountApp(deps).request("/change", { method: "POST", headers: { "x-recon-week": HEADER } });
+  assertEquals(res.status, 200);
+  assertEquals(queued, [`${ORG_A}|2026-09-21|rideshare`]);
+});
+
+Deno.test("WRA-43: a replay or a refused change queues nothing", async () => {
+  const queued: string[] = [];
+  const refreshWeek = async (org: string, week: string) => {
+    queued.push(`${org}|${week}`);
+  };
+  const replay = await mountApp({
+    requireAuthStrict: signedIn(),
+    reconClient: () => fakeRecon(RUN_ROW, { length: 0 }, "replay"),
+    refreshWeek,
+  }).request("/change", { method: "POST", headers: { "x-recon-week": HEADER } });
+  assertEquals(replay.status, 200);
+
+  const app = new Hono();
+  app.use("*", reconWeekVersionGuardWith({ requireAuthStrict: signedIn(), reconClient: () => fakeRecon(RUN_ROW, { length: 0 }), refreshWeek }));
+  app.post("/change", (c) => c.json({ error: "NOPE" }, 400));
+  const refused = await app.request("/change", { method: "POST", headers: { "x-recon-week": HEADER } });
+  assertEquals(refused.status, 400);
+  assertEquals(queued, []);
+});
+
+Deno.test("WRA-43: a failed queue never fails the saved change", async () => {
+  const res = await mountApp({
+    requireAuthStrict: signedIn(),
+    reconClient: () => fakeRecon(RUN_ROW, { length: 0 }),
+    refreshWeek: async () => {
+      throw new Error("queue down");
+    },
+  }).request("/change", { method: "POST", headers: { "x-recon-week": HEADER } });
+  assertEquals(res.status, 200);
 });
 
 Deno.test("parseWeekHeader unchanged", () => {

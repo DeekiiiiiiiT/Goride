@@ -216,6 +216,8 @@ export interface DeriveFuelPeriodsInput {
   dataQualityReviewedByWeek?: Map<string, Set<string>>;
   /** Desk disposition map — open fill counts honor accepts (R-5). */
   dispositions?: import('./fuelFlagDisposition').FuelFlagDispositionMap;
+  /** WRA-41: week starts kept even with no fuel (Week Reconciliation opened that week; it must be finishable). */
+  keepWeekStarts?: Set<string>;
 }
 
 function entryInWeek(e: FuelEntry, start: string, end: string): boolean {
@@ -238,6 +240,7 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
     lockedWeekStarts,
     dataQualityReviewedByWeek,
     dispositions,
+    keepWeekStarts,
   } = input;
 
   return weekOptions.map((week) => {
@@ -329,6 +332,7 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
   }).filter((p) => {
     // Locked/completed weeks stay on Completed.
     if (p.locked || p.status === 'completed') return true;
+    if (keepWeekStarts?.has(p.startDate)) return true;
     // Drop empty unlocked weeks (incl. current week with $0 spend) — they are not recon work
     // and were inflating Outstanding + Finalize weeks.
     return p.vehicleCount > 0 || p.exceptionCount > 0 || p.actionableTotal > 0;

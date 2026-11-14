@@ -372,3 +372,39 @@ describe('fuelPeriodStatus', () => {
     expect(periods[0].counts['leakage-gap'].actionable).toBe(1);
   });
 });
+
+describe('WRA-41: a week opened from Week Reconciliation', () => {
+  const week = [{ id: '2026-03-23', label: '', startDate: '2026-03-23', endDate: '2026-03-23' }];
+  const base = {
+    weekOptions: week,
+    vehicles: [{ id: 'v1', fuelScenarioId: 's1' } as any],
+    fuelEntries: [] as FuelEntry[],
+    disputes: [],
+    finalizedReports: [],
+    scenarios: [],
+  };
+
+  it('drops an empty week from the normal list', () => {
+    expect(deriveFuelReconciliationPeriods(base)).toHaveLength(0);
+  });
+
+  it('keeps the empty week when asked, with its real Monday–Sunday bounds', () => {
+    const periods = deriveFuelReconciliationPeriods({ ...base, keepWeekStarts: new Set(['2026-03-23']) });
+    expect(periods).toHaveLength(1);
+    expect(periods[0].startDate).toBe('2026-03-23');
+    expect(periods[0].endDate).toBe('2026-03-29');
+    expect(periods[0].locked).toBe(false);
+  });
+
+  it('keeps only the asked week, and takes its lock from the server list', () => {
+    const twoWeeks = [...week, { id: '2026-03-30', label: '', startDate: '2026-03-30', endDate: '2026-03-30' }];
+    const periods = deriveFuelReconciliationPeriods({
+      ...base,
+      weekOptions: twoWeeks,
+      keepWeekStarts: new Set(['2026-03-23']),
+      lockedWeekStarts: new Set(['2026-03-23']),
+    });
+    expect(periods.map((p) => p.startDate)).toEqual(['2026-03-23']);
+    expect(periods[0].locked).toBe(true);
+  });
+});
