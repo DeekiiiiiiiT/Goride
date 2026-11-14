@@ -412,6 +412,29 @@ export function weekSummaryToCanonicalEvents(rows: WeekSummaryRow[]): Record<str
   }));
 }
 
+/**
+ * WRA-51: day-grain twin of weekSummaryToCanonicalEvents. Each row is dated on
+ * its Jamaica day, so month-to-date totals (pay tiers) count a week that spans
+ * two months in the right month — a Monday-dated week sum cannot.
+ */
+export function rangeSummaryToCanonicalEvents(rows: RangeSummaryRow[]): Record<string, unknown>[] {
+  return rows.map((r) => ({
+    eventType: r.entry_type,
+    netAmount: Number(r.sum_minor ?? 0) / 100,
+    grossAmount: Number(r.gross_minor ?? r.sum_minor ?? 0) / 100,
+    date: String(r.day || "").slice(0, 10),
+    eventAt: String(r.day || "").slice(0, 10),
+    organizationId: r.organization_id,
+    driverId: r.driver_id,
+    platform: r.platform,
+    direction: r.direction,
+    product: r.product,
+    entryCount: r.entry_count,
+    eventKind: "day_summary",
+    schemaVersion: 1,
+  }));
+}
+
 /** Aggregate week_summary into per-driver / per-type maps for settlement/statement screens. */
 export function foldWeekSummaryByDriverType(rows: WeekSummaryRow[]): Map<string, Map<string, number>> {
   const byDriver = new Map<string, Map<string, number>>();

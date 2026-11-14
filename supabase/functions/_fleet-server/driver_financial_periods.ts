@@ -632,21 +632,25 @@ async function loadLedgerEventsForDriverIds(
     console.warn("[DriverFinancialPeriods] skip ledger load — missing organizationId");
     return [];
   }
+  // WRA-51: day totals (Jamaica day), not Monday-dated week totals. The pay tier
+  // adds fares from the 1st of the month, so a week that starts in the previous
+  // month must keep each day's fares on their real day.
   const {
-    weekSummary,
-    weekSummaryToCanonicalEvents,
+    rangeSummary,
+    rangeSummaryToCanonicalEvents,
   } = await import("../_shared/unifiedLedger/readApi.ts");
   const { lastNWeeksRange } = await import("../_shared/unifiedLedger/dateRange.ts");
   const bounds = range ?? lastNWeeksRange(52);
-  const summary = await weekSummary({
+  const summary = await rangeSummary({
     organizationId: org,
-    from: `${bounds.from}T00:00:00.000Z`,
-    to: `${bounds.to}T23:59:59.999Z`,
+    // Jamaica calendar days (UTC−5 all year), so the range covers whole fleet days.
+    from: `${bounds.from}T00:00:00.000-05:00`,
+    to: `${bounds.to}T23:59:59.999-05:00`,
     driverIds,
     products: ["roam_driver", "roam_fleet"],
     entryTypes: ["fare_earning", "tip", "payout_cash", "promotion", "prior_period_adjustment"],
   });
-  return weekSummaryToCanonicalEvents(summary);
+  return rangeSummaryToCanonicalEvents(summary);
 }
 
 async function loadDriverTransactionsForSettlement(
