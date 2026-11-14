@@ -61,18 +61,8 @@ export {
 } from '@/fleet-bridge/FuelPages';
 
 export {
-  BridgedTollLogsPage,
   BridgedTagInventoryPage,
-  BridgedTollAnalyticsPage,
 } from '@/fleet-bridge/TollPages';
-
-export const BridgedTollReconciliationPage = bridge(() =>
-  import('@fleet/pages/TollReconciliation').then((m) => {
-    const Comp = (m as { default?: React.ComponentType }).default
-      || (() => <div>Toll reconciliation</div>);
-    return { default: Comp };
-  }),
-);
 
 export const BridgedDataCenterPage = bridge(() =>
   import('@fleet/components/imports/ImportsPage').then((m) => ({ default: m.ImportsPage })),
@@ -100,4 +90,3 @@ export const BridgedSettingsPage = bridge(() =>
   import('@fleet/components/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
 
-export { ClaimsBridgePage as BridgedClaimsPage } from '@/fleet-bridge/ClaimsBridgePage';

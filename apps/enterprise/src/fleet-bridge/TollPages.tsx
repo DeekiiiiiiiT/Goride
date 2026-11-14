@@ -9,16 +9,8 @@ function BridgeFallback() {
   );
 }
 
-const LazyTollLogs = lazy(() =>
-  import('@fleet/pages/TollLogs').then((m) => ({ default: m.TollLogsPage })),
-);
-
 const LazyTagInventory = lazy(() =>
   import('@fleet/pages/TagInventory').then((m) => ({ default: m.TagInventory })),
-);
-
-const LazyTollAnalytics = lazy(() =>
-  import('@fleet/components/toll/TollAnalytics').then((m) => ({ default: m.TollAnalytics })),
 );
 
 function wrap(Lazy: LazyExoticComponent<ComponentType>) {
@@ -33,6 +25,4 @@ function wrap(Lazy: LazyExoticComponent<ComponentType>) {
   };
 }
 
-export const BridgedTollLogsPage = wrap(LazyTollLogs);
 export const BridgedTagInventoryPage = wrap(LazyTagInventory);
-export const BridgedTollAnalyticsPage = wrap(LazyTollAnalytics);

@@ -169,14 +169,8 @@ const BridgedFuelCardsPage = lazy(() =>
 const BridgedFuelLogsPage = lazy(() =>
   import('@/fleet-bridge/FuelPages').then((m) => ({ default: m.BridgedFuelLogsPage })),
 );
-const BridgedTollLogsPage = lazy(() =>
-  import('@/fleet-bridge/TollPages').then((m) => ({ default: m.BridgedTollLogsPage })),
-);
 const BridgedTagInventoryPage = lazy(() =>
   import('@/fleet-bridge/TollPages').then((m) => ({ default: m.BridgedTagInventoryPage })),
-);
-const BridgedTollAnalyticsPage = lazy(() =>
-  import('@/fleet-bridge/TollPages').then((m) => ({ default: m.BridgedTollAnalyticsPage })),
 );
 const BridgedDataCenterPage = lazy(() =>
   import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedDataCenterPage })),
@@ -186,9 +180,6 @@ const BridgedReportsPage = lazy(() =>
 );
 const BridgedBusinessFinancePage = lazy(() =>
   import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedBusinessFinancePage })),
-);
-const BridgedClaimsPage = lazy(() =>
-  import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedClaimsPage })),
 );
 const BridgedSettingsPage = lazy(() =>
   import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedSettingsPage })),
@@ -664,43 +655,13 @@ export default function App() {
               </Gated>
             }
           />
-          <Route path="toll" element={<Navigate to="/app/toll/logs" replace />} />
-          <Route
-            path="toll/logs"
-            element={
-              <Gated module="tollManagement">
-                <Suspense fallback={<Fall />}>
-                  <BridgedTollLogsPage />
-                </Suspense>
-              </Gated>
-            }
-          />
+          <Route path="toll" element={<Navigate to="/app/toll/tag-inventory" replace />} />
           <Route
             path="toll/tag-inventory"
             element={
               <Gated module="tollManagement">
                 <Suspense fallback={<Fall />}>
                   <BridgedTagInventoryPage />
-                </Suspense>
-              </Gated>
-            }
-          />
-          <Route
-            path="toll/analytics"
-            element={
-              <Gated module="tollManagement">
-                <Suspense fallback={<Fall />}>
-                  <BridgedTollAnalyticsPage />
-                </Suspense>
-              </Gated>
-            }
-          />
-          <Route
-            path="toll/claims"
-            element={
-              <Gated module="claimableLoss">
-                <Suspense fallback={<Fall />}>
-                  <BridgedClaimsPage />
                 </Suspense>
               </Gated>
             }
@@ -736,7 +697,7 @@ export default function App() {
               </Gated>
             }
           />
-          <Route path="claims" element={<Navigate to="/app/toll/claims" replace />} />
+          <Route path="toll/logs" element={<Navigate to="/app/toll/tag-inventory" replace />} />
           <Route
             path="team"
             element={

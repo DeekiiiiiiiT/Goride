@@ -117,20 +117,12 @@ const NAV_ITEMS: NavItem[] = [
         label: 'Toll',
         icon: MapPin,
         children: [
-          { to: '/app/toll/logs', label: 'Toll Logs', icon: FileText, module: 'tollManagement' },
           {
             to: '/app/toll/tag-inventory',
             label: 'Tag Inventory',
             icon: Tags,
             module: 'tollManagement',
           },
-          {
-            to: '/app/toll/analytics',
-            label: 'Toll Analytics',
-            icon: LineChart,
-            module: 'tollManagement',
-          },
-          { to: '/app/toll/claims', label: 'Claims', icon: Boxes, module: 'claimableLoss' },
         ],
       },
       {
