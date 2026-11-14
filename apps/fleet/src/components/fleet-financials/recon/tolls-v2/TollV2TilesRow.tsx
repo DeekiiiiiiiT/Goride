@@ -23,7 +23,8 @@ export function TollV2TilesRow({
       emphasize: true,
     },
     {
-      label: 'Paid back by Uber',
+      // Uber and InDrive both pay tolls back on the trip (toll-core v2 adapters).
+      label: 'Paid back by platforms',
       value: tiles.platformMinor,
       sub: `${subcounts.verifiedMatchCount} verified matches`,
       icon: <Sparkles className="h-4 w-4 text-[#1d4ed8]" aria-hidden />,
