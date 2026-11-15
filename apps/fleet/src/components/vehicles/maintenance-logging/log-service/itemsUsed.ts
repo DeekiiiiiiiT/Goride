@@ -156,22 +156,26 @@ type SavedItemLike = Partial<LineItemDraft> & {
   part_source?: "car" | "size" | "typed" | null;
 };
 
-/** Map a saved line item from the API into screen draft fields (partFit, partLabel). */
+/**
+ * Map an item into screen draft fields when a job is (re)opened. Two kinds of input:
+ * - a draft already on screen this visit (it has `partFit` / `partLabel` set by the picker): kept as is, so
+ *   reopening a job never forgets a "fits by size" pick;
+ * - an item read back from the server (no `partFit`, no `partLabel`): `partFit` comes from the saved
+ *   `partSource`, and the label is the brand (or part number), like a typed-in part shows.
+ * The saved `partSource` is kept on the draft (NULL included) so an unchanged item is sent back as it was.
+ */
 export function draftFromSavedItem(item: SavedItemLike): LineItemDraft {
   const draft = { ...item } as LineItemDraft;
-  const rawSource = item.partSource ?? item.part_source ?? null;
-  if (draft.partSource === undefined) draft.partSource = rawSource;
+  const fromServer = item.partFit === undefined && item.partLabel == null;
+  if (!fromServer) return draft;
 
+  const rawSource = item.partSource !== undefined ? item.partSource : (item.part_source ?? null);
+  draft.partSource = rawSource ?? null;
   if (draft.itemKind === "part_type") {
-    if (rawSource === "car") draft.partFit = "car";
-    else if (rawSource === "size") draft.partFit = "size";
-    else draft.partFit = null;
-
+    draft.partFit = rawSource === "car" ? "car" : rawSource === "size" ? "size" : null;
     const brand = draft.brand?.toString().trim();
     const partNumber = draft.partNumber?.toString().trim();
-    if (brand || partNumber) {
-      draft.partLabel = brand && partNumber ? `${brand} · ${partNumber}` : (brand || partNumber || null);
-    }
+    if (brand || partNumber) draft.partLabel = brand || partNumber || null;
   }
   return draft;
 }

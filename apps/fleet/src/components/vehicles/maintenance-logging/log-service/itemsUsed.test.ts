@@ -200,7 +200,7 @@ describe("draftFromSavedItem", () => {
       qty: 1,
     });
     expect(typed.partFit).toBeNull();
-    expect(typed.partLabel).toBe("Toyota genuine · 22271");
+    expect(typed.partLabel).toBe("Toyota genuine");
     expect(pickedPartBadge(typed)).toBe("typed");
 
     const nullBrand = draftFromSavedItem({
@@ -214,5 +214,29 @@ describe("draftFromSavedItem", () => {
 
     expect(draftFromSavedItem({ itemKind: "part_type", partSource: "car", partId: "p1" }).partFit).toBe("car");
     expect(draftFromSavedItem({ itemKind: "part_type", partSource: null, partId: null }).partLabel).toBeUndefined();
+  });
+
+  // Code review 15 Nov: reopening a job in the same visit must not forget a "fits by size" pick.
+  it("keeps a draft already on screen as it is (in-visit reopen)", () => {
+    const onScreen = { ...draftFromJobItem(gasket), partFit: "size" as const, partLabel: "Fel-Pro · Gasket", brand: "Fel-Pro" };
+    const reopened = draftFromSavedItem(onScreen);
+    expect(reopened.partFit).toBe("size");
+    expect(reopened.partLabel).toBe("Fel-Pro · Gasket");
+    expect(pickedPartBadge(reopened)).toBe("size");
+    expect(lineItemForWire(reopened).partSource).toBe("size");
+  });
+
+  // Code review 15 Nov: an older saved item (part_source NULL) is sent back as NULL, never relabelled "typed".
+  it("sends a saved item's partSource back unchanged, NULL included", () => {
+    const legacy = draftFromSavedItem({ ...draftFromJobItem(gasket), partSource: null, brand: "ACME" });
+    expect(lineItemForWire(legacy).partSource).toBeNull();
+    const savedSize = draftFromSavedItem({ ...draftFromJobItem(gasket), partSource: "size", brand: "ACME" });
+    expect(lineItemForWire(savedSize).partSource).toBe("size");
+    // a new pick clears partSource (the dialog sets it to undefined), so the wire works it out again
+    expect(lineItemForWire({ ...legacy, partSource: undefined }).partSource).toBe("typed");
+  });
+
+  it("a fits-by-size pick with no maker or part number is still sent as size", () => {
+    expect(lineItemForWire({ ...draftFromJobItem(gasket), partFit: "size", partLabel: "Universal clamp" }).partSource).toBe("size");
   });
 });

@@ -2096,7 +2096,8 @@ export function LogMaintenanceServiceDialog({
           setLineExtras((prev) => ({
             ...prev,
             items: prev.items.map((it) =>
-              it.source === "suggested" && it.jobItemId === target.jobItemId ? { ...it, ...picked } : it,
+              // A new pick replaces the saved partSource, so the wire works it out from this pick.
+              it.source === "suggested" && it.jobItemId === target.jobItemId ? { ...it, ...picked, partSource: undefined } : it,
             ),
           }));
         }}

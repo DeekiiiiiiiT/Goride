@@ -260,6 +260,9 @@ export function lineItemsAmount(line: Pick<MaintenanceLogLine, "items" | "itemsA
 function partSourceForWire(item: LineItemDraft): "car" | "size" | "typed" | null {
   if (item.itemKind !== "part_type") return null;
   if (item.partId) return "car";
+  // Read back from the server and not re-picked since (a new pick clears partSource): send what was saved,
+  // NULL included, so an older item is never relabelled "typed" just by saving the service again.
+  if (item.partSource !== undefined) return item.partSource === "car" ? null : item.partSource;
   if (item.partFit === "size") return "size";
   const brand = item.brand?.toString().trim();
   const partNumber = item.partNumber?.toString().trim();

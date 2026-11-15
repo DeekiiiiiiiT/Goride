@@ -109,7 +109,9 @@ Deno.test("parseLineItems part_source validation", () => {
     })], { declined: false }).ok,
     false,
   );
-  assertEquals(parseLineItems([partRow({ partSource: "size" })], { declined: false }).ok, false);
+  // "typed" must name something; a "fits by size" pick may have no maker or part number (code review, 15 Nov).
+  assertEquals(parseLineItems([partRow({ partSource: "typed" })], { declined: false }).ok, false);
+  assertEquals(parseLineItems([partRow({ partSource: "size" })], { declined: false }).ok, true);
   assertEquals(parseLineItems([partRow({ partSource: "typed", brand: "B" })], { declined: false }).ok, true);
 });
 

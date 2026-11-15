@@ -252,7 +252,9 @@ export function parseLineItems(
       }
     }
 
-    if (itemKind === "part_type" && (partSource === "size" || partSource === "typed")) {
+    // Only a typed-in part must name something. A "fits by size" pick can come from a catalogue part with no
+    // maker or part number (the picker allows it), so it isn't refused here.
+    if (itemKind === "part_type" && partSource === "typed") {
       const hasBrand = brand != null;
       const hasPartNumber = partNumber != null;
       if (!hasBrand && !hasPartNumber) {

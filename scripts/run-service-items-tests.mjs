@@ -77,7 +77,7 @@ async function main() {
   }
 
   try {
-    step('supabase migration up', 'npx', ['supabase', 'migration', 'up']);
+    step('supabase migration up', 'npx', ['supabase', 'migration', 'up', '--include-all']);
     step('build fleet-ops bundle', 'node', ['scripts/build-edge-bundle.mjs', 'fleet-ops']);
     step('build fleet-core bundle', 'node', ['scripts/build-edge-bundle.mjs', 'fleet-core']);
 
