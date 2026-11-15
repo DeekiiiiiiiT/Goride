@@ -4,6 +4,8 @@
 
 ## ⏸ START HERE (paused 14 Nov 2026 ~16:30 UTC, owner on a break — new chat picks up here)
 
+**UPDATE 15 Nov 01:53 UTC — Week of 21 Sep 2026 CLOSED** (Kenny: 33% after WRA-51, owed J$188.38 → Collect recorded, settled 0.00). Kenny's open weeks 28 Sep–9 Nov (not 12 Oct) re-queued so they rebuild at the fixed rate. **Next: Week of 28 Sep 2026** — Uber files (Replace file), TransJam "Sept 28 - Oct 4" usage + top-up; Tag account closing **9,214.00** (5,969 + 5,000 − 1,755). The text below is the 14 Nov state.
+
 **Where the owner is:** Week of **21 Sep 2026** (Rideshare), on **step 4 Tag account**. Steps 1–3 complete (all 8 inputs green, tolls decided + sealed). Everything below is pushed and live (main `8dcb7c19`, edge deploy success).
 
 **Exact next steps (one per reply, owner sends screenshots):**
