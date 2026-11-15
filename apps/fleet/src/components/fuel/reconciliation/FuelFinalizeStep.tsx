@@ -23,6 +23,11 @@ export type ImplausibleFillStop = {
 };
 
 export type FuelFinalizeStepProps = {
+  /**
+   * Week Reconciliation slides (Stitch part 5): the fill blockers live in Part 1 and the
+   * "Still open" list jumps there, so this card does not repeat them.
+   */
+  desk?: boolean;
   periodLocked: boolean;
   exceptionBlockers: FuelExceptionBlocker[];
   unapprovedFuelTxBlockers?: FuelUnapprovedTxBlocker[];
@@ -73,6 +78,7 @@ export type FuelFinalizeStepProps = {
 
 export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
   const {
+    desk = false,
     periodLocked,
     exceptionBlockers,
     unapprovedFuelTxBlockers = [],
@@ -126,19 +132,19 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
   return (
     <div className="space-y-3">
       {closableBlockMessages.length > 0 && (
-        <div
-          className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-950"
-          role="alert"
-        >
-          <p className="font-semibold">Finalize is blocked</p>
+        <div className="space-y-2 text-sm text-[#0b1c30]" role="alert">
+          <p className="text-[12px] font-semibold uppercase tracking-wider text-[#ba1a1a]">Finalize is blocked</p>
           {stopToStopSummary &&
           hasStopToStopBlock &&
           !/is clear/i.test(stopToStopSummary) ? (
-            <p className="mt-1 text-rose-900">{stopToStopSummary}</p>
+            <p className="text-[#47464c]">{stopToStopSummary}</p>
           ) : null}
-          <ul className="mt-1 list-inside list-disc space-y-0.5">
+          <ul className="space-y-2">
             {closableBlockMessages.map((m) => (
-              <li key={m}>{m}</li>
+              <li key={m} className="flex items-start gap-3 rounded-2xl bg-[#eff4ff] px-4 py-3 text-[15px]">
+                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#ba1a1a]" aria-hidden />
+                {m}
+              </li>
             ))}
           </ul>
           {hasStopToStopBlock && (fixStopToStop || onOpenIntegrityStopToStop) ? (
@@ -222,41 +228,57 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
         </div>
       )}
       {provenance && (
-        <div
-          className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[13px] text-slate-800"
-          role="status"
-          aria-live="polite"
-        >
-          <p className="font-semibold text-slate-900">What this week used</p>
-          <ul className="mt-1 list-inside list-disc space-y-0.5 text-slate-700">
-            <li>
-              Trips: {provenance.tripsTimedOut ? 'failed' : provenance.tripCount ? 'loaded' : 'loading'}
-            </li>
-            <li>Distances: {provenance.deadheadTimedOut ? 'failed' : 'loaded'}</li>
-            <li>Allowance: {provenance.personalAllowanceTimedOut ? 'failed' : 'loaded'}</li>
-            <li>Cards: {provenance.fuelCardsMissing ? 'failed' : 'loaded'}</li>
+        <div className="space-y-2" role="status" aria-live="polite">
+          <p className="text-[12px] font-semibold uppercase tracking-wider text-[#47464c]">What this week used</p>
+          <ul className="flex flex-wrap gap-2 text-[13px]">
+            {[
+              {
+                label: 'Trips',
+                state: provenance.tripsTimedOut ? 'failed' : provenance.tripCount ? `${provenance.tripCount} loaded` : 'loading',
+              },
+              { label: 'Distances', state: provenance.deadheadTimedOut ? 'failed' : 'loaded' },
+              { label: 'Allowance', state: provenance.personalAllowanceTimedOut ? 'failed' : 'loaded' },
+              { label: 'Cards', state: provenance.fuelCardsMissing ? 'failed' : 'loaded' },
+            ].map((item) => (
+              <li
+                key={item.label}
+                className={`rounded-full px-3 py-1 ${
+                  item.state === 'failed'
+                    ? 'bg-[#fff1f2] text-[#ba1a1a]'
+                    : item.state === 'loading'
+                      ? 'bg-[#f1f5f9] text-[#475569]'
+                      : 'bg-[#ecfdf5] text-[#069669]'
+                }`}
+              >
+                {item.state === 'failed' || item.state === 'loading' ? '' : '✓ '}
+                {item.label}: {item.state}
+              </li>
+            ))}
           </ul>
         </div>
       )}
-      <FuelUnapprovedTxBlockersPanel
-        blockers={unapprovedFuelTxBlockers}
-        onOpenReviewQueue={onOpenReviewQueue}
-      />
-      <FuelExceptionBlockersPanel
-        blockers={exceptionBlockers}
-        plateByVehicleId={plateByVehicleId}
-        busyId={exceptionBusyId}
-        onAcceptException={onAcceptException}
-        onEditFill={onEditFill}
-      />
+      {desk ? null : (
+        <>
+          <FuelUnapprovedTxBlockersPanel
+            blockers={unapprovedFuelTxBlockers}
+            onOpenReviewQueue={onOpenReviewQueue}
+          />
+          <FuelExceptionBlockersPanel
+            blockers={exceptionBlockers}
+            plateByVehicleId={plateByVehicleId}
+            busyId={exceptionBusyId}
+            onAcceptException={onAcceptException}
+            onEditFill={onEditFill}
+          />
+        </>
+      )}
       {hasBlockingWarnings && !hasExceptionBlockers && !hasUnapprovedFuelTxBlockers && (
-        <label className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <label className="flex items-center gap-3 rounded-2xl bg-[#f8f9ff] px-4 py-4 text-[15px] text-[#0b1c30]">
           <Checkbox
             checked={financeWarningAcknowledged}
             onCheckedChange={(v) => onFinanceWarningChange(!!v)}
-            className="mt-0.5"
           />
-          I reviewed data-quality and re-finalize warnings for this week.
+          I checked the warnings for this week.
         </label>
       )}
       {needsSecondApprover && !periodLocked ? (

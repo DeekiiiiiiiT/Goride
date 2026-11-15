@@ -5,7 +5,7 @@ import { FuelPeriodStepper } from './FuelPeriodStepper';
 import { createPortal } from 'react-dom';
 import { FuelDeskFinalizeBar } from './FuelDeskSection';
 import { FuelDeskSlides, FuelStillOpenList, openParts, type FuelSlidePart } from './FuelDeskSlides';
-import { FuelDisputesEmpty, FuelPolicyBars } from './FuelSlideParts';
+import { FuelDisputesEmpty, FuelDistanceSummary, FuelPolicyBars } from './FuelSlideParts';
 import { FuelWeekMoneyStrip } from './FuelWeekMoneyStrip';
 import {
   FuelWizardOverflowMenu,
@@ -1430,6 +1430,7 @@ function FuelPeriodWizardInner({
 
   const finalizeStepNode = (
               <FuelFinalizeStep
+                desk={deskSections}
                 periodLocked={periodLocked}
                 exceptionBlockers={exceptionBlockers}
                 unapprovedFuelTxBlockers={unapprovedFuelTxBlockers}
@@ -1619,11 +1620,12 @@ function FuelPeriodWizardInner({
           ? { text: `${openDisputes.length} open`, tone: 'fix' as const }
           : { text: 'Nothing open', tone: 'done' as const },
       policy: { text: 'Check', tone: 'info' as const },
-      distance: leakageReviewed
-        ? { text: 'Done', tone: 'done' as const }
-        : stopToStopBlocking
-          ? { text: 'To fix', tone: 'fix' as const }
-          : { text: 'Review', tone: 'review' as const },
+      // Review only when an accept is really needed (unexplained fuel), else this part is done.
+      distance: stopToStopBlocking
+        ? { text: 'To fix', tone: 'fix' as const }
+        : leakageStepHero.showDispositionForm && !leakageReviewed
+          ? { text: 'Review', tone: 'review' as const }
+          : { text: 'Done', tone: 'done' as const },
       finalize: periodLocked
         ? { text: 'Locked', tone: 'done' as const }
         : finalizeBlockedReason
@@ -1711,7 +1713,17 @@ function FuelPeriodWizardInner({
         description: 'How the car was driven this week, and how the fuel cost is split.',
         status: slideStatus.distance,
         testId: 'recon-fuel-section-distance',
-        content: leakageStepNode,
+        content: (
+          <div className="space-y-5">
+            <FuelDistanceSummary
+              reports={liveReports}
+              totalSpend={strip.totalSpend}
+              company={strip.company}
+              driver={strip.driver}
+            />
+            {leakageStepNode}
+          </div>
+        ),
       },
       {
         id: 'finalize',

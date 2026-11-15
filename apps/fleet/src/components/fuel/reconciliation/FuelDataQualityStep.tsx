@@ -3,7 +3,7 @@
  * Cash-desk actions: Review details (flagged evidence overlay) + Mark reviewed.
  */
 import { useState } from 'react';
-import { Gauge, TrendingUp, TriangleAlert, User } from 'lucide-react';
+import { CheckCircle2, Plus, ReceiptText } from 'lucide-react';
 import { Badge } from '../../ui/badge';
 import { Button } from '../../ui/button';
 import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
@@ -72,88 +72,6 @@ export function plainIssue(r: FuelQualityRow, openFlaggedFillCount = 0): string 
     parts.push('Review this vehicle.');
   }
   return parts.join(' · ');
-}
-
-function FlaggedVehicleCard({
-  r,
-  periodLocked,
-  onReviewDetails,
-  onMarkReviewed,
-  openCriticalCount = 0,
-  openFlaggedFillCount = 0,
-}: {
-  r: FuelQualityRow;
-  periodLocked?: boolean;
-  onReviewDetails: (row: FuelQualityRow) => void;
-  onMarkReviewed?: (vehicleId: string) => void;
-  openCriticalCount?: number;
-  openFlaggedFillCount?: number;
-}) {
-  const markBlocked = openCriticalCount > 0;
-  return (
-    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-colors hover:border-slate-300">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-base font-bold tracking-tight text-slate-900">{r.plate}</span>
-          </div>
-          <p className="mt-0.5 flex items-center gap-1 text-sm text-slate-500">
-            <User className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            Driver: <span className="font-medium text-slate-900">{r.driverName}</span>
-          </p>
-        </div>
-        <span
-          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${severityChipClass(r)}`}
-        >
-          {r.odometerIncomplete ? (
-            <Gauge className="h-3.5 w-3.5" aria-hidden />
-          ) : (
-            <TriangleAlert className="h-3.5 w-3.5" aria-hidden />
-          )}
-          {severityLabel(r)}
-        </span>
-      </div>
-      <p className="mt-2.5 rounded-lg border border-slate-200/60 bg-slate-50/80 p-2.5 text-sm leading-relaxed text-slate-600">
-        {plainIssue(r, openFlaggedFillCount)}
-        {r.totalSpend > FUEL_SPEND_EPS && (
-          <>
-            {' '}
-            <strong className="font-semibold text-slate-900">
-              {formatFuelMoney(r.totalSpend)}
-            </strong>
-          </>
-        )}
-      </p>
-      <div className="mt-3 flex flex-col gap-2">
-        <button
-          type="button"
-          className="flex h-12 w-full items-center justify-center gap-1.5 rounded-xl bg-slate-100 text-sm font-semibold text-[#3525cd] transition-colors hover:bg-slate-200 active:scale-[0.98]"
-          onClick={() => onReviewDetails(r)}
-        >
-          Review details
-          <span aria-hidden>→</span>
-        </button>
-        {!periodLocked && onMarkReviewed && (
-          <>
-            <Button
-              type="button"
-              className="h-12 min-h-12 w-full rounded-xl bg-[#3525cd] text-white hover:bg-[#2a1ea4] disabled:opacity-50"
-              disabled={markBlocked}
-              onClick={() => onMarkReviewed(r.id)}
-            >
-              Mark reviewed
-            </Button>
-            {markBlocked && (
-              <p className="text-center text-xs text-rose-700">
-                {openCriticalCount} flagged fill
-                {openCriticalCount === 1 ? '' : 's'} need a decision first.
-              </p>
-            )}
-          </>
-        )}
-      </div>
-    </article>
-  );
 }
 
 /**
@@ -252,14 +170,19 @@ export function FuelDataQualityStep({
   return (
     <div className="space-y-4">
       {(flaggedFillCount > 0 || uncleared.length > 0) && (
-        <p className="text-sm text-slate-600">
-          <span className="font-semibold text-slate-900">
+        <div className="flex flex-wrap items-baseline justify-between gap-2" data-testid="fuel-dq-summary">
+          <p className="text-[12px] font-semibold uppercase tracking-wider text-[#47464c]">
             {flaggedFillCount} flagged fill{flaggedFillCount === 1 ? '' : 's'}
-          </span>
-          {uncleared.length > 0
-            ? ` · ${uncleared.length} vehicle${uncleared.length === 1 ? '' : 's'} still need review`
-            : ''}
-        </p>
+            {uncleared.length > 0
+              ? ` · ${uncleared.length} car${uncleared.length === 1 ? '' : 's'} still need${uncleared.length === 1 ? 's' : ''} a review`
+              : ''}
+          </p>
+          {uncleared.length > 0 ? (
+            <p className="text-[15px] text-[#0b1c30]">
+              Total: {formatFuelMoney(uncleared.reduce((s, r) => s + (Number(r.totalSpend) || 0), 0))}
+            </p>
+          ) : null}
+        </div>
       )}
       {needsOdometerChainAck && !periodLocked && (
         <div className="space-y-3 rounded border border-amber-200 bg-amber-50 px-4 py-3">
@@ -297,176 +220,62 @@ export function FuelDataQualityStep({
         </div>
       )}
 
-      {/* Desktop filter/utility bar — Stitch C */}
-      <div className="hidden items-center justify-between gap-2 rounded border border-slate-200 bg-white p-2.5 md:flex">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="rounded border border-slate-200 bg-slate-100 px-2.5 py-1 text-sm font-bold text-[#3525cd]">
-            All Issues ({uncleared.length})
-          </span>
-          <span className="px-2.5 py-1 text-sm text-slate-500">
-            Flagged vehicles pending review
-          </span>
-        </div>
-        {!periodLocked && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 min-h-8"
-            onClick={onAddAdjustment}
-          >
-            <TrendingUp className="mr-1.5 h-4 w-4" />
-            Add Adjustment
-          </Button>
-        )}
-      </div>
-
-      {/* Mobile utility — Stitch B keeps actions quieter */}
-      {!periodLocked && (
-        <div className="flex flex-wrap gap-2 md:hidden">
-          <Button type="button" variant="outline" className="min-h-11" onClick={onAddAdjustment}>
-            <TrendingUp className="mr-2 h-4 w-4" />
-            Add Adjustment
-          </Button>
-        </div>
-      )}
-
-      <p className="text-[12px] leading-[16px] text-slate-500 md:hidden" title={UNAVAILABLE_KM_POLICY}>
-        {UNAVAILABLE_KM_POLICY}
-      </p>
-
       {uncleared.length === 0 && flagged.length === 0 ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-10 text-center text-sm text-emerald-800">
-          Nothing to fix — Continue.
+        <div className="flex items-center gap-2 rounded-2xl bg-[#ecfdf5] px-4 py-4 text-[15px] text-[#069669]" title={UNAVAILABLE_KM_POLICY}>
+          <CheckCircle2 className="h-5 w-5 shrink-0" aria-hidden /> No car needs a look this week.
         </div>
       ) : uncleared.length === 0 ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-6 text-center text-sm text-emerald-800">
-          All flagged vehicles reviewed — Continue.
+        <div className="flex items-center gap-2 rounded-2xl bg-[#ecfdf5] px-4 py-4 text-[15px] text-[#069669]">
+          <CheckCircle2 className="h-5 w-5 shrink-0" aria-hidden /> Every flagged car is reviewed.
         </div>
       ) : (
-        <>
-          {/* Stitch B mobile cards */}
-          <div className="space-y-3 md:hidden">
-            <div className="flex items-baseline justify-between gap-2 px-0.5">
-              <h4 className="text-base font-semibold text-slate-900">
-                Vehicles that need a quick look ({uncleared.length})
-              </h4>
-              <span className="text-xs text-slate-400">Action required</span>
-            </div>
-            <ul className="space-y-3">
-              {uncleared.map((r) => (
-                <li key={r.id}>
-                  <FlaggedVehicleCard
-                    r={r}
-                    periodLocked={periodLocked}
-                    onReviewDetails={setReviewRow}
-                    onMarkReviewed={onMarkReviewed}
-                    openCriticalCount={openCriticalByVehicle(r.id)}
-                    openFlaggedFillCount={openFlaggedByVehicle(r.id)}
-                  />
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Stitch C desktop table */}
-          <div className="hidden overflow-hidden rounded border border-slate-200 bg-white md:block">
-            <table className="w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
-                  <th className="px-4 py-2.5 font-semibold">Vehicle &amp; Plate</th>
-                  <th className="px-3 py-2.5 font-semibold">Driver</th>
-                  <th className="px-3 py-2.5 font-semibold">Issue Description</th>
-                  <th className="px-3 py-2.5 font-semibold">Severity</th>
-                  <th className="px-3 py-2.5 text-right font-semibold">Impact</th>
-                  <th className="px-4 py-2.5 text-right font-semibold">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {uncleared.map((r) => (
-                  <tr
-                    key={r.id}
-                    className={`min-h-[52px] transition-colors hover:bg-slate-50/60 ${
-                      r.healthStatus === 'Red' ? 'bg-rose-50/40' : ''
-                    }`}
+        <ul className="space-y-3" data-testid="fuel-dq-cars">
+          {uncleared.map((r) => {
+            const critical = openCriticalByVehicle(r.id);
+            return (
+              <li key={r.id} className="flex flex-col gap-4 rounded-2xl bg-[#eff4ff] p-5 md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0">
+                  <p className="flex flex-wrap items-baseline gap-x-3 text-[15px] text-[#0b1c30]">
+                    <span className="text-lg font-semibold">{r.plate}</span>
+                    <span className="text-[#47464c]">·</span>
+                    <span>{r.driverName}</span>
+                  </p>
+                  <p className="mt-1 text-sm text-[#47464c]">
+                    {plainIssue(r, openFlaggedByVehicle(r.id))} · {formatFuelMoney(r.totalSpend)} total
+                  </p>
+                  {critical > 0 && !periodLocked ? (
+                    <p className="mt-1 text-[13px] text-[#ba1a1a]">
+                      {critical} flagged fill{critical === 1 ? '' : 's'} need{critical === 1 ? 's' : ''} a decision first.
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                  <span className={`rounded-full px-3 py-1 text-[12px] font-semibold ${r.healthStatus === 'Red' ? 'bg-[#fff1f2] text-[#ba1a1a]' : 'bg-[#dce9ff] text-[#0b1c30]'}`}>
+                    {severityLabel(r)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setReviewRow(r)}
+                    className="h-10 rounded-xl border border-[#cbd5e1] bg-white px-4 text-sm font-semibold text-[#0b1c30] hover:bg-[#f8f9ff]"
                   >
-                    <td className="px-4 py-3">
-                      <div className="font-semibold text-slate-900">{r.plate}</div>
-                    </td>
-                    <td className="px-3 py-3 font-medium text-slate-900">{r.driverName}</td>
-                    <td className="px-3 py-3">
-                      <div
-                        className={
-                          r.healthStatus === 'Red'
-                            ? 'font-medium text-rose-700'
-                            : 'text-slate-900'
-                        }
-                      >
-                        {plainIssue(r, openFlaggedByVehicle(r.id))}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3">
-                      <span
-                        className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs font-semibold ${severityChipClass(r)}`}
-                      >
-                        {severityLabel(r)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3 text-right">
-                      <div
-                        className={`font-bold tabular-nums ${
-                          r.healthStatus === 'Red' ? 'text-rose-700' : 'text-slate-900'
-                        }`}
-                      >
-                        {formatFuelMoney(r.totalSpend)}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex flex-wrap items-center justify-end gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-8 min-h-8"
-                          onClick={() => setReviewRow(r)}
-                        >
-                          Review details
-                        </Button>
-                        {!periodLocked && onMarkReviewed && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            className={`h-8 min-h-8 disabled:opacity-50 ${
-                              r.healthStatus === 'Red'
-                                ? 'bg-rose-600 text-white hover:bg-rose-700'
-                                : 'bg-[#3525cd] text-white hover:bg-[#2a1ea4]'
-                            }`}
-                            disabled={openCriticalByVehicle(r.id) > 0}
-                            title={
-                              openCriticalByVehicle(r.id) > 0
-                                ? `${openCriticalByVehicle(r.id)} flagged fills need a decision first`
-                                : undefined
-                            }
-                            onClick={() => onMarkReviewed(r.id)}
-                          >
-                            Mark reviewed
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-500">
-              <span>
-                Showing {uncleared.length} vehicle exception
-                {uncleared.length === 1 ? '' : 's'} (mark reviewed to continue)
-              </span>
-              <span className="text-xs text-slate-400">Sorted by severity</span>
-            </div>
-          </div>
-        </>
+                    Review details
+                  </button>
+                  {!periodLocked && onMarkReviewed ? (
+                    <button
+                      type="button"
+                      disabled={critical > 0}
+                      title={critical > 0 ? `${critical} flagged fills need a decision first` : undefined}
+                      onClick={() => onMarkReviewed(r.id)}
+                      className="h-10 rounded-xl bg-[#030213] px-4 text-sm font-semibold text-white hover:bg-[#213145] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Mark reviewed
+                    </button>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
 
       {pendingOnly.length > 0 && (
@@ -476,22 +285,24 @@ export function FuelDataQualityStep({
         </p>
       )}
 
-      <Button
-        type="button"
-        variant="outline"
-        className="min-h-11 md:hidden"
-        onClick={onToggleBreakdown}
-      >
-        {showBreakdown ? 'Hide' : 'Show'} full cost breakdown
-      </Button>
-      <Button
-        type="button"
-        variant="link"
-        className="hidden h-auto min-h-11 px-0 text-sm text-[#3525cd] md:inline-flex"
-        onClick={onToggleBreakdown}
-      >
-        {showBreakdown ? 'Hide' : 'Show'} full cost breakdown →
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        {!periodLocked ? (
+          <button
+            type="button"
+            onClick={onAddAdjustment}
+            className="flex h-10 items-center gap-2 rounded-xl border border-[#cbd5e1] bg-white px-4 text-sm font-semibold text-[#0b1c30] hover:bg-[#eff4ff]"
+          >
+            <Plus className="h-4 w-4" aria-hidden /> Add adjustment
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={onToggleBreakdown}
+          className="flex h-10 items-center gap-2 rounded-xl border border-[#cbd5e1] bg-white px-4 text-sm font-semibold text-[#0b1c30] hover:bg-[#eff4ff]"
+        >
+          <ReceiptText className="h-4 w-4" aria-hidden /> {showBreakdown ? 'Hide' : 'Show'} full cost breakdown
+        </button>
+      </div>
 
       {showBreakdown && (
         <div className="overflow-x-auto rounded border border-slate-200 bg-white">

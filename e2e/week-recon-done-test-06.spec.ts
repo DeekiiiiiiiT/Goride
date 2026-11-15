@@ -58,17 +58,21 @@ test('done-test 6: resolve a fuel check, then Finalize fuel → Fuel complete on
   await expect(checks).toContainText('1 to fix', { timeout: 60_000 });
   // Not complete on its own, and Finalize stays off while the check is open.
   await expect(up.page.getByTestId('recon-step-fuel')).not.toContainText(/Complete|Fuel locked/);
+  // One part at a time: Finalize fuel lives on part 5.
+  await up.page.getByTestId('recon-fuel-part-finalize').click();
   await expect(up.page.getByTestId('recon-finalize-fuel')).toBeDisabled();
+  await up.page.getByTestId('recon-fuel-part-checks').click();
 
   await checks.getByRole('button', { name: 'Resolve' }).first().click();
   const dlg = up.page.getByRole('dialog').last();
   await dlg.locator('#exception-resolve-note').fill('Reviewed with the driver — the fill is right');
   await dlg.getByRole('button', { name: /Looks correct/ }).click();
   await expect(dlg).toBeHidden({ timeout: 30_000 });
-  await expect(checks).toContainText('Clear', { timeout: 60_000 });
+  await expect(up.page.getByTestId('recon-fuel-part-checks')).toContainText('Done', { timeout: 60_000 });
 
   // Still not complete until Finalize is pressed.
   await expect(up.page.getByTestId('recon-step-fuel')).not.toContainText(/Complete|Fuel locked/);
+  await up.page.getByTestId('recon-fuel-part-finalize').click();
   const finalize = up.page.getByTestId('recon-finalize-fuel');
   await expect(finalize).toBeEnabled({ timeout: 60_000 });
   await finalize.click();

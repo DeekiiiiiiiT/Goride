@@ -8,7 +8,7 @@ import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 
 function formatFillDate(ymd: string): string {
   try {
-    return format(parseISO(ymd), 'MMM d, yyyy');
+    return format(parseISO(ymd), 'd MMM');
   } catch {
     return ymd;
   }
@@ -39,39 +39,33 @@ export function FuelExceptionBlockersPanel({
 
   return (
     <>
-      <div
-        className="space-y-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-4"
-        role="alert"
-      >
-        <div className="flex items-start gap-2">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-700" aria-hidden />
-          <div className="min-w-0 space-y-1">
-            <p className="text-sm font-semibold text-rose-900">
-              {blockers.length === 1
-                ? '1 fill is blocking Finalize'
-                : `${blockers.length} fills are blocking Finalize`}
-            </p>
-          </div>
-        </div>
-
-        <ul className="divide-y divide-rose-200/80 overflow-hidden rounded-md border border-rose-200 bg-white">
+      <div className="space-y-3" role="alert" data-testid="fuel-exception-blockers">
+        <p className="sr-only">
+          {blockers.length === 1 ? '1 fill is blocking Finalize' : `${blockers.length} fills are blocking Finalize`}
+        </p>
+        <ul className="space-y-3">
           {blockers.map((b) => (
             <li
               key={b.id}
-              className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+              className="flex flex-col gap-4 rounded-2xl bg-[#fff1f2]/70 p-5 sm:flex-row sm:items-center sm:justify-between"
             >
-              <div className="min-w-0 space-y-0.5">
-                <div className="text-sm font-semibold text-slate-900">
-                  {formatFillDate(b.dateYmd)} · {formatFuelMoney(b.amount)} · {b.paymentLabel}
+              <div className="flex min-w-0 items-start gap-4">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#ffdad6]">
+                  <AlertTriangle className="h-5 w-5 text-[#ba1a1a]" aria-hidden />
+                </span>
+                <div className="min-w-0 space-y-0.5">
+                  <p className="text-lg font-semibold text-[#0b1c30]">
+                    {formatFillDate(b.dateYmd)} · {formatFuelMoney(b.amount)} · {b.paymentLabel}
+                  </p>
+                  <p className="text-sm text-[#47464c]">
+                    {plateFor(b)} · {b.location}
+                  </p>
+                  <p className="text-sm font-semibold text-[#ba1a1a]">! {b.reason}</p>
                 </div>
-                <div className="text-xs text-slate-600">
-                  {plateFor(b)} · {b.location}
-                </div>
-                <div className="text-xs text-rose-800">{b.reason}</div>
               </div>
               <Button
                 type="button"
-                className="min-h-11 shrink-0 bg-[#3525cd] text-white hover:bg-[#2a1ea4]"
+                className="h-11 min-h-11 shrink-0 rounded-xl bg-[#030213] px-5 text-white hover:bg-[#213145]"
                 disabled={busyId === b.id}
                 onClick={() => setActive(b)}
               >

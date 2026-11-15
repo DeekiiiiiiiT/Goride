@@ -185,17 +185,17 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
   return (
     <div className="space-y-3">
       {referenceNumbers.length > 0 && (
-        <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
+        <p className="rounded-2xl bg-[#f8f9ff] px-4 py-3 text-sm text-[#0b1c30]">
           Usual economy for this car: {referenceNumbers.map((value) => value.toFixed(1)).join(', ')} km/L.
         </p>
       )}
       {referenceOutOfBand && (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <p className="rounded-2xl bg-[#fffbeb] px-4 py-3 text-sm text-[#92400e]">
           This car’s usual economy came out impossible, so the driver was not charged for unexplained fuel.
         </p>
       )}
       {referenceTooThin && (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <p className="rounded-2xl bg-[#fffbeb] px-4 py-3 text-sm text-[#92400e]">
           There isn’t enough earlier fuel history to know this car’s usual economy, so the driver was not charged for unexplained fuel.
         </p>
       )}
@@ -209,7 +209,7 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
         </p>
       )}
       {openPriorMessage && (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <p className="rounded-2xl bg-[#fffbeb] px-4 py-3 text-sm text-[#92400e]">
           {openPriorMessage}
         </p>
       )}
@@ -221,7 +221,7 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
         const driverAdded = Number(balance.driverAdded) || 0;
         const covered = creditIn < 0 && snap.misc > 0 && Number(balance.billable) === 0;
         return (
-          <div key={`balance-${snap.vehicleId}`} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
+          <div key={`balance-${snap.vehicleId}`} className="rounded-2xl bg-[#f8f9ff] px-4 py-3 text-sm text-[#0b1c30]">
             {plate && <p className="font-medium text-slate-900">{plate}</p>}
             <p>Carried from recent weeks: {formatJMDDelta(creditIn, 2)}</p>
             <p>This week’s fuel difference: {formatJMDDelta(snap.misc, 2)}</p>
@@ -233,7 +233,7 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
         );
       })}
       {clockAssumed && (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <p className="rounded-2xl bg-[#fffbeb] px-4 py-3 text-sm text-[#92400e]">
           A fill has no time. We treated it as the end of that day. Add a time or link the gas card.
         </p>
       )}
@@ -247,7 +247,7 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
         </ul>
       )}
       {homeMissing && (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <p className="rounded-2xl bg-[#fffbeb] px-4 py-3 text-sm text-[#92400e]">
           Home is not set. Commute stays unexplained until you pin a home on the driver profile.
           {homeDrivers.length > 0 && (
             <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
@@ -265,7 +265,7 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
         </p>
       )}
       {streetHomeDrivers.length > 0 && (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <p className="rounded-2xl bg-[#fffbeb] px-4 py-3 text-sm text-[#92400e]">
           Commute is using the street address on file, not a confirmed home.
           <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
             {streetHomeDrivers.map((driver) => (
@@ -281,8 +281,12 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
         </p>
       )}
       {periodId && onSaveLeftoverOverride && !periodLocked && (
-        <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
-          <p className="text-sm font-medium text-slate-800">Change leftover for this week</p>
+        <details className="group rounded-2xl bg-[#f8f9ff] px-4 py-3" data-testid="fuel-leftover-split">
+          <summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-[#0b1c30]">
+            <span className="transition-transform group-open:rotate-90" aria-hidden>›</span>
+            Change the leftover split for this week <span className="text-[#47464c]">(optional)</span>
+          </summary>
+          <div className="mt-3 space-y-2">
           <p className="text-[12px] text-slate-500">
             Optional — only save if you mean to charge the driver a share of leftover. This is not
             the Accept unexplained step below.
@@ -358,7 +362,8 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
           >
             Save this week’s leftover split
           </Button>
-        </div>
+          </div>
+        </details>
       )}
       {needsUnattributedAck && !periodLocked && (
         <div className="space-y-3 rounded-lg border border-slate-300 bg-white px-3 py-3">
@@ -525,34 +530,50 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
       ) : null}
 
       {vehicles.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {stopToStopBlocking && onFixStopToStop ? (
-            <Button
-              type="button"
-              className="min-h-11"
-              onClick={onFixStopToStop}
-              disabled={periodLocked}
-            >
-              Fix stop-to-stop blockers
-            </Button>
-          ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11"
-            onClick={onToggleGapDetail}
-          >
-            View stop-to-stop gap detail
-          </Button>
+        <div className="space-y-2" data-testid="fuel-stop-to-stop">
+          <p className="text-[12px] font-semibold uppercase tracking-wider text-[#47464c]">Fill to fill (odometer check)</p>
+          {stopToStopBlocking ? (
+            <div className="flex flex-col gap-3 rounded-2xl bg-[#fffbeb] p-4 md:flex-row md:items-center md:justify-between">
+              <p className="text-[15px] font-semibold text-[#0b1c30]">
+                {stopToStopSummary || 'Some fill windows have trip km larger than the odometer moved.'}
+              </p>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={onToggleGapDetail}
+                  className="h-10 rounded-xl border border-[#cbd5e1] bg-white px-4 text-sm font-semibold text-[#0b1c30] hover:bg-[#eff4ff]"
+                >
+                  View gap detail
+                </button>
+                {onFixStopToStop ? (
+                  <button
+                    type="button"
+                    onClick={onFixStopToStop}
+                    disabled={periodLocked}
+                    className="h-10 rounded-xl bg-[#030213] px-4 text-sm font-semibold text-white hover:bg-[#213145] disabled:opacity-50"
+                  >
+                    Fix stop-to-stop blockers
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3 rounded-2xl bg-[#eff4ff] p-4 md:flex-row md:items-center md:justify-between">
+              <p className="text-[15px] text-[#0b1c30]">
+                <span className="mr-2 text-[#069669]" aria-hidden>✓</span>
+                Every fill window adds up, or its gap was accepted.
+              </p>
+              <button
+                type="button"
+                onClick={onToggleGapDetail}
+                className="h-10 shrink-0 rounded-xl border border-[#cbd5e1] bg-white px-4 text-sm font-semibold text-[#0b1c30] hover:bg-[#f8f9ff]"
+              >
+                View gap detail
+              </button>
+            </div>
+          )}
         </div>
       )}
-
-      {stopToStopBlocking && stopToStopSummary ? (
-        <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-950">
-          {stopToStopSummary} Use <strong>Fix stop-to-stop blockers</strong> — looking at the table
-          alone will not unlock Finalize.
-        </p>
-      ) : null}
 
       <Dialog
         open={showGapDetail && !!bucketVehicle}
