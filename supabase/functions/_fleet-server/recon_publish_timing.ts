@@ -1,11 +1,12 @@
 /**
  * WRA-27 (timing part): when the calculator may publish a week's desk.
- * - Wait for 45 s with no new change to that week, so a burst of changes becomes one publish.
+ * - Wait for 10 s with no new change to that week, so a burst of changes becomes one publish.
  * - A user hold (recon.week_publish_holds.hold_until) delays the publish,
  *   but never for more than 15 minutes in a row (held_since).
  * Pure: the worker passes the times in.
  */
-export const DESK_QUIET_MS = 45_000;
+/** 15 Nov 2026: 45 s → 10 s, so one change shows in seconds; a burst still ends in one publish. */
+export const DESK_QUIET_MS = 10_000;
 export const DESK_HOLD_CAP_MS = 15 * 60_000;
 
 export type DeskPublishDecision =

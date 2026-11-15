@@ -5,9 +5,13 @@
  * asking twice is cheap.
  */
 import { getServiceClient } from "./service_client.ts";
+import { wakeWeekCalculatorSoon } from "./recon_worker_wake_soon.ts";
 
-/** Same as the user publish hold (recon.claim_week_change): a burst of changes ends in one publish. */
-export const OTHER_LINE_DELAY_SECONDS = 120;
+/**
+ * Same as the user publish hold (recon.claim_week_change, 10 s since 15 Nov 2026): a burst of changes
+ * ends in one publish.
+ */
+export const OTHER_LINE_DELAY_SECONDS = 10;
 
 export async function enqueueWeekDesk(
   orgId: string,
@@ -53,6 +57,8 @@ export async function queueWeekDeskRefresh(
         }
       }),
     );
+    // 15 Nov 2026: wake the calculator in seconds instead of waiting for the once-a-minute database wake.
+    wakeWeekCalculatorSoon();
   } catch (e) {
     console.warn("[recon] desk refresh failed", e instanceof Error ? e.message : e);
   }

@@ -3,7 +3,7 @@ import { DESK_HOLD_CAP_MS, DESK_QUIET_MS, decideDeskPublish } from "./recon_publ
 
 const NOW = Date.parse("2026-11-11T12:00:00Z");
 
-Deno.test("WRA-27: publishes when the week has been quiet for 45 s and nothing holds it", () => {
+Deno.test("WRA-27: publishes when the week has been quiet for 10 s and nothing holds it", () => {
   assertEquals(
     decideDeskPublish({ nowMs: NOW, lastChangeAtMs: NOW - DESK_QUIET_MS, holdUntilMs: null, heldSinceMs: null }),
     { publish: true, reason: "quiet" },
@@ -14,9 +14,9 @@ Deno.test("WRA-27: publishes when the week has been quiet for 45 s and nothing h
   );
 });
 
-Deno.test("WRA-27: waits out the 45 s quiet window after a change", () => {
-  const d = decideDeskPublish({ nowMs: NOW, lastChangeAtMs: NOW - 10_000, holdUntilMs: null, heldSinceMs: null });
-  assertEquals(d, { publish: false, retryInSeconds: 35, reason: "recent_change" });
+Deno.test("WRA-27: waits out the 10 s quiet window after a change", () => {
+  const d = decideDeskPublish({ nowMs: NOW, lastChangeAtMs: NOW - 4_000, holdUntilMs: null, heldSinceMs: null });
+  assertEquals(d, { publish: false, retryInSeconds: 6, reason: "recent_change" });
 });
 
 Deno.test("WRA-27: respects a user hold", () => {
