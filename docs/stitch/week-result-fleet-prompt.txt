@@ -5,7 +5,7 @@ ROAM FLEET — WEEK RESULT (CLOSED WEEK) — FULL DESIGN PROMPT (GOOGLE STITCH)
 
 Roam Fleet - Week Result in Week Reconciliation (Desktop Web App with a phone layout, for the fleet owner):
 
-Design the page the fleet owner sees after a week is closed in "Week Reconciliation" inside Roam Fleet. Closing a week means every upload, toll, fuel fill, trip and driver payment for one Monday-to-Sunday week has been checked and settled. Once that is done, the owner does not want to see the checks again. They want one answer: how did the business do this week? The page shows exactly five numbers and nothing else: Revenue, Expenses and Profit for the week, then how that profit was shared between the fleet and the drivers. Revenue is everything the cars earned (fares and tips the fleet kept). Expenses are what it cost to run the cars (fuel, tolls after platforms paid them back, repairs and fees logged for that week). Profit is Revenue minus Expenses, before anyone is paid. Fleet profit is what the fleet keeps after paying the drivers. Driver profit is what the drivers take home after their share of fuel. Fleet profit plus Driver profit always equals Profit. The person using this is not an accountant: big clear numbers, short plain labels, nothing to click except "Reopen week". The design must feel modern, calm and effortless, like the best business banking apps. Every screen is tall enough to show everything, with no inner scrolling.
+Design the page the fleet owner sees after a week is closed in "Week Reconciliation" inside Roam Fleet. Closing a week means every upload, toll, fuel fill, trip and driver payment for one Monday-to-Sunday week has been checked and settled. Once that is done, the owner does not want to see the checks again. They want one answer: how did the business do this week? The page shows exactly five numbers and nothing else: Revenue, Expenses and Profit for the week, then how that profit was shared between the fleet and the drivers. Revenue is everything the cars earned (fares and tips the fleet kept). Expenses are what it cost to run the cars (fuel, tolls after platforms paid them back, repairs and fees logged for that week). Profit is Revenue minus Expenses, before anyone is paid. Fleet profit is what the fleet keeps after paying the drivers. Driver profit is the drivers' cut after expenses, added up for every driver who drove that week (a fleet can have one driver or fifty; the page never lists drivers by name). Fleet profit plus Driver profit always equals Profit. The person using this is not an accountant: big clear numbers, short plain labels, nothing to click except "Reopen week". The design must feel modern, calm and effortless, like the best business banking apps. Every screen is tall enough to show everything, with no inner scrolling.
 
 
 BRAND IDENTITY:
@@ -32,7 +32,7 @@ BRAND IDENTITY:
 - Typography: Inter. Page title 26px semibold. The three big numbers 40px semibold with tabular figures. Fleet profit and Driver profit 32px semibold. Labels 15px medium, helper text 13px muted. Money always has "J$" and no decimals on this page (J$92,021); the exact amount with 2 decimals shows in a tooltip on hover (J$92,021.20).
 - Dates are written in plain words: "Closed 15 Nov 2026 by Deeki T". Never "2026-11-15", never codes or ids.
 - Buttons always look like buttons. "Reopen week" = white with a red border and red text and a small open-padlock icon. Never underlined text links. Every confirm is an in-app dialog, never a browser pop-up.
-- Sample data (REAL, from Roam's week of 28 Sep 2026, Rideshare, one driver: Kenny Gregory Rattray, Toyota Roomy · 5179KZ):
+- Sample data (REAL totals from Roam's week of 28 Sep 2026, Rideshare; the page shows totals for all drivers and cars, no names or plates):
   - Revenue J$92,021 (fares J$91,781.20 + tips kept J$240.00)
   - Expenses J$28,000 (fuel J$28,000.00; tolls J$0 — J$1,755.00 paid, all paid back by Uber)
   - Profit J$64,021, 70% margin
@@ -56,12 +56,12 @@ SCREEN 1: WEEK RESULT — A CLOSED WEEK THAT MADE MONEY
 - Closed banner across the top of the card: dark near-black #030213 bar, white padlock icon, "Closed · 15 Nov 2026 by Deeki T" on the left, and the red-outline "Reopen week" button on the right (white button on the dark bar).
 - Row of three equal big number cards:
   - "Revenue" — "J$92,021" — helper "Fares and tips"
-  - "Expenses" — "J$28,000" — helper "Fuel, tolls, repairs and fees"
+  - "Expenses" — "J$28,000" — helper "Fuel + tolls"
   - "Profit" — "J$64,021" in green — a green chip "70% margin" under it
 - Between the cards, small muted "−" and "=" signs so the sum reads left to right: Revenue − Expenses = Profit.
 - Below, one wide card titled "How the profit was shared":
-  - Left half: "Fleet profit" — "J$34,654" — helper "What the fleet keeps after paying drivers" — a near-black chip "54%".
-  - Right half: "Driver profit" — "J$29,367" in blue — helper "What drivers take home after their fuel share" — a blue chip "46%".
+  - Left half: "Fleet profit" — "J$34,654" — helper "After paying drivers" — a near-black chip "54%".
+  - Right half: "Driver profit" — "J$29,367" in blue — helper "Driver's cut after expenses" — a blue chip "46%". This is the total for ALL drivers who drove that week, never one person's name.
   - Under both, one full-width rounded bar split 54% near-black / 46% blue, with no labels inside the bar.
 - Nothing else on the page.
 
@@ -70,7 +70,7 @@ SCREEN 2: WEEK RESULT — A CLOSED WEEK THAT LOST MONEY
 - Same layout as Screen 1 for a week with a big repair. Subtitle "Week of 19 Oct 2026 · Rideshare".
 - Closed banner "Closed · 22 Nov 2026 by Deeki T" with "Reopen week".
 - Three cards: "Revenue J$40,000"; "Expenses J$45,500"; "Profit −J$5,500" in red with a red chip "Loss".
-- "How the profit was shared": "Fleet profit −J$17,900" in red with helper "What the fleet keeps after paying drivers"; "Driver profit J$12,400" in blue with helper "What drivers take home after their fuel share".
+- "How the profit was shared": "Fleet profit −J$17,900" in red with helper "After paying drivers"; "Driver profit J$12,400" in blue with helper "Driver's cut after expenses".
 - No percent chips and no split bar when Profit is below zero. In place of the bar, one muted line: "Drivers were still paid for their trips, so the fleet carried the loss."
 
 
