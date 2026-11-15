@@ -97,6 +97,7 @@ The app you open in your browser shows the **real** database, so a feature prove
 7. **Short chat, detailed plan file.** The file is the project's memory; the chat disappears.
 8. **Use the switch.** New features stay off until they're proven on real data.
 9. **A red test is never "just an old test".** Read why it fails before changing it. Either the app is broken (fix the app) or the screen changed on purpose (update the test in the same round).
+10. **"Not given" and "given as empty" must mean different things.** When a function or screen takes optional settings (overrides, filters, sort), don't let "left out" and "set to nothing / any" share one value (e.g. a parameter that defaults to NULL when NULL also means "any"). Use an options object where a missing key means "leave it" and a present key, even an empty one, means "use this"; or store "all" as its own value. Write a test where the two cases give different answers.
 
 ## Copy-paste prompts
 - **Start a feature:** *"New feature: [one sentence]. Read the code and live data first, then write a plan file with Data / Server / Screens / Tests, every screen and button, numbered problems with one fix each, and done-tests. Don't build yet."*

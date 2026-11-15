@@ -1,8 +1,18 @@
-# Powertrain job fit — audit (Rev 5, 15 Nov 2026)
+# Powertrain job fit — audit (Rev 6, 15 Nov 2026)
 
 **Goal in one sentence:** every screen that offers maintenance jobs for a car offers the jobs that fit that car's powertrain (petrol, diesel, hybrid, plug-in, electric…), using one clean, owner-confirmed powertrain value per car model and one fit rule per job, so that an electric car is never offered an oil change and a petrol car is never offered high-voltage work.
 
 Everything below was checked in the code and on the live database on 15 Nov 2026. Method: `docs/how-we-build-playbook.md` (facts → findings with one fix → design → done-tests → Stitch → build in layers).
+
+**Rev 6 changes (after the fifth review):**
+- **`job_fit_count(p_job_id, p_overrides jsonb)`:** a missing key = the saved value, an array = that list, JSON null = "Same as group".
+- **"All" on a job is stored as the full code list,** so "same as group", "all" and "a chosen list" stay three distinct states. Test 25 covers all three; test 27 added.
+- **The "Not usual for this car" chip is grey,** with amber kept for High-voltage only.
+- **The HV chip appears on every job card** (steps 2 and 3, Review, history), never on tiles. Test 26 covers hidden HV jobs and history.
+- **The past-lines check is `live/powertrain-past-lines.sql`,** run by hand.
+- **The count is debounced** at about 250 ms.
+- **Assertions 12 / 13 are in order.** Test 9 is split between D1 (the function) and S1 (the route).
+- **The playbook gets a golden rule** on optional parameters.
 
 **Rev 5 changes (after the fourth review):**
 - **Fleet "High-voltage" chip** on HV job cards in the picker (safety: visible before opening a job).
@@ -202,8 +212,12 @@ The derivation trigger is created **after** the backfill, in the same transactio
 - `maintenance_work_order_lines.fit_at_log` (PT-8, insert + job change only).
 - `vehicle_component_schedule.retired_reason` (PT-4).
 - `public.job_fits_car(...)` (PT-10).
-- The read-only `fit_at_log = 'no'` check (PT-8).
-- **`public.job_fit_count(p_job_id uuid) RETURNS TABLE (fits int, unknown int, total int)`** for the Dominion drawer's "Fits N of T" line. It uses the **same internal helper as `job_fits_car`** (the effective-list resolution + exception lookup), applied to every model, so there's no second copy of the rule, in TypeScript or SQL. `fits` = models where the answer is 'yes'; `unknown` = models where it's 'unknown' (the `needs_check` ones); `total` = `count(*) FROM vehicle_catalog`, all models including `needs_check`. One call per drawer open (2,679 models × one job: fast, no cache). For unsaved edits in the drawer, the same function takes optional `p_fits_powertrains` / `p_fits_fuels` overrides, so the line updates before saving without the rule living in the browser.
+- The read-only `fit_at_log = 'no'` check (PT-8) is a SQL file, **`docs/service-items-build/live/powertrain-past-lines.sql`**, that the owner runs by hand. It prints the two numbers and the lines behind M. A Dominion screen for it is a future item on the Open list.
+- **"All" on a job is stored as the full code list, never as NULL.** On a job, NULL already means "Same as group". So the drawer's **All** preset saves every powertrain code (`{ice,mhev,hev,phev,erev,bev,fcev}`) or every fuel code, and **Same as group** saves NULL. On a group, All saves NULL (= any). The drawer shows a job's full list as "All" again when it reads it back. That keeps three distinct states on a job: same as group (NULL), all (full list), and a chosen list.
+- **`public.job_fit_count(p_job_id uuid, p_overrides jsonb DEFAULT NULL) RETURNS TABLE (fits int, unknown int, total int)`** for the Dominion drawer's "Fits N of T" line. It's **one set-based query** over all models, using the **same internal helper as `job_fits_car`** (effective-list resolution, then the exception lookup), so there's no second copy of the rule, in TypeScript or SQL.
+  - `fits` = models where the answer is 'yes'; `unknown` = 'unknown' (the `needs_check` ones); `total` = `count(*) FROM vehicle_catalog`, every model including `needs_check`.
+  - **`p_overrides` previews unsaved edits.** A **missing key** = use the job's saved value. Key present with an **array** = that list. Key present with **JSON null** = "Same as group" (NULL on the job). Example: `{"fits_fuels": ["petrol"]}` previews a fuels-only change; `{"fits_powertrains": null}` previews going back to the group. Allowed keys: `fits_powertrains`, `fits_fuels`; anything else, or an empty array, raises `job_fit_count_bad_override`.
+  - One call per drawer open or per (debounced) change; 2,679 models × one job is fast, no cache.
 
 ### Server
 - The four Fleet job-list routes accept `vehicleId` and add `fits` (one `job_fits_car` call per request). Without `vehicleId`, they behave as today.
@@ -215,8 +229,8 @@ The derivation trigger is created **after** the backfill, in the same transactio
 **Fleet: Log service, step 2 "Work done"** (Fleet is responsive; every screen has a 390px phone layout, as the service-items screens do):
 - The car strip shows a **powertrain pill** ("Petrol", "Hybrid", "Electric"…, or "Engine type unknown").
 - Only fitting jobs. Groups with none are removed and the grid closes up. Each group tile shows its count of fitting jobs.
-- **"Show all jobs (N hidden)"** at the bottom of the group grid, and **"Show all jobs in this group (N hidden)"** inside a group, where N = hidden **jobs**. Pressed, it reveals the hidden jobs under a **"Not usual for this car" divider**, greyed, each with the amber "Not usual for this car" chip, still tickable with **no dialog**. The button then reads **"Hide jobs that don't fit"**, and pressing it hides them again (a ticked hidden job stays ticked and visible).
-- **High-voltage chip:** every job with `is_high_voltage = true` shows a small amber **"High-voltage"** chip (lightning icon, the same amber as Dominion's switch) on its job card, wherever it appears (normal or hidden). So a person choosing between "Charging Port" and "Charging Port Inspection & Cleaning" sees which one is HV before opening either.
+- **"Show all jobs (N hidden)"** at the bottom of the group grid, and **"Show all jobs in this group (N hidden)"** inside a group, where N = hidden **jobs**. Pressed, it reveals the hidden jobs under a **"Not usual for this car" divider**, greyed, each with a **grey** "Not usual for this car" chip (info icon), still tickable with **no dialog**. Grey, not amber: amber is kept for "High-voltage" alone, so a hidden HV job shows one grey chip and one amber chip, never two amber ones. The button then reads **"Hide jobs that don't fit"**, and pressing it hides them again (a ticked hidden job stays ticked and visible).
+- **High-voltage chip:** every job with `is_high_voltage = true` shows a small amber **"High-voltage"** chip (lightning icon, the same amber as Dominion's switch) on every **job card**, wherever it appears: step 2 (normal or hidden), step 3, Review and Service history. Group tiles don't carry it, because a group can mix HV and non-HV jobs. So a person choosing between "Charging Port" and "Charging Port Inspection & Cleaning" sees which one is HV before opening either.
 - **Unknown banner** with a **"Link this car" button** (a real button, not a text link); all jobs shown; no "Show all" button (nothing is hidden).
 - **Couldn't check banner:** "Couldn't check which jobs fit this car. Showing every job." with a **"Try again"** button (PT-7).
 - Step 3: a job card with `fit = 'no'` shows the chip in its header and the helper "You picked this from all jobs. It's saved as normal."
@@ -236,7 +250,7 @@ The derivation trigger is created **after** the backfill, in the same transactio
 - **Custom…** opens a row of checkbox chips, one per code, with plain labels ("Mild hybrid", "Plug-in hybrid"…);
 - on a job, each row also has **"Same as group"** (the default, showing the group's preset name);
 - on a job only, a **"High-voltage work"** switch (setting it adds the amber chip to the drawer header); groups have no switch;
-- the line **"Fits N of T car models (U not known yet)"** from `job_fit_count`, updating as choices change, with a **"See which"** button that opens a simple list of the matching models; if the count can't load: "Couldn't count right now" with a **Retry** button;
+- the line **"Fits N of T car models (U not known yet)"** from `job_fit_count`, updating as choices change (debounced about 250 ms; the last known number stays shown, softly faded, until the new one arrives), with a **"See which"** button that opens a simple list of the matching models; if the count can't load: "Couldn't count right now" with a **Retry** button;
 - on a **group** drawer, the presets are shown as four large cards (All cars / Combustion / Electrified / Plug-in) plus **Custom…**, and a read-only list **"Jobs that set their own"** (each job in the group with a non-NULL `fits_*`, and its value in plain words).
 
 Stitch screens: the Dominion car-model row, the "Powertrain to check" list, the "Fits" row (presets + Custom chips + HV switch), and the Fleet step-2 states. The owner makes them (one file per app); the prompt is written after review.
@@ -296,8 +310,9 @@ Presets: **Combustion** = ice, mhev, hev, phev, erev. **Electrified** = hev, phe
 22. **`part_match.busy` really suppresses the trigger:** on the local copy, wrap the backfill in a test that counts `part_match_oe_chain` calls (or temporarily raises inside it) with `SET LOCAL part_match.busy = 'on'` → 0 calls; without the setting → > 0. If the mechanism ever changes (a setting becomes a table row), this test fails with "part_match.busy no longer suppresses the year trigger".
 23. **No group carries `is_high_voltage`:** the constraint refuses `UPDATE … SET is_high_voltage = true WHERE kind = 'system'`, and the HV checklist query reads jobs only.
 24. **The past-lines check** returns both numbers (logged as not usual / still don't fit) on a fixture where one rule was widened after logging.
-25. **`job_fit_count`** equals `count(*)` of models where `job_fits_car` = 'yes' (and 'unknown') for 3 fixture jobs (an inheriting job, an overriding job, and a job with a model exception), and its override arguments give the same count as saving those values and calling it again.
-26. **Fleet HV chip:** on the Honda Fit, Electric A/C Compressor and the HV jobs in Hybrid & electric show "High-voltage"; Cooling Fan Filter and Charging Port Inspection & Cleaning don't.
+25. **`job_fit_count`** equals `count(*)` of models where `job_fits_car` = 'yes' (and 'unknown') for 4 fixture jobs: an inheriting job, an overriding job, a job with a model exception, and a job where both the job and its group are NULL / NULL (expected: fits = 2,679 − 12 = 2,667, unknown = 12, total = 2,679). `p_overrides` gives the same count as saving those values and calling it again. **The three override states differ:** for a job saved as `fits_powertrains = {hev}` in the Hybrid & electric group (Electrified), (a) no override → the hev count (203); (b) `{"fits_powertrains": null}` → the group's Electrified count (585); (c) `{"fits_powertrains": [all 7 codes]}` → every placed model (2,667). An empty array or an unknown key raises `job_fit_count_bad_override`.
+26. **Fleet HV chip:** on the Honda Fit, Electric A/C Compressor and the HV jobs in Hybrid & electric show "High-voltage"; Cooling Fan Filter and Charging Port Inspection & Cleaning don't. **On the Roomy, "Show all jobs" → every hidden HV job shows the amber "High-voltage" chip next to the grey "Not usual for this car" chip. Logging one → step 3, Review and Service history show both.** Group tiles never show the HV chip.
+27. **"All" on a job** saves the full code list (not NULL), reads back as "All", and differs from "Same as group" in `job_fit_count`.
 
 ### 6b. DRYRUN assertions (D1 live SQL; generated, hash-stamped always-stop copy)
 
@@ -320,15 +335,15 @@ Presets: **Combustion** = ice, mhev, hev, phev, erev. **Electrified** = hev, phe
 9. `changed_other` = 0 across every snapshot above (other columns, other tables, other descriptions).
 10. **Idempotency:** the backfill's `IS DISTINCT FROM` set, re-evaluated after the UPDATE, is empty (a re-run would change 0 rows).
 11. New `platform_revision` rows = car rows changed + job rows changed, as counted by the UPDATEs themselves (`GET DIAGNOSTICS … ROW_COUNT`). Expected today: 2,679 + 47 = 2,726 on the first run, 0 on a re-run. The message prints all three numbers.
-13. **No mild hybrid fits any Hybrid & electric job or Electric A/C Compressor:** `count(*)` of (mhev model × those jobs) where `job_fits_car` = 'yes' = 0.
 12. `is_high_voltage = true` on 0 group rows.
+13. **No mild hybrid fits any Hybrid & electric job or Electric A/C Compressor:** `count(*)` of (mhev model × those jobs) where `job_fits_car` = 'yes' = 0.
 
 ---
 
 ## 7. Build rounds
 
-1. **D1 (Cursor):** columns, derivation (3a), backfill (3c) then the trigger (3b), `fits_*` + `is_high_voltage` + starting values (5), `fit_at_log`, `retired_reason`, `job_fits_car`, `job_fit_count`, `part_match.busy` (PT-11); SQL tests 9, 10, 12, 14–23, 25. Live via the generated DRYRUN (6b) + real file + logbook line.
-2. **S1 (Cursor):** routes take `vehicleId` and return `fits`; schedule skip + nightly retire; `fit_at_log` in `fleet_save_work_order` (insert + job change); Dominion routes; flag; server tests 7, 8, 9, 13, 24.
+1. **D1 (Cursor):** columns, derivation (3a), backfill (3c) then the trigger (3b), `fits_*` + `is_high_voltage` + starting values (5), `fit_at_log`, `retired_reason`, `job_fits_car`, `job_fit_count`, `part_match.busy` (PT-11); SQL tests 10, 12, 14–23, 25, 27 (and test 9's function half: `job_fits_car` on the 6 models; the route half runs in S1). Live via the generated DRYRUN (6b) + real file + logbook line.
+2. **S1 (Cursor):** routes take `vehicleId` and return `fits`; schedule skip + nightly retire; `fit_at_log` in `fleet_save_work_order` (insert + job change); Dominion routes; flag; server tests 7, 8, 9 (route = function), 13, 24.
 3. **Stitch (owner):** the screens in section 4.
 4. **UI1 (Claude):** Dominion car-model row, "Powertrain to check", "Fits" row with presets / Custom chips / HV switch.
 5. **UI2 (Claude):** Fleet step 2; click-throughs 1–6, 11, 26.
@@ -358,7 +373,7 @@ Files: `docs/stitch/powertrain-job-fit-fleet/html/01–10` and `docs/stitch/powe
 **Every screen, Drop:** invented data and controls, i.e. engine codes ("1.0L 1KR-FE"), VINs, "auto-detection confidence", "data pipeline / batch", "Export CSV", filter / sort / paging on the check list, "telemetry" text, invented jobs and job counts (e.g. O2 sensors and a heat shield in Exhaust, "Tires & wheels 12 jobs"), sidebar items that don't exist ("Powertrains", "HV & Battery", "Fleet Allocations"…), the "Catalytic" chip, and every text link ("Undo", "Inspect raw feed": real buttons or nothing).
 **Rendering notes (not design decisions):** Dominion screens 1–6 don't load Inter, so they render serif; the port uses the app's font. The cut-off PNGs come from Stitch's fixed-height inner scroll area; the port uses the real dialog / drawer.
 **Every Keep below is now written into section 4 (Rev 5)**, so section 4 is the one spec UI1 / UI2 build against. Section 9 only records where each element came from.
-**Add (missing from Stitch):** the amber "High-voltage" chip on HV job cards in Fleet screens 2, 3, 4 and 6 (section 4).
+**Add (missing from Stitch):** the amber "High-voltage" chip on every Fleet screen that shows a job card (2, 3, 4, 6, 7, 8); group tiles (1, 5, 10) don't carry it, because a group can mix HV and non-HV jobs. **Change:** the "Not usual for this car" chip is grey, not Stitch's amber, so a hidden HV job never shows two amber chips (section 4).
 **Every screen, Keep:** card / drawer / dialog shapes, spacing, chip styles (powertrain chips, "Needs checking", "Confirmed", amber "High-voltage work", amber "Not usual for this car"), the button styles (red outline Cancel, one solid primary), and the layouts below.
 **Content always comes from this audit:** real group names and job counts from live, real "Fits N of 2,679" numbers (2,084 Spark Plugs / 380 Charging Port / 585 Hybrid & electric group, all matching the screens), and the 12 real `needs_check` models.
 
