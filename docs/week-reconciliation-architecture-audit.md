@@ -1,24 +1,32 @@
 # Week Reconciliation — Architecture Audit
 
-**Rev 33 · 2026-11-15 · Status: LIVE — owner's real week-by-week test (Step A).** 21 Sep + 28 Sep 2026 closed; Week result page live. This file lists **only what is left**. Everything finished (Rounds 0–4c, go-live, WRA-01…55, the Week result page) is in the code and in this file's git history (Rev 32 = full detail).
+**Rev 34 · 2026-11-15 (evening) · Status: LIVE — owner's real week-by-week test (Step A).** 21 Sep, 28 Sep and 5 Oct 2026 closed (12 Oct closed earlier). This file lists **only what is left**. Everything finished (Rounds 0–4c, go-live, WRA-01…57, the Week result page, the one-part-at-a-time Fuel step, the seconds-not-minutes speed-up) is in the code and in this file's git history (Rev 32 = full detail up to 15 Nov midday).
 
 ---
 
-## ⏸ START HERE
+## ⏸ START HERE (paused 15 Nov 2026 ~23:00 UTC — new chat picks up here)
 
-**Where the owner is:** next week to close = **Week of 5 Oct 2026** (Rideshare), step 1 Upload inputs. Driver: Kenny Gregory Rattray (only driver), car Toyota Roomy 5179KZ, TransJam tag …6450 (the Toyota CHR tag …6430 is NOT fleet — ignore it).
+**First, before anything else:**
+1. **Is everything pushed?** On 15 Nov evening these were committed but NOT pushed: `e18f9ed4`, `f09de8b7`, `9ddd06a2`, `49c40e7f`, `c3fa5939` (check with `git fetch origin` + `git log origin/main..HEAD --oneline`). If any are listed, ask the owner to push (`cd C:\Roam\Goride` then `git push origin parts-auto-match:main`). The push also carries the other chat's maintenance / powertrain commits — say so.
+2. **After that push, check the speed-up is live** (commit `c3fa5939`): the edge deploy log lists "Deployed Functions" for fleet-core / fleet-fuel / fleet-toll (see `edge-deploy-diff-whole-push` note) and the "Deploy recon-worker" run is green. The database half is ALREADY live (owner ran `docs/recon_short_publish_hold_LIVE_apply.sql` on 15 Nov: hold 10 s, logbook line `20261115224516` present). Then on the next real change, confirm the week page updates in ~15–40 s with no F5 (week_runs.desk_computed_at moves; edge logs show the `/tick` wake from fleet-core / fleet-fuel). If it still takes minutes, read the edge logs for "[recon] calculator wake failed".
 
-**Weeks still to close, in order:** 5 Oct → 19 Oct → 26 Oct → 2 Nov → 9 Nov (12 Oct already closed).
-- **19 Oct, 26 Oct and 2 Nov need the Roam fuel card statement uploaded first** (Fleet Admin → Gas cards → Statement import, `docs/roam-fuel-card-statement-audit.md`).
-- Expected Tag account closings (step 4 Confirm): 5 Oct **5,154** · 19 Oct **4,629** · 26 Oct **3,619** · 2 Nov **1,279** · TransJam live **869 at 14 Nov 5:14 PM** (week of 9 Nov).
-- Owner files: `C:\Users\deeki\Documents\Business\Roam\Reports\Toll Tag\Usage\2026`, `...\Toll Tag\Top Up\2026`, `...\Reports\RideShare Trips\Uber\2026\<week>`. The "Oct 19" and "Oct 26" top-up files hold the **same** top-up (EAA3FBCCE3, 27 Oct); the 10 Nov top-up sits in the "Nov 2 - Nov 8" file.
+**Where the owner is:** next week to close = **Week of 19 Oct 2026** (Rideshare), step 1 Upload inputs. Driver: Kenny Gregory Rattray (only driver), car Toyota Roomy 5179KZ, TransJam tag …6450 (the Toyota CHR tag …6430 is NOT fleet — ignore it).
 
-**Per week, the steps that need Claude:**
-- Step 5 Fuel: Finalize now runs its job straight away (WRA-56). Only if a job still sits "queued" / "running" for minutes, run `select private.invoke_fuel_period_job_sweep();`.
-- Step 7: check each driver's number in live data before Pay / Collect (tier from the driver's earnings policy — Kenny = High Performer, 35% once the month passes J$375,001; D4 counts a month-straddling week into the month it starts in; tips go to the fleet when the J$100,000 weekly quota is missed).
-- Stop-to-stop gaps of a few km left after WRA-55 are Uber GPS en-route km reading a few % over the odometer (band 3%) — accept them.
+**Weeks still to close, in order:** 19 Oct → 26 Oct → 2 Nov → 9 Nov (9 Nov ended 15 Nov; its week run may not exist until the calculator's next 10-minute ensure pass).
+- **19 Oct, 26 Oct and 2 Nov need the Roam fuel card statement uploaded first** (Fleet Admin → Gas cards → Statement import, `docs/roam-fuel-card-statement-audit.md`). Last asked 15 Nov: owner had not said whether Roam sent it — ask first.
+- Expected Tag account closings (step 4 Confirm): 19 Oct **4,629** · 26 Oct **3,619** · 2 Nov **1,279** · TransJam live **869 at 14 Nov 5:14 PM** (week of 9 Nov).
+- Owner files: `C:\Users\deeki\Documents\Business\Roam\Reports\Toll Tag\Usage\2026`, `...\Toll Tag\Top Up\2026`, `...\Reports\RideShare Trips\Uber\2026\<week>`. The "Oct 19" and "Oct 26" top-up files hold the **same** top-up (EAA3FBCCE3, 27 Oct) — upload it in one week only; the 10 Nov top-up sits in the "Nov 2 - Nov 8" file.
 
-**Working rules:** owner is not a coder — short plain replies, one step at a time, screenshots. Owner pushes (`cd C:\Roam\Goride` then `git push origin parts-auto-match:main`). Another chat (Service items / maintenance) also commits on this branch — never stage its files, and say when a push carries its commits. Never `git stash`. Keep each file's line endings as in git. After `deno test` / `deno check` run `pnpm install --frozen-lockfile`. Run Fleet vitest from `C:\Roam\…` (capital C). Claude may read live data (Supabase connector) and queue a driver-week rebuild with `recon.touch_driver_week(org, driver, '<monday>'::date, false)` — real Mondays only. A fuel-core engine change needs a `FUEL_ENGINE_VERSION` bump or open weeks keep the old snapshot. Check the money in live data before the owner clicks Collect / Settle / Close.
+**Per week, the steps that need Claude (lessons from 21 Sep → 5 Oct):**
+- Step 1: "Missing" right after an upload is the calculator catching up (now ~15–40 s). Tag top-ups with no top-up that week → "No activity on empty days (all 7)"; cash tolls → same unless Kenny paid cash.
+- Step 3 Tolls: "Likely" matches whose toll time sits inside the Uber trip are right — confirm. **Uber paybacks with no toll:** a small Uber adjustment → Keep with no toll; a payback on a cash trip with no tag crossing → check the tag had balance and was read that day; if yes, the driver most likely took the free road → Keep with no toll (5 Oct: J$70 + J$780 kept).
+- Step 5 Fuel (now one part at a time, Stitch): read each flagged fill against the odometer photos before Resolve. "High fuel consumption" vs a "usual" inflated by small top-ups is normal (5 Oct: 9.75 km/L vs real usual 12.1 → accepted). Stop-to-stop gaps of a few km (Uber en-route km are a weekly average spread evenly; a trip straddling a fill) → accept with reason "Trip km overstated (platform)". Tick "I checked the warnings" before Finalize. Finalize runs its job at once (WRA-56); only if stuck run `select private.invoke_fuel_period_job_sweep();`.
+- Step 7: check each driver's number in live data before Pay / Collect. Kenny = **High Performer** policy (tiers 25/27/29/31/33/35%; 35% from J$375,001 month-to-date; D4 counts a month-straddling week into the month it starts in; tier resets each month — 5 Oct was 27%, Silver). Tips go to the fleet when the J$100,000 weekly quota is missed. Manually logged InDrive trips count even when the InDrive export is "No activity".
+- Step 8: a closed Rideshare week shows the **Week result** (Revenue − Expenses = Profit; Fleet vs Driver profit).
+
+**Closed weeks so far (all paid / settled):** 21 Sep (33%, Kenny owed J$188.38 → collected) · 28 Sep (35%, fleet paid J$1,575.13) · 5 Oct (27%, fleet paid **J$9,397.22**: share 22,616.76 − fuel 3,930.38 − cash 22,639.16 + cash fuel 13,350; tolls 12 × all paid back; fuel J$28,350; tag closing J$5,154 confirmed).
+
+**Working rules:** owner is not a coder — short plain replies, one step at a time, screenshots. Owner pushes. Another chat (Service items / maintenance / powertrain) also commits on this branch and leaves files modified — never stage its files (e.g. `FuelLogModal.tsx`, `maintenance_*`, `routes.generated.json` it regenerated), and say when a push carries its commits. Never `git stash`. **Before Write on a path, check it does not already exist** (15 Nov: an existing `recon_worker_wake.ts` was overwritten and had to be restored). Keep each file's line endings as in git. After `deno test` / `deno check` run `pnpm install --frozen-lockfile` (the 55 old deno type errors are not ours — run tests with `--no-check`). Run Fleet vitest from `C:\Roam\…` (capital C). Claude may read live data (Supabase connector) and queue a driver-week rebuild with `recon.touch_driver_week(org, driver, '<monday>'::date, false)` — real Mondays only. A fuel-core engine change needs a `FUEL_ENGINE_VERSION` bump or open weeks keep the old snapshot. New migrations: `npx supabase migration new <name>` (real UTC time), then a `docs/<name>_LIVE_apply.sql` with the logbook line for the owner. Check the money in live data before the owner clicks Collect / Settle / Close.
 
 ---
 
@@ -32,6 +40,8 @@ Fixed 15 Nov before the real weeks (owner's pick, they hit every week): WRA-56 f
 
 | # | What | Fix |
 |---|---|---|
+| WRA-58 | **Fuel prices km above the real cost when the car beats its usual economy.** 5 Oct: categories priced at J$16.79/km (rideshare) and J$18.97/km (pickups) vs the real J$28,350 ÷ 1,708 km = J$16.60/km → driver share J$3,930.38 instead of ≈ J$3,726 (**Kenny over-charged ≈ J$204**); company + driver = J$29,200.89 > spend (shown as "Over-explained −J$4,044.44"). Snapshot fields: rideShareCost 25,159.74, deadheadCost 4,041.15, unattributedKmCost 3,161.87 with ~0 unexplained km. | Fuel enterprise audit: price categories from the week's real spend per km (scale to spend), check unattributedKmCost; then **credit Kenny the over-charge** for 5 Oct (and check 21 Sep / 28 Sep). |
+| Page | Settlement step "Continue" waits for the calculator after Pay (now ~15–40 s). | Only if it still bothers the owner after the speed-up. |
 | WRA-47 | Step 6 "Activity vs trips" shows Uber hours only; Roam app went_online / job events (`driver_activity_logic.ts`) unused. | Add Roam hours to the card. |
 | WRA-49 | Fuel step on a week locked before the floor rule shows "Numbers don't balance" (`FuelWeekMoneyStrip.tsx` splitTie only accepts company + driver + leakage = total). | Also accept company + driver = total. |
 | Display | Close History raw "lane change:POST /fleet-fuel/…" lines (open weeks); Tolls on an empty week "0 of 0 · 0% completed". | Plain words; empty week reads done. |
@@ -73,7 +83,7 @@ If a close fails before Step D, turning `recon_v2` off brings the old section ba
 
 ## Next audits (their own files, after the real weeks)
 
-- **Fuel enterprise audit** (owner asked 14 Nov): bring fuel to the level of the rebuilt toll system — (1) the whole fuel system, (2) the **Fuel Policy** section (coverage rules, personal allowance, who pays what), (3) **future Telematics** (week page card "Coming soon"), designed so real litres / odometer / trips can replace the km × efficiency estimate without a rebuild. Starting findings: locked weeks are re-judged by today's money rules (WRA-49); the locked snapshot still says Draft / health Red / 5 pending; the company/driver split rests on km × estimated efficiency (21 Sep was 5.9% over) and nothing tracks that gap week to week; fuel money is one JSON bundle per week, not traceable ledger lines like tolls v2; the finalize job doesn't start by itself (WRA-56).
+- **Fuel enterprise audit** (owner asked 14 Nov): bring fuel to the level of the rebuilt toll system — (1) the whole fuel system, (2) the **Fuel Policy** section (coverage rules, personal allowance, who pays what), (3) **future Telematics** (week page card "Coming soon"), designed so real litres / odometer / trips can replace the km × efficiency estimate without a rebuild. Starting findings: locked weeks are re-judged by today's money rules (WRA-49); the locked snapshot still says Draft / health Red / 5 pending; the company/driver split rests on km × estimated efficiency (21 Sep was 5.9% over) and nothing tracks that gap week to week; fuel money is one JSON bundle per week, not traceable ledger lines like tolls v2; the finalize job doesn't start by itself (WRA-56, fixed 15 Nov); categories are priced above the real cost per km when the car beats its usual economy, so the driver is over-charged and company + driver > spend (WRA-58 — credit Kenny ≈ J$204 for 5 Oct).
 
 ## Later — when Roam Rush starts (Delivery, designed, not built)
 
