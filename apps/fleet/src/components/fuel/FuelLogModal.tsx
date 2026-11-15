@@ -160,30 +160,36 @@ export function FuelLogModal({
     const stationBrand = (s: StationProfile) =>
         String(s.brand || 'Independent').trim() || 'Independent';
 
+    // Brand match ignores capitals/spaces: Parent Company "RUBIS" must find stations saved as "Rubis"
+    const brandKey = (b: string) => String(b || '').trim().toLowerCase();
+    const sameBrand = (s: StationProfile, brand: string) => brandKey(stationBrand(s)) === brandKey(brand);
+
     // --- Derive unique brands and filtered stations ---
     const uniqueBrands: string[] = useMemo(() => {
-        const set = new Set<string>();
-        for (const name of parentCompanies) {
-            if (name) set.add(String(name).trim());
-        }
-        // Fallback: brands on verified stations (Known fill must work if Parent Company KV is empty)
+        // One entry per brand. Station spelling wins so a saved fill's brand still matches a list item.
+        const byKey = new Map<string, string>();
         for (const s of verifiedStations) {
-            set.add(stationBrand(s));
+            const b = stationBrand(s);
+            if (!byKey.has(brandKey(b))) byKey.set(brandKey(b), b);
         }
-        return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+        for (const name of parentCompanies) {
+            const b = String(name || '').trim();
+            if (b && !byKey.has(brandKey(b))) byKey.set(brandKey(b), b);
+        }
+        return Array.from(byKey.values()).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
     }, [parentCompanies, verifiedStations]);
 
     const stationsForBrand: StationProfile[] = useMemo(() => {
         if (!selectedBrand) return [];
         return verifiedStations
-            .filter((s) => stationBrand(s) === selectedBrand)
+            .filter((s) => sameBrand(s, selectedBrand))
             .sort((a, b) => a.name.localeCompare(b.name));
     }, [verifiedStations, selectedBrand]);
 
     const bulkFilteredStations: StationProfile[] = useMemo(() => {
         if (!bulkSelectedBrand) return [];
         return verifiedStations
-            .filter((s) => stationBrand(s) === bulkSelectedBrand)
+            .filter((s) => sameBrand(s, bulkSelectedBrand))
             .sort((a, b) => a.name.localeCompare(b.name));
     }, [verifiedStations, bulkSelectedBrand]);
 
@@ -970,7 +976,7 @@ export function FuelLogModal({
                                                     </div>
                                                 ) : null}
                                                 {uniqueBrands.map(brand => {
-                                                    const count = verifiedStations.filter(s => stationBrand(s) === brand).length;
+                                                    const count = verifiedStations.filter(s => sameBrand(s, brand)).length;
                                                     return (
                                                         <SelectItem key={brand} value={brand}>
                                                             <span className="flex items-center gap-2">
