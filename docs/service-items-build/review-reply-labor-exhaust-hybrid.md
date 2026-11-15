@@ -1,4 +1,13 @@
-# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 19, 15 Nov 2026)
+# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 20, 15 Nov 2026)
+
+## Rev 20: the two numbers, confirmed on live
+
+1. **"28 found" and "0 inexact" did run on the real run.** The check block runs **before COMMIT** in the real file too (identical to the dry run, except the dry run's final always-stop). Had either failed, the real run would have ended with "Stopped, nothing saved: …" instead of the table. The table the owner pasted is the **after-save** query, which only reports four numbers. **Confirmed on live anyway (read-only, 15 Nov):** all 28 codes found; **28 / 28** descriptions end with their own note; each note appears **exactly once** (28 / 28); **0** carry the other kind's note.
+2. **`dl_notes`, `dl_targets`, `dl_before` are `CREATE TEMP TABLE`.** They live only for that SQL editor session and never touch the schema. A permanent `catalogue_note_templates` table is noted as an option for when the Cooling / Transmission / Drivetrain notes repeat the pattern. The batch log (below) comes first.
+3. **Pipeline split, as you suggested:** **`catalogue_batch_log` first, owner Deeki T, target before Steering & Suspension runs.** Its own small round: table (name, file sha256, run at, counts), written by each live SQL inside its transaction, a prerequisite check at the top of each SQL, and a backfill row per batch already run. DRYRUN-in-CI and the runbook stay on the strategic item (target: before Fluids / Drivetrain).
+4. **Job-specific note wording:** accepted for new batches (convention: name the job's own fluid where it's one, e.g. Water pump → coolant, Master cylinder → brake fluid). The 28 live notes stay as they are; not worth re-running.
+
+**Order:** `part_source` (with the `is_part` column comment) → Charging Port check → `catalogue_batch_log` → Steering & Suspension.
 
 ## Rev 19: double-log notes LIVE
 
