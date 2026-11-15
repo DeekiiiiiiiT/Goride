@@ -6,6 +6,8 @@ import { JobTooltip } from "./JobTooltip";
 import type { MaintenanceServiceCategory } from "../../../../types/maintenance";
 import { actionLabel, type RecommendedWith, type SectionJob, type SystemSections } from "./systemSections";
 import { mayNeedSummary, type JobItem } from "./itemsUsed";
+import { isNotUsual, type JobFitState } from "./jobFit";
+import { HighVoltageChip, NotUsualChip, NotUsualDivider, ShowAllButton } from "./JobFitUi";
 
 type Props = {
   system: MaintenanceServiceCategory;
@@ -21,6 +23,11 @@ type Props = {
   onToggleRelated: (rel: RecommendedWith) => void;
   /** Service items on: each job ⓘ also says what it may need. */
   mayNeedByJob?: Map<string, JobItem[]>;
+  /** Powertrain job fit. Absent / "off" = today's screen. */
+  jobFit?: JobFitState;
+  /** Hidden jobs shown ("Show all jobs" here or on the group grid). */
+  showAll?: boolean;
+  onToggleShowAll?: () => void;
 };
 
 /** Pick one or more jobs inside a group (e.g. Wheel Alignment + Wheel Balancing). */
@@ -34,10 +41,21 @@ export function LogServiceSystemPicker({
   onToggleComponent,
   onToggleRelated,
   mayNeedByJob,
+  jobFit = { status: "off" },
+  showAll = false,
+  onToggleShowAll,
 }: Props) {
+  // A ticked job always stays where it is; only unticked "not usual" jobs move behind Show all.
+  const hide = (cat: SectionJob) => isNotUsual(jobFit, cat.id) && !selectedIds.includes(cat.id);
+  const allJobs: SectionJob[] = sections
+    ? [...sections.groups.flatMap((g) => g.sections.flatMap((sec) => sec.jobs)), ...sections.otherJobs]
+    : components;
+  const notUsual = [...new Map(allJobs.filter(hide).map((j) => [j.id, j])).values()];
+
   const card = (cat: SectionJob) => (
     <JobCard
       key={cat.id}
+      notUsual={isNotUsual(jobFit, cat.id)}
       cat={cat}
       openGroupId={system.id}
       selected={selectedIds.includes(cat.id)}
@@ -78,30 +96,46 @@ export function LogServiceSystemPicker({
                     <span className="text-sm font-semibold text-on-surface">{sec.name}</span>
                     <InfoButton label={`About ${sec.name}`} text={sec.description} />
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{sec.jobs.map(card)}</div>
+                  {sec.jobs.filter((j) => !hide(j)).length ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{sec.jobs.filter((j) => !hide(j)).map(card)}</div>
+                  ) : (
+                    <p className="text-xs text-stitch-secondary">None of these fit this car.</p>
+                  )}
                 </div>
               ))}
             </section>
           ))}
-          {sections.otherJobs.length ? (
+          {sections.otherJobs.filter((j) => !hide(j)).length ? (
             <section className="space-y-2">
               <h4 className="text-[11px] font-semibold uppercase tracking-wider text-stitch-secondary border-b border-outline-variant/30 pb-1">
                 {LOG_SERVICE_COPY.otherJobsHeading(system.name)}
               </h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{sections.otherJobs.map(card)}</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{sections.otherJobs.filter((j) => !hide(j)).map(card)}</div>
             </section>
           ) : null}
         </div>
       ) : components.length === 0 ? (
         <p className="text-sm text-stitch-secondary py-4">No components under this system.</p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{components.map(card)}</div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{components.filter((j) => !hide(j)).map(card)}</div>
       )}
+      {!loading && showAll && notUsual.length ? (
+        <div className="space-y-3" data-testid="not-usual-jobs">
+          <NotUsualDivider />
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 opacity-70">{notUsual.map(card)}</div>
+        </div>
+      ) : null}
+      {!loading && onToggleShowAll ? (
+        <div className="flex justify-center">
+          <ShowAllButton shown={showAll} hidden={notUsual.length} inGroup onToggle={onToggleShowAll} />
+        </div>
+      ) : null}
     </div>
   );
 }
 
 function JobCard({
+  notUsual = false,
   cat,
   openGroupId,
   selected,
@@ -119,6 +153,7 @@ function JobCard({
   onToggle: () => void;
   onToggleRelated: (rel: RecommendedWith) => void;
   mayNeed?: string;
+  notUsual?: boolean;
 }) {
   const info = [cat.description, mayNeed].filter(Boolean).join("\n\n");
   const badge = actionLabel(cat.default_action);
@@ -148,6 +183,12 @@ function JobCard({
             {badge ? (
               <span className="rounded-full bg-surface-container px-2 py-0.5 text-[11px] font-medium text-on-surface-variant">
                 {badge}
+              </span>
+            ) : null}
+            {cat.is_high_voltage || notUsual ? (
+              <span className="flex flex-wrap justify-center gap-1">
+                {notUsual ? <NotUsualChip /> : null}
+                {cat.is_high_voltage ? <HighVoltageChip /> : null}
               </span>
             ) : null}
             {added ? <span className="text-[11px] font-semibold text-primary">{LOG_SERVICE_COPY.jobAddedBadge}</span> : null}

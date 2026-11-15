@@ -521,7 +521,10 @@ export async function getPackageChecklist(args: {
       let lastMiles: number | null = null;
       for (const pos of MAINTENANCE_POSITIONS) {
         const row = stateByKey.get(`${categoryId}|${pos}`);
-        const st = row
+        const rowRetired = row && String(row.schedule_status ?? "") === "retired";
+        const st = rowRetired
+          ? "fulfilled"
+          : row
           ? analyzeComponentRowStatus(args.currentOdo, args.today, {
               next_due_km: row.next_due_km as number | null,
               next_due_km_max: row.next_due_km_max as number | null,
@@ -557,7 +560,10 @@ export async function getPackageChecklist(args: {
       });
     } else {
       const row = stateByKey.get(`${categoryId}|`);
-      const st = row
+      const rowRetired = row && String(row.schedule_status ?? "") === "retired";
+      const st = rowRetired
+        ? "fulfilled"
+        : row
         ? analyzeComponentRowStatus(args.currentOdo, args.today, {
             next_due_km: row.next_due_km as number | null,
             next_due_km_max: row.next_due_km_max as number | null,

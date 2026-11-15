@@ -9,6 +9,7 @@ import type { SisterVehicleRow } from "../vehiclesCatalogApi";
 import { factValue } from "./vehiclesStitchShared";
 import { versionYearsLabel } from "@roam/vehicle-catalog-core";
 import { D_CARD, D_MONO, D_MUTED, D_TXT, DIcon } from "../../parts-database/add-parts/catalog/dominionKit";
+import { PowertrainCard } from "./PowertrainCard";
 
 type SpecRow = { specKey?: string; value?: string | null };
 type JobRow = { status?: string; section?: string };
@@ -23,9 +24,11 @@ type Props = {
   onOpenCar: (r: VehicleCatalogRecord) => void;
   onTabParts: () => void;
   onAddFact: () => void;
+  token: string;
+  onPowertrainSaved: (patch: Partial<VehicleCatalogRecord> & { id: string }) => void;
 };
 
-export function VehiclesOverviewTab({ car, specs, jobs, sisters, logoByMake, items, onOpenCar, onTabParts, onAddFact }: Props) {
+export function VehiclesOverviewTab({ car, specs, jobs, sisters, logoByMake, items, onOpenCar, onTabParts, onAddFact, token, onPowertrainSaved }: Props) {
   const facts: Array<{ label: string; value: string | null; icon: string }> = [
     { label: "Years", value: versionYearsLabel(car.production_start_year, car.production_end_year), icon: "calendar_month" },
     { label: "Body", value: factValue(car.body_type), icon: "directions_car" },
@@ -55,6 +58,10 @@ export function VehiclesOverviewTab({ car, specs, jobs, sisters, logoByMake, ite
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="lg:col-span-3">
+        {/* key = id + status so a confirm elsewhere resets the card. */}
+        <PowertrainCard key={`${car.id}-${car.powertrain_status}`} car={car} token={token} canWrite onSaved={onPowertrainSaved} />
+      </div>
       <section className={`${D_CARD} p-6 lg:col-span-2`}>
         <h2 className={`text-[18px] font-semibold ${D_TXT}`}>Facts</h2>
         <p className={`mb-4 text-[14px] ${D_MUTED}`}>What this version is, from the car&apos;s own record.</p>

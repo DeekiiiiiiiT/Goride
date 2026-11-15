@@ -36,6 +36,7 @@ import { VehiclesSisterTab } from "./vehicles-stitch/VehiclesSisterTab";
 import { VehiclesHistoryTab } from "./vehicles-stitch/VehiclesHistoryTab";
 import { VehiclesAddCarFlow } from "./vehicles-stitch/VehiclesAddCarFlow";
 import { VehiclesStatesGallery } from "./vehicles-stitch/VehiclesStatesGallery";
+import { PowertrainCheckScreen } from "./vehicles-stitch/PowertrainCheckScreen";
 import { MakerLogo } from "./MakerLogo";
 import { PartsButton } from "../parts-database/PartsButton";
 import { rowFingerprint } from "./vehicles-stitch/vehiclesStitchShared";
@@ -44,7 +45,7 @@ import "../parts-database/partsDatabase.css";
 
 const RECENT_KEY = "dominion-vehicles-recent";
 
-type Screen = "home" | "maker" | "model" | "car" | "add" | "states";
+type Screen = "home" | "maker" | "model" | "car" | "add" | "states" | "powertrain";
 
 type JobRow = { status?: string; section?: string; label?: string; parts?: Array<{ partNumber?: string }> };
 
@@ -395,9 +396,28 @@ export function VehiclesStitchFlow({
     }
   }
 
+  /** A powertrain confirm only changes the 6 powertrain columns: merge them into the loaded list. */
+  const mergePowertrain = (patch: Partial<VehicleCatalogRecord> & { id: string }) =>
+    setItems((prev) => prev.map((r) => (r.id === patch.id ? { ...r, ...patch } : r)));
+
+  if (screen === "powertrain") {
+    return (
+      <PowertrainCheckScreen
+        token={token}
+        onBack={() => setScreen("home")}
+        onConfirmed={mergePowertrain}
+        onOpenCar={(id) => {
+          const r = items.find((x) => x.id === id);
+          if (r) openCar(r, "overview");
+        }}
+      />
+    );
+  }
+
   if (screen === "home") {
     return (
       <VehiclesHomeScreen
+        onOpenPowertrainCheck={() => setScreen("powertrain")}
         makers={makers}
         items={items}
         recentCars={cap && !recentCars.length ? items.slice(0, 2) : recentCars}
@@ -614,6 +634,8 @@ export function VehiclesStitchFlow({
             onOpenCar={openCar}
             onTabParts={() => setTab("parts")}
             onAddFact={openEditDetails}
+            token={token}
+            onPowertrainSaved={mergePowertrain}
           />
         ) : null}
         {tab === "specs" ? (

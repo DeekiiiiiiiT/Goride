@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { HighVoltageChip, NotUsualChip } from "./log-service/JobFitUi";
 import { ChevronRight, Eye, Loader2, Trash2 } from "lucide-react";
 import { groupJobsPreview, groupServiceHistoryRows } from "./serviceHistoryGroups";
 import {
@@ -364,6 +365,8 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
                       <div className="flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-primary" />
                         {String(row.category_name ?? row.categoryName ?? "—")}
+                        {row.fit_at_log === "no" || row.fitAtLog === "no" ? <NotUsualChip className="ml-1" /> : null}
+                        {row.is_high_voltage === true || row.isHighVoltage === true ? <HighVoltageChip className="ml-1" /> : null}
                       </div>
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap">

@@ -1,7 +1,7 @@
 {
   "slug": "fleet-ops",
-  "generatedAt": "2026-11-14T01:29:23.238Z",
-  "routeCount": 152,
+  "generatedAt": "2026-11-15T22:27:03.559Z",
+  "routeCount": 155,
   "routes": [
     "DELETE ${ADMIN_CAT}/:id",
     "DELETE ${ADMIN}/:id",
@@ -31,6 +31,8 @@
     "GET /admin/maintenance/history",
     "GET /admin/maintenance/history/export.csv",
     "GET /admin/maintenance/jobs",
+    "GET /admin/maintenance/jobs/:id/fit-count",
+    "GET /admin/maintenance/jobs/:id/fit-models",
     "GET /admin/maintenance/part-schedules-index",
     "GET /admin/maintenance/preview",
     "GET /admin/maintenance/preview/export.csv",
@@ -71,6 +73,7 @@
     "GET /vehicles/:vehicleId/maintenance/schedule-explain",
     "PATCH /admin/maintenance-categories/:id",
     "PATCH /admin/maintenance-templates/:id",
+    "PATCH /admin/maintenance/groups/:id/fits",
     "PATCH /admin/maintenance/job-items/:id",
     "PATCH /admin/maintenance/jobs/:id",
     "PATCH /admin/maintenance/rules/:id",

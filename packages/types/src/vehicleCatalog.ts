@@ -53,6 +53,15 @@ export function resolveApproveVehicleClass(
 /** Row from `public.vehicle_catalog` (Super Admin vehicle master DB). */
 export interface VehicleCatalogRecord {
   id: string;
+  /** Powertrain job fit (D1): ice, mhev, hev, phev, erev, bev, fcev. NULL while needs_check. */
+  powertrain?: string | null;
+  /** What the car runs on: petrol, diesel, cng, hydrogen, electric. */
+  fuel?: string | null;
+  /** derived (worked out) · confirmed (owner) · needs_check (Dominion list). */
+  powertrain_status?: "derived" | "confirmed" | "needs_check" | null;
+  powertrain_note?: string | null;
+  powertrain_last_confirmed_by?: string | null;
+  powertrain_last_confirmed_at?: string | null;
   /** `car` (default) or `motorcycle`. */
   vehicle_class?: VehicleClass;
   make: string;

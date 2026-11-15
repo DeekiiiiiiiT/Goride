@@ -2596,6 +2596,22 @@ export const api = {
       return { items: (json.items || []) as MaintenanceServiceCategory[] };
   },
 
+  /**
+   * Powertrain job fit: every job with fits = yes / no / unknown for this car, plus jobFit
+   * (status known / unknown / error). No jobFit in the answer = the job_fit_filter flag is off.
+   */
+  async getJobFitForVehicle(vehicleId: string) {
+      const q = `?kind=component&vehicleId=${encodeURIComponent(vehicleId)}`;
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance-categories${q}`, {
+          headers: await getHeaders(null),
+      });
+      if (!response.ok) throw new Error("Failed to check which jobs fit this car");
+      return (await response.json()) as {
+          items: Array<{ id: string; fits?: string }>;
+          jobFit?: { status?: string; powertrain?: string | null; fuel?: string | null };
+      };
+  },
+
   /** Systems (parent groups) for taxonomy browsing. */
   async listMaintenanceSystems() {
       return this.listMaintenanceCategories("system");

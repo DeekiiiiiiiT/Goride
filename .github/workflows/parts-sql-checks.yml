@@ -27,6 +27,12 @@ on:
       - 'supabase/tests/service_items_db_test.sql'
       - 'supabase/tests/service_items_save_db_test.sql'
       - 'supabase/tests/service_items_completion_db_test.sql'
+      - 'supabase/tests/powertrain_checks.sql'
+      - 'supabase/tests/powertrain_db_test.sql'
+      - 'supabase/tests/powertrain_rerun_test.sql'
+      - 'supabase/tests/powertrain_schedule_db_test.sql'
+      - 'supabase/migrations/20261115214317_powertrain_job_fit.sql'
+      - 'supabase/migrations/20261115222336_powertrain_job_fit_schedules.sql'
       - 'supabase/migrations/20261113154942_service_items_catalogue.sql'
       - 'supabase/migrations/20261113162605_service_items_drop_old_supply_link.sql'
       - 'supabase/migrations/20261113171047_service_items_logging_core.sql'
@@ -79,6 +85,12 @@ on:
       - 'supabase/tests/service_items_db_test.sql'
       - 'supabase/tests/service_items_save_db_test.sql'
       - 'supabase/tests/service_items_completion_db_test.sql'
+      - 'supabase/tests/powertrain_checks.sql'
+      - 'supabase/tests/powertrain_db_test.sql'
+      - 'supabase/tests/powertrain_rerun_test.sql'
+      - 'supabase/tests/powertrain_schedule_db_test.sql'
+      - 'supabase/migrations/20261115214317_powertrain_job_fit.sql'
+      - 'supabase/migrations/20261115222336_powertrain_job_fit_schedules.sql'
       - 'supabase/migrations/20261113154942_service_items_catalogue.sql'
       - 'supabase/migrations/20261113162605_service_items_drop_old_supply_link.sql'
       - 'supabase/migrations/20261113171047_service_items_logging_core.sql'
@@ -190,6 +202,16 @@ jobs:
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/service_items_save_db_test.sql
           docker cp supabase/tests/service_items_completion_db_test.sql "$db_container":/tmp/service_items_completion_db_test.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/service_items_completion_db_test.sql
+          docker cp supabase/tests/powertrain_checks.sql "$db_container":/tmp/powertrain_checks.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/powertrain_checks.sql
+          docker cp supabase/tests/powertrain_db_test.sql "$db_container":/tmp/powertrain_db_test.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/powertrain_db_test.sql
+          docker cp supabase/migrations/20261115214317_powertrain_job_fit.sql "$db_container":/tmp/20261115214317_powertrain_job_fit.sql
+          docker cp supabase/tests/powertrain_rerun_test.sql "$db_container":/tmp/powertrain_rerun_test.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/powertrain_rerun_test.sql
+          docker cp supabase/tests/powertrain_schedule_db_test.sql "$db_container":/tmp/powertrain_schedule_db_test.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/powertrain_schedule_db_test.sql
+          docker cp supabase/migrations/20261115222336_powertrain_job_fit_schedules.sql "$db_container":/tmp/20261115222336_powertrain_job_fit_schedules.sql
           docker cp supabase/tests/maintenance_discount_checks.sql "$db_container":/tmp/maintenance_discount_checks.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/maintenance_discount_checks.sql
           docker cp supabase/tests/maintenance_discount_db_test.sql "$db_container":/tmp/maintenance_discount_db_test.sql

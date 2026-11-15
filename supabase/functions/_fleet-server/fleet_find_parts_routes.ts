@@ -643,6 +643,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
               schedule_status?: string | null;
               category?: { name?: string } | { name?: string }[] | null;
             };
+            if (String(schedule.schedule_status ?? "active") === "retired") continue;
             const category = Array.isArray(schedule.category) ? schedule.category[0] : schedule.category;
             const analysis = analyzeMaintenanceScheduleRow(
               odometer,

@@ -267,3 +267,60 @@ export async function listVehicleCatalogOrphans(
     total: typeof data.total === "number" ? data.total : (data.items || []).length,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Powertrain job fit (docs/powertrain-job-fit-audit.md, routes from Round S1)
+// ---------------------------------------------------------------------------
+
+export type PowertrainCheckItem = {
+  id: string;
+  make: string;
+  model: string;
+  production_start_year: number | null;
+  production_end_year: number | null;
+  fuel_type: string | null;
+  engine_type: string | null;
+  fuel_category: string | null;
+  powertrain: string | null;
+  fuel: string | null;
+  powertrain_status: string;
+  powertrain_note: string | null;
+  powertrain_last_confirmed_by: string | null;
+  powertrain_last_confirmed_at: string | null;
+  disagreement: { fuelType: string; category: string } | null;
+};
+
+export async function listPowertrainCheck(
+  accessToken: string,
+): Promise<{ count: number; items: PowertrainCheckItem[] }> {
+  const res = await fetchWithRetry(`${writeUrl()}/powertrain-check`, { headers: edgeHeaders(accessToken) });
+  if (!res.ok) throw new Error(await parseError(res));
+  const data = await res.json();
+  return { count: Number(data.count ?? 0), items: (data.items || []) as PowertrainCheckItem[] };
+}
+
+export type PowertrainSummary = { total: number; needsCheck: number; byPowertrain: Record<string, number> };
+
+export async function getPowertrainSummary(accessToken: string): Promise<PowertrainSummary> {
+  const res = await fetchWithRetry(`${writeUrl()}/powertrain-summary`, { headers: edgeHeaders(accessToken) });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as PowertrainSummary;
+}
+
+/** Owner confirms (or edits) a model's powertrain → status confirmed (audit 3b, last row). */
+export async function confirmPowertrain(
+  accessToken: string,
+  id: string,
+  powertrain: string,
+  fuel: string,
+): Promise<Partial<VehicleCatalogRecord> & { id: string }> {
+  // No retry: a confirm is a write the owner sees straight away.
+  const res = await fetch(`${writeUrl()}/${id}/powertrain`, {
+    method: "PATCH",
+    headers: edgeHeaders(accessToken, "application/json"),
+    body: JSON.stringify({ powertrain, fuel }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  const data = await res.json();
+  return data.item as Partial<VehicleCatalogRecord> & { id: string };
+}

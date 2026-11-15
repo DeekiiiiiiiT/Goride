@@ -5,6 +5,8 @@ import { LOG_SERVICE_COPY } from "./logServiceCopy";
 import { JobTooltip } from "./JobTooltip";
 import { actionLabel } from "./systemSections";
 import type { MaintenanceServiceCategory } from "../../../../types/maintenance";
+import { groupFitCounts, isNotUsual, type JobFitState } from "./jobFit";
+import { CouldNotCheckBanner, NotUsualChip, NotUsualDivider, ShowAllButton, UnknownEngineBanner } from "./JobFitUi";
 
 export type LogServicePackageChoice = {
   id: string;
@@ -139,6 +141,16 @@ export type LogServiceWhatWasDoneStepProps = {
   onPickSuggested?: (op: LogServiceSuggestedOp) => void;
   onOpenInspection: () => void;
   vinLabel?: string | null;
+  /** Powertrain job fit (audit PT-1 / PT-7). Absent or status "off" = today's screen. */
+  jobFit?: JobFitState;
+  onRetryJobFit?: () => void;
+  /** Only where the host can open the car's page (Vehicles). */
+  onLinkCar?: () => void;
+  /** "Show all jobs" pressed (shared with the group screen). */
+  showAllJobs?: boolean;
+  onToggleShowAllJobs?: () => void;
+  /** Groups that already hold a ticked / added job stay visible even if nothing else fits. */
+  keepGroupIds?: string[];
 };
 
 function packageCardClass(status?: LogServicePackageChoice["status"]): string {
@@ -165,7 +177,30 @@ export function LogServiceWhatWasDoneStep({
   onPickSuggested,
   onOpenInspection,
   vinLabel,
+  jobFit = { status: "off" },
+  onRetryJobFit,
+  onLinkCar,
+  showAllJobs = false,
+  onToggleShowAllJobs,
+  keepGroupIds = [],
 }: LogServiceWhatWasDoneStepProps) {
+  const fitOn = jobFit.status === "known";
+  const groupCounts = useMemo(
+    () => new Map(quickJobs.map((g) => [g.id, groupFitCounts(jobFit, g.id, allJobs)])),
+    [quickJobs, jobFit, allJobs],
+  );
+  const hiddenGroupIds = new Set(
+    fitOn
+      ? quickJobs
+          .filter((g) => (groupCounts.get(g.id)?.fit ?? 0) === 0 && !keepGroupIds.includes(g.id))
+          .map((g) => g.id)
+      : [],
+  );
+  const hiddenJobCount = fitOn
+    ? quickJobs.reduce((n, g) => n + (groupCounts.get(g.id)?.hidden ?? 0), 0)
+    : 0;
+  const visibleGroups = quickJobs.filter((g) => !hiddenGroupIds.has(g.id));
+  const notUsualGroups = quickJobs.filter((g) => hiddenGroupIds.has(g.id));
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
@@ -298,6 +333,7 @@ export function LogServiceWhatWasDoneStep({
                     ) : null}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
+                    {isNotUsual(jobFit, op.categoryId) ? <NotUsualChip /> : null}
                     {op.status === "overdue" ? (
                       <span className="bg-error-container text-on-error-container text-[10px] px-1.5 py-0.5 rounded">
                         Due
@@ -311,6 +347,9 @@ export function LogServiceWhatWasDoneStep({
           ) : null}
         </div>
       </div>
+
+      {jobFit.status === "unknown" ? <UnknownEngineBanner onLinkCar={onLinkCar} /> : null}
+      {jobFit.status === "error" && onRetryJobFit ? <CouldNotCheckBanner onRetry={onRetryJobFit} /> : null}
 
       <section className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
@@ -390,22 +429,38 @@ export function LogServiceWhatWasDoneStep({
         ) : quickJobs.length === 0 ? (
           <p className="text-sm text-stitch-secondary py-2">No systems available.</p>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {quickJobs.map((sys) => (
-              <JobTooltip key={sys.id} text={sys.description}>
-              <button
-                type="button"
-                onClick={() => onPickSystem(sys)}
-                className="flex flex-col items-center gap-2 p-4 rounded-xl border border-outline-variant/40 bg-surface-container-lowest hover:bg-surface-container-low transition-colors text-center min-h-[108px]"
-              >
-                <div className="bg-surface-container p-3 rounded-xl text-on-surface">
-                  <MaintenanceIcon iconKey={sys.icon_key} className="w-6 h-6" />
+          <>
+            {jobFit.status === "loading" ? (
+              <p className="flex items-center gap-1.5 text-xs text-stitch-secondary">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking which jobs fit this car…
+              </p>
+            ) : null}
+            <div className="grid grid-cols-1 min-[391px]:grid-cols-2 sm:grid-cols-4 gap-3" data-testid="group-grid">
+              {visibleGroups.map((sys) => (
+                <GroupTile
+                  key={sys.id}
+                  sys={sys}
+                  count={fitOn ? groupCounts.get(sys.id)?.fit ?? null : null}
+                  onPick={() => onPickSystem(sys)}
+                />
+              ))}
+            </div>
+            {fitOn && showAllJobs && notUsualGroups.length ? (
+              <>
+                <NotUsualDivider />
+                <div className="grid grid-cols-1 min-[391px]:grid-cols-2 sm:grid-cols-4 gap-3 opacity-70">
+                  {notUsualGroups.map((sys) => (
+                    <GroupTile key={sys.id} sys={sys} count={groupCounts.get(sys.id)?.hidden ?? null} notUsual onPick={() => onPickSystem(sys)} />
+                  ))}
                 </div>
-                <span className="text-sm font-medium text-on-surface leading-tight">{sys.name}</span>
-              </button>
-              </JobTooltip>
-            ))}
-          </div>
+              </>
+            ) : null}
+            {fitOn && onToggleShowAllJobs ? (
+              <div className="flex justify-center pt-1">
+                <ShowAllButton shown={showAllJobs} hidden={hiddenJobCount} onToggle={onToggleShowAllJobs} />
+              </div>
+            ) : null}
+          </>
         )}
       </section>
 
@@ -435,5 +490,40 @@ export function LogServiceWhatWasDoneStep({
         </button>
       </section>
     </div>
+  );
+}
+
+function GroupTile({
+  sys,
+  count,
+  notUsual = false,
+  onPick,
+}: {
+  sys: MaintenanceServiceCategory;
+  /** Fitting jobs in the group (or hidden ones on a "not usual" tile); null = flag off. */
+  count: number | null;
+  notUsual?: boolean;
+  onPick: () => void;
+}) {
+  return (
+    <JobTooltip text={sys.description}>
+      <button
+        type="button"
+        onClick={onPick}
+        data-testid={`group-tile-${sys.code}`}
+        className="flex flex-col items-center gap-2 p-4 rounded-xl border border-outline-variant/40 bg-surface-container-lowest hover:bg-surface-container-low transition-colors text-center min-h-[108px]"
+      >
+        <div className="bg-surface-container p-3 rounded-xl text-on-surface">
+          <MaintenanceIcon iconKey={sys.icon_key} className="w-6 h-6" />
+        </div>
+        <span className="text-sm font-medium text-on-surface leading-tight">{sys.name}</span>
+        {count != null ? (
+          <span className="text-[11px] font-medium text-stitch-secondary">
+            {count} job{count === 1 ? "" : "s"}
+          </span>
+        ) : null}
+        {notUsual ? <NotUsualChip /> : null}
+      </button>
+    </JobTooltip>
   );
 }

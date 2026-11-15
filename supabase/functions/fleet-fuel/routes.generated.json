@@ -1,6 +1,6 @@
 {
   "slug": "fleet-fuel",
-  "generatedAt": "2026-11-14T15:19:27.026Z",
+  "generatedAt": "2026-11-15T22:27:03.532Z",
   "routeCount": 144,
   "routes": [
     "DELETE ${BASE_PATH}/admin/evidence-inbox/gate-held/:transactionId",

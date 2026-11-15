@@ -27,10 +27,11 @@ import {
 } from "./vehicle_catalog_enterprise.ts";
 
 export function registerVehicleCatalogWriteRoutes(
-  app: { post: unknown; patch: unknown; delete: unknown },
+  app: { get?: unknown; post: unknown; patch: unknown; delete: unknown },
   supabase: SupabaseClient,
 ): void {
   const route = app as {
+    get: (path: string, ...handlers: unknown[]) => void;
     post: (path: string, ...handlers: unknown[]) => void;
     patch: (path: string, ...handlers: unknown[]) => void;
     delete: (path: string, ...handlers: unknown[]) => void;
@@ -611,7 +612,9 @@ route.patch("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), as
     if (keys.length === 0) {
       return c.json({ error: "No fields to update" }, 400);
     }
-    let upd: any = await supabase.from("vehicle_catalog").update(row).eq("id", id).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
+    const catalogSelect =
+      `${VEHICLE_CATALOG_SUPABASE_SELECT},powertrain,fuel,powertrain_status,powertrain_note,powertrain_last_confirmed_by,powertrain_last_confirmed_at`;
+    let upd: any = await supabase.from("vehicle_catalog").update(row).eq("id", id).select(catalogSelect).single();
     if (upd.error && isLegacyVehicleCatalogYearNotNullError(upd.error)) {
       const legacyRow = patchRowForLegacyDb(row);
       legacyRow.updated_at = row.updated_at;
@@ -679,6 +682,127 @@ route.delete("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), a
   } catch (e: any) {
     console.error("[vehicle-catalog] delete:", e);
     return c.json({ error: e.message || "Failed to delete vehicle catalog entry" }, 500);
+  }
+});
+
+const POWERTRAIN_CODES = new Set(["ice", "mhev", "hev", "phev", "erev", "bev", "fcev"]);
+const FUEL_CODES = new Set(["petrol", "diesel", "cng", "hydrogen", "electric"]);
+
+route.patch("/make-server-37f42386/admin/vehicle-catalog/:id/powertrain", requireAuth(), async (c: any) => {
+  const denied = assertVehicleCatalogAccess(c);
+  if (denied) return denied;
+  const limited = await assertCatalogWriteRateLimit(c);
+  if (limited) return limited;
+  try {
+    const id = c.req.param("id");
+    const body = (await c.req.json()) as Record<string, unknown>;
+    const powertrain = String(body.powertrain ?? "").trim();
+    const fuel = String(body.fuel ?? "").trim();
+    if (!POWERTRAIN_CODES.has(powertrain)) {
+      return c.json({ error: "powertrain must be a known code." }, 400);
+    }
+    if (!FUEL_CODES.has(fuel)) {
+      return c.json({ error: "fuel must be a known code." }, 400);
+    }
+    const actorId = vehicleCatalogActorId(c);
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+      .from("vehicle_catalog")
+      .update({
+        powertrain,
+        fuel,
+        powertrain_status: "confirmed",
+        powertrain_note: null,
+        powertrain_last_confirmed_by: actorId,
+        powertrain_last_confirmed_at: now,
+        updated_at: now,
+      })
+      .eq("id", id)
+      .select("id, make, model, powertrain, fuel, powertrain_status, powertrain_note, powertrain_last_confirmed_by, powertrain_last_confirmed_at")
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return c.json({ error: "Not found" }, 404);
+    invalidateCatalogExistenceCache(id);
+    return c.json({ item: data });
+  } catch (e: any) {
+    console.error("[vehicle-catalog] powertrain patch:", e);
+    return c.json({ error: e.message || "Failed to update powertrain" }, 500);
+  }
+});
+
+route.get("/make-server-37f42386/admin/vehicle-catalog/powertrain-check", requireAuth(), async (c: any) => {
+  const denied = assertVehicleCatalogAccess(c);
+  if (denied) return denied;
+  try {
+    const { data, error } = await supabase
+      .from("vehicle_catalog")
+      .select(
+        "id, make, model, production_start_year, production_end_year, fuel_type, engine_type, fuel_category, powertrain, fuel, powertrain_status, powertrain_note, powertrain_last_confirmed_by, powertrain_last_confirmed_at",
+      )
+      .eq("vehicle_class", "car")
+      .eq("powertrain_status", "needs_check")
+      .order("make")
+      .order("model");
+    if (error) throw error;
+    type CheckRow = Record<string, unknown> & {
+      disagreement: { fuelType: string; category: string } | null;
+    };
+    const items: CheckRow[] = ((data || []) as Record<string, unknown>[]).map((row) => {
+      const fuelType = row.fuel_type != null ? String(row.fuel_type) : null;
+      const fuelCategory = row.fuel_category != null ? String(row.fuel_category) : null;
+      const disagreement =
+        fuelType === "Hybrid(petrol)" && fuelCategory === "Gas"
+          ? { fuelType, category: fuelCategory }
+          : null;
+      return {
+        ...row,
+        disagreement,
+      };
+    });
+    items.sort((a, b) => {
+      const ad = a.disagreement ? 0 : 1;
+      const bd = b.disagreement ? 0 : 1;
+      if (ad !== bd) return ad - bd;
+      const makeCmp = String(a.make ?? "").localeCompare(String(b.make ?? ""));
+      if (makeCmp !== 0) return makeCmp;
+      return String(a.model ?? "").localeCompare(String(b.model ?? ""));
+    });
+    return c.json({ count: items.length, items });
+  } catch (e: any) {
+    console.error("[vehicle-catalog] powertrain-check:", e);
+    return c.json({ error: e.message || "Failed to load powertrain check list" }, 500);
+  }
+});
+
+route.get("/make-server-37f42386/admin/vehicle-catalog/powertrain-summary", requireAuth(), async (c: any) => {
+  const denied = assertVehicleCatalogAccess(c);
+  if (denied) return denied;
+  try {
+    // Count queries, not a row fetch: the API returns at most 1,000 rows (max_rows) and there are 2,679 models.
+    const countWhere = async (col?: string, val?: string): Promise<number> => {
+      let q = supabase
+        .from("vehicle_catalog")
+        .select("id", { count: "exact", head: true })
+        .eq("vehicle_class", "car");
+      if (col && val) q = q.eq(col, val);
+      const { count, error } = await q;
+      if (error) throw error;
+      return count ?? 0;
+    };
+    const codes = [...POWERTRAIN_CODES];
+    const [total, needsCheck, ...perCode] = await Promise.all([
+      countWhere(),
+      countWhere("powertrain_status", "needs_check"),
+      ...codes.map((code) => countWhere("powertrain", code)),
+    ]);
+    const byPowertrain: Record<string, number> = {};
+    codes.forEach((code, i) => {
+      byPowertrain[code] = perCode[i];
+    });
+    return c.json({ total, needsCheck, byPowertrain });
+  } catch (e: any) {
+    console.error("[vehicle-catalog] powertrain-summary:", e);
+    return c.json({ error: e.message || "Failed to load powertrain summary" }, 500);
   }
 });
 }

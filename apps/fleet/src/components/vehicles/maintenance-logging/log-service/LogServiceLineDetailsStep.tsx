@@ -1,4 +1,5 @@
 import React from "react";
+import { HighVoltageChip, NotUsualChip } from "./JobFitUi";
 import { Loader2 } from "lucide-react";
 import { Checkbox } from "../../../ui/checkbox";
 import { Input } from "../../../ui/input";
@@ -69,6 +70,8 @@ export type LogServiceLineDetailsStepProps = {
   itemsSlot?: React.ReactNode;
   /** Inside the multi-job list the page already has the "Line details" title. */
   hideHeading?: boolean;
+  /** Powertrain job fit: picked from "Show all jobs" (doesn't fit this car). Saved as normal. */
+  notUsual?: boolean;
 };
 
 function PositionButtons({
@@ -330,8 +333,15 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
           {systemName && !props.itemsSlot ? (
             <span className="text-xs text-stitch-secondary">{systemName}</span>
           ) : null}
+          {props.notUsual ? <NotUsualChip /> : null}
+          {category.is_high_voltage ? <HighVoltageChip /> : null}
         </div>
       </div>
+      {props.notUsual ? (
+        <p className="-mt-3 text-xs text-stitch-secondary" data-testid="not-usual-helper">
+          You picked this from all jobs. It&apos;s saved as normal.
+        </p>
+      ) : null}
 
       {props.serviceForm ? (
         <ServiceJobForm {...props} serviceForm={props.serviceForm} />

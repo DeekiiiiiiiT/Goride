@@ -58,7 +58,15 @@ export const JOB_ICON_KEYS = [
   "wipers",
 ] as const;
 
-export type JobGroup = { id: string; code: string; name: string; iconKey: string | null };
+export type JobGroup = {
+  id: string;
+  code: string;
+  name: string;
+  iconKey: string | null;
+  /** Powertrain job fit: NULL = any car. */
+  fitsPowertrains?: string[] | null;
+  fitsFuels?: string[] | null;
+};
 
 export type AlsoDoLink = { relationId: string; jobId: string; jobName: string; note: string };
 export type SuggestedBy = { relationId: string; jobId: string; jobName: string };
@@ -80,6 +88,12 @@ export type Job = {
   suggestedBy: SuggestedBy[];
   /** May-need links (S1): active links only, in saved order. */
   items: MayNeedItem[];
+  /** Powertrain job fit: NULL = same as group. "All" is stored as the full code list. */
+  fitsPowertrains?: string[] | null;
+  fitsFuels?: string[] | null;
+  isHighVoltage?: boolean;
+  groupFitsPowertrains?: string[] | null;
+  groupFitsFuels?: string[] | null;
 };
 
 export type ItemNeed = "usually" | "sometimes";
@@ -183,7 +197,9 @@ export type JobInput = {
 };
 export const createJob = (token: string, input: JobInput) =>
   call<{ item: Job }>(token, "/admin/maintenance/jobs", { method: "POST", ...json(input) });
-export const updateJob = (token: string, id: string, input: Partial<JobInput>) =>
+/** Fit fields: key missing = leave as is; null = same as group; array = that list. */
+export type JobFitInput = { fitsPowertrains?: string[] | null; fitsFuels?: string[] | null; isHighVoltage?: boolean };
+export const updateJob = (token: string, id: string, input: Partial<JobInput> & JobFitInput) =>
   call<{ item: Job }>(token, `/admin/maintenance/jobs/${id}`, { method: "PATCH", ...json(input) });
 
 // V5
@@ -259,3 +275,42 @@ export const retireSupply = (token: string, id: string) =>
   call<{ item: Supply; hiddenFromJobs: number }>(token, `/admin/maintenance/supplies/${id}/retire`, { method: "POST" });
 export const restoreSupply = (token: string, id: string) =>
   call<{ item: Supply }>(token, `/admin/maintenance/supplies/${id}/restore`, { method: "POST" });
+
+// Powertrain job fit (S1 routes)
+export const updateGroupFits = (
+  token: string,
+  id: string,
+  input: { fitsPowertrains?: string[] | null; fitsFuels?: string[] | null },
+) =>
+  call<{ item: { id: string; fitsPowertrains: string[] | null; fitsFuels: string[] | null } }>(
+    token,
+    `/admin/maintenance/groups/${id}/fits`,
+    { method: "PATCH", ...json(input) },
+  );
+
+export type FitOverrides = { fits_powertrains?: string[] | null; fits_fuels?: string[] | null };
+export type FitCount = { fits: number; unknown: number; total: number };
+
+const overridesQuery = (o: FitOverrides | null) => (o ? `overrides=${encodeURIComponent(JSON.stringify(o))}` : "");
+
+/** "Fits N of T car models": one DB count (job_fit_count) with the unsaved choices as overrides. */
+export const fetchFitCount = (token: string, jobId: string, overrides: FitOverrides | null, signal?: AbortSignal) => {
+  const q = overridesQuery(overrides);
+  return call<FitCount>(token, `/admin/maintenance/jobs/${jobId}/fit-count${q ? `?${q}` : ""}`, { signal });
+};
+
+export type FitModel = {
+  vehicleCatalogId: string;
+  make: string;
+  model: string;
+  yearFrom: number | null;
+  yearTo: number | null;
+  powertrain: string | null;
+  fuel: string | null;
+};
+
+/** "See which": the matching models (same rule and overrides as the count). */
+export const fetchFitModels = (token: string, jobId: string, overrides: FitOverrides | null, limit = 200) => {
+  const q = overridesQuery(overrides);
+  return call<{ items: FitModel[] }>(token, `/admin/maintenance/jobs/${jobId}/fit-models?limit=${limit}${q ? `&${q}` : ""}`);
+};

@@ -49,6 +49,57 @@ function errMsg(e: unknown): string {
   return pgErrorMessage(e);
 }
 
+const POWERTRAIN_FAMILY_CODES = new Set(["ice", "mhev", "hev", "phev", "erev", "bev", "fcev"]);
+const POWERTRAIN_FUEL_CODES = new Set(["petrol", "diesel", "cng", "hydrogen", "electric"]);
+
+function jobPowertrainApiFields(
+  row: Record<string, unknown>,
+  parent: Record<string, unknown> | null | undefined,
+) {
+  return {
+    fitsPowertrains: (row.fits_powertrains as string[] | null | undefined) ?? null,
+    fitsFuels: (row.fits_fuels as string[] | null | undefined) ?? null,
+    isHighVoltage: row.is_high_voltage === true,
+    groupFitsPowertrains: parent?.fits_powertrains ?? null,
+    groupFitsFuels: parent?.fits_fuels ?? null,
+  };
+}
+
+function parseFitsCodeList(
+  raw: unknown,
+  allowed: Set<string>,
+  label: string,
+): { ok: true; value: string[] | null } | { ok: false; error: string } | { ok: true; missing: true } {
+  if (raw === undefined) return { ok: true, missing: true };
+  if (raw === null) return { ok: true, value: null };
+  if (!Array.isArray(raw)) return { ok: false, error: `${label} must be null or an array.` };
+  if (raw.length === 0) return { ok: false, error: `${label} cannot be empty.` };
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const x of raw) {
+    const code = String(x).trim();
+    if (!allowed.has(code)) return { ok: false, error: `Unknown code in ${label}: ${code}.` };
+    if (!seen.has(code)) {
+      seen.add(code);
+      out.push(code);
+    }
+  }
+  return { ok: true, value: out };
+}
+
+function parseFitOverridesQuery(raw: string | undefined): { ok: true; value: Record<string, unknown> | null } | { ok: false } {
+  if (raw == null || raw === "") return { ok: true, value: null };
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed !== null && typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { ok: false };
+    }
+    return { ok: true, value: parsed as Record<string, unknown> };
+  } catch {
+    return { ok: false };
+  }
+}
+
 function serviceItemsHttpError(
   c: Context,
   e: unknown,
@@ -71,7 +122,7 @@ async function buildJobsPayload(supabase: SupabaseClient) {
   const [groupsRes, sgRes, secRes, memRes, jobsRes, relRes, usedIds, itemsRes, suppliesRes, unitsRes] = await Promise.all([
     supabase
       .from("maintenance_service_categories")
-      .select("id, code, name, icon_key")
+      .select("id, code, name, icon_key, fits_powertrains, fits_fuels")
       .eq("kind", "system")
       .eq("status", "active")
       .not("code", "like", "imp-%")
@@ -170,8 +221,13 @@ async function buildJobsPayload(supabase: SupabaseClient) {
     }
   }
 
+  const groupById = new Map(
+    (groupsRes.data || []).map((g) => [String((g as { id: string }).id), g as Record<string, unknown>]),
+  );
+
   const jobs = jobRows.map((row) => {
     const mapped = mapCategoryToJob(row, usedIds, byId, outByFrom, inByTo);
+    const parent = groupById.get(String(row.parent_id ?? ""));
     const jobId = String(row.id);
     const links = (itemsByJob.get(jobId) || []).slice().sort(
       (a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0)
@@ -193,7 +249,7 @@ async function buildJobsPayload(supabase: SupabaseClient) {
         unit ? { label_one: String(unit.label_one), label_many: String(unit.label_many) } : undefined,
       );
     });
-    return { ...mapped, items };
+    return { ...mapped, ...jobPowertrainApiFields(row as unknown as Record<string, unknown>, parent), items };
   });
 
   const membersBySection = new Map<string, Array<{ category_id: string; sort_order: number | null }>>();
@@ -251,6 +307,8 @@ async function buildJobsPayload(supabase: SupabaseClient) {
     iconKey: (g as { icon_key: string | null }).icon_key != null
       ? String((g as { icon_key: string }).icon_key)
       : null,
+    fitsPowertrains: (g as { fits_powertrains?: string[] | null }).fits_powertrains ?? null,
+    fitsFuels: (g as { fits_fuels?: string[] | null }).fits_fuels ?? null,
   }));
 
   const supplies = supplyRows.map((row) => {
@@ -307,7 +365,15 @@ async function loadJobItem(supabase: SupabaseClient, id: string) {
     inByTo.set(to, inn);
   }
 
-  return mapCategoryToJob(row as JobRow, usedIds, byId, outByFrom, inByTo);
+  const { data: parentRow } = await supabase
+    .from("maintenance_service_categories")
+    .select("fits_powertrains, fits_fuels")
+    .eq("id", String(row.parent_id ?? ""))
+    .maybeSingle();
+  return {
+    ...mapCategoryToJob(row as JobRow, usedIds, byId, outByFrom, inByTo),
+    ...jobPowertrainApiFields(row as unknown as Record<string, unknown>, parentRow as Record<string, unknown> | null),
+  };
 }
 
 async function loadSupplyApi(supabase: SupabaseClient, id: string) {
@@ -452,6 +518,9 @@ export const MAINTENANCE_JOBS_ADMIN_ROUTE_GUARDS: Record<string, "catalog.write"
   "PUT /admin/maintenance/jobs/:id/items/order": "catalog.write",
   "POST /admin/maintenance/job-relations": "catalog.write",
   "DELETE /admin/maintenance/job-relations/:id": "catalog.write",
+  "PATCH /admin/maintenance/groups/:id/fits": "catalog.write",
+  "GET /admin/maintenance/jobs/:id/fit-count": "staff_read",
+  "GET /admin/maintenance/jobs/:id/fit-models": "staff_read",
 };
 
 export function registerMaintenanceJobsAdminRoutes(route: RouteApp, supabase: SupabaseClient): void {
@@ -598,6 +667,23 @@ export function registerMaintenanceJobsAdminRoutes(route: RouteApp, supabase: Su
           if (sys?.code) systemCode = String(sys.code);
         }
         patch.default_fit_mode = defaultFitModeForJob(isPart, systemCode);
+      }
+
+      if (body.fitsPowertrains !== undefined) {
+        const parsed = parseFitsCodeList(body.fitsPowertrains, POWERTRAIN_FAMILY_CODES, "fitsPowertrains");
+        if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+        if ("value" in parsed) patch.fits_powertrains = parsed.value;
+      }
+      if (body.fitsFuels !== undefined) {
+        const parsed = parseFitsCodeList(body.fitsFuels, POWERTRAIN_FUEL_CODES, "fitsFuels");
+        if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+        if ("value" in parsed) patch.fits_fuels = parsed.value;
+      }
+      if (body.isHighVoltage !== undefined) {
+        if (typeof body.isHighVoltage !== "boolean") {
+          return c.json({ error: "isHighVoltage must be true or false." }, 400);
+        }
+        patch.is_high_voltage = body.isHighVoltage;
       }
 
       const { error } = await supabase.from("maintenance_service_categories").update(patch).eq("id", id);
@@ -1392,6 +1478,137 @@ export function registerMaintenanceJobsAdminRoutes(route: RouteApp, supabase: Su
       const { error } = await supabase.from("maintenance_job_relations").delete().eq("id", id);
       if (error) throw error;
       return c.json({ success: true });
+    } catch (e: unknown) {
+      return c.json({ error: errMsg(e) }, 500);
+    }
+  });
+
+  route.patch("/admin/maintenance/groups/:id/fits", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogWriteResponse(c);
+    if (denied) return denied;
+    const id = c.req.param("id");
+    if (!isUuid(id)) return c.json({ error: "Invalid group id." }, 400);
+    try {
+      const body = (await c.req.json()) as Record<string, unknown>;
+      if (body.isHighVoltage !== undefined) {
+        return c.json({ error: "Groups can't be marked high-voltage." }, 400);
+      }
+      const { data: row, error: rowErr } = await supabase
+        .from("maintenance_service_categories")
+        .select("id, kind")
+        .eq("id", id)
+        .maybeSingle();
+      if (rowErr) throw rowErr;
+      if (!row || String(row.kind) !== "system") {
+        return c.json({ error: "Group was not found." }, 400);
+      }
+      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (body.fitsPowertrains !== undefined) {
+        const parsed = parseFitsCodeList(body.fitsPowertrains, POWERTRAIN_FAMILY_CODES, "fitsPowertrains");
+        if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+        if ("value" in parsed) patch.fits_powertrains = parsed.value;
+      }
+      if (body.fitsFuels !== undefined) {
+        const parsed = parseFitsCodeList(body.fitsFuels, POWERTRAIN_FUEL_CODES, "fitsFuels");
+        if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+        if ("value" in parsed) patch.fits_fuels = parsed.value;
+      }
+      if (Object.keys(patch).length < 2) {
+        return c.json({ error: "No fit fields to update." }, 400);
+      }
+      const { error } = await supabase.from("maintenance_service_categories").update(patch).eq("id", id);
+      if (error) throw error;
+      const { data: updated } = await supabase
+        .from("maintenance_service_categories")
+        .select("id, code, name, fits_powertrains, fits_fuels")
+        .eq("id", id)
+        .maybeSingle();
+      return c.json({
+        item: {
+          id: String(updated?.id),
+          code: String(updated?.code ?? ""),
+          name: String(updated?.name ?? ""),
+          fitsPowertrains: updated?.fits_powertrains ?? null,
+          fitsFuels: updated?.fits_fuels ?? null,
+        },
+      });
+    } catch (e: unknown) {
+      return c.json({ error: errMsg(e) }, 500);
+    }
+  });
+
+  route.get("/admin/maintenance/jobs/:id/fit-count", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    const id = c.req.param("id");
+    if (!isUuid(id)) return c.json({ error: "Invalid job id." }, 400);
+    const overridesRaw = c.req.query("overrides");
+    const parsedOverrides = parseFitOverridesQuery(overridesRaw);
+    if (!parsedOverrides.ok) {
+      return c.json({ error: "overrides must be valid JSON.", code: "job_fit_count_bad_override" }, 400);
+    }
+    try {
+      const { data, error } = await supabase.rpc("job_fit_count", {
+        p_job_id: id,
+        p_overrides: parsedOverrides.value,
+      });
+      if (error) {
+        if (String(error.message).includes("job_fit_count_bad_override")) {
+          return c.json({
+            error: String(error.hint ?? error.message),
+            code: "job_fit_count_bad_override",
+          }, 400);
+        }
+        throw error;
+      }
+      const row = (data || [])[0] as { fits?: number; unknown?: number; total?: number } | undefined;
+      return c.json({
+        fits: Number(row?.fits ?? 0),
+        unknown: Number(row?.unknown ?? 0),
+        total: Number(row?.total ?? 0),
+      });
+    } catch (e: unknown) {
+      return c.json({ error: errMsg(e) }, 500);
+    }
+  });
+
+  route.get("/admin/maintenance/jobs/:id/fit-models", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    const id = c.req.param("id");
+    if (!isUuid(id)) return c.json({ error: "Invalid job id." }, 400);
+    const overridesRaw = c.req.query("overrides");
+    const parsedOverrides = parseFitOverridesQuery(overridesRaw);
+    if (!parsedOverrides.ok) {
+      return c.json({ error: "overrides must be valid JSON.", code: "job_fit_count_bad_override" }, 400);
+    }
+    const limitRaw = Number(c.req.query("limit") || 50);
+    const limit = Math.min(200, Math.max(1, Number.isFinite(limitRaw) ? limitRaw : 50));
+    try {
+      const { data, error } = await supabase.rpc("job_fit_models", {
+        p_job_id: id,
+        p_overrides: parsedOverrides.value,
+        p_limit: limit,
+      });
+      if (error) {
+        if (String(error.message).includes("job_fit_count_bad_override")) {
+          return c.json({
+            error: String(error.hint ?? error.message),
+            code: "job_fit_count_bad_override",
+          }, 400);
+        }
+        throw error;
+      }
+      const items = (data || []).map((row: Record<string, unknown>) => ({
+        vehicleCatalogId: row.vehicle_catalog_id,
+        make: row.make,
+        model: row.model,
+        yearFrom: row.year_from,
+        yearTo: row.year_to,
+        powertrain: row.powertrain,
+        fuel: row.fuel,
+      }));
+      return c.json({ items });
     } catch (e: unknown) {
       return c.json({ error: errMsg(e) }, 500);
     }

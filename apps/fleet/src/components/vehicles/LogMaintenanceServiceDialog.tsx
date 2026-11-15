@@ -61,6 +61,12 @@ import { logServiceOemMatchSummary } from "./maintenance-logging/log-service/log
 import { ItemsUsedSection } from "./maintenance-logging/log-service/ItemsUsedSection";
 import { PickPartDialog } from "./maintenance-logging/log-service/PickPartDialog";
 import { useJobItems } from "./maintenance-logging/log-service/useJobItems";
+import {
+  isNotUsual,
+  jobFitFromResponse,
+  powertrainPill,
+  type JobFitState,
+} from "./maintenance-logging/log-service/jobFit";
 import { draftFromSavedItem, linesHaveItemErrors, money } from "./maintenance-logging/log-service/itemsUsed";
 import {
   NotFinishedBanner,
@@ -131,6 +137,8 @@ export interface LogMaintenanceServiceDialogProps {
   /** Supabase user id for draft storage key. */
   draftUserId?: string;
   onSaved?: () => void;
+  /** Powertrain job fit: "Link this car" opens the car's page (only where the host can). */
+  onLinkCar?: () => void;
 }
 
 function stripEverySuffix(label: string): string {
@@ -382,7 +390,27 @@ export function LogMaintenanceServiceDialog({
   initialLog,
   draftUserId,
   onSaved,
+  onLinkCar,
 }: LogMaintenanceServiceDialogProps) {
+  // Powertrain job fit (audit PT-1 / PT-7): one answer per open; "off" until the server says otherwise.
+  const [jobFit, setJobFit] = useState<JobFitState>({ status: "off" });
+  const [jobFitTick, setJobFitTick] = useState(0);
+  const [showAllJobs, setShowAllJobs] = useState(false);
+  const [showAllInGroup, setShowAllInGroup] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!open || !vehicleId) return;
+    let live = true;
+    setShowAllJobs(false);
+    setShowAllInGroup(new Set());
+    setJobFit((prev) => (prev.status === "off" && jobFitTick === 0 ? prev : { status: "loading" }));
+    api
+      .getJobFitForVehicle(vehicleId)
+      .then((res) => live && setJobFit(jobFitFromResponse(res)))
+      .catch(() => live && setJobFit({ status: "error" }));
+    return () => {
+      live = false;
+    };
+  }, [open, vehicleId, jobFitTick]);
   const [odoTouched, setOdoTouched] = useState(false);
   const [anomalyAcknowledged, setAnomalyAcknowledged] = useState(false);
   const [odometerCheckLoading, setOdometerCheckLoading] = useState(false);
@@ -534,11 +562,14 @@ export function LogMaintenanceServiceDialog({
 
   const strip: LogServiceVehicleStrip = useMemo(
     () =>
-      vehicleStrip ?? {
-        vehicleLabel: vehicleId,
-        odometerKm: defaultOdo ?? (formMeta.odo > 0 ? formMeta.odo : null),
-      },
-    [vehicleStrip, vehicleId, defaultOdo, formMeta.odo],
+      ({
+        ...(vehicleStrip ?? {
+          vehicleLabel: vehicleId,
+          odometerKm: defaultOdo ?? (formMeta.odo > 0 ? formMeta.odo : null),
+        }),
+        powertrainLabel: powertrainPill(jobFit),
+      }),
+    [vehicleStrip, vehicleId, defaultOdo, formMeta.odo, jobFit],
   );
 
   const canContinueDateStep =
@@ -1811,6 +1842,18 @@ export function LogMaintenanceServiceDialog({
               onPickSystem={handlePickSystem}
               onPickSuggested={handlePickSuggested}
               onOpenInspection={handleOpenInspection}
+              jobFit={jobFit}
+              onRetryJobFit={() => setJobFitTick((n) => n + 1)}
+              onLinkCar={onLinkCar}
+              showAllJobs={showAllJobs}
+              onToggleShowAllJobs={() => setShowAllJobs((v) => !v)}
+              keepGroupIds={[
+                ...new Set(
+                  [...lines.map((l) => l.categoryId), ...selectedCategoryIds]
+                    .map((id) => allComponents.find((c) => c.id === id)?.parent_id)
+                    .filter((x): x is string => Boolean(x)),
+                ),
+              ]}
             />
           )}
 
@@ -1823,6 +1866,18 @@ export function LogMaintenanceServiceDialog({
               mayNeedByJob={itemsEnabled ? jobItems.itemsByJob : undefined}
               selectedIds={selectedCategoryIds}
               isAdded={categoryHasLine}
+              jobFit={jobFit}
+              showAll={showAllJobs || showAllInGroup.has(selectedSystem.id)}
+              onToggleShowAll={() => {
+                const on = showAllJobs || showAllInGroup.has(selectedSystem.id);
+                if (on) setShowAllJobs(false);
+                setShowAllInGroup((prev) => {
+                  const next = new Set(prev);
+                  if (on) next.delete(selectedSystem.id);
+                  else next.add(selectedSystem.id);
+                  return next;
+                });
+              }}
               onToggleComponent={handleToggleQuickComponent}
               onToggleRelated={(rel) =>
                 setSelectedCategoryIds((prev) =>
@@ -1870,6 +1925,7 @@ export function LogMaintenanceServiceDialog({
                   {activeCategory?.id === cat.id && (
                     <LogServiceLineDetailsStep
                       hideHeading
+                      notUsual={isNotUsual(jobFit, cat.id)}
                       category={cat}
                       systemName={lineExtras.system?.name}
                       action={lineExtras.action}
@@ -1944,6 +2000,7 @@ export function LogMaintenanceServiceDialog({
 
           {step === "lineDetails" && lineDetailCategories.length === 0 && activeCategory && (
             <LogServiceLineDetailsStep
+              notUsual={isNotUsual(jobFit, activeCategory.id)}
               category={activeCategory}
               systemName={lineExtras.system?.name}
               action={lineExtras.action}
@@ -2014,6 +2071,15 @@ export function LogMaintenanceServiceDialog({
           ) : null}
           {step === "review" && (
             <LogServiceReviewStep
+              lineFit={(line) => ({
+                // A saved line keeps the answer frozen when it was logged (PT-8); a new one uses today's.
+                notUsual: line.fitAtLog
+                  ? line.fitAtLog === "no"
+                  : Boolean(line.categoryId && isNotUsual(jobFit, line.categoryId)),
+                highVoltage:
+                  line.isHighVoltage ??
+                  Boolean(allComponents.find((c) => c.id === line.categoryId)?.is_high_voltage),
+              })}
               itemsEnabled={itemsEnabled || lines.some((l) => (l.items?.length ?? 0) > 0)}
               vehicleLabel={strip.vehicleLabel}
               baySessionLabel={idempotencyKey.slice(0, 8).toUpperCase()}

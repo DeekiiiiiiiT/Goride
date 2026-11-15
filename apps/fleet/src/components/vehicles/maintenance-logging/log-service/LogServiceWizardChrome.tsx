@@ -10,6 +10,8 @@ export type LogServiceVehicleStrip = {
   odometerDateLabel?: string | null;
   sourceLabel?: string | null;
   homeBase?: string | null;
+  /** Powertrain job fit: "Petrol", "Hybrid", "Electric"… or "Engine type unknown". Absent = flag off. */
+  powertrainLabel?: string | null;
 };
 
 const STEP_LABELS = LOG_SERVICE_COPY.stepBarLabels;
@@ -150,6 +152,14 @@ export function LogServiceWizardChrome({
         <div className="flex items-center gap-2 min-w-0">
           <Car className="w-[18px] h-[18px] shrink-0 opacity-90" />
           <span className="text-sm font-bold truncate">{vehicle.vehicleLabel}</span>
+          {vehicle.powertrainLabel ? (
+            <span
+              className="shrink-0 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-semibold text-on-primary"
+              data-testid="powertrain-pill"
+            >
+              {vehicle.powertrainLabel}
+            </span>
+          ) : null}
         </div>
         <div className="shrink-0 flex items-center gap-1 text-xs font-medium opacity-90">
           {odo ? (

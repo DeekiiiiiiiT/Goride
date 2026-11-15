@@ -17,6 +17,9 @@ import {
 } from "./jobsUi";
 import { JobDrawer } from "./JobDrawer";
 import { ManageSections } from "./ManageSections";
+import { GroupFitsDrawer } from "./GroupFitsDrawer";
+import { HvChip } from "./FitsSection";
+import { POWERTRAIN_LABEL, POWERTRAIN_PRESETS, describeList } from "../../powertrain/powertrainModel";
 import { RetireJobDialog } from "./RetireJobDialog";
 
 type Props = { token: string; canWrite: boolean; onCountsChanged?: () => void };
@@ -33,6 +36,7 @@ export function JobsTab({ token, canWrite, onCountsChanged }: Props) {
   const [drawer, setDrawer] = useState<{ mode: "add" } | { mode: "edit"; job: Job } | null>(null);
   const [retiring, setRetiring] = useState<Job | null>(null);
   const [manageGroupId, setManageGroupId] = useState<string | null>(null);
+  const [fitsGroupId, setFitsGroupId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -215,6 +219,7 @@ export function JobsTab({ token, canWrite, onCountsChanged }: Props) {
               onRetire={(job) => setRetiring(job)}
               onRestore={(job) => void onRestore(job)}
               onAddJobs={() => setManageGroupId(v.group.id)}
+              onFits={() => setFitsGroupId(v.group.id)}
             />
           ))
         : null}
@@ -236,6 +241,20 @@ export function JobsTab({ token, canWrite, onCountsChanged }: Props) {
           onItemsChanged={() => {
             void load();
             onCountsChanged?.();
+          }}
+        />
+      ) : null}
+
+      {fitsGroupId && data && data.groups.find((g) => g.id === fitsGroupId) ? (
+        <GroupFitsDrawer
+          token={token}
+          data={data}
+          group={data.groups.find((g) => g.id === fitsGroupId)!}
+          canWrite={canWrite}
+          onClose={() => setFitsGroupId(null)}
+          onSaved={() => {
+            setFitsGroupId(null);
+            void load();
           }}
         />
       ) : null}
@@ -270,6 +289,7 @@ function GroupCard(props: {
   onRetire: (job: Job) => void;
   onRestore: (job: Job) => void;
   onAddJobs: () => void;
+  onFits: () => void;
 }) {
   const { view: v, data, groupName, open } = props;
   const listedElsewhere = v.homeJobs
@@ -298,12 +318,22 @@ function GroupCard(props: {
             ))}
           </div>
         </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <OutlineButton
+            icon="tune"
+            onClick={props.onFits}
+            aria-label={`Fits for ${v.group.name}`}
+            title="Which cars this group's jobs fit"
+          >
+            Fits: {describeList(v.group.fitsPowertrains ?? null, POWERTRAIN_PRESETS, POWERTRAIN_LABEL)}
+          </OutlineButton>
         <IconButton
           icon={open ? "expand_less" : "expand_more"}
           aria-label={open ? `Collapse ${v.group.name}` : `Expand ${v.group.name}`}
           aria-expanded={open}
           onClick={props.onToggle}
         />
+        </div>
       </header>
 
       {open ? (
@@ -410,6 +440,7 @@ function JobRow({
               {job.name}
             </span>
             <FormTypeChip isPart={job.isPart} />
+            {job.isHighVoltage ? <HvChip small /> : null}
             <ActionChip action={job.defaultAction} />
             {homeName ? <ListedFromChip groupName={homeName} /> : null}
             {job.items.length > 0 ? (

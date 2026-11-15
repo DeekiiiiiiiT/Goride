@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react";
+import { HighVoltageChip, NotUsualChip } from "./JobFitUi";
 import { CheckCircle2, Loader2, Plus, Scan } from "lucide-react";
 import { Button } from "../../../ui/button";
 import { Checkbox } from "../../../ui/checkbox";
@@ -35,6 +36,8 @@ export type LogServiceReviewStepProps = {
   onNotesChange: (v: string) => void;
   onScanFile: (e: React.ChangeEvent<HTMLInputElement>) => void;
   lines: MaintenanceLogLine[];
+  /** Powertrain job fit chips for a line (grey "Not usual for this car", amber "High-voltage"). */
+  lineFit?: (line: MaintenanceLogLine) => { notUsual: boolean; highVoltage: boolean };
   lineTotalPreview: (line: MaintenanceLogLine) => number;
   /** Line sum before discount. */
   subtotal: number;
@@ -96,6 +99,7 @@ export function LogServiceReviewStep({
   whatHappensNext,
   itemsEnabled = false,
   vehicleLabel,
+  lineFit,
 }: LogServiceReviewStepProps) {
   const discountInputRef = useRef<HTMLInputElement>(null);
   const showDiscountRow = discountRowOpen || discountAmount > 0;
@@ -230,6 +234,7 @@ export function LogServiceReviewStep({
             const items = line.items ?? [];
             const charge = Math.round((total - lineItemsAmount(line)) * 100) / 100;
             const pill = actionLabel(line.action);
+            const fit = lineFit?.(line) ?? { notUsual: false, highVoltage: false };
             return (
               <div
                 key={`${line.categoryId}-${line.categoryCode}-${idx}`}
@@ -249,6 +254,8 @@ export function LogServiceReviewStep({
                     {line.recommended && !declined ? (
                       <span className="text-[11px] text-on-surface-variant">Recommended</span>
                     ) : null}
+                    {fit.notUsual ? <NotUsualChip /> : null}
+                    {fit.highVoltage ? <HighVoltageChip /> : null}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {declined ? null : (

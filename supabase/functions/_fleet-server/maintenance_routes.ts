@@ -128,6 +128,145 @@ function isUuid(s: string): boolean {
   return UUID_RE.test(s.trim());
 }
 
+type JobFitAnswer = "yes" | "no" | "unknown";
+
+type JobFitContext =
+  | { mode: "off" }
+  | { mode: "error"; jobFit: { status: "error" } }
+  | {
+    mode: "on";
+    fitMap: Map<string, JobFitAnswer>;
+    jobFit: { status: "known" | "unknown"; powertrain: string | null; fuel: string | null };
+  };
+
+async function loadJobFitContext(
+  c: Context,
+  supabase: SupabaseClient,
+  orgId: string,
+): Promise<JobFitContext | Response> {
+  const vehicleId = c.req.query("vehicleId")?.trim() || c.req.query("vehicle_id")?.trim() || "";
+  if (!vehicleId) return { mode: "off" };
+  const enabled = orgId ? await isFeatureEnabled(FEATURE_FLAGS.JOB_FIT_FILTER, orgId) : false;
+  if (!enabled) return { mode: "off" };
+
+  const { data: vehicle, error: vehErr } = await fleetDb()
+    .from("vehicles")
+    .select("id, vehicle_catalog_id")
+    .eq("organization_id", orgId)
+    .eq("id", vehicleId)
+    .maybeSingle();
+  // A failed lookup must not break Log service: show every job with the "Couldn't check" note (PT-7).
+  if (vehErr) return { mode: "error", jobFit: { status: "error" } };
+  if (!vehicle) return c.json({ error: "Car not found." }, 404) as Response;
+
+  const rawCatalog = String((vehicle as { vehicle_catalog_id?: string }).vehicle_catalog_id ?? "").trim();
+  const catalogId = isUuid(rawCatalog) ? rawCatalog : null;
+
+  const { data: fitRows, error: fitErr } = await supabase.rpc("job_fits_car", {
+    p_vehicle_catalog_id: catalogId,
+    p_job_ids: null,
+  });
+  if (fitErr) {
+    return { mode: "error", jobFit: { status: "error" } };
+  }
+  const fitMap = new Map<string, JobFitAnswer>();
+  for (const row of fitRows || []) {
+    const id = String((row as { job_id: string }).job_id);
+    const fits = String((row as { fits: string }).fits) as JobFitAnswer;
+    fitMap.set(id, fits);
+  }
+
+  let jobFit: { status: "known" | "unknown"; powertrain: string | null; fuel: string | null };
+  if (!catalogId) {
+    jobFit = { status: "unknown", powertrain: null, fuel: null };
+  } else {
+    const { data: model, error: modErr } = await supabase
+      .from("vehicle_catalog")
+      .select("powertrain, fuel, powertrain_status")
+      .eq("id", catalogId)
+      .maybeSingle();
+    if (modErr || !model) {
+      jobFit = { status: "unknown", powertrain: null, fuel: null };
+    } else {
+      const st = String((model as { powertrain_status?: string }).powertrain_status ?? "");
+      const pt = (model as { powertrain?: string | null }).powertrain ?? null;
+      const fu = (model as { fuel?: string | null }).fuel ?? null;
+      jobFit = st === "needs_check" || pt == null || fu == null
+        ? { status: "unknown", powertrain: pt, fuel: fu }
+        : { status: "known", powertrain: pt, fuel: fu };
+    }
+  }
+
+  return { mode: "on", fitMap, jobFit };
+}
+
+export function groupFitCounts(
+  fitMap: Map<string, JobFitAnswer>,
+  childJobIds: string[],
+): { fitJobCount: number; hiddenJobCount: number } {
+  let fitJobCount = 0;
+  let hiddenJobCount = 0;
+  for (const id of childJobIds) {
+    const f = fitMap.get(id) ?? "unknown";
+    if (f === "no") hiddenJobCount += 1;
+    else fitJobCount += 1;
+  }
+  return { fitJobCount, hiddenJobCount };
+}
+
+function enrichCategoryListWithFit(
+  items: Record<string, unknown>[],
+  ctx: Extract<JobFitContext, { mode: "on" }>,
+): Record<string, unknown>[] {
+  const childrenBySystem = new Map<string, string[]>();
+  for (const row of items) {
+    if (String(row.kind ?? "") !== "component") continue;
+    if (String(row.status ?? "active") === "retired") continue;
+    const parent = String(row.parent_id ?? "");
+    if (!parent) continue;
+    const list = childrenBySystem.get(parent) || [];
+    list.push(String(row.id));
+    childrenBySystem.set(parent, list);
+  }
+  return items.map((row) => {
+    const kind = String(row.kind ?? "");
+    if (kind === "component") {
+      return { ...row, fits: ctx.fitMap.get(String(row.id)) ?? "unknown" };
+    }
+    if (kind === "system") {
+      const counts = groupFitCounts(ctx.fitMap, childrenBySystem.get(String(row.id)) || []);
+      return { ...row, fitJobCount: counts.fitJobCount, hiddenJobCount: counts.hiddenJobCount };
+    }
+    return row;
+  });
+}
+
+function enrichSectionsWithFit(
+  payload: ReturnType<typeof buildSystemSections>,
+  fitMap: Map<string, JobFitAnswer>,
+): ReturnType<typeof buildSystemSections> & { jobFit?: unknown } {
+  const withJob = (job: Record<string, unknown>) => {
+    const id = String(job.id ?? "");
+    const recommendedWith = Array.isArray(job.recommendedWith)
+      ? (job.recommendedWith as Record<string, unknown>[]).map((r) => ({
+        ...r,
+        fits: fitMap.get(String(r.categoryId ?? "")) ?? "unknown",
+      }))
+      : job.recommendedWith;
+    return { ...job, fits: fitMap.get(id) ?? "unknown", recommendedWith };
+  };
+  return {
+    groups: payload.groups.map((g) => ({
+      ...g,
+      sections: g.sections.map((s) => ({
+        ...s,
+        jobs: s.jobs.map((j) => withJob(j as Record<string, unknown>) as typeof j),
+      })),
+    })),
+    otherJobs: payload.otherJobs.map((j) => withJob(j as Record<string, unknown>) as typeof j),
+  };
+}
+
 function parseTaskCode(body: Record<string, unknown>): string | null {
   if (body.task_code === undefined || body.task_code === null) return null;
   const s = String(body.task_code).trim();
@@ -293,6 +432,8 @@ function mapDbLineToApi(row: Record<string, unknown>): Record<string, unknown> {
     lineTotal: row.line_total != null ? Number(row.line_total) : undefined,
     itemsAmount: row.items_amount != null ? Number(row.items_amount) : 0,
     voidedAt: row.voided_at ?? null,
+    fitAtLog: row.fit_at_log != null ? String(row.fit_at_log) : null,
+    isHighVoltage: row.is_high_voltage === true,
   };
 }
 
@@ -302,10 +443,31 @@ async function enrichLinesWithItems(
   lines: Record<string, unknown>[],
 ): Promise<Record<string, unknown>[]> {
   const itemsByLine = await loadLineItemsForWorkOrders(supabase, [workOrderId]);
-  return lines.map((line) => ({
-    ...mapDbLineToApi(line),
-    items: itemsByLine.get(String(line.id)) ?? [],
-  }));
+  const compIds = [
+    ...new Set(
+      lines.map((l) => String(l.component_id ?? "")).filter((id) => isUuid(id)),
+    ),
+  ];
+  const hvByJob = new Map<string, boolean>();
+  if (compIds.length) {
+    const { data: cats } = await supabase
+      .from("maintenance_service_categories")
+      .select("id, is_high_voltage")
+      .in("id", compIds);
+    for (const row of cats || []) {
+      hvByJob.set(String((row as { id: string }).id), (row as { is_high_voltage?: boolean }).is_high_voltage === true);
+    }
+  }
+  return lines.map((line) => {
+    const cid = String(line.component_id ?? "");
+    const merged = hvByJob.has(cid)
+      ? { ...line, is_high_voltage: hvByJob.get(cid) }
+      : line;
+    return {
+      ...mapDbLineToApi(merged),
+      items: itemsByLine.get(String(line.id)) ?? [],
+    };
+  });
 }
 
 function workOrderNotFinished(wo: Record<string, unknown>): boolean {
@@ -1318,6 +1480,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
     requireAuth(),
     async (c) => {
       try {
+        const orgId = getOrgId(c);
         const kindFilter = parseCategoryKind(c.req.query("kind"));
         let q = supabase
           .from("maintenance_service_categories")
@@ -1326,7 +1489,39 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (kindFilter) q = q.eq("kind", kindFilter);
         const { data, error } = await q;
         if (error) throw error;
-        return c.json({ items: data || [] });
+        const baseItems = (data || []) as Record<string, unknown>[];
+        const fitCtx = orgId ? await loadJobFitContext(c, supabase, orgId) : { mode: "off" as const };
+        if (fitCtx instanceof Response) return fitCtx;
+        if (fitCtx.mode === "off") {
+          return c.json({ items: baseItems });
+        }
+        if (fitCtx.mode === "error") {
+          return c.json({ items: baseItems, jobFit: fitCtx.jobFit });
+        }
+        let items = baseItems;
+        if (kindFilter === "component") {
+          items = baseItems.map((row) => ({
+            ...row,
+            fits: fitCtx.fitMap.get(String(row.id)) ?? "unknown",
+          }));
+        } else {
+          let componentsForCounts: Record<string, unknown>[] = [];
+          if (kindFilter === "system") {
+            const { data: comps, error: compErr } = await supabase
+              .from("maintenance_service_categories")
+              .select("id, parent_id, kind, status")
+              .eq("kind", "component");
+            if (compErr) throw compErr;
+            componentsForCounts = (comps || []) as Record<string, unknown>[];
+          }
+          const enrichSource = kindFilter === "system"
+            ? [...baseItems, ...componentsForCounts]
+            : baseItems;
+          items = enrichCategoryListWithFit(enrichSource, fitCtx).filter((row) =>
+            kindFilter === "system" ? String(row.kind ?? "") === "system" : true
+          );
+        }
+        return c.json({ items, jobFit: fitCtx.jobFit });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
@@ -1339,6 +1534,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
     requireAuth(),
     async (c) => {
       try {
+        const orgId = getOrgId(c);
         const { data, error } = await supabase
           .from("maintenance_service_categories")
           .select("*")
@@ -1346,7 +1542,25 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .eq("quick_job_eligible", true)
           .order("sort_order", { ascending: true });
         if (error) throw error;
-        return c.json({ items: data || [] });
+        const baseItems = (data || []) as Record<string, unknown>[];
+        const fitCtx = orgId ? await loadJobFitContext(c, supabase, orgId) : { mode: "off" as const };
+        if (fitCtx instanceof Response) return fitCtx;
+        if (fitCtx.mode === "off") {
+          return c.json({ items: baseItems });
+        }
+        if (fitCtx.mode === "error") {
+          return c.json({ items: baseItems, jobFit: fitCtx.jobFit });
+        }
+        const { data: comps, error: compErr } = await supabase
+          .from("maintenance_service_categories")
+          .select("id, parent_id, kind, status")
+          .eq("kind", "component");
+        if (compErr) throw compErr;
+        const items = enrichCategoryListWithFit(
+          [...baseItems, ...((comps || []) as Record<string, unknown>[])],
+          fitCtx,
+        ).filter((row) => String(row.kind ?? "") === "system");
+        return c.json({ items, jobFit: fitCtx.jobFit });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
@@ -1359,6 +1573,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
     requireAuth(),
     async (c) => {
       try {
+        const orgId = getOrgId(c);
         const systemId = c.req.param("systemId")?.trim() ?? "";
         if (!isUuid(systemId)) return c.json({ error: "Invalid system id" }, 400);
         const { data, error } = await supabase
@@ -1368,7 +1583,20 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .eq("parent_id", systemId)
           .order("sort_order", { ascending: true });
         if (error) throw error;
-        return c.json({ items: data || [] });
+        const baseItems = (data || []) as Record<string, unknown>[];
+        const fitCtx = orgId ? await loadJobFitContext(c, supabase, orgId) : { mode: "off" as const };
+        if (fitCtx instanceof Response) return fitCtx;
+        if (fitCtx.mode === "off") {
+          return c.json({ items: baseItems });
+        }
+        if (fitCtx.mode === "error") {
+          return c.json({ items: baseItems, jobFit: fitCtx.jobFit });
+        }
+        const items = baseItems.map((row) => ({
+          ...row,
+          fits: fitCtx.fitMap.get(String(row.id)) ?? "unknown",
+        }));
+        return c.json({ items, jobFit: fitCtx.jobFit });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
@@ -1469,7 +1697,16 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const serviceItemsEnabled = orgId
           ? await isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId)
           : false;
-        return c.json({ ...withItems, serviceItemsEnabled });
+        const fitCtx = orgId ? await loadJobFitContext(c, supabase, orgId) : { mode: "off" as const };
+        if (fitCtx instanceof Response) return fitCtx;
+        if (fitCtx.mode === "off") {
+          return c.json({ ...withItems, serviceItemsEnabled });
+        }
+        if (fitCtx.mode === "error") {
+          return c.json({ ...withItems, serviceItemsEnabled, jobFit: fitCtx.jobFit });
+        }
+        const enriched = enrichSectionsWithFit(withItems, fitCtx.fitMap);
+        return c.json({ ...enriched, serviceItemsEnabled, jobFit: fitCtx.jobFit });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
@@ -2993,10 +3230,11 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           // even when package schedule rows are missing.
           let minComponentNext: number | null = null;
           for (const row of compRows) {
+            const schSt = row.schedule_status != null ? String(row.schedule_status) : "active";
+            if (schSt === "retired") continue;
             const nextMiles = row.next_due_km != null ? Number(row.next_due_km) : null;
             const nextMilesMaxRaw = row.next_due_km_max != null ? Number(row.next_due_km_max) : null;
             const nextDate = row.next_due_date != null ? String(row.next_due_date).slice(0, 10) : null;
-            const schSt = row.schedule_status != null ? String(row.schedule_status) : "active";
             const a = analyzeMaintenanceScheduleRow(odo, today, nextMiles, nextMilesMaxRaw, nextDate, schSt);
             if (a.calendarDaysOverdue != null) {
               maxCalendarDaysOverdue = maxCalendarDaysOverdue == null
@@ -4656,6 +4894,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const itemsByLine = await loadLineItemsForWorkOrders(supabase, woIds);
         const withItems = items.map((r) => ({
           ...r,
+          fitAtLog: r.fit_at_log != null ? String(r.fit_at_log) : null,
+          isHighVoltage: r.is_high_voltage === true,
           items: itemsByLine.get(String(r.line_id ?? "")) ?? [],
         }));
         return c.json({ items: withItems, page, pageSize, total });

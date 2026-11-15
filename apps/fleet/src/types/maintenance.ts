@@ -92,6 +92,10 @@ export interface MaintenanceServiceCategory {
   description?: string | null;
   /** When true, Fleet tracks LF/RF/LR/RR separately for outstanding work. */
   position_aware?: boolean;
+  /** Powertrain job fit: the job touches the high-voltage system (amber "High-voltage" chip). */
+  is_high_voltage?: boolean;
+  /** Powertrain job fit: only when the list was asked for a car (vehicleId) and the flag is on. */
+  fits?: "yes" | "no" | "unknown";
   /** Fallback interval when component is not in a package. */
   default_interval_km?: number | null;
   default_interval_months?: number | null;
@@ -204,6 +208,10 @@ export interface MaintenanceLogLine {
   lineTotal?: number;
   /** Read only: set when this job was deleted from a completed service. */
   voidedAt?: string | null;
+  /** Read only (powertrain job fit): did the job fit the car when this line was saved. NULL = before this work. */
+  fitAtLog?: "yes" | "no" | "unknown" | null;
+  /** Read only: the line's job is high-voltage work. */
+  isHighVoltage?: boolean;
 }
 
 /**

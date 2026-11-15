@@ -31,6 +31,9 @@ const SQL_TESTS = [
   'maintenance_discount_checks',
   'maintenance_discount_db_test',
   'engine_sections_used_ids_test',
+  'powertrain_checks',
+  'powertrain_db_test',
+  'powertrain_schedule_db_test',
 ];
 
 const results = [];

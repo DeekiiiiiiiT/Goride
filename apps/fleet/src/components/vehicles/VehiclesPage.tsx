@@ -1199,6 +1199,11 @@ export function VehiclesPage({
           open={isServiceModalOpen}
           onOpenChange={setIsServiceModalOpen}
           vehicleId={actionVehicleId}
+          onLinkCar={() => {
+            // "Link this car" (powertrain job fit): open the car's page, where it's linked to its model.
+            setIsServiceModalOpen(false);
+            setSelectedVehicleId(actionVehicleId);
+          }}
           catalogTemplates={serviceCatalog}
           defaultOdo={serviceOdo}
           onSaved={() => {

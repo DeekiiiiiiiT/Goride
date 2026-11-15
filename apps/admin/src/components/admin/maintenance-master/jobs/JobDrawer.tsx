@@ -23,6 +23,8 @@ import { partIconKey } from "../MmChips";
 import { inMayNeed } from "./mayNeedModel";
 import { MayNeedSection } from "./MayNeedSection";
 import { BlueButton, RedSoftButton, T, WhiteButton } from "./serviceItemsUi";
+import { FitsSection, HvChip } from "./FitsSection";
+import { FUELS, POWERTRAINS, rowFromSaved, rowToSave, type FitRow } from "../../powertrain/powertrainModel";
 
 type Link = { relationId?: string; jobId: string; jobName: string; note: string };
 
@@ -59,6 +61,22 @@ export function JobDrawer({ token, data, mode, job, presetGroupId, canWrite, onC
   const [newLinkNote, setNewLinkNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [localData, setLocalData] = useState(data);
+  // Powertrain job fit (audit section 4): NULL on a job = "Same as group".
+  const [fitPt, setFitPt] = useState<FitRow>(() => rowFromSaved(job?.fitsPowertrains, POWERTRAINS, false));
+  const [fitFu, setFitFu] = useState<FitRow>(() => rowFromSaved(job?.fitsFuels, FUELS, false));
+  const [hv, setHv] = useState(job?.isHighVoltage ?? false);
+  const ptSave = rowToSave(fitPt, POWERTRAINS, false);
+  const fuSave = rowToSave(fitFu, FUELS, false);
+  const fitsInvalid = ptSave === undefined || fuSave === undefined;
+  const sameList = (a: string[] | null | undefined, b: string[] | null | undefined) =>
+    JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  const fitPatch = () => {
+    const p: { fitsPowertrains?: string[] | null; fitsFuels?: string[] | null; isHighVoltage?: boolean } = {};
+    if (!sameList(ptSave, job?.fitsPowertrains)) p.fitsPowertrains = ptSave ?? null;
+    if (!sameList(fuSave, job?.fitsFuels)) p.fitsFuels = fuSave ?? null;
+    if (hv !== (job?.isHighVoltage ?? false)) p.isHighVoltage = hv;
+    return p;
+  };
   const alsoDoRef = useRef<HTMLDivElement | null>(null);
 
   const jobsById = useMemo(() => new Map(localData.jobs.map((j) => [j.id, j])), [localData.jobs]);
@@ -71,7 +89,8 @@ export function JobDrawer({ token, data, mode, job, presetGroupId, canWrite, onC
     [localData.jobs, job?.id, links],
   );
 
-  const canSave = canWrite && name.trim() && homeGroupId && description.trim() && !busy;
+  const canSave = canWrite && name.trim() && homeGroupId && description.trim() && !busy && !fitsInvalid;
+  const homeGroup = localData.groups.find((g) => g.id === homeGroupId);
 
   const save = async () => {
     if (!canSave) return;
@@ -88,11 +107,15 @@ export function JobDrawer({ token, data, mode, job, presetGroupId, canWrite, onC
       let id = job?.id;
       if (mode === "add") {
         id = (await createJob(token, input)).item.id;
+        const fits = fitPatch();
+        if (Object.keys(fits).length) await updateJob(token, id, fits);
       } else if (id) {
         // Home group and form type are never sent once the job has been used.
-        const patch = locked
-          ? { name: input.name, defaultAction, description: input.description, iconKey }
-          : input;
+        const patch = {
+          ...(locked ? { name: input.name, defaultAction, description: input.description, iconKey } : input),
+          // Fits can change on a used job too: history keeps its own fit_at_log.
+          ...fitPatch(),
+        };
         await updateJob(token, id, patch);
       }
       if (id) {
@@ -146,6 +169,11 @@ export function JobDrawer({ token, data, mode, job, presetGroupId, canWrite, onC
               <h2 id="mm-job-drawer-title" className={`${T.headlineXl} text-[#161b27]`}>
                 {mode === "add" ? name.trim() || "New job" : job?.name}
               </h2>
+              {hv ? (
+                <div className="mt-1.5">
+                  <HvChip />
+                </div>
+              ) : null}
             </div>
             <button
               type="button"
@@ -299,6 +327,22 @@ export function JobDrawer({ token, data, mode, job, presetGroupId, canWrite, onC
                 </div>
               </div>
             </div>
+
+            <FitsSection
+              kind="job"
+              token={token}
+              canWrite={canWrite}
+              jobId={mode === "edit" ? job?.id ?? null : null}
+              groupPt={homeGroup?.fitsPowertrains ?? null}
+              groupFu={homeGroup?.fitsFuels ?? null}
+              groupName={homeGroup?.name ?? ""}
+              pt={fitPt}
+              fu={fitFu}
+              onPt={setFitPt}
+              onFu={setFitFu}
+              hv={hv}
+              onHv={setHv}
+            />
 
             <div ref={alsoDoRef} className="space-y-3 rounded-2xl bg-[#f1f3ff]/60 p-4" data-testid="also-do-card">
               <div className="flex items-center gap-2">

@@ -158,6 +158,8 @@ export async function buildLogServiceContext(args: {
 
   const suggestedOperations: LogServiceSuggestedOp[] = [];
   for (const row of compRows || []) {
+    const schStRow = row.schedule_status != null ? String(row.schedule_status) : "active";
+    if (schStRow === "retired") continue;
     const cat = row.category as {
       id?: string;
       name?: string;

@@ -9,6 +9,7 @@ import type { CatalogMakerSummary, VehiclesDashboard, VehiclesDashboardChange } 
 import type { PartsOverview } from "../../parts-database/partsDatabaseApi";
 import { rowFingerprint, VEHICLE_SEARCH_EXAMPLES } from "./vehiclesStitchShared";
 import { D_CARD, D_MONO, D_MUTED, D_TXT, DCode, DIcon, DIconTile } from "../../parts-database/add-parts/catalog/dominionKit";
+import { PowertrainHomeCards } from "./PowertrainHomeCards";
 
 type Props = {
   makers: CatalogMakerSummary[];
@@ -34,6 +35,7 @@ type Props = {
   onAddLogos: () => void;
   /** Go to another Dominion page (parts database, pending catalog). */
   onOpenPage: (page: string, params?: Record<string, string>) => void;
+  onOpenPowertrainCheck: () => void;
 };
 
 const nf = new Intl.NumberFormat("en-US");
@@ -227,6 +229,7 @@ export function VehiclesHomeScreen(props: Props) {
     onAddCar,
     onOpenLegacy,
     onOpenPage,
+    onOpenPowertrainCheck,
   } = props;
   const [allMakers, setAllMakers] = useState(false);
   const [allComplete, setAllComplete] = useState(false);
@@ -386,6 +389,8 @@ export function VehiclesHomeScreen(props: Props) {
             onClick={() => onOpenPage("pending-motor-vehicles")}
           />
         </div>
+
+        <PowertrainHomeCards items={items} onReview={onOpenPowertrainCheck} />
 
         <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
           <div className="flex flex-col gap-6 lg:col-span-8">

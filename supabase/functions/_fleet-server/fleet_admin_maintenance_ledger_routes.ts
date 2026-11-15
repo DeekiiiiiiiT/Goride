@@ -109,6 +109,7 @@ async function buildByOrgMaintenanceRollup(
       r.last_performed_km != null && Number.isFinite(Number(r.last_performed_km))
         ? Number(r.last_performed_km)
         : 0;
+    if (String(r.schedule_status ?? "active") === "retired") continue;
     const st = analyzeComponentRowStatus(proxyOdo, today, {
       next_due_km: r.next_due_km != null ? Number(r.next_due_km) : null,
       next_due_km_max: r.next_due_km_max != null ? Number(r.next_due_km_max) : null,
@@ -198,6 +199,7 @@ export function registerFleetAdminMaintenanceLedgerRoutes(
 
         const outstanding = [];
         for (const r of schedules || []) {
+          if (String(r.schedule_status ?? "active") === "retired") continue;
           const vid = String(r.vehicle_id);
           const odo =
             odoMap.get(vid) ??
