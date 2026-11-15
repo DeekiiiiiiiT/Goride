@@ -1,4 +1,18 @@
-# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 10, 15 Nov 2026)
+# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 11, 15 Nov 2026)
+
+## Rev 11: EV file Rev 2, after your review
+
+All five "before you run it" items are done in `ev-suggestions.md` (Rev 2) and `live/ev-add.sql`, re-tested on live with everything undone afterwards: **12 jobs, 4 new supplies, 22 supply links, 1 part link.**
+
+1. **A/C recharge path: option 1.** New **A/C Recharge** service in HVAC (every car, labor), with a new **A/C Refrigerant** supply (can; "R-134a or R-1234yf, use the type on the bonnet label") as Usually, POE oil Sometimes ("electric compressors only") and UV dye Sometimes ("only a dye approved for the system"). Electric A/C Compressor now also offers A/C Refrigerant as Usually ("the system is recharged after the compressor is changed"). One refrigerant supply, not two: like coolant, the type is decided by the car's label.
+2. **Charging Port "don't log twice":** both job descriptions and hints say it. Charging Port = replacement on its own; a port replaced during an inspection is the part item on Charging Port Inspection & Cleaning.
+3. **Dielectric Grease** added to HV Cable / Connector Replacement, Sometimes, "Only where the car maker specifies it" (the Oxygen / NOx sensor anti-seize pattern).
+4. **HV lockout has a date:** target **30 Nov 2026**, owner Deeki T, blocked on the screen design. **As of 15 Nov, 0 HV services logged** (checked on live), so no gap exists yet.
+5. **`part_source` window, with the number:** **1 saved item row in total, and it's a supply; 0 part-item rows** (checked on live). Only part items need `part_source`, so the window is fully clean. It ships before the first real part item is saved, as the next build item after `ev-add.sql`.
+
+**Optional item decided: drain-plug crush washer = part type** ("Drain Plug Washer", sized), offered as a Sometimes part item on every drain-and-fill job (engine oil, transmission, differential, reduction gear oil) in one go in the Fluids / Drivetrain file. Not bundled with the oil.
+
+**Next categories after EV:** Steering & Suspension components (tie rods, ball joints, control arms, wheel bearings, struts), then Cooling-system completion and Diagnostics / Inspections, as you suggested.
 
 ## Rev 10: CI attribution, part_source gate, session-only badge
 
