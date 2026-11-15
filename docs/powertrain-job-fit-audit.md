@@ -1,8 +1,18 @@
-# Powertrain job fit — audit (Rev 3, 15 Nov 2026)
+# Powertrain job fit — audit (Rev 4, 15 Nov 2026)
 
 **Goal in one sentence:** every screen that offers maintenance jobs for a car offers the jobs that fit that car's powertrain (petrol, diesel, hybrid, plug-in, electric…), using one clean, owner-confirmed powertrain value per car model and one fit rule per job, so that an electric car is never offered an oil change and a petrol car is never offered high-voltage work.
 
 Everything below was checked in the code and on the live database on 15 Nov 2026. Method: `docs/how-we-build-playbook.md` (facts → findings with one fix → design → done-tests → Stitch → build in layers).
+
+**Rev 4 changes (after the third review, all checked on live):**
+- **`part_match.busy` is a session setting (GUC):** the trigger reads `current_setting('part_match.busy', true)`, so `SET LOCAL` works.
+- **`maintenance_work_order_lines.component_id` is the job link** (`REFERENCES maintenance_service_categories(id)`).
+- **Exact revision count:** 2,679 car rows + 47 job / group rows = **2,726**, with one UPDATE per table.
+- **`is_high_voltage` can't be set on a group** (constraint on `kind`).
+- **Electric A/C Compressor stays on Electrified, with the reason:** most full hybrids use a high-voltage electric compressor. Belt-driven ones get a per-model exception.
+- **Alternator → ice only; Starter → ice, mhev.** Most mild hybrids replace the alternator with a belt starter-generator.
+- **The past-lines check** reports "still doesn't fit" separately.
+- **Notes added:** `fit_at_log = 'unknown'`, Rule 6, Rule 9's label, snapshot future-proofing, and the H2-ICE follow-up.
 
 **Rev 3 changes (after the second review):**
 - **Derivation:** re-checked engine_type on live. The rules now read engine_type by keyword. The 2 Hydrogen models say "Fuel Cell", so they're derived as fcev. "REEV" counts as a range-extender. **7 mild hybrids** get their own value, `mhev`. All 43 Petrol/Electric models place cleanly. Exact counts are in table 3a; `needs_check` falls from ≈33 to **12**.
@@ -76,7 +86,8 @@ The original text columns stay untouched ("capture, never gate"). Rows the rules
 **Fix:** (1) the schedule builder skips any job where `fits = 'no'`; (2) **every nightly run** (not one-time) sets `schedule_status = 'retired'` and `retired_reason = 'Job doesn''t fit this car''s powertrain'` on any stored row whose job is `fits = 'no'` for its car and isn't already retired. It's idempotent: retired rows aren't touched again. That also catches any row made later by a bug. Rows are never deleted, and `unknown` never retires anything. Expected on live today: **0** rows (both cars' 59 rows fit).
 
 **PT-5 (High, safety). "High-voltage" isn't defined anywhere, and HV jobs are offered to petrol and diesel cars.**
-**Fix:** `is_high_voltage boolean NOT NULL DEFAULT false`, true on exactly these **10 jobs**: HV Battery Health Check, HV Battery Module Replacement, HV Battery Pack Replacement, HV Cable & Insulation Resistance Inspection, HV Cable / Connector Replacement, Charging Port, On-Board Charger, DC-DC Converter, Traction Motor, Electric A/C Compressor. The HV lockout checklist keys off this flag only. The 8 non-HV jobs in the group stay false.
+**Fix:** `is_high_voltage boolean NOT NULL DEFAULT false`, true on exactly these **10 jobs**: HV Battery Health Check, HV Battery Module Replacement, HV Battery Pack Replacement, HV Cable & Insulation Resistance Inspection, HV Cable / Connector Replacement, Charging Port, On-Board Charger, DC-DC Converter, Traction Motor, Electric A/C Compressor. The HV lockout checklist keys off this flag only. The 8 non-HV jobs in the group stay false. **Groups can't carry it:** constraint `CHECK (kind = 'component' OR is_high_voltage = false)` (`kind` is 'system' for groups, 'component' for jobs), and the flag doesn't cascade.
+- **Electric A/C Compressor** fits Electrified (hev included) on purpose. Most full hybrids (Toyota, Honda, Hyundai / Kia; the Honda Fit hybrid in this fleet is one) use a high-voltage electric compressor, so hiding it from hevs would hide real HV work. A hybrid with a belt-driven compressor gets a per-model exception (`applicable = false`, reason "belt-driven compressor"). Its description gains: "Belt-driven compressors (petrol cars, a few hybrids) aren't this job; use the conventional A/C Compressor job once the HVAC file adds it."
 - **Charging Port Inspection & Cleaning** is non-HV *by its scope*. Its description gains: "Visual check and pin cleaning with the car switched off and unplugged; the port housing stays closed. If the housing has to be opened, that's high-voltage work: log Charging Port and follow lockout." The owner (Deeki T, the safety owner on the Open list) can flip the switch in Dominion.
 - Checked: none of the 8 non-HV jobs carries a "lockout first" hint. Only Fan & Duct Cleaning's description mentions lockout, conditionally ("if the cover comes off"), which is correct. So no hint text changes.
 
@@ -87,7 +98,7 @@ The original text columns stay untouched ("capture, never gate"). Rows the rules
 **Fix:** `fits = 'unknown'` for every job. Fleet shows all jobs with the banner "We don't know this car's engine type yet. Showing every job." and a link to fix it. Never hide jobs on a guess.
 
 **PT-8 (Medium). Old services must never disappear or be refused, and history must not be relabelled when rules change.**
-**Fix:** the fit rule only filters job pickers and schedules. History, edits and the save path never refuse anything. `maintenance_work_order_lines.fit_at_log text` ('yes' | 'no' | 'unknown'; NULL for lines saved before this work) is set by `fleet_save_work_order` **when a line is inserted, and when an update changes the line's `component_id`**, and at no other time. A quantity, price or note edit keeps the value frozen. The "Not usual for this car" chip reads `fit_at_log = 'no'`. A read-only check lists lines with `fit_at_log = 'no'` for the owner.
+**Fix:** the fit rule only filters job pickers and schedules. History, edits and the save path never refuse anything. `maintenance_work_order_lines.fit_at_log text` ('yes' | 'no' | 'unknown'; NULL for lines saved before this work) is set by `fleet_save_work_order` **when a line is inserted, and when an update changes the line's `component_id`** (the line's job: `REFERENCES maintenance_service_categories(id)`, checked), and at no other time. A quantity, price or note edit keeps the value frozen. On a car whose fit is 'unknown' (unlinked or `needs_check`), lines save as `'unknown'`, so there's **no chip, by design**: no false "not usual" when the app doesn't know. The "Not usual for this car" chip reads `fit_at_log = 'no'` only. The read-only check reports two numbers: "N lines were logged as not usual; M of them still don't fit today". M is the action list. N − M are lines where a rule has since been widened.
 
 **PT-9 (Low). Per-model exceptions have no use yet.**
 **Fix:** `catalog_component_applicability` is a **full override, checked first**: a row for (job, model), else (job, the model's `platform_id`), decides. `applicable = true` → 'yes', `false` → 'no'. It can widen or narrow. With no row, the powertrain / fuel rule applies. Filled only when needed.
@@ -103,7 +114,7 @@ No TypeScript copy of the rule. One call per page. A future fleet-wide due-items
 
 **PT-11 (Medium, new). The D1 backfill fires the existing car-model triggers on ~2,667 rows.**
 **Fix:** in the D1 transaction:
-- `SET LOCAL part_match.busy = 'on'`, so the parts-year trigger returns at once. Years don't change, so it would do nothing useful anyway, but it would still join every row to its OE numbers.
+- `SET LOCAL part_match.busy = 'on'`, so the parts-year trigger returns at once. (Checked: it's a session setting, not a table row. The trigger function opens with `IF pg_trigger_depth() > 1 OR current_setting('part_match.busy', true) = 'on' THEN RETURN NULL`, before any join.) Years don't change, so it would do nothing useful anyway, but it would still join every row to its OE numbers.
 - The revision trigger stays **on**: each changed model gets one honest `platform_revision` row (≈2,667), counted by DRYRUN assertion 11.
 - The engine-listings trigger doesn't fire (`engine_family_id` doesn't change).
 - The backfill is one UPDATE statement, and touches only rows whose values change (3c).
@@ -123,10 +134,10 @@ The rules are checked in this order. engine_type keywords are case-insensitive "
 | 3 | engine_type contains "mild" | mhev | petrol (diesel if fuel_type says diesel) | derived | 7 (Petrol 3, Hybrid(petrol) 1, Petrol/Electric 3) |
 | 4 | Electric | bev | electric | derived | 313 |
 | 5 | Hydrogen + engine_type contains "fuel cell" | fcev | hydrogen | derived | 2 |
-| 6 | Hydrogen, anything else | — | hydrogen | **needs_check** | 0 |
+| 6 | Hydrogen, anything else | — | hydrogen | **needs_check** | 0 today; kept so a future hydrogen-combustion model lands in the list instead of being guessed |
 | 7 | Hybrid(petrol) / Petrol/Electric + engine_type contains "phev" or "plug-in" | phev | petrol | derived | 33 (29 + 4) |
 | 8 | Hybrid(petrol) / Petrol/Electric + engine_type contains "erev", "reev" or "range extender" | erev | petrol | derived | 34 (12 + 2 + 20) |
-| 9 | Hybrid(petrol) / Petrol/Electric, anything else | hev | petrol | derived | 202 (186 + 16) |
+| 9 | Hybrid(petrol) / Petrol/Electric, anything else | hev | petrol | derived | 202 (186 + 16); petrol hevs only, the diesel one is rule 10 (hev total 203) |
 | 10 | Hybrid(diesel) | hev | diesel | derived | 1 |
 | 11 | Petrol | ice | petrol | derived | 1,799 |
 | 12 | Diesel | ice | diesel | derived | 267 |
@@ -161,6 +172,11 @@ One UPDATE that computes the rule's values and writes **only** where the row isn
 `UPDATE vehicle_catalog SET powertrain = r.powertrain, fuel = r.fuel, powertrain_status = r.status FROM (rule) r WHERE r.id = vehicle_catalog.id AND vehicle_catalog.powertrain_status IS DISTINCT FROM 'confirmed' AND (vehicle_catalog.powertrain, vehicle_catalog.fuel, vehicle_catalog.powertrain_status) IS DISTINCT FROM (r.powertrain, r.fuel, r.status);`
 
 The derivation trigger is created **after** the backfill, in the same transaction, so they never fight. A second run of the whole D1 file changes **0** rows and adds **0** revision rows (assertion 10).
+
+**One UPDATE per table, so one revision row per changed row:**
+- **Cars:** the new columns are added nullable with no default, so on the first run **every one of the 2,679 rows** changes (the 12 `needs_check` rows too: status NULL → needs_check, and fuel where known). After the backfill, `powertrain_status` becomes `NOT NULL`.
+- **Jobs and groups:** one UPDATE … FROM (VALUES …) carrying every column D1 sets on that row (`fits_powertrains`, `fits_fuels`, `is_high_voltage`, and the 2 description additions). It's **targeted**: only rows section 5 / PT-5 name. Rows that inherit keep NULL, so NULL = inherit survives D1. That's exactly **47 rows**: 5 groups (Engine, Belts & hoses, Transmission, Exhaust & emissions, Hybrid & electric); 35 job overrides (Engine 6, Filters 3, Fluids 3, Exhaust 10, Hybrid & electric 10, HVAC 1, Battery & electrical 2); and 7 more HV jobs that set only `is_high_voltage` (HV Battery Health Check, Module, Pack, Insulation Inspection, HV Cable, DC-DC Converter, Traction Motor; the other 3 HV jobs are already among the overrides). The 2 description changes (Charging Port Inspection & Cleaning, Electric A/C Compressor) are on rows already counted.
+- **Expected new `platform_revision` rows on the first run = 2,679 + 47 = 2,726; on a re-run = 0.** The DRYRUN computes the number from the VALUES lists and asserts it equals the rows actually changed.
 
 ---
 
@@ -223,7 +239,7 @@ Presets: **Combustion** = ice, mhev, hev, phev, erev. **Electrified** = hev, phe
 | Exhaust & emissions | Combustion | — | DPF ×2, SCR / AdBlue ×2, NOx, Glow Plugs, EGT, DPF Pressure Sensor → fuels diesel. EVAP / Charcoal Canister, Purge Valve → fuels petrol. |
 | Hybrid & electric | Electrified | — | Charging Port, Charging Port Inspection & Cleaning, On-Board Charger → Plug-in. Battery Thermal Management Coolant Service, Battery Coolant Pump → phev, erev, bev. HV Battery Cooling Fan Filter / Fan & Duct Cleaning → hev, phev. Inverter Coolant Service / Pump → hev, phev, erev. Reduction Gear Oil Change → bev, erev, fcev. |
 | HVAC | — | — | Electric A/C Compressor → Electrified. |
-| Battery & electrical | — | — | Alternator, Starter motor → ice, mhev (full hybrids use the motor-generator; a per-model exception can turn them back on). |
+| Battery & electrical | — | — | **Alternator → ice. Starter motor → ice, mhev.** Full hybrids use the motor-generator for both. Most mild hybrids replace the alternator with a belt starter-generator but keep a 12V starter. A per-model exception handles the rest (an mhev with an integrated starter-generator, or a full hybrid with a 12V starter). |
 | Tires & wheels, Brakes, Suspension & steering, Lighting & visibility, Shop fees | — | — | — |
 
 `is_high_voltage = true`: the 10 jobs in PT-5.
@@ -250,20 +266,23 @@ Presets: **Combustion** = ice, mhev, hev, phev, erev. **Electrified** = hev, phe
 14. Inheritance: NULL / NULL → group's values; powertrains set + fuels NULL → job's powertrains + group's fuels; the reverse; both set → job's both; `'{}'` → refused.
 15. Exceptions: a model row false → 'no' on a fitting job; true → 'yes' on a non-fitting job; a model row beats a platform row.
 16. Frozen fit: a line saved 'no' stays 'no' after the rule changes; **editing a saved line from a fitting job to a non-fitting job sets it to 'no'**; editing its quantity doesn't change it.
-17. HV flag: exactly the 10 PT-5 jobs.
+17. HV flag: exactly the 10 PT-5 jobs, and no group row.
 18. `job_fits_car` with NULLs inside `p_job_ids`: returns rows for the real ids, skips the NULLs, with no error.
 19. **Re-run:** running the whole D1 file twice → the second run changes 0 car rows, 0 job rows, 0 confirmed rows, and adds 0 `platform_revision` rows.
 20. `fuel_category`-only update (e.g. correcting a Gas hybrid to Hybrid) → the trigger fires and the row moves `needs_check` → derived hev.
-21. A mild hybrid (`mhev`) gets Engine, Alternator and Starter jobs and **no** Hybrid & electric jobs.
-22. The D1 transaction sets `part_match.busy`, and no `part_match` work runs during the backfill (the statement-level trigger returns early).
+21. A mild hybrid (`mhev`) gets Engine and Starter motor jobs, and **no** Alternator, Hybrid & electric or Electric A/C Compressor jobs.
+22. **`part_match.busy` really suppresses the trigger:** on the local copy, wrap the backfill in a test that counts `part_match_oe_chain` calls (or temporarily raises inside it) with `SET LOCAL part_match.busy = 'on'` → 0 calls; without the setting → > 0. If the mechanism ever changes (a setting becomes a table row), this test fails with "part_match.busy no longer suppresses the year trigger".
+23. **No group carries `is_high_voltage`:** the constraint refuses `UPDATE … SET is_high_voltage = true WHERE kind = 'system'`, and the HV checklist query reads jobs only.
+24. **The past-lines check** returns both numbers (logged as not usual / still don't fit) on a fixture where one rule was widened after logging.
 
 ### 6b. DRYRUN assertions (D1 live SQL; generated, hash-stamped always-stop copy)
 
 **Snapshot taken first** (temp tables, before any change):
 - `vehicle_catalog`: id + `md5(to_jsonb(row) - ARRAY['powertrain','fuel','powertrain_status','powertrain_note','powertrain_last_confirmed_by','powertrain_last_confirmed_at'])`. The new columns don't exist yet, so the snapshot is the whole row, compared after on everything except those 6.
-- `maintenance_service_categories`: id + `md5(to_jsonb(row) - ARRAY['fits_powertrains','fits_fuels','is_high_voltage','description'])`, plus the full `description` of **Charging Port Inspection & Cleaning only** (the one description D1 changes; checked as exactly old + its new sentence).
+- `maintenance_service_categories`: id + `md5(to_jsonb(row) - ARRAY['fits_powertrains','fits_fuels','is_high_voltage','description'])`, plus the full `description` of the **2** rows whose description D1 changes (Charging Port Inspection & Cleaning, Electric A/C Compressor), each checked as exactly old + its new sentence.
 - Row counts + `md5(string_agg(to_jsonb(t)::text ORDER BY id))` for `vehicle_component_schedule`, `maintenance_work_order_lines` (minus `fit_at_log`), `catalog_component_applicability`, `maintenance_task_templates`, `maintenance_work_order_line_item`.
 - `count(*) FROM platform_revision`.
+- **Future-proofing:** the exclusion lists name exactly the columns D1 adds or sets. Any column added to `vehicle_catalog` or `maintenance_service_categories` after D1 must be added to these lists in the D1 file before it's re-run, or `changed_other` fails on every re-run. The D1 file's header says so.
 
 **Assertions** (stop with "Stopped, nothing saved: <check> on <ids>" on failure, before COMMIT):
 1. `powertrain IS NULL AND powertrain_status <> 'needs_check'` = 0.
@@ -276,14 +295,15 @@ Presets: **Combustion** = ice, mhev, hev, phev, erev. **Electrified** = hev, phe
 8. Schedule rows the retire rule would touch = 0 (printed).
 9. `changed_other` = 0 across every snapshot above (other columns, other tables, other descriptions).
 10. **Idempotency:** the backfill's `IS DISTINCT FROM` set, re-evaluated after the UPDATE, is empty (a re-run would change 0 rows).
-11. New `platform_revision` rows = car rows changed + job rows changed (≈2,667 + 128-ish), printed.
+11. New `platform_revision` rows = **2,726** exactly on the first run (2,679 car rows + 47 job / group rows from the targeted VALUES list, section 3c), and = the car rows changed + job rows changed as counted by the UPDATEs themselves (`GET DIAGNOSTICS … ROW_COUNT`). Re-run: 0.
+12. `is_high_voltage = true` on 0 group rows.
 
 ---
 
 ## 7. Build rounds
 
-1. **D1 (Cursor):** columns, derivation (3a), backfill (3c) then the trigger (3b), `fits_*` + `is_high_voltage` + starting values (5), `fit_at_log`, `retired_reason`, `job_fits_car`, `part_match.busy` (PT-11); SQL tests 9, 10, 12, 14–22. Live via the generated DRYRUN (6b) + real file + logbook line.
-2. **S1 (Cursor):** routes take `vehicleId` and return `fits`; schedule skip + nightly retire; `fit_at_log` in `fleet_save_work_order` (insert + job change); Dominion routes; flag; server tests 7, 8, 9, 13.
+1. **D1 (Cursor):** columns, derivation (3a), backfill (3c) then the trigger (3b), `fits_*` + `is_high_voltage` + starting values (5), `fit_at_log`, `retired_reason`, `job_fits_car`, `part_match.busy` (PT-11); SQL tests 9, 10, 12, 14–23. Live via the generated DRYRUN (6b) + real file + logbook line.
+2. **S1 (Cursor):** routes take `vehicleId` and return `fits`; schedule skip + nightly retire; `fit_at_log` in `fleet_save_work_order` (insert + job change); Dominion routes; flag; server tests 7, 8, 9, 13, 24.
 3. **Stitch (owner):** the screens in section 4.
 4. **UI1 (Claude):** Dominion car-model row, "Powertrain to check", "Fits" row with presets / Custom chips / HV switch.
 5. **UI2 (Claude):** Fleet step 2; click-throughs 1–6, 11.
@@ -299,3 +319,7 @@ Presets: **Combustion** = ice, mhev, hev, phev, erev. **Electrified** = hev, phe
 - The HV lockout checklist itself (it reads `is_high_voltage`).
 - A per-organisation `job_fit_filter` flag.
 - A multi-model `job_fits_car` for a fleet-wide due-items view (PT-10 note).
+
+**Follow-ups recorded on the service-items audit Open list:**
+- **When a hydrogen-combustion (H2-ICE) model is first confirmed:** add `hydrogen` to the Spark-ignition preset's jobs (Spark Plugs, Spark Plug Wires, Ignition coil, Throttle Body, Carburetor), and decide whether H2-ICE needs a fuel value of its own.
+- **The conventional A/C Compressor job** (HVAC file) is the home for belt-driven compressors, including hybrids with a per-model exception on Electric A/C Compressor.
