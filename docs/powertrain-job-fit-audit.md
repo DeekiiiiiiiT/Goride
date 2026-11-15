@@ -2,50 +2,30 @@
 
 **Goal in one sentence:** every screen that offers maintenance jobs for a car offers the jobs that fit that car's powertrain (petrol, diesel, hybrid, plug-in, electric…), using one clean, owner-confirmed powertrain value per car model and one fit rule per job, so that an electric car is never offered an oil change and a petrol car is never offered high-voltage work.
 
-Everything below was checked in the code and on the live database on 15 Nov 2026. Method: `docs/how-we-build-playbook.md` (facts → findings with one fix → design → done-tests → Stitch → build in layers).
+Method: `docs/how-we-build-playbook.md`. All facts were checked in the code and on the live database on 15 Nov 2026.
 
-**Rev 6 changes (after the fifth review):**
-- **`job_fit_count(p_job_id, p_overrides jsonb)`:** a missing key = the saved value, an array = that list, JSON null = "Same as group".
-- **"All" on a job is stored as the full code list,** so "same as group", "all" and "a chosen list" stay three distinct states. Test 25 covers all three; test 27 added.
-- **The "Not usual for this car" chip is grey,** with amber kept for High-voltage only.
-- **The HV chip appears on every job card** (steps 2 and 3, Review, history), never on tiles. Test 26 covers hidden HV jobs and history.
-- **The past-lines check is `live/powertrain-past-lines.sql`,** run by hand.
-- **The count is debounced** at about 250 ms.
-- **Assertions 12 / 13 are in order.** Test 9 is split between D1 (the function) and S1 (the route).
-- **The playbook gets a golden rule** on optional parameters.
+## 0. START HERE (new chat)
 
-**Rev 5 changes (after the fourth review):**
-- **Fleet "High-voltage" chip** on HV job cards in the picker (safety: visible before opening a job).
-- **`job_fit_count`** (DB) feeds "Fits N of T car models (U not known yet)". It reuses `job_fits_car`'s helper, so no second copy of the rule; T = every model, `needs_check` included.
-- **Test 2** checks the Fit's Electric A/C Compressor with the HV chip.
-- **Every Stitch "Keep" element is now in section 4:** Show all in a group, Hide jobs that don't fit, the "You picked this" helper, the "N left" pill, the disagreement strip, Powertrain mix, Jobs that set their own, See which, the states, and the phone layout.
-- **Re-run caveat** for hand-edited derived rows.
-- **"Link this car" is a button.**
-- **Assertion 11** is phrased as a formula; **assertion 13 added** (no mhev fits HV jobs).
-- **Tests 25–26 added.**
-- **Section 9:** rendering notes are separated from design drops.
-- **The playbook's Step 4** says kept elements must be written into the plan's design section.
+**Where we are (15 Nov 2026, end of session):**
 
-**Rev 4 changes (after the third review, all checked on live):**
-- **`part_match.busy` is a session setting (GUC):** the trigger reads `current_setting('part_match.busy', true)`, so `SET LOCAL` works.
-- **`maintenance_work_order_lines.component_id` is the job link** (`REFERENCES maintenance_service_categories(id)`).
-- **Exact revision count:** 2,679 car rows + 47 job / group rows = **2,726**, with one UPDATE per table.
-- **`is_high_voltage` can't be set on a group** (constraint on `kind`).
-- **Electric A/C Compressor stays on Electrified, with the reason:** most full hybrids use a high-voltage electric compressor. Belt-driven ones get a per-model exception.
-- **Alternator → ice only; Starter → ice, mhev.** Most mild hybrids replace the alternator with a belt starter-generator.
-- **The past-lines check** reports "still doesn't fit" separately.
-- **Notes added:** `fit_at_log = 'unknown'`, Rule 6, Rule 9's label, snapshot future-proofing, and the H2-ICE follow-up.
+| Step | Status |
+|---|---|
+| Audit (this file) | **Rev 6 written.** Reviewed 5 times; every finding is folded into the sections below. Rev 6 was **sent to the reviewer; waiting for their reply**. They said it's ready to build once the `job_fit_count` override point was fixed (done in Rev 6). |
+| Stitch screens | **Received + filed.** Fleet 10 and Dominion 10 are in `docs/stitch/powertrain-job-fit-{fleet,dominion}/html/` (01–10 each). Keep / Drop / Add is in section 9 and folded into section 4. Prompts: `docs/stitch/powertrain-job-fit-{fleet,dominion}-prompt.txt`. |
+| D1 database round (Cursor) | **Not started.** Next step once the reviewer OKs Rev 6: write `docs/powertrain-build/cursor-D1.md` from sections 3, 4 (Database), 5, 6b and the D1 test list in 7. |
+| S1 server, UI1 Dominion, UI2 Fleet, live | Not started (section 7). |
+| Flag `job_fit_filter` | Doesn't exist yet; off by default when built. |
 
-**Rev 3 changes (after the second review):**
-- **Derivation:** re-checked engine_type on live. The rules now read engine_type by keyword. The 2 Hydrogen models say "Fuel Cell", so they're derived as fcev. "REEV" counts as a range-extender. **7 mild hybrids** get their own value, `mhev`. All 43 Petrol/Electric models place cleanly. Exact counts are in table 3a; `needs_check` falls from ≈33 to **12**.
-- **Fit at save:** `fit_at_log` is also recomputed when an edit changes a line's job.
-- **Spark-ignition preset** = petrol, cng (no hydrogen).
-- **D1 backfill:** only touches rows that aren't confirmed and whose values actually differ, so a re-run changes nothing. A full snapshot spec has been added.
-- **Charging Port Inspection & Cleaning:** stays non-HV, with the conditions written into its description.
-- **Confirmed rows:** a text change re-asks the owner only if the derived answer changes. The trigger also watches `fuel_category`. The confirm columns are renamed `powertrain_last_confirmed_*`.
-- **Schedule retire:** runs every night (it's idempotent).
-- **New PT-11:** the existing car-model triggers (revision history, parts-year match) and how D1 handles them.
-- Tests 18–22 added.
+**What to do first in a new chat:**
+1. Ask the owner for the reviewer's reply to Rev 6. If it has new points, fix them in the sections below, without adding a review-history section (git history keeps the old revisions).
+2. When it's OK'd, write the D1 Cursor prompt. Database and server rounds are Cursor's; screen rounds (UI1, UI2) are Claude's. Follow the usual rules: migration file named with the real current UTC time; the live SQL as a generated, hash-stamped DRYRUN first (pattern: `docs/service-items-build/live/README-dryrun.md`), then the real file with its `schema_migrations` logbook line.
+3. Before trusting any number in this file, re-run its check on live (the counts in 3a come from a query you can rerun).
+
+**Rules that still apply while this isn't built:**
+- **No HV service on a real car until the HV lockout checklist ships.** If it can't wait, log it in the app with "HV lockout done by <name> at <time>" in the notes (service-items audit Open list).
+- Log oil changes on "Engine oil" in the **Engine** group (`oil`), not the Fluids one (`engine_oil_part`).
+
+**Other open work (not this feature), in the order agreed:** see `docs/service-items-architecture-audit.md` → Open list, which includes `catalogue_batch_log` (before the Steering & Suspension list), the Charging Port part-item check, Find parts research (29 items), the HV lockout checklist (target 30 Nov 2026), and the CI known failure.
 
 ---
 
