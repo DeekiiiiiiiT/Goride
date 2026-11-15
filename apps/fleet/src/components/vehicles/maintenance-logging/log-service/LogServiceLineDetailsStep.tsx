@@ -14,6 +14,7 @@ import { MaintenanceIcon } from "../../MaintenanceIcon";
 import { LOG_SERVICE_COPY } from "./logServiceCopy";
 import type { MaintenanceLineAction, MaintenanceServiceCategory } from "../../../../types/maintenance";
 import { MAINTENANCE_LINE_ACTIONS } from "../../../../types/maintenance";
+import { actionLabel } from "./systemSections";
 import type { CompatiblePartsItem } from "../../../../types/partSourcing";
 
 const TIRE_BRAKE_POSITIONS = ["LF", "RF", "LR", "RR"] as const;
@@ -66,6 +67,8 @@ export type LogServiceLineDetailsStepProps = {
   };
   /** "Items used" block (service items on). Replaces the line-total box with its own total pill. */
   itemsSlot?: React.ReactNode;
+  /** Inside the multi-job list the page already has the "Line details" title. */
+  hideHeading?: boolean;
 };
 
 function PositionButtons({
@@ -120,6 +123,81 @@ function ServiceJobForm(props: LogServiceLineDetailsStepProps & { serviceForm: N
   const { serviceForm: sf, showPositions, positions, onTogglePosition, complimentary, onComplimentaryChange, currency, lineTotal, lineTotalLabel } = props;
   const perWheel = sf.costMode === "per_wheel";
   const wheelCount = positions.length;
+  if (props.itemsSlot) {
+    // Stitch screen 1: one "Service charge" block — words left; switch, amount and "No charge" right.
+    return (
+      <>
+        {showPositions ? (
+          <div className="space-y-2">
+            <Label>{LOG_SERVICE_COPY.whichWheels}</Label>
+            <PositionButtons positions={positions} onTogglePosition={onTogglePosition} onToggleAll={sf.onToggleAllPositions} />
+          </div>
+        ) : null}
+        <div
+          className="bg-surface-container-low/50 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
+          data-testid="log-service-service-charge"
+        >
+          <div className="flex flex-col">
+            <Label htmlFor="service-amount" className="text-sm font-semibold text-on-surface">
+              {LOG_SERVICE_COPY.serviceChargeLabel}
+            </Label>
+            <span className="text-[13px] leading-[18px] text-on-surface-variant">{LOG_SERVICE_COPY.serviceChargeHelper}</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {showPositions ? (
+              <div className="bg-surface-container-high p-1 rounded-xl flex items-center gap-1">
+                {(["total", "per_wheel"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={sf.costMode === mode}
+                    onClick={() => sf.onCostModeChange(mode)}
+                    className={`px-3 py-1 rounded-lg text-[11px] font-semibold transition-colors ${
+                      sf.costMode === mode ? "bg-black text-white shadow-xs" : "text-on-surface-variant hover:text-on-surface"
+                    }`}
+                  >
+                    {mode === "total" ? LOG_SERVICE_COPY.costModeTotal : LOG_SERVICE_COPY.costModePerWheel}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[15px] font-semibold text-on-surface-variant">
+                {currency === "JMD" ? "J$" : currency}
+              </span>
+              <Input
+                id="service-amount"
+                type="number"
+                min={0}
+                inputMode="decimal"
+                disabled={complimentary}
+                className="w-40 h-10 pl-9 bg-surface-container-lowest border-0 rounded-xl text-[15px] font-semibold tabular-nums shadow-xs"
+                placeholder={perWheel ? LOG_SERVICE_COPY.perWheelPlaceholder : LOG_SERVICE_COPY.totalPlaceholder}
+                value={sf.amount ?? ""}
+                onChange={(e) => sf.onAmountChange(e.target.value === "" ? null : Number(e.target.value))}
+              />
+            </div>
+            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              <Checkbox
+                id="complimentary"
+                checked={complimentary}
+                onCheckedChange={(checked: boolean | "indeterminate") => onComplimentaryChange(checked === true)}
+              />
+              <span className="text-[13px] text-on-surface-variant">{LOG_SERVICE_COPY.noChargeLabel}</span>
+            </label>
+          </div>
+        </div>
+        {perWheel && showPositions ? (
+          <p className="text-xs text-stitch-secondary -mt-2">
+            {wheelCount === 0
+              ? LOG_SERVICE_COPY.pickWheelsForPerWheel
+              : LOG_SERVICE_COPY.perWheelMath(currency, sf.amount ?? 0, wheelCount)}
+          </p>
+        ) : null}
+        {props.itemsSlot}
+      </>
+    );
+  }
   return (
     <>
       {showPositions ? (
@@ -129,17 +207,8 @@ function ServiceJobForm(props: LogServiceLineDetailsStepProps & { serviceForm: N
         </div>
       ) : null}
 
-      <div className={props.itemsSlot ? "space-y-2 bg-surface-container-low/50 rounded-xl p-4" : "space-y-2"}>
-        {props.itemsSlot ? (
-          <div className="flex flex-col">
-            <Label htmlFor="service-amount" className="text-sm font-semibold text-on-surface">
-              {LOG_SERVICE_COPY.serviceChargeLabel}
-            </Label>
-            <span className="text-[13px] leading-[18px] text-on-surface-variant">{LOG_SERVICE_COPY.serviceChargeHelper}</span>
-          </div>
-        ) : (
-          <Label htmlFor="service-amount">{LOG_SERVICE_COPY.serviceCostLabel}</Label>
-        )}
+      <div className="space-y-2">
+        <Label htmlFor="service-amount">{LOG_SERVICE_COPY.serviceCostLabel}</Label>
         {showPositions ? (
           <div className="inline-flex rounded-lg border border-outline-variant/40 p-1 bg-surface-container-low gap-1">
             {(["total", "per_wheel"] as const).map((mode) => (
@@ -195,14 +264,12 @@ function ServiceJobForm(props: LogServiceLineDetailsStepProps & { serviceForm: N
         </Label>
       </div>
 
-      {props.itemsSlot ?? (
-        <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low px-4 py-3 flex justify-between items-center">
-          <span className="text-sm text-stitch-secondary">{lineTotalLabel}</span>
-          <span className="font-semibold text-on-surface">
-            {currency} {lineTotal.toLocaleString()}
-          </span>
-        </div>
-      )}
+      <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low px-4 py-3 flex justify-between items-center">
+        <span className="text-sm text-stitch-secondary">{lineTotalLabel}</span>
+        <span className="font-semibold text-on-surface">
+          {currency} {lineTotal.toLocaleString()}
+        </span>
+      </div>
     </>
   );
 }
@@ -238,25 +305,31 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
     lineTotal,
   } = props;
 
+  const actionPill = actionLabel(action);
   return (
-    <div className="space-y-6">
-      <div>
-        <span className="text-[11px] text-stitch-secondary uppercase tracking-wider font-semibold">
-          {LOG_SERVICE_COPY.wizardEyebrow}
-        </span>
-        <h2 className="text-2xl font-semibold text-on-surface mt-0.5">{LOG_SERVICE_COPY.lineDetailsTitle}</h2>
-        <p className="text-sm text-stitch-secondary mt-1">{LOG_SERVICE_COPY.lineDetailsSubtitle}</p>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <div className="bg-surface-container p-3 rounded-xl text-on-surface">
-          <MaintenanceIcon iconKey={category.icon_key} className="w-6 h-6" />
-        </div>
+    <div className="space-y-5">
+      {props.hideHeading ? null : (
         <div>
-          <h3 className="font-semibold text-on-surface">{category.name}</h3>
-          <p className="text-xs text-stitch-secondary">
-            {[systemName, category.code].filter(Boolean).join(" · ")}
-          </p>
+          <h2 className="text-2xl font-semibold text-on-surface">{LOG_SERVICE_COPY.lineDetailsTitle}</h2>
+          <p className="text-sm text-stitch-secondary mt-1">{LOG_SERVICE_COPY.lineDetailsSubtitle}</p>
+        </div>
+      )}
+
+      {/* Stitch screen 1 job header: icon tile, job name, action pill. No internal codes on Fleet (6a). */}
+      <div className="flex items-center gap-2.5" data-testid="log-service-job-header">
+        <div className="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface shrink-0">
+          <MaintenanceIcon iconKey={category.icon_key} className="w-5 h-5" />
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+          <h3 className="text-base font-bold text-on-surface">{category.name}</h3>
+          {actionPill ? (
+            <span className="bg-surface-container-high text-on-surface-variant text-[11px] font-medium px-2.5 py-0.5 rounded-full">
+              {actionPill}
+            </span>
+          ) : null}
+          {systemName && !props.itemsSlot ? (
+            <span className="text-xs text-stitch-secondary">{systemName}</span>
+          ) : null}
         </div>
       </div>
 

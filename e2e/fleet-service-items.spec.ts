@@ -266,6 +266,14 @@ test.describe("Fleet service items", () => {
 
     const block = page.getByTestId("items-used");
     await expect(block).toBeVisible({ timeout: 30_000 });
+    // Stitch screen 1 job card: name + action pill, Service charge block; no internal codes (6a).
+    const header = page.getByTestId("log-service-job-header");
+    await expect(header).toContainText(fx.jobName);
+    await expect(header).not.toContainText("throttle_body_cleaning");
+    await expect(page.getByText(/Bay Session/i)).toHaveCount(0);
+    await expect(page.getByTestId("log-service-service-charge")).toContainText("Service charge");
+    await expect(page.getByTestId("log-service-service-charge")).toContainText("No charge (free)");
+    await expect(page.getByRole("heading", { name: /line details/i })).toHaveCount(1);
     // Nothing is ticked for you.
     await expect(block.getByRole("checkbox", { checked: true })).toHaveCount(0);
     await expect(block.getByText("Usually used")).toBeVisible();
@@ -305,6 +313,8 @@ test.describe("Fleet service items", () => {
     // 21: job 3,000 + cleaner 1,200 + gasket 800 = 5,000 (rags blank = 0).
     await expect(page.getByTestId("items-used-total")).toContainText("Job J$ 3,000 + items J$ 2,000 = J$ 5,000");
     await snap(page, "03-step3-ticked", block);
+    await header.scrollIntoViewIfNeeded();
+    await page.getByRole("dialog").screenshot({ path: join(shotsDir, "live-01-job-card-top.png") });
 
     // Screen 9 (phone): compact header, thin step bars, total pinned above the footer.
     await page.setViewportSize({ width: 390, height: 844 });

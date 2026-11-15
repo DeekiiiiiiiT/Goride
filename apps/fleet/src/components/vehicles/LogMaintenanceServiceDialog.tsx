@@ -1869,6 +1869,7 @@ export function LogMaintenanceServiceDialog({
                 >
                   {activeCategory?.id === cat.id && (
                     <LogServiceLineDetailsStep
+                      hideHeading
                       category={cat}
                       systemName={lineExtras.system?.name}
                       action={lineExtras.action}

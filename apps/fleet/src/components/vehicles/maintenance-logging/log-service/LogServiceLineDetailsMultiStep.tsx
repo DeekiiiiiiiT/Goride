@@ -17,7 +17,8 @@ export function LogServiceLineDetailsMultiStep({
 }: {
   packageLabel?: string | null;
   componentCount: number;
-  baySessionLabel: string;
+  /** No longer shown (invented code); kept so callers don't change. */
+  baySessionLabel?: string;
   configuredCount: number;
   subtotalLabel: string;
   mechanicNote: string;
@@ -33,10 +34,7 @@ export function LogServiceLineDetailsMultiStep({
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-1">
         <div>
-          <span className="text-[11px] text-stitch-secondary uppercase tracking-wider font-semibold">
-            {LOG_SERVICE_COPY.wizardEyebrow}
-          </span>
-          <h2 className="text-2xl font-semibold text-on-surface mt-0.5">
+          <h2 className="text-2xl font-semibold text-on-surface">
             {LOG_SERVICE_COPY.lineDetailsTitle}
             {packageLabel ? ` — ${packageLabel}` : ""}
           </h2>
@@ -49,10 +47,7 @@ export function LogServiceLineDetailsMultiStep({
               {packageLabel} ({componentCount} components)
             </span>
           ) : null}
-          <span className="text-xs font-mono text-on-surface-variant bg-surface-container px-2 py-1 rounded">
-            {LOG_SERVICE_COPY.baySessionLabel}
-            {baySessionLabel}
-          </span>
+          {/* "Bay Session #…" dropped: a slice of the save key, an invented code (plan 6a). */}
         </div>
       </div>
 
