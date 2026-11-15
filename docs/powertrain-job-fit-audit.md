@@ -1,173 +1,217 @@
-# Powertrain job fit — audit (Rev 2, 15 Nov 2026)
+# Powertrain job fit — audit (Rev 3, 15 Nov 2026)
 
 **Goal in one sentence:** every screen that offers maintenance jobs for a car offers the jobs that fit that car's powertrain (petrol, diesel, hybrid, plug-in, electric…), using one clean, owner-confirmed powertrain value per car model and one fit rule per job, so that an electric car is never offered an oil change and a petrol car is never offered high-voltage work.
 
 Everything below was checked in the code and on the live database on 15 Nov 2026. Method: `docs/how-we-build-playbook.md` (facts → findings with one fix → design → done-tests → Stitch → build in layers).
 
-**Rev 2 changes (after review):** HV lockout keys off a new `is_high_voltage` flag (10 jobs), not the group (PT-5). Per-column inheritance, and empty lists not allowed (PT-3). A `powertrain_status` transition table (section 3b). `job_fits_car` is NULL-safe and returns a whole set in one call (PT-10). Stored schedule rows that don't fit are retired once, with a reason (PT-4). The "Not usual for this car" result is frozen on the line at save time (PT-8). Per-model exceptions are a full override (PT-9). The fuel column is renamed `fuel` and gains `hydrogen` / `electric`, and `lpg` is dropped. Hydrogen models go to `needs_check`; FCEVs get Reduction Gear Oil Change. Mismatch count corrected. Explicit DRYRUN assertions. Tests expanded (6 models, inheritance, unlinked car).
+**Rev 3 changes (after the second review):**
+- **Derivation:** re-checked engine_type on live. The rules now read engine_type by keyword. The 2 Hydrogen models say "Fuel Cell", so they're derived as fcev. "REEV" counts as a range-extender. **7 mild hybrids** get their own value, `mhev`. All 43 Petrol/Electric models place cleanly. Exact counts are in table 3a; `needs_check` falls from ≈33 to **12**.
+- **Fit at save:** `fit_at_log` is also recomputed when an edit changes a line's job.
+- **Spark-ignition preset** = petrol, cng (no hydrogen).
+- **D1 backfill:** only touches rows that aren't confirmed and whose values actually differ, so a re-run changes nothing. A full snapshot spec has been added.
+- **Charging Port Inspection & Cleaning:** stays non-HV, with the conditions written into its description.
+- **Confirmed rows:** a text change re-asks the owner only if the derived answer changes. The trigger also watches `fuel_category`. The confirm columns are renamed `powertrain_last_confirmed_*`.
+- **Schedule retire:** runs every night (it's idempotent).
+- **New PT-11:** the existing car-model triggers (revision history, parts-year match) and how D1 handles them.
+- Tests 18–22 added.
 
 ---
 
 ## 1. Facts (checked)
 
 **Cars**
-- Dominion's master list `vehicle_catalog` has **2,679 car models**, all `vehicle_class = 'car'`.
+- Dominion's master list `vehicle_catalog` has **2,679 car models**, all `vehicle_class = 'car'`, each with a `platform_id` column (used by PT-9).
 - `fuel_type` is free text with **11 values**: Petrol 1,802 · Electric 313 · Diesel 267 · Hybrid(petrol) 236 · Petrol/Electric 43 · CNG 8 · blank 5 · Hydrogen 2 · Hybrid(diesel) 1 · CNG/LNG 1 · Electric/Hybrid 1.
-- `engine_type` is free text with **46 values**, mixing powertrain words (Hybrid, PHEV, EREV, Range Extender, BEV, PMSM, Electric) with engine shapes (Turbo, V6, Inline-4, Twin-Turbo V12…).
-- `fuel_category` already exists and is closer (Gas / Diesel / Electric / Hybrid / CNG / Hydrogen / Electric/Hybrid), but it's **wrong or too coarse in places**:
-  - **6** Hybrid(petrol) models are filed as "Gas" (a real disagreement). Separately, 1 CNG and 1 CNG/LNG model are filed as "Gas", which isn't a disagreement ("gas" covers natural gas).
-  - 1 Petrol model and the 5 blanks have no category.
-  - "Hybrid" lumps together normal hybrids, plug-ins (PHEV, 29 by engine_type), range-extenders (EREV / Range Extender, 26) and the diesel hybrid. Those need different jobs (only plug-ins and range-extenders have a charging port).
+- `engine_type` is free text with **46 values**. On the models that matter for powertrain it says:
+  - Electric: Electric 266, PMSM 17, BEV 13, blank 11, EV 4, Dual PMSM 2.
+  - Hybrid(petrol): Hybrid 127, blank 43, PHEV 29, Hybrid(petrol) 13, EREV 12, Turbo 4, REEV 2, Turbo V8 Hybrid 2, Mild Hybrid 1, and 1 each of Turbo V6 Hybrid, Hybrid (2.0L), Turbo Hybrid.
+  - Petrol/Electric: Range Extender 14, Hybrid 10, EREV 6, Twin-Turbo Hybrid 5, Plug-in Hybrid 4, Mild Hybrid 3, V12 Hybrid 1.
+  - Petrol: Mild Hybrid 3 (the rest are engine shapes such as Turbo, V6, Inline-4).
+  - Hydrogen: Fuel Cell 2.
+- `fuel_category` is closer (Gas / Diesel / Electric / Hybrid / CNG / Hydrogen / Electric/Hybrid), but:
+  - **6** Hybrid(petrol) models are filed as "Gas" (4 with blank engine_type, 2 "Turbo"): a real disagreement. 1 CNG and 1 CNG/LNG model are filed as "Gas", which isn't a disagreement ("gas" covers natural gas).
+  - **1** Petrol model has no category: a category-hygiene note only. The rule places it as ice / petrol.
+  - The **5** blank-fuel models have no category.
+  - "Hybrid" lumps together normal hybrids, plug-ins, range-extenders and mild hybrids. Those need different jobs.
   - Parts code (`parts_finder.ts`, `vehicle_parts_context.ts`, `parts_auto_match_routes.ts` and others) already reads `fuel_category`, so changing its meaning would break parts matching.
+- **Existing triggers on `vehicle_catalog`** (they fire on any backfill):
+  - `mm_master_revision_vehicle_catalog`: after each row insert / update / delete, writes one `platform_revision` row (old / new).
+  - `part_match_vehicle_catalog_years_upd`: statement-level. It only acts on production-year changes, but it first joins every changed row to its OE numbers through `part_match_oe_chain`. It returns at once when `part_match.busy = 'on'`.
+  - `vehicle_catalog_engine_listings_sync`: fires only on an `engine_family_id` change.
+  - `vehicle_catalog_one_maker_per_platform`.
+  - `maintenance_service_categories` has `mm_master_revision_service_categories` (same revision writer) and `trg_msc_default_action_fill`.
 - Fleet cars link to a model through `fleet.vehicles.vehicle_catalog_id` (text). Today: **2 cars, both linked**. 5179KZ Toyota Roomy = Petrol; 1505LM Honda Fit = Hybrid(petrol) / Hybrid.
 
 **Jobs**
 - `maintenance_service_categories` has 14 groups and 128 active jobs. **No column says which cars a job fits.**
-- The Fleet Log service job lists come from `GET /maintenance-categories`, `/quick-jobs`, `/systems/:id/sections` and `/systems/:id/components` (`maintenance_routes.ts` ~1317–1420). **None of them takes the car.** Every car gets every job.
-- Screens that list jobs: Fleet `LogMaintenanceServiceDialog.tsx` + `LogServiceSystemPicker.tsx` (Log service), and Dominion's job admin (`maintenanceMasterApi.ts`, `maintenanceTemplateService.ts`). The Driver app doesn't list jobs. If it ever shows due items, it must use `job_fits_car` too.
-- **Half a fix exists, unused:** `catalog_component_applicability` (scope, vehicle_catalog_id, platform_id, engine_family_id, component_id, applicable, reason, evidence_url) can say "this job isn't on this car / platform". It has **0 rows**, and only the Dominion schedule preview reads it (`maintenance_master_routes.ts` ~275).
+- The Fleet Log service job lists come from `GET /maintenance-categories`, `/quick-jobs`, `/systems/:id/sections` and `/systems/:id/components` (`maintenance_routes.ts` ~1317–1420). **None of them takes the car, and none caches** (checked: no server-side cache or memo on these routes).
+- A saved line's job **can** change on edit: `fleet_save_work_order` updates `component_id` when the line JSON has it.
+- Screens that list jobs: Fleet `LogMaintenanceServiceDialog.tsx` + `LogServiceSystemPicker.tsx` (Log service), and Dominion's job admin. The Driver app doesn't list jobs. If it ever shows due items, it must use `job_fits_car` too.
+- **Half a fix exists, unused:** `catalog_component_applicability` (scope, vehicle_catalog_id, platform_id, engine_family_id, component_id, applicable, reason, evidence_url). It has **0 rows**; only the Dominion schedule preview reads it.
 
 **Schedules**
-- 21 active `maintenance_task_templates`, all `template_scope = 'global'`, filtered only by `applicable_vehicle_classes` (every model is "car"). They include Engine oil, Spark Plugs, Engine Air Filter, Drive / Serpentine Belt, Transmission Fluid and Radiator Coolant Flush. So an electric car would be told its oil change is due.
-- Schedules are **stored rows**: `vehicle_component_schedule` has 59 rows today (active 25, odometer_needed 25, no_rule 9), all on the 2 Fleet cars. **7 server files read it directly** (Fleet Admin ledger, Find parts, Log service context, fleet enrich, master routes, maintenance routes, service ledger core). `schedule_status` already allows `'retired'`.
+- 21 active global `maintenance_task_templates`, filtered only by `applicable_vehicle_classes` (every model is "car"). They include Engine oil, Spark Plugs, Engine Air Filter, Drive / Serpentine Belt, Transmission Fluid and Radiator Coolant Flush.
+- Schedules are **stored rows**: `vehicle_component_schedule` has 59 (active 25, odometer_needed 25, no_rule 9), all on the 2 Fleet cars. **7 server files read it directly.** `schedule_status` already allows `'retired'`.
 
 ---
 
 ## 2. Findings (one fix each)
 
-**PT-1 (High). Log service offers every job to every car.** None of the four job-list routes knows which car is being serviced.
-**Fix:** each route takes `vehicleId` and returns every job with `fits: 'yes' | 'no' | 'unknown'` (section 4). Fleet shows the fitting jobs and hides the rest behind "Show all jobs". There's **no confirmation dialog** for logging a hidden job; the chip is the only signal.
+**PT-1 (High). Log service offers every job to every car.**
+**Fix:** each job-list route takes `vehicleId` and returns every job with `fits: 'yes' | 'no' | 'unknown'`. Fleet shows the fitting jobs and hides the rest behind "Show all jobs". There's **no confirmation dialog** for logging a hidden job; the chip is the only signal.
 
-**PT-2 (High). There is no trustworthy powertrain value per car model.** `fuel_type` / `engine_type` are free text; `fuel_category` is coarse, has 6 real disagreements and 6 blanks, and is already used by parts code.
-**Fix:** three new controlled columns on `vehicle_catalog`, filled from today's text by the rules in section 3:
-- `powertrain`: `ice`, `hev`, `phev`, `erev`, `bev`, `fcev`;
-- `fuel`: `petrol`, `diesel`, `cng`, `hydrogen`, `electric`. This is what the car runs on: `electric` for BEVs, `hydrogen` for FCEVs and hydrogen-combustion cars. `lpg` is dropped because no model produces it; it's added the day one does;
-- `powertrain_status`: `derived`, `confirmed`, `needs_check`.
+**PT-2 (High). There is no trustworthy powertrain value per car model.**
+**Fix:** new controlled columns on `vehicle_catalog`, filled by the rules in 3a:
+- `powertrain`: `ice`, `mhev` (mild hybrid: 48V, no high-voltage drive battery), `hev`, `phev`, `erev`, `bev`, `fcev`;
+- `fuel`: `petrol`, `diesel`, `cng`, `hydrogen`, `electric` (what the car runs on);
+- `powertrain_status`: `derived`, `confirmed`, `needs_check`;
+- `powertrain_note`, `powertrain_last_confirmed_by`, `powertrain_last_confirmed_at`.
 
-The original text columns stay untouched ("capture, never gate"). Rows the rules can't place cleanly are `needs_check` and go to a Dominion list for the owner.
+The original text columns stay untouched ("capture, never gate"). Rows the rules can't place are `needs_check` and go to a Dominion list for the owner.
 
 **PT-3 (High). Jobs have no fit rule.**
-**Fix:** two nullable array columns on `maintenance_service_categories`: `fits_powertrains text[]` and `fits_fuels text[]`. **Inheritance is per column:** for each of the two columns separately, a job's non-NULL value is used; a NULL value takes the group's value; a NULL on the group too means "any". So a job can be set to "petrol only" without retyping its group's powertrain list. **Empty arrays (`'{}'`) are refused by a constraint.** A job that should fit nothing is retired, not given an empty list. Each element is constrained to the code lists above. A job fits a car when the car's powertrain is in the effective powertrain list **and** the car's fuel is in the effective fuel list. Starting values: section 5.
+**Fix:** `fits_powertrains text[]` and `fits_fuels text[]` on `maintenance_service_categories`. **Inheritance is per column:** a job's non-NULL value is used; NULL takes the group's value; NULL on the group too means "any". **Empty arrays are refused by a constraint** (a job that fits nothing is retired instead). Each element is constrained to the code lists above. A job fits when the car's powertrain is in the effective powertrain list **and** its fuel is in the effective fuel list. **Every job not named in section 5's overrides inherits its group's values.**
 
-**PT-4 (High). Schedules would put combustion jobs on electric cars**, and wrong stored rows would stay visible to the 7 readers.
-**Fix, in two parts:** (1) the schedule builder (the nightly due-items check and the Dominion preview) skips any job where `fits = 'no'` before it looks at templates; (2) **one-time, on the first nightly run after the flag goes on:** every stored schedule row whose job is `fits = 'no'` for its car is set to `schedule_status = 'retired'`, with a new column `retired_reason = 'Job doesn''t fit this car''s powertrain'`. Rows are never deleted. The DRYRUN reports how many would be retired (expected **0** on live today: both cars' 59 rows fit). `unknown` never retires anything.
+**PT-4 (High). Schedules would put combustion jobs on electric cars, and wrong stored rows would stay visible to the 7 readers.**
+**Fix:** (1) the schedule builder skips any job where `fits = 'no'`; (2) **every nightly run** (not one-time) sets `schedule_status = 'retired'` and `retired_reason = 'Job doesn''t fit this car''s powertrain'` on any stored row whose job is `fits = 'no'` for its car and isn't already retired. It's idempotent: retired rows aren't touched again. That also catches any row made later by a bug. Rows are never deleted, and `unknown` never retires anything. Expected on live today: **0** rows (both cars' 59 rows fit).
 
-**PT-5 (High, safety). High-voltage jobs are offered to petrol and diesel cars, and "high-voltage" isn't defined anywhere.** The Hybrid & electric group mixes HV work (pack, modules, cables, charger, motor) with non-HV work (cooling fan, coolant, gear oil, cleaning the charging port). Electric A/C Compressor is HV but sits in HVAC.
-**Fix:** a new `is_high_voltage boolean NOT NULL DEFAULT false` on `maintenance_service_categories`, set true on exactly these **10 jobs**: HV Battery Health Check, HV Battery Module Replacement, HV Battery Pack Replacement, HV Cable & Insulation Resistance Inspection, HV Cable / Connector Replacement, Charging Port, On-Board Charger, DC-DC Converter, Traction Motor, Electric A/C Compressor. The **HV lockout checklist** (separate item, owner Deeki T) keys off this flag only, never off the group or "electrified". The 8 non-HV jobs in the group stay false: Cooling Fan Filter, Fan & Duct Cleaning, Inverter Coolant Service, Inverter Coolant Pump, Battery Thermal Management Coolant Service, Battery Coolant Pump, Charging Port Inspection & Cleaning, Reduction Gear Oil Change. Dominion's job drawer shows the flag as a switch; a new HV job gets it set when it's created. The "High-voltage: lockout first" hint text on the 8 non-HV jobs is checked and removed where it's wrong.
+**PT-5 (High, safety). "High-voltage" isn't defined anywhere, and HV jobs are offered to petrol and diesel cars.**
+**Fix:** `is_high_voltage boolean NOT NULL DEFAULT false`, true on exactly these **10 jobs**: HV Battery Health Check, HV Battery Module Replacement, HV Battery Pack Replacement, HV Cable & Insulation Resistance Inspection, HV Cable / Connector Replacement, Charging Port, On-Board Charger, DC-DC Converter, Traction Motor, Electric A/C Compressor. The HV lockout checklist keys off this flag only. The 8 non-HV jobs in the group stay false.
+- **Charging Port Inspection & Cleaning** is non-HV *by its scope*. Its description gains: "Visual check and pin cleaning with the car switched off and unplugged; the port housing stays closed. If the housing has to be opened, that's high-voltage work: log Charging Port and follow lockout." The owner (Deeki T, the safety owner on the Open list) can flip the switch in Dominion.
+- Checked: none of the 8 non-HV jobs carries a "lockout first" hint. Only Fan & Duct Cleaning's description mentions lockout, conditionally ("if the cover comes off"), which is correct. So no hint text changes.
 
 **PT-6 (Medium). Diesel cars are offered spark-plug jobs; petrol cars are offered DPF / AdBlue / glow-plug jobs.**
-**Fix:** `fits_fuels` on those jobs (section 5). Spark-ignition jobs are petrol / cng / hydrogen (a hydrogen-combustion engine uses spark plugs; FCEVs are excluded by powertrain). Diesel-only jobs are diesel.
+**Fix:** `fits_fuels` (section 5). **Spark-ignition = petrol, cng.** Hydrogen is left out on purpose. If a hydrogen-combustion model is ever confirmed, `hydrogen` is added to those jobs at that point. Diesel-only jobs are diesel.
 
-**PT-7 (Medium). A car with no model link, or a model marked `needs_check`, has an unknown powertrain.** Today 0 of 2 Fleet cars, but it will happen.
-**Fix:** `fits = 'unknown'` for every job. Fleet shows **all** jobs, with a banner "We don't know this car's engine type yet. Showing every job." and a link to fix it (Fleet: link the car to a model; Dominion: confirm the model). Never hide jobs on a guess.
+**PT-7 (Medium). A car with no model link, or a `needs_check` model, has an unknown powertrain.**
+**Fix:** `fits = 'unknown'` for every job. Fleet shows all jobs with the banner "We don't know this car's engine type yet. Showing every job." and a link to fix it. Never hide jobs on a guess.
 
 **PT-8 (Medium). Old services must never disappear or be refused, and history must not be relabelled when rules change.**
-**Fix:** the fit rule only filters **job pickers and new schedules**. Service history, edits of existing services and the save path ignore it. A job that doesn't fit can still be logged after "Show all jobs", with no dialog. **The fit is frozen at save time:** a new column `maintenance_work_order_lines.fit_at_log text` ('yes' | 'no' | 'unknown', NULL for lines saved before this work) is set by the save function from `job_fits_car` when the line is **first created**, and never recomputed. The "Not usual for this car" chip reads `fit_at_log = 'no'`. A read-only check lists lines with `fit_at_log = 'no'` for the owner. Because the value is frozen, it never re-reports a line just because a rule changed.
+**Fix:** the fit rule only filters job pickers and schedules. History, edits and the save path never refuse anything. `maintenance_work_order_lines.fit_at_log text` ('yes' | 'no' | 'unknown'; NULL for lines saved before this work) is set by `fleet_save_work_order` **when a line is inserted, and when an update changes the line's `component_id`**, and at no other time. A quantity, price or note edit keeps the value frozen. The "Not usual for this car" chip reads `fit_at_log = 'no'`. A read-only check lists lines with `fit_at_log = 'no'` for the owner.
 
-**PT-9 (Low). Per-model exceptions have no use yet.** For example, a petrol model with no turbo, or a hybrid that does have a 12V starter motor.
-**Fix:** `catalog_component_applicability` is a **full override**, checked first. If a row exists for (job, model) or (job, the model's platform), with model beating platform, its `applicable` value is the answer: `true` → 'yes', `false` → 'no'. It can widen or narrow. Only when there's no row does the powertrain / fuel rule apply. Filled only when needed; no bulk load in this work.
+**PT-9 (Low). Per-model exceptions have no use yet.**
+**Fix:** `catalog_component_applicability` is a **full override, checked first**: a row for (job, model), else (job, the model's `platform_id`), decides. `applicable = true` → 'yes', `false` → 'no'. It can widen or narrow. With no row, the powertrain / fuel rule applies. Filled only when needed.
 
 **PT-10 (Low). "Fits" must mean the same thing everywhere, and stay fast.**
-**Fix:** one database function holds the whole rule:
-`public.job_fits_car(p_vehicle_catalog_id uuid, p_job_ids uuid[] DEFAULT NULL) RETURNS TABLE (job_id uuid, fits text)`.
-- It returns one row per job, for every active job when `p_job_ids` is NULL. One call per page, never one per job.
-- Order: (1) `p_vehicle_catalog_id IS NULL`, or the model doesn't exist, or its `powertrain_status = 'needs_check'` → 'unknown' for every job; (2) the per-model / platform exception (PT-9); (3) the effective powertrain and fuel lists (PT-3) → 'yes' / 'no'.
-- A NULL id inside `p_job_ids` is skipped, never an error.
-- STABLE; `GRANT EXECUTE` to service_role only (the DRYRUN runs in the SQL editor as `postgres`, which owns it).
-- A comment on it says: "Assumes vehicle_class = 'car'. Extend when other classes are added."
+**Fix:** one function, `public.job_fits_car(p_vehicle_catalog_id uuid, p_job_ids uuid[] DEFAULT NULL) RETURNS TABLE (job_id uuid, fits text)`:
+- one row per job (every active job when `p_job_ids` is NULL);
+- NULL ids inside the array are skipped;
+- order: (1) NULL / unknown / `needs_check` model → 'unknown'; (2) exception (PT-9); (3) effective lists (PT-3);
+- STABLE, `GRANT EXECUTE` to service_role only, with the comment "Assumes vehicle_class = 'car'. Extend when other classes are added."
 
-No second copy of the rule in TypeScript. Routes and the schedule builder call this function.
+No TypeScript copy of the rule. One call per page. A future fleet-wide due-items view across N cars should call it once per distinct model, not per car, or get a multi-model variant then. Not needed at 2 cars.
+
+**PT-11 (Medium, new). The D1 backfill fires the existing car-model triggers on ~2,667 rows.**
+**Fix:** in the D1 transaction:
+- `SET LOCAL part_match.busy = 'on'`, so the parts-year trigger returns at once. Years don't change, so it would do nothing useful anyway, but it would still join every row to its OE numbers.
+- The revision trigger stays **on**: each changed model gets one honest `platform_revision` row (≈2,667), counted by DRYRUN assertion 11.
+- The engine-listings trigger doesn't fire (`engine_family_id` doesn't change).
+- The backfill is one UPDATE statement, and touches only rows whose values change (3c).
 
 ---
 
 ## 3. Car powertrain
 
-### 3a. Derivation rules (from today's text)
+### 3a. Derivation rules (exact counts from live, 15 Nov)
 
-| fuel_type (engine_type) | powertrain | fuel | status | models |
-|---|---|---|---|---|
-| Petrol | ice | petrol | derived | 1,802 |
-| Diesel | ice | diesel | derived | 267 |
-| Electric | bev | electric | derived | 313 |
-| Hybrid(petrol) + engine_type PHEV | phev | petrol | derived | 29 |
-| Hybrid(petrol) + engine_type EREV | erev | petrol | derived | 12 |
-| Hybrid(petrol) + other engine_type | hev | petrol | derived | ~195 |
-| Petrol/Electric + engine_type Range Extender | erev | petrol | derived | 14 |
-| Petrol/Electric + engine_type Hybrid | hev | petrol | derived | 10 |
-| Petrol/Electric + anything else | — | petrol | **needs_check** | ~19 |
-| Hybrid(diesel) | hev | diesel | derived | 1 |
-| CNG, CNG/LNG | ice | cng | derived | 9 |
-| Hydrogen | — | hydrogen | **needs_check** (fuel cell or hydrogen combustion: the owner decides) | 2 |
-| Electric/Hybrid | — | — | **needs_check** | 1 |
-| blank | — | — | **needs_check** | 5 |
-| Hybrid(petrol) with fuel_category "Gas" (a real disagreement) | as above | as above | **needs_check** | 6 |
+The rules are checked in this order. engine_type keywords are case-insensitive "contains" matches.
 
-The exact counts are written by the migration's check query, not by hand. The owner confirms each `needs_check` row in Dominion (about 33 rows). New models added later get derived on save and land in the same list if the rule can't place them.
+| # | Rule | powertrain | fuel | status | models |
+|---|---|---|---|---|---|
+| 1 | fuel_type blank, or Electric/Hybrid | — | — | **needs_check** | 5 + 1 |
+| 2 | Hybrid(petrol) with fuel_category "Gas" (disagreement) | — | petrol | **needs_check** | 6 |
+| 3 | engine_type contains "mild" | mhev | petrol (diesel if fuel_type says diesel) | derived | 7 (Petrol 3, Hybrid(petrol) 1, Petrol/Electric 3) |
+| 4 | Electric | bev | electric | derived | 313 |
+| 5 | Hydrogen + engine_type contains "fuel cell" | fcev | hydrogen | derived | 2 |
+| 6 | Hydrogen, anything else | — | hydrogen | **needs_check** | 0 |
+| 7 | Hybrid(petrol) / Petrol/Electric + engine_type contains "phev" or "plug-in" | phev | petrol | derived | 33 (29 + 4) |
+| 8 | Hybrid(petrol) / Petrol/Electric + engine_type contains "erev", "reev" or "range extender" | erev | petrol | derived | 34 (12 + 2 + 20) |
+| 9 | Hybrid(petrol) / Petrol/Electric, anything else | hev | petrol | derived | 202 (186 + 16) |
+| 10 | Hybrid(diesel) | hev | diesel | derived | 1 |
+| 11 | Petrol | ice | petrol | derived | 1,799 |
+| 12 | Diesel | ice | diesel | derived | 267 |
+| 13 | CNG, CNG/LNG | ice | cng | derived | 9 |
+| | **Total** | | | | **2,679** (needs_check **12**) |
 
-The Fleet cars today: Roomy → ice / petrol; Honda Fit → hev / petrol (both derived). The owner confirms them first, as the real test.
+**Verified 15 Nov by running these exact rules as a read-only query on live:** ice 2,075 · bev 313 · hev 203 · erev 34 · phev 33 · needs_check 12 · mhev 7 · fcev 2 = 2,679; Roomy → ice, Honda Fit → hev (its fuel_category is "Hybrid", so no disagreement). Hybrid(petrol) 236 = phev 29 + erev 14 (EREV 12, REEV 2) + mhev 1 + needs_check 6 + hev 186. Petrol/Electric 43 = erev 20 + phev 4 + mhev 3 + hev 16. The D1 check query prints this exact split; the doc and the query must agree. New models added later are derived on save, and land in the list if no rule places them.
+
+The Fleet cars today: Roomy → ice / petrol (rule 11); Honda Fit → hev / petrol (rule 9). The owner confirms them first, as the real test.
 
 ### 3b. `powertrain_status` transitions
 
-The trigger runs on insert, and on update of `fuel_type` / `engine_type`. An owner confirm or edit in Dominion goes through its own route, not the trigger.
+The trigger runs on insert, and on update of `fuel_type`, `engine_type` or `fuel_category`. An owner confirm or edit in Dominion goes through its own route.
 
-| From | Event | To | powertrain / fuel | confirmed_by / at |
+| From | Event | To | powertrain / fuel | last_confirmed_by / at, note |
 |---|---|---|---|---|
-| (new row) | rule places it | derived | rule's values | NULL |
-| (new row) | rule can't place it | needs_check | NULL (fuel kept if known) | NULL |
-| derived | text changes, rule places it | derived | new rule values | NULL |
-| derived | text changes, rule can't place it | needs_check | NULL | NULL |
-| needs_check | text changes, rule places it | **derived** (leaves the list) | rule's values | NULL |
-| needs_check | text changes, still can't place it | needs_check | NULL | NULL |
-| confirmed | text changes (any) | **needs_check** | kept (shown as "last confirmed") | **kept** as the last confirmation, plus `powertrain_note = 'Text changed after confirmation — please re-confirm'` |
+| (new row) | rule places it | derived | rule's values | — |
+| (new row) | no rule places it | needs_check | NULL (fuel kept if known) | — |
+| derived | text change, rule places it | derived | new values | — |
+| derived | text change, no rule places it | needs_check | NULL | — |
+| needs_check | text change, rule places it | **derived** (leaves the list) | rule's values | — |
+| needs_check | text change, still unplaced | needs_check | NULL | — |
+| confirmed | text change, **rule gives the same values** | **confirmed** | unchanged | kept; note cleared |
+| confirmed | text change, rule gives different values or none | **needs_check** | kept (shown as "last confirmed") | kept; note "Text changed after confirmation: please re-confirm" |
 | any | owner confirms / edits in Dominion | confirmed | owner's values | set to the owner / now; note cleared |
 
-A `confirmed` row is never overwritten by a re-derive. While a confirmed-then-changed row is `needs_check`, `job_fits_car` returns 'unknown' for it (safe: show everything) until the owner re-confirms.
+Column comment on `powertrain_last_confirmed_by / _at`: "The last time the owner confirmed this model's powertrain. On a needs_check row this is history, not the current state." A `confirmed` row is never overwritten by a re-derive. While a row is `needs_check`, `job_fits_car` returns 'unknown' for it.
+
+### 3c. D1 backfill (idempotent)
+
+One UPDATE that computes the rule's values and writes **only** where the row isn't confirmed and something differs:
+`UPDATE vehicle_catalog SET powertrain = r.powertrain, fuel = r.fuel, powertrain_status = r.status FROM (rule) r WHERE r.id = vehicle_catalog.id AND vehicle_catalog.powertrain_status IS DISTINCT FROM 'confirmed' AND (vehicle_catalog.powertrain, vehicle_catalog.fuel, vehicle_catalog.powertrain_status) IS DISTINCT FROM (r.powertrain, r.fuel, r.status);`
+
+The derivation trigger is created **after** the backfill, in the same transaction, so they never fight. A second run of the whole D1 file changes **0** rows and adds **0** revision rows (assertion 10).
 
 ---
 
 ## 4. Design
 
 ### Database
-- `vehicle_catalog`: `powertrain`, `fuel`, `powertrain_status`, `powertrain_note`, `powertrain_confirmed_by`, `powertrain_confirmed_at` (check-constrained), plus the trigger from 3b.
-- `maintenance_service_categories`: `fits_powertrains text[]`, `fits_fuels text[]` (non-empty, elements constrained), `is_high_voltage boolean NOT NULL DEFAULT false`, with column comments ("NULL = take the group's value; NULL on the group = any").
-- `maintenance_work_order_lines.fit_at_log text` (PT-8), set by `fleet_save_work_order` on line insert only.
-- `vehicle_component_schedule.retired_reason text` (PT-4).
+- `vehicle_catalog`: `powertrain`, `fuel`, `powertrain_status`, `powertrain_note`, `powertrain_last_confirmed_by`, `powertrain_last_confirmed_at` (check-constrained), plus the trigger from 3b.
+- `maintenance_service_categories`: `fits_powertrains`, `fits_fuels` (non-empty, elements constrained), `is_high_voltage NOT NULL DEFAULT false`, with column comments.
+- `maintenance_work_order_lines.fit_at_log` (PT-8, insert + job change only).
+- `vehicle_component_schedule.retired_reason` (PT-4).
 - `public.job_fits_car(...)` (PT-10).
-- A read-only check: lines with `fit_at_log = 'no'` (PT-8).
-- **"Fits N of 2,679 models"** in Dominion is computed on demand when the drawer opens, from one set query over `vehicle_catalog` grouped by (powertrain, fuel) (at most ~30 combinations), not 2,679 calls. It's cheap enough that no cache is needed; revisit if the model count grows 10×.
+- The read-only `fit_at_log = 'no'` check (PT-8).
+- "Fits N of 2,679 models" is computed when the Dominion drawer opens, from one query over `vehicle_catalog` grouped by (powertrain, fuel, status), at most ~40 groups. No cache needed at this size.
 
 ### Server
-- The four Fleet job-list routes accept `vehicleId` and add `fits` per job (one `job_fits_car` call per request). Without `vehicleId` they behave as today (Dominion and old callers unchanged).
-- The schedule builder skips `fits = 'no'`, and runs the one-time retire (PT-4).
-- `fleet_save_work_order` sets `fit_at_log` on new lines.
-- Dominion: routes to set a model's powertrain / fuel (→ `confirmed`), list `needs_check` models, set a group's / job's `fits_*` and `is_high_voltage`.
+- The four Fleet job-list routes accept `vehicleId` and add `fits` (one `job_fits_car` call per request). Without `vehicleId`, they behave as today.
+- The schedule builder skips `fits = 'no'`, and runs the nightly retire (PT-4).
+- `fleet_save_work_order` sets `fit_at_log` (PT-8).
+- Dominion: set a model's powertrain / fuel (→ confirmed), list `needs_check` models, set a group's / job's `fits_*` and `is_high_voltage`.
 
 ### Screens (every screen and button)
-**Fleet: Log service, step 2 "Work done"** (`LogServiceSystemPicker.tsx`, quick jobs, sections, components):
-- Shows only fitting jobs. Groups with no fitting job are removed and the list closes up (no gap). For example, Hybrid & electric doesn't appear on the Roomy.
-- **"Show all jobs (N hidden)"** button at the bottom, where N = **jobs**. It reveals the hidden jobs, greyed, each with a "Not usual for this car" chip. They're still tickable, with **no confirmation dialog**.
-- **Unknown powertrain banner** (PT-7) with **"Link this car"** (to the existing vehicle-link flow); all jobs shown.
-- Step 3 / Review / history: a line saved with `fit_at_log = 'no'` keeps its "Not usual for this car" chip.
+**Fleet: Log service, step 2 "Work done":**
+- Only fitting jobs. Groups with none are removed and the list closes up.
+- **"Show all jobs (N hidden)"**, where N = hidden **jobs**. Hidden jobs show greyed with a "Not usual for this car" chip, and are still tickable with **no dialog**.
+- **Unknown banner** with **"Link this car"**; all jobs shown.
+- Step 3 / Review / history: a line with `fit_at_log = 'no'` keeps its chip.
 
-**Fleet: maintenance overview / due items:** no new controls. Non-fitting jobs stop appearing (PT-4).
+**Fleet: maintenance overview / due items:** no new controls; non-fitting jobs stop appearing.
 
-**Dominion: car model page:** a "Powertrain" row showing the value, fuel and status ("Worked out from 'Hybrid(petrol) / PHEV'", "Confirmed by … on …", or "Text changed after confirmation — please re-confirm"), with an **Edit** button (two selects + Save / Cancel).
+**Dominion: car model page:** a "Powertrain" row showing the value, fuel and status ("Worked out from 'Hybrid(petrol) / PHEV'", "Confirmed by … on …", or "Text changed after confirmation: please re-confirm"), with an **Edit** button (two selects + Save / Cancel).
 
-**Dominion: "Powertrain to check" list:** the `needs_check` models, each with its raw `fuel_type` / `engine_type` / `fuel_category`, two selects and **Confirm**. A count badge on the Vehicles home.
+**Dominion: "Powertrain to check" list:** the 12 `needs_check` models (and future ones), each with its raw `fuel_type` / `engine_type` / `fuel_category`, two selects and **Confirm**. A count badge on the Vehicles home.
 
-**Dominion: job and group drawer:** a "Fits" row using **presets**, never raw arrays. Powertrain: **All / Combustion / Electrified / Plug-in / Custom…**. Fuel: **All / Petrol / Diesel / Spark-ignition / Custom…**. On a job, each row also has **"Same as group"**, the default and shown as the group's preset name. Plus an **"High-voltage work"** switch, and "Fits N of 2,679 models".
+**Dominion: job and group drawer:** a "Fits" row with presets, never raw arrays:
+- Powertrain: **All / Combustion / Electrified / Plug-in / Custom…**;
+- Fuel: **All / Petrol / Diesel / Spark-ignition / Custom…**;
+- **Custom…** opens a row of checkbox chips, one per code, with plain labels ("Mild hybrid", "Plug-in hybrid"…);
+- on a job, each row also has **"Same as group"** (the default, showing the group's preset name);
+- an **"High-voltage work"** switch, and "Fits N of 2,679 models".
 
-Stitch screens are needed for the Dominion car-model row, the "Powertrain to check" list, the job / group "Fits" row, and the Fleet step-2 states ("Show all jobs", hidden-job chip, unknown banner). The owner makes them in Stitch (one file per app); the Stitch prompt is written after this audit is reviewed.
+Stitch screens: the Dominion car-model row, the "Powertrain to check" list, the "Fits" row (presets + Custom chips + HV switch), and the Fleet step-2 states. The owner makes them (one file per app); the prompt is written after review.
 
 ### Gates
-- `pnpm test:service-items` + the new tests below; `/code-review` before push; live SQL as a generated DRYRUN first (assertions in section 6b), then the real file with its logbook line; the owner confirms the two Fleet cars' powertrain in Dominion before the Fleet filter is switched on.
-- Behind a flag `job_fit_filter`, off by default (off → today's behaviour). It's global; per-organisation flags are a future consideration if more fleets join, not this work.
+- `pnpm test:service-items` + the new tests; `/code-review` before push; live SQL as a generated, hash-stamped DRYRUN (6b) then the real file with its logbook line; the owner confirms the two Fleet cars before the flag goes on.
+- Flag `job_fit_filter`, global, off by default. A per-organisation flag is a future consideration.
 
 ---
 
-## 5. Starting fit values (group default, then per-job overrides; per-column inheritance)
+## 5. Starting fit values
 
-Presets: **Combustion** = ice, hev, phev, erev. **Electrified** = hev, phev, erev, bev, fcev. **Plug-in** = phev, erev, bev. **Spark-ignition** (fuel) = petrol, cng, hydrogen. "—" = NULL (any, or the group's value on a job).
+Presets: **Combustion** = ice, mhev, hev, phev, erev. **Electrified** = hev, phev, erev, bev, fcev (not mhev: no high-voltage drive battery). **Plug-in** = phev, erev, bev. **Spark-ignition** (fuel) = petrol, cng. "—" = NULL. **Every job not named under "Job overrides" inherits its group's values (PT-3).**
 
 | Group | fits_powertrains | fits_fuels | Job overrides |
 |---|---|---|---|
@@ -175,14 +219,14 @@ Presets: **Combustion** = ice, hev, phev, erev. **Electrified** = hev, phev, ere
 | Filters | — | — | Oil filter, Engine Air Filter, Fuel filter → Combustion. |
 | Fluids | — | — | Engine oil (both rows), Radiator Coolant Flush → Combustion. |
 | Belts & hoses | Combustion | — | — |
-| Transmission | ice, hev, phev, erev | — | (BEVs and FCEVs use Reduction Gear Oil Change.) |
+| Transmission | ice, mhev, hev, phev, erev | — | (BEVs and FCEVs use Reduction Gear Oil Change.) |
 | Exhaust & emissions | Combustion | — | DPF ×2, SCR / AdBlue ×2, NOx, Glow Plugs, EGT, DPF Pressure Sensor → fuels diesel. EVAP / Charcoal Canister, Purge Valve → fuels petrol. |
-| Hybrid & electric | Electrified | — | Charging Port, Charging Port Inspection & Cleaning, On-Board Charger → Plug-in. Battery Thermal Management Coolant Service, Battery Coolant Pump → phev, erev, bev. HV Battery Cooling Fan Filter / Fan & Duct Cleaning → hev, phev. Inverter Coolant Service / Pump → hev, phev, erev. **Reduction Gear Oil Change → bev, erev, fcev.** |
+| Hybrid & electric | Electrified | — | Charging Port, Charging Port Inspection & Cleaning, On-Board Charger → Plug-in. Battery Thermal Management Coolant Service, Battery Coolant Pump → phev, erev, bev. HV Battery Cooling Fan Filter / Fan & Duct Cleaning → hev, phev. Inverter Coolant Service / Pump → hev, phev, erev. Reduction Gear Oil Change → bev, erev, fcev. |
 | HVAC | — | — | Electric A/C Compressor → Electrified. |
-| Battery & electrical | — | — | Alternator, Starter motor → ice (hybrids use the motor-generator; a per-model exception can turn them back on). |
+| Battery & electrical | — | — | Alternator, Starter motor → ice, mhev (full hybrids use the motor-generator; a per-model exception can turn them back on). |
 | Tires & wheels, Brakes, Suspension & steering, Lighting & visibility, Shop fees | — | — | — |
 
-`is_high_voltage = true`: the 10 jobs listed in PT-5. These are starting values. The owner can change any of them in Dominion, and the "Fits N of 2,679 models" count shows the effect before saving.
+`is_high_voltage = true`: the 10 jobs in PT-5.
 
 ---
 
@@ -190,53 +234,68 @@ Presets: **Combustion** = ice, hev, phev, erev. **Electrified** = hev, phev, ere
 
 ### 6a. Done-tests (written before the build)
 
-1. Roomy (ice / petrol): Log service shows Engine and Exhaust & emissions (no DPF / AdBlue / glow plugs); no Hybrid & electric group; no Electric A/C Compressor; the group list has no gap.
-2. Honda Fit (hev / petrol): shows Engine and Hybrid & electric; no Charging Port, no On-Board Charger, no Reduction Gear Oil Change, no Alternator / Starter motor.
-3. A bev test model: no Engine group, no Engine oil, no Spark Plugs, no Transmission Fluid; Charging Port and Reduction Gear Oil Change present; Brakes, Tires and A/C present.
-4. A diesel test model: DPF, AdBlue and glow plugs present; Spark Plugs and EVAP absent.
-5. "Show all jobs (N hidden)": N = the number of hidden **jobs**. A hidden job can be ticked with no dialog, saved with `fit_at_log = 'no'`, and shown in history with "Not usual for this car".
-6. A car with no model link, or a `needs_check` model: every job shown, plus the unknown banner.
-7. Schedules: a bev test car gets no Engine oil / Spark Plugs / Transmission Fluid due items; the Roomy's due items don't change.
-8. Saving or editing an old service never fails or loses a line because of the fit rule; old lines keep `fit_at_log = NULL`.
-9. `job_fits_car` matches the route `fits` for every job on **6 models**: ice / petrol (Roomy), ice / diesel, hev / petrol (Fit), phev / petrol, bev, and a `needs_check` model (every job 'unknown').
-10. Transitions: every row of table 3b, including "confirmed → text changes → needs_check, confirmation kept as last confirmed".
+1. Roomy (ice / petrol): Engine and Exhaust & emissions shown (no DPF / AdBlue / glow plugs); no Hybrid & electric group; no Electric A/C Compressor; the list closes up.
+2. Honda Fit (hev / petrol): Engine and Hybrid & electric shown; no Charging Port, On-Board Charger, Reduction Gear Oil Change, Alternator or Starter motor.
+3. A bev model: no Engine group, Engine oil, Spark Plugs or Transmission Fluid; Charging Port and Reduction Gear Oil Change present; Brakes, Tires and A/C present.
+4. A diesel model: DPF, AdBlue and glow plugs present; Spark Plugs and EVAP absent.
+5. "Show all jobs (N hidden)": N = hidden jobs. A hidden job can be ticked with no dialog, saved with `fit_at_log = 'no'`, and shown in history with the chip.
+6. No model link, or a `needs_check` model: every job shown, plus the banner.
+7. Schedules: a bev car gets no Engine oil / Spark Plugs / Transmission Fluid due items; the Roomy's due items don't change; the nightly retire on live retires 0 rows; a second night retires 0 again.
+8. Saving or editing an old service never fails or loses a line; old lines keep `fit_at_log = NULL`.
+9. `job_fits_car` = route `fits` for every job on **6 models**: ice / petrol (Roomy), ice / diesel, hev / petrol (Fit), phev / petrol, bev, and a `needs_check` model (all 'unknown').
+10. Every row of transition table 3b, including "confirmed + text change with the same derived values → stays confirmed".
 11. Flag off → step 2 is exactly today's list.
-12. Migration check: every model has a powertrain or is `needs_check`; the counts match section 3a's rules.
-13. Unlinked car (`vehicle_catalog_id` NULL): every route returns `fits: 'unknown'` for every job, with no error.
-14. **Inheritance** (on test jobs in a test group): job NULL / NULL → takes the group's values; job powertrains set + fuels NULL → job powertrains + group fuels; job powertrains NULL + fuels set → group powertrains + job fuels; both set → job's both; `'{}'` → refused by the constraint.
-15. **Exceptions:** a model row `applicable = false` turns a fitting job to 'no'; `applicable = true` turns a non-fitting job to 'yes'; a model row beats a platform row.
-16. **Frozen fit:** a line saved as 'no' stays 'no' after the job's fit rule is changed to include the car.
-17. **HV flag:** exactly the 10 PT-5 jobs have `is_high_voltage = true`.
+12. Migration check: the 3a split, exactly.
+13. Unlinked car: every route returns 'unknown' for every job, with no error.
+14. Inheritance: NULL / NULL → group's values; powertrains set + fuels NULL → job's powertrains + group's fuels; the reverse; both set → job's both; `'{}'` → refused.
+15. Exceptions: a model row false → 'no' on a fitting job; true → 'yes' on a non-fitting job; a model row beats a platform row.
+16. Frozen fit: a line saved 'no' stays 'no' after the rule changes; **editing a saved line from a fitting job to a non-fitting job sets it to 'no'**; editing its quantity doesn't change it.
+17. HV flag: exactly the 10 PT-5 jobs.
+18. `job_fits_car` with NULLs inside `p_job_ids`: returns rows for the real ids, skips the NULLs, with no error.
+19. **Re-run:** running the whole D1 file twice → the second run changes 0 car rows, 0 job rows, 0 confirmed rows, and adds 0 `platform_revision` rows.
+20. `fuel_category`-only update (e.g. correcting a Gas hybrid to Hybrid) → the trigger fires and the row moves `needs_check` → derived hev.
+21. A mild hybrid (`mhev`) gets Engine, Alternator and Starter jobs and **no** Hybrid & electric jobs.
+22. The D1 transaction sets `part_match.busy`, and no `part_match` work runs during the backfill (the statement-level trigger returns early).
 
-### 6b. DRYRUN assertions (D1 live SQL; the always-stop message prints them)
+### 6b. DRYRUN assertions (D1 live SQL; generated, hash-stamped always-stop copy)
 
-1. `count(*) FROM vehicle_catalog WHERE powertrain IS NULL AND powertrain_status <> 'needs_check'` = **0**.
-2. `count(*) WHERE powertrain_status = 'needs_check'` = the rule's count (≈33), printed with the per-reason split (Petrol/Electric other, Hydrogen, Electric/Hybrid, blank, Gas disagreement).
-3. Every `powertrain` / `fuel` / `fits_*` element is a known code (constraint check, **0** bad rows).
-4. No job or group has an empty `fits_*` array (**0**).
-5. Roomy's model = ice / petrol / derived; Honda Fit's model = hev / petrol / derived.
-6. `is_high_voltage = true` on exactly the **10** named job codes.
-7. `job_fits_car(Roomy model)` gives 'no' for every Hybrid & electric job and 'yes' for Engine oil; `job_fits_car(Fit model)` gives 'yes' for Inverter Coolant Service and 'no' for Charging Port.
-8. Schedule rows that the one-time retire would touch = **0** (printed).
-9. `changed_other` = 0: no row of any other column / table changed (snapshot pattern from the double-log SQL).
+**Snapshot taken first** (temp tables, before any change):
+- `vehicle_catalog`: id + `md5(to_jsonb(row) - ARRAY['powertrain','fuel','powertrain_status','powertrain_note','powertrain_last_confirmed_by','powertrain_last_confirmed_at'])`. The new columns don't exist yet, so the snapshot is the whole row, compared after on everything except those 6.
+- `maintenance_service_categories`: id + `md5(to_jsonb(row) - ARRAY['fits_powertrains','fits_fuels','is_high_voltage','description'])`, plus the full `description` of **Charging Port Inspection & Cleaning only** (the one description D1 changes; checked as exactly old + its new sentence).
+- Row counts + `md5(string_agg(to_jsonb(t)::text ORDER BY id))` for `vehicle_component_schedule`, `maintenance_work_order_lines` (minus `fit_at_log`), `catalog_component_applicability`, `maintenance_task_templates`, `maintenance_work_order_line_item`.
+- `count(*) FROM platform_revision`.
+
+**Assertions** (stop with "Stopped, nothing saved: <check> on <ids>" on failure, before COMMIT):
+1. `powertrain IS NULL AND powertrain_status <> 'needs_check'` = 0.
+2. The split equals 3a: needs_check 12 (blank 5, Electric/Hybrid 1, Gas disagreement 6), mhev 7, bev 313, fcev 2, phev 33, erev 34, hev 203, ice 2,075.
+3. Every powertrain / fuel / `fits_*` element is a known code; 0 bad rows.
+4. No empty `fits_*` array.
+5. Roomy's model = ice / petrol / derived; Fit's model = hev / petrol / derived.
+6. `is_high_voltage = true` on exactly the 10 named job codes.
+7. `job_fits_car(Roomy)` → 'no' for every Hybrid & electric job and 'yes' for Engine oil; `job_fits_car(Fit)` → 'yes' for Inverter Coolant Service, 'no' for Charging Port and Alternator.
+8. Schedule rows the retire rule would touch = 0 (printed).
+9. `changed_other` = 0 across every snapshot above (other columns, other tables, other descriptions).
+10. **Idempotency:** the backfill's `IS DISTINCT FROM` set, re-evaluated after the UPDATE, is empty (a re-run would change 0 rows).
+11. New `platform_revision` rows = car rows changed + job rows changed (≈2,667 + 128-ish), printed.
 
 ---
 
 ## 7. Build rounds
 
-1. **D1 (Cursor):** car columns + derivation + transitions trigger + `needs_check` list; job `fits_*` + `is_high_voltage` + starting values (section 5); `fit_at_log`; `retired_reason`; `job_fits_car`; SQL tests 9, 10, 12–17. Live via generated DRYRUN (6b) + real file + logbook line.
-2. **S1 (Cursor):** routes take `vehicleId` and return `fits`; schedule builder skip + one-time retire; `fit_at_log` on save; Dominion routes; flag; server tests 7, 8, 9, 13.
+1. **D1 (Cursor):** columns, derivation (3a), backfill (3c) then the trigger (3b), `fits_*` + `is_high_voltage` + starting values (5), `fit_at_log`, `retired_reason`, `job_fits_car`, `part_match.busy` (PT-11); SQL tests 9, 10, 12, 14–22. Live via the generated DRYRUN (6b) + real file + logbook line.
+2. **S1 (Cursor):** routes take `vehicleId` and return `fits`; schedule skip + nightly retire; `fit_at_log` in `fleet_save_work_order` (insert + job change); Dominion routes; flag; server tests 7, 8, 9, 13.
 3. **Stitch (owner):** the screens in section 4.
-4. **UI1 (Claude):** Dominion car-model row, "Powertrain to check" list, job / group "Fits" row with presets + HV switch.
-5. **UI2 (Claude):** Fleet step 2 states; click-throughs 1–6, 11.
-6. **Live:** the owner confirms the two Fleet cars and the `needs_check` list, flag on, real check on both cars.
+4. **UI1 (Claude):** Dominion car-model row, "Powertrain to check", "Fits" row with presets / Custom chips / HV switch.
+5. **UI2 (Claude):** Fleet step 2; click-throughs 1–6, 11.
+6. **Live:** the owner confirms the two Fleet cars and the 12 `needs_check` models, flag on, real check on both cars.
 
 ---
 
 ## 8. Not in this work
 
-- Motorcycles / trucks (`vehicle_class` is "car" for every model today; `job_fits_car`'s comment marks where to extend).
-- Changing `fuel_type`, `engine_type` or `fuel_category` (they stay as they are; parts code keeps using `fuel_category`).
-- Bulk per-model exceptions (PT-9 is used only as cases come up).
-- The HV lockout checklist itself (its own item; it reads `is_high_voltage`).
+- Motorcycles / trucks (`job_fits_car`'s comment marks where to extend).
+- Changing `fuel_type`, `engine_type` or `fuel_category` (parts code keeps using `fuel_category`).
+- Bulk per-model exceptions.
+- The HV lockout checklist itself (it reads `is_high_voltage`).
 - A per-organisation `job_fit_filter` flag.
+- A multi-model `job_fits_car` for a fleet-wide due-items view (PT-10 note).
