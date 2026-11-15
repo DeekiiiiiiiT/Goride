@@ -2196,7 +2196,8 @@ function FuelManagementInner({
                 }} 
                 disabled={isRefreshing}
                 className={`text-slate-600 border-slate-200${
-                  activeTab === 'logs' ? ' hidden md:inline-flex' : ''
+                  // Week Reconciliation step 5 has "Refresh fuel" (same reload) — one button only.
+                  deskSections ? ' hidden' : activeTab === 'logs' ? ' hidden md:inline-flex' : ''
                 }`}
             >
                 <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />

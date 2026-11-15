@@ -1,7 +1,7 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { Hono } from "npm:hono@4.3.11";
 import type { Context, Next } from "npm:hono@4.3.11";
-import { reconWeekVersionGuardWith, parseWeekHeader, type WeekGuardDeps, type WeekReconClient } from "./recon_week_version_guard.ts";
+import { reconWeekVersionGuardWith, parseWeekHeader, isReadLikeWeekCall, type WeekGuardDeps, type WeekReconClient } from "./recon_week_version_guard.ts";
 import type { RbacUser } from "./rbac_middleware.ts";
 
 const ORG_A = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
@@ -215,4 +215,31 @@ Deno.test("a saved change answers with the week's real new version", async () =>
   const res = await mountApp(deps).request("/change", { method: "POST", headers: { "x-recon-week": HEADER } });
   assertEquals(res.status, 200);
   assertEquals(res.headers.get("X-Recon-Week-Version"), "6");
+});
+
+Deno.test("15 Nov: fuel compute / materialize / ensure skip the week check and never bump the version", async () => {
+  assertEquals(isReadLikeWeekCall("/fleet-fuel/fuel/periods/org%3A2026-10-05/compute"), true);
+  assertEquals(isReadLikeWeekCall("/fleet-fuel/fuel/periods/org%3A2026-10-05/materialize"), true);
+  assertEquals(isReadLikeWeekCall("/fleet-fuel/fuel/periods/ensure"), true);
+  assertEquals(isReadLikeWeekCall("/fleet-fuel/fuel/periods/org%3A2026-10-05/finalize"), false);
+  assertEquals(isReadLikeWeekCall("/fleet-fuel/fuel/periods/org%3A2026-10-05/stop-to-stop-gap-accept"), false);
+
+  const claimCalls = { length: 0 };
+  let runRead = 0;
+  const deps: WeekGuardDeps = {
+    requireAuthStrict: signedIn(),
+    reconClient: () => {
+      runRead += 1;
+      return fakeRecon({ ...RUN_ROW, version: 9 }, claimCalls, "ok", true);
+    },
+    refreshWeek: async () => {},
+  };
+  const app = new Hono();
+  app.use("*", reconWeekVersionGuardWith(deps));
+  app.post("/fuel/periods/:id/compute", (c) => c.json({ ok: true }, 200));
+  // Stale version on screen (5) vs live (9): a read-like call still runs, claims nothing.
+  const res = await app.request("/fuel/periods/org%3A2026-10-05/compute", { method: "POST", headers: { "x-recon-week": HEADER } });
+  assertEquals(res.status, 200);
+  assertEquals(claimCalls.length, 0);
+  assertEquals(runRead, 0);
 });

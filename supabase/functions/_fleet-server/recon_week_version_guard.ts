@@ -19,6 +19,22 @@ import { getOrgId } from "./org_scope.ts";
 import { correlationIdFrom, idempotencyKeyFrom } from "./recon_week_change.ts";
 
 const CHANGING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+/**
+ * POSTs that only (re)build the week's numbers — no user decision. They skip the check and
+ * never bump the version: before this, each fuel "prepare the week" after a Resolve moved
+ * the version and the next call answered WEEK_CHANGED (false "This week changed" banner, 15 Nov).
+ */
+const READ_LIKE_PATHS = [
+  /\/fuel\/periods\/ensure\/?$/,
+  /\/fuel\/periods\/[^/]+\/compute\/?$/,
+  /\/fuel\/periods\/[^/]+\/materialize\/?$/,
+];
+
+export function isReadLikeWeekCall(path: string): boolean {
+  const clean = String(path || "").split("?")[0];
+  return READ_LIKE_PATHS.some((re) => re.test(clean));
+}
+
 const HEADER_RE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})@(\d+)$/i;
 
 export function parseWeekHeader(value: string | undefined | null): { runId: string; version: number } | "bad" | null {
@@ -151,6 +167,7 @@ export async function runWeekVersionGuardCore(
 export function reconWeekVersionGuardWith(deps: WeekGuardDeps = defaultDeps) {
   return async (c: Context, next: Next) => {
     if (!CHANGING.has(c.req.method)) return next();
+    if (isReadLikeWeekCall(c.req.path)) return next();
     const parsed = parseWeekHeader(c.req.header("x-recon-week"));
     if (parsed === null) return next();
     if (parsed === "bad") {
