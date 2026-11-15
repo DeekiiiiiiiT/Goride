@@ -1,0 +1,162 @@
+ROAM DOMINION — VEHICLES: POWERTRAIN + JOB FIT FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Dominion - Vehicles · Powertrain and job fit (Desktop Admin, for the owner):
+
+Design modern, premium screens that let the owner say what powers each car model and which maintenance jobs fit which cars. They sit inside the existing Roam Dominion admin console (Vehicles section) and must feel like the same product. Today every car is offered every maintenance job, so an electric car is offered an oil change and a petrol car is offered high-voltage battery work. Each car model now gets a POWERTRAIN (Petrol / diesel engine, Mild hybrid, Hybrid, Plug-in hybrid, Range-extender, Electric, Hydrogen fuel cell) and a FUEL (Petrol, Diesel, Natural gas, Hydrogen, Electric). Roam works it out from the car's existing data and shows where it came from ("Worked out from 'Hybrid(petrol) / PHEV'"). The owner confirms it, or fixes the few that couldn't be worked out, in a "Powertrain to check" list (12 models today). Each maintenance JOB, and each job GROUP (Engine, Exhaust & emissions, Hybrid & electric…), says which cars it FITS, using simple presets (All, Combustion, Electrified, Plug-in, Spark-ignition) instead of lists of codes. A job can follow its group ("Same as group") or set its own. A job can also be marked "High-voltage work", which will later require a safety lockout checklist. Nothing is ever deleted, and old services are never changed. Dominion only sets the rules; it never shows fleet names, plates or prices. The app should feel like a polished consumer product in the style of Linear, Stripe and Airbnb: friendly, airy and easy to scan. Each screen is one single view, light mode only (dark mode comes from the Stitch theme switch). Make every screen tall enough to show everything, with no inner scrolling and nothing cut off.
+
+BRAND IDENTITY:
+- Match the existing Dominion console:
+  - a dark navy left sidebar with "Dominion · Roam Admin Console"; groups MASTER DATA (Overview, Vehicles — highlighted, Places and Maps, Fuel, Tolls, Tax and Vendors), ENGINES, DISTRIBUTION, PLATFORM, BACK OFFICE
+  - top bar: search "Search entities, engines, routes…" with a ⌘K chip, moon icon, user "DT · Deeki T · Owner"
+  - breadcrumb "Dominion › Master data › Vehicles" in small soft-grey text
+- LIGHT MODE (default):
+  - Primary: #0153dc; primary container: #dbe1ff
+  - Success: #006e31; warning: #8a5a00; error: #a83836
+  - Outline: #797a84
+  - Background: #faf8fe; cards white
+  - Text: #30323b; helper text #5d5f68
+- DARK MODE (for reference; draw light only):
+  - Background: #0b1220; cards #111a2e; text #e2e8f0; primary #5b8def; success #4ade80; warning #fbbf24; error #f87171
+- Shapes: cards and drawers 16px rounded corners; buttons and inputs 10px; chips are fully rounded pills
+- Depth: soft, light shadows on cards and drawers; at most a very light 1px border
+- Typography: Inter. Titles 22–26px semibold, body 15px, helper text 13px. Sentence case everywhere. Numbers use lined-up (tabular) figures.
+- Icons: Material Symbols Outlined, on soft-tinted round tiles
+- Powertrain chips, each an icon plus a word (never colour alone):
+  - "Petrol / diesel engine": soft grey, engine icon
+  - "Mild hybrid": soft grey, leaf icon
+  - "Hybrid": soft teal, battery-charging icon
+  - "Plug-in hybrid": soft teal, plug icon
+  - "Range-extender": soft teal, route icon
+  - "Electric": soft green, bolt icon
+  - "Hydrogen fuel cell": soft blue, water-drop icon
+- Status chips: "Worked out" soft grey with a sparkle icon · "Confirmed" soft green with a check · "Needs checking" soft amber with a question icon
+- "High-voltage work" chip: soft amber with a lightning icon
+
+DESIGN PRINCIPLES:
+- Modern and friendly: generous white space (24px inside cards, 32px between sections), large clear headings, nothing cramped
+- Plain words for a normal person: "What powers this car", "Fits", "Same as group", "Fits 2,075 of 2,679 car models". No codes, no arrays, no database words
+- Always show where a value came from ("Worked out from …", "Confirmed by Deeki T on 15 Nov 2026")
+- Presets first; "Custom…" only when needed
+- Every action is a real button with a fill or a visible outline, never a text link. One solid blue primary button per view. Cancel is red (red outline, red text)
+- No browser pop-ups; every message is inside the app
+- Desktop-first (1440px)
+
+---
+
+SCREEN 1: CAR MODEL PAGE — POWERTRAIN (WORKED OUT)
+- Vehicles › "Honda Fit (2020–2024)" model page; top: car icon tile, title "Honda Fit", subtitle "2020–2024 · Hatchback · 1.5L"
+- A white card "What powers this car" near the top
+  - Two large rows: "Powertrain" with the chip "Hybrid", and "Fuel" with the chip "Petrol"
+  - Status chip "Worked out", and helper "Worked out from 'Hybrid(petrol) / Hybrid'"
+  - A soft info strip: "Maintenance jobs offered for this car follow its powertrain. Confirm it once you've checked."
+  - Buttons: solid blue "Confirm", outline "Edit"
+- Below, the rest of the model page in soft cards (Specs, Parts), shown only as quiet headers
+
+SCREEN 2: CAR MODEL PAGE — POWERTRAIN (EDITING)
+- Same page; the "What powers this car" card is in edit mode
+- "Powertrain" select open, showing the seven choices, each with its chip icon; "Hybrid" highlighted
+- "Fuel" select showing "Petrol"
+- Helper under the selects: "Hybrid = a petrol or diesel engine plus a high-voltage battery that can't be plugged in."
+- Buttons: red outline "Cancel", solid blue "Save and confirm"
+
+SCREEN 3: CAR MODEL PAGE — POWERTRAIN (CONFIRMED)
+- Same card after confirming
+- "Powertrain: Hybrid", "Fuel: Petrol"
+- Status chip "Confirmed", helper "Confirmed by Deeki T on 15 Nov 2026"
+- Outline button "Edit"
+
+SCREEN 4: CAR MODEL PAGE — POWERTRAIN (PLEASE RE-CONFIRM)
+- The same card for "Toyota Prius (2016–2022)"
+- Status chip "Needs checking"
+- A soft amber strip: "The car's details changed after it was confirmed. Please check the powertrain again."
+- "Last confirmed: Hybrid · Petrol, by Deeki T on 15 Nov 2026"
+- Buttons: solid blue "Confirm Hybrid · Petrol", outline "Edit"
+
+SCREEN 5: POWERTRAIN TO CHECK — LIST
+- Vehicles › "Powertrain to check"; title "Powertrain to check", subtitle "12 car models Roam couldn't work out. Pick what powers each one."
+- A clean list of rows (white cards stacked with 12px gaps), each row:
+  - make and model with years ("BYD Song Plus (2021–2024)"), and a small soft line showing the original data: "Fuel: Electric/Hybrid · Engine: — · Category: Electric/Hybrid"
+  - two compact selects "Powertrain" and "Fuel" (empty, placeholder "Choose…")
+  - outline button "Confirm" (enabled once both are chosen)
+- Rows to show: "BYD Song Plus — Electric/Hybrid"; "Toyota Aqua — Hybrid(petrol) · Category: Gas" (helper: "The data disagrees: it says hybrid and petrol engine"); "Unknown model 2019 — no fuel data"; and three more similar rows
+- One row in its confirmed state: green check, "Confirmed: Hybrid · Petrol", fading out of the list
+- Top right: count pill "12 left"
+
+SCREEN 6: VEHICLES HOME — POWERTRAIN CARD
+- Vehicles home with its existing summary cards in a soft grid
+- A new card "Powertrain to check" with an amber question icon tile, the big number "12", helper "Car models that need you to say what powers them", and an outline button "Review"
+- A second new card "Powertrain mix" showing a simple horizontal bar split by powertrain, with labels and counts: Petrol / diesel engine 2,075 · Electric 313 · Hybrid 203 · Range-extender 34 · Plug-in hybrid 33 · Mild hybrid 7 · Hydrogen fuel cell 2 · Needs checking 12
+
+SCREEN 7: JOB DRAWER — FITS (SAME AS GROUP)
+- Vehicles › Maintenance templates › Jobs; a right-side drawer (560px) for the job "Spark Plugs" in the group "Engine"
+- Existing drawer header (job name, group, "Part" chip) and sections shown as quiet headers
+- A new section card "Fits":
+  - Row "Powertrain": a segmented choice "Same as group | Set for this job", with "Same as group" selected, and the group's value shown as a chip: "Combustion (from Engine)"
+  - Row "Fuel": the segmented choice with "Set for this job" selected, and the preset select showing "Spark-ignition (Petrol, Natural gas)"
+  - A live line: "Fits 2,084 of 2,679 car models", with a small "See which" outline button
+  - Row "High-voltage work": a switch, off, with helper "Turn on if this job touches the high-voltage battery or cables. A safety checklist will be required."
+- Drawer footer: red outline "Cancel", solid blue "Save"
+
+SCREEN 8: JOB DRAWER — FITS (CUSTOM)
+- The same drawer for the job "Charging Port" in "Hybrid & electric"
+- "Fits" card: Powertrain is set for this job with "Custom…" chosen, and a row of checkbox chips: "Petrol / diesel engine" (off), "Mild hybrid" (off), "Hybrid" (off), "Plug-in hybrid" (on), "Range-extender" (on), "Electric" (on), "Hydrogen fuel cell" (off)
+- Fuel: "Same as group (All)"
+- "Fits 380 of 2,679 car models"
+- "High-voltage work" switch ON, with the amber "High-voltage work" chip beside the job title in the drawer header
+- Footer: red outline "Cancel", solid blue "Save"
+
+SCREEN 9: GROUP DRAWER — FITS PRESETS
+- A drawer for the group "Hybrid & electric"
+- "Fits" card for the group: a large preset choice of four cards in a 2×2 grid ("All cars", "Combustion — has an engine", "Electrified — has a high-voltage battery", "Plug-in — can be charged from a socket"), "Electrified" selected with a blue ring, plus a small "Custom…" outline button
+- Helper: "Jobs in this group follow this unless they set their own."
+- A soft list "Jobs that set their own" with 10 short rows (e.g. "Charging Port — Plug-in", "Reduction Gear Oil Change — Electric, Range-extender, Hydrogen")
+- "Fits 585 of 2,679 car models"
+- No high-voltage switch on a group (groups can't be high-voltage)
+- Footer: red outline "Cancel", solid blue "Save"
+
+SCREEN 10: STATES
+- Four soft cards in a 2×2 grid, each a small view of the "Powertrain to check" list or the "Fits" card:
+  - Loading: soft grey shimmering rows
+  - Empty: a green check tile, "Every car model is confirmed", helper "New models that Roam can't work out will appear here."
+  - Couldn't save: a red-tinted strip inside the card, "Couldn't save this. Try again.", with a red outline "Try again" button
+  - Couldn't count: "Fits … car models" replaced by "Couldn't count right now" with an outline "Retry"
+
+---
+
+ADDITIONAL UI COMPONENTS:
+- Powertrain chip (icon + word) in seven variants, as in BRAND IDENTITY
+- Status chip: Worked out / Confirmed / Needs checking
+- Segmented choice "Same as group | Set for this job"
+- Preset select with a short description under each option
+- Checkbox chips for Custom…
+- Switch with helper text
+- "Fits N of 2,679 car models" line with a "See which" button
+- Count pill ("12 left")
+- Soft info strip and soft amber strip
+
+INTERACTIONS:
+- "Confirm" on a model sets the status to Confirmed and shows "Confirmed by … on …"; on the check list the row fades out and the count goes down
+- "Edit" switches the card to selects; "Save and confirm" saves and confirms; "Cancel" restores the old values
+- A model whose car data changes after it was confirmed shows Screen 4 until it's confirmed again
+- In a job drawer, switching to "Set for this job" reveals the preset select; "Custom…" reveals the checkbox chips; switching back to "Same as group" hides them and shows the group's value
+- The "Fits N of 2,679" line updates as choices change, before saving
+- Turning on "High-voltage work" adds the amber chip to the job's header
+- "See which" opens a simple list of the matching car models
+- Save and Cancel are real buttons; Esc closes the drawer; focus returns to the row that opened it; everything works by keyboard
+
+Spec screens / Area:
+| Screen | Area |
+|---|---|
+| 1 | Car model page — powertrain worked out |
+| 2 | Car model page — editing powertrain |
+| 3 | Car model page — confirmed |
+| 4 | Car model page — please re-confirm |
+| 5 | Powertrain to check list |
+| 6 | Vehicles home — powertrain cards |
+| 7 | Job drawer — Fits, same as group |
+| 8 | Job drawer — Fits, custom + high-voltage |
+| 9 | Group drawer — Fits presets |
+| 10 | States |

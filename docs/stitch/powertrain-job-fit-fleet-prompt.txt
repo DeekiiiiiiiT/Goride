@@ -1,0 +1,138 @@
+ROAM FLEET — LOG SERVICE: JOBS THAT FIT THIS CAR FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Log service · Jobs that fit this car (Desktop Web App, for fleet owners and their staff):
+
+Design modern, premium screens for step 2 "Work done" of the "Log service" dialog in Fleet maintenance in the Roam Fleet app, now that it only offers the jobs that fit the car being serviced. The person using it is a normal car-fleet owner, not a mechanic. A petrol Toyota Roomy no longer sees high-voltage battery jobs or diesel-only jobs. A Honda Fit hybrid sees its hybrid jobs but not plug-in charging jobs. Nothing is ever blocked: a "Show all jobs" button at the bottom reveals the hidden jobs, greyed with a small "Not usual for this car" chip, and they can still be ticked with no warning pop-up. If the app doesn't know what powers a car yet, it shows every job with a friendly banner and a way to fix it. A job logged even though it isn't usual for the car keeps its "Not usual for this car" chip on the Details step, on Review and in Service history. The dialog keeps its four steps: Date & mileage, Work done, Details, Review. The app should feel like a polished consumer product in the style of Linear, Stripe and Airbnb: friendly, airy and easy to scan. Each screen is one single view, light mode only (dark mode comes from the Stitch theme switch). Make every screen tall enough to show everything, with no inner scrolling and nothing cut off.
+
+BRAND IDENTITY:
+- Roam Fleet web app: a clean top bar with "Roam Fleet"; the page "Fleet maintenance" with a friendly orange wrench icon; the Log service dialog floats over a softly blurred, dimmed page
+- LIGHT MODE (default):
+  - Primary: Near-black (#030213) — primary buttons, the current step, selected jobs
+  - Background: very light grey (#f8fafc); cards and dialogs white
+  - Text: #0a0a0a; helper text soft grey #71717a
+  - Success: Emerald (#059669)
+  - Attention: Amber (#d97706)
+  - Danger (Cancel): Red (#d4183d)
+  - Soft tints for pills and icon tiles: Slate 100 (#f1f5f9)
+- DARK MODE (for reference; draw light only):
+  - Background: #18181b; cards: #232327; text: #fafafa; helper text: #a1a1aa; primary: #fafafa; success #34d399; attention #f59e0b; danger #f87171
+- Shapes: cards and dialogs 16px rounded corners; buttons and inputs 10px; chips are fully rounded pills
+- Depth: soft, light shadows on cards and dialogs; at most a very light 1px border
+- Typography: Inter. Titles 20–24px semibold, body 15px, helper text 13px. Sentence case everywhere. Numbers use lined-up (tabular) figures.
+- Icons: friendly line icons (Lucide style) on soft-tinted round tiles
+- Chips: "Not usual for this car" soft amber with a small info icon; the car's powertrain on the car strip as a soft pill ("Petrol", "Hybrid", "Electric") with a matching icon (engine, battery-charging, bolt)
+
+DESIGN PRINCIPLES:
+- Modern and friendly: generous white space, clear hierarchy, nothing cramped
+- Plain words for a normal person: "Jobs that fit this car", "Show all jobs", "Not usual for this car". No codes or technical labels
+- Never block: hidden jobs are one tap away and can always be logged; no warning pop-ups
+- Every action is a real button with a fill or a visible outline, never a text link. One solid black primary button per view. Cancel is red (red outline, red text)
+- No browser pop-ups; every message is inside the app
+- Desktop-first (1440px), with a phone version
+
+---
+
+SCREEN 1: STEP 2 WORK DONE — PETROL CAR (ROOMY)
+- A large white dialog (760px wide) over the dimmed page
+- Header: wrench icon on a soft round tile, title "Log service", round outlined close button
+- Car strip: a soft dark rounded card with a car icon, "Toyota Roomy (2019)", a small pill "5179KZ" and a powertrain pill "Petrol"; on the right "198,250 km · 15 Nov 2026"
+- Progress: four steps — "Date & mileage" ✓, "Work done" (current), "Details", "Review"
+- A soft line under the progress: "Showing jobs that fit a petrol car."
+- A grid of group tiles (3 per row), each a white rounded card with an icon tile, the group name and a count: "Engine · 38 jobs", "Filters", "Tires & wheels", "Brakes", "Fluids", "Belts & hoses", "Lighting & visibility", "Suspension & steering", "Transmission", "HVAC", "Battery & electrical", "Exhaust & emissions · 13 jobs", "Shop fees". There is no "Hybrid & electric" tile, and the grid has no gap where it would have been
+- Below the grid, a full-width outline button: "Show all jobs (26 hidden)" with an eye icon
+- Footer: red outline "Cancel" on the left; outline "Back" and solid black "Continue" on the right (Continue disabled until a job is ticked)
+
+SCREEN 2: STEP 2 — INSIDE A GROUP, PETROL CAR
+- Same dialog, inside the group "Exhaust & emissions" (back arrow + group title)
+- Job cards in a 3-column grid, each with an icon, the job name, a small action pill ("Replace", "Inspect") and a round tick circle: Exhaust Manifold / Header, Exhaust Manifold Gasket, Catalytic Converter, Muffler (ticked), Resonator, Flex Pipe, Exhaust Pipe / Tailpipe, Exhaust System Inspection, EVAP / Charcoal Canister, Purge Valve, Exhaust Flange Gasket, Exhaust Clamp, Exhaust Hanger / Rubber Isolator
+- No DPF, AdBlue, glow-plug or diesel sensor jobs
+- At the bottom: outline button "Show all jobs in this group (8 hidden)"
+- Footer: red outline "Cancel"; outline "Back"; solid black "Continue with 1 job"
+
+SCREEN 3: STEP 2 — SHOW ALL JOBS OPENED
+- The same group view after "Show all jobs in this group" was pressed
+- The 13 fitting jobs as normal cards
+- A soft divider "Not usual for this car", then the 8 hidden jobs as greyed cards (lighter text, soft grey background), each with the amber chip "Not usual for this car": DPF Cleaning / Regeneration, DPF Replacement, SCR / AdBlue System Service, AdBlue / DEF Top-up, NOx Sensor, Glow Plugs, Exhaust Gas Temperature (EGT) Sensor, DPF Differential Pressure Sensor
+- One greyed card ("Glow Plugs") is ticked: its tick circle is filled; it stays greyed with the chip; no pop-up
+- At the bottom: outline button "Hide jobs that don't fit"
+- Footer: red outline "Cancel"; outline "Back"; solid black "Continue with 2 jobs"
+
+SCREEN 4: STEP 2 — HYBRID CAR (HONDA FIT)
+- Car strip: "Honda Fit (2021)", pill "1505LM", powertrain pill "Hybrid"
+- A soft line: "Showing jobs that fit a hybrid car."
+- Group tiles as in Screen 1, plus "Hybrid & electric · 11 jobs", shown with a soft teal battery icon tile
+- Opened below (or as the selected tile's preview): the Hybrid & electric jobs that fit, as job cards: HV Battery Health Check, HV Battery Cooling Fan Filter, HV Battery Cooling Fan & Duct Cleaning, Inverter Coolant Service, Inverter Coolant Pump, HV Battery Module Replacement, HV Battery Pack Replacement, HV Cable & Insulation Resistance Inspection, HV Cable / Connector Replacement, DC-DC Converter, Traction Motor
+- Full-width outline button: "Show all jobs (16 hidden)"
+- Footer as in Screen 1
+
+SCREEN 5: STEP 2 — CAR WITH UNKNOWN POWERTRAIN
+- Car strip: "Nissan Note (2018)", pill "4471JM", and a soft grey pill "Engine type unknown" with a question icon
+- A soft amber banner across the top of the step: question icon, "We don't know this car's engine type yet. Showing every job.", and an outline button "Link this car"
+- All 14 group tiles shown, including "Hybrid & electric"
+- No "Show all jobs" button (nothing is hidden)
+- Footer as in Screen 1
+
+SCREEN 6: STEP 3 DETAILS — A JOB THAT'S NOT USUAL FOR THIS CAR
+- Step 3 "Details" for the Roomy with two job cards: "Muffler" (normal) and "Glow Plugs"
+- The "Glow Plugs" card header shows the amber chip "Not usual for this car" next to the job name, and a small soft helper: "You picked this from all jobs. It's saved as normal."
+- The usual fields below (Action, Quantity, Unit price, Labor, Brand, Part number, Items used), shown filled
+- Footer: red outline "Cancel"; outline "Back"; solid black "Continue to review"
+
+SCREEN 7: STEP 4 REVIEW
+- Review for the Roomy: a summary strip (date, mileage, total "J$ 18,500"), then two job cards: "Muffler · J$ 12,000" and "Glow Plugs · J$ 6,500" with the amber chip "Not usual for this car"
+- Totals card: Jobs, Items, Total
+- Footer: red outline "Cancel"; outline "Back"; solid black "Log service"
+
+SCREEN 8: SERVICE HISTORY
+- The Fleet maintenance page, "Service history" tab, a clean table of services for the Roomy
+- An opened service row (15 Nov 2026, J$ 18,500) shows its jobs: "Muffler" and "Glow Plugs" with the amber chip "Not usual for this car"
+- Other services shown normally, without chips
+
+SCREEN 9: STATES
+- Four soft cards in a 2×2 grid, each a small view of step 2:
+  - Loading: group tiles as soft grey shimmering cards
+  - Couldn't check which jobs fit: a soft amber strip "Couldn't check which jobs fit this car. Showing every job." with an outline "Try again" button; all groups shown
+  - A group where every job is hidden: the group doesn't appear (show the grid closing up, with a small caption "Hybrid & electric isn't shown for petrol cars")
+  - Nothing ticked yet: "Continue" disabled, helper "Tick at least one job"
+
+SCREEN 10: PHONE — STEP 2 (390px)
+- Phone layout of Screen 1: compact header "Step 2 of 4 · Work done", four thin step bars, the car strip with the "Petrol" pill
+- Group tiles in a single column of full-width rounded cards
+- The full-width outline button "Show all jobs (26 hidden)" at the bottom of the list
+- Footer pinned at the bottom: arrow-only Back, red "Cancel", solid black "Continue"
+
+---
+
+ADDITIONAL UI COMPONENTS:
+- Powertrain pill on the car strip (Petrol / Diesel / Hybrid / Plug-in hybrid / Electric / Engine type unknown)
+- "Show all jobs (N hidden)" full-width outline button and "Hide jobs that don't fit"
+- Greyed job card with the amber "Not usual for this car" chip, still tickable
+- Soft divider "Not usual for this car"
+- Soft amber banner with an outline action button
+- Group tile with icon, name and job count
+
+INTERACTIONS:
+- Step 2 opens with only the jobs that fit the car; groups with no fitting job are left out and the grid closes up
+- "Show all jobs (N hidden)" reveals the hidden jobs under the "Not usual for this car" divider; "Hide jobs that don't fit" hides them again (ticked hidden jobs stay ticked and visible)
+- Ticking a hidden job works like any other: no pop-up, no confirmation
+- A ticked job that isn't usual keeps its chip on Details, Review and in Service history
+- On a car with an unknown engine type, every job is shown with the banner; "Link this car" opens the existing link-to-model flow
+- If the fit check fails, every job is shown with the "Couldn't check" strip and a "Try again" button
+- Esc closes the dialog; focus returns to the button that opened it; every tile, card and button works by keyboard
+
+Spec screens / Area:
+| Screen | Area |
+|---|---|
+| 1 | Step 2 — group tiles, petrol car |
+| 2 | Step 2 — inside a group, petrol car |
+| 3 | Step 2 — show all jobs opened |
+| 4 | Step 2 — hybrid car |
+| 5 | Step 2 — unknown engine type |
+| 6 | Step 3 — job that's not usual for this car |
+| 7 | Step 4 — Review |
+| 8 | Service history |
+| 9 | States |
+| 10 | Phone — step 2 |
