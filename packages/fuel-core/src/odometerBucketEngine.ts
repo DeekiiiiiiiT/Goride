@@ -18,6 +18,7 @@ import {
   countsInFuelLogSpend,
 } from './fuelOpsEligibility.ts';
 import { toEntryYmd, isEntryInHalfOpenYmdRange } from './fuelWeekRange.ts';
+import { fleetInstantMs } from './fleetTime.ts';
 import { getTotalTripRideshareKm } from './tripRideshareKm.ts';
 import {
   FALLBACK_EFFICIENCY_KM_L,
@@ -29,7 +30,57 @@ import {
   STOP_TO_STOP_GPS_TOLERANCE_PCT,
 } from './stopToStopConservation.ts';
 
-type Anchor = OdometerBucketAnchor & { kind: 'boundary' | 'waypoint' };
+/** `atMs` = when the fill happened (UTC ms), or null when only its day is known. */
+type Anchor = OdometerBucketAnchor & { kind: 'boundary' | 'waypoint'; atMs?: number | null };
+
+const HAS_CLOCK = /T\d{2}:\d{2}/;
+
+/** A wall time of exactly midnight is how a date-only fill is stored — treat it as "time unknown". */
+function clockInstantMs(stored: string): number | null {
+  if (!HAS_CLOCK.test(stored)) return null;
+  if (/T00:00(:00(\.0+)?)?$/.test(stored)) return null;
+  return fleetInstantMs(stored);
+}
+
+/**
+ * When a fill happened. Driver-app fills carry it in `date` ("2026-10-03T09:59:00"),
+ * card / manual fills in `time` ("21:34:00"). Null when only the day is known.
+ */
+export function fillInstantMs(e: Pick<FuelEntry, 'date' | 'time'> | undefined): number | null {
+  if (!e) return null;
+  const d = String(e.date || '').trim().replace(' ', 'T');
+  if (!d) return null;
+  if (HAS_CLOCK.test(d)) return clockInstantMs(d);
+  const t = String(e.time || '').trim();
+  if (/^\d{2}:\d{2}/.test(t)) return clockInstantMs(`${d.slice(0, 10)}T${t}`);
+  return null;
+}
+
+/** When the trip started (UTC ms), or null when unknown. */
+function tripInstantMs(t: FuelCalcTrip): number | null {
+  const s = String(t.requestTime || '').trim();
+  if (!s || !HAS_CLOCK.test(s.replace(' ', 'T'))) return null;
+  return fleetInstantMs(s);
+}
+
+/**
+ * Does the trip fall in the window that starts at `start` and ends at `end`?
+ * Each side uses the fill's time when both the fill and the trip have one,
+ * else the calendar day (half-open). A fill is the end of one window and the
+ * start of the next with the same rule, so a trip is never counted twice or lost.
+ */
+export function isTripInFillWindow(
+  t: Pick<FuelCalcTrip, 'date' | 'requestTime'>,
+  start: { date: string; atMs?: number | null },
+  end: { date: string; atMs?: number | null },
+): boolean {
+  const tMs = tripInstantMs(t as FuelCalcTrip);
+  const tYmd = toEntryYmd(t.date);
+  const afterStart =
+    tMs != null && start.atMs != null ? tMs >= start.atMs : !!tYmd && tYmd >= toEntryYmd(start.date);
+  if (!afterStart) return false;
+  return tMs != null && end.atMs != null ? tMs < end.atMs : !!tYmd && tYmd < toEntryYmd(end.date);
+}
 
 function normalizeSource(
   s?: string,
@@ -105,8 +156,10 @@ export function calculateOdometerBuckets(
             e.id === refId ||
             (e.odometer === a.odometer && toEntryYmd(e.date) === toEntryYmd(a.date)),
         );
+      const fill = refId ? allOpsForVehicle.find((e) => e.id === refId) : undefined;
       return {
         ...a,
+        atMs: fill ? fillInstantMs(fill) : fillInstantMs({ date: a.date }),
         date: toEntryYmd(a.date),
         source: isFuel ? 'fuel' : source,
         referenceId: refId,
@@ -125,6 +178,7 @@ export function calculateOdometerBuckets(
         .map((e) => ({
           id: e.id,
           date: toEntryYmd(e.date),
+          atMs: fillInstantMs(e),
           odometer: e.odometer!,
           referenceId: e.id,
           source: 'fuel' as const,
@@ -138,6 +192,7 @@ export function calculateOdometerBuckets(
       .map((e) => ({
         id: e.id,
         date: toEntryYmd(e.date),
+        atMs: fillInstantMs(e),
         odometer: e.odometer!,
         referenceId: e.id,
         source: 'fuel' as const,
@@ -306,7 +361,7 @@ export function calculateOdometerBuckets(
           rideShareDistance += km;
           tripsCount += 1;
         }
-      } else if (isEntryInHalfOpenYmdRange(t.date, startYmd, endYmd)) {
+      } else if (isTripInFillWindow(t, startAnchor, endAnchor)) {
         const km = getTotalTripRideshareKm(t);
         if (km > 0) {
           rideShareDistance += km;
@@ -400,6 +455,8 @@ export function calculateOdometerBuckets(
       endOdometer: endOdo,
       startDate: startYmd,
       endDate: endYmd,
+      startAtMs: startAnchor.atMs ?? null,
+      endAtMs: endAnchor.atMs ?? null,
       actualFuelLiters: totalLiters,
       actualFuelCost: totalCost,
       associatedReceipts,

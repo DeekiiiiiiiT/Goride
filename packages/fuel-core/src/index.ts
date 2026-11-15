@@ -298,7 +298,12 @@ export {
   type StopToStopClosableFlagSet,
 } from './applyStopToStopGapAccepts.ts';
 
-export { calculateOdometerBuckets as calculateOdometerBucketsEngine } from './odometerBucketEngine.ts';export {
+export {
+  calculateOdometerBuckets as calculateOdometerBucketsEngine,
+  isTripInFillWindow,
+  fillInstantMs,
+} from './odometerBucketEngine.ts';
+export {
   GAP_DEDUCTION_TX_TYPE,
   STOP_TO_STOP_ENGINE_VERSION,
   gapChargeIdempotencyKey,

@@ -109,6 +109,9 @@ export interface OdometerBucket {
   endOdometer: number;
   startDate: string;
   endDate: string;
+  /** When the opening / closing fill happened (UTC ms); null = only the day is known. */
+  startAtMs?: number | null;
+  endAtMs?: number | null;
   actualFuelLiters: number;
   actualFuelCost: number;
   associatedReceipts: string[];

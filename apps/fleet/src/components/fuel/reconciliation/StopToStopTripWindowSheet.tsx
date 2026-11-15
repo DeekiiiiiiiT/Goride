@@ -15,7 +15,7 @@ import { ManualTripForm } from '../../trips/ManualTripForm';
 import { api } from '../../../services/api';
 import { createManualTrip, type ManualTripInput } from '../../../utils/tripFactory';
 import type { Trip } from '../../../types/data';
-import type { OdometerBucket } from '@roam/fuel-core';
+import { isTripInFillWindow, type OdometerBucket } from '@roam/fuel-core';
 import { toEntryYmd } from '../../../utils/fuelWeekPeriod';
 import { toast } from 'sonner';
 import { Pencil, Trash2, Plus } from 'lucide-react';
@@ -23,11 +23,13 @@ import { Pencil, Trash2, Plus } from 'lucide-react';
 function tripInBucketWindow(trip: Trip, bucket: OdometerBucket): boolean {
   if (trip.vehicleId && trip.vehicleId !== bucket.vehicleId) return false;
   if (trip.status !== 'Completed' && trip.status !== 'Cancelled') return false;
-  const ymd = toEntryYmd(trip.date || trip.requestTime || '');
-  const start = toEntryYmd(bucket.startDate);
-  const end = toEntryYmd(bucket.endDate);
-  if (!ymd || !start || !end) return false;
-  return ymd >= start && ymd < end;
+  if (!bucket.startDate || !bucket.endDate) return false;
+  // Same rule as the stop-to-stop engine: the fill time when known, else the day.
+  return isTripInFillWindow(
+    { date: trip.date || toEntryYmd(trip.requestTime || ''), requestTime: trip.requestTime },
+    { date: bucket.startDate, atMs: bucket.startAtMs },
+    { date: bucket.endDate, atMs: bucket.endAtMs },
+  );
 }
 
 function tripToInitialData(trip: Trip) {

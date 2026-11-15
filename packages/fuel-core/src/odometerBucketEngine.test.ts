@@ -613,3 +613,39 @@ describe('stop-to-stop H-8 freeze anchors match panel', () => {
     );
   });
 });
+
+describe("stop-to-stop trips split by the fill time (WRA-55)", () => {
+  const trip = (id, date, requestTime, km) =>
+    ({ id, vehicleId: "v5179", date, requestTime, status: "Completed", distance: km }) as any;
+
+  it("a trip earlier on the fill day belongs to the window before the fill", () => {
+    // 30 Sep: card fill at 21:34 (time in its own field); driver-app fill 2 Oct 09:38 (time in date).
+    const entries = [
+      fill("f1", "2026-09-29T12:08:00", 1000, 0, 0),
+      { ...fill("f2", "2026-09-30", 1300, 20, 5000), time: "21:34:00" },
+      fill("f3", "2026-10-02T09:38:00", 1500, 20, 5000),
+    ];
+    const trips = [
+      trip("before", "2026-09-30", "2026-09-30T20:00:00.000Z", 150), // 15:00 Jamaica, before the 21:34 fill
+      trip("after", "2026-10-01", "2026-10-01T15:00:00.000Z", 120),
+      trip("sameDayLater", "2026-10-02", "2026-10-02T17:00:00.000Z", 40), // 12:00, after the 09:38 fill
+    ];
+    const buckets = calculateOdometerBuckets(vehicle, entries, trips, []);
+    expect(buckets).toHaveLength(2);
+    expect(buckets[0].rideShareDistance).toBeCloseTo(150, 5);
+    expect(buckets[1].rideShareDistance).toBeCloseTo(120, 5);
+    expect(buckets[1].unaccountedDistance).toBe(0);
+  });
+
+  it("keeps the calendar-day rule when the fill has no time", () => {
+    const entries = [
+      fill("f1", "2026-09-29", 1000, 0, 0),
+      fill("f2", "2026-09-30", 1300, 20, 5000),
+      fill("f3", "2026-10-02", 1500, 20, 5000),
+    ];
+    const trips = [trip("t", "2026-09-30", "2026-09-30T20:00:00.000Z", 150)];
+    const buckets = calculateOdometerBuckets(vehicle, entries, trips, []);
+    expect(buckets[0].rideShareDistance).toBe(0);
+    expect(buckets[1].rideShareDistance).toBeCloseTo(150, 5);
+  });
+});
