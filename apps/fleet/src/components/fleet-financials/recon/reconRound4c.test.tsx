@@ -43,6 +43,16 @@ describe('approval dialog rules (WRA-32)', () => {
     fireEvent.click(screen.getByTestId('recon-approval-submit'));
     expect(onSelf).toHaveBeenCalledWith('All drivers checked and tie');
   });
+
+  it('WRA-46: the company owner approves their own Close / Reopen with no reason box', () => {
+    expect(approvalSubmitError('self', '', { ownerSkipsReason: true })).toBeNull();
+    expect(approvalSubmitError('send', '', { ownerSkipsReason: true })).toMatch(/note/);
+    const onSelf = vi.fn();
+    render(<ReconApprovalDialog {...base} canApprove otherApprovers={0} ownerSkipsReason onSend={vi.fn()} onSelfApprove={onSelf} />);
+    expect(screen.queryByTestId('recon-approval-reason')).toBeNull();
+    fireEvent.click(screen.getByTestId('recon-approval-submit'));
+    expect(onSelf).toHaveBeenCalledWith('');
+  });
 });
 
 describe('Close reads the saved check only (WRA-07)', () => {

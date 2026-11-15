@@ -16,8 +16,14 @@ export type ApprovalChoice = 'send' | 'self';
 /** Self-approval needs a real reason (same 8-character rule as the server's Close / Reopen). */
 export const SELF_APPROVE_MIN_REASON = 8;
 
-export function approvalSubmitError(choice: ApprovalChoice, reason: string): string | null {
+export function approvalSubmitError(
+  choice: ApprovalChoice,
+  reason: string,
+  opts?: { ownerSkipsReason?: boolean },
+): string | null {
   const r = reason.trim();
+  // WRA-46: the company owner approves their own close / reopen without a reason.
+  if (choice === 'self' && opts?.ownerSkipsReason) return null;
   if (choice === 'self' && r.length < SELF_APPROVE_MIN_REASON) {
     return `Say why you are approving your own change (at least ${SELF_APPROVE_MIN_REASON} characters).`;
   }
@@ -38,6 +44,7 @@ export function ReconApprovalDialog({
   onSend,
   onSelfApprove,
   extra,
+  ownerSkipsReason = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -58,6 +65,8 @@ export function ReconApprovalDialog({
   onSelfApprove: (reason: string) => void | Promise<void>;
   /** Extra confirmation shown above the reason box (e.g. the reopen money warning). */
   extra?: React.ReactNode;
+  /** WRA-46: the company owner self-approves Close / Reopen with no reason box (still logged self-approved). */
+  ownerSkipsReason?: boolean;
 }) {
   const canSend = otherApprovers > 0;
   const [choice, setChoice] = useState<ApprovalChoice>(canSend ? 'send' : 'self');
@@ -71,7 +80,8 @@ export function ReconApprovalDialog({
     setTouched(false);
   }, [open, canSend]);
 
-  const error = approvalSubmitError(choice, reason);
+  const skipReason = ownerSkipsReason && choice === 'self';
+  const error = approvalSubmitError(choice, reason, { ownerSkipsReason });
   const nobodyCanApprove = !canApprove && !canSend;
 
   const submit = () => {
@@ -158,6 +168,7 @@ export function ReconApprovalDialog({
 
             {extra}
 
+            {skipReason ? null : (
             <div className="space-y-1.5">
               <label htmlFor="recon-approval-reason" className="text-sm font-semibold text-[#0b1c30]">
                 {choice === 'self' ? 'Why are you approving your own change?' : 'Note for the approver'}
@@ -173,6 +184,7 @@ export function ReconApprovalDialog({
               />
               {touched && error ? <p className="text-[13px] text-[#ba1a1a]">{error}</p> : null}
             </div>
+            )}
           </>
         )}
 

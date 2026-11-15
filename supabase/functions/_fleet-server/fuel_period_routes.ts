@@ -1067,26 +1067,20 @@ async function processJobRow(job: Record<string, unknown>) {
   return { ok: true, version: nextVersion };
 }
 
-function kickFuelJobProcessor(c: Context) {
-  try {
-    const processUrl = c.req.url.replace(
-      /\/fuel\/periods\/[^/]+\/finalize(?:\?.*)?$/,
-      "/fuel/period-jobs/process",
-    );
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    const auth = c.req.header("Authorization");
-    const apikey = c.req.header("apikey");
-    if (auth) headers.Authorization = auth;
-    if (apikey) headers.apikey = apikey;
-    const pending = fetch(processUrl, { method: "POST", headers }).catch((e) => {
-      console.warn("[fuel_period] job kick failed", e);
-    });
-    const edge = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } })
-      .EdgeRuntime;
-    if (edge?.waitUntil) edge.waitUntil(pending);
-  } catch (e) {
-    console.warn("[fuel_period] job kick failed", e);
-  }
+/**
+ * WRA-56: run the queued job in this worker after the 202 answer. The old HTTP self-call
+ * (`c.req.url` → /fuel/period-jobs/process) never reached the function on Supabase (the
+ * internal URL has no /functions/v1 prefix), so jobs sat queued until the hourly sweep and
+ * the week page meanwhile got 409s. processJobRow claims the row first, so a sweep that
+ * picks the same job at the same time skips it ("claimed_elsewhere").
+ */
+function runFuelJobInBackground(job: Record<string, unknown>) {
+  const pending = processJobRow(job).catch((e) => {
+    console.warn("[fuel_period] job run failed", e);
+  });
+  const edge = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } })
+    .EdgeRuntime;
+  if (edge?.waitUntil) edge.waitUntil(pending);
 }
 
 export function registerFuelPeriodRoutes(app: Hono) {
@@ -1642,7 +1636,12 @@ export function registerFuelPeriodRoutes(app: Hono) {
               .update({ state: "queued", updated_at: new Date().toISOString() })
               .eq("id", existing.id);
           }
-          kickFuelJobProcessor(c);
+          const { data: fresh } = await sb
+            .from("fuel_period_job")
+            .select("*")
+            .eq("id", existing.id)
+            .maybeSingle();
+          if (fresh) runFuelJobInBackground(fresh as Record<string, unknown>);
           return c.json({ jobId: existing.id, state: "queued" }, 202);
         }
         return c.json(
@@ -1683,7 +1682,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
         .select("*")
         .single();
       if (error) return c.json({ error: error.message }, 500);
-      kickFuelJobProcessor(c);
+      runFuelJobInBackground(job as Record<string, unknown>);
       return c.json({ jobId: job.id, state: "queued" }, 202);
     },
   );

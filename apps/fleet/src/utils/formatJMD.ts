@@ -5,12 +5,15 @@
  * `$${n.toFixed(2)}` instead and rendered US-looking amounts for Jamaican dollars.
  */
 export function formatJMD(value: number, decimals = 0): string {
-  return new Intl.NumberFormat('en-JM', {
-    style: 'currency',
-    currency: 'JMD',
+  // Browsers print JMD in the en-JM locale as a bare "$" (looks like US dollars), so the
+  // "J$" sign is written here: "J$28,000.00", "-J$5,500.00".
+  const n = Number.isFinite(value) ? value : 0;
+  const body = new Intl.NumberFormat('en-US', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
-  }).format(Number.isFinite(value) ? value : 0);
+  }).format(Math.abs(n));
+  const rounded = Number(Math.abs(n).toFixed(decimals));
+  return `${n < 0 && rounded !== 0 ? '-' : ''}J$${body}`;
 }
 
 /** Same formatting with an explicit +/- so a delta reads as a direction, not a total. */

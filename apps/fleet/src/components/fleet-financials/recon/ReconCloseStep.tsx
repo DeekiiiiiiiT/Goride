@@ -481,6 +481,7 @@ export function ReconCloseStep({
         confirmLabel="Approve & lock week"
         canApprove={approvals.canApprove}
         otherApprovers={approvals.otherApprovers}
+        ownerSkipsReason={approvals.isCompanyOwner}
         busy={busy}
         onSend={(reason) => send('close', reason)}
         onSelfApprove={selfClose}
@@ -494,6 +495,7 @@ export function ReconCloseStep({
         confirmLabel="Approve & sign"
         canApprove={approvals.canApprove}
         otherApprovers={approvals.otherApprovers}
+        ownerSkipsReason={approvals.isCompanyOwner}
         busy={busy}
         onSend={(reason) => send('sign_restatement', reason)}
         onSelfApprove={selfClose}
@@ -507,6 +509,7 @@ export function ReconCloseStep({
         confirmLabel="Approve & reopen"
         canApprove={approvals.canApprove}
         otherApprovers={approvals.otherApprovers}
+        ownerSkipsReason={approvals.isCompanyOwner}
         busy={busy}
         onSend={(reason) => send('reopen', reason)}
         onSelfApprove={selfReopen}

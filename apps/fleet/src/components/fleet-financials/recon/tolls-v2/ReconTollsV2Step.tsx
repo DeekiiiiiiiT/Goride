@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchTagAccountRollForward } from '../../../../services/reconApi';
 import { toast } from 'sonner';
 import { isPaidWeekRefusal } from '../../../../services/tollV2CommandError';
 import { useTollV2Desk } from './useTollV2Desk';
@@ -47,6 +48,21 @@ export function ReconTollsV2Step({
   const queryClient = useQueryClient();
   const deskQuery = useTollV2Desk(weekKey);
   const weeksQuery = useTollV2Weeks();
+  // WRA-57: the Tag account box shows step 4's roll (anchored on the last closed week), same cache as step 4.
+  const tagRollQuery = useQuery({
+    queryKey: ['recon-tag-account', 'rideshare', weekKey],
+    queryFn: () => fetchTagAccountRollForward('rideshare', weekKey),
+    staleTime: 30_000,
+    retry: 1,
+  });
+  const tagRoll = tagRollQuery.data
+    ? {
+        openingMinor: tagRollQuery.data.openingMinor,
+        topUpsMinor: tagRollQuery.data.topUpsMinor,
+        usageMinor: tagRollQuery.data.tagUsageMinor,
+        closingMinor: tagRollQuery.data.expectedClosingMinor,
+      }
+    : null;
   const { runCommand, busy, versionConflict, clearVersionConflict, refetchDesk } = useTollV2Commands(weekKey);
   const [sealing, setSealing] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
@@ -416,6 +432,7 @@ export function ReconTollsV2Step({
         result={desk.result}
         charges={desk.charges}
         onGoToTagAccount={onGoToTagAccount}
+        roll={tagRoll}
       />
 
       <TollV2PickTripDialog

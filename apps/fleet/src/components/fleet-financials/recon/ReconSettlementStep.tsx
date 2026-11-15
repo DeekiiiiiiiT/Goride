@@ -20,6 +20,7 @@ import { humanBlockerLabel } from '../../../utils/weekCloseBlockers';
 import { LogCashPaymentModal } from '../../drivers/LogCashPaymentModal';
 import { RecordPayoutModal, type RecordPayoutSavePayload } from '../../drivers/RecordPayoutModal';
 import { SettleFromBalanceModal } from './SettleFromBalanceModal';
+import { formatWeekRange } from './weekListFormat';
 import { Button } from '../../ui/button';
 import { toast } from 'sonner';
 
@@ -29,7 +30,7 @@ const MONEY = (n: number | null | undefined) => {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-  return `${n < 0 ? '-' : ''}$${body}`;
+  return `${n < 0 ? '−' : ''}J$${body}`;
 };
 
 function collectOwedMajor(r: {
@@ -190,7 +191,7 @@ export function ReconSettlementStep({
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-600">
-        Who owes whom for the week of {weekKey}. Pay or collect here. A bank payout stays open until
+        Who owes whom for the week of {formatWeekRange(weekKey)}. Pay or collect here. A bank payout stays open until
         it clears. Closing is the next step.
       </p>
 
@@ -383,7 +384,7 @@ export function ReconSettlementStep({
         maxAmount={writeOffTarget?.amount || 0}
         workPeriodStart={weekKey}
         workPeriodEnd={periodEnd}
-        weekLabel={weekKey}
+        weekLabel={formatWeekRange(weekKey)}
         onSave={async (payload: CashWriteOffSavePayload) => {
           if (!writeOffTarget) return;
           if (!String(payload.reason || '').trim()) throw new Error('A reason is required to write off cash.');
@@ -429,7 +430,7 @@ export function ReconSettlementStep({
               idempotencyKey: `settle-from-balance:${settleTarget.driverId}:${weekKey}:${creditWeekStart}:${amount.toFixed(2)}`,
             });
             toast.success(
-              `Moved ${MONEY(amount)} onto week of ${creditWeekStart}`,
+              `Moved ${MONEY(amount)} onto the week of ${formatWeekRange(creditWeekStart)}`,
             );
             await qc.invalidateQueries({ queryKey: ['settlements'] });
             await qc.invalidateQueries({ queryKey: ['recon-run'] });

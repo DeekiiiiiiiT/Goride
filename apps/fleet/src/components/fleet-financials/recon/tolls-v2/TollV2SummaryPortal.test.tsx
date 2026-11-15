@@ -52,4 +52,43 @@ describe('TollV2SummaryPortal', () => {
     expect(view.getByText('= Closing')).toBeTruthy();
     document.body.removeChild(target);
   });
+
+  const week28SepResult = {
+    spend: { totalMinor: 175500 },
+    bearers: { platformMinor: 175500, driverMinor: 0, fleetMinor: 0 },
+    drivers: [],
+    // Toll week result sums files from zero: wrong opening / closing (WRA-57).
+    tagAccount: { openingMinor: -59500, topUpsMinor: 500000, usageMinor: 175500, closingMinor: 265000 },
+  };
+
+  it("WRA-57: shows step 4's roll (opening 5,969 → closing 9,214), not the toll week result", () => {
+    const box = document.createElement('div');
+    document.body.appendChild(box);
+    render(
+      <TollV2SummaryPortal
+        target={box}
+        charges={[]}
+        onGoToTagAccount={() => {}}
+        result={week28SepResult}
+        roll={{ openingMinor: 596900, topUpsMinor: 500000, usageMinor: 175500, closingMinor: 921400 }}
+      />,
+    );
+    const view = within(box);
+    expect(view.getByTestId('toll-tag-opening').textContent).toContain('5,969.00');
+    expect(view.getByTestId('toll-tag-closing').textContent).toContain('9,214.00');
+    expect(view.queryByText(/2,650/)).toBeNull();
+    document.body.removeChild(box);
+  });
+
+  it('WRA-57: while step 4 is loading the box shows dashes, never the toll week result', () => {
+    const box = document.createElement('div');
+    document.body.appendChild(box);
+    render(
+      <TollV2SummaryPortal target={box} charges={[]} onGoToTagAccount={() => {}} result={week28SepResult} roll={null} />,
+    );
+    const view = within(box);
+    expect(view.getByTestId('toll-tag-opening').textContent).toBe('—');
+    expect(view.getByTestId('toll-tag-closing').textContent).toBe('—');
+    document.body.removeChild(box);
+  });
 });

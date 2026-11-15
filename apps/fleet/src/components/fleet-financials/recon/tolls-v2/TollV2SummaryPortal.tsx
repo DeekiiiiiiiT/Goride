@@ -16,19 +16,45 @@ function driverDisplayName(
   return 'Driver';
 }
 
+/** Step 4's roll-forward (anchored on the last closed week), shown in the Tag account box. */
+export type TagAccountBoxRoll = {
+  openingMinor: number;
+  topUpsMinor: number;
+  usageMinor: number;
+  closingMinor: number;
+};
+
 export function TollV2SummaryPortal({
   target,
   result,
   charges,
   onGoToTagAccount,
+  roll,
 }: {
   target: HTMLElement | null;
   result: TollV2WeekResult;
   charges: TollV2Charge[];
   onGoToTagAccount: () => void;
+  /**
+   * WRA-57: the toll week result sums uploaded files from zero and ignores the step-4 anchor,
+   * so the box shows step 4's numbers. null = still loading or unavailable (shows "—");
+   * undefined = no roll given (falls back to the toll week result).
+   */
+  roll?: TagAccountBoxRoll | null;
 }) {
   const drivers = result.drivers ?? [];
-  const tag = result.tagAccount;
+  const tag: Partial<TagAccountBoxRoll> | null =
+    roll === undefined
+      ? result.tagAccount
+        ? {
+            openingMinor: result.tagAccount.openingMinor,
+            topUpsMinor: result.tagAccount.topUpsMinor,
+            usageMinor: result.tagAccount.usageMinor,
+            closingMinor: result.tagAccount.closingMinor,
+          }
+        : null
+      : roll;
+  const show = (minor: number | undefined) => (tag && minor != null ? fmtTollMinor(minor) : '—');
 
   const driverRows = useMemo(
     () =>
@@ -65,19 +91,19 @@ export function TollV2SummaryPortal({
         <dl className="mt-2 space-y-1 text-sm tabular-nums">
           <div className="flex justify-between gap-2">
             <dt className="text-[#47464c]">Opening</dt>
-            <dd className="font-medium text-[#0b1c30]">{fmtTollMinor(tag?.openingMinor ?? 0)}</dd>
+            <dd className="font-medium text-[#0b1c30]" data-testid="toll-tag-opening">{show(tag?.openingMinor)}</dd>
           </div>
           <div className="flex justify-between gap-2">
             <dt className="text-[#47464c]">+ Top-ups</dt>
-            <dd className="font-medium text-[#0b1c30]">{fmtTollMinor(tag?.topUpsMinor ?? 0)}</dd>
+            <dd className="font-medium text-[#0b1c30]">{show(tag?.topUpsMinor)}</dd>
           </div>
           <div className="flex justify-between gap-2">
             <dt className="text-[#47464c]">− Usage</dt>
-            <dd className="font-medium text-[#0b1c30]">{fmtTollMinor(tag?.usageMinor ?? 0)}</dd>
+            <dd className="font-medium text-[#0b1c30]">{show(tag?.usageMinor)}</dd>
           </div>
           <div className="flex justify-between gap-2 border-t border-[#eff4ff] pt-2">
             <dt className="font-medium text-[#0b1c30]">= Closing</dt>
-            <dd className="font-semibold text-[#0b1c30]">{fmtTollMinor(tag?.closingMinor ?? 0)}</dd>
+            <dd className="font-semibold text-[#0b1c30]" data-testid="toll-tag-closing">{show(tag?.closingMinor)}</dd>
           </div>
         </dl>
         <TollV2SecondaryButton className="mt-4 w-full" type="button" onClick={onGoToTagAccount}>

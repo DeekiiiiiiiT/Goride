@@ -28,6 +28,8 @@ export function useReconApprovals() {
   return {
     items: query.data?.items ?? [],
     me: query.data?.me ?? null,
+    /** WRA-46: the company owner approves their own close / reopen without a reason. */
+    isCompanyOwner: query.data?.isCompanyOwner === true,
     /** If the list did not load, assume someone else can approve rather than hide the choice. */
     otherApprovers: query.data?.otherApprovers ?? 1,
     canApprove: can('recon.approve' as never),

@@ -2359,7 +2359,8 @@ export function registerReconRoutes(app: Hono) {
         // WRA-32: "Send for approval" is hidden when nobody else can approve.
         const me = actorFromContext(c);
         const otherApprovers = await loadOtherApproverCount(orgId, me).catch(() => 1);
-        return c.json({ success: true, items, me, otherApprovers });
+        // WRA-46: the company owner self-approves without a reason box.
+        return c.json({ success: true, items, me, otherApprovers, isCompanyOwner: !!me && String(me) === String(orgId) });
       } catch (e) {
         return safeErrorResponse(c, e, "recon-approval-list");
       }

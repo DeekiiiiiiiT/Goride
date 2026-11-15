@@ -2,6 +2,15 @@ import { Button } from '../../ui/button';
 import { FuelWeekMoneyStrip } from './FuelWeekMoneyStrip';
 import type { FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
 
+/** "15 Nov 2026, 9:41 AM" in the fleet's Jamaica clock — never "11/15/2026, 9:41:29 AM". */
+export function formatLockedAt(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'on the server';
+  const day = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Jamaica' });
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Jamaica' });
+  return `${day}, ${time}`;
+}
+
 /** Read-only receipt once the week in the database is locked. No week engine. */
 export function FuelWeekLockedReceipt({
   period,
@@ -27,9 +36,8 @@ export function FuelWeekLockedReceipt({
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Locked</p>
         <h2 className="mt-1 text-lg font-bold text-slate-900">{period.label}</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Locked {period.lockedAt ? new Date(period.lockedAt).toLocaleString() : 'on the server'}
-          {period.version ? ` · version ${period.version}` : ''}
+        <p className="mt-1 text-sm text-slate-600" data-testid="fuel-locked-at">
+          Locked {period.lockedAt ? formatLockedAt(period.lockedAt) : 'on the server'}
         </p>
         <div className="mt-4">
           <FuelWeekMoneyStrip
@@ -45,16 +53,6 @@ export function FuelWeekLockedReceipt({
         <p className="mt-3 text-sm text-slate-600">
           Reopening this week reverses the posted fuel lines and asks for a reason.
         </p>
-        {period.closeReceipt?.statementIds?.length ? (
-          <p className="mt-3 text-sm text-slate-700">
-            Statement {period.closeReceipt.statementIds.join(', ')}
-          </p>
-        ) : null}
-        {period.closeReceipt?.ledgerEventIds?.length ? (
-          <p className="mt-1 text-sm text-slate-700">
-            Posted lines {period.closeReceipt.ledgerEventIds.join(', ')}
-          </p>
-        ) : null}
         {period.fuelSealError ? (
           <p className="mt-3 text-sm text-amber-800">
             The statement did not finish posting. {period.fuelSealError}

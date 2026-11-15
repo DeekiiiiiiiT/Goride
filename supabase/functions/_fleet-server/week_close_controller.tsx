@@ -207,6 +207,12 @@ app.post(`${BASE}/acknowledge-cash-source`, requireAnyPermission("recon.approve"
   }
 });
 
+/** WRA-46: the company owner (their user id is the organization id) approves without a reason. */
+export function isCompanyOwner(user: { userId?: string | null } | null | undefined, org: string): boolean {
+  return !!user?.userId && String(user.userId) === String(org);
+}
+export const OWNER_SELF_APPROVED_REASON = "Self-approved by the company owner";
+
 // ── POST /week-close ────────────────────────────────────────────────────────
 app.post(BASE, requireAnyPermission("recon.approve", "transactions.edit"), async (c) => {
   try {
@@ -227,8 +233,12 @@ app.post(BASE, requireAnyPermission("recon.approve", "transactions.edit"), async
     }
     // WRA-32: a direct Close is an approver approving their own close — it needs a reason
     // (same rule as the screen's "Approve it myself"). Approved requests do not come through here.
+    // WRA-46: the company owner skips the reason; the close is still logged as self-approved.
     if (String(body.reason || "").trim().length < 8) {
-      return c.json({ error: "REASON_REQUIRED", message: "Enter a reason (at least 8 characters) to close the week yourself" }, 400);
+      if (!isCompanyOwner(user, org)) {
+        return c.json({ error: "REASON_REQUIRED", message: "Enter a reason (at least 8 characters) to close the week yourself" }, 400);
+      }
+      body.reason = OWNER_SELF_APPROVED_REASON;
     }
     const override = String(body.earlierWeekOverrideReason || "").trim();
     if (override) {
@@ -393,7 +403,8 @@ app.post(`${BASE}/reopen`, requireAnyPermission("recon.approve", "transactions.e
     if (!WEEK_RE.test(weekKey)) {
       return c.json({ error: "weekKey (YYYY-MM-DD) is required" }, 400);
     }
-    const reason = String(body.reason || "").trim();
+    // WRA-46: the company owner skips the reason (logged as self-approved by the owner).
+    const reason = String(body.reason || "").trim() || (isCompanyOwner(user, org) ? OWNER_SELF_APPROVED_REASON : "");
     if (!reason) {
       return c.json({ error: "REASON_REQUIRED", message: "A reopen reason is required" }, 400);
     }

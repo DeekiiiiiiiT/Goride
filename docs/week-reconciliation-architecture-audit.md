@@ -14,7 +14,7 @@
 - Owner files: `C:\Users\deeki\Documents\Business\Roam\Reports\Toll Tag\Usage\2026`, `...\Toll Tag\Top Up\2026`, `...\Reports\RideShare Trips\Uber\2026\<week>`. The "Oct 19" and "Oct 26" top-up files hold the **same** top-up (EAA3FBCCE3, 27 Oct); the 10 Nov top-up sits in the "Nov 2 - Nov 8" file.
 
 **Per week, the steps that need Claude:**
-- Step 5 Fuel: if Finalize sits "queued" (WRA-56), run `select private.invoke_fuel_period_job_sweep();` — a second time if the job stays "running" at step `rebuild` (the 5 s pg_net timeout cuts the call).
+- Step 5 Fuel: Finalize now runs its job straight away (WRA-56). Only if a job still sits "queued" / "running" for minutes, run `select private.invoke_fuel_period_job_sweep();`.
 - Step 7: check each driver's number in live data before Pay / Collect (tier from the driver's earnings policy — Kenny = High Performer, 35% once the month passes J$375,001; D4 counts a month-straddling week into the month it starts in; tips go to the fleet when the J$100,000 weekly quota is missed).
 - Stop-to-stop gaps of a few km left after WRA-55 are Uber GPS en-route km reading a few % over the odometer (band 3%) — accept them.
 
@@ -28,14 +28,13 @@ Close the weeks above in order inside Week Reconciliation. At the same time the 
 
 ## Step B — Open fixes (after the real weeks)
 
+Fixed 15 Nov before the real weeks (owner's pick, they hit every week): WRA-56 fuel finalize runs its job in the request (`runFuelJobInBackground`), WRA-57 Tolls box shows step 4's roll, WRA-46 company owner self-approves Close / Reopen with no reason (`isCompanyOwner` = user id is the org id), every JMD amount prints "J$" (`formatJMD`; the browser printed en-JM JMD as "$"), Settlement week dates and the locked fuel date in plain words.
+
 | # | What | Fix |
 |---|---|---|
-| WRA-56 | Finalize fuel queues a `fuel_period_job` but `kickFuelJobProcessor`'s HTTP self-call never reaches `/fuel/period-jobs/process`; the job waits for the hourly sweep (:17) and meanwhile compute/ensure answer 409 → "This week changed" + "Couldn't load this week". | Run the job inside the finalize request (`EdgeRuntime.waitUntil(processJobRow(job))`); the page polls the job. |
-| WRA-57 | Tolls step right column "Tag account" box sums uploaded top-ups − usage from zero (`20261113031959_toll_v2_carry_forward.sql` tagAccount) and ignores the step-4 anchor (28 Sep showed −J$595 / J$2,650 instead of 5,969 / 9,214). | Show step 4's roll (`tagAccountRollFor`) in that box. |
-| WRA-46 | Owner is asked for a reason on self-approve (`ReconApprovalDialog.tsx` + server Close/Reopen 8-character rule). | The company owner skips the reason box; still logged Self-approved; staff unchanged. |
 | WRA-47 | Step 6 "Activity vs trips" shows Uber hours only; Roam app went_online / job events (`driver_activity_logic.ts`) unused. | Add Roam hours to the card. |
 | WRA-49 | Fuel step on a week locked before the floor rule shows "Numbers don't balance" (`FuelWeekMoneyStrip.tsx` splitTie only accepts company + driver + leakage = total). | Also accept company + driver = total. |
-| Display | Settlement preview `$` not `J$` + raw dates; Fuel Money Check `$`; Close History raw "lane change:POST /fleet-fuel/…" lines (open weeks); Tolls on an empty week "0 of 0 · 0% completed". | Plain J$, plain dates, plain words, empty week reads done. |
+| Display | Close History raw "lane change:POST /fleet-fuel/…" lines (open weeks); Tolls on an empty week "0 of 0 · 0% completed". | Plain words; empty week reads done. |
 | Wording | Settle from balance (step 7) says "No open week the fleet owes" when later weeks the fleet owes aren't settled yet. | "Later weeks the fleet owes aren't settled yet — close them first, or Collect". |
 | CI | "Dominion Stitch fidelity" fails `S20 75% labels — packages/platform-ops-ui/src/fleet-customer/GasCardsPage.tsx` (Statement import wording, 16ac8812). | Fix the labels to match the S20 screen. |
 | Tests | Done-tests 5, 6, 9t, 13 still use the old toll import (`importTolls` in `e2e/helpers/weekReconDoneTest.ts`); test 6 flagged fill shows Clear too early; `fuel/periods/ensure` answered 500 twice in one run (likely a create race). | Re-point at `/toll/v2/import`, then `pnpm test:week-recon` → all green. |

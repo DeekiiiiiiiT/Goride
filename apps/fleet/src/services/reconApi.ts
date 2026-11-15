@@ -779,13 +779,13 @@ export type ReconApprovalItem = {
   status: 'pending_approval' | 'stale';
 };
 
-export async function fetchApprovals(): Promise<{ items: ReconApprovalItem[]; me: string | null; otherApprovers: number }> {
-  const body = await reconJson<{ items?: ReconApprovalItem[]; me?: string; otherApprovers?: number }>(
+export async function fetchApprovals(): Promise<{ items: ReconApprovalItem[]; me: string | null; otherApprovers: number; isCompanyOwner: boolean }> {
+  const body = await reconJson<{ items?: ReconApprovalItem[]; me?: string; otherApprovers?: number; isCompanyOwner?: boolean }>(
     '/approvals',
     undefined,
     'Could not load approvals',
   );
-  return { items: body.items ?? [], me: body.me ?? null, otherApprovers: Number(body.otherApprovers ?? 1) };
+  return { items: body.items ?? [], me: body.me ?? null, otherApprovers: Number(body.otherApprovers ?? 1), isCompanyOwner: body.isCompanyOwner === true };
 }
 
 export async function sendForApproval(input: {
