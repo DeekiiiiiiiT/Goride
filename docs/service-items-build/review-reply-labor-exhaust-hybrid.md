@@ -1,4 +1,26 @@
-# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 7, 15 Nov 2026)
+# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 9, 15 Nov 2026)
+
+## Rev 9: the EV file
+
+`ev-suggestions.md` + `live/ev-add.sql`, tested on live with everything undone afterwards: **11 jobs** (10 in Hybrid & electric, Electric A/C Compressor in HVAC), 7 part jobs + 4 services, **3 new supplies**, **17 supply links**, **1 part link** (Charging Port on Charging Port Inspection & Cleaning). Not run yet.
+
+The three things you said you'd look for:
+1. **Battery thermal-management coolant:** decided as its own supply, **EV Battery Coolant** (litre). Usually on Battery Thermal Management Coolant Service and Battery Coolant Pump; Sometimes "if liquid-cooled" on the On-Board Charger, DC-DC Converter and Traction Motor. It's kept separate from Hybrid Inverter Coolant because battery and inverter loops don't always use the same coolant.
+2. **HV cable / insulation-resistance inspection:** in, as a labor-only service covering hybrids and EVs, with HV Cable / Connector Replacement as its repair job.
+3. **`part_source`: not shipped.** Status: still 1 saved item row in total, so no real data lost yet. Plan: its own small round (column on `maintenance_work_order_line_item`, the save function, Fleet sending it), done before any Exhaust / Hybrid / EV part item is used on a real service. This is the next build item after the EV SQL runs.
+
+Also in the file:
+- **POE Compressor Oil (Non-Conductive)** on the new Electric A/C Compressor job: PAG oil in a high-voltage compressor is a safety fault, so it gets its own supply.
+- **EV Reduction Gear Oil** for the single-speed gearbox, with its own oil-change service.
+- **No grease on charging pins or HV connectors**, written into those notes.
+- **Left out, with reasons:** software / ADAS (later Battery & electrical file), A/C refrigerant recharge (needs its own HVAC file; no recharge job exists for any car), battery heater / chiller (logged under the coolant service for now), PPE.
+- **Find parts backlog:** 22 + 7 = 29. **HV lockout:** owner Deeki T, pending design, and it moves up now that the EV jobs add more HV work.
+
+## Rev 8: deployed, last check passed
+
+- **Tick fix deployed:** commit 367dcb07 pushed to main; the Fleet deploy (Vercel) succeeded. CI's one red step is "Dominion Stitch fidelity", which was already failing on the commit before this one (another chat's work) and doesn't touch these files.
+- **Part type logged as its own job: PASSED** (owner, 15 Nov, nothing saved). Exhaust Clamp alone → step 3 shows Action Replace, Quantity, Unit price, Labor (blank), Labor hours/rate, Brand, Part number, Link part ("No compatible parts" — research backlog), and Items used "No standard items suggested…". No phantom labor.
+- **`hybrid-add.sql` ran on live after the deploy** (15 Nov) and was checked there: group "Hybrid & electric", 7 jobs, 10 supply links, 1 part link, Hybrid Inverter Coolant supply active. Hybrid batch closed.
 
 ## Rev 7: reload badge, part_source, sequencing
 

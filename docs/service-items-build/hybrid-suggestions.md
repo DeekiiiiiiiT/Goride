@@ -4,7 +4,7 @@ A new top-level group, **Hybrid & electric**, with **7 hybrid jobs** (4 part job
 
 **Usually** = used almost every time; **Sometimes** = only when needed. A blank amount means it depends on the car. Nothing is ticked for you in Fleet.
 
-Run `docs/service-items-build/live/hybrid-add.sql` after you're happy. It was tested on the live database with everything undone afterwards: 7 jobs, 10 supply links, 1 part link.
+✅ **Ran on live 15 Nov** (after the tick-fix deploy), checked by Claude: 7 jobs, 10 supply links, 1 part link, new coolant supply active. `docs/service-items-build/live/hybrid-add.sql`. It was tested on the live database with everything undone afterwards: 7 jobs, 10 supply links, 1 part link.
 
 ## Decision: inverter coolant gets its own supply
 
