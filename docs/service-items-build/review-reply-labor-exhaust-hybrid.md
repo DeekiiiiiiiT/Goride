@@ -1,4 +1,16 @@
-# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 13, 15 Nov 2026)
+# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 14, 15 Nov 2026)
+
+## Rev 14: double-log rule on live jobs, HV backfill, screen gates
+
+1. **Double-log rule on the live jobs: wider than the three pairs you named.** I pulled the list from live (every active job offering Engine Oil, Coolant / Antifreeze, Brake Fluid or Transmission Fluid): **17 part / repair jobs** that refill a fluid (Brake caliper, Brake hose, Master cylinder, Wheel cylinder, Head Gasket, Oil Pan Gasket, Timing Chain, Timing Belt, Thermostat, Water pump, Piston Ring / Piston / Rod Bearing / Main Bearing Replacement, Valve Stem Seals, Engine Overhaul, Walnut Blasting) and **7 fluid services** (Brake Fluid, Engine oil ×2, Coolant, Radiator Coolant Flush, Fluids (Washer / Coolant), Transmission Fluid). `live/double-log-notes.sql` adds the note to all 24, text only. **Fluids (Washer / Coolant)** is a fluid service, not a part job, so it gets the fluid-service wording. **Oil filter** is left out on purpose: it goes *with* an oil change, and its link note already says "when the oil is not logged as its own job". **Your snapshot idea is built in:** it snapshots every catalogue row first, and the check must show `changed_other = 0`, 17 and 7. Not run yet.
+2. **HV backfill:** on the Open list. Owner Deeki T, target = checklist ship date + 7 days, 0 services to backfill today.
+3. **Screen-level gates:** on the Open list as a known future requirement (HV banner, part items locked) before a second person logs services.
+4. **Charging Port part-item check:** the owner does it next, before the next batch.
+5. **"Usually one of these" examples corrected:** you're right, Brake Fluid is a single supply like Coolant. The Open list now says the refrigerants are the only live instance, and oil / brake fluid / coolant become instances only if they're split.
+6. **Drain Plug Washer:** the EV follow-up now says the Fluids / Drivetrain file adds it to all drain-and-fill jobs in one SQL, naming `ev_reduction_gear_oil` explicitly.
+7. **Found on the way:** "Engine oil" exists twice (`oil` in Engine, `engine_oil_part` in Fluids). On the Open list: keep one and retire the other in the Fluids / Drivetrain file, after checking which one past services use.
+
+**Order from here, as you set it:** `part_source` → double-log notes SQL → Charging Port check → Steering & Suspension (with the three checks you named: declared supplies with SUP codes, "don't log both" on part-item / inspection pairs, and the double-log note on every fluid refill).
 
 ## Rev 13: EV batch live; your five documentation points
 

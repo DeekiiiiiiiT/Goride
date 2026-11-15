@@ -89,7 +89,7 @@ A drain-plug crush washer comes in sizes, so it's a **part type**, not a supply,
 
 ## Follow-ups this file leaves
 
-- **Drain Plug Washer → Reduction Gear Oil Change.** When the Fluids / Drivetrain file creates Drain Plug Washer, add it to Reduction Gear Oil Change too. It's the one EV job that needs it and isn't in that file's scope.
+- **Drain Plug Washer → Reduction Gear Oil Change.** The Fluids / Drivetrain file creates Drain Plug Washer and adds it to **all** drain-and-fill jobs in the same SQL, Reduction Gear Oil Change included by name (code `ev_reduction_gear_oil`), so it isn't forgotten.
 - **2-minute check now that it's live** (nothing saved; HV rule above means don't finish it on a real car): Log service → Hybrid & electric → **Charging Port Inspection & Cleaning** → step 3 → **Charging Port** shows as a part item → tick it → **Pick a part** → Cancel. Proves the part-item path on this batch's own job pair.
 
 ## Conventions this file sets (for every future file)
