@@ -1,6 +1,6 @@
 # Service items ("May need") — build plan
 
-**Rev 13 · 14 Nov 2026.** Database, server, Dominion and Fleet screens are **done and checked** (UI2 incl. the phone screen; Fleet test 5/5). `pnpm test:service-items` runs everything: **14/14 passed**. Next: `/code-review`. B1 (a failed Business Finance write didn’t stop completion) is **fixed in Round S4 and proven** (section 8). **Nothing is committed yet** (all on branch `parts-auto-match`).
+**Rev 13 · 14 Nov 2026.** Database, server, Dominion and Fleet screens are **done and checked** (UI2 incl. the phone screen; Fleet test 5/5). `pnpm test:service-items` runs everything: **14/14 passed**. Next: `/code-review`. B1 (a failed Business Finance write didn’t stop completion) is **fixed in Round S4 and proven** (section 8). **Committed 14 Nov as `9b691c21` on `parts-auto-match` (not pushed).**
 
 **Goal:** each job in Dominion lists the **items it may need** (parts and shop supplies). When someone ticks that job in Roam Fleet → Log service, those items show up so they can tick what was actually used. The job and its items are saved together, and the items count in the bill.
 
@@ -20,7 +20,7 @@ Example: **Throttle Body Cleaning** may need **Throttle body cleaner** (usually 
 1. ~~Finish UI1 (Dominion screens)~~ — **done 14 Nov** (section 8).
 2. **Offer the owner a checkpoint commit** of everything so far (only when the owner says yes; no push).
 3. ~~UI2 (Fleet screens)~~ — **done 14 Nov** (section 8). B1 fixed in S4 (`docs/service-items-build/cursor-S4.md`).
-4. **T1:** ~~`pnpm test:service-items`~~ — **done 14 Nov, 14/14** (`scripts/run-service-items-tests.mjs`; Docker open; uses the test copy if it's running, else starts and stops it; `--no-e2e` skips the click-throughs). `/code-review` run 14 Nov: 10 findings, checked by Claude (7 real, 1 not reachable today, 1 mostly by design, 1 with no live caller yet) → fixes in Round S5, prompt `docs/service-items-build/cursor-S5.md`. **S5 done 14 Nov and checked by Claude**: all 10 fixes read in the code; one regression fixed by Claude (S5 removed the version re-read before an edit's "Finish saving" retry, so that retry would hit "This service was changed" — now it finishes the saved work order directly, and driver-request complete / dismiss pass the work order id + version from the requests list). Full `pnpm test:service-items` **14/14 passed** incl. click-throughs. **T1 closed.** Next: checkpoint commit (owner says yes), then L.
+4. **T1:** ~~`pnpm test:service-items`~~ — **done 14 Nov, 14/14** (`scripts/run-service-items-tests.mjs`; Docker open; uses the test copy if it's running, else starts and stops it; `--no-e2e` skips the click-throughs). `/code-review` run 14 Nov: 10 findings, checked by Claude (7 real, 1 not reachable today, 1 mostly by design, 1 with no live caller yet) → fixes in Round S5, prompt `docs/service-items-build/cursor-S5.md`. **S5 done 14 Nov and checked by Claude**: all 10 fixes read in the code; one regression fixed by Claude (S5 removed the version re-read before an edit's "Finish saving" retry, so that retry would hit "This service was changed" — now it finishes the saved work order directly, and driver-request complete / dismiss pass the work order id + version from the requests list). Full `pnpm test:service-items` **14/14 passed** incl. click-throughs. **T1 closed.** Checkpoint commit `9b691c21` on `parts-auto-match` (14 Nov, not pushed). Next: L (go live).
 5. **L (go live):** section 7.
 6. **C (close out):** update this file and memory, then commit when the owner says.
 
@@ -334,14 +334,16 @@ Repo search: `reverseAndDeleteWorkOrder` and `syncWorkOrderLines` must find noth
 
 ## 7. Go live (round L — the owner runs every live step)
 
-1. **Run the migrations** on the live database in this order, each followed by its `schema_migrations` logbook line:
-   1. `20261113154942_service_items_catalogue`
-   2. `20261113162605_service_items_drop_old_supply_link`
-   3. `20261113171047_service_items_logging_core`
-   4. `20261113184641_service_items_completion`
+1. **Run the migrations** on the live database (Supabase SQL editor), one file at a time, from `docs/service-items-build/live/` (each file = the migration + its `schema_migrations` logbook line):
+   1. `L1-service_items_catalogue.sql`
+   2. `L2-service_items_logging_core.sql`
+   3. `L3-service_items_completion.sql`
+
+   **Not** the supply-link drop yet: the live code still reads `component_related_supply` (Find parts) until the deploy. (Order corrected 14 Nov.)
 
    `20261113162537_toll_v2_screen_reads` belongs to the toll work, not this plan.
-2. **Deploy** the edge functions (`fleet-ops`, `fleet-core`) and the Fleet, Dominion and Driver apps, with `service_items` off for every fleet.
+2. **Deploy** = push commit `9b691c21` to `main`. That runs `deploy-supabase-edge.yml` (all changed edge functions) and `vercel-path-deploy.yml` (Fleet, Dominion web apps). `service_items` stays off (no flag row = off). The Driver app change (save key) ships with its next store build; older builds keep working.
+   Then run `L4-service_items_drop_old_supply_link.sql`.
 
    These changes take effect at deploy and **can't** be undone by the switch:
    - edits need a version;
