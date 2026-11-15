@@ -341,6 +341,8 @@ export type TagAccountRollForwardPayload = {
   topUpsMinor: number;
   tagUsageMinor: number;
   statementClosingMinor: number | null;
+  /** WRA-48: the saved closing is the worked-out balance the user confirmed (not typed). */
+  statementConfirmedFromExpected?: boolean;
   expectedClosingMinor: number;
   varianceMinor: number | null;
   ties: boolean;

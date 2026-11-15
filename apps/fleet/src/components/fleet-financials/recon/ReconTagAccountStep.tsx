@@ -45,6 +45,8 @@ export function ReconTagAccountStep({
   const weekKey = run.run.weekKey;
   const [statementInput, setStatementInput] = useState('');
   const [busy, setBusy] = useState(false);
+  /** WRA-48: show the typed-balance box instead of the Confirm card. */
+  const [editing, setEditing] = useState(false);
 
   const rollQuery = useQuery({
     queryKey: ['recon-tag-account', line, weekKey],
@@ -81,15 +83,16 @@ export function ReconTagAccountStep({
     }
   }, [rollQuery.data?.statementClosingMinor, statementInput]);
 
-  const saveStatement = async () => {
-    if (statementMinor == null) return;
+  const postClosing = async (closingMinor: number, confirmedExpected: boolean) => {
     setBusy(true);
     try {
       await postRunEvent(line, weekKey, {
         kind: 'tag_account_statement_closing',
         expectedVersion: run.run.version,
-        payload: { statementClosingMinor: statementMinor },
+        payload: { statementClosingMinor: closingMinor, ...(confirmedExpected ? { confirmedExpected: true } : {}) },
       });
+      setStatementInput(String(fromMoneyMinor(closingMinor as import('@roam/finance-core').MoneyMinor)));
+      setEditing(false);
       await rollQuery.refetch();
       onRefresh();
     } catch (err) {
@@ -97,6 +100,11 @@ export function ReconTagAccountStep({
     } finally {
       setBusy(false);
     }
+  };
+
+  const saveStatement = async () => {
+    if (statementMinor == null) return;
+    await postClosing(statementMinor, false);
   };
 
   const varianceAction = async (action: 'missing_topup' | 'provider_fee' | 'investigate') => {
@@ -142,6 +150,18 @@ export function ReconTagAccountStep({
   const data = rollQuery.data;
   const tied = liveRoll.ties;
   const hasStatement = statementMinor != null;
+  // WRA-48: with an earlier closing, the app works the balance out itself
+  // (opening + top-ups − usage) and the user confirms it against TransJam.
+  const hasPrior = data.priorWeekKey != null;
+  const workedOutMinor = computeTagAccountRollForward({
+    openingMinor: data.openingMinor,
+    topUpsMinor: data.topUpsMinor,
+    tagUsageMinor: data.tagUsageMinor,
+  }).expectedClosingMinor;
+  const savedMinor = data.statementClosingMinor;
+  const showConfirmCard = hasPrior && !editing && (savedMinor == null || data.ties);
+  const staleConfirm =
+    hasPrior && savedMinor != null && !data.ties && data.statementConfirmedFromExpected === true;
 
   return (
     <div className="space-y-4">
@@ -182,6 +202,63 @@ export function ReconTagAccountStep({
         </div>
       </dl>
 
+      {showConfirmCard ? (
+        savedMinor == null ? (
+          <div className="space-y-3 rounded-xl border border-[#c7d2fe] bg-[#eef2ff] p-4" data-testid="tag-confirm-card">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Balance at the end of this week</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">J${fmtMajor(workedOutMinor)}</p>
+              <p className="mt-1 text-sm text-slate-600">
+                Worked out from last week&apos;s closing, this week&apos;s top-ups and tolls. Check it matches your
+                TransJam balance, then confirm.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                disabled={busy}
+                onClick={() => void postClosing(workedOutMinor, true)}
+                data-testid="tag-confirm-balance"
+              >
+                {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
+                Confirm J${fmtMajor(workedOutMinor)}
+              </Button>
+              <Button type="button" variant="outline" disabled={busy} onClick={() => setEditing(true)}>
+                TransJam shows a different balance
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4"
+            data-testid="tag-confirmed-card"
+          >
+            <p className="flex items-center gap-2 text-sm text-emerald-900">
+              <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
+              <span>
+                Closing balance <strong className="tabular-nums">J${fmtMajor(savedMinor)}</strong> saved — it ties.
+              </span>
+            </p>
+            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => setEditing(true)}>
+              Change balance
+            </Button>
+          </div>
+        )
+      ) : null}
+
+      {staleConfirm && !editing ? (
+        <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900" data-testid="tag-stale-confirm">
+          <p>
+            The toll files changed after you confirmed J${fmtMajor(savedMinor ?? 0)}. The balance now works out to{' '}
+            <strong className="tabular-nums">J${fmtMajor(workedOutMinor)}</strong>.
+          </p>
+          <Button type="button" disabled={busy} onClick={() => void postClosing(workedOutMinor, true)}>
+            Confirm J${fmtMajor(workedOutMinor)}
+          </Button>
+        </div>
+      ) : null}
+
+      {showConfirmCard ? null : (
       <div className="space-y-2 rounded-xl border border-slate-200 p-4">
         <Label htmlFor="tag-statement-closing">Statement closing balance</Label>
         <div className="flex flex-wrap gap-2">
@@ -220,9 +297,15 @@ export function ReconTagAccountStep({
             </span>
           </div>
         ) : null}
+        {hasPrior && editing ? (
+          <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => setEditing(false)}>
+            Back to the worked-out balance
+          </Button>
+        ) : null}
       </div>
+      )}
 
-      {hasStatement && !tied ? (
+      {!showConfirmCard && hasStatement && !tied ? (
         <div className="flex flex-wrap gap-2">
           <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void varianceAction('missing_topup')}>
             Missing top-up

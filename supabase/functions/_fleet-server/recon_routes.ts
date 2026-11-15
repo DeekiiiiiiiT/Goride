@@ -1227,7 +1227,8 @@ async function loadExternalQueue(): Promise<ExternalQueueItem[]> {
 async function tagAccountRollFor(orgId: string, weekKey: string, runId: string | null) {
   const prior = await loadPriorTagClosingMinor(orgId, weekKey);
   const { topUpsMinor, tagUsageMinor } = await sumTagLedgerWeekMinor(orgId, weekKey);
-  const statementClosingMinor = runId ? await loadStoredStatementClosingMinor(runId) : null;
+  const stored = runId ? await loadStoredStatementClosing(runId) : null;
+  const statementClosingMinor = stored?.minor ?? null;
   const openingFromStatement = prior.priorWeekKey === null && statementClosingMinor != null;
   const openingMinor = openingFromStatement
     ? Math.round(Number(statementClosingMinor)) - topUpsMinor + tagUsageMinor
@@ -1240,6 +1241,8 @@ async function tagAccountRollFor(orgId: string, weekKey: string, runId: string |
     topUpsMinor,
     tagUsageMinor,
     statementClosingMinor,
+    /** WRA-48: the saved closing was the worked-out balance the user confirmed. */
+    statementConfirmedFromExpected: stored?.confirmedExpected === true,
     ...roll,
   };
 }
@@ -1316,7 +1319,9 @@ async function sumTagLedgerWeekMinor(
   return { topUpsMinor, tagUsageMinor };
 }
 
-async function loadStoredStatementClosingMinor(runId: string): Promise<number | null> {
+async function loadStoredStatementClosing(
+  runId: string,
+): Promise<{ minor: number; confirmedExpected: boolean } | null> {
   const { data } = await reconDb()
     .from("run_events")
     .select("payload")
@@ -1324,10 +1329,13 @@ async function loadStoredStatementClosingMinor(runId: string): Promise<number | 
     .eq("kind", "tag_account_statement_closing")
     .order("at", { ascending: false })
     .limit(1);
-  const payload = data?.[0]?.payload as { statementClosingMinor?: number } | undefined;
+  const payload = data?.[0]?.payload as
+    | { statementClosingMinor?: number; confirmedExpected?: boolean }
+    | undefined;
   if (payload?.statementClosingMinor == null) return null;
   const n = Number(payload.statementClosingMinor);
-  return Number.isFinite(n) ? Math.round(n) : null;
+  if (!Number.isFinite(n)) return null;
+  return { minor: Math.round(n), confirmedExpected: payload.confirmedExpected === true };
 }
 
 export function registerReconRoutes(app: Hono) {
