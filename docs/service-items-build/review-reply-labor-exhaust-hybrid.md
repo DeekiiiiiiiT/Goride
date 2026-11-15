@@ -1,4 +1,14 @@
-# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 15, 15 Nov 2026)
+# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 16, 15 Nov 2026)
+
+## Rev 16: dry run, NULLs, per-job wording
+
+1. **NULL descriptions: already handled, and checked.** Both updates use `coalesce(description, '') || ' …'`, and every check reads `coalesce(description, '')`, so a NULL can't stay NULL or slip past a `NOT LIKE`. Live check (15 Nov): **all 28 target codes exist, and 0 have a NULL description.** The pre-save check also counts the targets found (must be 28) and treats a NULL description on a target as not appended.
+2. **Dry run: done your way.** New file `live/double-log-notes-DRYRUN.sql`: the same SQL, with the save replaced by an always-stop at the very end. It runs every update and every check, then stops with **"DRY RUN OK, nothing saved: 28 found, 0 not appended, 0 missing, 0 other rows changed, refill notes=20, fluid notes=8"**, and the database undoes it all. The owner runs it in the SQL editor; then the real file. If the owner's dry run can't happen, the Open list records "correct by design, unproven by execution".
+3. **Checks are ordered and name the jobs:** targets found (28) → **not_appended on <codes>** → no note on <codes> → changed_other on <codes> → totals. Each failure stops with "Stopped, nothing saved: <check> on <job codes>". It's a RAISE inside the transaction, so the SQL editor shows it as the run's error.
+4. **Wording is chosen per job code, not by is_part.** `engine_oil_part` is is_part = true, but it's listed as `kind = 'fluid'` in the SQL's target table, so it gets the fluid-service wording ("if a part that holds this fluid is replaced… log the fluid on that part's job instead"). Same for `oil`, `coolant_part`, `brake_fluid`, `fluids` and `transmission` (all is_part = true on live, all fluid services).
+5. **`engine_oil_part` in the meantime:** on the Open list. "Log oil changes on Engine oil (Engine group, `oil`), never the Fluids-group one; anything logged on `engine_oil_part` before retirement is moved to `oil` first."
+
+**This SQL's pattern** (snapshot → per-row append check → wrong-row check → named-job stop → dry-run copy) is the template for the Cooling / Transmission / Drivetrain double-log notes, and Steering & Suspension starts with the double-log notes in its first draft.
 
 ## Rev 15: double-log SQL Rev 2 (28 jobs, append-proof), Engine oil facts
 

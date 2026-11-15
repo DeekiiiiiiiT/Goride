@@ -20,8 +20,13 @@
 --                    'EV Battery Coolant','EV Reduction Gear Oil','Hybrid Inverter Coolant (Low-Conductivity)')
 --   GROUP BY j.code, j.name, j.is_part, j.description ORDER BY j.code;
 --
--- Checks (last query): changed_other = 0 (no other row touched), not_appended = 0 (every target still starts
+-- Checks run BEFORE saving and stop with "Stopped, nothing saved: <check> on <job codes>" if any fails:
+-- 28 targets found; not_appended (each target's new text starts with its old text); every target got its note;
+-- changed_other (no other row touched). Shown again after saving (last query): changed_other = 0, not_appended = 0 (every target still starts
 -- with its old text), refill_jobs_with_note = 20, fluid_services_with_note = 8.
+-- Wording is chosen per job CODE (dl_targets.kind), not by is_part: e.g. engine_oil_part is is_part = true but is a
+-- fluid service, so it gets the fluid-service wording. Checked 15 Nov: 0 of the 28 have a NULL description.
+-- DRY RUN FIRST: double-log-notes-DRYRUN.sql is this file with an always-stop at the end (nothing saved).
 
 BEGIN;
 
@@ -62,18 +67,33 @@ WHERE t.code = c.code AND t.kind = 'fluid'
 
 -- Safety: if any check is wrong, stop here. The error undoes EVERYTHING above, so nothing is saved.
 DO $chk$
-DECLARE other_n int; lost_n int; refill_n int; fluid_n int;
+DECLARE found_n int; lost text; missing text; other text; refill_n int; fluid_n int;
 BEGIN
-  SELECT count(*) INTO other_n FROM public.maintenance_service_categories c JOIN dl_before b ON b.id = c.id
+  -- every target found, by code (28)
+  SELECT count(*) INTO found_n FROM public.maintenance_service_categories c JOIN dl_targets t ON t.code = c.code;
+  -- not_appended: a target whose new text doesn't start with its old text, or got no note at all
+  SELECT string_agg(c.code, ', ') INTO lost FROM public.maintenance_service_categories c
+    JOIN dl_before b ON b.id = c.id JOIN dl_targets t ON t.code = c.code
+    WHERE c.description IS NULL OR position(b.d IN c.description) <> 1;
+  SELECT string_agg(c.code, ', ') INTO missing FROM public.maintenance_service_categories c JOIN dl_targets t ON t.code = c.code
+    WHERE (t.kind = 'refill' AND coalesce(c.description, '') NOT LIKE '%don''t also log a separate fluid service%')
+       OR (t.kind = 'fluid' AND coalesce(c.description, '') NOT LIKE '%log the fluid on that part''s job instead%');
+  -- changed_other: any non-target row whose description changed, or any row whose name / hint / status / is_part changed
+  SELECT string_agg(c.code, ', ') INTO other FROM public.maintenance_service_categories c JOIN dl_before b ON b.id = c.id
     WHERE (b.d <> coalesce(c.description, '') AND c.code NOT IN (SELECT code FROM dl_targets))
        OR b.other <> md5(coalesce(c.name, '') || coalesce(c.editor_hint, '') || coalesce(c.status, '') || coalesce(c.is_part::text, ''));
-  SELECT count(*) INTO lost_n FROM public.maintenance_service_categories c JOIN dl_before b ON b.id = c.id
-    JOIN dl_targets t ON t.code = c.code WHERE position(b.d IN coalesce(c.description, '')) <> 1;
   SELECT count(*) INTO refill_n FROM public.maintenance_service_categories WHERE description LIKE '%don''t also log a separate fluid service%';
   SELECT count(*) INTO fluid_n FROM public.maintenance_service_categories WHERE description LIKE '%log the fluid on that part''s job instead%';
-  IF other_n <> 0 OR lost_n <> 0 OR refill_n <> 20 OR fluid_n <> 8 THEN
-    RAISE EXCEPTION 'Stopped, nothing saved: changed_other=%, not_appended=%, refill=% (want 20), fluid=% (want 8)', other_n, lost_n, refill_n, fluid_n;
+  -- Order: the append check first (it's the main one), then missing notes, then wrong rows, then totals.
+  IF found_n <> 28 THEN RAISE EXCEPTION 'Stopped, nothing saved: found % of 28 target jobs', found_n; END IF;
+  IF lost IS NOT NULL THEN RAISE EXCEPTION 'Stopped, nothing saved: not_appended on %', lost; END IF;
+  IF missing IS NOT NULL THEN RAISE EXCEPTION 'Stopped, nothing saved: no note on %', missing; END IF;
+  IF other IS NOT NULL THEN RAISE EXCEPTION 'Stopped, nothing saved: changed_other on %', other; END IF;
+  IF refill_n <> 20 OR fluid_n <> 8 THEN
+    RAISE EXCEPTION 'Stopped, nothing saved: refill notes=% (want 20), fluid notes=% (want 8)', refill_n, fluid_n;
   END IF;
+  -- (double-log-notes-DRYRUN.sql has an always-stop on the next line; this real file does not.)
+  -- (real run: no stop here; COMMIT follows)
 END $chk$;
 
 COMMIT;
