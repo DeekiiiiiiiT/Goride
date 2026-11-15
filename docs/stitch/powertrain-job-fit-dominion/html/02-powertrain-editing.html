@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "secondary-container": "#d9e2fe",
+          "on-secondary-container": "#5b647c",
+          "secondary": "#555e75",
+          "on-primary-container": "#ced8ff",
+          "on-primary-fixed": "#00174b",
+          "surface-tint": "#0053db",
+          "outline-variant": "#c3c6d7",
+          "on-error": "#ffffff",
+          "error-container": "#ffdad6",
+          "on-surface": "#191b23",
+          "background": "#faf8ff",
+          "primary-fixed": "#dbe1ff",
+          "surface-container-highest": "#e1e2ec",
+          "on-tertiary-container": "#ffd196",
+          "on-secondary-fixed": "#121b2f",
+          "primary": "#003ea9",
+          "inverse-on-surface": "#eff0fb",
+          "on-surface-variant": "#434655",
+          "surface-bright": "#faf8ff",
+          "secondary-fixed": "#d9e2fe",
+          "inverse-surface": "#2e3038",
+          "surface-container-high": "#e7e7f2",
+          "tertiary-fixed-dim": "#fabb61",
+          "on-secondary": "#ffffff",
+          "outline": "#737686",
+          "tertiary-fixed": "#ffddb4",
+          "on-tertiary": "#ffffff",
+          "surface-container-lowest": "#ffffff",
+          "on-primary": "#ffffff",
+          "on-background": "#191b23",
+          "surface-container-low": "#f2f3fe",
+          "surface-container": "#ecedf8",
+          "inverse-primary": "#b4c5ff",
+          "primary-fixed-dim": "#b4c5ff",
+          "secondary-fixed-dim": "#bdc6e1",
+          "surface-variant": "#e1e2ec",
+          "tertiary": "#634000",
+          "on-error-container": "#93000a",
+          "on-tertiary-fixed-variant": "#633f00",
+          "error": "#ba1a1a",
+          "on-primary-fixed-variant": "#003ea8",
+          "on-tertiary-fixed": "#291800",
+          "tertiary-container": "#835500",
+          "surface": "#faf8ff",
+          "surface-dim": "#d8d9e4",
+          "primary-container": "#0153dc",
+          "on-secondary-fixed-variant": "#3e465d"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.25rem",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+        "spacing": {
+          "margin": "2rem",
+          "space-sm": "0.5rem",
+          "space-md": "1rem",
+          "space-xs": "0.25rem",
+          "space-xl": "2rem",
+          "space-lg": "1.5rem",
+          "gutter": "1.5rem"
+        },
+        "fontFamily": {
+          "headline-lg": [
+            "Inter"
+          ],
+          "body-lg": [
+            "Inter"
+          ],
+          "body-md": [
+            "Inter"
+          ],
+          "headline-sm": [
+            "Inter"
+          ],
+          "label-lg": [
+            "Inter"
+          ],
+          "label-md": [
+            "Inter"
+          ],
+          "display-lg": [
+            "Inter"
+          ],
+          "label-sm": [
+            "Inter"
+          ],
+          "body-sm": [
+            "Inter"
+          ]
+        },
+        "fontSize": {
+          "headline-lg": [
+            "24px",
+            {
+              "lineHeight": "32px",
+              "letterSpacing": "-0.015em",
+              "fontWeight": "600"
+            }
+          ],
+          "body-lg": [
+            "16px",
+            {
+              "lineHeight": "24px",
+              "letterSpacing": "-0.005em",
+              "fontWeight": "400"
+            }
+          ],
+          "body-md": [
+            "14px",
+            {
+              "lineHeight": "20px",
+              "letterSpacing": "0em",
+              "fontWeight": "400"
+            }
+          ],
+          "headline-sm": [
+            "18px",
+            {
+              "lineHeight": "26px",
+              "letterSpacing": "-0.01em",
+              "fontWeight": "600"
+            }
+          ],
+          "label-lg": [
+            "14px",
+            {
+              "lineHeight": "20px",
+              "letterSpacing": "0.005em",
+              "fontWeight": "500"
+            }
+          ],
+          "label-md": [
+            "12px",
+            {
+              "lineHeight": "16px",
+              "letterSpacing": "0.01em",
+              "fontWeight": "500"
+            }
+          ],
+          "display-lg": [
+            "32px",
+            {
+              "lineHeight": "40px",
+              "letterSpacing": "-0.02em",
+              "fontWeight": "600"
+            }
+          ],
+          "label-sm": [
+            "11px",
+            {
+              "lineHeight": "14px",
+              "letterSpacing": "0.03em",
+              "fontWeight": "600"
+            }
+          ],
+          "body-sm": [
+            "12px",
+            {
+              "lineHeight": "18px",
+              "letterSpacing": "0em",
+              "fontWeight": "400"
+            }
+          ]
+        }
+      },
+    },
+  }</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-[260px] bg-[#0d131f] text-slate-300 z-50 flex flex-col justify-between overflow-y-auto"><div class="flex flex-col"><div class="h-16 px-space-lg flex items-center gap-space-sm border-b border-slate-800/60"><div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center text-on-primary shadow-sm"><span class="material-symbols-outlined text-[18px]">directions_car</span></div><div class="flex flex-col"><span class="font-headline-sm text-headline-sm text-white tracking-tight leading-tight">Dominion</span><span class="font-label-sm text-label-sm text-slate-400 font-normal">Roam Admin Console</span></div></div><div class="py-space-md flex flex-col gap-space-md"><div class="px-space-md"><div class="px-space-sm py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-slate-500 font-semibold">Master Data</div><nav class="mt-space-xs flex flex-col gap-0.5" data-active-classes="bg-primary-container text-on-primary font-medium"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-white transition-colors font-body-sm text-body-sm" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span>Overview</a><a aria-current="page" class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg transition-colors bg-primary-container text-on-primary font-medium" data-path="vehicles" href="#"><span class="material-symbols-outlined text-[18px]">commute</span>Vehicles</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-white transition-colors font-body-sm text-body-sm" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">pin_drop</span>Places and Maps</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-white transition-colors font-body-sm text-body-sm" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span>Fuel</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-white transition-colors font-body-sm text-body-sm" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px]">toll</span>Tolls</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-white transition-colors font-body-sm text-body-sm" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span>Tax and Vendors</a></nav></div><div class="px-space-md"><div class="px-space-sm py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-slate-500 font-semibold">Engines</div><nav class="mt-space-xs flex flex-col gap-0.5" data-active-classes="bg-primary-container text-on-primary font-medium"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-white transition-colors font-body-sm text-body-sm" data-path="powertrain-specs" href="#"><span class="material-symbols-outlined text-[18px]">engineering</span>Powertrains</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-white transition-colors font-body-sm text-body-sm" data-path="electric-hv-systems" href="#"><span class="material-symbols-outlined text-[18px]">bolt</span>HV &amp; Battery</a></nav></div><div class="px-space-md"><div class="px-space-sm py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-slate-500 font-semibold">Distribution</div><nav class="mt-space-xs flex flex-col gap-0.5" data-active-classes="bg-primary-container text-on-primary font-medium"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-white transition-colors font-body-sm text-body-sm" data-path="fleet-allocations" href="#"><span class="material-symbols-outlined text-[18px]">hub</span>Fleet Allocations</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-white transition-colors font-body-sm text-body-sm" data-path="routes-logistics" href="#"><span class="material-symbols-outlined text-[18px]">alt_route</span>Logistics</a></nav></div><div class="px-space-md"><div class="px-space-sm py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-slate-500 font-semibold">Platform</div><nav class="mt-space-xs flex flex-col gap-0.5" data-active-classes="bg-primary-container text-on-primary font-medium"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-white transition-colors font-body-sm text-body-sm" data-path="api-integrations" href="#"><span class="material-symbols-outlined text-[18px]">integration_instructions</span>Integrations</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-white transition-colors font-body-sm text-body-sm" data-path="access-roles" href="#"><span class="material-symbols-outlined text-[18px]">security</span>Security &amp; Roles</a></nav></div><div class="px-space-md"><div class="px-space-sm py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-slate-500 font-semibold">Back Office</div><nav class="mt-space-xs flex flex-col gap-0.5" data-active-classes="bg-primary-container text-on-primary font-medium"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-white transition-colors font-body-sm text-body-sm" data-path="audit-logs" href="#"><span class="material-symbols-outlined text-[18px]">history</span>Audit Logs</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-white transition-colors font-body-sm text-body-sm" data-path="system-settings" href="#"><span class="material-symbols-outlined text-[18px]">settings</span>Settings</a></nav></div></div></div><div class="p-space-md border-t border-slate-800/60"><div class="flex items-center gap-space-sm px-space-sm py-1.5 text-slate-400 font-label-sm text-label-sm"><span class="w-2 h-2 rounded-full bg-emerald-500"></span><span>Cluster: US-East-1 (Active)</span></div></div></aside><div class="pl-[260px]"><header class="fixed top-0 left-[260px] right-0 h-16 bg-surface/95 backdrop-blur-xl border-b border-outline-variant/30 shadow-[0_1px_4px_rgba(17,26,46,0.03)] z-40 flex items-center justify-between px-margin"><div class="flex items-center gap-space-xs text-on-surface-variant font-body-sm text-body-sm"><span>Dominion</span><span class="text-outline-variant">›</span><span>Master data</span><span class="text-outline-variant">›</span><span class="text-on-surface font-medium">Vehicles</span></div><div class="flex items-center gap-space-md"><div class="relative flex items-center"><div class="flex items-center w-80 h-10 px-space-md rounded-lg bg-surface-container-lowest border border-outline-variant/40 shadow-sm text-on-surface-variant font-body-sm text-body-sm justify-between"><div class="flex items-center gap-space-xs"><span class="material-symbols-outlined text-[18px] text-outline">search</span><span class="text-outline">Search entities, engines, routes…</span></div><kbd class="px-1.5 py-0.5 rounded bg-surface-container font-label-sm text-label-sm text-on-surface-variant border border-outline-variant/40 font-mono">⌘K</kbd></div></div><button aria-label="Toggle theme" class="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><div class="h-5 w-px bg-outline-variant/40"></div><div class="flex items-center gap-space-sm pl-space-xs"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="flex flex-col text-left"><span class="font-label-md text-label-md text-on-surface font-semibold leading-tight">DT · Deeki T</span><span class="font-label-sm text-label-sm text-on-surface-variant">Owner</span></div></div></div></header><main class="relative pt-16 min-h-screen bg-surface"><div class="w-full max-w-[1280px] mx-auto p-margin"><div class="flex flex-col w-full pb-16">
+<!-- Top Breadcrumb / Status Banner -->
+<div class="flex items-center justify-between mb-space-md">
+<div class="flex items-center gap-space-sm text-on-surface-variant font-label-md text-label-md">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary-container text-on-secondary-container font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+        Master Data Revision #4092-B
+      </span>
+<span>•</span>
+<span>Spec Origin: Honda Global Engineering Taxonomy (JDM/USDM/EU)</span>
+</div>
+<div class="flex items-center gap-space-sm">
+<span class="px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider">
+        Stage: Engineering Verification
+      </span>
+</div>
+</div>
+<!-- Header Bar -->
+<div class="flex items-center justify-between pb-space-lg mb-space-lg">
+<div class="flex items-center gap-space-md">
+<div class="w-12 h-12 rounded-xl bg-primary-fixed flex items-center justify-center text-primary shadow-sm">
+<span class="material-symbols-outlined text-[28px]">directions_car</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-space-sm">
+<h1 class="font-headline-lg text-headline-lg text-on-surface font-semibold tracking-tight">Honda Fit</h1>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant font-label-sm text-label-sm font-semibold">GR3 / e:HEV</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant">2020–2024 · Hatchback · 1.5L i-VTEC + e:HEV Dual-Motor</p>
+</div>
+</div>
+<!-- Quick Stat Strip -->
+<div class="hidden lg:flex items-center gap-space-md bg-surface-container-lowest px-space-md py-2 rounded-xl shadow-sm">
+<div class="flex flex-col text-right">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Fleet VIN Index</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold font-mono">JHM-GR3-8812</span>
+</div>
+<div class="h-6 w-px bg-surface-container-highest"></div>
+<div class="flex items-center gap-space-xs text-primary font-label-md text-label-md">
+<span class="material-symbols-outlined text-[18px]">verified</span>
+<span>Config Locked to Region: Global</span>
+</div>
+</div>
+</div>
+<!-- Main Active Edit Card Grid -->
+<div class="grid grid-cols-12 gap-gutter items-start">
+<!-- PRIMARY EDIT CARD: "What powers this car" -->
+<div class="col-span-12 xl:col-span-8 bg-surface-container-lowest rounded-xl shadow-md p-7 relative">
+<!-- Card Header -->
+<div class="flex items-center justify-between pb-space-md mb-space-lg">
+<div class="flex items-center gap-space-sm">
+<div class="w-9 h-9 rounded-lg bg-primary-fixed flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">electric_meter</span>
+</div>
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-semibold">What powers this car</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Configure fundamental propulsion energy and primary kinetic source</p>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<!-- Active Editing Pill -->
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary-container text-on-secondary-container font-label-md text-label-md font-semibold shadow-sm">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+            Editing
+          </span>
+</div>
+</div>
+<!-- Live Notice Strip -->
+<div class="mb-space-lg p-space-md rounded-xl bg-secondary-container/40 flex items-start gap-space-sm">
+<span class="material-symbols-outlined text-primary-container text-[20px] mt-0.5">info</span>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-primary font-semibold">Live Master Data Modification</span>
+<span class="font-body-sm text-body-sm text-on-secondary-container">
+            Updating the powertrain class triggers re-evaluation for battery chemistry compliance, emissions ratings, and route tax calculations.
+          </span>
+</div>
+</div>
+<!-- Form Inputs Layout -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-gutter mb-space-xl">
+<!-- Field 1: Powertrain Custom Select (EXPANDED / OPEN STATE) -->
+<div class="flex flex-col relative z-30">
+<label class="font-label-md text-label-md font-semibold text-on-surface mb-2 flex items-center justify-between">
+<span>Powertrain System</span>
+<span class="font-label-sm text-label-sm text-primary font-normal">Active Choice</span>
+</label>
+<!-- Select Trigger Box (Visibly Active) -->
+<div class="h-10 px-space-md bg-surface-container-lowest rounded-lg shadow-sm flex items-center justify-between cursor-pointer">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-on-secondary-container text-[18px]">battery_charging_full</span>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-md text-label-md font-semibold">
+                Hybrid
+              </span>
+</div>
+<span class="material-symbols-outlined text-primary text-[20px] transition-transform duration-200 rotate-180">expand_more</span>
+</div>
+<!-- Helper Explainer Text directly under input -->
+<div class="mt-2 text-on-surface-variant font-body-sm text-body-sm flex items-start gap-1.5">
+<span class="material-symbols-outlined text-outline text-[16px] mt-0.5">help_outline</span>
+<span><strong class="text-on-surface font-medium">Hybrid</strong> = a petrol or diesel engine plus a high-voltage battery that can't be plugged in.</span>
+</div>
+<!-- FLOATING DROPDOWN LIST (OPEN BY DEFAULT) -->
+<div class="mt-2 w-full bg-surface-container-lowest rounded-xl shadow-xl p-2 flex flex-col gap-1">
+<div class="px-3 py-1.5 font-label-sm text-label-sm uppercase tracking-wider text-outline font-semibold">
+              Select Architecture
+            </div>
+<!-- Option 1: Petrol / Diesel -->
+<div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-container-low cursor-pointer transition-colors group">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[18px]">engineering</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface font-medium">Petrol / diesel engine</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Pure internal combustion (ICE)</span>
+</div>
+</div>
+<span class="px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm">ICE</span>
+</div>
+<!-- Option 2: Mild Hybrid -->
+<div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-container-low cursor-pointer transition-colors group">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[18px]">eco</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface font-medium">Mild hybrid</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">48V integrated starter generator (MHEV)</span>
+</div>
+</div>
+<span class="px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm">MHEV</span>
+</div>
+<!-- Option 3: Hybrid (HEV) - SELECTED & HIGHLIGHTED -->
+<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-primary-fixed/40 cursor-pointer shadow-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-primary-container text-on-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">battery_charging_full</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<span class="font-label-lg text-label-lg text-primary font-semibold">Hybrid</span>
+<span class="px-2 py-0.2 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-label-sm font-semibold">Current</span>
+</div>
+<span class="font-body-sm text-body-sm text-primary">Full self-charging hybrid (HEV)</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-6 h-6 rounded-full bg-primary-container text-on-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[16px]">check</span>
+</span>
+</div>
+</div>
+<!-- Option 4: Plug-in Hybrid -->
+<div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-container-low cursor-pointer transition-colors group">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-secondary-container/60 flex items-center justify-center text-on-secondary-container">
+<span class="material-symbols-outlined text-[18px]">power</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface font-medium">Plug-in hybrid</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Engine + grid rechargeable battery (PHEV)</span>
+</div>
+</div>
+<span class="px-2.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-label-sm">PHEV</span>
+</div>
+<!-- Option 5: Range-Extender -->
+<div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-container-low cursor-pointer transition-colors group">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-secondary-container/60 flex items-center justify-center text-on-secondary-container">
+<span class="material-symbols-outlined text-[18px]">alt_route</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface font-medium">Range-extender</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Electric drive with auxiliary generator (REEV)</span>
+</div>
+</div>
+<span class="px-2.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-label-sm">REEV</span>
+</div>
+<!-- Option 6: Electric (BEV) -->
+<div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-container-low cursor-pointer transition-colors group">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-primary-fixed flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[18px]">bolt</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface font-medium">Electric</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Full zero-emission traction battery (BEV)</span>
+</div>
+</div>
+<span class="px-2.5 py-0.5 rounded-full bg-primary-fixed text-primary font-label-sm text-label-sm font-semibold">BEV</span>
+</div>
+<!-- Option 7: Hydrogen Fuel Cell -->
+<div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-container-low cursor-pointer transition-colors group">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-secondary-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[18px]">water_drop</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface font-medium">Hydrogen fuel cell</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Compressed H2 electrochemical fuel cell (FCEV)</span>
+</div>
+</div>
+<span class="px-2.5 py-0.5 rounded-full bg-secondary-container text-primary font-label-sm text-label-sm">FCEV</span>
+</div>
+</div>
+</div>
+<!-- Field 2: Fuel Field -->
+<div class="flex flex-col">
+<label class="font-label-md text-label-md font-semibold text-on-surface mb-2 flex items-center justify-between">
+<span>Primary Fuel Type</span>
+<span class="font-label-sm text-label-sm text-outline font-normal">Combustion / Carrier</span>
+</label>
+<!-- Input Display -->
+<div class="h-10 px-space-md bg-surface-container-lowest rounded-lg shadow-sm flex items-center justify-between cursor-pointer hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-outline text-[20px]">local_gas_station</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Petrol (Unleaded 95 RON)</span>
+</div>
+<span class="material-symbols-outlined text-outline text-[20px]">unfold_more</span>
+</div>
+<div class="mt-2 text-on-surface-variant font-body-sm text-body-sm flex items-start gap-1.5">
+<span class="material-symbols-outlined text-outline text-[16px] mt-0.5">info</span>
+<span>Primary combustion or carrier energy source configured for Euro 6d emissions.</span>
+</div>
+<!-- Supplementary Context Panel for Selected Spec -->
+<div class="mt-6 p-space-md rounded-xl bg-surface-container-low flex flex-col gap-space-sm">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider font-semibold">Engine System Pairing</span>
+<div class="flex items-center justify-between bg-surface-container-lowest p-2.5 rounded-lg shadow-sm">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">memory</span>
+<span class="font-label-md text-label-md text-on-surface font-medium">Dual-Motor e:HEV Controller</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface font-mono">ECU-HON-GR3</span>
+</div>
+<div class="flex items-center justify-between bg-surface-container-lowest p-2.5 rounded-lg shadow-sm">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">bolt</span>
+<span class="font-label-md text-label-md text-on-surface font-medium">Lithium-ion Pack</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface font-mono">0.8 kWh Nominal</span>
+</div>
+<div class="flex items-center justify-between bg-surface-container-lowest p-2.5 rounded-lg shadow-sm">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">speed</span>
+<span class="font-label-md text-label-md text-on-surface font-medium">Max Output Combination</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface font-mono">80 kW (109 PS)</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Action Buttons Bar -->
+<div class="pt-space-md flex items-center justify-between mt-8">
+<div class="flex items-center gap-2 text-outline font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[16px]">history</span>
+<span>Last modified by Kevin M. (Platform Data Eng) 3 hrs ago</span>
+</div>
+<div class="flex items-center gap-space-md">
+<!-- Cancel Button (Red Outline & Red Text) -->
+<button class="h-10 px-5 py-2.5 rounded-lg font-label-lg text-label-lg font-medium text-error bg-surface-container-lowest hover:bg-error-container/30 transition-colors flex items-center gap-1.5 shadow-sm" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+<span>Cancel</span>
+</button>
+<!-- Primary Save and Confirm Button -->
+<button class="h-10 px-6 py-2.5 rounded-lg font-label-lg text-label-lg font-medium text-on-primary bg-primary-container hover:bg-primary shadow-sm hover:shadow transition-all flex items-center gap-2 active:scale-95" type="button">
+<span class="material-symbols-outlined text-[18px]">check</span>
+<span>Save and confirm</span>
+</button>
+</div>
+</div>
+</div>
+<!-- SIDE PANEL: Model Snapshot & Visual Verification -->
+<div class="col-span-12 xl:col-span-4 flex flex-col gap-gutter">
+<!-- Visual Spec Card -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-md flex flex-col">
+<div class="flex items-center justify-between mb-space-sm">
+<span class="font-label-md text-label-md font-semibold text-on-surface">Digital Twin Visual</span>
+<span class="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-label-sm font-semibold">Active Mesh</span>
+</div>
+<div class="w-full h-44 rounded-lg overflow-hidden bg-surface-container-high relative mb-space-sm">
+<img class="w-full h-full object-cover" data-alt="Studio automotive portrait of modern compact white Japanese hatchback Honda Fit parked in high key minimalist photographic studio, dramatic soft rim lighting, sleek gloss bodywork, crisp reflections, clean engineering aesthetic" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBRI0rk9uVUuzCHEPROWDdyTLS4V-npOoQ8kuUlmhjGwAbeEJxqtOLZucb9ZisKzneBF9D5y3Ujv940nhOrDl6rzVn3jZSWHiRjK6LvPZgcIIaIJj3bTqkhm2ZbCTuOYLQ4FjDAVoXt85SDGhUfy35ZL1gca4XG1BTecEzUTHqzH_InV3qjn3xeNvV1Z2GIKk_C1apAPMw4O7zfsUglSWijDoZWCPMgm9ul4o-rXFDP"/>
+<div class="absolute bottom-2 left-2 bg-on-surface/80 backdrop-blur-md px-2 py-1 rounded text-surface font-label-sm text-label-sm font-mono">
+            GR3-eHEV-2023.cad
+          </div>
+</div>
+<div class="grid grid-cols-2 gap-2 text-center">
+<div class="p-2 rounded-lg bg-surface-container-low flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Curb Weight</span>
+<span class="font-label-lg text-label-lg text-on-surface font-semibold font-mono">1,200 kg</span>
+</div>
+<div class="p-2 rounded-lg bg-surface-container-low flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">WLTP Combined</span>
+<span class="font-label-lg text-label-lg text-on-surface font-semibold font-mono">4.5 L/100km</span>
+</div>
+</div>
+</div>
+<!-- Quick Powertrain Reference Guide Card -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-md flex flex-col gap-space-sm">
+<div class="flex items-center gap-2 text-on-surface font-label-md text-label-md font-semibold">
+<span class="material-symbols-outlined text-primary text-[18px]">verified_user</span>
+<span>Compliance &amp; Certification</span>
+</div>
+<div class="space-y-2">
+<div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low">
+<span class="font-body-sm text-body-sm text-on-surface">Euro 6d-ISC-FCM</span>
+<span class="font-label-sm text-label-sm text-primary font-semibold">Passed</span>
+</div>
+<div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low">
+<span class="font-body-sm text-body-sm text-on-surface">UN ECE R100 (Battery Safety)</span>
+<span class="font-label-sm text-label-sm text-primary font-semibold">Certified</span>
+</div>
+<div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low">
+<span class="font-body-sm text-body-sm text-on-surface">High-Voltage Interlock Loop</span>
+<span class="font-label-sm text-label-sm text-secondary font-semibold">Enabled</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- QUIET SECTIONS BELOW -->
+<div class="flex flex-col gap-gutter mt-space-xl">
+<!-- Quiet Section 1: Specifications & Dimensions -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-lg transition-opacity duration-200 opacity-90 hover:opacity-100">
+<div class="flex items-center justify-between mb-space-md">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-outline">
+<span class="material-symbols-outlined text-[18px]">straighten</span>
+</div>
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-medium">Specifications &amp; Dimensions</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Chassis geometric boundaries, gross axle distribution, and cabin capacity</p>
+</div>
+</div>
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-on-surface font-label-md text-label-md font-medium transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[16px]">edit</span>
+<span>Edit Specs</span>
+</button>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-space-md pt-2">
+<div class="flex flex-col p-3 rounded-lg bg-surface-container-low">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Length</span>
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold font-mono">4,045 mm</span>
+</div>
+<div class="flex flex-col p-3 rounded-lg bg-surface-container-low">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Width</span>
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold font-mono">1,695 mm</span>
+</div>
+<div class="flex flex-col p-3 rounded-lg bg-surface-container-low">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Height</span>
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold font-mono">1,525 mm</span>
+</div>
+<div class="flex flex-col p-3 rounded-lg bg-surface-container-low">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Wheelbase</span>
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold font-mono">2,530 mm</span>
+</div>
+<div class="flex flex-col p-3 rounded-lg bg-surface-container-low">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Luggage Capacity</span>
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold font-mono">304 L</span>
+</div>
+<div class="flex flex-col p-3 rounded-lg bg-surface-container-low">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Seating Layout</span>
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold font-mono">5 Seats</span>
+</div>
+</div>
+</div>
+<!-- Quiet Section 2: Parts & Compatibility Rules -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-lg transition-opacity duration-200 opacity-90 hover:opacity-100">
+<div class="flex items-center justify-between mb-space-md">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-outline">
+<span class="material-symbols-outlined text-[18px]">build_circle</span>
+</div>
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-medium">Parts &amp; Compatibility Rules</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">OEM interchange rules, maintenance service schedules, and platform overrides</p>
+</div>
+</div>
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-on-surface font-label-md text-label-md font-medium transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[16px]">rule</span>
+<span>Manage 14 Rules</span>
+</button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-md pt-2">
+<div class="p-3 rounded-lg bg-surface-container-low flex items-start gap-space-sm">
+<span class="material-symbols-outlined text-outline text-[20px] mt-0.5">check_circle</span>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Oil Specification</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Ultra Next 0W-7 or 0W-16 Low Friction synthetic API SP</span>
+</div>
+</div>
+<div class="p-3 rounded-lg bg-surface-container-low flex items-start gap-space-sm">
+<span class="material-symbols-outlined text-outline text-[20px] mt-0.5">check_circle</span>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Tire Dimension Matrix</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">185/60R15 84H (Standard) or 185/55R16 83V (Luxe)</span>
+</div>
+</div>
+<div class="p-3 rounded-lg bg-surface-container-low flex items-start gap-space-sm">
+<span class="material-symbols-outlined text-outline text-[20px] mt-0.5">check_circle</span>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">HV Inverter Cooling</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Independent low-temp loop (Honda Type 2 All-Season Coolant)</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div></div></main></div></body></html>

@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={"darkMode":"class","theme":{"extend":{"colors":{"error":"#ba1a1a","on-secondary-fixed":"#002114","surface-container-low":"#f4f2fd","on-primary-container":"#84819a","on-primary":"#ffffff","secondary-container":"#82f5c1","primary-fixed":"#e4dffc","tertiary-fixed-dim":"#ffb77d","on-tertiary-fixed-variant":"#6e3900","on-tertiary":"#ffffff","surface-dim":"#dad9e3","on-surface-variant":"#47464c","on-tertiary-fixed":"#2f1500","secondary":"#006c4a","surface-variant":"#e3e1ec","on-error-container":"#93000a","inverse-on-surface":"#f1effa","on-primary-fixed-variant":"#46445b","surface-container-highest":"#e3e1ec","inverse-surface":"#2f3038","primary":"#000000","secondary-fixed":"#85f8c4","surface-tint":"#5e5c74","primary-fixed-dim":"#c8c3df","on-error":"#ffffff","tertiary":"#000000","on-tertiary-container":"#c76c00","on-background":"#1a1b22","on-secondary-container":"#00714e","outline":"#78767d","on-secondary-fixed-variant":"#005137","surface-container-lowest":"#ffffff","outline-variant":"#c9c5cd","surface-container":"#eeedf7","on-secondary":"#ffffff","on-primary-fixed":"#1b192e","primary-container":"#1b192e","secondary-fixed-dim":"#68dba9","on-surface":"#1a1b22","error-container":"#ffdad6","surface-container-high":"#e8e7f1","inverse-primary":"#c8c3df","surface-bright":"#fbf8ff","tertiary-fixed":"#ffdcc3","surface":"#fbf8ff","background":"#fbf8ff","tertiary-container":"#2f1500"},"borderRadius":{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},"spacing":{"space-sm":"0.5rem","margin":"2rem","space-xl":"2rem","space-lg":"1.5rem","margin-mobile":"1rem","gutter-mobile":"0.75rem","gutter":"1.5rem","space-md":"1rem","space-xs":"0.25rem"},"fontFamily":{"headline-lg":["Inter"],"body-lg":["Inter"],"display-lg":["Inter"],"headline-md":["Inter"],"body-sm":["Inter"],"label-sm":["Inter"],"title-md":["Inter"],"body-md":["Inter"],"headline-lg-mobile":["Inter"],"title-sm":["Inter"],"label-md":["Inter"]},"fontSize":{"headline-lg":["28px",{"lineHeight":"36px","letterSpacing":"-0.025em","fontWeight":"600"}],"body-lg":["15px",{"lineHeight":"24px","letterSpacing":"-0.01em","fontWeight":"400"}],"display-lg":["36px",{"lineHeight":"44px","letterSpacing":"-0.03em","fontWeight":"600"}],"headline-md":["20px",{"lineHeight":"28px","letterSpacing":"-0.02em","fontWeight":"600"}],"body-sm":["13px",{"lineHeight":"18px","letterSpacing":"0em","fontWeight":"400"}],"label-sm":["11px",{"lineHeight":"14px","letterSpacing":"0.03em","fontWeight":"600"}],"title-md":["16px",{"lineHeight":"24px","letterSpacing":"-0.015em","fontWeight":"600"}],"body-md":["14px",{"lineHeight":"20px","letterSpacing":"-0.005em","fontWeight":"400"}],"headline-lg-mobile":["22px",{"lineHeight":"28px","letterSpacing":"-0.02em","fontWeight":"600"}],"title-sm":["14px",{"lineHeight":"20px","letterSpacing":"-0.01em","fontWeight":"600"}],"label-md":["12px",{"lineHeight":"16px","letterSpacing":"0.01em","fontWeight":"500"}]}}}};</script></head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 right-0 w-full z-40 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 w-full px-margin flex items-center justify-between"><div class="flex items-center gap-space-xl"><div class="flex items-center gap-space-sm"><div class="w-9 h-9 rounded-lg bg-tertiary-fixed flex items-center justify-center"><span class="material-symbols-outlined text-on-tertiary-container text-[20px]">local_shipping</span></div><span class="font-headline-md text-headline-md text-on-surface tracking-tight">Roam Fleet</span></div><nav class="hidden lg:flex items-center gap-space-xs" data-active-classes="bg-primary-container text-on-primary-container rounded-lg"><a class="px-space-md py-space-xs font-title-sm text-title-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg" data-path="dashboard" href="#">Dashboard</a><a class="px-space-md py-space-xs font-title-sm text-title-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg" data-path="vehicles" href="#">Vehicles</a><a class="px-space-md py-space-xs font-title-sm text-title-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg" data-path="fleet-maintenance" href="#">Fleet Maintenance</a><a class="px-space-md py-space-xs font-title-sm text-title-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg" data-path="drivers" href="#">Drivers</a><a class="px-space-md py-space-xs font-title-sm text-title-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg" data-path="reports" href="#">Reports</a><a class="px-space-md py-space-xs font-title-sm text-title-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg" data-path="settings" href="#">Settings</a></nav></div><div class="flex items-center gap-space-md"><button class="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">notifications</span></button><button class="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">help_outline</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full pt-16 bg-surface"><div class="flex flex-col w-full">
+<div class="relative w-full min-h-[calc(100vh-4rem)] p-space-md lg:p-space-xl overflow-hidden flex items-center justify-center">
+<!-- Dimmed & Softly Blurred Maintenance Page Canvas Behind Modal -->
+<div class="absolute inset-0 select-none pointer-events-none filter blur-md opacity-40 bg-surface flex flex-col p-space-xl space-y-space-lg">
+<div class="flex justify-between items-center w-full">
+<div class="h-8 w-64 bg-surface-variant rounded-lg"></div>
+<div class="flex gap-space-sm">
+<div class="h-10 w-28 bg-surface-variant rounded-lg"></div>
+<div class="h-10 w-36 bg-surface-variant rounded-lg"></div>
+</div>
+</div>
+<div class="grid grid-cols-4 gap-space-md w-full">
+<div class="h-28 bg-surface-container-high rounded-xl p-space-md flex flex-col justify-between">
+<div class="h-4 w-20 bg-surface-variant rounded"></div>
+<div class="h-8 w-16 bg-surface-variant rounded"></div>
+</div>
+<div class="h-28 bg-surface-container-high rounded-xl p-space-md flex flex-col justify-between">
+<div class="h-4 w-24 bg-surface-variant rounded"></div>
+<div class="h-8 w-20 bg-surface-variant rounded"></div>
+</div>
+<div class="h-28 bg-surface-container-high rounded-xl p-space-md flex flex-col justify-between">
+<div class="h-4 w-28 bg-surface-variant rounded"></div>
+<div class="h-8 w-14 bg-surface-variant rounded"></div>
+</div>
+<div class="h-28 bg-surface-container-high rounded-xl p-space-md flex flex-col justify-between">
+<div class="h-4 w-20 bg-surface-variant rounded"></div>
+<div class="h-8 w-16 bg-surface-variant rounded"></div>
+</div>
+</div>
+<div class="h-96 w-full bg-surface-container-low rounded-xl p-space-lg flex flex-col gap-space-md">
+<div class="h-6 w-48 bg-surface-variant rounded"></div>
+<div class="h-12 w-full bg-surface-container rounded-lg"></div>
+<div class="h-12 w-full bg-surface-container rounded-lg"></div>
+<div class="h-12 w-full bg-surface-container rounded-lg"></div>
+<div class="h-12 w-full bg-surface-container rounded-lg"></div>
+</div>
+</div>
+<!-- Backdrop Tint Overlay -->
+<div class="absolute inset-0 bg-primary/40 backdrop-blur-sm z-10 transition-opacity"></div>
+<!-- 760px Wide Modal Card -->
+<div class="relative z-20 w-full max-w-[760px] bg-surface-container-lowest rounded-xl shadow-xl flex flex-col overflow-hidden my-auto">
+<!-- 1. Header -->
+<div class="px-space-lg pt-space-lg pb-space-md flex items-center justify-between">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-[20px]" style="font-variation-settings: 'FILL' 1;">build</span>
+</div>
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Log service</h2>
+<p class="font-label-md text-label-md text-on-surface-variant">Step 2: Service record & component allocation</p>
+</div>
+</div>
+<button aria-label="Close dialog" class="w-9 h-9 rounded-full bg-surface-container hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<!-- 2. Car Strip (Dark Rounded Container) -->
+<div class="px-space-lg py-space-xs">
+<div class="w-full bg-primary-container text-on-primary rounded-xl px-space-md py-space-sm flex flex-wrap items-center justify-between gap-space-sm shadow-sm">
+<div class="flex items-center gap-space-sm">
+<span class="font-title-sm text-title-sm text-on-primary">Toyota Roomy (2019)</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-lowest/15 font-label-md text-label-md tracking-wider text-surface-bright">5179KZ</span>
+<span class="px-2.5 py-0.5 rounded-full bg-secondary text-on-secondary font-label-md text-label-md flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">local_gas_station</span>
+              Petrol
+            </span>
+</div>
+<div class="flex items-center gap-space-xs font-label-md text-label-md text-on-primary-container">
+<span class="material-symbols-outlined text-[16px]">speed</span>
+<span>198,250 km · 15 Nov 2026</span>
+</div>
+</div>
+</div>
+<!-- 3. Progress Stepper -->
+<div class="px-space-lg py-space-md">
+<div class="grid grid-cols-4 gap-space-sm relative">
+<!-- Step 1 Done -->
+<div class="flex items-center gap-space-xs">
+<div class="w-6 h-6 rounded-full bg-secondary text-on-secondary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+<span class="font-label-md text-label-md text-on-surface line-clamp-1">Date & mileage</span>
+</div>
+<!-- Step 2 Active -->
+<div class="flex items-center gap-space-xs">
+<div class="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center shrink-0 font-label-sm text-label-sm">
+              2
+            </div>
+<span class="font-title-sm text-title-sm text-primary line-clamp-1">Work done</span>
+</div>
+<!-- Step 3 Idle -->
+<div class="flex items-center gap-space-xs opacity-60">
+<div class="w-6 h-6 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center shrink-0 font-label-sm text-label-sm">
+              3
+            </div>
+<span class="font-label-md text-label-md text-on-surface-variant line-clamp-1">Details</span>
+</div>
+<!-- Step 4 Idle -->
+<div class="flex items-center gap-space-xs opacity-60">
+<div class="w-6 h-6 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center shrink-0 font-label-sm text-label-sm">
+              4
+            </div>
+<span class="font-label-md text-label-md text-on-surface-variant line-clamp-1">Review</span>
+</div>
+</div>
+</div>
+<!-- Divider Ribbon -->
+<div class="w-full h-px bg-surface-container-high"></div>
+<!-- Modal Body (Scrollable if needed, optimized for 760px) -->
+<div class="px-space-lg py-space-md max-h-[593px] overflow-y-auto space-y-space-md">
+<!-- 4. Group Header Navigation -->
+<div class="flex flex-col gap-space-xs">
+<button class="inline-flex items-center gap-1 font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors w-fit" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_back</span>
+            All groups
+          </button>
+<div class="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1">
+<h3 class="font-headline-md text-headline-md text-on-surface">Exhaust & emissions</h3>
+<span class="font-label-md text-label-md text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-full">
+              13 jobs that fit this car · 8 hidden diesel jobs filtered out
+            </span>
+</div>
+</div>
+<!-- 5. Job Cards Grid (3 Columns) -->
+<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-space-sm" id="jobsGrid">
+<!-- Job 1 -->
+<div class="bg-surface-container-lowest hover:bg-surface-container-low rounded-xl p-3.5 flex flex-col justify-between gap-space-md shadow-sm transition-all cursor-pointer select-none">
+<div class="flex items-start justify-between gap-2">
+<span class="font-title-sm text-title-sm text-on-surface leading-tight">Exhaust Manifold / Header</span>
+<div class="w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center shrink-0"></div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="px-2 py-0.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface-variant">Replace</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant/70">~1.5h</span>
+</div>
+</div>
+<!-- Job 2 -->
+<div class="bg-surface-container-lowest hover:bg-surface-container-low rounded-xl p-3.5 flex flex-col justify-between gap-space-md shadow-sm transition-all cursor-pointer select-none">
+<div class="flex items-start justify-between gap-2">
+<span class="font-title-sm text-title-sm text-on-surface leading-tight">Exhaust Manifold Gasket</span>
+<div class="w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center shrink-0"></div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="px-2 py-0.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface-variant">Replace</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant/70">~0.8h</span>
+</div>
+</div>
+<!-- Job 3 -->
+<div class="bg-surface-container-lowest hover:bg-surface-container-low rounded-xl p-3.5 flex flex-col justify-between gap-space-md shadow-sm transition-all cursor-pointer select-none">
+<div class="flex items-start justify-between gap-2">
+<span class="font-title-sm text-title-sm text-on-surface leading-tight">Catalytic Converter</span>
+<div class="w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center shrink-0"></div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="px-2 py-0.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface-variant">Replace</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant/70">~1.2h</span>
+</div>
+</div>
+<!-- Job 4: TICKED / SELECTED -->
+<div class="bg-surface-container-high rounded-xl p-3.5 flex flex-col justify-between gap-space-md shadow-md transition-all cursor-pointer select-none">
+<div class="flex items-start justify-between gap-2">
+<span class="font-title-sm text-title-sm text-on-surface leading-tight font-semibold">Muffler</span>
+<div class="w-5 h-5 rounded-full bg-primary text-on-primary flex items-center justify-center shrink-0 shadow-sm">
+<span class="material-symbols-outlined text-[13px]">check</span>
+</div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="px-2 py-0.5 rounded-full bg-primary-container text-on-primary-container font-label-sm text-label-sm">Replace</span>
+<span class="font-label-sm text-label-sm text-on-surface font-medium">Selected</span>
+</div>
+</div>
+<!-- Job 5 -->
+<div class="bg-surface-container-lowest hover:bg-surface-container-low rounded-xl p-3.5 flex flex-col justify-between gap-space-md shadow-sm transition-all cursor-pointer select-none">
+<div class="flex items-start justify-between gap-2">
+<span class="font-title-sm text-title-sm text-on-surface leading-tight">Resonator</span>
+<div class="w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center shrink-0"></div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="px-2 py-0.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface-variant">Replace</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant/70">~0.7h</span>
+</div>
+</div>
+<!-- Job 6 -->
+<div class="bg-surface-container-lowest hover:bg-surface-container-low rounded-xl p-3.5 flex flex-col justify-between gap-space-md shadow-sm transition-all cursor-pointer select-none">
+<div class="flex items-start justify-between gap-2">
+<span class="font-title-sm text-title-sm text-on-surface leading-tight">Flex Pipe</span>
+<div class="w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center shrink-0"></div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="px-2 py-0.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface-variant">Replace</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant/70">~1.0h</span>
+</div>
+</div>
+<!-- Job 7 -->
+<div class="bg-surface-container-lowest hover:bg-surface-container-low rounded-xl p-3.5 flex flex-col justify-between gap-space-md shadow-sm transition-all cursor-pointer select-none">
+<div class="flex items-start justify-between gap-2">
+<span class="font-title-sm text-title-sm text-on-surface leading-tight">Exhaust Pipe / Tailpipe</span>
+<div class="w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center shrink-0"></div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="px-2 py-0.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface-variant">Replace</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant/70">~0.6h</span>
+</div>
+</div>
+<!-- Job 8 -->
+<div class="bg-surface-container-lowest hover:bg-surface-container-low rounded-xl p-3.5 flex flex-col justify-between gap-space-md shadow-sm transition-all cursor-pointer select-none">
+<div class="flex items-start justify-between gap-2">
+<span class="font-title-sm text-title-sm text-on-surface leading-tight">Exhaust System Inspection</span>
+<div class="w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center shrink-0"></div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-label-sm font-semibold">Inspect</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant/70">~0.4h</span>
+</div>
+</div>
+<!-- Job 9 -->
+<div class="bg-surface-container-lowest hover:bg-surface-container-low rounded-xl p-3.5 flex flex-col justify-between gap-space-md shadow-sm transition-all cursor-pointer select-none">
+<div class="flex items-start justify-between gap-2">
+<span class="font-title-sm text-title-sm text-on-surface leading-tight">EVAP / Charcoal Canister</span>
+<div class="w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center shrink-0"></div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="px-2 py-0.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface-variant">Replace</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant/70">~0.9h</span>
+</div>
+</div>
+<!-- Job 10 -->
+<div class="bg-surface-container-lowest hover:bg-surface-container-low rounded-xl p-3.5 flex flex-col justify-between gap-space-md shadow-sm transition-all cursor-pointer select-none">
+<div class="flex items-start justify-between gap-2">
+<span class="font-title-sm text-title-sm text-on-surface leading-tight">Purge Valve</span>
+<div class="w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center shrink-0"></div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="px-2 py-0.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface-variant">Replace</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant/70">~0.5h</span>
+</div>
+</div>
+<!-- Job 11 -->
+<div class="bg-surface-container-lowest hover:bg-surface-container-low rounded-xl p-3.5 flex flex-col justify-between gap-space-md shadow-sm transition-all cursor-pointer select-none">
+<div class="flex items-start justify-between gap-2">
+<span class="font-title-sm text-title-sm text-on-surface leading-tight">Exhaust Flange Gasket</span>
+<div class="w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center shrink-0"></div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="px-2 py-0.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface-variant">Replace</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant/70">~0.4h</span>
+</div>
+</div>
+<!-- Job 12 -->
+<div class="bg-surface-container-lowest hover:bg-surface-container-low rounded-xl p-3.5 flex flex-col justify-between gap-space-md shadow-sm transition-all cursor-pointer select-none">
+<div class="flex items-start justify-between gap-2">
+<span class="font-title-sm text-title-sm text-on-surface leading-tight">Exhaust Clamp</span>
+<div class="w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center shrink-0"></div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="px-2 py-0.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface-variant">Replace</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant/70">~0.3h</span>
+</div>
+</div>
+<!-- Job 13 -->
+<div class="bg-surface-container-lowest hover:bg-surface-container-low rounded-xl p-3.5 flex flex-col justify-between gap-space-md shadow-sm transition-all cursor-pointer select-none">
+<div class="flex items-start justify-between gap-2">
+<span class="font-title-sm text-title-sm text-on-surface leading-tight">Exhaust Hanger / Rubber Isolator</span>
+<div class="w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center shrink-0"></div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="px-2 py-0.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface-variant">Replace</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant/70">~0.3h</span>
+</div>
+</div>
+</div>
+<!-- 6. Bottom Action: Show hidden diesel jobs button -->
+<div class="pt-space-xs">
+<button class="w-full py-2.5 px-4 rounded-xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-title-sm text-title-sm flex items-center justify-center gap-space-sm transition-all shadow-sm" type="button">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">visibility</span>
+<span>Show all jobs in this group (8 hidden diesel jobs)</span>
+</button>
+</div>
+</div>
+<!-- 7. Footer -->
+<div class="px-space-lg py-space-md bg-surface-container-low flex items-center justify-between gap-space-md">
+<!-- Cancel button (Destructive tint style) -->
+<button class="px-4 py-2 rounded-xl bg-error-container text-error hover:bg-error hover:text-on-error font-title-sm text-title-sm transition-colors shadow-sm" type="button">
+          Cancel
+        </button>
+<!-- Right actions -->
+<div class="flex items-center gap-space-sm">
+<button class="px-4 py-2 rounded-xl bg-surface-container-lowest hover:bg-surface-container text-on-surface font-title-sm text-title-sm transition-colors shadow-sm" type="button">
+            Back
+          </button>
+<button class="px-5 py-2.5 rounded-xl bg-primary text-on-primary hover:bg-primary/90 font-title-sm text-title-sm flex items-center gap-space-xs transition-all shadow-md" type="button">
+<span>Continue with 1 job</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+  (function() {
+    const jobCards = document.querySelectorAll('#jobsGrid > div');
+    jobCards.forEach(card => {
+      card.addEventListener('click', () => {
+        const isSelected = card.classList.contains('bg-surface-container-high');
+        const indicator = card.querySelector('div.rounded-full');
+        const statusText = card.querySelector('.justify-between span:last-child');
+        
+        if (isSelected) {
+          card.classList.remove('bg-surface-container-high', 'shadow-md');
+          card.classList.add('bg-surface-container-lowest', 'shadow-sm');
+          indicator.className = 'w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center shrink-0';
+          indicator.innerHTML = '';
+          if (statusText && statusText.textContent === 'Selected') {
+            statusText.textContent = '~0.8h';
+            statusText.className = 'font-label-sm text-label-sm text-on-surface-variant/70';
+          }
+        } else {
+          card.classList.remove('bg-surface-container-lowest', 'shadow-sm');
+          card.classList.add('bg-surface-container-high', 'shadow-md');
+          indicator.className = 'w-5 h-5 rounded-full bg-primary text-on-primary flex items-center justify-center shrink-0 shadow-sm';
+          indicator.innerHTML = '<span class="material-symbols-outlined text-[13px]">check</span>';
+          if (statusText) {
+            statusText.textContent = 'Selected';
+            statusText.className = 'font-label-sm text-label-sm text-on-surface font-medium';
+          }
+        }
+      });
+    });
+  })();
+</script></main><footer class="w-full bg-surface-container-low py-space-xl mt-space-xl"><div class="w-full px-margin flex flex-col md:flex-row items-center justify-between gap-space-md text-on-surface-variant font-body-sm text-body-sm"><div>© 2025 Roam Fleet Logistics OS. Standard Telemetry and Fleet Management Systems.</div><div class="flex items-center gap-space-lg"><a class="hover:text-on-surface transition-colors" href="#">Privacy Policy</a><a class="hover:text-on-surface transition-colors" href="#">Compliance & Safety</a><a class="hover:text-on-surface transition-colors" href="#">System Status</a></div></div></footer></body></html>

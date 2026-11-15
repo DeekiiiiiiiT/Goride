@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "on-primary-fixed-variant": "#003ea8",
+          "on-primary": "#ffffff",
+          "surface-container": "#ecedf8",
+          "on-secondary-container": "#5b647c",
+          "secondary-fixed": "#d9e2fe",
+          "tertiary-container": "#835500",
+          "on-primary-container": "#ced8ff",
+          "error": "#ba1a1a",
+          "background": "#faf8ff",
+          "outline-variant": "#c3c6d7",
+          "secondary": "#555e75",
+          "tertiary-fixed": "#ffddb4",
+          "on-error": "#ffffff",
+          "on-secondary": "#ffffff",
+          "on-secondary-fixed-variant": "#3e465d",
+          "surface": "#faf8ff",
+          "surface-container-highest": "#e1e2ec",
+          "surface-container-lowest": "#ffffff",
+          "primary-fixed-dim": "#b4c5ff",
+          "primary-fixed": "#dbe1ff",
+          "primary": "#003ea9",
+          "inverse-on-surface": "#eff0fb",
+          "inverse-surface": "#2e3038",
+          "outline": "#737686",
+          "inverse-primary": "#b4c5ff",
+          "on-tertiary-fixed": "#291800",
+          "surface-dim": "#d8d9e4",
+          "surface-tint": "#0053db",
+          "on-tertiary-container": "#ffd196",
+          "tertiary": "#634000",
+          "on-error-container": "#93000a",
+          "on-secondary-fixed": "#121b2f",
+          "surface-variant": "#e1e2ec",
+          "secondary-container": "#d9e2fe",
+          "surface-container-high": "#e7e7f2",
+          "on-tertiary": "#ffffff",
+          "on-tertiary-fixed-variant": "#633f00",
+          "on-background": "#191b23",
+          "tertiary-fixed-dim": "#fabb61",
+          "on-surface-variant": "#434655",
+          "surface-container-low": "#f2f3fe",
+          "surface-bright": "#faf8ff",
+          "error-container": "#ffdad6",
+          "secondary-fixed-dim": "#bdc6e1",
+          "primary-container": "#0153dc",
+          "on-primary-fixed": "#00174b",
+          "on-surface": "#191b23"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.25rem",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+        "spacing": {
+          "space-xs": "0.25rem",
+          "margin": "2rem",
+          "space-sm": "0.5rem",
+          "space-xl": "2rem",
+          "space-md": "1rem",
+          "gutter": "1.5rem",
+          "space-lg": "1.5rem"
+        },
+        "fontFamily": {
+          "body-md": ["Inter"],
+          "headline-sm": ["Inter"],
+          "label-sm": ["Inter"],
+          "display-lg": ["Inter"],
+          "label-lg": ["Inter"],
+          "headline-lg": ["Inter"],
+          "body-sm": ["Inter"],
+          "body-lg": ["Inter"],
+          "label-md": ["Inter"]
+        },
+        "fontSize": {
+          "body-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400"}],
+          "headline-sm": ["18px", {"lineHeight": "26px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+          "label-sm": ["11px", {"lineHeight": "14px", "letterSpacing": "0.03em", "fontWeight": "600"}],
+          "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+          "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.005em", "fontWeight": "500"}],
+          "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.015em", "fontWeight": "600"}],
+          "body-sm": ["12px", {"lineHeight": "18px", "letterSpacing": "0em", "fontWeight": "400"}],
+          "body-lg": ["16px", {"lineHeight": "24px", "letterSpacing": "-0.005em", "fontWeight": "400"}],
+          "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "500"}]
+        }
+      }
+    }
+  }</script></head><body class="bg-surface font-body-md text-body-md text-on-surface"><aside class="fixed left-0 top-0 h-full w-[260px] bg-[#0d131f] text-[#d9e2fe] z-50 flex flex-col justify-between select-none shadow-[0_1px_8px_rgba(0,0,0,0.12)]"><div class="flex flex-col h-full"><div class="h-16 px-space-lg flex items-center gap-space-sm"><div class="w-7 h-7 rounded-lg bg-primary-container flex items-center justify-center text-on-primary font-headline-sm text-headline-sm">R</div><div class="flex flex-col"><span class="font-label-md text-label-md text-white tracking-tight font-semibold">Dominion</span><span class="font-label-sm text-label-sm text-[#8d94a5] font-normal">Roam Admin Console</span></div></div><div class="flex-1 overflow-y-auto px-space-sm py-space-sm space-y-space-md"><div class="space-y-space-xs"><div class="px-space-sm py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-[#636c81]">Master Data</div><nav class="space-y-1" data-active-classes="bg-primary-container text-on-primary font-label-md text-label-md rounded-lg"><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-[#bdc6e1] hover:bg-[#1a2133] hover:text-white transition-colors" data-path="vehicles" href="#"><span class="material-symbols-outlined text-[18px]">directions_car</span><span class="font-label-md text-label-md">Vehicles</span></a><a aria-current="page" class="flex items-center gap-space-sm px-space-sm py-space-xs transition-colors bg-primary-container text-on-primary font-label-md text-label-md rounded-lg" data-path="maintenance-templates" href="#"><span class="material-symbols-outlined text-[18px]">build</span><span class="font-label-md text-label-md">Maintenance templates</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-[#bdc6e1] hover:bg-[#1a2133] hover:text-white transition-colors" data-path="parts-catalog" href="#"><span class="material-symbols-outlined text-[18px]">category</span><span class="font-label-md text-label-md">Parts Catalog</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-[#636c81]">Engines</div><nav class="space-y-1" data-active-classes="bg-primary-container text-on-primary font-label-md text-label-md rounded-lg"><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-[#bdc6e1] hover:bg-[#1a2133] hover:text-white transition-colors" data-path="powertrain-matrix" href="#"><span class="material-symbols-outlined text-[18px]">electric_bolt</span><span class="font-label-md text-label-md">Powertrain Matrix</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-[#bdc6e1] hover:bg-[#1a2133] hover:text-white transition-colors" data-path="emissions-compliance" href="#"><span class="material-symbols-outlined text-[18px]">eco</span><span class="font-label-md text-label-md">Emissions & Specs</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-[#636c81]">Distribution</div><nav class="space-y-1" data-active-classes="bg-primary-container text-on-primary font-label-md text-label-md rounded-lg"><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-[#bdc6e1] hover:bg-[#1a2133] hover:text-white transition-colors" data-path="fleet-allocations" href="#"><span class="material-symbols-outlined text-[18px]">local_shipping</span><span class="font-label-md text-label-md">Fleet Allocations</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-[#bdc6e1] hover:bg-[#1a2133] hover:text-white transition-colors" data-path="regional-hubs" href="#"><span class="material-symbols-outlined text-[18px]">hub</span><span class="font-label-md text-label-md">Regional Hubs</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-[#636c81]">Platform</div><nav class="space-y-1" data-active-classes="bg-primary-container text-on-primary font-label-md text-label-md rounded-lg"><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-[#bdc6e1] hover:bg-[#1a2133] hover:text-white transition-colors" data-path="telematics-integrations" href="#"><span class="material-symbols-outlined text-[18px]">settings_input_component</span><span class="font-label-md text-label-md">Telematics API</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-[#bdc6e1] hover:bg-[#1a2133] hover:text-white transition-colors" data-path="audit-logs" href="#"><span class="material-symbols-outlined text-[18px]">history</span><span class="font-label-md text-label-md">Audit Trail</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-[#636c81]">Back Office</div><nav class="space-y-1" data-active-classes="bg-primary-container text-on-primary font-label-md text-label-md rounded-lg"><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-[#bdc6e1] hover:bg-[#1a2133] hover:text-white transition-colors" data-path="system-settings" href="#"><span class="material-symbols-outlined text-[18px]">tune</span><span class="font-label-md text-label-md">System Settings</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-[#bdc6e1] hover:bg-[#1a2133] hover:text-white transition-colors" data-path="access-roles" href="#"><span class="material-symbols-outlined text-[18px]">admin_panel_settings</span><span class="font-label-md text-label-md">Access & Roles</span></a></nav></div></div><div class="p-space-md border-t border-[#1a2133]/60 bg-[#090e17] flex items-center justify-between"><div class="flex items-center gap-space-sm"><div class="w-2 h-2 rounded-full bg-[#10b981]"></div><span class="font-label-sm text-label-sm text-[#8d94a5]">Dominion Node 01</span></div><span class="font-label-sm text-label-sm text-[#636c81]">v3.4</span></div></div></aside><div class="pl-[260px]"><header class="fixed top-0 left-[260px] right-0 h-16 bg-surface/90 backdrop-blur-xl z-40 shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 w-full px-space-xl flex items-center justify-between gap-space-md"><div class="flex items-center gap-space-sm text-on-surface-variant font-body-sm text-body-sm"><span class="material-symbols-outlined text-[18px]">grid_view</span><span>Console</span><span class="material-symbols-outlined text-[14px]">chevron_right</span><span class="font-label-md text-label-md text-on-surface font-medium">Master Data</span><span class="material-symbols-outlined text-[14px]">chevron_right</span><span class="font-label-md text-label-md text-primary font-semibold">Overview</span></div><div class="flex items-center gap-space-md"><div class="flex items-center gap-space-sm bg-surface-container-lowest px-space-md py-space-xs rounded-lg shadow-[0_1px_3px_rgba(17,26,46,0.04)] text-on-surface-variant w-72"><span class="material-symbols-outlined text-[18px]">search</span><input class="w-full bg-transparent border-0 outline-none font-body-sm text-body-sm text-on-surface placeholder:text-outline" placeholder="Search components, engines, VIN..." readonly="" type="text"/><kbd class="bg-surface-container-high px-1.5 py-0.5 rounded font-label-sm text-label-sm text-on-surface-variant select-none">⌘K</kbd></div><button class="w-9 h-9 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">light_mode</span></button><div class="flex items-center gap-space-sm pl-space-sm"><div class="flex flex-col text-right"><span class="font-label-md text-label-md text-on-surface font-medium leading-none">Deeki T</span><span class="font-label-sm text-label-sm text-on-surface-variant mt-0.5 leading-none">Owner</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></div></header><main class="relative pt-16 bg-surface min-h-screen"><div class="flex flex-col w-full relative min-h-[calc(100vh-4rem)]">
+<!-- Under-Canvas: Vehicles > Maintenance Templates Background Context -->
+<div class="px-space-xl py-space-lg w-full max-w-[1240px] opacity-40 pointer-events-none select-none">
+<div class="flex items-center justify-between mb-space-lg">
+<div class="space-y-1">
+<div class="flex items-center gap-space-xs font-label-sm text-label-sm uppercase tracking-wider text-secondary">
+<span>Vehicles</span>
+<span>/</span>
+<span class="text-primary font-semibold">Maintenance Templates</span>
+</div>
+<h1 class="font-display-lg text-display-lg text-on-surface">Scheduled Service Master</h1>
+</div>
+<div class="flex items-center gap-space-sm">
+<span class="px-3 py-1.5 rounded-lg bg-surface-container-high font-label-md text-label-md text-on-surface-variant">Templates Catalog (14)</span>
+<button class="px-4 py-2 bg-primary-container text-on-primary rounded-lg font-label-md text-label-md flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px]">add</span>
+          New Template
+        </button>
+</div>
+</div>
+<!-- Background Table Dummy for Spatial Anchor -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-md space-y-space-md">
+<div class="h-10 bg-surface-container-low rounded-lg w-full"></div>
+<div class="space-y-space-sm">
+<div class="h-14 bg-surface-container rounded-lg w-full flex items-center px-4 justify-between">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary">folder_open</span>
+<div class="h-4 w-40 bg-surface-variant rounded"></div>
+</div>
+<div class="h-6 w-24 bg-surface-container-highest rounded-full"></div>
+</div>
+<div class="h-14 bg-surface-container rounded-lg w-full flex items-center px-4 justify-between">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary">folder_open</span>
+<div class="h-4 w-48 bg-surface-variant rounded"></div>
+</div>
+<div class="h-6 w-24 bg-surface-container-highest rounded-full"></div>
+</div>
+<div class="h-14 bg-primary-fixed/20 rounded-lg w-full flex items-center px-4 justify-between ring-2 ring-primary/20">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary">folder</span>
+<div class="h-4 w-52 bg-primary/30 rounded"></div>
+</div>
+<div class="h-6 w-32 bg-primary-container/20 rounded-full"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Dimmed Modal Backdrop -->
+<div class="fixed inset-0 top-16 left-[260px] bg-[#0d131f]/40 backdrop-blur-sm z-40 transition-opacity duration-300" id="drawer-backdrop"></div>
+<!-- Right-Side Group Drawer (560px wide) -->
+<aside class="fixed top-16 right-0 bottom-0 w-[560px] bg-surface-container-lowest z-50 flex flex-col shadow-[-12px_0_36px_rgba(17,26,46,0.12)] border-l border-outline-variant/30 overflow-hidden transform translate-x-0 transition-transform duration-300" id="group-drawer">
+<!-- Drawer Header -->
+<header class="p-space-lg bg-surface-container-lowest border-b border-surface-container-high flex-shrink-0">
+<div class="flex items-start justify-between gap-space-md">
+<div class="space-y-space-xs flex-1 min-w-0">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-lg bg-primary-fixed flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[20px]">folder_managed</span>
+</div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface tracking-tight truncate">Hybrid & electric</h2>
+</div>
+<div class="flex items-center gap-space-sm flex-wrap pt-0.5">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-fixed font-label-sm text-label-sm font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+              Job Group
+            </span>
+<span class="text-outline font-label-sm text-label-sm">•</span>
+<span class="font-label-md text-label-md text-on-surface-variant font-medium">24 active jobs bound</span>
+</div>
+</div>
+<button aria-label="Close drawer" class="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40" id="close-drawer-btn" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+</header>
+<!-- Scrollable Drawer Body -->
+<div class="flex-1 overflow-y-auto p-space-lg space-y-space-lg bg-surface/50">
+<!-- Card "Fits" -->
+<section class="bg-surface-container-lowest rounded-2xl p-6 shadow-sm border border-[#e8e9f2] space-y-space-md">
+<div>
+<div class="flex items-center justify-between">
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold tracking-tight">Fits</h3>
+<span class="font-label-sm text-label-sm text-primary bg-primary-fixed/60 px-2 py-0.5 rounded font-semibold uppercase tracking-wider">Group Preset</span>
+</div>
+<p class="font-body-md text-body-md text-[#5d5f68] mt-1">Jobs in this group follow this unless they set their own.</p>
+</div>
+<!-- 2x2 Grid of Preset Option Cards -->
+<div class="grid grid-cols-2 gap-space-sm">
+<!-- Preset 1: All Cars -->
+<button class="group-preset-card text-left p-3.5 rounded-xl border border-outline-variant/50 hover:border-primary/50 hover:bg-surface-container-low transition-all relative flex flex-col justify-between min-h-[96px] focus:outline-none focus:ring-2 focus:ring-primary/20" type="button">
+<div>
+<div class="flex items-center justify-between">
+<span class="font-label-lg text-label-lg font-semibold text-on-surface">All cars</span>
+<span class="material-symbols-outlined text-[18px] text-outline opacity-0 group-hover:opacity-60">radio_button_unchecked</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 leading-snug">Every car in the fleet catalog</p>
+</div>
+<span class="font-label-sm text-label-sm text-outline mt-2 tabular-nums">2,679 models</span>
+</button>
+<!-- Preset 2: Combustion -->
+<button class="group-preset-card text-left p-3.5 rounded-xl border border-outline-variant/50 hover:border-primary/50 hover:bg-surface-container-low transition-all relative flex flex-col justify-between min-h-[96px] focus:outline-none focus:ring-2 focus:ring-primary/20" type="button">
+<div>
+<div class="flex items-center justify-between">
+<span class="font-label-lg text-label-lg font-semibold text-on-surface">Combustion</span>
+<span class="material-symbols-outlined text-[18px] text-outline opacity-0 group-hover:opacity-60">radio_button_unchecked</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 leading-snug">Has an internal combustion engine</p>
+</div>
+<span class="font-label-sm text-label-sm text-outline mt-2 tabular-nums">1,942 models</span>
+</button>
+<!-- Preset 3: Electrified (SELECTED) -->
+<button class="group-preset-card text-left p-3.5 rounded-xl bg-[#f0f5ff] ring-2 ring-[#0153dc] border-transparent transition-all relative flex flex-col justify-between min-h-[96px] shadow-[0_2px_8px_rgba(1,83,220,0.12)] focus:outline-none" type="button">
+<div>
+<div class="flex items-center justify-between">
+<span class="font-label-lg text-label-lg font-semibold text-primary">Electrified</span>
+<div class="w-5 h-5 rounded-full bg-[#0153dc] text-white flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px] font-bold">check</span>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 leading-snug">Has a high-voltage battery</p>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-semibold mt-2 tabular-nums">585 models match</span>
+</button>
+<!-- Preset 4: Plug-in -->
+<button class="group-preset-card text-left p-3.5 rounded-xl border border-outline-variant/50 hover:border-primary/50 hover:bg-surface-container-low transition-all relative flex flex-col justify-between min-h-[96px] focus:outline-none focus:ring-2 focus:ring-primary/20" type="button">
+<div>
+<div class="flex items-center justify-between">
+<span class="font-label-lg text-label-lg font-semibold text-on-surface">Plug-in</span>
+<span class="material-symbols-outlined text-[18px] text-outline opacity-0 group-hover:opacity-60">radio_button_unchecked</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 leading-snug">Can be charged from an external socket</p>
+</div>
+<span class="font-label-sm text-label-sm text-outline mt-2 tabular-nums">398 models</span>
+</button>
+</div>
+<!-- Custom Filter Button -->
+<div class="pt-0.5">
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] border border-[#d8d9e4] bg-surface hover:bg-surface-container text-[#30323b] font-label-md text-label-md transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20" type="button">
+<span class="material-symbols-outlined text-[16px] text-secondary">tune</span>
+<span>Custom…</span>
+</button>
+</div>
+<!-- Live Count Indicator Strip -->
+<div class="bg-surface-container-low/70 rounded-xl p-3 flex items-center justify-between gap-space-sm border border-outline-variant/20">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="material-symbols-outlined text-primary text-[20px] flex-shrink-0">pie_chart</span>
+<div class="font-body-sm text-body-sm text-on-surface-variant truncate">
+              Fits <span class="font-label-md text-label-md font-semibold text-[#30323b] tabular-nums">585</span> of <span class="font-label-md text-label-md font-semibold text-[#30323b] tabular-nums">2,679</span> car models
+            </div>
+</div>
+<button class="px-2.5 py-1 rounded-md border border-[#d8d9e4] bg-surface-container-lowest text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-label-sm text-label-sm font-medium transition-colors flex-shrink-0" type="button">
+            See which
+          </button>
+</div>
+</section>
+<!-- Card "Jobs that set their own" -->
+<section class="bg-surface-container-lowest rounded-2xl p-5 shadow-sm border border-[#e8e9f2] space-y-space-md">
+<div class="flex items-start justify-between">
+<div>
+<div class="flex items-center gap-2">
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold tracking-tight">Jobs that set their own</h3>
+<span class="w-6 h-6 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm flex items-center justify-center font-bold">10</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">These jobs override the group preset</p>
+</div>
+<span class="material-symbols-outlined text-outline text-[20px]">rule_folder</span>
+</div>
+<!-- 10 Overriding Job Rows -->
+<div class="space-y-2">
+<!-- Row 1 -->
+<div class="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-surface-container-low/40 hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span>
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Charging Port</span>
+</div>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-label-sm font-medium bg-[#ccfbf1] text-[#0f766e] flex-shrink-0">
+              Plug-in
+            </span>
+</div>
+<!-- Row 2 -->
+<div class="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-surface-container-low/40 hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span>
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Reduction Gear Oil Change</span>
+</div>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-label-sm font-medium bg-surface-variant text-on-surface-variant flex-shrink-0 max-w-[210px] truncate">
+              Electric, Range-extender, Hydrogen
+            </span>
+</div>
+<!-- Row 3 -->
+<div class="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-surface-container-low/40 hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span>
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Inverter Coolant Flush</span>
+</div>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-label-sm font-medium bg-[#ede9fe] text-[#5b21b6] flex-shrink-0">
+              Electrified & Range-extender
+            </span>
+</div>
+<!-- Row 4 -->
+<div class="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-surface-container-low/40 hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span>
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">DC Fast Charging System Test</span>
+</div>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-label-sm font-medium bg-[#dbe1ff] text-[#0153dc] flex-shrink-0">
+              Plug-in & Electric
+            </span>
+</div>
+<!-- Row 5 -->
+<div class="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-surface-container-low/40 hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span>
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">High-Voltage Isolation Check</span>
+</div>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-label-sm font-medium bg-[#e0f2fe] text-[#0369a1] flex-shrink-0">
+              Electrified (HV)
+            </span>
+</div>
+<!-- Row 6 -->
+<div class="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-surface-container-low/40 hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span>
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Regenerative Brake Calibration</span>
+</div>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-label-sm font-medium bg-[#f0f5ff] text-primary flex-shrink-0">
+              Electrified
+            </span>
+</div>
+<!-- Row 7 -->
+<div class="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-surface-container-low/40 hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span>
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Battery Cell Balancing Test</span>
+</div>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-label-sm font-medium bg-[#f0f5ff] text-primary flex-shrink-0">
+              Electrified
+            </span>
+</div>
+<!-- Row 8 -->
+<div class="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-surface-container-low/40 hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span>
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Hydrogen Fuel Cell Stack Inspection</span>
+</div>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-label-sm font-medium bg-[#e0f7fa] text-[#006064] flex-shrink-0">
+              Hydrogen fuel cell
+            </span>
+</div>
+<!-- Row 9 -->
+<div class="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-surface-container-low/40 hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span>
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Onboard Charger Firmware Sync</span>
+</div>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-label-sm font-medium bg-[#ccfbf1] text-[#0f766e] flex-shrink-0">
+              Plug-in
+            </span>
+</div>
+<!-- Row 10 -->
+<div class="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-surface-container-low/40 hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span>
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Drive Unit Sump Screen Clean</span>
+</div>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-label-sm font-medium bg-[#dbe1ff] text-[#0153dc] flex-shrink-0">
+              Electric (BEV)
+            </span>
+</div>
+</div>
+</section>
+</div>
+<!-- Drawer Footer Actions -->
+<footer class="p-space-lg bg-surface-container-lowest border-t border-surface-container-high flex-shrink-0 flex items-center justify-end gap-space-md">
+<button class="h-10 px-5 rounded-[10px] border border-[#a83836] text-[#ba1a1a] hover:bg-[#fdf2f2] font-label-lg text-label-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-error/20" id="cancel-drawer-btn" type="button">
+        Cancel
+      </button>
+<button class="h-10 px-6 rounded-[10px] bg-[#0153dc] hover:bg-[#0047bf] text-[#ffffff] font-label-lg text-label-lg font-medium shadow-sm active:scale-[0.99] transition-all flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-primary/40" id="save-drawer-btn" type="button">
+<span class="material-symbols-outlined text-[18px]">done</span>
+<span>Save</span>
+</button>
+</footer>
+</aside>
+<!-- Interactive Script for Preset Toggle & Close Micro-interactions -->
+<script>
+    (function() {
+      const closeBtn = document.getElementById('close-drawer-btn');
+      const cancelBtn = document.getElementById('cancel-drawer-btn');
+      const saveBtn = document.getElementById('save-drawer-btn');
+      const drawer = document.getElementById('group-drawer');
+      const backdrop = document.getElementById('drawer-backdrop');
+
+      function dismissDrawer() {
+        if (!drawer || !backdrop) return;
+        drawer.style.transform = 'translateX(100%)';
+        backdrop.style.opacity = '0';
+        setTimeout(() => {
+          drawer.classList.add('hidden');
+          backdrop.classList.add('hidden');
+        }, 300);
+      }
+
+      if (closeBtn) closeBtn.addEventListener('click', dismissDrawer);
+      if (cancelBtn) cancelBtn.addEventListener('click', dismissDrawer);
+      if (backdrop) backdrop.addEventListener('click', dismissDrawer);
+      if (saveBtn) {
+        saveBtn.addEventListener('click', function() {
+          const originalContent = saveBtn.innerHTML;
+          saveBtn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">refresh</span><span>Saving...</span>';
+          saveBtn.disabled = true;
+          setTimeout(() => {
+            saveBtn.innerHTML = originalContent;
+            saveBtn.disabled = false;
+            dismissDrawer();
+          }, 450);
+        });
+      }
+    })();
+  </script>
+</div></main></div></body></html>

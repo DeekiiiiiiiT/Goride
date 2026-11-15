@@ -323,3 +323,35 @@ Presets: **Combustion** = ice, mhev, hev, phev, erev. **Electrified** = hev, phe
 **Follow-ups recorded on the service-items audit Open list:**
 - **When a hydrogen-combustion (H2-ICE) model is first confirmed:** add `hydrogen` to the Spark-ignition preset's jobs (Spark Plugs, Spark Plug Wires, Ignition coil, Throttle Body, Carburetor), and decide whether H2-ICE needs a fuel value of its own.
 - **The conventional A/C Compressor job** (HVAC file) is the home for belt-driven compressors, including hybrids with a per-model exception on Electric A/C Compressor.
+
+---
+
+## 9. Stitch screens received (15 Nov) — Keep / Drop / Add
+
+Files: `docs/stitch/powertrain-job-fit-fleet/html/01–10` and `docs/stitch/powertrain-job-fit-dominion/html/01–10` (HTML + PNG, numbered as the prompts). **Stitch = the look; this audit = the content.** Checked by eye and by searching each HTML file for the required elements: all 20 screens contain their key elements. The PNGs of Fleet 1 / 3 and Dominion 7 / 8 / 9 are cut off only because Stitch drew a fixed-height inner scroll area; the port uses the real dialog / drawer layout, so the clipping doesn't carry over.
+
+**Every screen, Drop:** invented data and controls, i.e. engine codes ("1.0L 1KR-FE"), VINs, "auto-detection confidence", "data pipeline / batch", "Export CSV", filter / sort / paging on the check list, "telemetry" text, invented jobs and job counts (e.g. O2 sensors and a heat shield in Exhaust, "Tires & wheels 12 jobs"), sidebar items that don't exist ("Powertrains", "HV & Battery", "Fleet Allocations"…), the "Catalytic" chip, and every text link ("Undo", "Inspect raw feed": real buttons or nothing). Dominion screens 1–6 don't load Inter, so they render serif; the port uses the app's font.
+**Every screen, Keep:** card / drawer / dialog shapes, spacing, chip styles (powertrain chips, "Needs checking", "Confirmed", amber "High-voltage work", amber "Not usual for this car"), the button styles (red outline Cancel, one solid primary), and the layouts below.
+**Content always comes from this audit:** real group names and job counts from live, real "Fits N of 2,679" numbers (2,084 Spark Plugs / 380 Charging Port / 585 Hybrid & electric group, all matching the screens), and the 12 real `needs_check` models.
+
+| # | Fleet screen | Keep | Drop / change |
+|---|---|---|---|
+| 1 | Step 2 petrol | car strip + powertrain pill, group tile grid, "Show all jobs (26 hidden)" | the "13 Groups" box and engine code; use real per-group counts |
+| 2 | Inside a group | group breadcrumb, job cards with action pill + tick, "Show all jobs in this group (8 hidden)" | invented jobs; list = the real fitting jobs |
+| 3 | Show all opened | "Not usual for this car" divider + greyed cards + chip, "Hide jobs that don't fit" | invented jobs |
+| 4 | Hybrid car | Hybrid & electric tile, "Show all jobs (16 hidden)" | — |
+| 5 | Unknown engine type | amber banner + "Link this car" button, all tiles | — |
+| 6 | Step 3 not usual | chip in the job card header + "You picked this from all jobs" helper | — |
+| 7 | Review | chip on the job card | — |
+| 8 | Service history | chip on the opened service's job | — |
+| 9 | States | loading, "Couldn't check… Showing every job" + Try again, group-removed caption, nothing ticked | — |
+| 10 | Phone | single-column tiles, full-width "Show all jobs", pinned footer | — |
+
+| # | Dominion screen | Keep | Drop / change |
+|---|---|---|---|
+| 1–4 | Car model "What powers this car" card (worked out / editing / confirmed / re-confirm) | the card, two rows with chips, status chip, "Worked out from …", Confirm / Edit, the amber re-confirm strip | serif font; extra spec rows Stitch invented |
+| 5 | Powertrain to check | row layout (model, raw data line, two selects, Confirm), "12 left", the disagreement strip, the confirmed row fading | confidence %, pipeline text, VIN lines, filter / sort / paging, CSV export, "Undo" / "Inspect raw feed" links |
+| 6 | Vehicles home | "Powertrain to check" card + "Powertrain mix" bar with the 3a counts | invented other cards |
+| 7–8 | Job drawer Fits | "Same as group / Set for this job", preset select, Custom checkbox chips, HV switch + header chip, "Fits N of 2,679" + "See which" | "Electrical specifications" / "Safety isolation protocol" rows (invented), "Reset to default" button |
+| 9 | Group drawer presets | 2×2 preset cards, "Jobs that set their own" list, no HV switch | — |
+| 10 | States | loading, "Every car model is confirmed", couldn't save + Try again, couldn't count + Retry | — |

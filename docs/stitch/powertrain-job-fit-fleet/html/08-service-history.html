@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      "colors": {
+        "on-secondary-fixed-variant": "#005137",
+        "error": "#ba1a1a",
+        "outline-variant": "#c9c5cd",
+        "surface-container": "#eeedf7",
+        "primary-fixed-dim": "#c8c3df",
+        "secondary-container": "#82f5c1",
+        "on-tertiary-fixed-variant": "#6e3900",
+        "secondary": "#006c4a",
+        "on-primary-fixed-variant": "#46445b",
+        "error-container": "#ffdad6",
+        "secondary-fixed": "#85f8c4",
+        "outline": "#78767d",
+        "inverse-surface": "#2f3038",
+        "surface-dim": "#dad9e3",
+        "on-error": "#ffffff",
+        "on-tertiary-fixed": "#2f1500",
+        "on-surface": "#1a1b22",
+        "on-secondary-fixed": "#002114",
+        "background": "#fbf8ff",
+        "inverse-on-surface": "#f1effa",
+        "surface-container-low": "#f4f2fd",
+        "on-surface-variant": "#47464c",
+        "on-background": "#1a1b22",
+        "primary": "#000000",
+        "primary-container": "#1b192e",
+        "on-primary-container": "#84819a",
+        "tertiary-fixed-dim": "#ffb77d",
+        "secondary-fixed-dim": "#68dba9",
+        "inverse-primary": "#c8c3df",
+        "surface-container-lowest": "#ffffff",
+        "surface-variant": "#e3e1ec",
+        "surface-container-high": "#e8e7f1",
+        "surface-tint": "#5e5c74",
+        "tertiary": "#000000",
+        "surface": "#fbf8ff",
+        "on-primary": "#ffffff",
+        "tertiary-container": "#2f1500",
+        "on-primary-fixed": "#1b192e",
+        "on-tertiary": "#ffffff",
+        "surface-container-highest": "#e3e1ec",
+        "surface-bright": "#fbf8ff",
+        "primary-fixed": "#e4dffc",
+        "on-tertiary-container": "#c76c00",
+        "on-secondary": "#ffffff",
+        "on-secondary-container": "#00714e",
+        "on-error-container": "#93000a",
+        "tertiary-fixed": "#ffdcc3"
+      },
+      "borderRadius": {
+        "DEFAULT": "0.25rem",
+        "lg": "0.5rem",
+        "xl": "0.75rem",
+        "full": "9999px"
+      },
+      "spacing": {
+        "space-md": "1rem",
+        "space-sm": "0.5rem",
+        "space-lg": "1.5rem",
+        "space-xs": "0.25rem",
+        "margin-mobile": "1rem",
+        "gutter-mobile": "0.75rem",
+        "gutter": "1.5rem",
+        "space-xl": "2rem",
+        "margin": "2rem"
+      },
+      "fontFamily": {
+        "title-sm": ["Inter"],
+        "label-md": ["Inter"],
+        "body-sm": ["Inter"],
+        "label-sm": ["Inter"],
+        "body-md": ["Inter"],
+        "headline-md": ["Inter"],
+        "headline-lg": ["Inter"],
+        "body-lg": ["Inter"],
+        "title-md": ["Inter"],
+        "headline-lg-mobile": ["Inter"],
+        "display-lg": ["Inter"]
+      },
+      "fontSize": {
+        "title-sm": ["14px", {"lineHeight": "20px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "500"}],
+        "body-sm": ["13px", {"lineHeight": "18px", "letterSpacing": "0em", "fontWeight": "400"}],
+        "label-sm": ["11px", {"lineHeight": "14px", "letterSpacing": "0.03em", "fontWeight": "600"}],
+        "body-md": ["14px", {"lineHeight": "20px", "letterSpacing": "-0.005em", "fontWeight": "400"}],
+        "headline-md": ["20px", {"lineHeight": "28px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+        "headline-lg": ["28px", {"lineHeight": "36px", "letterSpacing": "-0.025em", "fontWeight": "600"}],
+        "body-lg": ["15px", {"lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "400"}],
+        "title-md": ["16px", {"lineHeight": "24px", "letterSpacing": "-0.015em", "fontWeight": "600"}],
+        "headline-lg-mobile": ["22px", {"lineHeight": "28px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+        "display-lg": ["36px", {"lineHeight": "44px", "letterSpacing": "-0.03em", "fontWeight": "600"}]
+      }
+    }
+  }
+}</script></head><body class="bg-surface font-body-md text-body-md text-on-surface min-h-screen flex flex-col"><header class="fixed top-0 w-full z-50 bg-surface-container-lowest/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 max-w-7xl mx-auto px-gutter flex items-center justify-between"><div class="flex items-center gap-space-lg"><a class="flex items-center gap-space-sm group" data-path="dashboard" href="#"><div class="w-8 h-8 rounded-lg bg-tertiary-fixed flex items-center justify-center"><span class="material-symbols-outlined text-on-tertiary-fixed text-[20px]">local_shipping</span></div><span class="font-headline-md text-headline-md tracking-tight text-on-tertiary-container font-bold">Roam<span class="text-on-surface font-semibold ml-1">Fleet</span></span></a><nav class="hidden md:flex items-center gap-space-xs" data-active-classes="bg-surface-container-high text-on-surface font-title-sm text-title-sm"><a class="px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors font-body-md text-body-md" data-path="dashboard" href="#">Dashboard</a><a class="px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors font-body-md text-body-md" data-path="vehicles" href="#">Vehicles</a><a aria-current="page" class="px-space-md py-space-sm rounded-lg transition-colors bg-surface-container-high text-on-surface font-title-sm text-title-sm" data-path="fleet-maintenance" href="#">Fleet Maintenance</a><a class="px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors font-body-md text-body-md" data-path="drivers" href="#">Drivers</a><a class="px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors font-body-md text-body-md" data-path="reports" href="#">Reports</a><a class="px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors font-body-md text-body-md" data-path="settings" href="#">Settings</a></nav></div><div class="flex items-center gap-space-sm"><button aria-label="Notifications" class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">notifications</span></button><button aria-label="Help Center" class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">help_outline</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center ml-space-xs"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full pt-16 flex-1 bg-surface"><div class="max-w-7xl mx-auto px-gutter py-space-lg"><div class="flex flex-col w-full pb-space-xl">
+<!-- Page Header & Operational Status Indicator -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-space-md mb-space-lg">
+<div>
+<div class="flex items-center gap-space-xs text-on-surface-variant font-label-md text-label-md uppercase tracking-wider mb-1">
+<span class="text-on-tertiary-container font-semibold">Asset Telemetry</span>
+<span>/</span>
+<span>Maintenance Logs</span>
+</div>
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-xl bg-tertiary-fixed flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-on-tertiary-fixed text-[22px]" style="font-variation-settings: 'FILL' 1;">build</span>
+</div>
+<div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">Fleet Maintenance</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Track lifecycle work orders, historical logsheets, and compliance overhauls.</p>
+</div>
+</div>
+</div>
+<!-- Quick Stat Counter Pill -->
+<div class="flex items-center gap-space-sm self-start md:self-auto bg-surface-container-lowest px-space-md py-space-sm rounded-xl shadow-sm">
+<div class="flex flex-col pr-space-md">
+<span class="font-label-sm text-label-sm uppercase text-on-surface-variant">YTD Spend (Selected)</span>
+<span class="font-title-md text-title-md font-bold text-on-surface tabular-nums">J$ 49,900</span>
+</div>
+<div class="w-8 h-8 rounded-full bg-secondary-fixed flex items-center justify-center">
+<span class="material-symbols-outlined text-on-secondary-fixed text-[18px]">verified</span>
+</div>
+</div>
+</div>
+<!-- Primary Sub-navigation Tabs -->
+<div class="flex items-center gap-space-xs overflow-x-auto pb-space-xs mb-space-lg">
+<a class="px-space-md py-space-sm rounded-lg font-body-md text-body-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors whitespace-nowrap" href="#">
+      Overview
+    </a>
+<a class="px-space-md py-space-sm rounded-lg font-body-md text-body-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors whitespace-nowrap" href="#">
+      Active work orders
+    </a>
+<a class="px-space-md py-space-sm rounded-lg font-title-sm text-title-sm text-on-primary bg-primary shadow-sm whitespace-nowrap flex items-center gap-space-xs" href="#">
+<span class="material-symbols-outlined text-[18px]">receipt_long</span>
+      Service history
+    </a>
+<a class="px-space-md py-space-sm rounded-lg font-body-md text-body-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors whitespace-nowrap" href="#">
+      Schedules &amp; alerts
+    </a>
+</div>
+<!-- Filter & Action Bar -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm mb-space-lg flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-space-md">
+<div class="flex flex-wrap items-center gap-space-sm flex-1">
+<!-- Vehicle Selector Dropdown -->
+<div class="relative min-w-[280px] flex-1 sm:flex-initial">
+<label class="block font-label-sm text-label-sm text-on-surface-variant uppercase mb-1">Target Asset</label>
+<button class="w-full flex items-center justify-between gap-space-sm px-space-md py-space-sm bg-surface-container-low hover:bg-surface-container-high text-on-surface rounded-lg text-left transition-colors" type="button">
+<div class="flex items-center gap-space-sm min-w-0">
+<span class="material-symbols-outlined text-on-tertiary-container text-[20px]">directions_car</span>
+<div class="truncate">
+<span class="font-title-sm text-title-sm font-semibold text-on-surface">Toyota Roomy (2019)</span>
+<span class="font-label-md text-label-md text-on-surface-variant ml-1">· 5179KZ [Petrol]</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">unfold_more</span>
+</button>
+</div>
+<!-- Date Range Dropdown -->
+<div class="relative min-w-[170px]">
+<label class="block font-label-sm text-label-sm text-on-surface-variant uppercase mb-1">Date Window</label>
+<button class="w-full flex items-center justify-between gap-space-sm px-space-md py-space-sm bg-surface-container-low hover:bg-surface-container-high text-on-surface rounded-lg text-left transition-colors" type="button">
+<div class="flex items-center gap-space-xs text-on-surface">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">calendar_today</span>
+<span class="font-body-md text-body-md font-medium">Last 12 months</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">expand_more</span>
+</button>
+</div>
+<!-- Search Input -->
+<div class="relative min-w-[200px] flex-1">
+<label class="block font-label-sm text-label-sm text-on-surface-variant uppercase mb-1">Search Logs</label>
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-3 text-on-surface-variant text-[18px]">search</span>
+<input class="w-full pl-9 pr-space-md py-space-sm bg-surface-container-low focus:bg-surface-container-lowest text-on-surface placeholder:text-on-surface-variant font-body-md text-body-md rounded-lg outline-none transition-colors" placeholder="Filter by job, OEM #, shop..." type="text"/>
+</div>
+</div>
+</div>
+<!-- Right Controls: Export and Log Action -->
+<div class="flex items-center gap-space-sm self-end xl:self-center mt-2 xl:mt-0">
+<button class="flex items-center gap-space-xs px-space-md py-space-sm bg-surface-container-low hover:bg-surface-container-high text-on-surface rounded-lg font-body-md text-body-md font-medium transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">download</span>
+        Export
+      </button>
+<button class="flex items-center gap-space-xs px-space-md py-space-sm bg-primary hover:bg-inverse-surface text-on-primary rounded-lg font-title-sm text-title-sm transition-all shadow-sm active:scale-[0.99]" type="button">
+<span class="material-symbols-outlined text-[18px]">add</span>
+        + Log service
+      </button>
+</div>
+</div>
+<!-- Asset Telemetry Header Summary Card -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-md mb-space-lg">
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center gap-space-md">
+<div class="w-12 h-12 rounded-xl bg-surface-container-low flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface text-[24px]">speed</span>
+</div>
+<div>
+<p class="font-label-sm text-label-sm text-on-surface-variant uppercase font-semibold">Odometer Reading</p>
+<p class="font-headline-md text-headline-md font-bold text-on-surface tabular-nums">198,250 <span class="font-body-sm text-body-sm font-normal text-on-surface-variant">km</span></p>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center gap-space-md">
+<div class="w-12 h-12 rounded-xl bg-surface-container-low flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface text-[24px]">construction</span>
+</div>
+<div>
+<p class="font-label-sm text-label-sm text-on-surface-variant uppercase font-semibold">Total Logged Jobs</p>
+<p class="font-headline-md text-headline-md font-bold text-on-surface tabular-nums">9 <span class="font-body-sm text-body-sm font-normal text-on-surface-variant">tasks</span></p>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center gap-space-md">
+<div class="w-12 h-12 rounded-xl bg-surface-container-low flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary text-[24px]">event_repeat</span>
+</div>
+<div>
+<p class="font-label-sm text-label-sm text-on-surface-variant uppercase font-semibold">Service Health</p>
+<p class="font-headline-md text-headline-md font-bold text-secondary">Up to date</p>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center gap-space-md">
+<div class="w-12 h-12 rounded-xl bg-surface-container-low flex items-center justify-center">
+<span class="material-symbols-outlined text-on-tertiary-container text-[24px]">payments</span>
+</div>
+<div>
+<p class="font-label-sm text-label-sm text-on-surface-variant uppercase font-semibold">Avg Job Cost</p>
+<p class="font-headline-md text-headline-md font-bold text-on-surface tabular-nums">J$ 5,544</p>
+</div>
+</div>
+</div>
+<!-- Services Data Table Container -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<div class="px-space-lg py-space-md bg-surface-container-low flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<h2 class="font-title-md text-title-md font-bold text-on-surface">Recorded Maintenance Events</h2>
+<span class="bg-surface-container-high px-2 py-0.5 rounded-full font-label-sm text-label-sm text-on-surface-variant font-semibold">4 Entries</span>
+</div>
+<div class="font-label-md text-label-md text-on-surface-variant">
+        Values listed in Jamaican Dollar (J$) · Tabular Figures
+      </div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider">
+<th class="py-space-sm px-space-md font-semibold">Date</th>
+<th class="py-space-sm px-space-md font-semibold">Mileage</th>
+<th class="py-space-sm px-space-md font-semibold">Service / Jobs</th>
+<th class="py-space-sm px-space-md font-semibold">Provider / Shop</th>
+<th class="py-space-sm px-space-md font-semibold text-right">Total Cost</th>
+<th class="py-space-sm px-space-md font-semibold text-center">Status</th>
+<th class="py-space-sm px-space-md font-semibold text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y-0">
+<!-- ROW 1: EXPANDED ACCORDION VIEW -->
+<tr class="bg-surface-container-low/70 transition-colors">
+<td class="py-space-md px-space-md font-title-sm text-title-sm text-on-surface font-semibold whitespace-nowrap">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+                15 Nov 2026
+              </div>
+</td>
+<td class="py-space-md px-space-md font-body-md text-body-md text-on-surface tabular-nums whitespace-nowrap">
+              198,250 km
+            </td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<div class="flex items-center gap-space-xs">
+<span class="font-title-sm text-title-sm text-on-surface font-medium">Exhaust repair &amp; glow plug check</span>
+<span class="bg-surface-container-high text-on-surface-variant text-label-sm font-label-sm px-2 py-0.5 rounded-full">2 jobs</span>
+</div>
+</td>
+<td class="py-space-md px-space-md font-body-md text-body-md text-on-surface-variant whitespace-nowrap">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">store</span>
+                Central Fleet Depot
+              </div>
+</td>
+<td class="py-space-md px-space-md font-title-sm text-title-sm text-on-surface font-bold text-right tabular-nums whitespace-nowrap">
+              J$ 18,500
+            </td>
+<td class="py-space-md px-space-md text-center whitespace-nowrap">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-label-md text-label-md bg-secondary-fixed text-on-secondary-fixed font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+                Completed
+              </span>
+</td>
+<td class="py-space-md px-space-md text-right whitespace-nowrap">
+<button aria-label="Collapse inspection details" class="w-8 h-8 rounded-lg bg-surface-container-high text-on-surface inline-flex items-center justify-center hover:bg-surface-container transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">expand_less</span>
+</button>
+</td>
+</tr>
+<!-- EXPANDED ACCORDION INNER CARD (Spans full table) -->
+<tr class="bg-surface-container-low/40">
+<td class="p-0" colspan="7">
+<div class="p-space-lg mx-space-md my-space-xs bg-surface-container-lowest rounded-xl shadow-sm">
+<!-- Breakdown Sub-Header -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between pb-space-md mb-space-md bg-surface-container-low/50 p-space-md rounded-lg">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-on-tertiary-container text-[20px]">fact_check</span>
+<div>
+<h3 class="font-title-sm text-title-sm font-bold text-on-surface">Detailed Work Order Itemization</h3>
+<p class="font-label-md text-label-md text-on-surface-variant">Work Order #WO-2026-8819 · Closed by Central Fleet Operations</p>
+</div>
+</div>
+<div class="mt-2 sm:mt-0 flex items-center gap-space-sm">
+<span class="font-label-md text-label-md text-on-surface-variant">Invoice ref:</span>
+<span class="font-label-sm text-label-sm font-semibold bg-surface-container-high text-on-surface px-2 py-1 rounded">CFD-99420-INV</span>
+</div>
+</div>
+<!-- Job Items Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-md mb-space-md">
+<!-- Job 1 -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-col justify-between">
+<div>
+<div class="flex items-start justify-between gap-space-sm mb-space-xs">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-on-surface text-[18px]">car_repair</span>
+<span class="font-title-sm text-title-sm font-bold text-on-surface">Job 1: Muffler</span>
+</div>
+<span class="font-title-sm text-title-sm font-bold text-on-surface tabular-nums">J$ 12,000</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface mb-space-sm">
+                        Replaced rear muffler box &amp; rubber hangers
+                      </p>
+</div>
+<div class="pt-space-xs flex items-center justify-between bg-surface-container-lowest/80 px-space-sm py-1 rounded-lg">
+<span class="font-label-sm text-label-sm text-on-surface-variant">OEM Toyota/Daihatsu</span>
+<span class="font-label-sm text-label-sm font-semibold text-on-surface font-mono">#17430-B1360</span>
+</div>
+</div>
+<!-- Job 2 (With Special Alert Badge) -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-col justify-between">
+<div>
+<div class="flex items-start justify-between gap-space-sm mb-space-xs">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-on-surface text-[18px]">electrical_services</span>
+<span class="font-title-sm text-title-sm font-bold text-on-surface">Job 2: Glow Plugs</span>
+</div>
+<span class="font-title-sm text-title-sm font-bold text-on-surface tabular-nums">J$ 6,500</span>
+</div>
+<!-- Prominent Soft Amber Tag -->
+<div class="inline-flex items-center gap-1.5 px-space-sm py-1 rounded-lg bg-tertiary-fixed text-on-tertiary-fixed font-label-md text-label-md font-semibold mb-space-sm">
+<span class="material-symbols-outlined text-on-tertiary-fixed text-[16px]">info</span>
+<span>Not usual for this car</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-xs">
+                        Diagnostic cycle run on secondary ignition rail. Replacement applied.
+                      </p>
+</div>
+<div class="pt-space-xs flex items-center justify-between bg-surface-container-lowest/80 px-space-sm py-1 rounded-lg">
+<div class="flex items-center gap-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Denso DG-305</span>
+<span class="text-on-surface-variant font-label-sm text-label-sm">·</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant italic">Logged from all jobs catalog</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant text-[16px]">inventory_2</span>
+</div>
+</div>
+</div>
+<!-- Technician Notes Banner -->
+<div class="p-space-md bg-surface-container rounded-xl flex items-start gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center flex-shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-on-surface text-[18px]">engineering</span>
+</div>
+<div class="min-w-0">
+<h4 class="font-label-sm text-label-sm font-bold text-on-surface uppercase tracking-wide">Invoice &amp; Technician Notes</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+                      “Mechanic noted custom aftermarket wiring; glow plugs tested and replaced per supervisor request.”
+                    </p>
+</div>
+</div>
+<!-- Visual Scans / Work order artifacts preview -->
+<div class="mt-space-md flex flex-wrap items-center justify-between gap-space-sm pt-space-xs">
+<div class="flex items-center gap-space-sm">
+<button class="inline-flex items-center gap-1.5 px-space-sm py-1 bg-surface-container-low hover:bg-surface-container-high rounded-lg font-label-md text-label-md text-on-surface transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">picture_as_pdf</span>
+                      View Signed Work Order (PDF)
+                    </button>
+<button class="inline-flex items-center gap-1.5 px-space-sm py-1 bg-surface-container-low hover:bg-surface-container-high rounded-lg font-label-md text-label-md text-on-surface transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">photo_library</span>
+                      Exhaust &amp; Bay Photos (4)
+                    </button>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-mono">HASH: 8F2A-0931-E4</span>
+</div>
+</div>
+</td>
+</tr>
+<!-- ROW 2: COLLAPSED -->
+<tr class="hover:bg-surface-container-low/40 transition-colors">
+<td class="py-space-md px-space-md font-title-sm text-title-sm text-on-surface whitespace-nowrap">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-outline-variant"></span>
+                12 Aug 2026
+              </div>
+</td>
+<td class="py-space-md px-space-md font-body-md text-body-md text-on-surface tabular-nums whitespace-nowrap">
+              185,100 km
+            </td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<div class="flex items-center gap-space-xs">
+<span class="font-title-sm text-title-sm text-on-surface font-medium">Oil &amp; filter change, Tire rotation</span>
+<span class="bg-surface-container-high text-on-surface-variant text-label-sm font-label-sm px-2 py-0.5 rounded-full">2 jobs</span>
+</div>
+</td>
+<td class="py-space-md px-space-md font-body-md text-body-md text-on-surface-variant whitespace-nowrap">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">store</span>
+                QuickLube Express
+              </div>
+</td>
+<td class="py-space-md px-space-md font-title-sm text-title-sm text-on-surface font-bold text-right tabular-nums whitespace-nowrap">
+              J$ 7,400
+            </td>
+<td class="py-space-md px-space-md text-center whitespace-nowrap">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-label-md text-label-md bg-secondary-fixed text-on-secondary-fixed font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+                Completed
+              </span>
+</td>
+<td class="py-space-md px-space-md text-right whitespace-nowrap">
+<button aria-label="Expand inspection details" class="w-8 h-8 rounded-lg bg-surface-container-low text-on-surface-variant inline-flex items-center justify-center hover:bg-surface-container-high hover:text-on-surface transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">expand_more</span>
+</button>
+</td>
+</tr>
+<!-- ROW 3: COLLAPSED -->
+<tr class="hover:bg-surface-container-low/40 transition-colors">
+<td class="py-space-md px-space-md font-title-sm text-title-sm text-on-surface whitespace-nowrap">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-outline-variant"></span>
+                04 May 2026
+              </div>
+</td>
+<td class="py-space-md px-space-md font-body-md text-body-md text-on-surface tabular-nums whitespace-nowrap">
+              172,000 km
+            </td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<div class="flex items-center gap-space-xs">
+<span class="font-title-sm text-title-sm text-on-surface font-medium">Front Brake Pads, Brake Fluid Flush</span>
+<span class="bg-surface-container-high text-on-surface-variant text-label-sm font-label-sm px-2 py-0.5 rounded-full">2 jobs</span>
+</div>
+</td>
+<td class="py-space-md px-space-md font-body-md text-body-md text-on-surface-variant whitespace-nowrap">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">store</span>
+                BrakePro Garage
+              </div>
+</td>
+<td class="py-space-md px-space-md font-title-sm text-title-sm text-on-surface font-bold text-right tabular-nums whitespace-nowrap">
+              J$ 14,200
+            </td>
+<td class="py-space-md px-space-md text-center whitespace-nowrap">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-label-md text-label-md bg-secondary-fixed text-on-secondary-fixed font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+                Completed
+              </span>
+</td>
+<td class="py-space-md px-space-md text-right whitespace-nowrap">
+<button aria-label="Expand inspection details" class="w-8 h-8 rounded-lg bg-surface-container-low text-on-surface-variant inline-flex items-center justify-center hover:bg-surface-container-high hover:text-on-surface transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">expand_more</span>
+</button>
+</td>
+</tr>
+<!-- ROW 4: COLLAPSED -->
+<tr class="hover:bg-surface-container-low/40 transition-colors">
+<td class="py-space-md px-space-md font-title-sm text-title-sm text-on-surface whitespace-nowrap">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-outline-variant"></span>
+                18 Jan 2026
+              </div>
+</td>
+<td class="py-space-md px-space-md font-body-md text-body-md text-on-surface tabular-nums whitespace-nowrap">
+              160,400 km
+            </td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<div class="flex items-center gap-space-xs">
+<span class="font-title-sm text-title-sm text-on-surface font-medium">Engine Air Filter, Cabin Filter, Spark Plugs</span>
+<span class="bg-surface-container-high text-on-surface-variant text-label-sm font-label-sm px-2 py-0.5 rounded-full">3 jobs</span>
+</div>
+</td>
+<td class="py-space-md px-space-md font-body-md text-body-md text-on-surface-variant whitespace-nowrap">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">store</span>
+                Central Fleet Depot
+              </div>
+</td>
+<td class="py-space-md px-space-md font-title-sm text-title-sm text-on-surface font-bold text-right tabular-nums whitespace-nowrap">
+              J$ 9,800
+            </td>
+<td class="py-space-md px-space-md text-center whitespace-nowrap">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-label-md text-label-md bg-secondary-fixed text-on-secondary-fixed font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+                Completed
+              </span>
+</td>
+<td class="py-space-md px-space-md text-right whitespace-nowrap">
+<button aria-label="Expand inspection details" class="w-8 h-8 rounded-lg bg-surface-container-low text-on-surface-variant inline-flex items-center justify-center hover:bg-surface-container-high hover:text-on-surface transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">expand_more</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Table Pagination & Footer Status -->
+<div class="px-space-lg py-space-md bg-surface-container-low flex flex-col sm:flex-row items-center justify-between gap-space-md">
+<div class="font-body-sm text-body-sm text-on-surface-variant">
+        Showing <span class="font-semibold text-on-surface">1</span> to <span class="font-semibold text-on-surface">4</span> of <span class="font-semibold text-on-surface">4</span> total logs for Toyota Roomy (2019)
+      </div>
+<div class="flex items-center gap-space-xs">
+<button class="px-space-md py-1 rounded bg-surface-container-high text-on-surface-variant font-label-md text-label-md opacity-50 cursor-not-allowed" disabled="" type="button">
+          Previous
+        </button>
+<span class="px-3 py-1 font-title-sm text-title-sm bg-surface-container-lowest text-on-surface rounded shadow-sm font-semibold">1</span>
+<button class="px-space-md py-1 rounded bg-surface-container-high text-on-surface-variant font-label-md text-label-md opacity-50 cursor-not-allowed" disabled="" type="button">
+          Next
+        </button>
+</div>
+</div>
+</div>
+<!-- Operational Insights Banner (Asymmetric Bento Block) -->
+<div class="mt-space-lg grid grid-cols-1 lg:grid-cols-3 gap-space-md">
+<!-- Visual Vehicle Card with Placeholder -->
+<div class="bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm flex flex-col">
+<div class="relative h-44 w-full bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="A clean front-three-quarter studio photograph of a modern compact Toyota Roomy tall wagon van in metallic silver finish, pristine condition, soft studio reflection, hyper-realistic commercial automotive lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB-AQqRfBHIDHv1RoFRlmeCtO_y8H13V3qUlAImMqx58QPfFJgbXzfBJPv3a0WY7R5jqeDqpBCTysUTMKlN48QpIlW7rcxZEVcDIYrajyVHFZH6OOcrtTW-Y4rLbJJE4Vnge9uGxfSxDw4zkK_-XbB0yVZ5vdMg408fz4HZh6sQYnCXYlguerk3hH3jZLHgjNrJGDLoBqzwV_WXyEYbCh9m3jIG06jiLrEN7lxfcAVo"/>
+<div class="absolute top-3 left-3 bg-inverse-surface/80 backdrop-blur-md px-2.5 py-1 rounded text-on-primary font-label-sm text-label-sm font-medium">
+          5179KZ · Petrol 1.0L
+        </div>
+</div>
+<div class="p-space-md flex-1 flex flex-col justify-between">
+<div>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-on-tertiary-container font-bold">Assigned Profile</span>
+<h4 class="font-title-md text-title-md font-bold text-on-surface mt-0.5">Toyota Roomy G Grade (2019)</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Direct-injected 1KR-FE motor. Assigned to Kingston Central Courier Route.</p>
+</div>
+<div class="mt-space-md pt-space-sm flex items-center justify-between text-on-surface-variant font-label-md text-label-md">
+<span>Assigned Driver: Marcus Sterling</span>
+<span class="material-symbols-outlined text-[18px]">badge</span>
+</div>
+</div>
+</div>
+<!-- Maintenance Frequency SVG Telemetry Chart -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between mb-space-xs">
+<h4 class="font-title-md text-title-md font-bold text-on-surface">Service Interval Cadence</h4>
+<span class="font-label-sm text-label-sm bg-secondary-fixed text-on-secondary-fixed px-2 py-0.5 rounded font-semibold">Optimal</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Interval average: 12,616 km between routine shop visits.</p>
+</div>
+<!-- Inline Telemetry SVG Chart -->
+<div class="py-space-md">
+<svg class="w-full h-24 overflow-visible" preserveaspectratio="none" viewbox="0 0 300 70">
+<!-- Baseline and target guides -->
+<line class="text-surface-container-high" stroke="currentColor" stroke-dasharray="4 4" stroke-width="1" x1="0" x2="300" y1="20" y2="20"></line>
+<line class="text-surface-container-high" stroke="currentColor" stroke-width="1" x1="0" x2="300" y1="50" y2="50"></line>
+<!-- Interval Sparkline Gradient -->
+<path class="text-primary" d="M 10 52 Q 60 48, 100 38 T 190 28 T 280 18" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2.5"></path>
+<!-- Key Points -->
+<circle class="fill-surface-container-lowest text-primary" cx="10" cy="52" r="4" stroke="currentColor" stroke-width="2"></circle>
+<circle class="fill-surface-container-lowest text-primary" cx="100" cy="38" r="4" stroke="currentColor" stroke-width="2"></circle>
+<circle class="fill-surface-container-lowest text-primary" cx="190" cy="28" r="4" stroke="currentColor" stroke-width="2"></circle>
+<circle class="fill-on-tertiary-container" cx="280" cy="18" r="5"></circle>
+</svg>
+<div class="flex justify-between font-label-sm text-label-sm text-on-surface-variant mt-1">
+<span>Jan '26 (160k)</span>
+<span>May '26 (172k)</span>
+<span>Aug '26 (185k)</span>
+<span class="font-semibold text-on-surface">Nov '26 (198k)</span>
+</div>
+</div>
+<div class="bg-surface-container-low p-space-sm rounded-lg flex items-center gap-space-sm text-on-surface-variant font-label-md text-label-md">
+<span class="material-symbols-outlined text-[16px] text-on-tertiary-container">schedule</span>
+        Next scheduled service projected at 210,000 km.
+      </div>
+</div>
+<!-- Depot Compliance Note & Quick Action -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col justify-between">
+<div>
+<div class="w-10 h-10 rounded-xl bg-tertiary-fixed flex items-center justify-center mb-space-sm">
+<span class="material-symbols-outlined text-on-tertiary-fixed text-[20px]">assignment_turned_in</span>
+</div>
+<h4 class="font-title-md text-title-md font-bold text-on-surface">Automated Audit Sync</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">
+          All service bills, line-item costs, and replaced components have been logged to the National Transport Authority vehicle compliance file.
+        </p>
+</div>
+<div class="mt-space-md pt-space-md bg-surface-container-low p-space-md rounded-xl">
+<div class="flex items-center justify-between text-on-surface font-title-sm text-title-sm mb-1">
+<span>Warranty Preservation</span>
+<span class="font-bold text-secondary">94%</span>
+</div>
+<div class="w-full bg-surface-container-high h-2 rounded-full overflow-hidden">
+<div class="bg-secondary h-full rounded-full" style="width: 94%;"></div>
+</div>
+<span class="block mt-2 font-label-sm text-label-sm text-on-surface-variant">Validated with Genuine &amp; Approved OEM alternatives</span>
+</div>
+</div>
+</div>
+</div></div></main><footer class="w-full bg-surface-container-low mt-auto"><div class="max-w-7xl mx-auto px-gutter py-space-xl flex flex-col md:flex-row items-center justify-between gap-space-md"><div class="flex items-center gap-space-sm"><div class="w-6 h-6 rounded-lg bg-tertiary-fixed flex items-center justify-center"><span class="material-symbols-outlined text-on-tertiary-fixed text-[14px]">local_shipping</span></div><p class="font-body-sm text-body-sm text-on-surface-variant">© 2025 Roam Fleet Technologies, Inc. All rights reserved.</p></div><nav class="flex items-center gap-space-lg"><a class="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" href="#">Privacy Policy</a><a class="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" href="#">Terms of Service</a><a class="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" href="#">Compliance &amp; Safety</a><a class="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" href="#">System Status</a></nav></div></footer></body></html>

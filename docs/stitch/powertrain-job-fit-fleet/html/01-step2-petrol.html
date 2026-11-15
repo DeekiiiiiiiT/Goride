@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={"darkMode":"class","theme":{"extend":{"colors":{"error":"#ba1a1a","on-secondary-fixed":"#002114","surface-container-low":"#f4f2fd","on-primary-container":"#84819a","on-primary":"#ffffff","secondary-container":"#82f5c1","primary-fixed":"#e4dffc","tertiary-fixed-dim":"#ffb77d","on-tertiary-fixed-variant":"#6e3900","on-tertiary":"#ffffff","surface-dim":"#dad9e3","on-surface-variant":"#47464c","on-tertiary-fixed":"#2f1500","secondary":"#006c4a","surface-variant":"#e3e1ec","on-error-container":"#93000a","inverse-on-surface":"#f1effa","on-primary-fixed-variant":"#46445b","surface-container-highest":"#e3e1ec","inverse-surface":"#2f3038","primary":"#000000","secondary-fixed":"#85f8c4","surface-tint":"#5e5c74","primary-fixed-dim":"#c8c3df","on-error":"#ffffff","tertiary":"#000000","on-tertiary-container":"#c76c00","on-background":"#1a1b22","on-secondary-container":"#00714e","outline":"#78767d","on-secondary-fixed-variant":"#005137","surface-container-lowest":"#ffffff","outline-variant":"#c9c5cd","surface-container":"#eeedf7","on-secondary":"#ffffff","on-primary-fixed":"#1b192e","primary-container":"#1b192e","secondary-fixed-dim":"#68dba9","on-surface":"#1a1b22","error-container":"#ffdad6","surface-container-high":"#e8e7f1","inverse-primary":"#c8c3df","surface-bright":"#fbf8ff","tertiary-fixed":"#ffdcc3","surface":"#fbf8ff","background":"#fbf8ff","tertiary-container":"#2f1500"},"borderRadius":{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},"spacing":{"space-sm":"0.5rem","margin":"2rem","space-xl":"2rem","space-lg":"1.5rem","margin-mobile":"1rem","gutter-mobile":"0.75rem","gutter":"1.5rem","space-md":"1rem","space-xs":"0.25rem"},"fontFamily":{"headline-lg":["Inter"],"body-lg":["Inter"],"display-lg":["Inter"],"headline-md":["Inter"],"body-sm":["Inter"],"label-sm":["Inter"],"title-md":["Inter"],"body-md":["Inter"],"headline-lg-mobile":["Inter"],"title-sm":["Inter"],"label-md":["Inter"]},"fontSize":{"headline-lg":["28px",{"lineHeight":"36px","letterSpacing":"-0.025em","fontWeight":"600"}],"body-lg":["15px",{"lineHeight":"24px","letterSpacing":"-0.01em","fontWeight":"400"}],"display-lg":["36px",{"lineHeight":"44px","letterSpacing":"-0.03em","fontWeight":"600"}],"headline-md":["20px",{"lineHeight":"28px","letterSpacing":"-0.02em","fontWeight":"600"}],"body-sm":["13px",{"lineHeight":"18px","letterSpacing":"0em","fontWeight":"400"}],"label-sm":["11px",{"lineHeight":"14px","letterSpacing":"0.03em","fontWeight":"600"}],"title-md":["16px",{"lineHeight":"24px","letterSpacing":"-0.015em","fontWeight":"600"}],"body-md":["14px",{"lineHeight":"20px","letterSpacing":"-0.005em","fontWeight":"400"}],"headline-lg-mobile":["22px",{"lineHeight":"28px","letterSpacing":"-0.02em","fontWeight":"600"}],"title-sm":["14px",{"lineHeight":"20px","letterSpacing":"-0.01em","fontWeight":"600"}],"label-md":["12px",{"lineHeight":"16px","letterSpacing":"0.01em","fontWeight":"500"}]}}}};</script></head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 right-0 w-full z-40 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 w-full px-margin flex items-center justify-between"><div class="flex items-center gap-space-xl"><div class="flex items-center gap-space-sm"><div class="w-9 h-9 rounded-lg bg-tertiary-fixed flex items-center justify-center"><span class="material-symbols-outlined text-on-tertiary-container text-[20px]">local_shipping</span></div><span class="font-headline-md text-headline-md text-on-surface tracking-tight">Roam Fleet</span></div><nav class="hidden lg:flex items-center gap-space-xs" data-active-classes="bg-primary-container text-on-primary-container rounded-lg"><a class="px-space-md py-space-xs font-title-sm text-title-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg" data-path="dashboard" href="#">Dashboard</a><a class="px-space-md py-space-xs font-title-sm text-title-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg" data-path="vehicles" href="#">Vehicles</a><a class="px-space-md py-space-xs font-title-sm text-title-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg" data-path="fleet-maintenance" href="#">Fleet Maintenance</a><a class="px-space-md py-space-xs font-title-sm text-title-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg" data-path="drivers" href="#">Drivers</a><a class="px-space-md py-space-xs font-title-sm text-title-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg" data-path="reports" href="#">Reports</a><a class="px-space-md py-space-xs font-title-sm text-title-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg" data-path="settings" href="#">Settings</a></nav></div><div class="flex items-center gap-space-md"><button class="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">notifications</span></button><button class="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">help_outline</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full pt-16 bg-surface"><div class="flex flex-col w-full relative">
+<!-- Underlay: In-context Fleet Maintenance Workspace (dimmed & blurred backdrop) -->
+<div class="w-full px-margin py-space-lg select-none pointer-events-none filter blur-[5px] opacity-40">
+<!-- Maintenance Hub Top Bar -->
+<div class="flex items-center justify-between mb-space-lg">
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-space-sm">
+<span class="font-headline-lg text-headline-lg text-on-surface">Fleet Maintenance</span>
+<span class="bg-secondary-container text-on-secondary-container px-2.5 py-0.5 rounded-full font-label-sm text-label-sm">Live Sync</span>
+</div>
+<span class="font-body-md text-body-md text-on-surface-variant">Scheduled inspections, fluid logs, and active repair tickets across 48 assets.</span>
+</div>
+<div class="flex items-center gap-space-sm">
+<div class="bg-surface-container-lowest px-4 py-2 rounded-lg shadow-sm flex items-center gap-2">
+<span class="material-symbols-outlined text-outline text-[18px]">search</span>
+<span class="font-body-sm text-body-sm text-outline">Search VIN, plate, or task...</span>
+</div>
+<div class="bg-primary text-on-primary px-4 py-2 rounded-lg font-title-sm text-title-sm flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>Log Work</span>
+</div>
+</div>
+</div>
+<!-- Telemetry Cards -->
+<div class="grid grid-cols-4 gap-gutter mb-space-xl">
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex flex-col justify-between">
+<span class="font-label-sm text-label-sm text-outline uppercase">Active Overdue</span>
+<span class="font-display-lg text-display-lg text-error">3 Units</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Urgent brake & timing checks</span>
+</div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex flex-col justify-between">
+<span class="font-label-sm text-label-sm text-outline uppercase">Scheduled (7 Days)</span>
+<span class="font-display-lg text-display-lg text-on-surface">14 Assets</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Routine 10,000 km cycles</span>
+</div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex flex-col justify-between">
+<span class="font-label-sm text-label-sm text-outline uppercase">Monthly Spend</span>
+<span class="font-display-lg text-display-lg text-on-surface">$12,480</span>
+<span class="font-body-sm text-body-sm text-secondary">4.2% below projection</span>
+</div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex flex-col justify-between">
+<span class="font-label-sm text-label-sm text-outline uppercase">Compliance Rate</span>
+<span class="font-display-lg text-display-lg text-secondary">98.4%</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">NZTA WOF & CoF valid</span>
+</div>
+</div>
+<!-- Background Table Mockup -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<div class="px-space-md py-space-sm bg-surface-container-low flex justify-between items-center">
+<span class="font-title-sm text-title-sm text-on-surface">Vehicles Requiring Service</span>
+<span class="font-label-md text-label-md text-on-surface-variant">Showing 10 of 48 records</span>
+</div>
+<div class="p-space-lg flex flex-col gap-space-sm">
+<div class="h-12 bg-surface-container rounded-lg w-full"></div>
+<div class="h-12 bg-surface-container-low rounded-lg w-full"></div>
+<div class="h-12 bg-surface-container rounded-lg w-full"></div>
+<div class="h-12 bg-surface-container-low rounded-lg w-full"></div>
+</div>
+</div>
+</div>
+<!-- Overlay Modal Backdrop -->
+<div class="fixed inset-0 top-16 z-50 bg-inverse-surface/40 backdrop-blur-md flex items-center justify-center p-space-md overflow-y-auto">
+<!-- Modal Card (760px standard) -->
+<div class="relative w-full max-w-[760px] bg-surface-container-lowest rounded-xl shadow-xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+<!-- 1. Header Section -->
+<div class="px-space-xl pt-space-lg pb-space-md flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-tertiary-fixed flex items-center justify-center text-on-tertiary-container shadow-sm">
+<span class="material-symbols-outlined text-[20px]">build</span>
+</div>
+<div class="flex flex-col">
+<h2 class="font-headline-md text-headline-md text-on-surface tracking-tight">Log service</h2>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Record maintenance tasks, replacement parts, and job telemetry.</span>
+</div>
+</div>
+<button aria-label="Close dialog" class="w-9 h-9 rounded-full bg-surface-container-low hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<!-- Scrollable Interior Body -->
+<div class="px-space-xl pb-space-lg flex flex-col gap-space-md max-h-[calc(88vh-140px)] overflow-y-auto pr-space-lg">
+<!-- 2. Car Identification Strip -->
+<div class="bg-primary-container text-on-primary p-3.5 rounded-xl flex flex-wrap items-center justify-between gap-space-sm shadow-sm">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-8 h-8 rounded-lg bg-inverse-surface flex items-center justify-center text-on-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[18px]">directions_car</span>
+</div>
+<div class="flex items-center gap-2 flex-wrap min-w-0">
+<span class="font-title-sm text-title-sm text-on-primary truncate">Toyota Roomy (2019)</span>
+<span class="font-label-sm text-label-sm bg-surface-container-highest/20 text-inverse-on-surface px-2 py-0.5 rounded-full font-mono">5179KZ</span>
+<span class="bg-secondary text-secondary-fixed text-[11px] font-label-sm px-2.5 py-0.5 rounded-full flex items-center gap-1 font-medium">
+<span class="material-symbols-outlined text-[13px]">local_gas_station</span>
+                Petrol
+              </span>
+</div>
+</div>
+<div class="font-body-sm text-body-sm text-inverse-on-surface/80 flex items-center gap-1.5 tabular-nums">
+<span class="material-symbols-outlined text-[16px] text-inverse-on-surface/60">speed</span>
+<span>198,250 km</span>
+<span class="text-inverse-on-surface/40">·</span>
+<span>15 Nov 2026</span>
+</div>
+</div>
+<!-- 3. Progress Stepper (4 Steps) -->
+<div class="py-space-xs px-space-xs">
+<div class="flex items-center justify-between w-full">
+<!-- Step 1: Completed -->
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+<span class="font-label-md text-label-md text-on-surface-variant font-medium">Date & mileage</span>
+</div>
+<!-- Connector 1-2 -->
+<div class="flex-1 mx-3 h-0.5 bg-secondary-container"></div>
+<!-- Step 2: Active -->
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-sm text-label-sm">
+                2
+              </div>
+<span class="font-label-md text-label-md text-on-surface font-semibold">Work done</span>
+</div>
+<!-- Connector 2-3 -->
+<div class="flex-1 mx-3 h-0.5 bg-surface-container-high"></div>
+<!-- Step 3: Upcoming -->
+<div class="flex items-center gap-2 opacity-60">
+<div class="w-6 h-6 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center font-label-sm text-label-sm">
+                3
+              </div>
+<span class="font-label-md text-label-md text-on-surface-variant">Details</span>
+</div>
+<!-- Connector 3-4 -->
+<div class="flex-1 mx-3 h-0.5 bg-surface-container-high"></div>
+<!-- Step 4: Upcoming -->
+<div class="flex items-center gap-2 opacity-60">
+<div class="w-6 h-6 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center font-label-sm text-label-sm">
+                4
+              </div>
+<span class="font-label-md text-label-md text-on-surface-variant">Review</span>
+</div>
+</div>
+</div>
+<!-- 4. Subtitle / Context Notice -->
+<div class="flex items-center justify-between py-2 px-3 rounded-lg bg-surface-container-low text-on-surface-variant text-body-sm">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[18px]">verified</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Showing jobs tailored to a <strong class="text-on-surface font-title-sm">1.0L 1KR-FE Petrol</strong> powertrain. Non-applicable hybrid systems are omitted.</span>
+</div>
+<span class="font-label-sm text-label-sm text-outline tabular-nums">13 Groups</span>
+</div>
+<!-- 5. Grid of Service Group Tiles (13 Groups tailored for Toyota Roomy Petrol) -->
+<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" id="service-groups-grid">
+<!-- 1. Engine -->
+<button class="group-tile text-left p-3.5 rounded-xl bg-surface-container-lowest hover:bg-surface-container transition-all shadow-sm flex items-start justify-between cursor-pointer focus:outline-none" data-group="engine" type="button">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-on-surface-variant transition-colors group-hover:bg-surface-container-highest">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-sm text-title-sm text-on-surface group-hover:text-primary">Engine</span>
+<span class="font-body-sm text-body-sm text-outline tabular-nums">38 jobs</span>
+</div>
+</div>
+<div class="tile-check w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center text-transparent text-[14px]">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+</button>
+<!-- 2. Filters -->
+<button class="group-tile text-left p-3.5 rounded-xl bg-surface-container-lowest hover:bg-surface-container transition-all shadow-sm flex items-start justify-between cursor-pointer focus:outline-none" data-group="filters" type="button">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-on-surface-variant transition-colors group-hover:bg-surface-container-highest">
+<span class="material-symbols-outlined text-[20px]">filter_alt</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-sm text-title-sm text-on-surface group-hover:text-primary">Filters</span>
+<span class="font-body-sm text-body-sm text-outline tabular-nums">6 jobs</span>
+</div>
+</div>
+<div class="tile-check w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center text-transparent text-[14px]">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+</button>
+<!-- 3. Tires & wheels -->
+<button class="group-tile text-left p-3.5 rounded-xl bg-surface-container-lowest hover:bg-surface-container transition-all shadow-sm flex items-start justify-between cursor-pointer focus:outline-none" data-group="tires" type="button">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-on-surface-variant transition-colors group-hover:bg-surface-container-highest">
+<span class="material-symbols-outlined text-[20px]">trip_origin</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-sm text-title-sm text-on-surface group-hover:text-primary">Tires & wheels</span>
+<span class="font-body-sm text-body-sm text-outline tabular-nums">12 jobs</span>
+</div>
+</div>
+<div class="tile-check w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center text-transparent text-[14px]">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+</button>
+<!-- 4. Brakes -->
+<button class="group-tile text-left p-3.5 rounded-xl bg-surface-container-lowest hover:bg-surface-container transition-all shadow-sm flex items-start justify-between cursor-pointer focus:outline-none" data-group="brakes" type="button">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-on-surface-variant transition-colors group-hover:bg-surface-container-highest">
+<span class="material-symbols-outlined text-[20px]">album</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-sm text-title-sm text-on-surface group-hover:text-primary">Brakes</span>
+<span class="font-body-sm text-body-sm text-outline tabular-nums">14 jobs</span>
+</div>
+</div>
+<div class="tile-check w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center text-transparent text-[14px]">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+</button>
+<!-- 5. Fluids -->
+<button class="group-tile text-left p-3.5 rounded-xl bg-surface-container-lowest hover:bg-surface-container transition-all shadow-sm flex items-start justify-between cursor-pointer focus:outline-none" data-group="fluids" type="button">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-on-surface-variant transition-colors group-hover:bg-surface-container-highest">
+<span class="material-symbols-outlined text-[20px]">water_drop</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-sm text-title-sm text-on-surface group-hover:text-primary">Fluids</span>
+<span class="font-body-sm text-body-sm text-outline tabular-nums">8 jobs</span>
+</div>
+</div>
+<div class="tile-check w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center text-transparent text-[14px]">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+</button>
+<!-- 6. Belts & hoses -->
+<button class="group-tile text-left p-3.5 rounded-xl bg-surface-container-lowest hover:bg-surface-container transition-all shadow-sm flex items-start justify-between cursor-pointer focus:outline-none" data-group="belts" type="button">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-on-surface-variant transition-colors group-hover:bg-surface-container-highest">
+<span class="material-symbols-outlined text-[20px]">linear_scale</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-sm text-title-sm text-on-surface group-hover:text-primary">Belts & hoses</span>
+<span class="font-body-sm text-body-sm text-outline tabular-nums">9 jobs</span>
+</div>
+</div>
+<div class="tile-check w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center text-transparent text-[14px]">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+</button>
+<!-- 7. Lighting & visibility -->
+<button class="group-tile text-left p-3.5 rounded-xl bg-surface-container-lowest hover:bg-surface-container transition-all shadow-sm flex items-start justify-between cursor-pointer focus:outline-none" data-group="lighting" type="button">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-on-surface-variant transition-colors group-hover:bg-surface-container-highest">
+<span class="material-symbols-outlined text-[20px]">light_mode</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-sm text-title-sm text-on-surface group-hover:text-primary">Lighting & visibility</span>
+<span class="font-body-sm text-body-sm text-outline tabular-nums">11 jobs</span>
+</div>
+</div>
+<div class="tile-check w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center text-transparent text-[14px]">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+</button>
+<!-- 8. Suspension & steering -->
+<button class="group-tile text-left p-3.5 rounded-xl bg-surface-container-lowest hover:bg-surface-container transition-all shadow-sm flex items-start justify-between cursor-pointer focus:outline-none" data-group="suspension" type="button">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-on-surface-variant transition-colors group-hover:bg-surface-container-highest">
+<span class="material-symbols-outlined text-[20px]">explore</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-sm text-title-sm text-on-surface group-hover:text-primary">Suspension & steering</span>
+<span class="font-body-sm text-body-sm text-outline tabular-nums">16 jobs</span>
+</div>
+</div>
+<div class="tile-check w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center text-transparent text-[14px]">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+</button>
+<!-- 9. Transmission -->
+<button class="group-tile text-left p-3.5 rounded-xl bg-surface-container-lowest hover:bg-surface-container transition-all shadow-sm flex items-start justify-between cursor-pointer focus:outline-none" data-group="transmission" type="button">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-on-surface-variant transition-colors group-hover:bg-surface-container-highest">
+<span class="material-symbols-outlined text-[20px]">fork_right</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-sm text-title-sm text-on-surface group-hover:text-primary">Transmission</span>
+<span class="font-body-sm text-body-sm text-outline tabular-nums">7 jobs</span>
+</div>
+</div>
+<div class="tile-check w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center text-transparent text-[14px]">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+</button>
+<!-- 10. HVAC -->
+<button class="group-tile text-left p-3.5 rounded-xl bg-surface-container-lowest hover:bg-surface-container transition-all shadow-sm flex items-start justify-between cursor-pointer focus:outline-none" data-group="hvac" type="button">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-on-surface-variant transition-colors group-hover:bg-surface-container-highest">
+<span class="material-symbols-outlined text-[20px]">mode_fan</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-sm text-title-sm text-on-surface group-hover:text-primary">HVAC</span>
+<span class="font-body-sm text-body-sm text-outline tabular-nums">10 jobs</span>
+</div>
+</div>
+<div class="tile-check w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center text-transparent text-[14px]">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+</button>
+<!-- 11. Battery & electrical -->
+<button class="group-tile text-left p-3.5 rounded-xl bg-surface-container-lowest hover:bg-surface-container transition-all shadow-sm flex items-start justify-between cursor-pointer focus:outline-none" data-group="electrical" type="button">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-on-surface-variant transition-colors group-hover:bg-surface-container-highest">
+<span class="material-symbols-outlined text-[20px]">battery_charging_full</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-sm text-title-sm text-on-surface group-hover:text-primary">Battery & electrical</span>
+<span class="font-body-sm text-body-sm text-outline tabular-nums">15 jobs</span>
+</div>
+</div>
+<div class="tile-check w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center text-transparent text-[14px]">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+</button>
+<!-- 12. Exhaust & emissions (highlighted badge) -->
+<button class="group-tile relative text-left p-3.5 rounded-xl bg-surface-container-lowest hover:bg-surface-container transition-all shadow-sm flex items-start justify-between cursor-pointer focus:outline-none group" data-group="exhaust" type="button">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-on-surface-variant transition-colors group-hover:bg-surface-container-highest">
+<span class="material-symbols-outlined text-[20px]">speed</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-1.5">
+<span class="font-title-sm text-title-sm text-on-surface group-hover:text-primary">Exhaust</span>
+<span class="font-label-sm text-label-sm bg-tertiary-fixed text-on-tertiary-fixed px-1.5 py-0.2 rounded font-medium">Catalytic</span>
+</div>
+<span class="font-body-sm text-body-sm text-outline tabular-nums">13 jobs</span>
+</div>
+</div>
+<div class="tile-check w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center text-transparent text-[14px]">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+</button>
+<!-- 13. Shop fees -->
+<button class="group-tile text-left p-3.5 rounded-xl bg-surface-container-lowest hover:bg-surface-container transition-all shadow-sm flex items-start justify-between cursor-pointer focus:outline-none" data-group="fees" type="button">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-on-surface-variant transition-colors group-hover:bg-surface-container-highest">
+<span class="material-symbols-outlined text-[20px]">receipt_long</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-sm text-title-sm text-on-surface group-hover:text-primary">Shop fees & labor</span>
+<span class="font-body-sm text-body-sm text-outline tabular-nums">4 jobs</span>
+</div>
+</div>
+<div class="tile-check w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center text-transparent text-[14px]">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+</button>
+</div>
+<!-- 6. Show all jobs (Expander button) -->
+<button class="w-full py-3 px-4 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface-variant font-title-sm text-title-sm flex items-center justify-center gap-2 transition-colors" id="toggle-hidden-jobs" type="button">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+<span>Show all jobs (26 hidden hybrid/EV procedures)</span>
+</button>
+</div>
+<!-- 7. Footer Action Bar -->
+<div class="px-space-xl py-space-md bg-surface-container-lowest flex items-center justify-between shadow-[0_-1px_3px_rgba(0,0,0,0.02)]">
+<button class="px-4 py-2 rounded-lg font-title-sm text-title-sm text-error bg-error-container/40 hover:bg-error-container hover:text-on-error-container transition-colors" type="button">
+          Cancel
+        </button>
+<div class="flex items-center gap-space-sm">
+<button class="px-4 py-2 rounded-lg font-title-sm text-title-sm bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors" type="button">
+            Back
+          </button>
+<button class="px-6 py-2 rounded-lg font-title-sm text-title-sm bg-primary text-on-primary transition-all opacity-40 cursor-not-allowed flex items-center gap-1.5 shadow-sm" disabled="" id="continue-button" type="button">
+<span>Continue</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+  (function initServiceSelection() {
+    const tiles = document.querySelectorAll('.group-tile');
+    const continueBtn = document.getElementById('continue-button');
+    let selectedCount = 0;
+
+    tiles.forEach(tile => {
+      tile.addEventListener('click', () => {
+        const isSelected = tile.getAttribute('data-selected') === 'true';
+        const checkIcon = tile.querySelector('.tile-check');
+        
+        if (isSelected) {
+          tile.setAttribute('data-selected', 'false');
+          tile.classList.remove('bg-surface-container-high', 'shadow-md');
+          tile.classList.add('bg-surface-container-lowest');
+          if (checkIcon) {
+            checkIcon.classList.remove('bg-primary', 'text-on-primary');
+            checkIcon.classList.add('bg-surface-container-high', 'text-transparent');
+          }
+          selectedCount = Math.max(0, selectedCount - 1);
+        } else {
+          tile.setAttribute('data-selected', 'true');
+          tile.classList.remove('bg-surface-container-lowest');
+          tile.classList.add('bg-surface-container-high', 'shadow-md');
+          if (checkIcon) {
+            checkIcon.classList.remove('bg-surface-container-high', 'text-transparent');
+            checkIcon.classList.add('bg-primary', 'text-on-primary');
+          }
+          selectedCount += 1;
+        }
+
+        // Enable or disable Continue button based on selection
+        if (selectedCount > 0) {
+          continueBtn.removeAttribute('disabled');
+          continueBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+          continueBtn.classList.add('hover:bg-primary-container', 'cursor-pointer');
+        } else {
+          continueBtn.setAttribute('disabled', 'true');
+          continueBtn.classList.add('opacity-40', 'cursor-not-allowed');
+          continueBtn.classList.remove('hover:bg-primary-container', 'cursor-pointer');
+        }
+      });
+    });
+
+    const toggleBtn = document.getElementById('toggle-hidden-jobs');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        const isExpanded = toggleBtn.getAttribute('data-expanded') === 'true';
+        if (isExpanded) {
+          toggleBtn.setAttribute('data-expanded', 'false');
+          toggleBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">visibility</span><span>Show all jobs (26 hidden hybrid/EV procedures)</span>';
+        } else {
+          toggleBtn.setAttribute('data-expanded', 'true');
+          toggleBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">visibility_off</span><span>Hide filtered non-petrol jobs (26 items)</span>';
+        }
+      });
+    }
+  })();
+</script></main><footer class="w-full bg-surface-container-low py-space-xl mt-space-xl"><div class="w-full px-margin flex flex-col md:flex-row items-center justify-between gap-space-md text-on-surface-variant font-body-sm text-body-sm"><div>© 2025 Roam Fleet Logistics OS. Standard Telemetry and Fleet Management Systems.</div><div class="flex items-center gap-space-lg"><a class="hover:text-on-surface transition-colors" href="#">Privacy Policy</a><a class="hover:text-on-surface transition-colors" href="#">Compliance & Safety</a><a class="hover:text-on-surface transition-colors" href="#">System Status</a></div></div></footer></body></html>
