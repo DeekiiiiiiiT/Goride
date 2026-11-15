@@ -1,4 +1,17 @@
-# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 17, 15 Nov 2026)
+# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 18, 15 Nov 2026)
+
+## Rev 18: before the dry run
+
+**SQL (both files regenerated, not run yet):**
+- **Exact-equality check added:** the two notes are now defined once (a `dl_notes` table) and used by both the UPDATE and a new check: per job code, the new description must be **exactly** old text + **that job's own note** (or unchanged on a re-run, when it already ended with it). This closes `old + garbage + note`, and it's the per-job wording check you asked about. A refill job carrying the fluid-service note now fails as "text not exactly old + its own note on <codes>". (The earlier "no note" check was already per job code via `t.kind`.)
+- **DRYRUN proves it's current:** its first line is `GENERATED from double-log-notes.sql sha256 <hash>`. `sha256sum double-log-notes.sql` must match; it does (7c1258b1…). The regeneration command, with the hash, is in `live/README-dryrun.md`. Expected message: "DRY RUN OK, nothing saved: 28 found, 0 not appended, 0 missing, 0 inexact, 0 other rows changed, refill notes=20, fluid notes=8".
+
+**Open list:**
+1. **`is_part` meaning goes into the schema:** a `COMMENT ON COLUMN` in the `part_source` migration (exact text written in the audit), plus a paragraph in the batch-file conventions.
+2. **Cabin filters downgraded to "verify, then decide":** count usage on every foreign key, check Dominion for any model where the two resolve to different part numbers; **if they ever differ, keep both** with "which one this car uses" notes. Retirement only if they never differ, with the "both used" plan written first.
+3. **Pipeline as a strategic item:** owner Deeki T, target before the next batch that retires a job (Fluids / Drivetrain). A `catalogue_batch_log` table written by each batch SQL (name + file hash), prerequisites checked against it at the top of each SQL, DRYRUN in CI against a local database copy, and one runbook for the order rules.
+
+**Next:** the owner runs the DRYRUN and pastes the message → real file → `part_source` (0 part-item rows still) → Charging Port check → Steering & Suspension from the template.
 
 ## Rev 17: the three verifications, duplicates, is_part
 

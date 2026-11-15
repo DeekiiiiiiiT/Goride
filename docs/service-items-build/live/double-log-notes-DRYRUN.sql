@@ -1,5 +1,6 @@
--- DRY RUN of double-log-notes.sql. GENERATED (see README-dryrun.md). Saves NOTHING: it always ends with an error.
--- Expected: "DRY RUN OK, nothing saved: 28 found, 0 not appended, 0 missing, 0 other rows changed, refill notes=20, fluid notes=8"
+-- GENERATED from double-log-notes.sql sha256 7c1258b1421c3fba008a10d5da426426c74fc385b186813218042948cbbc79fd (see README-dryrun.md). Do not edit by hand.
+-- DRY RUN: saves NOTHING; it always ends with an error message.
+-- Expected: "DRY RUN OK, nothing saved: 28 found, 0 not appended, 0 missing, 0 inexact, 0 other rows changed, refill notes=20, fluid notes=8"
 -- Any "Stopped, nothing saved: ..." means a check failed; paste it to Claude.
 -- Double-log rule on jobs that were already live (Rev 2, 15 Nov 2026). Job DESCRIPTION text only, APPENDED
 -- (never replaced); targets are matched by job CODE, not by name. Nothing else changes.
@@ -59,23 +60,24 @@ INSERT INTO dl_targets VALUES
   ('brake_fluid','fluid'), ('oil','fluid'), ('engine_oil_part','fluid'), ('coolant_part','fluid'),
   ('coolant_flush','fluid'), ('fluids','fluid'), ('transmission','fluid'), ('ev_reduction_gear_oil','fluid');
 
-UPDATE public.maintenance_service_categories c
-SET description = coalesce(c.description, '') ||
-  ' Fluid used to refill after this job (oil, coolant, brake fluid or gear oil) is logged here; don''t also log a separate fluid service for the same visit.'
-FROM dl_targets t
-WHERE t.code = c.code AND t.kind = 'refill'
-  AND coalesce(c.description, '') NOT LIKE '%don''t also log a separate fluid service%';
+-- The two notes, defined once; the UPDATE and the exact-text check both read them from here.
+DROP TABLE IF EXISTS dl_notes;
+CREATE TEMP TABLE dl_notes (kind text PRIMARY KEY, note text NOT NULL, marker text NOT NULL);
+INSERT INTO dl_notes VALUES
+  ('refill', ' Fluid used to refill after this job (oil, coolant, brake fluid or gear oil) is logged here; don''t also log a separate fluid service for the same visit.',
+             'don''t also log a separate fluid service'),
+  ('fluid',  ' If a part that holds this fluid is replaced in the same visit (for example a water pump, brake caliper, oil pan gasket or traction motor), log the fluid on that part''s job instead; don''t log both.',
+             'log the fluid on that part''s job instead');
 
 UPDATE public.maintenance_service_categories c
-SET description = coalesce(c.description, '') ||
-  ' If a part that holds this fluid is replaced in the same visit (for example a water pump, brake caliper, oil pan gasket or traction motor), log the fluid on that part''s job instead; don''t log both.'
-FROM dl_targets t
-WHERE t.code = c.code AND t.kind = 'fluid'
-  AND coalesce(c.description, '') NOT LIKE '%log the fluid on that part''s job instead%';
+SET description = coalesce(c.description, '') || n.note
+FROM dl_targets t JOIN dl_notes n ON n.kind = t.kind
+WHERE t.code = c.code
+  AND position(n.marker IN coalesce(c.description, '')) = 0;
 
 -- Safety: if any check is wrong, stop here. The error undoes EVERYTHING above, so nothing is saved.
 DO $chk$
-DECLARE found_n int; lost text; missing text; other text; refill_n int; fluid_n int;
+DECLARE found_n int; lost text; missing text; inexact text; other text; refill_n int; fluid_n int;
 BEGIN
   -- every target found, by code (28)
   SELECT count(*) INTO found_n FROM public.maintenance_service_categories c JOIN dl_targets t ON t.code = c.code;
@@ -86,6 +88,12 @@ BEGIN
   SELECT string_agg(c.code, ', ') INTO missing FROM public.maintenance_service_categories c JOIN dl_targets t ON t.code = c.code
     WHERE (t.kind = 'refill' AND coalesce(c.description, '') NOT LIKE '%don''t also log a separate fluid service%')
        OR (t.kind = 'fluid' AND coalesce(c.description, '') NOT LIKE '%log the fluid on that part''s job instead%');
+  -- inexact: per job code, the new text must be EXACTLY old text + that job's own note (or unchanged on a re-run,
+  -- when the old text already ended with it). Catches the wrong note on a job and anything extra in between.
+  SELECT string_agg(c.code, ', ') INTO inexact FROM public.maintenance_service_categories c
+    JOIN dl_before b ON b.id = c.id JOIN dl_targets t ON t.code = c.code JOIN dl_notes n ON n.kind = t.kind
+    WHERE NOT (c.description = b.d || n.note
+               OR (c.description = b.d AND right(b.d, length(n.note)) = n.note));
   -- changed_other: any non-target row whose description changed, or any row whose name / hint / status / is_part changed
   SELECT string_agg(c.code, ', ') INTO other FROM public.maintenance_service_categories c JOIN dl_before b ON b.id = c.id
     WHERE (b.d <> coalesce(c.description, '') AND c.code NOT IN (SELECT code FROM dl_targets))
@@ -96,10 +104,11 @@ BEGIN
   IF found_n <> 28 THEN RAISE EXCEPTION 'Stopped, nothing saved: found % of 28 target jobs', found_n; END IF;
   IF lost IS NOT NULL THEN RAISE EXCEPTION 'Stopped, nothing saved: not_appended on %', lost; END IF;
   IF missing IS NOT NULL THEN RAISE EXCEPTION 'Stopped, nothing saved: no note on %', missing; END IF;
+  IF inexact IS NOT NULL THEN RAISE EXCEPTION 'Stopped, nothing saved: text not exactly old + its own note on %', inexact; END IF;
   IF other IS NOT NULL THEN RAISE EXCEPTION 'Stopped, nothing saved: changed_other on %', other; END IF;
   IF refill_n <> 20 OR fluid_n <> 8 THEN
     RAISE EXCEPTION 'Stopped, nothing saved: refill notes=% (want 20), fluid notes=% (want 8)', refill_n, fluid_n;
   END IF;
   -- (double-log-notes-DRYRUN.sql has an always-stop on the next line; this real file does not.)
-  RAISE EXCEPTION 'DRY RUN OK, nothing saved: 28 found, 0 not appended, 0 missing, 0 other rows changed, refill notes=%, fluid notes=%', refill_n, fluid_n;
+  RAISE EXCEPTION 'DRY RUN OK, nothing saved: 28 found, 0 not appended, 0 missing, 0 inexact, 0 other rows changed, refill notes=%, fluid notes=%', refill_n, fluid_n;
 END $chk$;
