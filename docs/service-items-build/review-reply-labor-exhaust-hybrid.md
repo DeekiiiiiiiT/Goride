@@ -1,4 +1,4 @@
-# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 20, 15 Nov 2026)
+# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid — CLOSED (Rev 20, 15 Nov 2026). Reviewer: no more sections here; new items go to the service-items audit Open list.
 
 ## Rev 20: the two numbers, confirmed on live
 
