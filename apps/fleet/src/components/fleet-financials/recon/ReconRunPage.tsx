@@ -170,6 +170,9 @@ export function ReconRunPage({
       const data = query.state.data;
       if (data?.calculatorPaused) return 8000;
       if (data?.deskReady === false) return 3000;
+      // WRA-53: while the banner says "Updating N changes…", keep asking until
+      // the calculator has published them, so the user never has to reload.
+      if ((data?.calculator?.pendingUnits ?? 0) > 0) return 5000;
       return false;
     },
   });
