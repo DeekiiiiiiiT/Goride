@@ -334,6 +334,10 @@ Repo search: `reverseAndDeleteWorkOrder` and `syncWorkOrderLines` must find noth
 
 ## 7. Go live (round L — the owner runs every live step)
 
+**LIVE 15 Nov 2026 (00:20 UTC):** L1–L3 run by the owner; `main` pushed (`3e84a17f`; it also carried 3 finished Week Reconciliation commits f9e25700 / e54a21db / a80eaba2); edge + Vercel deploys succeeded; L4 run; all 4 logbook lines recorded; `service_items` on for deekiiiiiii's Fleet (`8cfa606a-…`) only. Live check: 35 work orders all version 1, no items, none in progress; old supply table had 0 rows. Left: fill the May-need lists (only Throttle Body Cleaning → Throttle body cleaner exists) and one real log (step 6).
+
+**Incident (15 Nov, ~00:17–00:31 UTC):** the push deployed **no** server code. `deploy-supabase-edge.yml` diffed only `HEAD^..HEAD`, and the push's last commit was docs-only. For ~14 min live ran the old fleet-ops/fleet-core against the new database (Find parts could fail, since L4 had dropped the old supply table; no Items used in Log service, which is how the owner spotted it). Fixed by a manual full deploy (`deploy_all`, run 43658358112, all functions OK). Root cause fixed in `5b9d79b5`: the workflow now diffs `github.event.before..HEAD` with full history and deploys everything when it can't read the start commit. Vercel was fine (it already used `event.before`).
+
 1. **Run the migrations** on the live database (Supabase SQL editor), one file at a time, from `docs/service-items-build/live/` (each file = the migration + its `schema_migrations` logbook line):
    1. `L1-service_items_catalogue.sql`
    2. `L2-service_items_logging_core.sql`
