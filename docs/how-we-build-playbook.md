@@ -42,7 +42,7 @@ Then go back and forth with the planner until it can't find a single gap. That b
 2. You create the screens in the design tool.
 3. From then on, **the design is the spec for the look**: layout, section order, card and chip styles, spacing, colours, fonts, dark mode. Build that exactly; don't redesign during the build.
 4. **The plan is the spec for the content.** Every number, badge, car, button and sentence on a screen must come from real data or a feature the plan lists. Design tools invent facts (scores, certifications, specs, IDs, prices, extra buttons) — those are dropped, never built as fake data.
-5. For each screen the planner writes a short **Keep / Drop / Add** list in the plan: *Keep* what matches the plan, *Drop* what the design invented, *Add* what the plan needs but the design left out (built in the same style).
+5. For each screen the planner writes a short **Keep / Drop / Add** list in the plan: *Keep* what matches the plan, *Drop* what the design invented, *Add* what the plan needs but the design left out (built in the same style). **Anything kept that the plan's design section doesn't already list is written into that design section too**, so the plan stays the one spec the build follows (the Keep list must never quietly grow the spec).
 6. Only ask for a new design when the **layout** itself is wrong (a whole section missing, the screen can't be used). Wrong content is fixed by the Keep / Drop / Add list, not by redesigning.
 
 ## Step 5 — Build in layers, one at a time
