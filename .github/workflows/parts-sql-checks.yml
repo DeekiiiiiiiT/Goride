@@ -23,6 +23,14 @@ on:
       - 'supabase/tests/20261106131300_mm_go_live_order_fixture.sql'
       - 'supabase/tests/engine_sections_checks.sql'
       - 'supabase/tests/engine_sections_used_ids_test.sql'
+      - 'supabase/tests/service_items_checks.sql'
+      - 'supabase/tests/service_items_db_test.sql'
+      - 'supabase/tests/service_items_save_db_test.sql'
+      - 'supabase/tests/service_items_completion_db_test.sql'
+      - 'supabase/migrations/20261113154942_service_items_catalogue.sql'
+      - 'supabase/migrations/20261113162605_service_items_drop_old_supply_link.sql'
+      - 'supabase/migrations/20261113171047_service_items_logging_core.sql'
+      - 'supabase/migrations/20261113184641_service_items_completion.sql'
       - 'supabase/tests/maintenance_discount_checks.sql'
       - 'supabase/tests/maintenance_discount_db_test.sql'
       - 'supabase/tests/toll_v2_schema_checks.sql'
@@ -67,6 +75,14 @@ on:
       - 'supabase/tests/20261106131300_mm_go_live_order_fixture.sql'
       - 'supabase/tests/engine_sections_checks.sql'
       - 'supabase/tests/engine_sections_used_ids_test.sql'
+      - 'supabase/tests/service_items_checks.sql'
+      - 'supabase/tests/service_items_db_test.sql'
+      - 'supabase/tests/service_items_save_db_test.sql'
+      - 'supabase/tests/service_items_completion_db_test.sql'
+      - 'supabase/migrations/20261113154942_service_items_catalogue.sql'
+      - 'supabase/migrations/20261113162605_service_items_drop_old_supply_link.sql'
+      - 'supabase/migrations/20261113171047_service_items_logging_core.sql'
+      - 'supabase/migrations/20261113184641_service_items_completion.sql'
       - 'supabase/tests/maintenance_discount_checks.sql'
       - 'supabase/tests/maintenance_discount_db_test.sql'
       - 'supabase/tests/toll_v2_schema_checks.sql'
@@ -166,6 +182,14 @@ jobs:
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/engine_sections_checks.sql
           docker cp supabase/tests/engine_sections_used_ids_test.sql "$db_container":/tmp/engine_sections_used_ids_test.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/engine_sections_used_ids_test.sql
+          docker cp supabase/tests/service_items_checks.sql "$db_container":/tmp/service_items_checks.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/service_items_checks.sql
+          docker cp supabase/tests/service_items_db_test.sql "$db_container":/tmp/service_items_db_test.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/service_items_db_test.sql
+          docker cp supabase/tests/service_items_save_db_test.sql "$db_container":/tmp/service_items_save_db_test.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/service_items_save_db_test.sql
+          docker cp supabase/tests/service_items_completion_db_test.sql "$db_container":/tmp/service_items_completion_db_test.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/service_items_completion_db_test.sql
           docker cp supabase/tests/maintenance_discount_checks.sql "$db_container":/tmp/maintenance_discount_checks.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/maintenance_discount_checks.sql
           docker cp supabase/tests/maintenance_discount_db_test.sql "$db_container":/tmp/maintenance_discount_db_test.sql

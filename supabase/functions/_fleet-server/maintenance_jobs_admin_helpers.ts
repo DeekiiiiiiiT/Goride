@@ -232,3 +232,210 @@ export function parseJobIds(raw: unknown): string[] | null {
   const ids = raw.map((x) => String(x)).filter((id) => isUuid(id));
   return ids;
 }
+
+// Keep in sync with apps/admin/src/components/admin/maintenance-master/jobs/jobsApi.ts JOB_ICON_KEYS
+export const JOB_ICON_KEYS = new Set([
+  "wrench",
+  "gears",
+  "oil",
+  "filter",
+  "wind",
+  "droplet",
+  "spark",
+  "belt",
+  "thermometer",
+  "gauge",
+  "tires",
+  "rotate",
+  "brakes",
+  "suspension",
+  "lightbulb",
+  "wipers",
+]);
+
+export function tidySupplyName(raw: unknown): { ok: true; name: string } | { ok: false; error: string } {
+  const name = btrimCollapse(String(raw ?? ""));
+  if (!name) return { ok: false, error: "Name is required." };
+  if (name.length > 120) return { ok: false, error: "Name must be 120 characters or fewer." };
+  return { ok: true, name };
+}
+
+function btrimCollapse(s: string): string {
+  return s.trim().replace(/\s+/g, " ");
+}
+
+export function validateSupplyDescription(raw: unknown): { ok: true; description: string } | { ok: false; error: string } {
+  const description = String(raw ?? "").trim();
+  if (!description) return { ok: false, error: "Description is required." };
+  return { ok: true, description };
+}
+
+export function validateSupplyIconKey(raw: unknown): { ok: true; iconKey: string } | { ok: false; error: string } {
+  const iconKey = String(raw ?? "").trim();
+  if (!JOB_ICON_KEYS.has(iconKey)) return { ok: false, error: "Choose a valid icon." };
+  return { ok: true, iconKey };
+}
+
+export function validateJobItemNeed(raw: unknown): { ok: true; need: "usually" | "sometimes" } | { ok: false; error: string } {
+  const need = String(raw ?? "").trim();
+  if (need !== "usually" && need !== "sometimes") {
+    return { ok: false, error: "Need must be usually or sometimes." };
+  }
+  return { ok: true, need };
+}
+
+export function validateJobItemNote(raw: unknown): { ok: true; note: string | null } | { ok: false; error: string } {
+  if (raw === null || raw === undefined) return { ok: true, note: null };
+  const note = String(raw).trim();
+  if (!note) return { ok: true, note: null };
+  if (note.length > 300) return { ok: false, error: "Note must be 300 characters or fewer." };
+  return { ok: true, note };
+}
+
+export function validateQtyHint(raw: unknown): { ok: true; qtyHint: number | null } | { ok: false; error: string } {
+  if (raw === null || raw === undefined || raw === "") return { ok: true, qtyHint: null };
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return { ok: false, error: "Quantity hint must be greater than zero." };
+  const rounded = Math.round(n * 1000) / 1000;
+  if (Math.abs(n - rounded) > 1e-9) {
+    return { ok: false, error: "Quantity hint allows at most 3 decimal places." };
+  }
+  return { ok: true, qtyHint: rounded };
+}
+
+export function validateActiveLinkOrder(orderedIds: string[], activeIds: string[]): string | null {
+  if (orderedIds.length !== activeIds.length) {
+    return "The list changed. Reload and try again.";
+  }
+  const activeSet = new Set(activeIds);
+  for (const id of orderedIds) {
+    if (!activeSet.has(id)) return "The list changed. Reload and try again.";
+  }
+  if (new Set(orderedIds).size !== orderedIds.length) {
+    return "The list changed. Reload and try again.";
+  }
+  return null;
+}
+
+export type ServiceItemsErrorContext = "job_item" | "job_relation" | "supply";
+
+export function mapServiceItemsDbError(
+  message: string,
+  context: ServiceItemsErrorContext,
+  opts?: { uniqueViolation?: boolean },
+): { status: number; error: string } | null {
+  const code = message.trim();
+  if (opts?.uniqueViolation) {
+    if (context === "supply") {
+      return { status: 409, error: "Another active supply uses this name. Rename one of them first." };
+    }
+    return { status: 409, error: "This item is already listed for this job." };
+  }
+  switch (code) {
+    case "supply_name_taken":
+      return { status: 409, error: "Another active supply uses this name. Rename one of them first." };
+    case "job_item_also_do_clash":
+      return {
+        status: 409,
+        error: context === "job_relation"
+          ? "This part is already in May need for this job."
+          : "This part is already in Also do for this job.",
+      };
+    case "job_item_job_invalid":
+      return { status: 400, error: "May-need items can only be added to a job." };
+    case "job_item_part_type_invalid":
+      return { status: 400, error: "Only part types can be added as parts." };
+    case "job_item_identity_locked":
+      return { status: 409, error: "To change the item, remove it and add the new one." };
+    default:
+      return null;
+  }
+}
+
+export type MayNeedItemApi = {
+  linkId: string;
+  kind: "part_type" | "supply";
+  itemId: string;
+  name: string;
+  need: string;
+  qtyHint: number | null;
+  note: string | null;
+  sortOrder: number;
+  itemRetired: boolean;
+  unitLabelOne?: string;
+  unitLabelMany?: string;
+};
+
+export type SupplyApi = {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  iconKey: string;
+  unitId: string;
+  unitCode: string;
+  status: string;
+  usedOnJobs: number;
+  createdAt: string | null;
+  updatedAt: string | null;
+  /** Staff name or email; null when added by a migration or unknown. */
+  createdByName: string | null;
+  updatedByName: string | null;
+};
+
+export function mapSupplyRowToApi(
+  row: Record<string, unknown>,
+  unitCode: string,
+  usedOnJobs: number,
+  names?: Map<string, string>,
+): SupplyApi {
+  const nameOf = (id: unknown) => (id != null ? names?.get(String(id)) ?? null : null);
+  return {
+    id: String(row.id),
+    code: String(row.code),
+    name: String(row.name),
+    description: String(row.description ?? ""),
+    iconKey: String(row.icon_key ?? "wrench"),
+    unitId: String(row.unit_id),
+    unitCode,
+    status: String(row.status ?? "active"),
+    usedOnJobs,
+    createdAt: row.created_at != null ? String(row.created_at) : null,
+    updatedAt: row.updated_at != null ? String(row.updated_at) : null,
+    createdByName: nameOf(row.created_by),
+    updatedByName: nameOf(row.updated_by),
+  };
+}
+
+export function mapJobItemRowToApi(
+  link: Record<string, unknown>,
+  name: string,
+  itemRetired: boolean,
+  unit?: { label_one: string; label_many: string },
+): MayNeedItemApi {
+  const partTypeId = link.part_type_id != null ? String(link.part_type_id) : null;
+  const supplyId = link.supply_id != null ? String(link.supply_id) : null;
+  const kind = partTypeId ? "part_type" as const : "supply" as const;
+  const itemId = partTypeId ?? supplyId ?? "";
+  const out: MayNeedItemApi = {
+    linkId: String(link.id),
+    kind,
+    itemId,
+    name,
+    need: String(link.need),
+    qtyHint: link.qty_hint != null ? Number(link.qty_hint) : null,
+    note: link.note != null ? String(link.note) : null,
+    sortOrder: Number(link.sort_order ?? 0),
+    itemRetired,
+  };
+  if (kind === "supply" && unit) {
+    out.unitLabelOne = String(unit.label_one);
+    out.unitLabelMany = String(unit.label_many);
+  }
+  return out;
+}
+
+export function actorUserIdFromRbac(rbacUser: { userId?: string; id?: string } | undefined): string | null {
+  const id = String(rbacUser?.userId ?? rbacUser?.id ?? "").trim();
+  return isUuid(id) ? id : null;
+}

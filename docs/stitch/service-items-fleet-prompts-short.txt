@@ -1,0 +1,149 @@
+ROAM FLEET — LOG SERVICE: ITEMS USED FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Log service · Items used (Desktop Web App, for fleet owners and their staff):
+
+Design modern, premium screens for recording the parts and supplies a job used up, inside the "Log service" dialog of Fleet maintenance in the Roam Fleet app, plus the service history that goes with it. The person using it is a normal car-fleet owner, not a mechanic. When they tick a job such as "Throttle Body Cleaning", a short "Items used" list appears that Roam has prepared for that job (for example "Throttle body cleaner", usually 1 can, and "Throttle Body Gasket", sometimes). Nothing is ticked for them: they tick what was actually used, set how many and what each cost (or leave the cost blank if they don't know), and it is added to the bill. They can add something that isn't on the list with "+ Other item". The dialog keeps its four steps: Date & mileage, Work done, Details, Review. Service history shows the items used, and a service that didn't finish saving shows a "Finish saving" button. The app should feel like a polished consumer product in the style of Linear, Stripe and Airbnb: friendly, airy and easy to scan. Each screen is one single view. Make every screen tall enough to show everything, with no inner scrolling and nothing cut off.
+
+BRAND IDENTITY:
+- Roam Fleet web app: a clean top bar with "Roam Fleet"; the page "Fleet maintenance" with a friendly orange wrench icon; the Log service dialog floats over a softly blurred, dimmed page
+- LIGHT MODE (default):
+  - Primary: Near-black (#030213) — primary buttons, the current step, selected choices
+  - Background: very light grey (#f8fafc); cards and dialogs white
+  - Text: #0a0a0a; helper text soft grey #71717a
+  - Success: Emerald (#059669)
+  - Attention / not finished: Amber (#d97706)
+  - Danger (Cancel, Remove): Red (#d4183d)
+  - Soft tints for pills and icon tiles: Slate 100 (#f1f5f9)
+- DARK MODE:
+  - Background: #18181b; cards: #232327; borders: #3f3f46
+  - Text: #fafafa; helper text: #a1a1aa
+  - Primary: #fafafa (buttons become light with dark text)
+  - Success: #34d399; attention: #f59e0b; danger: #f87171
+- Shapes: cards and dialogs 16px rounded corners; buttons and inputs 10px; chips are fully rounded pills
+- Depth: soft, light shadows on cards and dialogs; at most a very light 1px border
+- Typography: Inter. Titles 20–24px semibold, body 15px, helper text 13px. Sentence case everywhere — no all-caps labels, no monospace text. Money uses lined-up (tabular) numbers.
+- Money is Jamaican dollars: "J$ 1,200"; kilometres "197,486 km"; dates "12 Nov 2026"
+- Icons: friendly line icons (Lucide style) on soft-tinted round tiles
+- Pills: "Supply", "Part", "Clean", "Declined", "Voided" soft grey; "Usually used" soft slate fill; "Fits this car" and "Verified" soft green; "Not finished saving" and "Check before buying" soft amber
+
+DESIGN PRINCIPLES:
+- Modern and friendly: generous white space (24px inside cards, 32px between sections), clear hierarchy, nothing cramped
+- Plain words for a normal person: "Items used", "Cost each", "Leave a cost blank if you don't know it" — no codes, jargon or technical labels
+- Never tick anything for the user; suggestions stay suggestions
+- The money adds up in front of them: each item shows its amount, each job shows "Job J$ X + items J$ Y = J$ Z"
+- Every action is a real button with a fill or a visible outline — never a text link. Cancel and Remove are red (red outline, red text). One solid black primary button per screen
+- No browser pop-ups; every message is inside the app
+- Desktop-first (1440px), with a phone version
+
+---
+
+SCREEN 1: LOG SERVICE — STEP 3 DETAILS WITH ITEMS USED
+- A large white dialog (760px wide) over the dimmed page
+- Header: wrench icon on a soft round tile, title "Log service", round outlined close button
+- Car strip: a soft dark rounded card with a car icon, "Toyota Roomy (2019)" and a small pill "5179KZ"; on the right "197,486 km · 12 Nov 2026"
+- Progress: four steps with small numbered circles — "Date & mileage" ✓, "Work done" ✓, "Details" (current, highlighted), "Review"
+- Job card "Throttle Body Cleaning" with a pill "Clean":
+  - "Service charge" with helper "Not counting the items below"; a pill switch "Total cost | Per wheel" (Total cost on); money input "J$ 3,000"; checkbox "No charge (free)"
+  - "Notes": "Cleaned with the engine off; idle back to normal."
+  - Section "Items used" with helper "Tick what was used. Nothing is ticked for you."
+  - Small heading "Usually used", then a ticked rounded row: spray-can icon, "Throttle body cleaner", pill "Supply", quantity stepper (− 1 +) reading "1 can", money input "Cost each J$ 1,200", input "Brand (optional)" with "CRC", and "J$ 1,200" on the right
+  - Small heading "Sometimes used", then a ticked rounded row: gasket icon, "Throttle Body Gasket", pill "Part", a small inner card "Toyota genuine · Throttle body gasket" with a green "Fits this car" check and an outline "Change" button, quantity "1", "Cost each J$ 800", and "J$ 800" on the right
+  - Outline button "+ Other item"
+  - Helper: "Leave a cost blank if you don't know it. It won't be added to the total."
+  - Bottom right of the card, a soft summary pill: "Job J$ 3,000 + items J$ 2,000 = J$ 5,000"
+- Footer: red outline "Cancel" on the left; outline "Back" and solid black "Continue to review" on the right
+
+SCREEN 2: PICK A PART
+- Screen 1 softly dimmed behind; a centred white rounded pop-up (540px)
+- Title "Pick a part", sub-line "Throttle Body Gasket for your Toyota Roomy (2019)", round close button
+- Small heading "Fits your car": two selectable rounded cards with a radio dot — "Toyota genuine · Throttle body gasket" (selected, highlighted border) and "Aisin · Throttle body gasket" — each with a soft green "Verified" pill
+- Small heading "Fits by size": one card "Universal gasket sheet · cut to size" with a soft amber pill "Check before buying"
+- Outline button "Type it in instead"
+- Footer: red outline "Cancel", solid black "Use this part"
+
+SCREEN 3: STEP 3 — OTHER ITEM, DECLINED JOB, VOIDED JOB
+- The same dialog on "Details", with three job cards stacked:
+  - "Throttle Body Cleaning" showing its Items used plus one extra row from "+ Other item": inputs "What was it?" ("Shop rags"), quantity "1", "Cost each J$ 200", "Brand (optional)" empty, "J$ 200" on the right, and a red outline "Remove" button
+  - "Spark Plugs" with a pill "Declined": no items area; helper "No items on a declined job." and a struck-through grey "Quoted J$ 9,600"
+  - "Engine Air Filter", faded, with a pill "Voided": helper "Voided jobs can't be changed." and a read-only line "Shop rags · 1 pack · J$ 200"
+- Footer: red outline "Cancel", outline "Back", solid black "Continue to review"
+
+SCREEN 4: STEP 4 REVIEW
+- The same dialog on "Review"
+- Title "Review and save", sub-line "Check everything before it's saved to the car's history."
+- A soft summary card with four labelled values: Car "Toyota Roomy (2019) · 5179KZ", Date "12 Nov 2026", Mileage "197,486 km", Garage "Kingston Auto Care"
+- Job list:
+  - "Throttle Body Cleaning" with pill "Clean" and "J$ 5,000" on the right; indented helper lines under it: "Service charge · J$ 3,000", "Throttle body cleaner · 1 can · J$ 1,200", "Throttle Body Gasket · 1 · J$ 800"
+  - "Throttle Body Relearn" with pill "Adjust" and "J$ 1,500"
+  - Indented helper line "Shop rags · 1 pack · Cost not recorded"
+- Totals card: "Jobs J$ 4,500", "Items J$ 2,000", a divider, large bold "Total J$ 6,500"
+- Footer: red outline "Cancel", outline "Back", solid black "Log service"
+
+SCREEN 5: SERVICE HISTORY WITH "NOT FINISHED SAVING"
+- Full page (not a dialog): title "Fleet maintenance" with the orange wrench icon; pill tabs "Overview", "Service history" (selected), "Find parts"
+- Rounded service cards for "Toyota Roomy (2019) · 5179KZ":
+  - "12 Nov 2026 · 197,486 km · Kingston Auto Care", total "J$ 6,500" on the right; lines "Throttle Body Cleaning — J$ 5,000" with helper line "Items used: Throttle body cleaner (1 can, J$ 1,200), Throttle Body Gasket (1, J$ 800)" and "Throttle Body Relearn — J$ 1,500"; outline button "View"
+  - "10 Nov 2026 · 196,900 km · Kingston Auto Care" with a soft amber pill and clock icon "Not finished saving", total "J$ 3,200"; line "Oil & filter — J$ 3,200"; helper "This service saved but didn't finish. Nothing is lost."; solid black button "Finish saving"
+  - "23 Aug 2026 · 180,300 km · Whole-Heated Car Service LTD", total "J$ 16,800", outline "View"
+
+SCREEN 6: FINISH SAVING — BUTTON STATES
+- Four copies of the "Not finished saving" card from Screen 5, stacked, each with a small caption above:
+  - "Working": the black button shows a spinner and "Finishing…", slightly faded
+  - "Still busy": under the button, amber text "Still finishing, try again in a moment."
+  - "Failed": under the button, red text "Couldn't finish: the books service isn't answering. Try again later."
+  - "Done": the amber pill is gone and the card looks like a normal finished service with "View"
+
+SCREEN 7: "THIS SERVICE WAS CHANGED"
+- The dialog titled "Edit service" softly dimmed behind
+- A centred white rounded message (460px): soft amber icon tile, title "This service was changed", text "Someone saved a change to this service since you opened it. Reload to see the latest, then make your change again."
+- Footer: red outline "Cancel", solid black "Reload"
+
+SCREEN 8: STATES
+- Four rounded cards stacked, each with a small caption:
+  - "Loading": soft skeleton bars where the Items used rows go
+  - "Couldn't load items": helper "Couldn't load the items for this job." with an outline "Try again" button; the rest of the job card still works
+  - "No items for this job": the job card shows only the service charge, notes and "+ Other item"
+  - "Save failed": an in-app message "Couldn't log this service. Nothing was saved. Try again."
+
+SCREEN 9: PHONE (390px)
+- The "Details" step for "Throttle Body Cleaning": a rounded card with the service charge "J$ 3,000"
+- Section "Items used": each item is its own rounded card — top line: checkbox, name, pill, amount on the right; second line: quantity stepper and "Cost each" side by side; third line: "Brand (optional)"
+- Items: "Throttle body cleaner · Supply · 1 can · J$ 1,200" and "Throttle Body Gasket · Part · 1 · J$ 800"
+- Full-width outline "+ Other item"
+- Sticky bottom bar: "Job J$ 3,000 + items J$ 2,000" and a full-width solid black "Continue to review"
+
+---
+
+ADDITIONAL UI COMPONENTS:
+- Item row: checkbox, icon tile, name, kind pill, quantity stepper with unit, "Cost each" money input, optional "Brand", amount
+- Quantity stepper: round "−" and "+" buttons around the number; the unit follows the number ("1 can", "2 cans")
+- Picked-part card with "Fits this car" check and outline "Change" button
+- Summary pill "Job J$ X + items J$ Y = J$ Z"
+- Amber "Not finished saving" pill with clock icon
+- In-app message boxes and toasts (no browser pop-ups)
+
+INTERACTIONS:
+- Ticking an item shows its quantity, cost and brand fields, with the usual quantity filled in; unticking hides them and takes the amount out of the total
+- "Change" / "Pick part" opens Screen 2; "Use this part" fills the row; "Type it in instead" shows "Brand" and "Part number (optional)" inputs
+- "+ Other item" adds an editable row; "Remove" takes it away
+- Marking a job "Declined" hides its Items used and clears its ticks
+- "Log service" saves once: the button shows a spinner and can't be pressed twice
+- "Finish saving" finishes a service that didn't finish; it never makes a second service
+- "Reload" loads the latest version of the service; "Cancel" closes without saving
+- Esc closes pop-ups; everything works with the keyboard
+
+Spec screens / Area:
+| Screen | Area |
+|---|---|
+| 1 | Log service — Step 3 Details with Items used |
+| 2 | Pick a part |
+| 3 | Step 3 — other item, declined job, voided job |
+| 4 | Step 4 Review |
+| 5 | Service history with "Not finished saving" |
+| 6 | Finish saving — button states |
+| 7 | "This service was changed" |
+| 8 | States |
+| 9 | Phone |

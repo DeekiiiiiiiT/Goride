@@ -5,6 +5,7 @@ import { LOG_SERVICE_COPY } from "./logServiceCopy";
 import { JobTooltip } from "./JobTooltip";
 import type { MaintenanceServiceCategory } from "../../../../types/maintenance";
 import { actionLabel, type RecommendedWith, type SectionJob, type SystemSections } from "./systemSections";
+import { mayNeedSummary, type JobItem } from "./itemsUsed";
 
 type Props = {
   system: MaintenanceServiceCategory;
@@ -18,6 +19,8 @@ type Props = {
   onToggleComponent: (cat: MaintenanceServiceCategory) => void;
   /** Tick/untick a related job from an "Also do" chip (may live in another group). */
   onToggleRelated: (rel: RecommendedWith) => void;
+  /** Service items on: each job ⓘ also says what it may need. */
+  mayNeedByJob?: Map<string, JobItem[]>;
 };
 
 /** Pick one or more jobs inside a group (e.g. Wheel Alignment + Wheel Balancing). */
@@ -30,6 +33,7 @@ export function LogServiceSystemPicker({
   isAdded,
   onToggleComponent,
   onToggleRelated,
+  mayNeedByJob,
 }: Props) {
   const card = (cat: SectionJob) => (
     <JobCard
@@ -41,6 +45,7 @@ export function LogServiceSystemPicker({
       selectedIds={selectedIds}
       onToggle={() => onToggleComponent(cat)}
       onToggleRelated={onToggleRelated}
+      mayNeed={mayNeedSummary(mayNeedByJob?.get(cat.id))}
     />
   );
 
@@ -104,6 +109,7 @@ function JobCard({
   selectedIds,
   onToggle,
   onToggleRelated,
+  mayNeed,
 }: {
   cat: SectionJob;
   openGroupId: string;
@@ -112,7 +118,9 @@ function JobCard({
   selectedIds: string[];
   onToggle: () => void;
   onToggleRelated: (rel: RecommendedWith) => void;
+  mayNeed?: string;
 }) {
+  const info = [cat.description, mayNeed].filter(Boolean).join("\n\n");
   const badge = actionLabel(cat.default_action);
   const related = selected ? cat.recommendedWith ?? [] : [];
   return (
@@ -145,9 +153,9 @@ function JobCard({
             {added ? <span className="text-[11px] font-semibold text-primary">{LOG_SERVICE_COPY.jobAddedBadge}</span> : null}
           </button>
         </JobTooltip>
-        {cat.description ? (
+        {info ? (
           <div className="absolute top-2 left-2">
-            <InfoButton label={`About ${cat.name}`} text={cat.description} />
+            <InfoButton label={`About ${cat.name}`} text={info} />
           </div>
         ) : null}
       </div>
@@ -212,7 +220,7 @@ export function InfoButton({ label, text }: { label: string; text: string }) {
       {open ? (
         <span
           role="tooltip"
-          className="absolute left-0 top-7 z-30 w-60 rounded-lg border border-outline-variant/40 bg-surface-container-lowest p-3 text-left text-xs leading-snug text-on-surface shadow-xl"
+          className="absolute left-0 top-7 z-30 w-60 whitespace-pre-line rounded-lg border border-outline-variant/40 bg-surface-container-lowest p-3 text-left text-xs leading-snug text-on-surface shadow-xl"
         >
           {text}
         </span>

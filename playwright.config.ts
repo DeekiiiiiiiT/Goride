@@ -81,7 +81,7 @@ export default defineConfig({
   projects: [
     {
       name: 'dominion-admin',
-      testMatch: /parts-import-stitch\.spec\.ts|parts-auto-match-stitch\.spec\.ts|add-a-part-stitch\.spec\.ts|add-a-part-done\.spec\.ts|roomy-brakes-trust\.spec\.ts|capture-am-screens\.spec\.ts|dominion-maintenance-master\.spec\.ts|dominion-add-parts-self-serve-capture\.spec\.ts|dominion-vehicles-catalog-capture\.spec\.ts|dominion-vehicles-home-dashboard-capture\.spec\.ts/,
+      testMatch: /parts-import-stitch\.spec\.ts|parts-auto-match-stitch\.spec\.ts|add-a-part-stitch\.spec\.ts|add-a-part-done\.spec\.ts|roomy-brakes-trust\.spec\.ts|capture-am-screens\.spec\.ts|dominion-maintenance-master\.spec\.ts|dominion-service-items\.spec\.ts|dominion-add-parts-self-serve-capture\.spec\.ts|dominion-vehicles-catalog-capture\.spec\.ts|dominion-vehicles-home-dashboard-capture\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1456, height: 900 },
@@ -90,7 +90,7 @@ export default defineConfig({
     },
     {
       name: 'fleet',
-      testMatch: /fleet-rush-integration\.spec\.ts|fuel-recon-wizard\.spec\.ts|fuel-recon-shadow-soak\.spec\.ts|driver-settlements-desk\.spec\.ts|driver-detail-smoke\.spec\.ts|fleet-find-parts-visual\.spec\.ts|parts-import-stitch\.spec\.ts|parts-auto-match-stitch\.spec\.ts|fleet-maintenance-master\.spec\.ts|fleet-maintenance-log-service\.spec\.ts|fleet-vehicle-documents-overlay\.spec\.ts/,
+      testMatch: /fleet-rush-integration\.spec\.ts|fuel-recon-wizard\.spec\.ts|fuel-recon-shadow-soak\.spec\.ts|driver-settlements-desk\.spec\.ts|driver-detail-smoke\.spec\.ts|fleet-find-parts-visual\.spec\.ts|parts-import-stitch\.spec\.ts|parts-auto-match-stitch\.spec\.ts|fleet-maintenance-master\.spec\.ts|fleet-maintenance-log-service\.spec\.ts|fleet-service-items\.spec\.ts|fleet-vehicle-documents-overlay\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         baseURL: fleetBaseUrl || 'http://127.0.0.1:5181',

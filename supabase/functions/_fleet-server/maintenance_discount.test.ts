@@ -324,7 +324,7 @@ Deno.test("CR-02 complete, draft PATCH and legacy edit re-check the stored disco
   assertEquals(/discountTooLarge\(lineRows,\s*discount\)/.test(complete), true);
   const patch = routeBody(text, 'route.patch(\n    "/maintenance-work-orders/:id"');
   assertEquals(/discountTooLarge\(newLines,\s*effectiveDiscount\)/.test(patch), true);
-  assertEquals(/discountTooLarge\(editLines,\s*storedDiscount\)/.test(text), true);
+  assertEquals(/discountTooLarge\(prepared\.lines,\s*storedDiscount\)/.test(text), true);
 });
 
 Deno.test("CR-03 idempotent replay refuses a changed discount with 409 discount_changed", async () => {
@@ -337,7 +337,9 @@ Deno.test("CR-03 idempotent replay refuses a changed discount with 409 discount_
 
 Deno.test("CR-04 work order subtotal skips voided lines", async () => {
   const text = await readRoutesLf();
-  assertEquals(/subtotal:\s*lines\s*\?\s*lineSubtotal\(lines\.filter\(\(l\)\s*=>\s*l\.voided_at\s*==\s*null\)\)/.test(text), true);
+  // Database rows and already-mapped lines (service items) both skip voided jobs.
+  assertEquals(/lineSubtotal\(lines\.filter\(\(l\)\s*=>\s*l\.voided_at\s*==\s*null\)\)/.test(text), true);
+  assertEquals(/\.filter\(\(l\)\s*=>\s*l\.voidedAt\s*==\s*null\)/.test(text), true);
 });
 
 Deno.test("CR-07 loadDiscountEnabled logs a read error", async () => {

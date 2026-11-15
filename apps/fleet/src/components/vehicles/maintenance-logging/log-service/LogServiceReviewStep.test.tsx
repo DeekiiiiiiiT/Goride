@@ -48,7 +48,7 @@ describe("LogServiceReviewStep discount", () => {
         discountRowOpen={false}
       />,
     );
-    expect(screen.getByTestId("log-service-review-total")).toHaveTextContent("JMD 17,600");
+    expect(screen.getByTestId("log-service-review-total")).toHaveTextContent("J$ 17,600");
     expect(screen.queryByTestId("log-service-review-subtotal")).toBeNull();
     expect(screen.queryByTestId("log-service-review-discount")).toBeNull();
   });
@@ -128,5 +128,48 @@ describe("LogServiceReviewStep discount", () => {
     expect(screen.getByTestId("log-service-discount-error")).toHaveTextContent(
       "Discount can't be more than the bill.",
     );
+  });
+});
+
+describe("LogServiceReviewStep items (plan screen 4)", () => {
+  const withItems: MaintenanceLogLine[] = [
+    {
+      categoryId: "1",
+      categoryCode: "tbc",
+      categoryName: "Throttle Body Cleaning",
+      labor: 3000,
+      items: [
+        { source: "suggested", jobItemId: "11111111-1111-4111-8111-111111111111", itemKind: "supply", supplyId: "22222222-2222-4222-8222-222222222222", itemName: "Throttle body cleaner", unitLabelOne: "can", unitLabelMany: "cans", qty: "1", unitCost: "1200" },
+        { source: "other", itemKind: "other", itemName: "Shop rags", unitLabelOne: "piece", unitLabelMany: "pieces", qty: "1", unitCost: "" },
+      ],
+    },
+    { categoryId: "2", categoryCode: "sp", categoryName: "Spark Plugs", labor: 9600, declined: true, recommended: true },
+  ];
+
+  it("lists each item, marks a blank cost, and splits jobs vs items", () => {
+    render(
+      <LogServiceReviewStep
+        {...baseProps}
+        lines={withItems}
+        itemsEnabled
+        vehicleLabel="Toyota Roomy 5179KZ"
+        lineTotalPreview={(l) => (l.declined ? 9600 : 4200)}
+        subtotal={4200}
+        netTotal={4200}
+      />,
+    );
+    expect(screen.getByText("Throttle body cleaner · 1 can")).toBeInTheDocument();
+    expect(screen.getByText("Cost not recorded (excluded from total)")).toBeInTheDocument();
+    expect(screen.getByTestId("log-service-review-jobs-total")).toHaveTextContent("J$ 3,000");
+    expect(screen.getByTestId("log-service-review-items-total")).toHaveTextContent("J$ 1,200");
+    expect(screen.getByTestId("log-service-review-total")).toHaveTextContent("J$ 4,200");
+    expect(screen.getByText("No items on a declined job.")).toBeInTheDocument();
+    expect(screen.getByText("Quoted J$ 9,600")).toBeInTheDocument();
+    expect(screen.getByTestId("log-service-review-summary")).toHaveTextContent("Toyota Roomy 5179KZ");
+  });
+
+  it("switch off: no item split", () => {
+    render(<LogServiceReviewStep {...baseProps} lines={lines} subtotal={17_600} netTotal={17_600} />);
+    expect(screen.queryByTestId("log-service-review-items-total")).toBeNull();
   });
 });

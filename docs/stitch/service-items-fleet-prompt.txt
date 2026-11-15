@@ -1,0 +1,161 @@
+ROAM FLEET — LOG SERVICE: "ITEMS USED" + FINISH SAVING FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Log service · Items used (Desktop Web App, for fleet managers and their staff):
+
+Design the screens that let a fleet manager record the parts and supplies a job used up, right inside the existing "Log service" dialog of Fleet maintenance in the Roam Fleet app, plus the service-history screens that go with it. Today, when someone ticks "Throttle Body Cleaning" they can only type one cost. Now each job can come with a short "Items used" list that Roam has prepared (for Throttle Body Cleaning: "Throttle body cleaner", usually 1 can, and "Throttle Body Gasket", sometimes). Nothing is ever ticked for them: they tick what was actually used, say how many and what each cost (or leave the cost blank if they don't know), and it is saved with the job and added to the bill. They can also add something that isn't on the list with "+ Other item". The same dialog keeps its four steps: 1 Date & mileage, 2 Work done, 3 Details, 4 Review. The person using it is a normal fleet owner, not a mechanic: plain words, no codes, no part-number jargon unless they choose to type one. Two new history states are also needed: a service that didn't finish saving (with a "Finish saving" button), and the message shown when someone else changed a service while it was open. Draw each screen at FULL HEIGHT so every element is visible; nothing may be cut off, blurred or hidden behind another layer except where a screen below says so.
+
+BRAND IDENTITY:
+- Match the existing Roam Fleet web app and the existing Log service dialog exactly:
+  - black top bar with the "Roam Fleet" app tile, then a white nav row: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations (active, underlined), Delivery Operations, Analytics, Reports, Business Finance, and the avatar
+  - dark sub-bar with "Switch vehicle or search hub..." on the left and "07:52:19 AM EST · America/Jamaica" on the right
+  - page "Fleet maintenance" with the orange wrench icon, dimmed behind the dialog
+  - Log service dialog: white, 720px wide, title "Log service" with a wrench icon and close X; a black car bar under the title: car icon "Toyota Roomy (2019) 5179KZ" on the left, "Current 197,486 km · 12 Nov 2026 · [fuel fill log]" on the right; a step bar "1 Date & mileage ✓ · 2 Work done ✓ · 3 Details · 4 Review" with the current step underlined in black
+  - footer: red "Cancel" button on the left, outline "← Back", and the black primary button on the right
+- LIGHT MODE (default):
+  - Primary: Near-black (#030213) — primary buttons, the active step, selected choices
+  - Background: White (#FFFFFF); page wash: Slate 50 (#f8fafc)
+  - Surface cards: White, 1px border rgba(0,0,0,0.1), 12px corners
+  - Muted text: #717182; text primary: #0a0a0a
+  - Success / done: Emerald (#059669)
+  - Warning / not finished: Amber (#d97706)
+  - Error: Red (#d4183d)
+  - Neutral: Slate 500 (#64748b)
+  - Icon tiles: Indigo 600 (#4f46e5) line icon on a Slate 100 (#f1f5f9) rounded square
+  - Muted fill for chips: Slate 100 (#f1f5f9)
+- DARK MODE:
+  - Background: #252525; surface: #2e2e2e; border: #444444
+  - Text primary: #fafafa; muted: #b4b4b4
+  - Primary: #fafafa (buttons become light with dark text)
+  - Success: #34d399; warning: #f59e0b; error: #f87171; neutral: #94a3b8
+- Chips (word + icon, never colour alone):
+  - "Usually used" — slate fill, small solid dot · "Sometimes used" — white fill, grey outline, hollow dot
+  - "Part" (cog icon) · "Supply" (spray-can icon) — small grey outline
+  - "Not finished saving" — amber outline, amber text, small clock icon
+  - "Cost not recorded" — slate text, no fill
+- Money is Jamaican dollars: "J$ 1,200"; kilometres "197,486 km"; dates "12 Nov 2026"
+- Typography: Inter. Plates, km, money, quantities in a mono font with tabular numerals.
+- Icons: Lucide / Material line icons, 20px. No gradients, glass or 3D. No AI badges, no percentages.
+
+BUTTON RULES (strict):
+- Every action is a real button with a visible border or fill — never plain text, never underlined, never faint grey.
+- Primary = solid black. Secondary = visible border + dark text. Icon buttons = 32px with a visible border.
+- Cancel, Remove and Discard are red: red outline + red text (the dialog's "Cancel" is solid red as it is today).
+- One primary button per screen.
+- No browser pop-ups; every message and confirm is in-app.
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px), with a phone version
+- Plain words for a normal person: "Items used", "Cost each", "Leave blank if you don't know" — never "consumables", "SKU", "line item" or codes
+- Never tick anything for the user; suggestions are just suggestions
+- The money adds up in front of them: every item shows its amount, every job shows "Job J$ X + items J$ Y"
+- Capture, never block: a blank cost is fine, it simply isn't added
+- One save: the save button shows a spinner and can't be pressed twice
+- 8px spacing grid, hairline borders, soft shadows, skeleton loading
+
+---
+
+SCREEN 1: STEP 2 "WORK DONE" — TOOLTIP SHOWS WHAT A JOB MAY NEED
+- The existing Engine grid: heading "Engine — Tick everything that was done, then press Continue.", small caps "EXTERNAL BOLT-ON & INDUCTION", section "Air Intake & Induction" with three tiles: Engine Air Filter (Replace), Throttle Body Cleaning (Clean) — TICKED with a black outline and a check, Intake Manifold Gasket (Replace)
+- Under the ticked tile, the existing chip row "Also do: [Throttle Body Relearn]"
+- The ⓘ on the Throttle Body Cleaning tile is open as a small in-app tooltip card: "Cleaning carbon and dirt out of the throttle body so the engine idles smoothly." then a divider, then "May need: Throttle body cleaner, Throttle Body Gasket"
+- Footer: red "Cancel", outline "← Back", black "Continue with 1 job →"
+
+SCREEN 2: STEP 3 "DETAILS" — SERVICE JOB WITH ITEMS USED (THE MAIN SCREEN)
+- Step bar on "3 Details"
+- Job card "Throttle Body Cleaning" (wind icon tile, chip "Clean"), with the existing fields:
+  - "Service charge (not counting items below)" — segmented "Total cost | Per wheel" with Total cost selected; money field "J$ 3,000"; checkbox "No charge (free)" unticked
+  - Notes field "Cleaned with the engine off; idle back to normal."
+- NEW block inside the card, under a hairline: heading "Items used" with muted helper "Tick what was used. Nothing is ticked for you."
+  - Group label "Usually used"
+    - Row TICKED: checkbox ✓ · spray-can icon · "Throttle body cleaner" · chip [Supply] · then inline fields: "Qty" stepper "1" with unit "can" after it · "Cost each" money field "J$ 1,200" · "Brand (optional)" field "CRC" · right-aligned amount in mono "J$ 1,200"
+  - Thin divider, group label "Sometimes used"
+    - Row TICKED: checkbox ✓ · cog icon · "Throttle Body Gasket" · chip [Part] · outline button "Pick part" showing the chosen part as a small card "Toyota genuine · Throttle body gasket · fits this car" with a green check and an outline "Change" button · "Qty" "1" · "Cost each" "J$ 800" · amount "J$ 800"
+  - Under the rows: outline button "+ Other item"
+  - Muted helper under the Cost each fields: "Leave blank if you don't know. It won't be added to the total."
+- Card footer line, right-aligned mono: "Job J$ 3,000 + items J$ 2,000 = J$ 5,000"
+- Footer: red "Cancel", outline "← Back", black "Continue to review →"
+- Also draw a second small frame of the same card with nothing ticked: both rows unticked, fields hidden, and the card footer "Job J$ 3,000 + items J$ 0 = J$ 3,000"
+
+SCREEN 3: STEP 3 — PICK PART PANEL FOR A PART-TYPE ITEM
+- Behind: Screen 2 dimmed; a centered in-app panel 520px: title "Pick a part · Throttle Body Gasket", sub-line "Parts that fit your Toyota Roomy (2019)", close X
+- Section "Fits your car": two rows with radio buttons: "Toyota genuine · Throttle body gasket" (selected) and "Aisin · Throttle body gasket", each with a small green "Verified" badge
+- Section "Fits by size": one row "Universal gasket sheet · cut to size" with a small slate badge "Check before buying"
+- Under the list: outline button "Type it in instead" which switches to two fields "Brand" and "Part number (optional)"
+- Footer: red outline "Cancel", black "Use this part"
+
+SCREEN 4: STEP 3 — OTHER ITEM, DECLINED JOB AND VOIDED JOB
+- Frame A — "+ Other item" open inside the Throttle Body Cleaning card: a new row with fields "What was it?" ("Shop rags"), "Qty" ("1"), "Cost each" ("J$ 200"), "Brand (optional)" (empty), amount "J$ 200", and a red outline "Remove" button at the end of the row
+- Frame B — a job marked Declined (the existing "Recommended, owner declined" state) on "Spark Plugs": the Items used block is replaced by a muted line "No items on a declined job." and the quoted cost stays visible but struck-through in muted text "Quoted J$ 9,600"
+- Frame C — when editing an older service: a voided job card "Engine Air Filter" greyed, chip "Voided", muted line "Voided jobs can't be changed." and its items listed read-only ("Shop rags · 1 pack · J$ 200")
+
+SCREEN 5: STEP 4 "REVIEW"
+- Step bar on "4 Review"; heading "Review and save", sub-line "Check everything before it's saved to the car's history."
+- Summary card: car, date "12 Nov 2026", odometer "197,486 km", provider "Kingston Auto Care"
+- Job list:
+  - "Throttle Body Cleaning · Clean" — right "J$ 5,000"
+    - indented muted lines: "Service charge · J$ 3,000"; "Throttle body cleaner · 1 can · J$ 1,200"; "Throttle Body Gasket · 1 · J$ 800"
+  - A second job example "Throttle Body Relearn · Adjust" — "J$ 1,500"
+  - One item with no cost: "Shop rags · 1 pack · Cost not recorded"
+- Totals block, mono: "Jobs J$ 4,500", "Items J$ 2,000", divider, bold "Total J$ 6,500"
+- Footer: red "Cancel", outline "← Back", black "Log service" (also draw it in its saving state: spinner + "Logging…", disabled)
+
+SCREEN 6: SERVICE HISTORY — ITEMS USED AND "NOT FINISHED SAVING"
+- The existing "Service history" tab of Fleet maintenance, a list of service cards for Toyota Roomy (2019) 5179KZ
+- Card 1 (normal, completed): "12 Nov 2026 · 197,486 km · Kingston Auto Care", total "J$ 6,500"; job lines "Throttle Body Cleaning — J$ 5,000" with a muted second line "Items used: Throttle body cleaner (1 can, J$ 1,200), Throttle Body Gasket (1, J$ 800)"; "Throttle Body Relearn — J$ 1,500"; right buttons "View" (outline)
+- Card 2 (not finished): same layout, with an amber chip "Not finished saving" next to the date, and a muted line "This service saved but didn't finish. Nothing is lost." and a black button "Finish saving"
+- Draw the Finish saving button in three more small frames:
+  - pressed: spinner + "Finishing…", disabled
+  - still running elsewhere: amber in-app note under it "Still finishing, try again in a moment." with the button enabled again
+  - failed: red in-app note "Couldn't finish: the books service isn't answering. Try again later." with the button enabled
+- After success the chip disappears and the card looks like Card 1 (show as a fourth small frame)
+
+SCREEN 7: "SOMEONE ELSE CHANGED THIS SERVICE"
+- Behind: the Log service dialog in edit mode (title "Edit service"), Step 4 Review, dimmed
+- In-app message panel (not a browser pop-up), 440px: amber info icon, title "This service was changed", body "Someone saved a change to this service since you opened it. Reload to see the latest, then make your change again."
+- Footer: red outline "Cancel", black "Reload"
+
+STATES SCREEN (one frame with four small panels):
+- Loading skeleton of the Items used block
+- Error inside the Items used block: "Couldn't load the items for this job." with outline "Try again" — the rest of the card still works
+- A job with no items prepared: no Items used block at all, just the existing cost fields and "+ Other item"
+- Save error toast (in-app): "Couldn't log this service. Nothing was saved. Try again."
+
+PHONE SCREEN (390px, two frames):
+- Frame A — Step 3 Details, Throttle Body Cleaning: each item row stacks — line 1 checkbox + name + chip; line 2 Qty stepper and Cost each side by side; line 3 Brand; amount on the right of line 1; "+ Other item" full width; sticky bottom bar "Job J$ 3,000 + items J$ 2,000" and the black "Continue to review" button
+- Frame B — Service history card with the "Not finished saving" chip and a full-width black "Finish saving" button
+
+ADDITIONAL UI COMPONENTS:
+- Item row (supply, part, other) with checkbox, icon, name, kind chip, Qty stepper with unit, Cost each money field, optional Brand, amount
+- Qty stepper: "−" and "+" 32px bordered icon buttons around a mono number; the unit word changes with the number ("1 can", "2 cans")
+- Picked-part card with "Verified" badge and outline "Change" button
+- Running total line "Job J$ X + items J$ Y = J$ Z"
+- Amber "Not finished saving" chip
+- In-app message panels and toasts (no browser pop-ups)
+
+INTERACTIONS:
+- Ticking an item reveals its Qty / Cost each / Brand fields, prefilled Qty from the usual quantity; unticking hides them and takes the amount out of the total
+- "Pick part" opens Screen 3; "Use this part" fills the row; "Type it in instead" swaps to Brand + Part number
+- "+ Other item" adds an editable row; "Remove" takes it away
+- Marking a job Declined hides its Items used block and clears its ticks
+- "Log service" saves once (spinner, no double press); success closes the dialog and shows the service in history
+- "Finish saving" retries the save for a not-finished service; it never makes a second service
+- "Reload" on Screen 7 reloads the service with the latest changes; "Cancel" closes without saving
+- Esc closes panels; focus returns to the button that opened them; every checkbox, stepper and button works by keyboard
+
+Spec screens / Area:
+| Screen | Area |
+|---|---|
+| 1 | Step 2 Work done — tooltip "May need" |
+| 2 | Step 3 Details — service job with Items used (plus nothing-ticked frame) |
+| 3 | Step 3 — Pick part panel |
+| 4 | Step 3 — Other item, declined job, voided job |
+| 5 | Step 4 Review with items and totals |
+| 6 | Service history — items used and "Not finished saving" (plus button states) |
+| 7 | "This service was changed" message |
+| States | Loading, error, no items, save error |
+| Phone | Step 3 and history card at 390px |
+
+Draw Light and Dark versions of every screen.

@@ -64,6 +64,8 @@ export type LogServiceLineDetailsStepProps = {
     onAmountChange: (v: number | null) => void;
     onToggleAllPositions: () => void;
   };
+  /** "Items used" block (service items on). Replaces the line-total box with its own total pill. */
+  itemsSlot?: React.ReactNode;
 };
 
 function PositionButtons({
@@ -127,8 +129,17 @@ function ServiceJobForm(props: LogServiceLineDetailsStepProps & { serviceForm: N
         </div>
       ) : null}
 
-      <div className="space-y-2">
-        <Label htmlFor="service-amount">{LOG_SERVICE_COPY.serviceCostLabel}</Label>
+      <div className={props.itemsSlot ? "space-y-2 bg-surface-container-low/50 rounded-xl p-4" : "space-y-2"}>
+        {props.itemsSlot ? (
+          <div className="flex flex-col">
+            <Label htmlFor="service-amount" className="text-sm font-semibold text-on-surface">
+              {LOG_SERVICE_COPY.serviceChargeLabel}
+            </Label>
+            <span className="text-[13px] leading-[18px] text-on-surface-variant">{LOG_SERVICE_COPY.serviceChargeHelper}</span>
+          </div>
+        ) : (
+          <Label htmlFor="service-amount">{LOG_SERVICE_COPY.serviceCostLabel}</Label>
+        )}
         {showPositions ? (
           <div className="inline-flex rounded-lg border border-outline-variant/40 p-1 bg-surface-container-low gap-1">
             {(["total", "per_wheel"] as const).map((mode) => (
@@ -184,12 +195,14 @@ function ServiceJobForm(props: LogServiceLineDetailsStepProps & { serviceForm: N
         </Label>
       </div>
 
-      <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low px-4 py-3 flex justify-between items-center">
-        <span className="text-sm text-stitch-secondary">{lineTotalLabel}</span>
-        <span className="font-semibold text-on-surface">
-          {currency} {lineTotal.toLocaleString()}
-        </span>
-      </div>
+      {props.itemsSlot ?? (
+        <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low px-4 py-3 flex justify-between items-center">
+          <span className="text-sm text-stitch-secondary">{lineTotalLabel}</span>
+          <span className="font-semibold text-on-surface">
+            {currency} {lineTotal.toLocaleString()}
+          </span>
+        </div>
+      )}
     </>
   );
 }
@@ -419,12 +432,14 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
         )}
       </div>
 
-      <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low px-4 py-3 flex justify-between items-center">
-        <span className="text-sm text-stitch-secondary">{lineTotalLabel}</span>
-        <span className="font-semibold text-on-surface">
-          {currency} {lineTotal.toLocaleString()}
-        </span>
-      </div>
+      {props.itemsSlot ?? (
+        <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low px-4 py-3 flex justify-between items-center">
+          <span className="text-sm text-stitch-secondary">{lineTotalLabel}</span>
+          <span className="font-semibold text-on-surface">
+            {currency} {lineTotal.toLocaleString()}
+          </span>
+        </div>
+      )}
       </>
       )}
     </div>

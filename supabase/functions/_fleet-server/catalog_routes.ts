@@ -837,8 +837,6 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   route.post("/make-server-37f42386/admin/catalog/applicability", requireAuth(), (c: Context) => guided(c, "save_component_applicability"));
   route.post("/make-server-37f42386/admin/catalog/specs", requireAuth(), (c: Context) => guided(c, "save_catalog_spec"));
   route.post("/make-server-37f42386/admin/catalog/universal-parts", requireAuth(), (c: Context) => guided(c, "save_universal_part"));
-  route.post("/make-server-37f42386/admin/catalog/related-supplies", requireAuth(), (c: Context) => guided(c, "save_related_supply"));
-
   route.get("/make-server-37f42386/admin/catalog/variants/:id/checklist", requireAuth(), async (c: Context) => {
     const denied = assertCatalogWrite(c);
     if (denied) return denied;

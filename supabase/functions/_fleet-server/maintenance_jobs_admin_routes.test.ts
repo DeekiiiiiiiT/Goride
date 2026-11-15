@@ -4,6 +4,7 @@ import { MAINTENANCE_MASTER_ROUTE_GUARDS } from "./maintenance_master_routes.ts"
 
 Deno.test("jobs admin GET routes are staff_read", () => {
   assertEquals(MAINTENANCE_JOBS_ADMIN_ROUTE_GUARDS["GET /admin/maintenance/jobs"], "staff_read");
+  assertEquals(MAINTENANCE_JOBS_ADMIN_ROUTE_GUARDS["GET /admin/maintenance/supplies"], "staff_read");
 });
 
 Deno.test("jobs admin write routes are catalog.write", () => {
@@ -20,6 +21,14 @@ Deno.test("maintenance master guards include jobs admin routes", () => {
   );
   assertEquals(
     MAINTENANCE_MASTER_ROUTE_GUARDS["POST /admin/maintenance/jobs/:id/retire"],
+    "catalog.write",
+  );
+  assertEquals(
+    MAINTENANCE_MASTER_ROUTE_GUARDS["POST /admin/maintenance/job-items"],
+    "catalog.write",
+  );
+  assertEquals(
+    MAINTENANCE_MASTER_ROUTE_GUARDS["POST /admin/maintenance/supplies"],
     "catalog.write",
   );
 });

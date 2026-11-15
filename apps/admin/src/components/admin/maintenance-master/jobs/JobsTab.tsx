@@ -19,9 +19,9 @@ import { JobDrawer } from "./JobDrawer";
 import { ManageSections } from "./ManageSections";
 import { RetireJobDialog } from "./RetireJobDialog";
 
-type Props = { token: string; canWrite: boolean };
+type Props = { token: string; canWrite: boolean; onCountsChanged?: () => void };
 
-export function JobsTab({ token, canWrite }: Props) {
+export function JobsTab({ token, canWrite, onCountsChanged }: Props) {
   const [data, setData] = useState<JobsPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -233,6 +233,10 @@ export function JobsTab({ token, canWrite }: Props) {
             void load();
           }}
           onOpenJob={(job) => setDrawer({ mode: "edit", job })}
+          onItemsChanged={() => {
+            void load();
+            onCountsChanged?.();
+          }}
         />
       ) : null}
 
@@ -408,6 +412,15 @@ function JobRow({
             <FormTypeChip isPart={job.isPart} />
             <ActionChip action={job.defaultAction} />
             {homeName ? <ListedFromChip groupName={homeName} /> : null}
+            {job.items.length > 0 ? (
+              <span
+                className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-[#dae2fd] px-2.5 py-0.5 text-[12px] font-semibold leading-4 tracking-[0.01em] text-[#0153dc]"
+                data-testid={`may-need-pill-${job.code}`}
+              >
+                <span className="material-symbols-outlined text-[14px]" aria-hidden="true">format_list_bulleted</span>
+                May need · {job.items.length}
+              </span>
+            ) : null}
             <StatusChip status={job.status} />
           </div>
           <span className="font-code text-[11px] text-on-surface-variant">

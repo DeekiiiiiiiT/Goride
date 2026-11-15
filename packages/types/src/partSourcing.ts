@@ -129,13 +129,6 @@ export interface UniversalSpecSection {
   }>;
 }
 
-export interface RelatedSupply {
-  id: string;
-  component_id: string;
-  supply_name: string;
-  note?: string | null;
-}
-
 export interface CompatiblePartsResponse {
   catalogMatched: boolean;
   catalogId?: string;
@@ -145,5 +138,4 @@ export interface CompatiblePartsResponse {
   tiered?: boolean;
   universal?: UniversalSpecSection[];
   sections?: Array<{ tier: number; label: string; sisterNames?: string; items?: CompatiblePartsItem[] }>;
-  relatedSupplies?: RelatedSupply[];
 }

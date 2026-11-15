@@ -239,6 +239,18 @@ jobs:
       - name: Deno test dominion access
         run: deno test --no-check supabase/functions/_fleet-server/dominion_access.test.ts
 
+      - name: Deno test maintenance jobs + service items
+        run: >
+          deno test --no-check --allow-read
+          supabase/functions/_fleet-server/maintenance_jobs_admin_helpers.test.ts
+          supabase/functions/_fleet-server/maintenance_jobs_admin_routes.test.ts
+          supabase/functions/_fleet-server/maintenance_supplies_admin_helpers.test.ts
+          supabase/functions/_fleet-server/service_items_line_items.test.ts
+          supabase/functions/_fleet-server/service_items_save.test.ts
+          supabase/functions/_fleet-server/maintenance_completion.test.ts
+          supabase/functions/_fleet-server/canonical_from_ops_maintenance.test.ts
+          supabase/functions/_fleet-server/maintenance_routes_policy.test.ts
+
       - name: Deno test platform MFA gate
         run: deno test --no-check supabase/functions/_fleet-server/platform_mfa_gate.test.ts
 

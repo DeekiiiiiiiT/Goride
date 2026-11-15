@@ -105,8 +105,21 @@ async function sha256Hex(text: string): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+export const ledgerCanonicalTestHooks = {
+  getCanonicalEventByIdemKeyOverride:
+    undefined as ((idempotencyKey: string) => Promise<Record<string, unknown> | null>) | undefined,
+  fleetDualWriteCanonicalEventOverride:
+    undefined as
+      | ((
+        event: Record<string, unknown>,
+      ) => Promise<{ status: "posted" | "skipped" | "failed"; reason?: string }>)
+      | undefined,
+};
+
 /** Fetch a canonical ledger event by its idempotencyKey, or null if none exists. */
 export async function getCanonicalEventByIdemKey(idempotencyKey: string): Promise<Record<string, unknown> | null> {
+  const lookup = ledgerCanonicalTestHooks.getCanonicalEventByIdemKeyOverride;
+  if (lookup) return lookup(idempotencyKey);
   try {
     const client = supabaseKv();
     const unifiedKey = `kv_ledger_event:${idempotencyKey}`;
@@ -474,6 +487,7 @@ export type AppendCanonicalLedgerResult = {
     id?: string;
     error?: string;
     skipped?: boolean;
+    reason?: string;
   }>;
 };
 
@@ -575,8 +589,11 @@ export async function appendCanonicalLedgerEvents(
         metaBase.sourceFileHash = base.sourceFileHash.trim();
       }
 
-      const { fleetDualWriteCanonicalEvent } = await import("./unified_ledger_dual_write.ts");
-      await fleetDualWriteCanonicalEvent({
+      const dwOverride = ledgerCanonicalTestHooks.fleetDualWriteCanonicalEventOverride;
+      const fleetDualWriteCanonicalEvent = dwOverride
+        ? async (event: Record<string, unknown>) => dwOverride(event)
+        : (await import("./unified_ledger_dual_write.ts")).fleetDualWriteCanonicalEvent;
+      const dw = await fleetDualWriteCanonicalEvent({
         id,
         idempotencyKey: idem,
         eventType: String(base.eventType),
@@ -597,11 +614,19 @@ export async function appendCanonicalLedgerEvents(
         metadata: metaBase,
       });
 
-      inserted++;
-      details.push({ index: i, idempotencyKey: idem, id });
-      console.log(
-        `[CanonicalLedger] inserted(unified) id=${id} type=${base.eventType} idem=${idem.slice(0, 40)}…`,
-      );
+      if (dw.status === "posted") {
+        inserted++;
+        details.push({ index: i, idempotencyKey: idem, id });
+        console.log(
+          `[CanonicalLedger] inserted(unified) id=${id} type=${base.eventType} idem=${idem.slice(0, 40)}…`,
+        );
+      } else if (dw.status === "skipped") {
+        skipped++;
+        details.push({ index: i, idempotencyKey: idem, id, skipped: true, reason: dw.reason });
+      } else {
+        failed++;
+        details.push({ index: i, idempotencyKey: idem, error: dw.reason });
+      }
     } catch (err: any) {
       failed++;
       details.push({ index: i, idempotencyKey: idem, error: err?.message || String(err) });

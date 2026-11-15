@@ -1,0 +1,158 @@
+ROAM DOMINION — MAINTENANCE: MAY NEED + SUPPLIES FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Dominion - Maintenance templates · May need + Supplies (Desktop Admin, for the owner and catalog staff):
+
+Design modern, premium screens that let the owner say which parts and shop supplies each maintenance job may need. They sit inside the "Maintenance templates" section of the Dominion admin console, next to the Jobs tab. A JOB is one piece of maintenance work, e.g. "Throttle Body Cleaning" (a Service) or "Intake Manifold Gasket" (a Part that goes onto the car). A SUPPLY is something used up while doing the work and the same for every car, e.g. "Throttle body cleaner" (sold by the can), "Brake cleaner", "Shop rags". Each job gets a "May need" list of parts and supplies, each marked "Usually" or "Sometimes", with an optional usual quantity ("1 can") and a short note. When someone logs that job in the Roam Fleet app, the list appears so they can tick what was actually used. "May need" is different from the existing "Also do" list: Also do suggests separate work; May need is what gets used up inside this one job, and a part can't be in both. Nothing is deleted: supplies are retired and can be restored. Dominion only holds this list; it never shows prices, suppliers, stock, fleet names, plates, usage numbers from the apps, percentages, charts or side panels. The console should feel like a polished, modern SaaS product in the style of Linear, Stripe Dashboard and Notion: airy, calm and pleasant to use every day. Each screen is one single view. Make every screen tall enough to show everything, with no inner scrolling and nothing cut off.
+
+BRAND IDENTITY:
+- Dominion console layout:
+  - left sidebar, deep navy (#0f172a) with rounded hover states, titled "Dominion"; groups MASTER DATA (Overview, Vehicles — selected, Places and Maps, Fuel, Tolls, Tax and Vendors), ENGINES (Fuel Brain, Toll Brain, Matching Brain), DISTRIBUTION (Apps, Data API, Change requests), PLATFORM (Staff and roles, Activity log, Platform Ops, Global settings), BACK OFFICE (GCT registrations, Ledger, Remittance)
+  - light top bar: rounded search "Search…", moon icon, user "Deeki T · Owner"
+  - page: small breadcrumb "Vehicles / Maintenance templates", title "Maintenance templates", sub-line "How often each part is serviced, for which cars, and why."
+  - pill tabs: "Part schedules 16", "Service packages 5", "Jobs 77", "Supplies 12", "Review list 1", "History"
+- LIGHT MODE (default):
+  - Primary: #0153dc — primary buttons, selected tab, selected choices
+  - Soft blue tint: #e8eeff — "Usually" pills, "May need" pills, selected rows
+  - Background: #f8f9fc; cards, drawers and dialogs white
+  - Text: #1f2430; helper text soft grey #6b7280
+  - Success: #16a34a; warning: #d97706; danger: #dc2626
+- DARK MODE:
+  - Background: #0b1220; cards: #121a2b; borders: #1f2a3d
+  - Text: #e5e7eb; helper text: #94a3b8
+  - Primary: #5b8def; success: #4ade80; warning: #fbbf24; danger: #f87171
+- Shapes: cards, drawers and dialogs 16px rounded corners; buttons and inputs 10px; chips are fully rounded pills
+- Depth: soft, light shadows on cards and overlays; at most a very light 1px border; no heavy grid lines
+- Typography: Inter. Page title 28px semibold, section titles 18px semibold, body 15px, helper text 13px. Sentence case everywhere — no all-caps labels, no monospace text. Supply codes (like "SUP-00001") only where asked, as small soft-grey text.
+- Icons: Material Symbols Rounded; job and supply icons sit on soft-tinted rounded tiles
+- Pills: "Part" soft blue outline; "Supply" soft grey; "Usually" soft blue fill with a dot; "Sometimes" white with grey outline and a hollow dot; "Active" soft green with a dot; "Retired" soft grey with an archive icon; "May need · 2" soft blue with a list icon
+
+DESIGN PRINCIPLES:
+- Modern and calm: generous white space (24px inside cards, 32px between sections), clear hierarchy, nothing cramped
+- Plain words first; codes small and soft grey
+- Every action is a real button with a fill or a visible outline — never a text link. Remove, Retire and Cancel are red (red outline, red text; solid red only for a final confirm). One blue primary button per screen
+- No browser pop-ups; every confirm is inside the app
+- Everything works by keyboard: list order has move-up / move-down arrow buttons as well as drag; pop-ups move focus in and back out
+- Use only the content listed under each screen — no extra panels, charts, statistics or made-up numbers
+
+---
+
+SCREEN 1: JOBS TAB WITH "MAY NEED" COUNTS
+- Pill tab "Jobs 77" selected
+- Toolbar: rounded search "Search jobs…", dropdown "All groups", pill switch "Active | Retired"; on the right outline "Manage sections" and blue "+ Add job"
+- Rounded card "Engine" (expanded) with soft heading "External bolt-on & induction" and three groups of clean rows (icon tile, name, pills; on the right outline "Edit" and red outline "Retire"):
+  - "Air intake & induction": Engine Air Filter [Part] [Replace] [Listed from Filters]; Throttle Body Cleaning [Service] [Clean] [May need · 2]; Intake Manifold Gasket [Part] [Replace]
+  - "Fuel system": Fuel Injector Cleaning [Service] [Clean] [May need · 1]; Fuel Injector Replacement [Part] [Replace]
+  - "Ignition system": Spark Plugs [Part] [Replace] [May need · 1]; Ignition coil [Part] [Replace]; Spark Plug Wires [Part] [Replace]
+- Collapsed rounded cards with counts: "Brakes · 11 jobs", "Tires & wheels · 7 jobs", "Fluids · 5 jobs", "Suspension & steering · 14 jobs", "Battery & electrical · 8 jobs"
+
+SCREEN 2: EDIT JOB DRAWER WITH THE "MAY NEED" LIST
+- The Jobs page softly dimmed behind; a white drawer on the right (580px wide, full window height)
+- Header: "Edit job", big title "Throttle Body Cleaning", round close button
+- Fields: "Name" (Throttle Body Cleaning); "Home group" (Engine) and "Default action" (Clean) side by side; "Form type" pill switch "Service | Part" (Service on); "Description": "Cleaning carbon and dirt out of the throttle body so the engine idles smoothly."; "Icon": a row of 8 round icon choices, the wind icon selected
+- Section "Also do" with count pill "1": one soft row "Throttle Body Relearn" with helper "Resets the idle after cleaning." and a red outline "Remove"; outline button "+ Add 'also do'"
+- Section "May need" with count pill "2 items" and helper "Parts and supplies used up doing this job. Suggested while logging, never ticked automatically. Separate work goes in Also do."
+  - Row: spray-can icon tile, "Throttle body cleaner", pills [Supply] [Usually], helper "1 can", note "Spray, then wipe with a clean rag."; on the right outline "Edit", red outline "Remove", and two small round arrow buttons (move up — faded, move down)
+  - Row: gasket icon tile, "Throttle Body Gasket", pills [Part] [Sometimes], note "Only if the old gasket tears."; same buttons (move down faded)
+  - Faded row: "Carb cleaner (old)", pills [Supply] [Sometimes], grey pill "Retired · hidden while logging", red outline "Remove" and the arrow buttons
+  - Outline button "+ Add item"
+- Sticky footer: red outline "Cancel", blue "Save job"
+
+SCREEN 3: ADD TO MAY NEED — PART TYPES
+- Screen 2 softly dimmed behind; a centred white rounded pop-up (540px)
+- Title "Add to May need", sub-line "Throttle Body Cleaning", round close button
+- Pill tabs "Part types" (selected) | "Supplies"
+- Rounded search with "gasket" typed
+- Selectable rounded rows with a radio dot: "Throttle Body Gasket · Engine" (faded, grey pill "Already listed"); "Intake Manifold Gasket · Engine" (selected, blue border); "Valve Cover Gasket · Engine"; "Oil Pan Gasket · Engine" (faded, grey pill "Already in Also do")
+- "How often is it needed?" pill switch "Usually | Sometimes" (Sometimes on)
+- "Usual quantity (optional)" number input "1"
+- "Note (optional)" input "Only if the old gasket tears."
+- Footer: red outline "Cancel", blue "Add"
+
+SCREEN 4: ADD TO MAY NEED — SUPPLIES
+- Same pop-up with the "Supplies" tab selected
+- Rounded search with "clean" typed
+- Rows: "Throttle body cleaner · can" (faded, "Already listed"); "Brake cleaner · can" (selected); "Hand cleaner · tube"
+- Outline button "+ New supply" under the list
+- "How often is it needed?" (Sometimes on); "Usual quantity (optional)" "1" with "can" after it; "Note (optional)" empty
+- Footer: red outline "Cancel", blue "Add"
+
+SCREEN 5: SUPPLIES TAB
+- Pill tab "Supplies 12" selected
+- Toolbar: rounded search "Search supplies…", pill switch "Active | Retired", blue "+ Add supply" on the right
+- One rounded card with a clean list (soft row hover). Columns: Supply, Unit, Used on, Status, and an outline "Edit" on each row. Each supply: icon tile, name, and a small soft-grey code under the name:
+  - Brake cleaner (SUP-00004) · can · On 3 jobs · Active
+  - Dielectric grease (SUP-00006) · tube · On 2 jobs · Active
+  - Fuel system cleaner (SUP-00002) · bottle · On 1 job · Active
+  - Hand cleaner (SUP-00011) · tube · Not on any job · Active
+  - Shop rags (SUP-00008) · pack · On 4 jobs · Active
+  - Thread locker, blue (SUP-00005) · tube · On 1 job · Active
+  - Throttle body cleaner (SUP-00001) · can · On 1 job · Active
+
+SCREEN 6: EDIT SUPPLY DRAWER
+- Screen 5 softly dimmed behind; a white drawer on the right (500px, full window height)
+- Header: small soft-grey "SUP-00001", green pill "Active", big title "Throttle body cleaner", round close button
+- "Name" input "Throttle body cleaner" with a small "21 / 120" counter
+- "Description" box "An aerosol spray that dissolves carbon and grime inside the throttle body." with helper "Shown when someone taps ⓘ while logging."
+- "Unit" dropdown "can"
+- "Icon": a row of 8 round icon choices, the spray can selected
+- Soft info line "Used on 1 job: Throttle Body Cleaning."
+- Sticky footer: red outline "Retire" on the left; red outline "Cancel" and blue "Save supply" on the right
+
+SCREEN 7: RETIRE A SUPPLY
+- Screen 6 softly dimmed behind; a centred white rounded dialog (480px)
+- Soft red icon tile, title "Retire Throttle body cleaner?"
+- Three short lines, each with a small icon: "Hidden from the May-need list of 1 job (Throttle Body Cleaning) until restored." · "Hidden from logging in Roam Fleet." · "Past service logs keep the name — nothing is erased."
+- Footer: outline "Keep it", solid red "Retire supply"
+
+SCREEN 8: RETIRED SUPPLIES AND RESTORE
+- Supplies tab with the "Retired" switch on
+- One row: "Carb cleaner (old)" (SUP-00003) · can · On 1 job · grey pill "Retired" · outline "Restore"
+- Under that row, a soft red rounded message with an icon: "Another active supply uses this name. Rename one of them first." and a small round close button
+
+SCREEN 9: STATES
+- Four rounded cards stacked, each with a small caption:
+  - "Loading": soft skeleton rows where the May need list goes
+  - "Couldn't save": soft red message "Couldn't save this item. This part is already in Also do for this job." with an outline "Try again"
+  - "Empty May need": "No items yet. Add the parts and supplies this job uses up." with an outline "+ Add item"
+  - "No search match": search "xyz" and "No supply matches 'xyz'"
+
+SCREEN 10: TABLET (768px)
+- The sidebar collapses to icons; the "Edit job · Throttle Body Cleaning" drawer fills the width
+- "May need" section: each item is its own rounded card — top line: icon tile, name and pills; second line: quantity and note; third line: "Edit", red outline "Remove", and the two round arrow buttons
+- Outline "+ Add item"; sticky footer red outline "Cancel", blue "Save job"
+
+---
+
+ADDITIONAL UI COMPONENTS:
+- "May need" row: icon tile, name, kind pill, need pill (tap to switch Usually / Sometimes), quantity, note, Edit, Remove, arrow buttons, drag handle
+- Count pills next to section titles ("2 items", "1")
+- "Retired · hidden while logging" grey pill
+- "Already listed", "Already in Also do", "Already in May need" grey pills on faded rows
+- Soft red inline messages for errors; toast after save: "Saved. Throttle Body Cleaning now lists 3 items."
+
+INTERACTIONS:
+- "+ Add item" opens Screen 3; "Add" closes it and the new row appears at the bottom of the May need list
+- "Edit" on a May need row reopens the pop-up with the item fixed; only need, quantity and note can change
+- "Remove" takes the row off straight away and shows a toast "Removed from May need. Old logs keep it."
+- Arrow buttons and drag change the order; this is the order Roam Fleet shows
+- "+ New supply" opens the supply drawer and returns with the new supply selected
+- "Retire" opens Screen 7; "Restore" brings a supply back with its old May-need rows
+- In the "Also do" picker, a part already in May need is faded with "Already in May need"
+- Esc closes pop-ups and drawers; focus returns to the button that opened them
+
+Spec screens / Area:
+| Screen | Area |
+|---|---|
+| 1 | Jobs tab with "May need" counts |
+| 2 | Edit job drawer — May need list |
+| 3 | Add to May need — Part types |
+| 4 | Add to May need — Supplies |
+| 5 | Supplies tab |
+| 6 | Edit supply drawer |
+| 7 | Retire a supply |
+| 8 | Retired supplies and restore |
+| 9 | States |
+| 10 | Tablet |

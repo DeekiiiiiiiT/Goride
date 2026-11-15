@@ -1,0 +1,181 @@
+ROAM DOMINION — MAINTENANCE: "MAY NEED" ITEMS + SUPPLIES FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Dominion - Maintenance templates · May need + Supplies (Desktop Admin, for the owner and catalog staff):
+
+Design the screens that let the owner say which parts and shop supplies each maintenance job may need. They sit inside the existing "Maintenance templates" section of the Roam Dominion admin console, next to the Jobs tab, and must look like the same product. In this section a JOB is one piece of maintenance work you can log, e.g. "Throttle Body Cleaning" (a Service: only a cost is logged) or "Intake Manifold Gasket" (a Part: it goes onto the car and has a part number). A SUPPLY is something used up while doing the work and the same for every car, e.g. "Throttle body cleaner" (sold by the can), "Brake cleaner", "Thread locker". Each job gets a "MAY NEED" list of part types and supplies, each marked "Usually" or "Sometimes", with an optional usual quantity ("1 can") and a short note. When a mechanic logs that job in the Roam Fleet app, the list appears so they can tick what was actually used. "May need" is different from the existing "ALSO DO" list: Also do suggests separate work with its own line ("Throttle Body Relearn"); May need is stuff used up inside this one job. A part can't be in both lists for the same job. Nothing is ever deleted: supplies are retired and can be restored, and removing an item from a job hides it without erasing old logs. Dominion only feeds this list to the apps; it never shows fleet names, plates, prices, suppliers, stock or how often anything was used. Draw each screen at FULL HEIGHT so every element is visible; nothing may be cut off, blurred or hidden behind another layer except where a screen below says so.
+
+BRAND IDENTITY:
+- Match the existing Dominion console exactly:
+  - dark navy left sidebar with "Dominion · Roam Admin Console"; groups MASTER DATA (Overview, Vehicles — highlighted, Places and Maps, Fuel, Tolls, Tax and Vendors), ENGINES (Fuel Brain, Toll Brain, Matching Brain), DISTRIBUTION (Apps, Data API, Change requests), PLATFORM (Staff and roles, Activity log, Platform Ops, Global settings), BACK OFFICE (GCT registrations, Ledger, Remittance); bottom status "KGN-DC-01 · JMD READY". Maintenance lives inside Vehicles — no separate sidebar item.
+  - top bar: search "Search entities, engines, routes…" with a ⌘K chip, moon icon, user "DT · Deeki T · Owner", sign-out icon. Nothing else.
+  - breadcrumb in mono caps "DOMINION › MASTER DATA › VEHICLES › MAINTENANCE TEMPLATES"
+  - page title "Maintenance templates", subtitle "How often each part is serviced, for which cars, and why."
+  - tabs in this order: "Part schedules" (16), "Service packages" (5), "Jobs" (77), "Supplies" (12) — NEW, "Review list" (1, amber badge), "History"
+- LIGHT MODE (default):
+  - Primary: #0153dc; primary container: #dbe1ff
+  - Success: #006e31; warning: #8a5a00; error: #a83836
+  - Outline: #797a84; hairline dividers #e6e7ee
+  - Background: #faf8fe; cards white, 16px radius, 1px hairline border, no heavy shadows
+  - Text: #30323b; muted text: #5d5f68
+- DARK MODE:
+  - Background: #0b1220; cards #111a2e; hairlines #1e293b
+  - Text: #e2e8f0; muted #94a3b8
+  - Primary: #5b8def
+  - Success: #4ade80; warning: #fbbf24; error: #f87171
+  - Outline: #94a3b8
+- Chips (word + icon, never colour alone):
+  - Item kind: "Part" (primary outline, cog icon) · "Supply" (grey outline, spray-can / inventory icon)
+  - Need: "Usually" (primary-container fill, solid dot) · "Sometimes" (white fill, grey outline, hollow dot)
+  - Status: "Active" green dot · "Retired" grey fill with archive icon
+  - Unit: small neutral mono pill, e.g. "can", "bottle", "tube", "litre", "pack", "piece", "kit", "roll"
+  - Count on a job row: small primary-container pill with a list icon, "May need: 2"
+- Typography: Inter. Supply codes (SUP-00001), job codes (throttle_body_cleaning · ENG-TBC) and counts in a mono font with tabular numerals.
+- Icons: Material Symbols Outlined, 20px.
+
+BUTTON RULES (strict):
+- Every action is a real button with a visible border or fill — never plain text, never underlined, never faint grey.
+- Primary = solid blue. Secondary = visible border + dark text. Icon buttons = 32px with a visible border.
+- Destructive buttons (Remove, Retire, Cancel) are red: red outline + red text; the final confirm in a dialog is solid red.
+- One primary (blue) button per screen, drawer or panel.
+- No browser pop-ups; every confirm is an in-app dialog.
+
+DESIGN PRINCIPLES:
+- Calm and exact, a well-kept service manual, not a spreadsheet
+- Plain words first, codes small and muted
+- No prices, suppliers, stock, fleet names, plates, usage counts from the apps, percentages, server/sync/version labels or made-up IDs
+- Use only the real data listed under each screen
+- Everything reachable by keyboard: reorder has Move up / Move down buttons as well as a drag handle; panels move focus in when they open and back to the button that opened them when they close
+
+---
+
+SCREEN 1: JOBS TAB — LIST WITH "MAY NEED" COUNTS
+- Toolbar row: search field "Search jobs, codes…"; filter dropdown "Group: All groups"; segmented "Active | Retired" (Active selected); on the right: secondary "Manage sections", primary "+ Add job"
+- Summary line, muted mono: "77 jobs · 12 groups · Engine has 10 sections"
+- ENGINE card expanded, section group heading "EXTERNAL BOLT-ON & INDUCTION", section "Air Intake & Induction (3)" with its rows:
+  - Engine Air Filter — chips [Part] [Replace] [Listed from Filters] [Active]
+  - Throttle Body Cleaning — chips [Service] [Clean] [May need: 2] [Active]; muted mono code under the name "throttle_body_cleaning · ENG-TBC"
+  - Intake Manifold Gasket — chips [Part] [Replace] [Active]
+- Section "Fuel System (2)":
+  - Fuel Injector Cleaning / Induction Service — [Service] [Clean] [May need: 1] [Active]
+  - Fuel Injector Replacement — [Part] [Replace] [Active]
+- Section "Ignition System (3)": Spark Plugs — [Part] [Replace] [May need: 1] [Active]; Ignition coil; Spark Plug Wires
+- Each row ends with two buttons: "Edit" (outline) and "Retire" (red outline)
+- Other group cards collapsed with counts (Brakes 11, Tires & wheels 7, Fluids 5, …)
+
+SCREEN 2: EDIT JOB DRAWER — "MAY NEED" BLOCK (THROTTLE BODY CLEANING)
+- Behind: the Jobs list dimmed but readable; right drawer 560px wide, full window height, all content visible (scrolling drawn open, nothing cut)
+- Header: "Edit job · Throttle Body Cleaning", close X (32px bordered icon button)
+- Existing fields (same as today): Name "Throttle Body Cleaning"; Home group "Engine"; Form type segmented "Service | Part" with Service selected; Default action "Clean"; Description "Cleaning carbon and dirt out of the throttle body (the valve that lets air into the engine) so the engine idles smoothly and responds properly."; Icon row with "wind" selected
+- Section "Also do" (existing): one row "Throttle Body Relearn — Resets the idle after cleaning." with red outline "Remove"; outline button "+ Add 'also do'"
+- NEW section "May need", directly under Also do:
+  - Heading "May need" with a count pill "2 items" on the right
+  - Sub-text: "Parts and supplies used up doing this job. Suggested while logging, never ticked automatically. Separate work goes in Also do."
+  - Row 1: drag handle · spray-can icon · "Throttle body cleaner" · [Supply] · [Usually] · muted "1 can" · muted note "Spray, then wipe with a clean rag." · buttons: "Edit" (outline), "Remove" (red outline), "Move up" and "Move down" (32px bordered icon buttons; Move up disabled on the first row)
+  - Row 2: drag handle · cog icon · "Throttle Body Gasket" · [Part] · [Sometimes] · no quantity · muted note "Only if the old gasket tears when the throttle body comes off." · same buttons (Move down disabled on the last row)
+  - Row 3 (shown greyed): drag handle · spray-can icon · "Carb cleaner (old)" · [Supply] · [Sometimes] · grey chip "Retired: hidden while logging" · buttons "Remove" (red outline), Move up / Move down
+  - Under the list: outline button "+ Add item"
+- Read-only line below: "Suggested with: (none)" in muted text
+- Sticky footer: red outline "Cancel", primary "Save job"
+- Also draw a second small frame of the same drawer in ADD mode (title "Add job", Name "Fuel Pressure Test"): the May need section shows a muted dashed box "Save the job first, then add items" and the "+ Add item" button disabled; footer "Cancel" (red outline) + "Add job" (primary)
+
+SCREEN 3: ADD ITEM PANEL (OPENED FROM "+ ADD ITEM")
+- Behind: the Edit job drawer from Screen 2, dimmed; the panel is a centered in-app dialog 520px wide, full height of its content
+- Title: "Add to May need · Throttle Body Cleaning", close X
+- Segmented tabs: "Part types" | "Supplies" — draw TWO frames, one per tab
+- Frame A — "Part types" tab selected:
+  - Search field "Find a part type…" with "gasket" typed
+  - Result list, one row each with a radio button, icon, name and muted group:
+    - "Throttle Body Gasket · Engine" — disabled, muted pill "Already listed"
+    - "Intake Manifold Gasket · Engine" — enabled, selected
+    - "Valve Cover Gasket · Engine" — enabled
+    - "Oil Pan Gasket · Engine" — disabled, muted pill "Already in Also do"
+- Frame B — "Supplies" tab selected:
+  - Search field "Find a supply…" with "clean" typed
+  - Rows: "Throttle body cleaner · can" — disabled, "Already listed"; "Brake cleaner · can" — enabled, selected; "Hand cleaner · tube" — enabled
+  - Under the list: outline button "+ New supply" (opens the Add supply drawer from Screen 5 and comes back with it selected)
+- Below the list, both frames:
+  - "How often is it needed?" — segmented "Usually | Sometimes" (Sometimes selected by default)
+  - "Usual quantity (optional)" — number field "1" with the unit shown after it ("can" in Frame B; no unit in Frame A)
+  - "Note (optional)" — single line "Only if the old gasket tears."
+- Footer: red outline "Cancel", primary "Add" (Frame A) / "Add" (Frame B)
+- Also a small third frame: the Also do picker (existing) with a part row "Throttle Body Gasket · Engine" disabled and muted pill "Already in May need"
+
+SCREEN 4: SUPPLIES TAB — LIST
+- Tabs row with "Supplies" (12) selected
+- Toolbar: search field "Search supplies…"; segmented "Active | Retired" (Active selected); primary "+ Add supply" on the right
+- Summary line, muted mono: "12 supplies · sorted by name"
+- Table card, columns: Supply (icon + name), Code (mono), Unit (pill), Used on (mono "On 2 jobs"), Status, and a right-aligned "Edit" outline button. Rows:
+  - Brake cleaner — SUP-00004 — can — On 3 jobs — Active
+  - Coolant bleed kit wipes — SUP-00009 — pack — On 1 job — Active
+  - Dielectric grease — SUP-00006 — tube — On 2 jobs — Active
+  - Fuel system cleaner — SUP-00002 — bottle — On 1 job — Active
+  - Hand cleaner — SUP-00011 — tube — On 0 jobs — Active
+  - Shop rags — SUP-00008 — pack — On 4 jobs — Active
+  - Thread locker (blue) — SUP-00005 — tube — On 1 job — Active
+  - Throttle body cleaner — SUP-00001 — can — On 1 job — Active
+- "On N jobs" means the Dominion May-need lists that include it — never anything about the apps
+
+SCREEN 5: ADD / EDIT SUPPLY DRAWER
+- Behind: Supplies list dimmed; right drawer 480px, full height
+- EDIT frame: title "Edit supply · Throttle body cleaner", muted mono "SUP-00001" under the title, close X
+  - "Name *" — "Throttle body cleaner", helper "Up to 120 characters."
+  - "Description *" — textarea "An aerosol spray that dissolves carbon and grime inside the throttle body." helper "Shown when someone taps ⓘ while logging."
+  - "Unit *" — dropdown "can" (open in a small inset showing: can, bottle, tube, litre, pack, piece, kit, roll)
+  - "Icon" — a row of 8 icon choices with the spray-can icon selected
+  - Muted line: "On 1 job: Throttle Body Cleaning."
+  - Footer: red outline "Retire" on the left; on the right red outline "Cancel" and primary "Save supply"
+- ADD frame (small): title "Add supply", empty fields with placeholders ("e.g. Brake cleaner"), footer red outline "Cancel" + primary "Add supply"
+- Inline validation example on the ADD frame: Name "brake  cleaner" with a red helper under it "Another active supply uses this name."
+
+SCREEN 6: RETIRE AND RESTORE A SUPPLY
+- Frame A — dialog: behind, the Edit supply drawer dimmed; centered dialog 480px, title "Retire Throttle body cleaner?"
+  - Body as a short list with icons:
+    - "Hidden from the May-need list of 1 job (Throttle Body Cleaning) until restored."
+    - "Hidden from logging in Fleet."
+    - "Past service logs keep the name — nothing is erased."
+  - Footer: outline "Keep it", solid red "Retire supply"
+- Frame B — Supplies list with "Retired" selected: row "Carb cleaner (old) — SUP-00003 — can — On 1 job — [Retired]" with outline button "Restore"
+- Frame C — the same row after pressing Restore when the name is taken: a red inline message under the row "Another active supply uses this name. Rename one of them first." and the row still shows [Retired]
+
+STATES SCREEN (one frame with four small panels):
+- Loading skeleton of the May need block inside the drawer
+- Error card in the drawer "Couldn't save this item" with outline "Try again" and the plain reason "This part is already in Also do for this job."
+- Empty May need block: dashed box "No items yet. Add the parts and supplies this job uses up." with outline "+ Add item"
+- Empty Supplies search "No supply matches 'xyz'"
+
+NARROW SCREEN (one frame, 768px tablet width):
+- The Edit job drawer full width; May need rows stack: line 1 icon + name + chips; line 2 quantity + note; line 3 the buttons in a row (Edit, Remove, Move up, Move down), all still visible and bordered
+
+ADDITIONAL UI COMPONENTS:
+- Need toggle chip: tapping "Usually" / "Sometimes" on a row switches it in place; it has a visible focus ring
+- Count pill "N items" next to the May need heading
+- Retired-item chip "Retired: hidden while logging"
+- "Already listed" / "Already in Also do" / "Already in May need" muted pills on disabled picker rows
+- Inline red helper text under fields and rows for errors
+- Toast after save: "Saved. Throttle Body Cleaning now lists 3 items."
+
+INTERACTIONS:
+- "+ Add item" opens the Add item panel (Screen 3); "Add" closes it and the new row appears at the bottom of the May need list
+- "Edit" on a May need row reopens the same panel with the item locked (only need, quantity and note can change)
+- "Remove" removes the row straight away and shows a toast "Removed from May need. Old logs keep it." (add it again with "+ Add item" if needed)
+- Move up / Move down and drag reorder the list; the order is the order Fleet shows
+- "+ New supply" inside the panel opens Screen 5 (Add) and returns with the new supply selected
+- "Retire" on a supply opens Screen 6 Frame A; "Restore" brings it back with its old May-need rows
+- Esc closes panels and dialogs; focus returns to the button that opened them
+
+Spec screens / Area:
+| Screen | Area |
+|---|---|
+| 1 | Jobs tab list with "May need" counts |
+| 2 | Edit job drawer — May need block (plus Add job frame) |
+| 3 | Add item panel — Part types / Supplies tabs (plus Also do picker frame) |
+| 4 | Supplies tab list |
+| 5 | Add / Edit supply drawer |
+| 6 | Retire and restore a supply |
+| States | Loading, error, empty |
+| Narrow | 768px drawer layout |
+
+Draw Light and Dark versions of every screen.

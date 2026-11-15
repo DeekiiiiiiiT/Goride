@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"on-tertiary-fixed-variant":"#005137","primary-fixed":"#e4dffc","tertiary-fixed":"#85f8c4","primary-fixed-dim":"#c8c3df","surface-container-highest":"#e0e3e5","on-tertiary-fixed":"#002114","on-primary-fixed":"#1b192e","on-error":"#ffffff","on-surface":"#191c1e","outline-variant":"#c9c5cd","on-secondary":"#ffffff","surface":"#f7f9fb","tertiary-fixed-dim":"#68dba9","secondary-fixed":"#ffdbce","on-secondary-container":"#571a00","on-background":"#191c1e","tertiary-container":"#002114","primary-container":"#1b192e","on-primary":"#ffffff","primary":"#000000","background":"#f7f9fb","inverse-on-surface":"#eff1f3","on-tertiary":"#ffffff","outline":"#78767d","secondary-container":"#fd651e","on-surface-variant":"#47464c","surface-bright":"#f7f9fb","surface-container":"#eceef0","error":"#ba1a1a","surface-dim":"#d8dadc","surface-container-lowest":"#ffffff","error-container":"#ffdad6","surface-variant":"#e0e3e5","on-secondary-fixed-variant":"#7f2b00","surface-container-high":"#e6e8ea","on-primary-fixed-variant":"#46445b","on-tertiary-container":"#069669","inverse-primary":"#c8c3df","secondary":"#a73a00","inverse-surface":"#2d3133","surface-container-low":"#f2f4f6","secondary-fixed-dim":"#ffb599","on-secondary-fixed":"#370e00","surface-tint":"#5e5c74","on-error-container":"#93000a","tertiary":"#000000","on-primary-container":"#84819a"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},spacing:{"gutter":"1.5rem","space-sm":"0.5rem","space-2xl":"3rem","space-lg":"1.5rem","space-md":"1rem","space-xs":"0.25rem","gutter-mobile":"1rem","margin":"2rem","space-xl":"2rem","margin-mobile":"1rem"},fontFamily:{"label-md":["Inter"],"body-lg":["Inter"],"headline-sm":["Inter"],"label-sm":["Inter"],"headline-lg":["Inter"],"display-lg":["Inter"],"body-sm":["Inter"],"headline-md":["Inter"],"currency-md":["Inter"],"title-sm":["Inter"],"title-md":["Inter"],"body-md":["Inter"]},fontSize:{"label-md":["12px",{lineHeight:"16px",letterSpacing:"0.01em",fontWeight:"500"}],"body-lg":["16px",{lineHeight:"24px",fontWeight:"400"}],"headline-sm":["20px",{lineHeight:"28px",letterSpacing:"-0.005em",fontWeight:"600"}],"label-sm":["11px",{lineHeight:"14px",letterSpacing:"0.02em",fontWeight:"600"}],"headline-lg":["30px",{lineHeight:"38px",letterSpacing:"-0.015em",fontWeight:"600"}],"display-lg":["40px",{lineHeight:"48px",letterSpacing:"-0.02em",fontWeight:"600"}],"body-sm":["13px",{lineHeight:"18px",fontWeight:"400"}],"headline-md":["24px",{lineHeight:"32px",letterSpacing:"-0.01em",fontWeight:"600"}],"currency-md":["15px",{lineHeight:"20px",fontWeight:"600"}],"title-sm":["14px",{lineHeight:"20px",fontWeight:"600"}],"title-md":["16px",{lineHeight:"24px",fontWeight:"600"}],"body-md":["14px",{lineHeight:"20px",fontWeight:"400"}]}}}};</script></head><body class="bg-surface font-body-md text-on-surface antialiased min-h-screen"><header class="fixed top-0 left-0 right-0 z-50 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 w-full px-margin flex items-center justify-between gap-space-md"><div class="flex items-center gap-space-md shrink-0"><div class="flex items-center gap-space-sm"><div class="w-9 h-9 rounded-lg bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[20px]">hub</span></div><span class="font-title-md text-title-md text-on-surface tracking-tight font-bold">Roam Fleet</span></div><span class="text-outline-variant font-label-md text-label-md">/</span><div class="flex items-center gap-space-xs bg-secondary-fixed/50 px-space-sm py-1 rounded-full"><span class="material-symbols-outlined text-secondary text-[16px]">build</span><span class="font-label-sm text-label-sm text-on-secondary-fixed font-semibold">Fleet maintenance</span></div></div><nav class="hidden xl:flex items-center gap-space-xs bg-surface-container-low p-1 rounded-xl" data-active-classes="bg-surface-container text-on-surface font-title-sm font-semibold shadow-sm"><a class="px-space-md py-1.5 rounded-lg font-title-sm text-title-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" data-path="overview" href="#">Overview</a><a class="px-space-md py-1.5 rounded-lg font-title-sm text-title-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" data-path="vehicles" href="#">Vehicles</a><a class="px-space-md py-1.5 rounded-lg font-title-sm text-title-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" data-path="maintenance" href="#">Maintenance</a><a class="px-space-md py-1.5 rounded-lg font-title-sm text-title-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" data-path="fuel-expenses" href="#">Fuel &amp; Expenses</a><a class="px-space-md py-1.5 rounded-lg font-title-sm text-title-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" data-path="reports" href="#">Reports</a><a class="px-space-md py-1.5 rounded-lg font-title-sm text-title-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" data-path="settings" href="#">Settings</a></nav><div class="flex items-center gap-space-sm shrink-0"><button class="hidden md:flex items-center gap-space-sm bg-surface-container-low hover:bg-surface-container-high px-space-sm py-1.5 rounded-lg text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer" type="button"><span class="material-symbols-outlined text-[18px]">search</span><span class="font-body-sm text-body-sm">Search...</span><kbd class="bg-surface-container-highest px-1.5 py-0.5 rounded font-label-sm text-label-sm text-on-surface-variant">⌘K</kbd></button><div class="hidden lg:flex items-center gap-space-xs bg-surface-container-low hover:bg-surface-container-high px-space-sm py-1.5 rounded-lg cursor-pointer transition-colors"><span class="material-symbols-outlined text-secondary text-[18px]">directions_car</span><span class="font-body-sm text-body-sm text-on-surface font-medium">Toyota Roomy (2019) · 5179KZ</span><span class="material-symbols-outlined text-on-surface-variant text-[16px]">unfold_more</span></div><button class="relative w-9 h-9 flex items-center justify-center rounded-lg bg-surface-container-low hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer" type="button"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-secondary-container"></span></button><div class="flex items-center gap-space-xs pl-space-xs"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></div></header><main class="w-full pt-16 bg-surface min-h-screen"><div class="flex flex-col w-full pb-space-2xl">
+<!-- Top Spec Navigation Bar / Context -->
+<div class="w-full bg-surface-container-lowest border-b border-surface-container py-space-sm px-margin flex items-center justify-between mb-space-xl">
+<div class="flex items-center gap-space-sm">
+<a class="inline-flex items-center gap-1 font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" href="#">
+<span class="material-symbols-outlined text-[16px]">arrow_back</span>
+<span>Back to Logs</span>
+</a>
+<span class="text-outline-variant font-label-md text-label-md">/</span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary font-bold">Component Design Audit · Flow State #6</span>
+</div>
+<div class="flex items-center gap-space-sm">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface-variant font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary-container animate-pulse"></span>
+        Live Interactive Preview
+      </span>
+</div>
+</div>
+<!-- Main Centered Presentation Container (max-w-[1000px]) -->
+<div class="w-full max-w-[1000px] mx-auto px-gutter flex flex-col">
+<!-- Title & Description Header -->
+<header class="flex flex-col gap-space-xs mb-space-2xl">
+<div class="flex items-center gap-space-xs mb-1">
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant font-bold">Fleet Maintenance Spec System</span>
+<span class="text-outline-variant font-label-md text-label-md">•</span>
+<span class="font-label-sm text-label-sm text-on-tertiary-container font-semibold">Toyota Roomy (2019) · 5179KZ</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">
+        Finish saving — button states
+      </h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl mt-1">
+        Audit of the asynchronous background sync states when recovering an interrupted draft log. Illustrates visual feedback across latency, queue timeouts, retry rejection, and final confirmation.
+      </p>
+<!-- Meta stats strip -->
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-space-md mt-space-lg pt-space-lg border-t border-surface-container">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Sync Mechanism</span>
+<span class="font-title-sm text-title-sm text-on-surface font-semibold mt-0.5">Optimistic IndexedDB</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Backoff Policy</span>
+<span class="font-title-sm text-title-sm text-on-surface font-semibold mt-0.5">Exponential (4 retries)</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Target Endpoint</span>
+<span class="font-title-sm text-title-sm text-on-surface font-semibold mt-0.5 font-mono">/v2/fleet/log_commit</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Session Scope</span>
+<span class="font-title-sm text-title-sm text-on-surface font-semibold mt-0.5">Draft #DS-491</span>
+</div>
+</div>
+</header>
+<!-- Four Card States Stack (Gap 32px / space-xl) -->
+<div class="flex flex-col gap-space-xl">
+<!-- ======================================================== -->
+<!-- CARD 1: WORKING -->
+<!-- ======================================================== -->
+<section class="flex flex-col">
+<!-- Caption Marker -->
+<div class="flex items-center justify-between mb-space-sm px-1">
+<div class="flex items-center gap-space-sm">
+<span class="inline-flex items-center px-2 py-0.5 rounded bg-surface-container-high text-on-surface font-label-sm text-label-sm font-bold tracking-wider uppercase">
+              State 01 · Working
+            </span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">In-flight RPC stream active (latency ~850ms)</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-mono">HTTP 102 PROCESSING</span>
+</div>
+<!-- Card Container -->
+<div class="w-full bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm transition-all hover:shadow-md">
+<!-- Card Header Row -->
+<div class="flex flex-wrap items-center justify-between gap-space-sm pb-space-md border-b border-surface-container-low">
+<div class="flex flex-wrap items-center gap-space-sm">
+<span class="font-title-md text-title-md text-on-surface font-bold">10 Nov 2026</span>
+<span class="text-outline-variant font-label-md text-label-md">·</span>
+<span class="font-body-md text-body-md text-on-surface-variant tabular-nums">196,900 km</span>
+<span class="text-outline-variant font-label-md text-label-md">·</span>
+<span class="px-2 py-0.5 rounded font-mono text-label-sm bg-surface-container text-on-surface-variant font-semibold">Draft Session #DS-491</span>
+<span class="text-outline-variant font-label-md text-label-md">·</span>
+<span class="font-body-md text-body-md text-on-surface font-medium flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">storefront</span>
+                Kingston Auto Care
+              </span>
+</div>
+<!-- Amber Status Badge -->
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary-fixed/40 text-on-secondary-fixed-variant font-label-sm text-label-sm font-bold tracking-wide">
+<span class="material-symbols-outlined text-[15px] animate-spin">sync</span>
+              Not finished saving
+            </span>
+</div>
+<!-- Status Callout Banner -->
+<div class="mt-space-md bg-secondary-fixed/20 rounded-xl p-space-md flex items-start gap-space-sm text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[20px] text-secondary shrink-0 mt-0.5">schedule</span>
+<div class="flex flex-col gap-0.5 min-w-0">
+<p class="font-title-sm text-title-sm font-semibold text-on-secondary-fixed">
+                This service saved but didn't finish. Nothing is lost.
+              </p>
+<p class="font-body-sm text-body-sm text-on-secondary-fixed-variant">
+                Synchronizing with cloud database... Locking write handles and reconciling inventory manifests.
+              </p>
+</div>
+</div>
+<!-- Service Breakdown Content -->
+<div class="mt-space-md py-space-sm flex flex-col gap-space-xs">
+<div class="flex items-center justify-between text-on-surface">
+<div class="flex items-center gap-space-sm">
+<span class="text-secondary font-bold text-title-sm">•</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Oil &amp; filter replacement</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">(Castrol Magnatec 5W-30 + OEM Filter)</span>
+</div>
+<span class="font-currency-md text-currency-md text-on-surface font-bold tabular-nums">J$ 3,200</span>
+</div>
+</div>
+<!-- Card Footer (Subtotal & In-Progress Button) -->
+<div class="mt-space-md pt-space-md border-t border-surface-container-low flex flex-col sm:flex-row sm:items-center sm:justify-between gap-space-md">
+<div class="flex items-center gap-2">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Subtotal logged:</span>
+<span class="font-title-md text-title-md text-on-surface font-bold tabular-nums">J$ 3,200</span>
+</div>
+<div class="flex items-center gap-space-sm self-end sm:self-auto">
+<!-- Disabled / Busy In-flight state -->
+<button class="cursor-not-allowed opacity-75 inline-flex items-center justify-center gap-2 h-10 px-5 rounded-lg bg-primary text-on-primary font-title-sm text-title-sm font-semibold shadow-sm select-none" disabled="" type="button">
+<!-- Crisp inline SVG spinning circle loader -->
+<svg class="animate-spin -ml-1 mr-1 h-4 w-4 text-white" fill="none" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
+<path class="opacity-90" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"></path>
+</svg>
+<span>Finishing…</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- ======================================================== -->
+<!-- CARD 2: STILL BUSY -->
+<!-- ======================================================== -->
+<section class="flex flex-col">
+<!-- Caption Marker -->
+<div class="flex items-center justify-between mb-space-sm px-1">
+<div class="flex items-center gap-space-sm">
+<span class="inline-flex items-center px-2 py-0.5 rounded bg-secondary-fixed/40 text-on-secondary-fixed font-label-sm text-label-sm font-bold tracking-wider uppercase">
+              State 02 · Still busy
+            </span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">User manually clicks while transaction pipeline is busy</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-mono">THROTTLED (429 / CONCURRENCY_LOCK)</span>
+</div>
+<!-- Card Container -->
+<div class="w-full bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm transition-all hover:shadow-md">
+<!-- Card Header Row -->
+<div class="flex flex-wrap items-center justify-between gap-space-sm pb-space-md border-b border-surface-container-low">
+<div class="flex flex-wrap items-center gap-space-sm">
+<span class="font-title-md text-title-md text-on-surface font-bold">10 Nov 2026</span>
+<span class="text-outline-variant font-label-md text-label-md">·</span>
+<span class="font-body-md text-body-md text-on-surface-variant tabular-nums">196,900 km</span>
+<span class="text-outline-variant font-label-md text-label-md">·</span>
+<span class="px-2 py-0.5 rounded font-mono text-label-sm bg-surface-container text-on-surface-variant font-semibold">Draft Session #DS-491</span>
+<span class="text-outline-variant font-label-md text-label-md">·</span>
+<span class="font-body-md text-body-md text-on-surface font-medium flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">storefront</span>
+                Kingston Auto Care
+              </span>
+</div>
+<!-- Amber Status Badge -->
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary-fixed/40 text-on-secondary-fixed-variant font-label-sm text-label-sm font-bold tracking-wide">
+<span class="material-symbols-outlined text-[15px]">schedule</span>
+              Not finished saving
+            </span>
+</div>
+<!-- Status Callout Banner -->
+<div class="mt-space-md bg-secondary-fixed/20 rounded-xl p-space-md flex items-start gap-space-sm text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[20px] text-secondary shrink-0 mt-0.5">schedule</span>
+<div class="flex flex-col gap-0.5 min-w-0">
+<p class="font-title-sm text-title-sm font-semibold text-on-secondary-fixed">
+                This service saved but didn't finish. Nothing is lost.
+              </p>
+<p class="font-body-sm text-body-sm text-on-secondary-fixed-variant">
+                Synchronizing with cloud database... Background workers are currently resolving offline journal entries.
+              </p>
+</div>
+</div>
+<!-- Service Breakdown Content -->
+<div class="mt-space-md py-space-sm flex flex-col gap-space-xs">
+<div class="flex items-center justify-between text-on-surface">
+<div class="flex items-center gap-space-sm">
+<span class="text-secondary font-bold text-title-sm">•</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Oil &amp; filter replacement</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">(Castrol Magnatec 5W-30 + OEM Filter)</span>
+</div>
+<span class="font-currency-md text-currency-md text-on-surface font-bold tabular-nums">J$ 3,200</span>
+</div>
+</div>
+<!-- Card Footer (Subtotal & Button with Underneath Warning Note) -->
+<div class="mt-space-md pt-space-md border-t border-surface-container-low flex flex-col sm:flex-row sm:items-start sm:justify-between gap-space-md">
+<div class="flex items-center gap-2 pt-1.5">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Subtotal logged:</span>
+<span class="font-title-md text-title-md text-on-surface font-bold tabular-nums">J$ 3,200</span>
+</div>
+<!-- Button Stack with Amber Warning Beneath on the Right -->
+<div class="flex flex-col items-end gap-1.5 self-end sm:self-auto">
+<button class="inline-flex items-center justify-center gap-1.5 h-10 px-5 rounded-lg bg-primary hover:bg-on-surface-variant text-on-primary font-title-sm text-title-sm font-semibold shadow-sm transition-all active:scale-[0.98]" type="button">
+<span>Finish saving</span>
+<span class="material-symbols-outlined text-[16px]">sync</span>
+</button>
+<!-- Amber Helper Text directly beneath -->
+<div class="flex items-center gap-1 text-secondary font-medium font-body-sm text-body-sm animate-pulse">
+<span class="material-symbols-outlined text-[15px] shrink-0">warning</span>
+<span>Still finishing, try again in a moment.</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ======================================================== -->
+<!-- CARD 3: FAILED -->
+<!-- ======================================================== -->
+<section class="flex flex-col">
+<!-- Caption Marker -->
+<div class="flex items-center justify-between mb-space-sm px-1">
+<div class="flex items-center gap-space-sm">
+<span class="inline-flex items-center px-2 py-0.5 rounded bg-error-container text-on-error-container font-label-sm text-label-sm font-bold tracking-wider uppercase">
+              State 03 · Failed
+            </span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Downstream dependency unavailable or gateway timeout</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-mono">HTTP 503 SERVICE UNAVAILABLE</span>
+</div>
+<!-- Card Container -->
+<div class="w-full bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm transition-all hover:shadow-md">
+<!-- Card Header Row -->
+<div class="flex flex-wrap items-center justify-between gap-space-sm pb-space-md border-b border-surface-container-low">
+<div class="flex flex-wrap items-center gap-space-sm">
+<span class="font-title-md text-title-md text-on-surface font-bold">10 Nov 2026</span>
+<span class="text-outline-variant font-label-md text-label-md">·</span>
+<span class="font-body-md text-body-md text-on-surface-variant tabular-nums">196,900 km</span>
+<span class="text-outline-variant font-label-md text-label-md">·</span>
+<span class="px-2 py-0.5 rounded font-mono text-label-sm bg-surface-container text-on-surface-variant font-semibold">Draft Session #DS-491</span>
+<span class="text-outline-variant font-label-md text-label-md">·</span>
+<span class="font-body-md text-body-md text-on-surface font-medium flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">storefront</span>
+                Kingston Auto Care
+              </span>
+</div>
+<!-- Amber Status Badge remains (still not finished) -->
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary-fixed/40 text-on-secondary-fixed-variant font-label-sm text-label-sm font-bold tracking-wide">
+<span class="material-symbols-outlined text-[15px]">schedule</span>
+              Not finished saving
+            </span>
+</div>
+<!-- Status Callout Banner -->
+<div class="mt-space-md bg-secondary-fixed/20 rounded-xl p-space-md flex items-start gap-space-sm text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[20px] text-secondary shrink-0 mt-0.5">schedule</span>
+<div class="flex flex-col gap-0.5 min-w-0">
+<p class="font-title-sm text-title-sm font-semibold text-on-secondary-fixed">
+                This service saved but didn't finish. Nothing is lost.
+              </p>
+<p class="font-body-sm text-body-sm text-on-secondary-fixed-variant">
+                Synchronizing with cloud database... Local cache intact with zero risk of transaction loss.
+              </p>
+</div>
+</div>
+<!-- Service Breakdown Content -->
+<div class="mt-space-md py-space-sm flex flex-col gap-space-xs">
+<div class="flex items-center justify-between text-on-surface">
+<div class="flex items-center gap-space-sm">
+<span class="text-secondary font-bold text-title-sm">•</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Oil &amp; filter replacement</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">(Castrol Magnatec 5W-30 + OEM Filter)</span>
+</div>
+<span class="font-currency-md text-currency-md text-on-surface font-bold tabular-nums">J$ 3,200</span>
+</div>
+</div>
+<!-- Card Footer (Subtotal & Button with Underneath Error Note) -->
+<div class="mt-space-md pt-space-md border-t border-surface-container-low flex flex-col sm:flex-row sm:items-start sm:justify-between gap-space-md">
+<div class="flex items-center gap-2 pt-1.5">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Subtotal logged:</span>
+<span class="font-title-md text-title-md text-on-surface font-bold tabular-nums">J$ 3,200</span>
+</div>
+<!-- Button Stack with Rose/Red Alert Beneath on the Right -->
+<div class="flex flex-col items-end gap-1.5 self-end sm:self-auto max-w-sm">
+<button class="inline-flex items-center justify-center gap-1.5 h-10 px-5 rounded-lg bg-primary hover:bg-on-surface-variant text-on-primary font-title-sm text-title-sm font-semibold shadow-sm transition-all active:scale-[0.98]" type="button">
+<span>Finish saving</span>
+<span class="material-symbols-outlined text-[16px]">sync_problem</span>
+</button>
+<!-- Rose Alert Text directly beneath -->
+<div class="flex items-start justify-end gap-1.5 text-error font-medium font-body-sm text-body-sm text-right">
+<span class="material-symbols-outlined text-[16px] text-error shrink-0 mt-0.5">error</span>
+<span>Couldn't finish: the books service isn't answering. Try again later.</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ======================================================== -->
+<!-- CARD 4: DONE -->
+<!-- ======================================================== -->
+<section class="flex flex-col">
+<!-- Caption Marker -->
+<div class="flex items-center justify-between mb-space-sm px-1">
+<div class="flex items-center gap-space-sm">
+<span class="inline-flex items-center px-2 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm font-bold tracking-wider uppercase">
+              State 04 · Done
+            </span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Ledger committed &amp; synced across general ledger accounts</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-tertiary-container font-mono font-semibold">STATUS: 200 OK (COMMITTED)</span>
+</div>
+<!-- Card Container (Clean, no warning banner) -->
+<div class="w-full bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm transition-all hover:shadow-md">
+<!-- Card Header Row -->
+<div class="flex flex-wrap items-center justify-between gap-space-sm pb-space-md border-b border-surface-container-low">
+<div class="flex flex-wrap items-center gap-space-sm">
+<span class="font-title-md text-title-md text-on-surface font-bold">10 Nov 2026</span>
+<span class="text-outline-variant font-label-md text-label-md">·</span>
+<span class="font-body-md text-body-md text-on-surface-variant tabular-nums">196,900 km</span>
+<span class="text-outline-variant font-label-md text-label-md">·</span>
+<span class="px-2 py-0.5 rounded font-mono text-label-sm bg-surface-container text-on-surface font-bold">Work Order #KAC-8821</span>
+<span class="text-outline-variant font-label-md text-label-md">·</span>
+<span class="font-body-md text-body-md text-on-surface font-medium flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-on-tertiary-container">check_circle</span>
+                Kingston Auto Care
+              </span>
+</div>
+<!-- Soft Emerald Completed Badge (Amber badge gone) -->
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-tertiary-fixed/60 text-on-tertiary-fixed font-label-sm text-label-sm font-bold tracking-wide">
+<span class="material-symbols-outlined text-[15px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+              Completed
+            </span>
+</div>
+<!-- Service Breakdown Content -->
+<div class="mt-space-md py-space-sm flex flex-col gap-space-xs">
+<div class="flex items-center justify-between text-on-surface">
+<div class="flex items-center gap-space-sm">
+<span class="text-on-tertiary-container font-bold text-title-sm">•</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Oil &amp; filter replacement</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">(Castrol Magnatec 5W-30 + OEM Filter)</span>
+</div>
+<span class="font-currency-md text-currency-md text-on-surface font-bold tabular-nums">J$ 3,200</span>
+</div>
+</div>
+<!-- Card Footer (Final Total & Clean Outline View Button) -->
+<div class="mt-space-md pt-space-md border-t border-surface-container-low flex flex-col sm:flex-row sm:items-center sm:justify-between gap-space-md">
+<div class="flex items-center gap-2">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Service Total:</span>
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold tabular-nums">J$ 3,200</span>
+<span class="font-label-sm text-label-sm text-on-tertiary-container bg-tertiary-fixed/40 px-2 py-0.5 rounded ml-2 font-medium">Reconciled</span>
+</div>
+<!-- Secondary Outline "View" Button -->
+<div class="flex items-center gap-space-sm self-end sm:self-auto">
+<button class="inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-title-sm text-title-sm font-semibold transition-colors cursor-pointer" type="button">
+<span>View details</span>
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Design Specification Notes Footer -->
+<div class="mt-space-2xl p-space-lg rounded-2xl bg-surface-container-low flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<span class="font-title-sm text-title-sm text-on-surface font-bold flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-secondary">info</span>
+          Engineering &amp; UX Implementation Guidelines
+        </span>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider font-semibold">Doc Ref: RF-SPEC-06</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-md">
+<div class="flex flex-col gap-1 p-space-md bg-surface-container-lowest rounded-xl">
+<span class="font-title-sm text-title-sm text-on-surface font-semibold">1. Debounce Threshold</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+            Prevent multiple simultaneous RPC invocations. If the previous trigger hasn't timed out, render State 02 within 150ms of duplicate clicks.
+          </p>
+</div>
+<div class="flex flex-col gap-1 p-space-md bg-surface-container-lowest rounded-xl">
+<span class="font-title-sm text-title-sm text-on-surface font-semibold">2. Resilience &amp; Data Safety</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+            State 03 copy explicitly assures users that local offline transactions remain cached. Never purge dirty records until the server returns an ACK.
+          </p>
+</div>
+<div class="flex flex-col gap-1 p-space-md bg-surface-container-lowest rounded-xl">
+<span class="font-title-sm text-title-sm text-on-surface font-semibold">3. Transition to Done</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+            On HTTP 200, swap amber warning banner for the emerald completed status, transition draft token <code class="font-mono text-label-sm">#DS-491</code> to final order <code class="font-mono text-label-sm">#KAC-8821</code>, and replace the action with View.
+          </p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+  // Micro-interaction handlers for preview fidelity
+  document.addEventListener('DOMContentLoaded', () => {
+    const buttons = document.querySelectorAll('button:not([disabled])');
+    buttons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        // Soft click ripple simulation
+        btn.classList.add('scale-95');
+        setTimeout(() => btn.classList.remove('scale-95'), 120);
+      });
+    });
+  });
+</script></main><footer class="w-full bg-surface-container-low py-space-lg shadow-[0_1px_8px_rgba(0,0,0,0.02)]"><div class="w-full px-margin flex flex-col sm:flex-row items-center justify-between gap-space-md"><div class="flex items-center gap-space-sm"><span class="font-title-sm text-title-sm text-on-surface font-semibold">Roam Fleet</span><span class="text-outline-variant font-label-md text-label-md">·</span><span class="font-body-sm text-body-sm text-on-surface-variant">© 2025 Roam Fleet Operations Ltd. All rights reserved.</span></div><div class="flex items-center gap-space-md"><a class="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" href="#">Operational Status</a><a class="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" href="#">API &amp; Telematics</a><a class="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" href="#">Support</a></div></div></footer></body></html>

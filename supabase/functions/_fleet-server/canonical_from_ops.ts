@@ -456,8 +456,13 @@ export async function appendCanonicalMaintenanceIfEligible(
   const ev = buildCanonicalMaintenanceEvent(record);
   if (!ev) return { posted: false, failed: false };
   try {
-    await appendCanonicalLedgerEvents([ev], c);
-    return { posted: true, failed: false };
+    const r = await appendCanonicalLedgerEvents([ev], c);
+    const failed = !r.success || r.failed > 0;
+    const posted = !failed && (r.inserted > 0 || r.skipped > 0);
+    if (failed) {
+      console.error("[CanonicalOps] maintenance append failed:", r);
+    }
+    return { posted, failed };
   } catch (e) {
     console.error("[CanonicalOps] maintenance append failed:", e);
     return { posted: false, failed: true };

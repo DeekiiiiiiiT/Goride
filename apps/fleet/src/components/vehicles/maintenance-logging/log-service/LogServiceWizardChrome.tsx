@@ -22,8 +22,17 @@ function StepBar({
   onStepClick?: (step: LogServiceWizardStep) => void;
 }) {
   return (
-    <div className="bg-surface-container-lowest px-6 py-4 shadow-[0_1px_0_0_rgba(0,0,0,0.06)]">
-      <div className="grid grid-cols-4 gap-2 items-center">
+    <div className="bg-surface-container-lowest px-4 pb-3 sm:px-6 sm:py-4 shadow-[0_1px_0_0_rgba(0,0,0,0.06)]">
+      {/* Phone (Stitch screen 9): four thin segments; done + current in Stitch orange. */}
+      <div className="grid grid-cols-4 gap-1.5 sm:hidden" data-testid="log-service-step-segments">
+        {STEP_LABELS.map((label, index) => (
+          <span
+            key={label}
+            className={`h-1 rounded-full ${index + 1 <= activeStep ? "bg-[#fd651e]" : "bg-surface-container-highest"}`}
+          />
+        ))}
+      </div>
+      <div className="hidden sm:grid grid-cols-4 gap-2 items-center">
         {STEP_LABELS.map((label, index) => {
           const stepNum = (index + 1) as LogServiceWizardStep;
           const isActive = stepNum === activeStep;
@@ -94,6 +103,7 @@ export function LogServiceWizardChrome({
   onStepClick,
   children,
   footer,
+  mobileSummary,
 }: {
   activeStep: LogServiceWizardStep;
   vehicle: LogServiceVehicleStrip;
@@ -101,6 +111,8 @@ export function LogServiceWizardChrome({
   onStepClick?: (step: LogServiceWizardStep) => void;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  /** Phone only: the running total pinned above the footer (Stitch screen 9). */
+  mobileSummary?: React.ReactNode;
 }) {
   const odo =
     vehicle.odometerKm != null && vehicle.odometerKm > 0
@@ -109,12 +121,20 @@ export function LogServiceWizardChrome({
 
   return (
     <div className="flex flex-col max-h-[90vh] overflow-hidden bg-surface-container-lowest">
-      <div className="px-6 pt-5 pb-2 flex items-center justify-between">
+      <div className="px-4 sm:px-6 pt-4 sm:pt-5 pb-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Wrench className="w-5 h-5 text-on-surface" />
-          <h2 className="text-xl font-semibold text-on-surface tracking-tight">
-            {LOG_SERVICE_COPY.dialogTitle}
-          </h2>
+          <span className="sm:hidden w-9 h-9 rounded-lg bg-black text-white flex items-center justify-center">
+            <Wrench className="w-[18px] h-[18px]" />
+          </span>
+          <Wrench className="hidden sm:block w-5 h-5 text-on-surface" />
+          <div className="flex flex-col">
+            <h2 className="text-lg sm:text-xl font-semibold text-on-surface tracking-tight leading-tight">
+              {LOG_SERVICE_COPY.dialogTitle}
+            </h2>
+            <span className="sm:hidden text-xs font-medium text-on-surface-variant" data-testid="log-service-step-caption">
+              {LOG_SERVICE_COPY.stepCaption(activeStep, STEP_LABELS[activeStep - 1])}
+            </span>
+          </div>
         </div>
         <button
           type="button"
@@ -126,7 +146,7 @@ export function LogServiceWizardChrome({
         </button>
       </div>
 
-      <div className="bg-primary text-on-primary px-6 py-2 flex items-center justify-between gap-3">
+      <div className="bg-primary text-on-primary px-4 sm:px-6 py-2 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
           <Car className="w-[18px] h-[18px] shrink-0 opacity-90" />
           <span className="text-sm font-bold truncate">{vehicle.vehicleLabel}</span>
@@ -157,10 +177,22 @@ export function LogServiceWizardChrome({
 
       <StepBar activeStep={activeStep} onStepClick={onStepClick} />
 
-      <div className="flex-1 overflow-y-auto px-6 py-6">{children}</div>
+      <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">{children}</div>
 
+      {mobileSummary ? (
+        <div
+          className="sm:hidden bg-surface-container-lowest px-4 pt-3 border-t border-outline-variant/30"
+          data-testid="log-service-mobile-summary"
+        >
+          {mobileSummary}
+        </div>
+      ) : null}
       {footer ? (
-        <div className="bg-surface-container-low px-6 py-4 flex items-center justify-between border-t border-outline-variant/30">
+        <div
+          className={`bg-surface-container-low px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 ${
+            mobileSummary ? "max-sm:bg-surface-container-lowest" : "border-t border-outline-variant/30"
+          } sm:border-t sm:border-outline-variant/30`}
+        >
           {footer}
         </div>
       ) : null}
@@ -184,7 +216,7 @@ export function LogServiceWizardContinueButton({
       type="button"
       disabled={disabled || loading}
       onClick={onClick}
-      className={`px-6 py-2 rounded-lg font-medium text-sm flex items-center gap-1.5 transition-all ${
+      className={`px-6 py-2 max-sm:py-3 max-sm:flex-1 justify-center rounded-lg font-medium text-sm flex items-center gap-1.5 transition-all ${
         disabled || loading
           ? "bg-surface-container-highest text-stitch-secondary cursor-not-allowed"
           : "bg-primary text-on-primary hover:opacity-90 active:scale-[0.98] shadow-sm"

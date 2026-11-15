@@ -4,7 +4,13 @@
 BEGIN;
 SET LOCAL session_replication_role = replica;
 
--- Lines have no organization_id; remove them by the test org's work orders first.
+-- Items and lines have no organization_id; remove them by the test org's work orders first
+-- (replica mode skips the ON DELETE CASCADE from lines to items).
+DELETE FROM public.maintenance_work_order_line_item
+WHERE work_order_id IN (
+  SELECT id FROM public.maintenance_work_orders
+  WHERE organization_id = 'd6010000-0000-4000-8000-000000000088'
+);
 DELETE FROM public.maintenance_work_order_lines
 WHERE work_order_id IN (
   SELECT id FROM public.maintenance_work_orders
@@ -21,7 +27,7 @@ BEGIN
     JOIN information_schema.tables tb
       ON tb.table_schema = c.table_schema AND tb.table_name = c.table_name
     WHERE c.column_name = 'organization_id'
-      AND c.table_schema IN ('public', 'fleet')
+      AND c.table_schema IN ('public', 'fleet', 'ledger')
       AND tb.table_type = 'BASE TABLE'
   LOOP
     EXECUTE format(

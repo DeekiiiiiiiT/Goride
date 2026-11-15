@@ -276,7 +276,11 @@ export async function recordCompletedServiceLines(args: {
           note: "position_aware_without_positions",
         },
       });
-      if (!ledErr) ledgerInserted++;
+      if (ledErr) {
+        if (ledErr.code === "23505") continue;
+        throw ledErr;
+      }
+      ledgerInserted++;
       continue;
     }
 
@@ -298,7 +302,24 @@ export async function recordCompletedServiceLines(args: {
         notes: line.notes != null ? String(line.notes) : null,
         payload_json: { source: "recordCompletedServiceLines" },
       });
-      if (!ledErr) ledgerInserted++;
+      if (ledErr) {
+        if (ledErr.code === "23505") {
+          await upsertComponentScheduleRow(sb, {
+            organizationId: args.organizationId,
+            vehicleId: args.vehicleId,
+            categoryId,
+            position: pos,
+            performedMiles: args.performedAtMiles,
+            performedDate: args.performedAtDate,
+            template: effective,
+            sourceTemplateId: args.templateId || sourceTemplateId,
+          });
+          categoriesAdvanced.add(categoryId);
+          continue;
+        }
+        throw ledErr;
+      }
+      ledgerInserted++;
 
       await upsertComponentScheduleRow(sb, {
         organizationId: args.organizationId,

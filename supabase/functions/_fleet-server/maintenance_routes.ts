@@ -13,9 +13,6 @@ import {
   backfillServiceLedgerForOrg,
   bootstrapVehicleComponentSchedules,
   getPackageChecklist,
-  maybeAdvancePackageSchedule,
-  recordCompletedServiceLines,
-  type LedgerLineInput,
 } from "./maintenance_service_ledger_core.ts";
 import {
   canonicalOdometerForVehicle,
@@ -39,8 +36,7 @@ import {
 import { deleteCanonicalLedgerBySource } from "./ledger_canonical.ts";
 import { isMaintenanceLedgerEligible } from "../../../packages/finance-core/src/canonicalMaintenanceLedger.ts";
 import { projectFromMaintenanceLog, voidOdometerReading } from "./odometer_ledger.ts";
-import { commitPartsUsage } from "./parts_match.ts";
-import { ledgerAllowedAfterParts } from "../../../packages/types/src/partsResolution.ts";
+import { maintenanceRecordAcceptsClientHint, runCompletion } from "./maintenance_completion.ts";
 import {
   assessOdometerAnomaly,
   checkMaintenanceOdometerReading,
@@ -81,6 +77,19 @@ import { registerMaintenanceMasterRoutes } from "./maintenance_master_routes.ts"
 import { buildLogServiceContext } from "./maintenance_log_service_context.ts";
 import { buildSystemSections } from "./maintenance_system_sections.ts";
 import { assertCatalogWriteResponse, governWriteOrProposal } from "./catalog_access.ts";
+import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
+import {
+  callSaveWorkOrder,
+  isBoardOnlyBody,
+  isContentEditBody,
+  isMixedPatchBody,
+  loadLineItemsForWorkOrders,
+  loadWorkOrderLinesForRpc,
+  mapApiLineToDb,
+  prepareWorkOrderLines,
+  buildClientPayloadLines,
+} from "./service_items_save.ts";
+import { mapJobItemRowToApi } from "./maintenance_jobs_admin_helpers.ts";
 
 const assertVehicleCatalogPlatformAccess = assertPlatformStaffResponse;
 
@@ -114,84 +123,6 @@ function aggregateFleetStatusFromDue(
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function lineNeedsPartsUsage(row: Record<string, unknown>): boolean {
-  if (row.declined === true) return false;
-  if (row.part_id && isUuid(String(row.part_id))) return true;
-  const num = row.part_number != null ? String(row.part_number).trim() : "";
-  return num.length > 0;
-}
-
-async function reverseAndDeleteWorkOrder(
-  supabase: SupabaseClient,
-  workOrderId: string,
-): Promise<void> {
-  await supabase.rpc("reverse_parts_usage_for_work_order", { p_work_order_id: workOrderId });
-  await supabase.from("maintenance_work_orders").delete().eq("id", workOrderId);
-}
-
-type PartsUsageCommit = {
-  warrantyPrompts: unknown[];
-  stockWarnings: unknown[];
-};
-
-function usageFromCommit(usageResult: Record<string, unknown>): PartsUsageCommit {
-  return {
-    warrantyPrompts: Array.isArray(usageResult.warrantyPrompts) ? usageResult.warrantyPrompts : [],
-    stockWarnings: Array.isArray(usageResult.stockWarnings) ? usageResult.stockWarnings : [],
-  };
-}
-
-async function commitUsageOrDiscardNewWorkOrder(
-  supabase: SupabaseClient,
-  workOrderId: string,
-  createdHere: boolean,
-): Promise<PartsUsageCommit> {
-  try {
-    const usageResult = await commitPartsUsage(supabase, workOrderId);
-    return usageFromCommit(usageResult);
-  } catch (err) {
-    if (createdHere) await reverseAndDeleteWorkOrder(supabase, workOrderId);
-    throw err;
-  }
-}
-
-function stampLineIds(rows: Record<string, unknown>[]): void {
-  for (const row of rows) {
-    if (row.id == null || !isUuid(String(row.id))) row.id = crypto.randomUUID();
-  }
-}
-
-async function syncWorkOrderLines(
-  supabase: SupabaseClient,
-  workOrderId: string,
-  editLines: Record<string, unknown>[],
-): Promise<void> {
-  stampLineIds(editLines);
-  const { data: existing, error: exErr } = await supabase
-    .from("maintenance_work_order_lines")
-    .select("id")
-    .eq("work_order_id", workOrderId);
-  if (exErr) throw exErr;
-  const existingIds = new Set((existing || []).map((r) => String((r as { id: string }).id)));
-  const incomingIds = new Set(editLines.map((r) => String(r.id)));
-  const toDelete = [...existingIds].filter((id) => !incomingIds.has(id));
-  if (toDelete.length) {
-    const { error } = await supabase.from("maintenance_work_order_lines").delete().in("id", toDelete);
-    if (error) throw error;
-  }
-  for (const row of editLines) {
-    const id = String(row.id);
-    const payload = { ...row, id, work_order_id: workOrderId };
-    if (existingIds.has(id)) {
-      const { error } = await supabase.from("maintenance_work_order_lines").update(payload).eq("id", id);
-      if (error) throw error;
-    } else {
-      const { error } = await supabase.from("maintenance_work_order_lines").insert(payload);
-      if (error) throw error;
-    }
-  }
-}
 
 function isUuid(s: string): boolean {
   return UUID_RE.test(s.trim());
@@ -273,78 +204,57 @@ export function workOrdersBasePath(requestPath: string): string {
   return i >= 0 ? requestPath.slice(0, i + marker.length) : marker;
 }
 
-const WO_LINE_ACTIONS = new Set([
-  "inspect", "clean", "adjust", "replace", "rotate", "balance", "flush", "top_up", "repair",
-  "machine", "rebuild", "other",
-]);
+function legacyMaintenanceLogPayloadExtra(log: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...log };
+  for (const k of ["lines", "cost", "status", "id", "vehicleId", "vehicle_id"]) {
+    delete out[k];
+  }
+  return out;
+}
 
-/** camelCase API line → snake_case DB row for maintenance_work_order_lines. */
-function mapApiLineToDb(
-  raw: Record<string, unknown>,
-  sortOrder: number,
-  workOrderId?: string,
-): Record<string, unknown> {
-  const valuesRaw = raw.values ?? raw.values_json;
-  const values = (valuesRaw && typeof valuesRaw === "object" && !Array.isArray(valuesRaw))
-    ? valuesRaw
-    : null;
-  const componentParsed = parseOptionalUuidField(
-    raw.componentId ?? raw.component_id ?? raw.categoryId ?? raw.category_id,
-  );
-  const systemParsed = parseOptionalUuidField(raw.systemId ?? raw.system_id);
-  const partParsed = parseOptionalUuidField(raw.partId ?? raw.part_id);
-  let action = String(raw.action ?? "replace").trim();
-  if (!WO_LINE_ACTIONS.has(action)) action = "other";
+async function legacyCompleteRecordId(
+  sb: SupabaseClient,
+  clientId: string,
+  workOrderId: string,
+  orgId: string,
+  vehicleId: string,
+): Promise<string> {
+  if (!isUuid(clientId)) return crypto.randomUUID();
+  const { data: existing, error } = await sb
+    .from("maintenance_records")
+    .select("id, organization_id, vehicle_id, work_order_id")
+    .eq("id", clientId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!existing) return clientId;
+  if (maintenanceRecordAcceptsClientHint(existing as Record<string, unknown>, {
+    orgId,
+    vehicleId,
+    workOrderId,
+  })) {
+    return clientId;
+  }
+  return crypto.randomUUID();
+}
 
-  const row: Record<string, unknown> = {
-    sort_order: raw.sortOrder != null ? Number(raw.sortOrder) : (raw.sort_order != null ? Number(raw.sort_order) : sortOrder),
-    system_id: systemParsed.ok ? systemParsed.value : null,
-    component_id: componentParsed.ok ? componentParsed.value : null,
-    system_code: raw.systemCode != null
-      ? String(raw.systemCode)
-      : (raw.system_code != null ? String(raw.system_code) : null),
-    system_name: raw.systemName != null
-      ? String(raw.systemName)
-      : (raw.system_name != null ? String(raw.system_name) : null),
-    component_code: raw.componentCode != null
-      ? String(raw.componentCode)
-      : (raw.categoryCode != null
-        ? String(raw.categoryCode)
-        : (raw.component_code != null ? String(raw.component_code) : null)),
-    component_name: raw.componentName != null
-      ? String(raw.componentName)
-      : (raw.categoryName != null
-        ? String(raw.categoryName)
-        : (raw.component_name != null ? String(raw.component_name) : null)),
-    action,
-    qty: parseOptionalNumberField(raw.qty),
-    unit_price: parseOptionalNumberField(raw.unitPrice ?? raw.unit_price),
-    material: parseOptionalNumberField(raw.material),
-    labor_amount: parseOptionalNumberField(raw.laborAmount ?? raw.labor_amount ?? raw.labor),
-    labor_hours: parseOptionalNumberField(raw.laborHours ?? raw.labor_hours),
-    labor_rate: parseOptionalNumberField(raw.laborRate ?? raw.labor_rate),
-    condition: raw.condition != null ? String(raw.condition) : null,
-    positions: Array.isArray(raw.positions) ? raw.positions.map(String) : null,
-    brand: raw.brand != null ? String(raw.brand) : null,
-    part_number: raw.partNumber != null
-      ? String(raw.partNumber)
-      : (raw.part_number != null ? String(raw.part_number) : null),
-    warranty: raw.warranty === true,
-    complimentary: raw.complimentary === true,
-    part_id: partParsed.ok ? partParsed.value : null,
-    supplier_part_offer_id: (() => {
-      const offerParsed = parseOptionalUuidField(raw.supplierPartOfferId ?? raw.supplier_part_offer_id);
-      return offerParsed.ok ? offerParsed.value : null;
-    })(),
-    notes: raw.notes != null ? String(raw.notes) : null,
-    recommended: raw.recommended === true,
-    declined: raw.declined === true,
-    values_json: values,
+function internalWorkOrderCompleteRequest(
+  app: unknown,
+  c: Context,
+  workOrderId: string,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const honoApp = app as {
+    request: (path: string, init?: RequestInit, env?: unknown) => Promise<Response>;
   };
-  row.line_total = computeWoLineTotal(row);
-  if (workOrderId) row.work_order_id = workOrderId;
-  if (raw.id != null && isUuid(String(raw.id))) row.id = String(raw.id);
-  return row;
+  return honoApp.request(
+    `${workOrdersBasePath(c.req.path)}/${workOrderId}/complete`,
+    {
+      method: "POST",
+      headers: c.req.raw.headers,
+      body: JSON.stringify(body),
+    },
+    c.env,
+  );
 }
 
 /** snake_case DB line → camelCase API. */
@@ -381,51 +291,234 @@ function mapDbLineToApi(row: Record<string, unknown>): Record<string, unknown> {
     declined: row.declined === true,
     values: row.values_json,
     lineTotal: row.line_total != null ? Number(row.line_total) : undefined,
+    itemsAmount: row.items_amount != null ? Number(row.items_amount) : 0,
     voidedAt: row.voided_at ?? null,
   };
 }
 
-function apiLinesToLedgerInputs(lines: unknown[]): LedgerLineInput[] {
-  const out: LedgerLineInput[] = [];
-  for (const raw of lines) {
-    if (!raw || typeof raw !== "object") continue;
-    const r = raw as Record<string, unknown>;
-    const catId = r.categoryId ?? r.category_id ?? r.componentId ?? r.component_id;
-    out.push({
-      categoryId: catId != null ? String(catId) : null,
-      categoryCode: r.categoryCode != null
-        ? String(r.categoryCode)
-        : (r.componentCode != null ? String(r.componentCode) : (r.component_code != null ? String(r.component_code) : null)),
-      categoryName: r.categoryName != null
-        ? String(r.categoryName)
-        : (r.componentName != null ? String(r.componentName) : (r.component_name != null ? String(r.component_name) : null)),
-      action: r.action != null ? String(r.action) : null,
-      positions: r.positions,
-      notes: r.notes != null ? String(r.notes) : null,
-      workOrderLineId: r.id != null && isUuid(String(r.id)) ? String(r.id) : null,
-      declined: r.declined === true,
-    });
+async function enrichLinesWithItems(
+  supabase: SupabaseClient,
+  workOrderId: string,
+  lines: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  const itemsByLine = await loadLineItemsForWorkOrders(supabase, [workOrderId]);
+  return lines.map((line) => ({
+    ...mapDbLineToApi(line),
+    items: itemsByLine.get(String(line.id)) ?? [],
+  }));
+}
+
+function workOrderNotFinished(wo: Record<string, unknown>): boolean {
+  if (String(wo.status) !== "in_progress") return false;
+  const updatedAt = wo.updated_at != null ? new Date(String(wo.updated_at)).getTime() : 0;
+  return updatedAt > 0 && Date.now() - updatedAt > 120_000;
+}
+
+async function mapSavedRpcToApiItem(
+  supabase: SupabaseClient,
+  saved: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const wo = (saved.work_order ?? {}) as Record<string, unknown>;
+  const lineRows = (Array.isArray(saved.lines) ? saved.lines : []) as Record<string, unknown>[];
+  const lines = await enrichLinesWithItems(supabase, String(wo.id), lineRows);
+  return mapDbWorkOrderToApi(wo, lines);
+}
+
+function buildSnakeWorkOrderPayload(
+  body: Record<string, unknown>,
+  opts: { includeKeys?: Set<string> } = {},
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const allow = opts.includeKeys;
+  const put = (key: string, val: unknown) => {
+    if (allow && !allow.has(key)) return;
+    if (val !== undefined) out[key] = val;
+  };
+  put("vehicle_id", body.vehicleId ?? body.vehicle_id);
+  put("log_mode", (() => {
+    const lm = String(body.logMode ?? body.log_mode ?? "").trim();
+    if (!lm) return undefined;
+    return lm === "package" ? "package" : "quick_job";
+  })());
+  put("idempotency_key", body.idempotencyKey ?? body.idempotency_key);
+  put("log_number", body.logNumber ?? body.log_number);
+  if (body.performedAtDate !== undefined || body.performed_at_date !== undefined) {
+    const v = body.performedAtDate ?? body.performed_at_date;
+    put("performed_at_date", v == null || v === "" ? null : String(v).slice(0, 10));
+  }
+  if (body.odometer !== undefined) {
+    put("odometer", body.odometer == null || body.odometer === "" ? null : Number(body.odometer));
+  }
+  if (body.provider !== undefined) put("provider", body.provider == null ? null : String(body.provider));
+  if (body.currency !== undefined) {
+    const cur = String(body.currency).trim().toUpperCase();
+    put("currency", cur || "JMD");
+  }
+  if (body.templateId !== undefined || body.template_id !== undefined) {
+    const tp = parseOptionalUuidField(body.templateId ?? body.template_id);
+    if (tp.ok) put("template_id", tp.value);
+  }
+  if (body.packageComplete !== undefined || body.package_complete !== undefined) {
+    put("package_complete", body.packageComplete === true || body.package_complete === true);
+  }
+  if (body.notes !== undefined) put("notes", body.notes == null ? null : String(body.notes));
+  if (body.invoiceUrl !== undefined || body.invoice_url !== undefined) {
+    const u = body.invoiceUrl ?? body.invoice_url;
+    put("invoice_url", u == null || u === "" ? null : String(u));
+  }
+  if (body.discount !== undefined || body.discount_amount !== undefined) {
+    const d = parseDiscount(body.discount ?? body.discount_amount);
+    put("discount_amount", d ?? 0);
   }
   return out;
 }
 
-function dbLinesToLedgerInputs(lines: Record<string, unknown>[]): LedgerLineInput[] {
-  return lines.map((r) => ({
-    categoryId: r.component_id != null ? String(r.component_id) : null,
-    categoryCode: r.component_code != null ? String(r.component_code) : null,
-    categoryName: r.component_name != null ? String(r.component_name) : null,
-    action: r.action != null ? String(r.action) : null,
-    positions: r.positions,
-    notes: r.notes != null ? String(r.notes) : null,
-    workOrderLineId: r.id != null ? String(r.id) : null,
-    declined: r.declined === true,
-  }));
+function isIdempotencyUniqueViolation(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.includes("duplicate key") || msg.includes("unique constraint")
+    || msg.includes("idempotency");
+}
+
+async function attachFleetJobItemsToSections(
+  supabase: SupabaseClient,
+  payload: ReturnType<typeof buildSystemSections>,
+): Promise<ReturnType<typeof buildSystemSections>> {
+  const jobIds = new Set<string>();
+  for (const g of payload.groups) {
+    for (const s of g.sections) {
+      for (const j of s.jobs) jobIds.add(String(j.id));
+    }
+  }
+  for (const j of payload.otherJobs) jobIds.add(String(j.id));
+  if (!jobIds.size) return payload;
+
+  const [itemsRes, suppliesRes, unitsRes] = await Promise.all([
+    supabase
+      .from("maintenance_job_item")
+      .select("*")
+      .in("job_id", [...jobIds])
+      .is("removed_at", null)
+      .order("sort_order")
+      .order("created_at"),
+    supabase.from("maintenance_supply").select("id, name, status, unit_id"),
+    supabase.from("maintenance_unit").select("id, label_one, label_many"),
+  ]);
+  if (itemsRes.error) throw itemsRes.error;
+  if (suppliesRes.error) throw suppliesRes.error;
+  if (unitsRes.error) throw unitsRes.error;
+
+  const partTypeIds = new Set<string>();
+  for (const row of itemsRes.data || []) {
+    const pt = (row as { part_type_id?: string }).part_type_id;
+    if (pt) partTypeIds.add(String(pt));
+  }
+  const categoriesById = new Map<string, Record<string, unknown>>();
+  if (partTypeIds.size > 0) {
+    const { data, error } = await supabase
+      .from("maintenance_service_categories")
+      .select("id, name, status, default_fit_mode")
+      .in("id", [...partTypeIds]);
+    if (error) throw error;
+    for (const row of data || []) {
+      categoriesById.set(String((row as { id: string }).id), row as Record<string, unknown>);
+    }
+  }
+
+  const suppliesById = new Map(
+    (suppliesRes.data || []).map((s) => [String((s as { id: string }).id), s as Record<string, unknown>]),
+  );
+  const unitsById = new Map(
+    (unitsRes.data || []).map((u) => [String((u as { id: string }).id), u as Record<string, unknown>]),
+  );
+
+  const itemsByJob = new Map<string, Record<string, unknown>[]>();
+  for (const link of itemsRes.data || []) {
+    const lr = link as Record<string, unknown>;
+    const jobId = String(lr.job_id);
+    if (lr.part_type_id != null) {
+      const cat = categoriesById.get(String(lr.part_type_id));
+      if (!cat || String(cat.status) !== "active") continue;
+      const mapped = mapJobItemRowToApi(lr, String(cat.name), false);
+      const item = {
+        linkId: mapped.linkId,
+        kind: mapped.kind,
+        itemId: mapped.itemId,
+        name: mapped.name,
+        need: mapped.need,
+        qtyHint: mapped.qtyHint,
+        note: mapped.note,
+        sortOrder: mapped.sortOrder,
+        unitLabelOne: "piece",
+        unitLabelMany: "pieces",
+        defaultFitMode: cat.default_fit_mode != null ? String(cat.default_fit_mode) : null,
+      };
+      const list = itemsByJob.get(jobId) || [];
+      list.push(item);
+      itemsByJob.set(jobId, list);
+      continue;
+    }
+    const sup = suppliesById.get(String(lr.supply_id));
+    if (!sup || String(sup.status) !== "active") continue;
+    const unit = unitsById.get(String(sup.unit_id));
+    const mapped = mapJobItemRowToApi(
+      lr,
+      String(sup.name),
+      false,
+      unit ? { label_one: String(unit.label_one), label_many: String(unit.label_many) } : undefined,
+    );
+    const item = {
+      linkId: mapped.linkId,
+      kind: mapped.kind,
+      itemId: mapped.itemId,
+      name: mapped.name,
+      need: mapped.need,
+      qtyHint: mapped.qtyHint,
+      note: mapped.note,
+      sortOrder: mapped.sortOrder,
+      unitLabelOne: mapped.unitLabelOne ?? "piece",
+      unitLabelMany: mapped.unitLabelMany ?? "pieces",
+      defaultFitMode: null,
+    };
+    const list = itemsByJob.get(jobId) || [];
+    list.push(item);
+    itemsByJob.set(jobId, list);
+  }
+
+  const withItems = (job: Record<string, unknown>) => ({
+    ...job,
+    items: itemsByJob.get(String(job.id)) ?? [],
+  });
+
+  return {
+    groups: payload.groups.map((g) => ({
+      ...g,
+      sections: g.sections.map((s) => ({
+        ...s,
+        jobs: s.jobs.map((j) => withItems(j as Record<string, unknown>) as typeof j),
+      })),
+    })),
+    otherJobs: payload.otherJobs.map((j) => withItems(j as Record<string, unknown>) as typeof j),
+  };
 }
 
 function mapDbWorkOrderToApi(
   wo: Record<string, unknown>,
   lines?: Record<string, unknown>[],
 ): Record<string, unknown> {
+  // Callers pass either database rows or lines already mapped by enrichLinesWithItems (with items).
+  // Mapping a mapped line again wipes its name, amounts and items, so only database rows are mapped.
+  const isDbRow = (l: Record<string, unknown>) => "work_order_id" in l;
+  const apiLines = lines?.map((l) => (isDbRow(l) ? mapDbLineToApi(l) : l));
+  const subtotal = !lines
+    ? null
+    : lines.every(isDbRow)
+    // CR-04: deleted (voided) jobs are not part of the bill.
+    ? lineSubtotal(lines.filter((l) => l.voided_at == null))
+    : Math.round(
+      (apiLines ?? [])
+        .filter((l) => l.voidedAt == null)
+        .reduce((s, l) => s + (Number(l.lineTotal) || 0), 0) * 100,
+    ) / 100;
   return {
     id: wo.id,
     organizationId: wo.organization_id,
@@ -444,8 +537,7 @@ function mapDbWorkOrderToApi(
     invoiceUrl: wo.invoice_url,
     totalCost: wo.total_cost != null ? Number(wo.total_cost) : null,
     discountAmount: Number(wo.discount_amount ?? 0),
-    // CR-04: deleted (voided) jobs are not part of the bill.
-    subtotal: lines ? lineSubtotal(lines.filter((l) => l.voided_at == null)) : null,
+    subtotal,
     maintenanceRecordId: wo.maintenance_record_id,
     priority: wo.priority,
     vendorId: wo.vendor_id,
@@ -456,7 +548,9 @@ function mapDbWorkOrderToApi(
     source: wo.source,
     cancelReason: wo.cancel_reason,
     logNumber: wo.log_number,
-    lines: lines ? lines.map(mapDbLineToApi) : undefined,
+    lines: apiLines,
+    version: wo.version != null ? Number(wo.version) : 1,
+    notFinished: workOrderNotFinished(wo),
     createdAt: wo.created_at,
     updatedAt: wo.updated_at,
   };
@@ -1287,6 +1381,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
     requireAuth(),
     async (c) => {
       try {
+        const orgId = getOrgId(c);
         const systemId = c.req.param("systemId")?.trim() ?? "";
         if (!isUuid(systemId)) return c.json({ error: "Invalid system id" }, 400);
 
@@ -1370,7 +1465,11 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           systemsById,
           allJobsById,
         );
-        return c.json(payload);
+        const withItems = await attachFleetJobItemsToSections(supabase, payload);
+        const serviceItemsEnabled = orgId
+          ? await isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId)
+          : false;
+        return c.json({ ...withItems, serviceItemsEnabled });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
@@ -1650,22 +1749,89 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const { data, error } = await q;
         if (error) throw error;
 
-        const logs = (data || []).map((row: Record<string, unknown>) => {
-          if (row.payload_json && typeof row.payload_json === "object") {
-            return row.payload_json as Record<string, unknown>;
+        const records = (data || []) as Record<string, unknown>[];
+        const woIds = new Set<string>();
+        for (const row of records) {
+          const woCol = row.work_order_id != null ? String(row.work_order_id) : "";
+          if (woCol && isUuid(woCol)) woIds.add(woCol);
+          const payload = row.payload_json && typeof row.payload_json === "object"
+            ? row.payload_json as Record<string, unknown>
+            : null;
+          const payloadWo = payload?.workOrderId != null ? String(payload.workOrderId) : "";
+          if (payloadWo && isUuid(payloadWo)) woIds.add(payloadWo);
+        }
+
+        const woVersionById = new Map<string, number>();
+        const lineMetaById = new Map<string, { itemsAmount: number }>();
+        const itemsByLineId = new Map<string, Record<string, unknown>[]>();
+
+        if (woIds.size > 0) {
+          const { data: wos, error: woErr } = await supabase
+            .from("maintenance_work_orders")
+            .select("id, version")
+            .in("id", [...woIds]);
+          if (woErr) throw woErr;
+          for (const wo of wos || []) {
+            woVersionById.set(
+              String((wo as { id: string }).id),
+              Number((wo as { version?: number }).version ?? 1),
+            );
           }
-          return {
-            id: row.id,
-            vehicleId: row.vehicle_id,
-            date: row.performed_at_date,
-            type: row.service_type || "Service",
-            cost: row.cost != null ? Number(row.cost) : 0,
-            odo: row.performed_at_miles,
-            provider: row.provider || "",
-            notes: row.notes || "",
-            invoiceUrl: row.invoice_url || "",
-            status: row.status || "Completed",
-          };
+          const { data: lines, error: lineErr } = await supabase
+            .from("maintenance_work_order_lines")
+            .select("id, items_amount")
+            .in("work_order_id", [...woIds]);
+          if (lineErr) throw lineErr;
+          for (const line of lines || []) {
+            const lr = line as { id: string; items_amount?: number };
+            lineMetaById.set(String(lr.id), {
+              itemsAmount: Number(lr.items_amount ?? 0),
+            });
+          }
+          const itemsMap = await loadLineItemsForWorkOrders(supabase, [...woIds]);
+          for (const [lineId, items] of itemsMap.entries()) {
+            itemsByLineId.set(lineId, items);
+          }
+        }
+
+        const logs = records.map((row: Record<string, unknown>) => {
+          const base = row.payload_json && typeof row.payload_json === "object"
+            ? { ...(row.payload_json as Record<string, unknown>) }
+            : {
+              id: row.id,
+              vehicleId: row.vehicle_id,
+              date: row.performed_at_date,
+              type: row.service_type || "Service",
+              cost: row.cost != null ? Number(row.cost) : 0,
+              odo: row.performed_at_miles,
+              provider: row.provider || "",
+              notes: row.notes || "",
+              invoiceUrl: row.invoice_url || "",
+              status: row.status || "Completed",
+            };
+          const woId = row.work_order_id != null && isUuid(String(row.work_order_id))
+            ? String(row.work_order_id)
+            : (base.workOrderId != null && isUuid(String(base.workOrderId))
+              ? String(base.workOrderId)
+              : "");
+          if (woId) {
+            base.version = woVersionById.get(woId) ?? 1;
+          }
+          if (Array.isArray(base.lines)) {
+            base.lines = base.lines.map((lineRaw: unknown) => {
+              if (!lineRaw || typeof lineRaw !== "object") return lineRaw;
+              const line = lineRaw as Record<string, unknown>;
+              const lineId = line.id != null ? String(line.id) : "";
+              if (!lineId) return line;
+              const meta = lineMetaById.get(lineId);
+              return {
+                ...line,
+                itemsAmount: meta?.itemsAmount ?? 0,
+                items: itemsByLineId.get(lineId) ?? [],
+              };
+            });
+          }
+          return base;
         });
 
         return c.json(logs);
@@ -1730,188 +1896,272 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const currency = currencyRaw || "JMD";
         const status = log.status != null ? String(log.status) : "Completed";
         const jobCompleted = status.trim().toLowerCase() === "completed";
+        const idempotencyKeyRaw = log.idempotencyKey ?? log.idempotency_key;
+        const idempotencyKey = idempotencyKeyRaw != null ? String(idempotencyKeyRaw).trim() : "";
 
-        const savedLines: Record<string, unknown>[] = [];
-        const lineRows: Record<string, unknown>[] = [];
-        for (const raw of Array.isArray(log.lines) ? log.lines as unknown[] : []) {
-          if (!raw || typeof raw !== "object") continue;
-          const row = mapApiLineToDb(raw as Record<string, unknown>, lineRows.length);
-          if (row.id == null || !isUuid(String(row.id))) row.id = crypto.randomUUID();
-          lineRows.push(row);
-          savedLines.push({ ...(raw as Record<string, unknown>), id: row.id });
+        if (idempotencyKey) {
+          const raced = await findWorkOrderByIdempotency(supabase, orgId, idempotencyKey);
+          if (raced) {
+            const racedStatus = String(raced.status);
+            if (racedStatus === "completed") {
+              const { data: record } = await supabase
+                .from("maintenance_records")
+                .select("*")
+                .eq("id", raced.maintenance_record_id ?? "")
+                .maybeSingle();
+              const { data: woLines } = await supabase
+                .from("maintenance_work_order_lines")
+                .select("*")
+                .eq("work_order_id", raced.id)
+                .order("sort_order", { ascending: true });
+              const enriched = await enrichLinesWithItems(
+                supabase,
+                String(raced.id),
+                (woLines || []) as Record<string, unknown>[],
+              );
+              return c.json({
+                success: true,
+                data: record,
+                workOrderId: raced.id,
+                lines: enriched,
+                idempotentReplay: true,
+              });
+            }
+            if (racedStatus === "in_progress") {
+              const completeRes = await internalWorkOrderCompleteRequest(app, c, String(raced.id), {
+                recordId: await legacyCompleteRecordId(supabase, id, String(raced.id), orgId, vehicleId),
+                type: log.type,
+                payloadExtra: legacyMaintenanceLogPayloadExtra(log),
+              });
+              if (!completeRes.ok) {
+                const errBody = await completeRes.json().catch(() => ({}));
+                return c.json(errBody, completeRes.status as 200);
+              }
+              const completeJson = await completeRes.json() as Record<string, unknown>;
+              return c.json({
+                success: true,
+                data: completeJson.record,
+                workOrderId: raced.id,
+                lines: (completeJson.item as { lines?: unknown })?.lines ?? [],
+                warrantyPrompts: completeJson.warrantyPrompts,
+                stockWarnings: completeJson.stockWarnings,
+                ledgerPosted: completeJson.ledgerPosted,
+                ledgerWarning: completeJson.ledgerWarning,
+                idempotentReplay: true,
+              });
+            }
+          }
         }
 
-        const cost = lineRows.length
-          ? serviceNetTotal(lineRows, 0)
-          : (log.cost != null ? Number(log.cost) : null);
-
-        const rowInsert = {
-          id,
-          organization_id: orgId,
-          vehicle_id: vehicleId,
-          template_id: templateId || null,
-          performed_at_miles,
-          performed_at_date,
-          cost,
-          currency,
-          service_type: log.type != null ? String(log.type) : null,
-          provider: log.provider != null ? String(log.provider) : null,
-          notes: log.notes != null ? String(log.notes) : null,
-          invoice_url: log.invoiceUrl != null ? String(log.invoiceUrl) : null,
-          status,
-          legacy_kv_id: null as string | null,
-          payload_json: { ...log, id, vehicleId, currency, status, cost, lines: savedLines } as Record<string, unknown>,
-          updated_at: new Date().toISOString(),
-        };
-
-        // Parts usage before the service record and the ledger charge. A usage failure deletes only this work order.
-        let workOrderId: string | undefined;
-        let warrantyPrompts: unknown[] = [];
-        let stockWarnings: unknown[] = [];
-        const needsUsage = lineRows.some(lineNeedsPartsUsage);
-        let usageCommitted = !needsUsage || !jobCompleted;
-        if (lineRows.length) {
-          const woId = crypto.randomUUID();
-          const rowsForWo = lineRows.map((r) => ({ ...r, work_order_id: woId }));
-          const bridgeNetTotal = serviceNetTotal(rowsForWo, 0);
-          const logModeDb = logMode === "package" ? "package" : "quick_job";
-          const packageComplete = logModeDb === "package" && !!templateId;
-          const { error: woErr } = await supabase.from("maintenance_work_orders").insert({
-            id: woId,
+        const rawLines = Array.isArray(log.lines) ? log.lines as unknown[] : [];
+        if (rawLines.length === 0) {
+          const cost = log.cost != null ? Number(log.cost) : null;
+          const rowInsert = {
+            id,
             organization_id: orgId,
             vehicle_id: vehicleId,
-            status: jobCompleted ? "completed" : "in_progress",
-            opened_at: new Date().toISOString(),
-            closed_at: jobCompleted ? new Date().toISOString() : null,
-            performed_at_date,
-            odometer: performed_at_miles,
-            provider: rowInsert.provider,
-            currency,
             template_id: templateId || null,
-            package_complete: packageComplete,
-            log_mode: logModeDb,
-            notes: rowInsert.notes,
-            invoice_url: rowInsert.invoice_url,
-            discount_amount: 0,
-            total_cost: bridgeNetTotal,
-            maintenance_record_id: null,
-            payload_json: { source: "maintenance_logs_bridge", logId: id },
+            performed_at_miles,
+            performed_at_date,
+            cost,
+            currency,
+            service_type: log.type != null ? String(log.type) : null,
+            provider: log.provider != null ? String(log.provider) : null,
+            notes: log.notes != null ? String(log.notes) : null,
+            invoice_url: log.invoiceUrl != null ? String(log.invoiceUrl) : null,
+            status,
+            legacy_kv_id: null as string | null,
+            payload_json: { ...log, id, vehicleId, currency, status, cost } as Record<string, unknown>,
             updated_at: new Date().toISOString(),
-          });
-          if (woErr) throw woErr;
-          workOrderId = woId;
-          const { error: lineErr } = await supabase.from("maintenance_work_order_lines").insert(rowsForWo);
-          if (lineErr) {
-            await reverseAndDeleteWorkOrder(supabase, woId);
-            throw lineErr;
-          }
-          if (needsUsage && jobCompleted) {
-            const usage = await commitUsageOrDiscardNewWorkOrder(supabase, woId, true);
-            warrantyPrompts = usage.warrantyPrompts;
-            stockWarnings = usage.stockWarnings;
-            usageCommitted = true;
-          }
-        }
-        if (!ledgerAllowedAfterParts({ needsUsage: needsUsage && jobCompleted, usageCommitted })) {
-          if (workOrderId) await reverseAndDeleteWorkOrder(supabase, workOrderId);
-          throw new Error("Parts usage was not saved");
-        }
-
-        const { data: inserted, error: insErr } = await supabase
-          .from("maintenance_records")
-          .insert(rowInsert)
-          .select()
-          .single();
-        if (insErr) {
-          if (workOrderId) await reverseAndDeleteWorkOrder(supabase, workOrderId);
-          throw insErr;
-        }
-
-        if (workOrderId) {
-          rowInsert.payload_json = {
-            ...(rowInsert.payload_json as Record<string, unknown>),
-            workOrderId,
           };
-          await supabase.from("maintenance_work_orders").update({
-            maintenance_record_id: id,
-            updated_at: new Date().toISOString(),
-          }).eq("id", workOrderId);
-          await supabase.from("maintenance_records").update({
-            payload_json: rowInsert.payload_json,
-            updated_at: new Date().toISOString(),
-          }).eq("id", id);
+          const { data: inserted, error: insErr } = await supabase
+            .from("maintenance_records")
+            .insert(rowInsert)
+            .select()
+            .single();
+          if (insErr) throw insErr;
+          const ledgerInput = {
+            id,
+            vehicleId,
+            performed_at_date,
+            cost: rowInsert.cost,
+            status,
+            currency,
+            service_type: rowInsert.service_type,
+            provider: rowInsert.provider,
+          };
+          const ledgerResult = await appendCanonicalMaintenanceIfEligible(ledgerInput, c);
+          try {
+            await projectFromMaintenanceLog(
+              {
+                id,
+                vehicleId,
+                odometer: performed_at_miles,
+                date: performed_at_date,
+                serviceType: rowInsert.service_type,
+                organizationId: orgId,
+              },
+              orgId,
+            );
+          } catch (odoErr) {
+            console.error("[maintenance-logs] odometer ledger projection failed:", odoErr);
+          }
+          return c.json({
+            success: true,
+            data: inserted,
+            ledgerPosted: ledgerResult.posted,
+            ledgerWarning: ledgerResult.failed
+              ? "Service saved but not posted to books — contact support if this persists"
+              : undefined,
+          });
         }
 
-        // Service ledger + component schedules (ops truth); package clock only when members satisfied
-        if (String(status).trim().toLowerCase() === "completed") {
-          const ledgerLines = Array.isArray(log.lines)
-            ? apiLinesToLedgerInputs(log.lines as unknown[])
-            : [];
-          if (ledgerLines.length) {
-            await recordCompletedServiceLines({
-              sb: supabase,
-              organizationId: orgId,
-              vehicleId,
-              performedAtDate: performed_at_date,
-              performedAtMiles: performed_at_miles,
-              lines: ledgerLines,
-              templateId,
-              maintenanceRecordId: id,
-            });
+        const actorId = rbacUserId(c);
+        if (!actorId) return c.json({ code: "actor_required", error: "Actor required" }, 401);
+        const itemsEnabled = await isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId);
+        const woId = crypto.randomUUID();
+        const prepared = await prepareWorkOrderLines(supabase, {
+          orgId,
+          vehicleId,
+          workOrderId: null,
+          rawLines,
+          itemsEnabled,
+        });
+        if (!prepared.ok) {
+          return c.json({ code: prepared.code, error: prepared.error }, prepared.status);
+        }
+        const discount = parseDiscount(log.discount ?? log.discount_amount) ?? 0;
+        const logModeDb = logMode === "package" ? "package" : "quick_job";
+        const packageComplete = logModeDb === "package" && !!templateId;
+        const saveStatus = jobCompleted ? "in_progress" : "draft";
+        const templateParsed = templateId && isUuid(templateId)
+          ? { ok: true as const, value: templateId }
+          : { ok: true as const, value: null as string | null };
+        const pWorkOrder: Record<string, unknown> = {
+          id: woId,
+          vehicle_id: vehicleId,
+          log_mode: logModeDb,
+          idempotency_key: idempotencyKey || null,
+          performed_at_date,
+          odometer: performed_at_miles,
+          provider: log.provider != null ? String(log.provider) : null,
+          currency,
+          template_id: templateParsed.value,
+          package_complete: packageComplete || log.packageComplete === true || log.package_complete === true,
+          notes: log.notes != null ? String(log.notes) : null,
+          invoice_url: log.invoiceUrl != null ? String(log.invoiceUrl) : null,
+          discount_amount: discount,
+        };
+        const saveRes = await callSaveWorkOrder(supabase, {
+          orgId,
+          actorId,
+          status: saveStatus,
+          workOrderId: null,
+          expectedVersion: null,
+          workOrder: pWorkOrder,
+          lines: prepared.lines,
+        });
+        if (!saveRes.ok) {
+          if (idempotencyKey) {
+            const raced = await findWorkOrderByIdempotency(supabase, orgId, idempotencyKey);
+            if (raced && String(raced.status) === "in_progress") {
+              const completeRes = await internalWorkOrderCompleteRequest(app, c, String(raced.id), {
+                recordId: await legacyCompleteRecordId(supabase, id, String(raced.id), orgId, vehicleId),
+                type: log.type,
+                payloadExtra: legacyMaintenanceLogPayloadExtra(log),
+              });
+              if (!completeRes.ok) {
+                const errBody = await completeRes.json().catch(() => ({}));
+                return c.json(errBody, completeRes.status as 200);
+              }
+              const completeJson = await completeRes.json() as Record<string, unknown>;
+              return c.json({
+                success: true,
+                data: completeJson.record,
+                workOrderId: raced.id,
+                lines: (completeJson.item as { lines?: unknown })?.lines ?? [],
+                warrantyPrompts: completeJson.warrantyPrompts,
+                stockWarnings: completeJson.stockWarnings,
+                ledgerPosted: completeJson.ledgerPosted,
+                ledgerWarning: completeJson.ledgerWarning,
+                idempotentReplay: true,
+              });
+            }
           }
-          if (templateId && logMode !== "quick_job") {
-            await maybeAdvancePackageSchedule({
-              sb: supabase,
-              organizationId: orgId,
-              vehicleId,
-              templateId,
-              performedMiles: performed_at_miles,
-              performedDate: performed_at_date,
-              currentOdo: performed_at_miles,
-              force: log.packageComplete === true || log.package_complete === true,
-            });
+          return c.json({ code: saveRes.code, error: saveRes.error }, saveRes.status);
+        }
+        const workOrderId = String((saveRes.data.work_order as Record<string, unknown>).id ?? woId);
+        const savedRpcLines = Array.isArray(saveRes.data.lines) ? saveRes.data.lines : [];
+        const savedLines = buildClientPayloadLines(rawLines, savedRpcLines);
+
+        if (jobCompleted) {
+          const recordId = await legacyCompleteRecordId(supabase, id, workOrderId, orgId, vehicleId);
+          const completeRes = await internalWorkOrderCompleteRequest(app, c, workOrderId, {
+            recordId,
+            type: log.type,
+            payloadExtra: legacyMaintenanceLogPayloadExtra(log),
+          });
+          if (!completeRes.ok) {
+            const errBody = await completeRes.json().catch(() => ({}));
+            return c.json(errBody, completeRes.status as 200);
           }
+          const completeJson = await completeRes.json() as Record<string, unknown>;
+          return c.json({
+            success: true,
+            data: completeJson.record,
+            workOrderId,
+            lines: (completeJson.item as { lines?: unknown })?.lines ?? savedLines,
+            warrantyPrompts: completeJson.warrantyPrompts,
+            stockWarnings: completeJson.stockWarnings,
+            ledgerPosted: completeJson.ledgerPosted,
+            ledgerWarning: completeJson.ledgerWarning,
+          });
         }
 
-        const ledgerInput = {
+        const cost = serviceNetTotal(prepared.lines, discount);
+        const payload_json = {
+          ...log,
           id,
           vehicleId,
-          performed_at_date,
-          cost: rowInsert.cost,
-          status,
           currency,
-          service_type: rowInsert.service_type,
-          provider: rowInsert.provider,
+          status,
+          cost,
+          lines: savedLines,
+          workOrderId,
         };
-        const ledgerResult = await appendCanonicalMaintenanceIfEligible(ledgerInput, c);
-
-        try {
-          await projectFromMaintenanceLog(
-            {
-              id,
-              vehicleId,
-              odometer: performed_at_miles,
-              date: performed_at_date,
-              serviceType: rowInsert.service_type,
-              organizationId: orgId,
-            },
-            orgId,
-          );
-        } catch (odoErr) {
-          console.error("[maintenance-logs] odometer ledger projection failed:", odoErr);
-        }
+        const { data: inserted, error: insErr } = await supabase
+          .from("maintenance_records")
+          .insert({
+            id,
+            organization_id: orgId,
+            vehicle_id: vehicleId,
+            template_id: templateId || null,
+            performed_at_miles,
+            performed_at_date,
+            cost,
+            currency,
+            service_type: log.type != null ? String(log.type) : null,
+            provider: log.provider != null ? String(log.provider) : null,
+            notes: log.notes != null ? String(log.notes) : null,
+            invoice_url: log.invoiceUrl != null ? String(log.invoiceUrl) : null,
+            status,
+            legacy_kv_id: null,
+            work_order_id: workOrderId,
+            payload_json,
+            updated_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+        if (insErr) throw insErr;
 
         return c.json({
           success: true,
           data: inserted,
           workOrderId,
           lines: savedLines,
-          warrantyPrompts,
-          stockWarnings,
-          ledgerPosted: ledgerResult.posted,
-          ledgerWarning: ledgerResult.failed
-            ? "Service saved but not posted to books — contact support if this persists"
-            : undefined,
+          warrantyPrompts: [],
+          stockWarnings: [],
+          ledgerPosted: false,
         });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -2029,114 +2279,170 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           : (prevPayload.logMode != null ? String(prevPayload.logMode) : null);
 
         const jobCompleted = nextStatusLc === "completed";
-        const savedLines: Record<string, unknown>[] = [];
-        const editLines: Record<string, unknown>[] = [];
-        for (const raw of Array.isArray(lines) ? lines as unknown[] : []) {
-          if (!raw || typeof raw !== "object") continue;
-          const row = mapApiLineToDb(raw as Record<string, unknown>, editLines.length);
-          if (row.id == null || !isUuid(String(row.id))) row.id = crypto.randomUUID();
-          editLines.push(row);
-          savedLines.push({ ...(raw as Record<string, unknown>), id: row.id });
-        }
-        const needsUsage = editLines.some(lineNeedsPartsUsage);
-        let usageCommitted = !needsUsage || !jobCompleted;
-        let editWorkOrderId = prevPayload.workOrderId != null ? String(prevPayload.workOrderId) : "";
-        let storedDiscount = 0;
-        if (isUuid(editWorkOrderId)) {
-          const { data: woDiscountRow } = await supabase
-            .from("maintenance_work_orders")
-            .select("discount_amount")
-            .eq("id", editWorkOrderId)
-            .maybeSingle();
-          storedDiscount = Number(
-            (woDiscountRow as { discount_amount?: number } | null)?.discount_amount ?? 0,
-          );
-        }
-        // CR-02: edited lines must still cover the stored discount.
-        if (editLines.length && discountTooLarge(editLines, storedDiscount)) {
-          return discountTooLargeResponse(c);
-        }
-        const cost = editLines.length
-          ? serviceNetTotal(editLines, storedDiscount)
-          : (body.cost !== undefined
-            ? (body.cost != null ? Number(body.cost) : null)
-            : (existing.cost != null ? Number(existing.cost) : null));
+        const rawEditLines = Array.isArray(lines) ? lines as unknown[] : [];
+        let editWorkOrderId = (existing as { work_order_id?: string | null }).work_order_id != null
+          ? String((existing as { work_order_id: string }).work_order_id)
+          : (prevPayload.workOrderId != null ? String(prevPayload.workOrderId) : "");
 
-        let warrantyPrompts: unknown[] = [];
-        let stockWarnings: unknown[] = [];
-        const leftCompleted = prevStatus === "completed" && nextStatusLc !== "completed";
-        if (editLines.length || isUuid(editWorkOrderId)) {
-          let createdHere = false;
-          if (!isUuid(editWorkOrderId)) {
-            editWorkOrderId = crypto.randomUUID();
-            createdHere = true;
-            const rowsForWo = editLines.map((r) => ({ ...r, work_order_id: editWorkOrderId }));
-            const editBridgeNet = serviceNetTotal(rowsForWo, 0);
-            const { error: woErr } = await supabase.from("maintenance_work_orders").insert({
-              id: editWorkOrderId,
-              organization_id: orgId,
-              vehicle_id: vehicleId,
-              status: jobCompleted ? "completed" : "in_progress",
-              opened_at: new Date().toISOString(),
-              closed_at: jobCompleted ? new Date().toISOString() : null,
+        if (rawEditLines.length || isUuid(editWorkOrderId)) {
+          const evRaw = body.expectedVersion ?? body.expected_version;
+          if (isUuid(editWorkOrderId) && (evRaw == null || evRaw === "")) {
+            return c.json({ code: "version_required", error: "Reload this service and try again." }, 428);
+          }
+          const actorId = rbacUserId(c);
+          if (!actorId) return c.json({ code: "actor_required", error: "Actor required" }, 401);
+
+          const itemsEnabled = await isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId);
+          let workOrderId = editWorkOrderId;
+          if (!isUuid(workOrderId) && rawEditLines.length) {
+            workOrderId = crypto.randomUUID();
+          }
+
+          const prepared = rawEditLines.length
+            ? await prepareWorkOrderLines(supabase, {
+              orgId,
+              vehicleId,
+              workOrderId: isUuid(editWorkOrderId) ? editWorkOrderId : null,
+              rawLines: rawEditLines,
+              itemsEnabled,
+            })
+            : { ok: true as const, lines: await loadWorkOrderLinesForRpc(supabase, workOrderId) };
+
+          if (!prepared.ok) {
+            return c.json({ code: prepared.code, error: prepared.error }, prepared.status);
+          }
+
+          let storedDiscount = 0;
+          if (isUuid(editWorkOrderId)) {
+            const { data: woDiscountRow } = await supabase
+              .from("maintenance_work_orders")
+              .select("discount_amount")
+              .eq("id", editWorkOrderId)
+              .maybeSingle();
+            storedDiscount = Number(
+              (woDiscountRow as { discount_amount?: number } | null)?.discount_amount ?? 0,
+            );
+          }
+          if (prepared.lines.length && discountTooLarge(prepared.lines, storedDiscount)) {
+            return discountTooLargeResponse(c);
+          }
+
+          const logModeDb = logMode === "package" ? "package" : "quick_job";
+          const saveStatus = jobCompleted ? "in_progress" : "draft";
+          const pWorkOrder: Record<string, unknown> = {
+            id: workOrderId,
+            vehicle_id: vehicleId,
+            log_mode: logModeDb,
+            performed_at_date,
+            odometer: performed_at_miles,
+            provider,
+            currency,
+            template_id: templateId && isUuid(templateId) ? templateId : null,
+            notes,
+            invoice_url,
+            discount_amount: storedDiscount,
+          };
+          if (body.packageComplete !== undefined || body.package_complete !== undefined) {
+            pWorkOrder.package_complete = body.packageComplete === true || body.package_complete === true;
+          }
+
+          const saveRes = await callSaveWorkOrder(supabase, {
+            orgId,
+            actorId,
+            status: saveStatus,
+            workOrderId: isUuid(editWorkOrderId) ? editWorkOrderId : null,
+            expectedVersion: isUuid(editWorkOrderId) ? Number(evRaw) : null,
+            workOrder: pWorkOrder,
+            lines: prepared.lines,
+          });
+          if (!saveRes.ok) {
+            return c.json({ code: saveRes.code, error: saveRes.error }, saveRes.status);
+          }
+
+          workOrderId = String((saveRes.data.work_order as Record<string, unknown>).id ?? workOrderId);
+          const savedRpcLines = Array.isArray(saveRes.data.lines) ? saveRes.data.lines : [];
+          const savedLines = buildClientPayloadLines(rawEditLines, savedRpcLines);
+          const cost = serviceNetTotal(prepared.lines, storedDiscount);
+
+          if (jobCompleted) {
+            const completeRes = await internalWorkOrderCompleteRequest(app, c, workOrderId, {
+              recordId: id,
+              type: service_type,
+              payloadExtra: legacyMaintenanceLogPayloadExtra({ ...prevPayload, ...body }),
+            });
+            if (!completeRes.ok) {
+              const errBody = await completeRes.json().catch(() => ({}));
+              return c.json(errBody, completeRes.status as 200);
+            }
+            const completeJson = await completeRes.json() as Record<string, unknown>;
+            return c.json({
+              success: true,
+              data: completeJson.record,
+              lines: (completeJson.item as { lines?: unknown })?.lines ?? savedLines,
+              warrantyPrompts: completeJson.warrantyPrompts,
+              stockWarnings: completeJson.stockWarnings,
+              ledgerPosted: completeJson.ledgerPosted,
+              ledgerWarning: completeJson.ledgerWarning,
+            });
+          }
+
+          const payload_json = {
+            ...prevPayload,
+            ...body,
+            id,
+            vehicleId,
+            date: performed_at_date,
+            odo: performed_at_miles,
+            cost,
+            currency,
+            type: service_type,
+            provider,
+            notes,
+            invoiceUrl: invoice_url,
+            templateId: templateId || undefined,
+            status: nextStatus,
+            lines: savedLines,
+            logMode: logMode || undefined,
+            workOrderId,
+          };
+
+          const { data: updated, error: upErr } = await supabase
+            .from("maintenance_records")
+            .update({
+              performed_at_miles,
               performed_at_date,
-              odometer: performed_at_miles,
-              provider,
+              cost,
               currency,
-              template_id: templateId || null,
+              service_type,
+              provider,
               notes,
               invoice_url,
-              discount_amount: 0,
-              total_cost: editBridgeNet,
-              maintenance_record_id: id,
-              payload_json: { source: "maintenance_logs_edit", logId: id },
+              status: nextStatus,
+              template_id: templateId || null,
+              work_order_id: workOrderId,
+              payload_json,
               updated_at: new Date().toISOString(),
-            });
-            if (woErr) throw woErr;
-            const { error: lineErr } = await supabase.from("maintenance_work_order_lines").insert(rowsForWo);
-            if (lineErr) {
-              await reverseAndDeleteWorkOrder(supabase, editWorkOrderId);
-              throw lineErr;
-            }
-          } else {
-            if (leftCompleted) {
-              const { error: revErr } = await supabase.rpc("reverse_parts_usage_for_work_order", {
-                p_work_order_id: editWorkOrderId,
-              });
-              if (revErr) throw revErr;
-            }
-            await syncWorkOrderLines(supabase, editWorkOrderId, editLines);
-            if (jobCompleted) {
-              const editNetTotal = serviceNetTotal(editLines, storedDiscount);
-              const { error: woUpErr } = await supabase.from("maintenance_work_orders").update({
-                status: "completed",
-                closed_at: new Date().toISOString(),
-                performed_at_date,
-                odometer: performed_at_miles,
-                total_cost: editNetTotal,
-                updated_at: new Date().toISOString(),
-              }).eq("id", editWorkOrderId);
-              if (woUpErr) throw woUpErr;
-            } else if (leftCompleted) {
-              const { error: woUpErr } = await supabase.from("maintenance_work_orders").update({
-                status: "in_progress",
-                closed_at: null,
-                updated_at: new Date().toISOString(),
-              }).eq("id", editWorkOrderId);
-              if (woUpErr) throw woUpErr;
-            }
-          }
-          if (jobCompleted) {
-            const usage = await commitUsageOrDiscardNewWorkOrder(supabase, editWorkOrderId, createdHere);
-            warrantyPrompts = usage.warrantyPrompts;
-            stockWarnings = usage.stockWarnings;
-            usageCommitted = true;
-          }
-        }
-        if (!ledgerAllowedAfterParts({ needsUsage: needsUsage && jobCompleted, usageCommitted })) {
-          throw new Error("Parts usage was not saved");
+            })
+            .eq("id", id)
+            .eq("vehicle_id", vehicleId)
+            .eq("organization_id", orgId)
+            .select()
+            .single();
+          if (upErr) throw upErr;
+
+          return c.json({
+            success: true,
+            data: updated,
+            lines: savedLines,
+            warrantyPrompts: [],
+            stockWarnings: [],
+            ledgerPosted: false,
+          });
         }
 
+        const cost = body.cost !== undefined
+          ? (body.cost != null ? Number(body.cost) : null)
+          : (existing.cost != null ? Number(existing.cost) : null);
         const payload_json = {
           ...prevPayload,
           ...body,
@@ -2152,11 +2458,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           invoiceUrl: invoice_url,
           templateId: templateId || undefined,
           status: nextStatus,
-          lines: savedLines,
           logMode: logMode || undefined,
-          workOrderId: editWorkOrderId || prevPayload.workOrderId,
         };
-
         const { data: updated, error: upErr } = await supabase
           .from("maintenance_records")
           .update({
@@ -2180,36 +2483,6 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .single();
         if (upErr) throw upErr;
 
-        const becameCompleted = prevStatus !== "completed" && nextStatusLc === "completed";
-        if (becameCompleted || (nextStatusLc === "completed" && Array.isArray(lines) && lines.length)) {
-          const ledgerLines = Array.isArray(lines) ? apiLinesToLedgerInputs(lines as unknown[]) : [];
-          if (ledgerLines.length && becameCompleted) {
-            await recordCompletedServiceLines({
-              sb: supabase,
-              organizationId: orgId,
-              vehicleId,
-              performedAtDate: performed_at_date,
-              performedAtMiles: performed_at_miles,
-              lines: ledgerLines,
-              templateId,
-              maintenanceRecordId: id,
-            });
-          }
-          if (becameCompleted && templateId && logMode !== "quick_job") {
-            await maybeAdvancePackageSchedule({
-              sb: supabase,
-              organizationId: orgId,
-              vehicleId,
-              templateId,
-              performedMiles: performed_at_miles,
-              performedDate: performed_at_date,
-              currentOdo: performed_at_miles,
-              force: body.packageComplete === true || body.package_complete === true,
-            });
-          }
-        }
-
-        // Ledger: delete prior, then re-append if still eligible (cost/status change)
         await deleteCanonicalLedgerBySource("financial_event", [id]);
         const ledgerInput = {
           id,
@@ -2250,9 +2523,6 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         return c.json({
           success: true,
           data: updated,
-          lines: savedLines,
-          warrantyPrompts,
-          stockWarnings,
           ledgerPosted,
           ledgerWarning,
         });
@@ -2472,7 +2742,41 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .order("created_at", { ascending: false })
           .limit(200);
         if (error) throw error;
-        return c.json({ data: data || [] });
+        const rows = (data || []) as Record<string, unknown>[];
+        const woIds = new Set<string>();
+        for (const row of rows) {
+          const direct = row.work_order_id;
+          if (direct != null && isUuid(String(direct))) woIds.add(String(direct));
+          const payload = row.payload_json;
+          if (payload && typeof payload === "object") {
+            const wo = (payload as Record<string, unknown>).workOrderId;
+            if (wo != null && isUuid(String(wo))) woIds.add(String(wo));
+          }
+        }
+        const versionByWoId = new Map<string, number>();
+        if (woIds.size > 0) {
+          const { data: woRows, error: woErr } = await supabase
+            .from("maintenance_work_orders")
+            .select("id, version")
+            .in("id", [...woIds]);
+          if (woErr) throw woErr;
+          for (const wo of woRows || []) {
+            const w = wo as { id: string; version?: number };
+            if (typeof w.version === "number" && Number.isFinite(w.version)) {
+              versionByWoId.set(String(w.id), w.version);
+            }
+          }
+        }
+        const enriched = rows.map((row) => {
+          let woId = row.work_order_id != null ? String(row.work_order_id) : "";
+          if (!isUuid(woId) && row.payload_json && typeof row.payload_json === "object") {
+            const fromPayload = (row.payload_json as Record<string, unknown>).workOrderId;
+            if (fromPayload != null) woId = String(fromPayload);
+          }
+          const version = isUuid(woId) ? versionByWoId.get(woId) : undefined;
+          return version != null ? { ...row, version } : row;
+        });
+        return c.json({ data: enriched });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
@@ -3098,10 +3402,15 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .eq("work_order_id", id)
           .order("sort_order", { ascending: true });
         if (lineErr) throw lineErr;
+        const enrichedLines = await enrichLinesWithItems(
+          supabase,
+          id,
+          (lines || []) as Record<string, unknown>[],
+        );
         return c.json({
           item: mapDbWorkOrderToApi(
             wo as Record<string, unknown>,
-            (lines || []) as Record<string, unknown>[],
+            enrichedLines,
           ),
         });
       } catch (e: unknown) {
@@ -3150,10 +3459,15 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
                 .select("*")
                 .eq("work_order_id", existing.id)
                 .order("sort_order", { ascending: true });
+              const enrichedLines = await enrichLinesWithItems(
+                supabase,
+                String(existing.id),
+                (lines || []) as Record<string, unknown>[],
+              );
               return c.json({
                 item: mapDbWorkOrderToApi(
                   existing as Record<string, unknown>,
-                  (lines || []) as Record<string, unknown>[],
+                  enrichedLines,
                 ),
                 idempotentReplay: true,
               });
@@ -3194,20 +3508,24 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const currencyRaw = body.currency != null ? String(body.currency).trim().toUpperCase() : "JMD";
         const currency = currencyRaw || "JMD";
         const woId = crypto.randomUUID();
+        const itemsEnabled = await isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId);
         const rawLines = Array.isArray(body.lines) ? body.lines : [];
-        const lineRows = rawLines
-          .map((raw, i) => {
-            if (!raw || typeof raw !== "object") return null;
-            return mapApiLineToDb(raw as Record<string, unknown>, i, woId);
-          })
-          .filter((r): r is Record<string, unknown> => r != null);
+        const prepared = await prepareWorkOrderLines(supabase, {
+          orgId,
+          vehicleId,
+          workOrderId: null,
+          rawLines,
+          itemsEnabled,
+        });
+        if (!prepared.ok) {
+          return c.json({ code: prepared.code, error: prepared.error }, prepared.status);
+        }
+        const lineRows = prepared.lines;
         const discountParsed = parseDiscount(body.discount ?? body.discount_amount);
         const discount = discountParsed ?? 0;
         const discountEnabled = await loadDiscountEnabled(orgId);
         const discountReject = respondDiscountRejection(c, discountParsed, discountEnabled, lineRows, discount);
         if (discountReject) return discountReject;
-        const totalCost = serviceNetTotal(lineRows, discount);
-        // CR-08: reserve the log number only after every refusal check has passed.
         let logNumber: string | null = null;
         try {
           logNumber = await reserveMaintenanceLogNumber(supabase);
@@ -3215,12 +3533,12 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           logNumber = null;
         }
 
-        const header = {
+        const pWorkOrder: Record<string, unknown> = {
           id: woId,
-          organization_id: orgId,
           vehicle_id: vehicleId,
-          status,
-          opened_at: new Date().toISOString(),
+          log_mode,
+          idempotency_key: idempotencyKey || null,
+          log_number: logNumber,
           performed_at_date: body.performedAtDate != null || body.performed_at_date != null
             ? String(body.performedAtDate ?? body.performed_at_date).slice(0, 10)
             : null,
@@ -3229,34 +3547,64 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           currency,
           template_id: templateParsed.value,
           package_complete: body.packageComplete === true || body.package_complete === true,
-          log_mode,
           notes: body.notes != null ? String(body.notes) : null,
           invoice_url: body.invoiceUrl != null
             ? String(body.invoiceUrl)
             : (body.invoice_url != null ? String(body.invoice_url) : null),
           discount_amount: discount,
-          total_cost: totalCost || null,
-          log_number: logNumber,
-          idempotency_key: idempotencyKey || null,
-          updated_at: new Date().toISOString(),
         };
-        const { data: wo, error: woErr } = await supabase
-          .from("maintenance_work_orders")
-          .insert(header)
-          .select()
-          .single();
-        if (woErr) throw woErr;
-        if (lineRows.length) {
-          const { error: lineErr } = await supabase
-            .from("maintenance_work_order_lines")
-            .insert(lineRows);
-          if (lineErr) throw lineErr;
+
+        const saveRes = await callSaveWorkOrder(supabase, {
+          orgId,
+          actorId: rbacUserId(c),
+          status,
+          workOrderId: null,
+          expectedVersion: null,
+          workOrder: pWorkOrder,
+          lines: lineRows,
+        });
+        if (!saveRes.ok) {
+          if (idempotencyKey) {
+            const raced = await findWorkOrderByIdempotency(supabase, orgId, idempotencyKey);
+            if (raced) {
+              const existingStatus = String(raced.status);
+              if (existingStatus === "completed") {
+                const { data: lines } = await supabase
+                  .from("maintenance_work_order_lines")
+                  .select("*")
+                  .eq("work_order_id", raced.id)
+                  .order("sort_order", { ascending: true });
+                const enrichedLines = await enrichLinesWithItems(
+                  supabase,
+                  String(raced.id),
+                  (lines || []) as Record<string, unknown>[],
+                );
+                return c.json({
+                  item: mapDbWorkOrderToApi(raced as Record<string, unknown>, enrichedLines),
+                  idempotentReplay: true,
+                });
+              }
+              if (existingStatus === "in_progress") {
+                const honoApp = app as {
+                  request: (path: string, init?: RequestInit, env?: unknown) => Promise<Response>;
+                };
+                const replayRes = await honoApp.request(
+                  `${workOrdersBasePath(c.req.path)}/${raced.id}/complete`,
+                  {
+                    method: "POST",
+                    headers: c.req.raw.headers,
+                    body: JSON.stringify(body),
+                  },
+                  c.env,
+                );
+                if (!replayRes.ok) return replayRes;
+                const replayJson = await replayRes.json();
+                return c.json({ ...replayJson, idempotentReplay: true });
+              }
+            }
+          }
+          return c.json({ code: saveRes.code, error: saveRes.error }, saveRes.status);
         }
-        const { data: lines } = await supabase
-          .from("maintenance_work_order_lines")
-          .select("*")
-          .eq("work_order_id", woId)
-          .order("sort_order", { ascending: true });
 
         if (completeNow) {
           const honoApp = app as {
@@ -3274,10 +3622,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         }
 
         return c.json({
-          item: mapDbWorkOrderToApi(
-            wo as Record<string, unknown>,
-            (lines || []) as Record<string, unknown>[],
-          ),
+          item: await mapSavedRpcToApiItem(supabase, saveRes.data),
         });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -3306,6 +3651,116 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .maybeSingle();
         if (fetchErr) throw fetchErr;
         if (!existing) return c.json({ error: "Not found" }, 404);
+
+        if (isMixedPatchBody(body)) {
+          return c.json({ error: "Save the job details and the status separately." }, 400);
+        }
+
+        if (isContentEditBody(body)) {
+          const existingSt = String((existing as Record<string, unknown>).status ?? "").trim();
+          const existingVoided = (existing as Record<string, unknown>).voided_at != null;
+          if (
+            existingVoided
+            || (existingSt !== "draft" && existingSt !== "in_progress")
+          ) {
+            return c.json(
+              {
+                code: "immutable",
+                error: "Completed services can't be changed — void it and log again.",
+              },
+              409,
+            );
+          }
+          const evRaw = body.expectedVersion ?? body.expected_version;
+          if (evRaw == null || evRaw === "") {
+            return c.json({ code: "version_required", error: "Reload this service and try again." }, 428);
+          }
+          const expectedVersion = Number(evRaw);
+          if (!Number.isFinite(expectedVersion)) {
+            return c.json({ code: "version_required", error: "Reload this service and try again." }, 428);
+          }
+          if (body.status !== undefined) {
+            const st = String(body.status).trim();
+            if (st !== "draft" && st !== "in_progress") {
+              return c.json({ code: "status_invalid", error: "Invalid service status." }, 400);
+            }
+          }
+          const itemsEnabled = await isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId);
+          const vehicleId = String(existing.vehicle_id ?? "");
+          let linesForSave: Record<string, unknown>[];
+          if (Array.isArray(body.lines)) {
+            const prepared = await prepareWorkOrderLines(supabase, {
+              orgId,
+              vehicleId,
+              workOrderId: id,
+              rawLines: body.lines,
+              itemsEnabled,
+            });
+            if (!prepared.ok) {
+              return c.json({ code: prepared.code, error: prepared.error }, prepared.status);
+            }
+            linesForSave = prepared.lines;
+          } else {
+            linesForSave = await loadWorkOrderLinesForRpc(supabase, id);
+          }
+
+          const discountInBody = body.discount !== undefined || body.discount_amount !== undefined;
+          if (discountInBody) {
+            const discountParsed = parseDiscount(body.discount ?? body.discount_amount);
+            const discount = discountParsed ?? 0;
+            const discountEnabled = await loadDiscountEnabled(orgId);
+            const discountReject = respondDiscountRejection(
+              c,
+              discountParsed,
+              discountEnabled,
+              linesForSave,
+              discount,
+            );
+            if (discountReject) return discountReject;
+          } else if (Array.isArray(body.lines)) {
+            const effectiveDiscount = Number(existing.discount_amount ?? 0);
+            const newLines = linesForSave;
+            if (effectiveDiscount > 0 && discountTooLarge(newLines, effectiveDiscount)) {
+              return discountTooLargeResponse(c);
+            }
+          }
+
+          const pWorkOrder = buildSnakeWorkOrderPayload(body);
+          let saveStatus = String(existing.status);
+          if (body.status !== undefined) saveStatus = String(body.status).trim();
+          if (saveStatus !== "draft" && saveStatus !== "in_progress") {
+            return c.json({ code: "status_invalid", error: "Invalid service status." }, 400);
+          }
+          const saveRes = await callSaveWorkOrder(supabase, {
+            orgId,
+            actorId: rbacUserId(c),
+            status: saveStatus,
+            workOrderId: id,
+            expectedVersion,
+            workOrder: pWorkOrder,
+            lines: linesForSave,
+          });
+          if (!saveRes.ok) {
+            return c.json({ code: saveRes.code, error: saveRes.error }, saveRes.status);
+          }
+          return c.json({ item: await mapSavedRpcToApiItem(supabase, saveRes.data) });
+        }
+
+        if (!isBoardOnlyBody(body)) {
+          return c.json({ error: "Nothing to update" }, 400);
+        }
+
+        const expectedBoardVer = body.expectedVersion ?? body.expected_version;
+        if (expectedBoardVer != null && expectedBoardVer !== "") {
+          const exp = Number(expectedBoardVer);
+          if (Number.isFinite(exp) && Number((existing as Record<string, unknown>).version ?? 1) !== exp) {
+            return c.json({
+              code: "stale_edit",
+              error: "Someone else saved this service first. Reload to see their changes.",
+            }, 409);
+          }
+        }
+
         if (String(existing.status) === "completed") {
           return c.json({ error: "Cannot edit a completed work order" }, 400);
         }
@@ -3315,6 +3770,12 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (actorId) patch.updated_by = actorId;
         if (body.status !== undefined) {
           const st = String(body.status).trim();
+          if (st === "completed") {
+            return c.json({
+              code: "use_complete",
+              error: "Use Finish to complete this service.",
+            }, 409);
+          }
           if (!isMaintenanceWoStatus(st)) {
             return c.json({ error: "Invalid work order status" }, 400);
           }
@@ -3366,110 +3827,6 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           patch.vendor_id = v == null || v === "" ? null : String(v);
         }
         if (body.source !== undefined) patch.source = body.source == null ? null : String(body.source);
-        if (body.performedAtDate !== undefined || body.performed_at_date !== undefined) {
-          const v = body.performedAtDate ?? body.performed_at_date;
-          patch.performed_at_date = v == null || v === "" ? null : String(v).slice(0, 10);
-        }
-        if (body.odometer !== undefined) {
-          patch.odometer = body.odometer == null || body.odometer === "" ? null : Number(body.odometer);
-        }
-        if (body.provider !== undefined) patch.provider = body.provider == null ? null : String(body.provider);
-        if (body.currency !== undefined) {
-          const cur = String(body.currency).trim().toUpperCase();
-          patch.currency = cur || "JMD";
-        }
-        if (body.templateId !== undefined || body.template_id !== undefined) {
-          const tp = parseOptionalUuidField(body.templateId ?? body.template_id);
-          if (!tp.ok) return c.json({ error: "Invalid templateId" }, 400);
-          patch.template_id = tp.value;
-        }
-        if (body.packageComplete !== undefined || body.package_complete !== undefined) {
-          patch.package_complete = body.packageComplete === true || body.package_complete === true;
-        }
-        if (body.logMode !== undefined || body.log_mode !== undefined) {
-          const lm = String(body.logMode ?? body.log_mode).trim();
-          patch.log_mode = lm === "package" ? "package" : "quick_job";
-        }
-        if (body.notes !== undefined) patch.notes = body.notes == null ? null : String(body.notes);
-        if (body.invoiceUrl !== undefined || body.invoice_url !== undefined) {
-          const u = body.invoiceUrl ?? body.invoice_url;
-          patch.invoice_url = u == null || u === "" ? null : String(u);
-        }
-
-        let effectiveDiscount = Number(existing.discount_amount ?? 0);
-        const discountInBody = body.discount !== undefined || body.discount_amount !== undefined;
-
-        const loadWoLines = async (): Promise<Record<string, unknown>[]> => {
-          const { data: existingLines, error: lineLoadErr } = await supabase
-            .from("maintenance_work_order_lines")
-            .select("*")
-            .eq("work_order_id", id)
-            .order("sort_order", { ascending: true });
-          if (lineLoadErr) throw lineLoadErr;
-          return (existingLines || []) as Record<string, unknown>[];
-        };
-
-        if (discountInBody) {
-          const discountParsed = parseDiscount(body.discount ?? body.discount_amount);
-          const discount = discountParsed ?? 0;
-          const discountEnabled = await loadDiscountEnabled(orgId);
-          let linesForDiscount: Record<string, unknown>[];
-          if (Array.isArray(body.lines)) {
-            linesForDiscount = body.lines
-              .map((raw, i) => {
-                if (!raw || typeof raw !== "object") return null;
-                return mapApiLineToDb(raw as Record<string, unknown>, i, id);
-              })
-              .filter((r): r is Record<string, unknown> => r != null);
-          } else {
-            linesForDiscount = await loadWoLines();
-          }
-          const discountReject = respondDiscountRejection(
-            c,
-            discountParsed,
-            discountEnabled,
-            linesForDiscount,
-            discount,
-          );
-          if (discountReject) return discountReject;
-          patch.discount_amount = discount;
-          effectiveDiscount = discount;
-        } else if (Array.isArray(body.lines) && effectiveDiscount > 0) {
-          // CR-02: new lines must still cover the stored discount.
-          const newLines = body.lines
-            .map((raw, i) => {
-              if (!raw || typeof raw !== "object") return null;
-              return mapApiLineToDb(raw as Record<string, unknown>, i, id);
-            })
-            .filter((r): r is Record<string, unknown> => r != null);
-          if (discountTooLarge(newLines, effectiveDiscount)) return discountTooLargeResponse(c);
-        }
-
-        if (Array.isArray(body.lines)) {
-          const { error: delErr } = await supabase
-            .from("maintenance_work_order_lines")
-            .delete()
-            .eq("work_order_id", id);
-          if (delErr) throw delErr;
-          const lineRows = body.lines
-            .map((raw, i) => {
-              if (!raw || typeof raw !== "object") return null;
-              const row = mapApiLineToDb(raw as Record<string, unknown>, i, id);
-              delete row.id; // fresh ids on replace
-              return row;
-            })
-            .filter((r): r is Record<string, unknown> => r != null);
-          if (lineRows.length) {
-            const { error: insErr } = await supabase
-              .from("maintenance_work_order_lines")
-              .insert(lineRows);
-            if (insErr) throw insErr;
-          }
-          patch.total_cost = serviceNetTotal(lineRows, effectiveDiscount);
-        } else if (discountInBody) {
-          const linesForTotal = await loadWoLines();
-          patch.total_cost = serviceNetTotal(linesForTotal, effectiveDiscount);
-        }
 
         const { data: wo, error: upErr } = await supabase
           .from("maintenance_work_orders")
@@ -3498,10 +3855,15 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .select("*")
           .eq("work_order_id", id)
           .order("sort_order", { ascending: true });
+        const enrichedLines = await enrichLinesWithItems(
+          supabase,
+          id,
+          (lines || []) as Record<string, unknown>[],
+        );
         return c.json({
           item: mapDbWorkOrderToApi(
             wo as Record<string, unknown>,
-            (lines || []) as Record<string, unknown>[],
+            enrichedLines,
           ),
         });
       } catch (e: unknown) {
@@ -3519,6 +3881,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
       try {
         const orgId = getOrgId(c);
         if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const actorId = rbacUserId(c);
+        if (!actorId) return c.json({ code: "actor_required", error: "Actor required" }, 401);
         const id = c.req.param("id");
         if (!isUuid(id)) return c.json({ error: "Invalid id" }, 400);
         const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -3531,9 +3895,6 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .maybeSingle();
         if (fetchErr) throw fetchErr;
         if (!wo) return c.json({ error: "Not found" }, 404);
-        if (String(wo.status) === "completed") {
-          return c.json({ error: "Work order already completed" }, 400);
-        }
         if (String(wo.status) === "cancelled") {
           return c.json({ error: "Cannot complete a cancelled work order" }, 400);
         }
@@ -3546,225 +3907,24 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (lineErr) throw lineErr;
         const lineRows = (lines || []) as Record<string, unknown>[];
         const discount = Number(wo.discount_amount ?? 0);
-        // CR-02: never quietly clamp a discount that is bigger than the bill.
         if (discountTooLarge(lineRows, discount)) return discountTooLargeResponse(c);
-        const subtotal = lineSubtotal(lineRows);
-        const roundedTotal = serviceNetTotal(lineRows, discount);
 
-        const performed_at_date = body.performedAtDate != null || body.performed_at_date != null
-          ? String(body.performedAtDate ?? body.performed_at_date).slice(0, 10)
-          : (wo.performed_at_date != null ? String(wo.performed_at_date).slice(0, 10) : todayIso());
-        const odoCheck = parseRequiredOdometer({
-          odometer: body.odometer ?? body.odo ?? wo.odometer,
-        });
+        const odoCheck = parseRequiredOdometer({ odometer: wo.odometer });
         if (typeof odoCheck === "object") return odometerRequiredResponse(c);
-        const performed_at_miles = odoCheck;
-        const currency = String(wo.currency ?? "JMD");
-        const vehicleId = String(wo.vehicle_id);
-        const templateId = wo.template_id != null ? String(wo.template_id) : null;
-        const logMode = String(wo.log_mode ?? "quick_job");
-        const packageComplete = wo.package_complete === true;
-        const provider = body.provider != null
-          ? String(body.provider)
-          : (wo.provider != null ? String(wo.provider) : null);
-        const notes = body.notes != null
-          ? String(body.notes)
-          : (wo.notes != null ? String(wo.notes) : null);
-        const invoice_url = body.invoiceUrl != null || body.invoice_url != null
-          ? String(body.invoiceUrl ?? body.invoice_url)
-          : (wo.invoice_url != null ? String(wo.invoice_url) : null);
 
-        const needsUsage = lineRows.some(lineNeedsPartsUsage);
-        let usageCommitted = !needsUsage;
-        let warrantyPrompts: unknown[] = [];
-        let stockWarnings: unknown[] = [];
-        if (needsUsage) {
-          const usage = await commitUsageOrDiscardNewWorkOrder(supabase, id, false);
-          warrantyPrompts = usage.warrantyPrompts;
-          stockWarnings = usage.stockWarnings;
-          usageCommitted = true;
-        }
-        if (!ledgerAllowedAfterParts({ needsUsage, usageCommitted })) {
-          throw new Error("Parts usage was not saved");
-        }
-
-        const recordId = crypto.randomUUID();
-        const apiLines = lineRows.map(mapDbLineToApi);
-        const service_type = body.type != null
-          ? String(body.type)
-          : (packageComplete ? "Package service" : "Quick job");
-        const payload_json = {
-          id: recordId,
-          vehicleId,
-          date: performed_at_date,
-          odo: performed_at_miles,
-          type: service_type,
-          cost: roundedTotal,
-          subtotal,
-          discount,
-          currency,
-          provider: provider || "",
-          notes: notes || "",
-          invoiceUrl: invoice_url || "",
-          status: "Completed",
-          templateId: templateId || undefined,
-          logMode,
+        const result = await runCompletion(supabase, {
+          orgId,
           workOrderId: id,
-          lines: apiLines,
-          source: "work_order_complete",
-        };
-
-        const { data: record, error: recErr } = await supabase
-          .from("maintenance_records")
-          .insert({
-            id: recordId,
-            organization_id: orgId,
-            vehicle_id: vehicleId,
-            template_id: templateId,
-            performed_at_miles,
-            performed_at_date,
-            cost: roundedTotal,
-            currency,
-            service_type,
-            provider,
-            notes,
-            invoice_url,
-            status: "Completed",
-            legacy_kv_id: null,
-            payload_json,
-            updated_at: new Date().toISOString(),
-          })
-          .select()
-          .single();
-        if (recErr) throw recErr;
-
-        const { data: completedWo, error: upErr } = await supabase
-          .from("maintenance_work_orders")
-          .update({
-            status: "completed",
-            closed_at: new Date().toISOString(),
-            performed_at_date,
-            odometer: performed_at_miles,
-            provider,
-            notes,
-            invoice_url,
-            total_cost: roundedTotal,
-            maintenance_record_id: recordId,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", id)
-          .eq("organization_id", orgId)
-          .select()
-          .single();
-        if (upErr) throw upErr;
-
-        await supabase.rpc("refresh_repeat_part_alerts", {
-          p_km: 10000,
-          p_days: 90,
-          p_vehicle_id: vehicleId,
+          actorId,
+          wo: wo as Record<string, unknown>,
+          lineRows,
+          body,
+          c,
+          // runCompletion calls enrichLines(workOrderId, lines); the helper also needs the client.
+          enrichLines: (woId, rows) => enrichLinesWithItems(supabase, woId, rows),
+          mapCompletedItem: mapDbWorkOrderToApi,
         });
-
-        // Service ledger + component schedules; package clock when members satisfied
-        await recordCompletedServiceLines({
-          sb: supabase,
-          organizationId: orgId,
-          vehicleId,
-          performedAtDate: performed_at_date,
-          performedAtMiles: performed_at_miles,
-          lines: dbLinesToLedgerInputs(lineRows),
-          templateId,
-          maintenanceRecordId: recordId,
-          workOrderId: id,
-        });
-        if (templateId && logMode !== "quick_job") {
-          await maybeAdvancePackageSchedule({
-            sb: supabase,
-            organizationId: orgId,
-            vehicleId,
-            templateId,
-            performedMiles: performed_at_miles,
-            performedDate: performed_at_date,
-            currentOdo: performed_at_miles,
-            force: packageComplete === true,
-          });
-        }
-
-        const ledgerInput = {
-          id: recordId,
-          vehicleId,
-          performed_at_date,
-          cost: roundedTotal,
-          status: "Completed",
-          currency,
-          service_type,
-          provider,
-        };
-        const ledgerResult = await appendCanonicalMaintenanceIfEligible(ledgerInput, c);
-
-        const recordedAtIso = `${performed_at_date}T12:00:00.000Z`;
-        let odometerAnomaly: Awaited<ReturnType<typeof assessOdometerAnomaly>> | null = null;
-        try {
-          odometerAnomaly = await assessOdometerAnomaly(
-            supabase,
-            vehicleId,
-            performed_at_miles,
-            recordedAtIso,
-          );
-        } catch (anomErr) {
-          console.warn("[maintenance complete] assess_odometer_anomaly:", anomErr);
-        }
-
-        try {
-          await projectFromMaintenanceLog(
-            {
-              id: recordId,
-              vehicleId,
-              odometer: performed_at_miles,
-              date: performed_at_date,
-              serviceType: service_type,
-              organizationId: orgId,
-            },
-            orgId,
-          );
-        } catch (odoErr) {
-          throw odoErr;
-        }
-
-        // fleet.log_service is not reachable over PostgREST (fleet schema is not exposed), so call
-        // the public wrapper. A bare rpc("log_service") failed with "function not found" AFTER the
-        // books had posted, returning 500 for a service that had actually saved.
-        const { data: finalizeResult, error: finalizeErr } = await supabase.rpc("fleet_log_service", {
-          payload: {
-            organizationId: orgId,
-            vehicleId,
-            workOrderId: id,
-            recordId,
-          },
-        });
-        if (finalizeErr) throw finalizeErr;
-
-        return c.json({
-          item: mapDbWorkOrderToApi(completedWo as Record<string, unknown>, lineRows),
-          record,
-          warrantyPrompts,
-          stockWarnings,
-          ledgerPosted: ledgerResult.posted,
-          ledgerWarning: ledgerResult.failed
-            ? "Work order completed but not posted to books — contact support if this persists"
-            : undefined,
-          odometerAnomaly: odometerAnomaly?.isAnomaly ?? false,
-          anomalyReason: odometerAnomaly?.anomalyReason ?? null,
-          neighbors: odometerAnomaly
-            ? {
-                expected: odometerAnomaly.priorReading != null
-                  ? odometerAnomaly.priorReading
-                  : performed_at_miles,
-                before: odometerAnomaly.priorReading,
-                after: odometerAnomaly.nextReading,
-              }
-            : null,
-          finalize: finalizeResult,
-        });
+        return c.json(result.body, result.status);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
@@ -4491,7 +4651,14 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           page,
           pageSize,
         );
-        return c.json({ items, page, pageSize, total });
+        // Service items: each job row carries the items used on it ("Items used:" line).
+        const woIds = [...new Set(items.map((r) => String(r.work_order_id ?? "")).filter((id) => isUuid(id)))];
+        const itemsByLine = await loadLineItemsForWorkOrders(supabase, woIds);
+        const withItems = items.map((r) => ({
+          ...r,
+          items: itemsByLine.get(String(r.line_id ?? "")) ?? [],
+        }));
+        return c.json({ items: withItems, page, pageSize, total });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);

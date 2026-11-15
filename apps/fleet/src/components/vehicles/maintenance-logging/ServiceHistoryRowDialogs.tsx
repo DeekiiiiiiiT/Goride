@@ -15,8 +15,9 @@ import {
 } from "../../ui/responsive-dialog";
 import type { MaintenanceLogLine, MaintenanceWorkOrder } from "../../../types/maintenance";
 import { formatMaintenanceServiceDateLabel } from "../../../utils/maintenanceDisplayFormat";
+import { itemsUsedText } from "./serviceHistoryItems";
 
-type ApiLine = MaintenanceLogLine & { lineTotal?: number; voidedAt?: string | null };
+type ApiLine = MaintenanceLogLine;
 
 export function formatServiceMoney(currency: string | null | undefined, amount: unknown): string {
   const n = Number(amount);
@@ -70,6 +71,8 @@ export function ServiceHistoryViewDialog({
 }) {
   const { wo, loading, error } = useWorkOrder(workOrderId);
   const lines = ((wo?.lines || []) as ApiLine[]).filter((l) => !l.recommended && !l.voidedAt);
+  /** Deleted jobs keep their items, read-only (plan rule 6). */
+  const voided = ((wo?.lines || []) as ApiLine[]).filter((l) => !l.recommended && l.voidedAt);
   const total = lines.reduce((s, l) => s + (Number(l.lineTotal) || 0), 0);
 
   return (
@@ -115,7 +118,8 @@ export function ServiceHistoryViewDialog({
               </p>
               <ul className="divide-y divide-surface-container rounded-lg border border-outline-variant/40">
                 {lines.map((l, i) => (
-                  <li key={l.id ?? i} className="flex items-start justify-between gap-3 px-3 py-2">
+                  <li key={l.id ?? i} className="px-3 py-2">
+                  <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-medium">{l.categoryName || "—"}</p>
                       <p className="text-xs text-stitch-secondary">
@@ -125,12 +129,50 @@ export function ServiceHistoryViewDialog({
                       </p>
                     </div>
                     <span className="font-mono font-semibold whitespace-nowrap">
-                      {l.complimentary ? "Free" : formatServiceMoney(wo.currency, l.lineTotal)}
+                      {l.complimentary && !l.itemsAmount ? "Free" : formatServiceMoney(wo.currency, l.lineTotal)}
                     </span>
+                  </div>
+                  {itemsUsedText(l.items, wo.currency) ? (
+                    <p className="mt-1 text-xs text-on-surface-variant" data-testid="service-details-items-used">
+                      <span className="font-semibold text-on-surface">Items used:</span> {itemsUsedText(l.items, wo.currency)}
+                    </p>
+                  ) : null}
                   </li>
                 ))}
               </ul>
             </div>
+
+            {voided.length ? (
+              <div className="space-y-2" data-testid="service-details-voided">
+                {voided.map((l, i) => (
+                  <div key={l.id ?? i} className="rounded-xl bg-surface-container-low/40 p-3 space-y-1.5 opacity-75">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-on-surface-variant">{l.categoryName || "—"}</span>
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-surface-container-highest text-on-surface-variant">
+                        Voided
+                      </span>
+                    </div>
+                    <p className="flex items-center gap-1 text-[11px] text-outline">
+                      <span className="material-symbols-outlined text-[14px]">lock</span>
+                      Voided jobs can&apos;t be changed.
+                    </p>
+                    {(l.items ?? []).map((it, j) => (
+                      <div
+                        key={it.id ?? j}
+                        className="p-2 bg-surface-container rounded-lg flex items-center justify-between text-xs text-outline"
+                      >
+                        <span className="font-medium">
+                          {it.itemName} · {it.qty} {it.unitLabel ?? ""}
+                        </span>
+                        <span className="font-mono line-through">
+                          {it.unitCost == null ? "cost not recorded" : formatServiceMoney(wo.currency, it.amount ?? 0)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ) : null}
 
             <div className="flex justify-between items-center rounded-lg bg-surface-container-low px-3 py-2">
               <span className="text-stitch-secondary">Total</span>

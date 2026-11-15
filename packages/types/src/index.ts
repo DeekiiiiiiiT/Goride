@@ -30,6 +30,7 @@ export * from './offline';
 export * from './osrm';
 export * from './partSourcing';
 export * from './partsResolution';
+export * from './serviceItems';
 export * from './vehicleVariantLabel';
 export * from './partsBestPick';
 export * from './findPartsParse';

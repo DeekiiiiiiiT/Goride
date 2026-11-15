@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"on-tertiary-fixed-variant":"#005137","primary-fixed":"#e4dffc","tertiary-fixed":"#85f8c4","primary-fixed-dim":"#c8c3df","surface-container-highest":"#e0e3e5","on-tertiary-fixed":"#002114","on-primary-fixed":"#1b192e","on-error":"#ffffff","on-surface":"#191c1e","outline-variant":"#c9c5cd","on-secondary":"#ffffff","surface":"#f7f9fb","tertiary-fixed-dim":"#68dba9","secondary-fixed":"#ffdbce","on-secondary-container":"#571a00","on-background":"#191c1e","tertiary-container":"#002114","primary-container":"#1b192e","on-primary":"#ffffff","primary":"#000000","background":"#f7f9fb","inverse-on-surface":"#eff1f3","on-tertiary":"#ffffff","outline":"#78767d","secondary-container":"#fd651e","on-surface-variant":"#47464c","surface-bright":"#f7f9fb","surface-container":"#eceef0","error":"#ba1a1a","surface-dim":"#d8dadc","surface-container-lowest":"#ffffff","error-container":"#ffdad6","surface-variant":"#e0e3e5","on-secondary-fixed-variant":"#7f2b00","surface-container-high":"#e6e8ea","on-primary-fixed-variant":"#46445b","on-tertiary-container":"#069669","inverse-primary":"#c8c3df","secondary":"#a73a00","inverse-surface":"#2d3133","surface-container-low":"#f2f4f6","secondary-fixed-dim":"#ffb599","on-secondary-fixed":"#370e00","surface-tint":"#5e5c74","on-error-container":"#93000a","tertiary":"#000000","on-primary-container":"#84819a"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},spacing:{"gutter":"1.5rem","space-sm":"0.5rem","space-2xl":"3rem","space-lg":"1.5rem","space-md":"1rem","space-xs":"0.25rem","gutter-mobile":"1rem","margin":"2rem","space-xl":"2rem","margin-mobile":"1rem"},fontFamily:{"label-md":["Inter"],"body-lg":["Inter"],"headline-sm":["Inter"],"label-sm":["Inter"],"headline-lg":["Inter"],"display-lg":["Inter"],"body-sm":["Inter"],"headline-md":["Inter"],"currency-md":["Inter"],"title-sm":["Inter"],"title-md":["Inter"],"body-md":["Inter"]},fontSize:{"label-md":["12px",{lineHeight:"16px",letterSpacing:"0.01em",fontWeight:"500"}],"body-lg":["16px",{lineHeight:"24px",fontWeight:"400"}],"headline-sm":["20px",{lineHeight:"28px",letterSpacing:"-0.005em",fontWeight:"600"}],"label-sm":["11px",{lineHeight:"14px",letterSpacing:"0.02em",fontWeight:"600"}],"headline-lg":["30px",{lineHeight:"38px",letterSpacing:"-0.015em",fontWeight:"600"}],"display-lg":["40px",{lineHeight:"48px",letterSpacing:"-0.02em",fontWeight:"600"}],"body-sm":["13px",{lineHeight:"18px",fontWeight:"400"}],"headline-md":["24px",{lineHeight:"32px",letterSpacing:"-0.01em",fontWeight:"600"}],"currency-md":["15px",{lineHeight:"20px",fontWeight:"600"}],"title-sm":["14px",{lineHeight:"20px",fontWeight:"600"}],"title-md":["16px",{lineHeight:"24px",fontWeight:"600"}],"body-md":["14px",{lineHeight:"20px",fontWeight:"400"}]}}}};</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface antialiased min-h-screen"><header class="fixed top-0 left-0 right-0 z-50 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 w-full px-margin flex items-center justify-between gap-space-md"><div class="flex items-center gap-space-md shrink-0"><div class="flex items-center gap-space-sm"><div class="w-9 h-9 rounded-lg bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[20px]">hub</span></div><span class="font-title-md text-title-md text-on-surface tracking-tight font-bold">Roam Fleet</span></div><span class="text-outline-variant font-label-md text-label-md">/</span><div class="flex items-center gap-space-xs bg-secondary-fixed/50 px-space-sm py-1 rounded-full"><span class="material-symbols-outlined text-secondary text-[16px]">build</span><span class="font-label-sm text-label-sm text-on-secondary-fixed font-semibold">Fleet maintenance</span></div></div><nav class="hidden xl:flex items-center gap-space-xs bg-surface-container-low p-1 rounded-xl" data-active-classes="bg-surface-container text-on-surface font-title-sm font-semibold shadow-sm"><a class="px-space-md py-1.5 rounded-lg font-title-sm text-title-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" data-path="overview" href="#">Overview</a><a class="px-space-md py-1.5 rounded-lg font-title-sm text-title-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" data-path="vehicles" href="#">Vehicles</a><a class="px-space-md py-1.5 rounded-lg font-title-sm text-title-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" data-path="maintenance" href="#">Maintenance</a><a class="px-space-md py-1.5 rounded-lg font-title-sm text-title-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" data-path="fuel-expenses" href="#">Fuel &amp; Expenses</a><a class="px-space-md py-1.5 rounded-lg font-title-sm text-title-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" data-path="reports" href="#">Reports</a><a class="px-space-md py-1.5 rounded-lg font-title-sm text-title-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" data-path="settings" href="#">Settings</a></nav><div class="flex items-center gap-space-sm shrink-0"><button class="hidden md:flex items-center gap-space-sm bg-surface-container-low hover:bg-surface-container-high px-space-sm py-1.5 rounded-lg text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer" type="button"><span class="material-symbols-outlined text-[18px]">search</span><span class="font-body-sm text-body-sm">Search...</span><kbd class="bg-surface-container-highest px-1.5 py-0.5 rounded font-label-sm text-label-sm text-on-surface-variant">⌘K</kbd></button><div class="hidden lg:flex items-center gap-space-xs bg-surface-container-low hover:bg-surface-container-high px-space-sm py-1.5 rounded-lg cursor-pointer transition-colors"><span class="material-symbols-outlined text-secondary text-[18px]">directions_car</span><span class="font-body-sm text-body-sm text-on-surface font-medium">Toyota Roomy (2019) · 5179KZ</span><span class="material-symbols-outlined text-on-surface-variant text-[16px]">unfold_more</span></div><button class="relative w-9 h-9 flex items-center justify-center rounded-lg bg-surface-container-low hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer" type="button"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-secondary-container"></span></button><div class="flex items-center gap-space-xs pl-space-xs"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></div></header><main class="w-full pt-16 bg-surface min-h-screen"><div class="flex flex-col w-full pb-36">
+<!-- Top App Navigation / Modal Header -->
+<div class="sticky top-0 z-40 bg-surface-container-lowest/95 backdrop-blur-md px-margin-mobile py-space-sm shadow-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-on-primary">
+<span class="material-symbols-outlined text-[18px]">build</span>
+</div>
+<div>
+<span class="font-title-sm text-title-sm text-on-surface block leading-tight">Log service</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Step 3 of 4 · Details</span>
+</div>
+</div>
+<button class="w-10 h-10 rounded-full flex items-center justify-center bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- Active Vehicle Ribbon -->
+<div class="mt-space-sm bg-surface-container-low px-space-sm py-1.5 rounded-lg flex items-center justify-between">
+<div class="flex items-center gap-1.5 min-w-0">
+<span class="material-symbols-outlined text-secondary text-[16px] shrink-0">directions_car</span>
+<span class="font-title-sm text-title-sm text-on-surface truncate">Toyota Roomy (2019)</span>
+<span class="bg-surface-container-highest text-on-surface-variant font-label-sm text-label-sm px-1.5 py-0.5 rounded shrink-0">5179KZ</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant shrink-0 pl-2">197,486 km</span>
+</div>
+<!-- Stepper Dots & Bars -->
+<div class="grid grid-cols-4 gap-1.5 mt-space-sm">
+<div class="h-1 rounded-full bg-secondary-container"></div>
+<div class="h-1 rounded-full bg-secondary-container"></div>
+<div class="h-1 rounded-full bg-secondary-container relative overflow-hidden">
+<div class="absolute inset-0 bg-secondary-container animate-pulse"></div>
+</div>
+<div class="h-1 rounded-full bg-surface-container-highest"></div>
+</div>
+</div>
+<!-- Main Content Body (390px Calibrated) -->
+<div class="px-margin-mobile pt-space-md space-y-space-md">
+<!-- Primary Job Container Card -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<!-- Card Title & Scope Pill -->
+<div class="flex items-center justify-between pb-space-sm">
+<div class="flex items-center gap-space-xs">
+<div class="w-7 h-7 rounded-lg bg-secondary-fixed/60 flex items-center justify-center text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[17px]">tune</span>
+</div>
+<h2 class="font-title-md text-title-md text-on-surface">Throttle Body Cleaning</h2>
+</div>
+<span class="bg-surface-container px-2.5 py-0.5 rounded-full font-label-sm text-label-sm text-on-surface-variant font-semibold">Clean</span>
+</div>
+<!-- Service Charge Block -->
+<div class="bg-surface-container-low rounded-xl p-space-sm space-y-space-sm mt-space-xs">
+<div class="flex items-center justify-between">
+<label class="font-title-sm text-title-sm text-on-surface">Service charge</label>
+<!-- Segmented Toggle -->
+<div class="flex items-center bg-surface-container-highest p-0.5 rounded-lg text-label-sm font-label-sm">
+<button class="bg-surface-container-lowest text-on-surface px-2.5 py-1 rounded shadow-xs font-semibold" type="button">Total cost</button>
+<button class="text-on-surface-variant px-2.5 py-1 hover:text-on-surface transition-colors" type="button">Per wheel</button>
+</div>
+</div>
+<div class="flex items-center gap-space-sm">
+<div class="relative flex-1">
+<span class="absolute left-3 top-2.5 font-currency-md text-currency-md text-on-surface-variant">J$</span>
+<input class="w-full bg-surface-container-lowest text-on-surface font-headline-sm text-headline-sm pl-9 pr-3 py-1.5 rounded-lg focus:outline-none focus:bg-surface-container-lowest" type="text" value="3,000"/>
+</div>
+<label class="flex items-center gap-1.5 cursor-pointer select-none shrink-0 pr-1">
+<input class="w-4 h-4 rounded text-secondary-container focus:ring-0 cursor-pointer accent-secondary" type="checkbox"/>
+<span class="font-body-sm text-body-sm text-on-surface-variant">No charge (free)</span>
+</label>
+</div>
+</div>
+<!-- Notes Field (Compact Expandable Preview) -->
+<div class="mt-space-sm">
+<div class="flex items-center justify-between pb-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Mechanic notes</span>
+<button class="text-secondary font-label-sm text-label-sm flex items-center gap-0.5" type="button">
+<span class="material-symbols-outlined text-[14px]">edit_note</span> Edit
+          </button>
+</div>
+<div class="bg-surface-container-low/70 rounded-lg p-2.5 flex items-start gap-2">
+<span class="material-symbols-outlined text-outline text-[16px] mt-0.5 shrink-0">chat_bubble</span>
+<p class="font-body-sm text-body-sm text-on-surface italic line-clamp-2">"Cleaned with the engine off; idle back to normal."</p>
+</div>
+</div>
+<!-- Items Used Section Header -->
+<div class="pt-space-md pb-space-xs">
+<div class="flex items-baseline justify-between">
+<h3 class="font-title-md text-title-md text-on-surface">Items used</h3>
+<span class="font-label-sm text-label-sm text-secondary font-semibold">2 Selected</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Tick what was used. Nothing is ticked for you.</p>
+</div>
+<!-- Item Card 1: Throttle Body Cleaner -->
+<div class="bg-surface-container-lowest rounded-xl p-space-sm mt-space-sm shadow-sm space-y-space-sm transition-all">
+<!-- Top Line -->
+<div class="flex items-start justify-between gap-space-xs">
+<div class="flex items-center gap-space-sm min-w-0">
+<input checked="" class="w-5 h-5 rounded text-secondary-container focus:ring-0 accent-secondary cursor-pointer shrink-0" type="checkbox"/>
+<div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant shrink-0">
+<span class="material-symbols-outlined text-[20px]">cleaning_services</span>
+</div>
+<div class="min-w-0">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="font-title-sm text-title-sm text-on-surface font-bold truncate">Throttle body cleaner</span>
+<span class="bg-surface-container-high text-on-surface-variant px-1.5 py-0.2 rounded font-label-sm text-label-sm">Supply</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant block">Aerosol solvent 450ml</span>
+</div>
+</div>
+<div class="text-right shrink-0">
+<span class="font-title-md text-title-md text-on-surface block font-bold">J$ 1,200</span>
+</div>
+</div>
+<!-- Second Line: Stepper + Unit Price -->
+<div class="grid grid-cols-2 gap-space-sm pt-space-xs">
+<!-- Stepper -->
+<div>
+<label class="font-label-sm text-label-sm text-on-surface-variant block mb-1">Quantity</label>
+<div class="flex items-center justify-between bg-surface-container-low rounded-lg px-1 py-1 h-10">
+<button class="w-8 h-8 rounded-md bg-surface-container-lowest flex items-center justify-center text-on-surface font-title-md shadow-xs active:scale-95 transition-transform" type="button">
+<span class="material-symbols-outlined text-[16px]">remove</span>
+</button>
+<span class="font-title-sm text-title-sm text-on-surface font-bold">1 can</span>
+<button class="w-8 h-8 rounded-md bg-surface-container-lowest flex items-center justify-center text-on-surface font-title-md shadow-xs active:scale-95 transition-transform" type="button">
+<span class="material-symbols-outlined text-[16px]">add</span>
+</button>
+</div>
+</div>
+<!-- Unit Cost -->
+<div>
+<label class="font-label-sm text-label-sm text-on-surface-variant block mb-1">Cost each</label>
+<div class="relative h-10 flex items-center">
+<span class="absolute left-2.5 font-label-sm text-label-sm text-on-surface-variant font-semibold">J$</span>
+<input class="w-full h-10 bg-surface-container-low text-on-surface font-title-sm text-title-sm pl-8 pr-2.5 rounded-lg focus:outline-none" type="text" value="1,200"/>
+</div>
+</div>
+</div>
+<!-- Third Line: Brand Optional -->
+<div>
+<label class="font-label-sm text-label-sm text-on-surface-variant block mb-1">Brand (optional)</label>
+<div class="relative">
+<input class="w-full bg-surface-container-low text-on-surface font-body-sm text-body-sm px-3 py-2 rounded-lg focus:outline-none" placeholder="e.g. 3M, Wurth" type="text" value="CRC"/>
+<span class="material-symbols-outlined text-outline text-[16px] absolute right-2.5 top-2.5">verified</span>
+</div>
+</div>
+</div>
+<!-- Item Card 2: Throttle Body Gasket -->
+<div class="bg-surface-container-lowest rounded-xl p-space-sm mt-space-sm shadow-sm space-y-space-sm transition-all">
+<!-- Top Line -->
+<div class="flex items-start justify-between gap-space-xs">
+<div class="flex items-center gap-space-sm min-w-0">
+<input checked="" class="w-5 h-5 rounded text-secondary-container focus:ring-0 accent-secondary cursor-pointer shrink-0" type="checkbox"/>
+<div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant shrink-0">
+<span class="material-symbols-outlined text-[20px]">donut_small</span>
+</div>
+<div class="min-w-0">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="font-title-sm text-title-sm text-on-surface font-bold truncate">Throttle Body Gasket</span>
+<span class="bg-primary-fixed text-on-primary-fixed px-1.5 py-0.2 rounded font-label-sm text-label-sm">Part</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block truncate">OEM: 22271-B1010</span>
+</div>
+</div>
+<div class="text-right shrink-0">
+<span class="font-title-md text-title-md text-on-surface block font-bold">J$ 800</span>
+</div>
+</div>
+<!-- Sub-badge: Fitment match -->
+<div class="bg-tertiary-container/10 px-2.5 py-1.5 rounded-lg flex items-center justify-between">
+<div class="flex items-center gap-1.5 min-w-0">
+<span class="material-symbols-outlined text-on-tertiary-container text-[16px] shrink-0" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-label-sm text-label-sm text-on-tertiary-container font-semibold truncate">Toyota genuine · Fits this car</span>
+</div>
+<button class="font-label-sm text-label-sm text-secondary hover:underline shrink-0 pl-2 font-semibold" type="button">Change</button>
+</div>
+<!-- Second Line: Stepper + Unit Price -->
+<div class="grid grid-cols-2 gap-space-sm pt-space-xs">
+<!-- Stepper -->
+<div>
+<label class="font-label-sm text-label-sm text-on-surface-variant block mb-1">Quantity</label>
+<div class="flex items-center justify-between bg-surface-container-low rounded-lg px-1 py-1 h-10">
+<button class="w-8 h-8 rounded-md bg-surface-container-lowest flex items-center justify-center text-on-surface font-title-md shadow-xs active:scale-95 transition-transform" type="button">
+<span class="material-symbols-outlined text-[16px]">remove</span>
+</button>
+<span class="font-title-sm text-title-sm text-on-surface font-bold">1 pc</span>
+<button class="w-8 h-8 rounded-md bg-surface-container-lowest flex items-center justify-center text-on-surface font-title-md shadow-xs active:scale-95 transition-transform" type="button">
+<span class="material-symbols-outlined text-[16px]">add</span>
+</button>
+</div>
+</div>
+<!-- Unit Cost -->
+<div>
+<label class="font-label-sm text-label-sm text-on-surface-variant block mb-1">Cost each</label>
+<div class="relative h-10 flex items-center">
+<span class="absolute left-2.5 font-label-sm text-label-sm text-on-surface-variant font-semibold">J$</span>
+<input class="w-full h-10 bg-surface-container-low text-on-surface font-title-sm text-title-sm pl-8 pr-2.5 rounded-lg focus:outline-none" type="text" value="800"/>
+</div>
+</div>
+</div>
+<!-- Third Line: Brand Optional -->
+<div>
+<label class="font-label-sm text-label-sm text-on-surface-variant block mb-1">Brand (optional)</label>
+<input class="w-full bg-surface-container-low text-on-surface font-body-sm text-body-sm px-3 py-2 rounded-lg focus:outline-none" type="text" value="Toyota Genuine"/>
+</div>
+</div>
+<!-- Add Other Item CTA -->
+<button class="w-full mt-space-sm py-2.5 bg-surface-container-low hover:bg-surface-container text-on-surface rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer" type="button">
+<span class="material-symbols-outlined text-[18px]">add_circle</span>
+<span class="font-title-sm text-title-sm font-semibold">+ Other item</span>
+</button>
+<!-- Friendly Helper Microcopy -->
+<div class="mt-space-md p-space-sm bg-surface-container-low/50 rounded-lg flex items-start gap-2">
+<span class="material-symbols-outlined text-outline text-[16px] mt-0.5 shrink-0">info</span>
+<p class="font-label-md text-label-md text-on-surface-variant">Leave a cost blank if you don't know it. It won't be added to the total.</p>
+</div>
+</div>
+<!-- Quick Vehicle Telematics Snapshot (Visual Delight Anchor) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm space-y-space-sm">
+<div class="flex items-center justify-between">
+<span class="font-title-sm text-title-sm text-on-surface font-bold">Intake health metric</span>
+<span class="bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm px-2 py-0.5 rounded-full font-bold">Good</span>
+</div>
+<div class="space-y-1.5">
+<div class="flex justify-between font-label-sm text-label-sm text-on-surface-variant">
+<span>Target Idle Speed</span>
+<span class="text-on-surface font-semibold">680 RPM ± 50</span>
+</div>
+<div class="w-full h-2 rounded-full bg-surface-container overflow-hidden flex">
+<div class="w-3/4 bg-on-tertiary-container h-full"></div>
+<div class="w-1/4 bg-surface-container h-full"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Sticky Bottom Summary & Navigation Bar -->
+<div class="fixed bottom-0 left-0 right-0 z-50 bg-surface-container-lowest/95 backdrop-blur-xl px-margin-mobile pt-3 pb-6 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+<!-- Arithmetic Breakdown Row -->
+<div class="flex items-center justify-between pb-2.5 px-1 font-body-sm text-body-sm text-on-surface-variant">
+<div class="flex items-center gap-1.5 truncate">
+<span>Job J$ 3,000</span>
+<span>+</span>
+<span>items J$ 2,000</span>
+</div>
+<div class="flex items-center gap-1 shrink-0 font-currency-md text-currency-md text-on-surface font-bold">
+<span>=</span>
+<span class="text-secondary">J$ 5,000</span>
+</div>
+</div>
+<!-- Dual Action Buttons: Back + Continue -->
+<div class="flex items-center gap-space-sm">
+<button class="h-12 px-4 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface flex items-center justify-center shrink-0 transition-colors" type="button">
+<span class="material-symbols-outlined text-[20px]">arrow_back</span>
+</button>
+<button class="flex-1 h-12 bg-primary hover:bg-primary-container text-on-primary rounded-xl flex items-center justify-center gap-2 font-title-sm text-title-sm font-semibold shadow-md active:scale-[0.98] transition-all" type="button">
+<span>Continue to review</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div></main><footer class="w-full bg-surface-container-low py-space-lg shadow-[0_1px_8px_rgba(0,0,0,0.02)]"><div class="w-full px-margin flex flex-col sm:flex-row items-center justify-between gap-space-md"><div class="flex items-center gap-space-sm"><span class="font-title-sm text-title-sm text-on-surface font-semibold">Roam Fleet</span><span class="text-outline-variant font-label-md text-label-md">·</span><span class="font-body-sm text-body-sm text-on-surface-variant">© 2025 Roam Fleet Operations Ltd. All rights reserved.</span></div><div class="flex items-center gap-space-md"><a class="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" href="#">Operational Status</a><a class="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" href="#">API &amp; Telematics</a><a class="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" href="#">Support</a></div></div></footer></body></html>

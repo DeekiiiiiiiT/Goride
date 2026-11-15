@@ -20,6 +20,9 @@ import {
 import {
   formatMaintenanceServiceDateLabel,
 } from "../../../utils/maintenanceDisplayFormat";
+import type { LineItemDraft } from "../../../types/maintenance";
+import { NotFinishedServices } from "./NotFinishedServices";
+import { itemsUsedText } from "./serviceHistoryItems";
 
 type HistoryRow = Record<string, unknown>;
 
@@ -226,6 +229,16 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
         <div className="px-4 pb-4 text-sm text-error">{error}</div>
       ) : null}
 
+      <NotFinishedServices
+        vehicleId={vehicleFilter === "all" ? null : vehicleFilter}
+        vehicleName={(id) => {
+          const v = vehicleById.get(id);
+          return v ? [v.make, v.model, v.licensePlate].filter(Boolean).join(" ") : id;
+        }}
+        onFinished={() => void load()}
+        onView={(workOrderId, label) => setViewing({ workOrderId, label })}
+      />
+
       <div className="overflow-x-auto w-full">
         {loading ? (
           <div className="flex justify-center py-16">
@@ -330,11 +343,10 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
                 ]
                   .filter(Boolean)
                   .join(" · ");
+                const usedText = itemsUsedText(row.items as LineItemDraft[] | undefined, currency);
                 return (
-                  <tr
-                    key={String(row.line_id ?? row.lineId ?? idx)}
-                    className="bg-surface-container-lowest hover:bg-surface-container-low/60"
-                  >
+                  <React.Fragment key={String(row.line_id ?? row.lineId ?? idx)}>
+                  <tr className="bg-surface-container-lowest hover:bg-surface-container-low/60">
                     <td className="py-3 pl-14 pr-4 whitespace-nowrap text-stitch-secondary text-xs">
                       {formatDate(row.performed_at_date ?? row.performedAtDate, dateUnknown)}
                     </td>
@@ -421,6 +433,20 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
                       </div>
                     </td>
                   </tr>
+                  {usedText ? (
+                    <tr className="bg-surface-container-lowest" data-testid="service-history-items-used">
+                      <td />
+                      <td className="pb-3 px-4 text-xs text-on-surface-variant" colSpan={8}>
+                        <span className="inline-flex items-start gap-1.5 rounded-md bg-surface-container-low px-2.5 py-1.5">
+                          <span className="material-symbols-outlined text-[16px] text-[#a73a00]">inventory_2</span>
+                          <span>
+                            <span className="font-semibold text-on-surface">Items used:</span> {usedText}
+                          </span>
+                        </span>
+                      </td>
+                    </tr>
+                  ) : null}
+                  </React.Fragment>
                 );
                         })
                       : null}

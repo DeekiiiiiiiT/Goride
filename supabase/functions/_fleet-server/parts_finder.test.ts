@@ -345,7 +345,6 @@ function roomy2019Client(partsByVariant: Record<string, string[]>) {
       if (table === "vehicle_catalog") return chain(variants);
       if (table === "variant_parts_readiness") return chain({ ready: true });
       if (table === "supplier_part_offer") return chain([]);
-      if (table === "component_related_supply") return chain([]);
       if (table === "part_listing") return chain([]);
       if (table === "part_master") return chain([]);
       return chain([]);

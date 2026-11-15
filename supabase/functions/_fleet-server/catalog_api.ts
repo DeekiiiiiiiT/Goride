@@ -295,7 +295,6 @@ export async function getCatalogParts(
     ? items.filter((item) => String(item.part.category_id ?? "") === categoryId)
     : items;
   const universal = await loadUniversalSection(supabase, catalogId, input.vehicleYear ?? null, componentId);
-  const relatedSupplies = await loadRelatedSupplies(supabase);
   const sections = PART_MATCH_TIERS.map((row) => ({
     tier: row.tier,
     label: row.label,
@@ -303,7 +302,7 @@ export async function getCatalogParts(
       ? universal
       : filtered.filter((item) => item.tier === row.tier),
   }));
-  return { mode, ready, items: filtered, universal, relatedSupplies, sections };
+  return { mode, ready, items: filtered, universal, sections };
 }
 
 /** Five sections, built after fleet stock and fit text are attached. */
@@ -350,14 +349,6 @@ async function loadUniversalSection(
   const { data, error } = await supabase.rpc("universal_section_for_variant", args);
   if (error) throw error;
   return Array.isArray(data) ? data : [];
-}
-
-async function loadRelatedSupplies(supabase: SupabaseClient) {
-  const { data, error } = await supabase
-    .from("component_related_supply")
-    .select("id, component_id, supply_name, note");
-  if (error) throw error;
-  return data || [];
 }
 
 function priceOffer(offer: CatalogOffer, downtimePerDay: number) {

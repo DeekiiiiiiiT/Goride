@@ -14,7 +14,10 @@ import {
 } from "../../../ui/select";
 import { LOG_SERVICE_COPY } from "./logServiceCopy";
 import type { MaintenanceLogLine } from "../../../../types/maintenance";
-import { formatMaintenanceLineLabel } from "../../../../types/maintenance";
+import { formatMaintenanceLineLabel, lineItemsAmount } from "../../../../types/maintenance";
+import { formatMaintenanceServiceDateLabel } from "../../../../utils/maintenanceDisplayFormat";
+import { costRecorded, itemAmount, money, qtyWithUnit } from "./itemsUsed";
+import { actionLabel } from "./systemSections";
 
 export type LogServiceReviewStepProps = {
   baySessionLabel: string;
@@ -50,7 +53,14 @@ export type LogServiceReviewStepProps = {
   markPackageComplete: boolean;
   onMarkPackageCompleteChange: (v: boolean) => void;
   whatHappensNext?: React.ReactNode;
+  /** Show item lines and the Labor / Parts split (service items on, or lines already carry items). */
+  itemsEnabled?: boolean;
+  vehicleLabel?: string;
 };
+
+function moneyLabel(currency: string, n: number): string {
+  return money(currency, n);
+}
 
 export function LogServiceReviewStep({
   baySessionLabel,
@@ -84,10 +94,16 @@ export function LogServiceReviewStep({
   markPackageComplete,
   onMarkPackageCompleteChange,
   whatHappensNext,
+  itemsEnabled = false,
+  vehicleLabel,
 }: LogServiceReviewStepProps) {
   const discountInputRef = useRef<HTMLInputElement>(null);
   const showDiscountRow = discountRowOpen || discountAmount > 0;
   const showSubtotalBreakdown = discountAmount > 0;
+  const doneLines = lines.filter((l) => !l.declined);
+  const itemsTotal = doneLines.reduce((s, l) => s + lineItemsAmount(l), 0);
+  const jobsTotal = Math.round((subtotal - itemsTotal) * 100) / 100;
+  const cur = currency || "JMD";
 
   useEffect(() => {
     if (showDiscountRow) discountInputRef.current?.focus();
@@ -103,6 +119,23 @@ export function LogServiceReviewStep({
           <h2 className="text-2xl font-semibold text-on-surface mt-0.5">{LOG_SERVICE_COPY.reviewHeading}</h2>
           <p className="text-sm text-stitch-secondary mt-1">{LOG_SERVICE_COPY.reviewSubtitle}</p>
         </div>
+      </div>
+
+      <div
+        className="bg-surface-container-low rounded-xl p-4 grid grid-cols-2 md:grid-cols-4 gap-4"
+        data-testid="log-service-review-summary"
+      >
+        {[
+          ["Vehicle", vehicleLabel || "—"],
+          ["Service date", date ? formatMaintenanceServiceDateLabel(date, false) : "—"],
+          ["Odometer", odometer ? `${Number(odometer).toLocaleString()} km` : "—"],
+          ["Workshop", provider.trim() || "—"],
+        ].map(([k, v]) => (
+          <div key={k} className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">{k}</p>
+            <p className="text-[15px] font-medium text-on-surface truncate">{v}</p>
+          </div>
+        ))}
       </div>
 
       <div className="border-2 border-dashed border-outline-variant/50 rounded-xl p-6 flex flex-col items-center justify-center bg-surface-container-low relative group hover:bg-surface-container transition-colors">
@@ -179,50 +212,122 @@ export function LogServiceReviewStep({
       </div>
 
       <div className="space-y-3">
-        <Label className="font-semibold">Line items</Label>
-        <div className="border border-outline-variant/40 rounded-lg divide-y bg-surface-container-lowest">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Label className="text-sm font-semibold text-on-surface">Service Work Orders</Label>
+            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant">
+              {doneLines.length} Job{doneLines.length === 1 ? "" : "s"} Recorded
+            </span>
+          </div>
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">
+            Breakdown ({cur})
+          </span>
+        </div>
+        <div className="space-y-3" data-testid="log-service-review-jobs">
           {lines.map((line, idx) => {
-            const muted = Boolean(line.declined);
+            const declined = Boolean(line.declined);
+            const total = lineTotalPreview(line);
+            const items = line.items ?? [];
+            const charge = Math.round((total - lineItemsAmount(line)) * 100) / 100;
+            const pill = actionLabel(line.action);
             return (
               <div
                 key={`${line.categoryId}-${line.categoryCode}-${idx}`}
-                className={`flex items-center justify-between px-4 py-3 gap-3 ${muted ? "opacity-50" : ""}`}
+                data-testid="log-service-review-job"
+                className={`rounded-xl p-4 ${declined ? "bg-surface-container-low/60" : "bg-surface-container-low"}`}
               >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-on-surface truncate">
-                    {formatMaintenanceLineLabel(line)}
-                  </p>
-                  <p className="text-xs text-stitch-secondary">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex items-center gap-2 flex-wrap">
+                    <p className="text-base font-semibold text-on-surface">{formatMaintenanceLineLabel(line)}</p>
+                    {declined ? (
+                      <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant">
+                        Declined
+                      </span>
+                    ) : pill ? (
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#ffdbce] text-[#370e00]">{pill}</span>
+                    ) : null}
+                    {line.recommended && !declined ? (
+                      <span className="text-[11px] text-on-surface-variant">Recommended</span>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {declined ? null : (
+                      <span className="text-lg font-bold text-on-surface tabular-nums">{moneyLabel(cur, total)}</span>
+                    )}
+                    {!line.recommended ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs text-stitch-secondary"
+                        onClick={() => onEditLine(line)}
+                      >
+                        Edit
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+                {declined ? (
+                  <div className="mt-2 p-3 bg-surface-container rounded-lg flex items-center justify-between flex-wrap gap-2">
+                    <span className="flex items-center gap-1.5 text-sm text-on-surface-variant">
+                      <span className="material-symbols-outlined text-[18px] text-outline">info</span>
+                      No items on a declined job.
+                    </span>
+                    {total > 0 ? (
+                      <span className="text-[15px] font-medium text-outline line-through tabular-nums">
+                        Quoted {moneyLabel(cur, total)}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : itemsEnabled && items.length ? (
+                  <ul className="mt-2 space-y-1">
+                    <li className="flex justify-between text-sm text-on-surface">
+                      <span className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#a73a00]" />
+                        Service charge
+                      </span>
+                      <span className="font-semibold tabular-nums">{moneyLabel(cur, charge)}</span>
+                    </li>
+                    {items.map((it, i) => (
+                      <li
+                        key={it.id ?? `${it.jobItemId ?? "o"}-${i}`}
+                        className={`flex justify-between gap-2 text-sm ${
+                          costRecorded(it) ? "text-on-surface-variant" : "bg-surface-container-lowest/70 rounded-md px-2 py-0.5 -mx-2"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2 min-w-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-outline-variant shrink-0" />
+                          <span className="truncate">
+                            {it.itemName || "Item"} · {qtyWithUnit(it)}
+                          </span>
+                        </span>
+                        {costRecorded(it) ? (
+                          <span className="font-semibold text-on-surface tabular-nums">{moneyLabel(cur, itemAmount(it))}</span>
+                        ) : (
+                          <span className="flex items-center gap-1 italic text-on-surface-variant text-xs">
+                            <span className="material-symbols-outlined text-[14px]">info</span>
+                            Cost not recorded (excluded from total)
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-1 text-xs text-stitch-secondary">
                     {[
-                      line.recommended ? "Recommended" : null,
-                      line.declined ? "Declined" : null,
                       line.qty != null ? `Qty ${line.qty}` : null,
                       line.brand || null,
                       line.positions?.length ? line.positions.join(" ") : null,
                     ]
                       .filter(Boolean)
-                      .join(" · ") || line.categoryCode}
+                      .join(" · ")}
                   </p>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-sm font-medium text-on-surface">
-                    {currency} {muted ? "0" : lineTotalPreview(line).toLocaleString()}
-                  </span>
-                  {!line.recommended ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs text-stitch-secondary"
-                      onClick={() => onEditLine(line)}
-                    >
-                      Edit
-                    </Button>
-                  ) : null}
-                </div>
+                )}
               </div>
             );
           })}
+        </div>
+        <div className="border border-outline-variant/40 rounded-lg divide-y bg-surface-container-lowest empty:hidden">
           {showDiscountRow ? (
             <div className="flex items-center justify-between px-4 py-3 gap-3">
               <div className="min-w-0 flex-1">
@@ -276,22 +381,28 @@ export function LogServiceReviewStep({
             Add discount
           </Button>
         ) : null}
-        <div className="space-y-1 px-1 pt-1">
+        <div className="bg-surface-container-low rounded-xl p-5 space-y-2" data-testid="log-service-review-totals">
+          {itemsEnabled ? (
+            <>
+              <div className="flex justify-between items-center text-[15px] text-on-surface-variant" data-testid="log-service-review-jobs-total">
+                <span>Labor &amp; Service Jobs</span>
+                <span className="font-semibold text-on-surface tabular-nums">{moneyLabel(cur, jobsTotal)}</span>
+              </div>
+              <div className="flex justify-between items-center text-[15px] text-on-surface-variant" data-testid="log-service-review-items-total">
+                <span>Installed Parts &amp; Consumables</span>
+                <span className="font-semibold text-on-surface tabular-nums">{moneyLabel(cur, itemsTotal)}</span>
+              </div>
+            </>
+          ) : null}
           {showSubtotalBreakdown ? (
             <>
-              <div
-                className="flex justify-between items-center"
-                data-testid="log-service-review-subtotal"
-              >
+              <div className="flex justify-between items-center" data-testid="log-service-review-subtotal">
                 <span className="text-sm font-semibold text-on-surface-variant">Subtotal</span>
                 <span className="text-base font-semibold text-on-surface">
                   {currency} {subtotal.toLocaleString()}
                 </span>
               </div>
-              <div
-                className="flex justify-between items-center"
-                data-testid="log-service-review-discount"
-              >
+              <div className="flex justify-between items-center" data-testid="log-service-review-discount">
                 <span className="text-sm font-semibold text-on-surface-variant">Discount</span>
                 <span className="text-base font-semibold text-on-surface">
                   −{currency} {discountAmount.toLocaleString()}
@@ -299,12 +410,27 @@ export function LogServiceReviewStep({
               </div>
             </>
           ) : null}
-          <div className="flex justify-between items-center" data-testid="log-service-review-total">
-            <span className="text-sm font-semibold text-on-surface-variant">Total</span>
-            <span className="text-base font-semibold text-on-surface">
-              {currency} {(showSubtotalBreakdown ? netTotal : subtotal).toLocaleString()}
-            </span>
+          <div
+            className={`flex justify-between items-end gap-3 ${itemsEnabled || showSubtotalBreakdown ? "border-t border-outline-variant/40 pt-3 mt-1" : ""}`}
+            data-testid="log-service-review-total"
+          >
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Net invoice total</p>
+              <p className="text-xl font-bold text-on-surface">Total Service Cost</p>
+            </div>
+            <div className="text-right">
+              <p className="text-3xl font-extrabold text-on-surface tabular-nums">
+                {moneyLabel(cur, showSubtotalBreakdown ? netTotal : subtotal)}
+              </p>
+              <p className="font-mono text-[11px] text-on-surface-variant">Currency: {cur}</p>
+            </div>
           </div>
+          {itemsEnabled ? (
+            <p className="flex items-center gap-1.5 text-xs text-on-surface-variant pt-1">
+              <span className="material-symbols-outlined text-[16px] text-[#a73a00]">verified_user</span>
+              Leave a cost blank if you don&apos;t know it. It won&apos;t be added to the total.
+            </p>
+          ) : null}
         </div>
       </div>
 

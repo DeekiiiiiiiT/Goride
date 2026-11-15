@@ -23,6 +23,8 @@ import { catalogPages } from '@roam/api-client';
 import { tollApiErrorFromResponse } from './tollApiError';
 import { TollV2CommandError } from './tollV2CommandError';
 import type { CompatiblePartsResponse } from '../types/partSourcing';
+import { MaintenanceSaveError, maintenanceSaveErrorFrom, retryWhileFinishing } from './maintenanceSaveError';
+import { resolveMaintenanceLogIdempotencyKey } from '../../../../packages/types/src/maintenanceLogIdempotency.ts';
 import type {
   MaintenanceInspectionFinding,
   MaintenanceInspectionTemplate,
@@ -2502,12 +2504,16 @@ export const api = {
   },
 
   async saveMaintenanceLog(log: unknown) {
+      // A save key makes a retried create safe (one log, never two).
+      const body = log && typeof log === "object"
+        ? { ...(log as Record<string, unknown>), idempotencyKey: resolveMaintenanceLogIdempotencyKey(log) }
+        : log;
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance-logs`, {
           method: 'POST',
           headers: await getHeaders(),
-          body: JSON.stringify(log)
+          body: JSON.stringify(body)
       });
-      if (!response.ok) throw new Error("Failed to save maintenance log");
+      if (!response.ok) throw await maintenanceSaveErrorFrom(response, "Failed to save maintenance log");
       return response.json() as Promise<{
         success: boolean;
         data?: unknown;
@@ -2517,15 +2523,15 @@ export const api = {
       }>;
   },
 
-  async updateMaintenanceLog(vehicleId: string, id: string, patch: unknown) {
+  /** Edit a log. Callers must send `expectedVersion` when the service has a work order. */
+  async updateMaintenanceLog(vehicleId: string, id: string, patch: Record<string, unknown>) {
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance-logs/${vehicleId}/${id}`, {
           method: 'PATCH',
           headers: await getHeaders(),
           body: JSON.stringify(patch),
       });
       if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error || "Failed to update maintenance log");
+        throw await maintenanceSaveErrorFrom(response, "Failed to update maintenance log");
       }
       return response.json() as Promise<{
         success: boolean;
@@ -2885,23 +2891,23 @@ export const api = {
           body: JSON.stringify(payload),
       });
       if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        const code = (err as { code?: string }).code;
-        const message = (err as { error?: string }).error;
+        const err = await response.json().catch(() => ({})) as { code?: string; error?: string; step?: string };
+        const code = err.code;
         if (code === "odometer_required") {
-          throw new Error("Odometer is required and must be greater than zero");
+          throw new MaintenanceSaveError(response.status, { ...err, error: "Odometer is required and must be greater than zero" }, "");
         }
         if (
           code === "discount_too_large"
           || code === "discount_disabled"
           || code === "discount_invalid"
         ) {
-          throw new Error(
-            message
+          throw new MaintenanceSaveError(response.status, {
+            ...err,
+            error: err.error
               || (code === "discount_invalid" ? "Enter a valid discount amount." : "Discount could not be applied."),
-          );
+          }, "");
         }
-        throw new Error(message || "Failed to create work order");
+        throw new MaintenanceSaveError(response.status, err, "Failed to create work order");
       }
       const json = await response.json() as {
         item?: MaintenanceWorkOrder;
@@ -2950,6 +2956,8 @@ export const api = {
     notes: string | null;
     invoiceUrl: string | null;
     lines: MaintenanceLogLine[];
+    /** Required on content edits (date, lines, notes…); board-only status / vendor changes may skip it. */
+    expectedVersion: number;
   }>) {
       const response = await fetchWithRetry(
         `${API_ENDPOINTS.fleetOps}/maintenance-work-orders/${encodeURIComponent(id)}`,
@@ -2960,8 +2968,7 @@ export const api = {
         },
       );
       if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error || "Failed to update work order");
+        throw await maintenanceSaveErrorFrom(response, "Failed to update work order");
       }
       const json = await response.json() as { data?: MaintenanceWorkOrder } & MaintenanceWorkOrder;
       return (json.data || json) as MaintenanceWorkOrder;
@@ -2979,22 +2986,25 @@ export const api = {
     invoiceUrl?: string | null;
     lines?: MaintenanceLogLine[];
     totalCost?: number | null;
-  }) {
-      const response = await fetchWithRetry(
-        `${API_ENDPOINTS.fleetOps}/maintenance-work-orders/${encodeURIComponent(id)}/complete`,
-        {
-          method: "POST",
-          headers: await getHeaders(),
-          body: JSON.stringify(patch || {}),
-        },
-      );
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error || "Failed to complete work order");
-      }
+  }, opts?: { retryDelayMs?: number }) {
+      // "Finish saving": a log that is still finishing elsewhere answers 409; wait 3 s and try again (5×).
+      const response = await retryWhileFinishing(async () => {
+        const res = await fetchWithRetry(
+          `${API_ENDPOINTS.fleetOps}/maintenance-work-orders/${encodeURIComponent(id)}/complete`,
+          {
+            method: "POST",
+            headers: await getHeaders(),
+            body: JSON.stringify(patch || {}),
+          },
+        );
+        if (!res.ok) throw await maintenanceSaveErrorFrom(res, "Failed to complete work order");
+        return res;
+      }, { delayMs: opts?.retryDelayMs });
       return response.json() as Promise<{
         success?: boolean;
         data?: MaintenanceWorkOrder;
+        item?: MaintenanceWorkOrder;
+        idempotentReplay?: boolean;
         ledgerPosted?: boolean;
         ledgerWarning?: string;
         error?: string;

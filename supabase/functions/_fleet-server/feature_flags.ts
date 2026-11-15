@@ -104,6 +104,8 @@ export const FEATURE_FLAGS = {
    * Default off — no behaviour change until enabled per org.
    */
   TOLL_SEAL_BEFORE_PAY: "toll_seal_before_pay",
+  /** Fleet Log service line items (May need used on save). Default off per org. */
+  SERVICE_ITEMS: "service_items",
   /** Tiered parts search (OEM / sister / engine / aftermarket). Default off. */
   PARTS_TIERED_SEARCH: "parts_tiered_search",
   /** Dominion parts auto-match engine (OE numbers, derived fits, conflicts). Default off. */

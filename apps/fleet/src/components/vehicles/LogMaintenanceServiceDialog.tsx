@@ -58,8 +58,20 @@ import {
   type SystemSections,
 } from "./maintenance-logging/log-service/systemSections";
 import { logServiceOemMatchSummary } from "./maintenance-logging/log-service/logServiceOemMatchSummary";
+import { ItemsUsedSection } from "./maintenance-logging/log-service/ItemsUsedSection";
+import { PickPartDialog } from "./maintenance-logging/log-service/PickPartDialog";
+import { useJobItems } from "./maintenance-logging/log-service/useJobItems";
+import { linesHaveItemErrors, money } from "./maintenance-logging/log-service/itemsUsed";
+import {
+  NotFinishedBanner,
+  SaveFailedBanner,
+  ServiceChangedDialog,
+  type FinishState,
+} from "./maintenance-logging/ServiceSaveStates";
+import { finishFailureText, MaintenanceSaveError } from "../../services/maintenanceSaveError";
 import type {
   CatalogMaintenanceTaskOption,
+  LineItemDraft,
   MaintenanceCategoryFieldDef,
   MaintenanceLineAction,
   MaintenanceLog,
@@ -69,6 +81,8 @@ import type {
 import {
   formatMaintenanceLineLabel,
   groupCategoriesBySystem,
+  lineItemForWire,
+  lineItemsAmount,
   maintenanceDiscountTooLarge,
   maintenanceServiceNetTotal,
   parseMaintenanceDiscount,
@@ -223,10 +237,13 @@ type LineExtras = {
   supplierPartOfferId: string | null;
   partConfirmedFit: boolean;
   system: MaintenanceServiceCategory | null;
+  /** Items used on this job (never pre-ticked). */
+  items: LineItemDraft[];
 };
 
 function defaultExtras(system: MaintenanceServiceCategory | null = null): LineExtras {
   return {
+    items: [],
     action: "replace",
     laborHours: null,
     laborRate: null,
@@ -265,6 +282,7 @@ function lineFromCategoryValues(
         cost_mode: values.cost_mode === "per_wheel" ? "per_wheel" : "total",
         service_amount: serviceJobAmount(values),
       },
+      items: extras.items.length ? extras.items.map((i) => ({ ...i })) : undefined,
     };
   }
   const conditionRaw = values.condition;
@@ -304,7 +322,22 @@ function lineFromCategoryValues(
     partConfirmedFit: extras.partId ? extras.partConfirmedFit : undefined,
     notes: typeof values.notes === "string" ? values.notes : undefined,
     values: { ...values },
+    items: extras.items.length ? extras.items.map((i) => ({ ...i })) : undefined,
   };
+}
+
+/**
+ * Lines as the server takes them: items reduced to the keys it reads. With the switch known to be off,
+ * unsaved items are dropped; items already saved are still sent, so the server refuses rather than
+ * this screen silently deleting them.
+ */
+function linesForSave(lines: MaintenanceLogLine[], itemsEnabled: boolean | null): MaintenanceLogLine[] {
+  return lines.map((l) => {
+    const { items, itemsAmount: _ia, lineTotal: _lt, voidedAt: _va, ...rest } = l;
+    if (l.declined || !items?.length) return rest;
+    if (itemsEnabled === false && !items.some((i) => i.id)) return rest;
+    return { ...rest, items: items.map(lineItemForWire) as unknown as LineItemDraft[] };
+  });
 }
 
 function lineTotalPreview(line: MaintenanceLogLine): number {
@@ -410,6 +443,19 @@ export function LogMaintenanceServiceDialog({
     id: undefined as string | undefined,
   });
   const [pendingInvoiceFile, setPendingInvoiceFile] = useState<File | null>(null);
+
+  /** May-need items per job + the fleet's service-items switch. */
+  const jobItems = useJobItems();
+  const itemsEnabled = jobItems.enabled === true;
+  /** The ticked part item whose "Pick a part" dialog is open. */
+  const [pickingItem, setPickingItem] = useState<LineItemDraft | null>(null);
+  /** Version of the service being edited (edits send it back; a mismatch → "This service was changed"). */
+  const [editVersion, setEditVersion] = useState<number | null>(null);
+  const [saveProblem, setSaveProblem] = useState<
+    null | { kind: "failed"; reason: string } | { kind: "notFinished"; finish: FinishState }
+  >(null);
+  const [changedOpen, setChangedOpen] = useState(false);
+  const [reloading, setReloading] = useState(false);
 
   const packageChoices = useMemo((): PackageChoice[] => {
     const base =
@@ -632,6 +678,11 @@ export function LogMaintenanceServiceDialog({
     setDiscountAmount(0);
     setDiscountRowOpen(false);
     setDiscountInput("");
+    jobItems.reset();
+    setPickingItem(null);
+    setSaveProblem(null);
+    setChangedOpen(false);
+    setEditVersion(typeof initialLog?.version === "number" ? initialLog.version : null);
 
     const savedDraft =
       draftUserId && !initialLog?.id ? readLogServiceDraft(draftUserId, vehicleId) : null;
@@ -724,17 +775,25 @@ export function LogMaintenanceServiceDialog({
         const pickable = qItems.length ? qItems : sItems.filter((s) => s.quick_job_eligible);
         setQuickJobs(pickable);
         // Sections for every pickable group, in parallel; a failure just means the flat grid (F4).
+        // The same answer carries each job's May-need items and the service-items switch.
         void Promise.all(
           pickable.map((g) =>
             api
               .getSystemSections(g.id)
               .then((s) => [g.id, s] as const)
-              .catch(() => null),
+              .catch(() => {
+                if (!cancelled) jobItems.fail(g.id);
+                return null;
+              }),
           ),
         ).then((pairs) => {
           if (cancelled) return;
           const m = new Map<string, SystemSections>();
-          for (const p of pairs) if (p && p[1]?.groups?.length) m.set(p[0], p[1]);
+          for (const p of pairs) {
+            if (!p) continue;
+            jobItems.ingest(p[0], p[1]);
+            if (p[1]?.groups?.length) m.set(p[0], p[1]);
+          }
           setSectionsBySystem(m);
         });
         setAllSystems(sItems.length ? sItems : qItems.filter((s) => s.kind === "system" || s.code?.startsWith("sys_")));
@@ -823,9 +882,50 @@ export function LogMaintenanceServiceDialog({
       supplierPartOfferId: existing?.supplierPartOfferId ?? null,
       partConfirmedFit: existing?.partConfirmedFit === true,
       system,
+      items: existing?.items ? existing.items.map((i) => ({ ...i })) : [],
     });
+    void jobItems.ensure(cat.parent_id);
     setStep("lineDetails");
   };
+
+  /** Where this job's May-need list stands: its own group's load, or "none" for preset jobs. */
+  const jobItemsStatusFor = (cat: MaintenanceServiceCategory) => {
+    if (cat.id.startsWith("synthetic-") || !cat.parent_id) return "none" as const;
+    return jobItems.statusBySystem.get(cat.parent_id) ?? ("loading" as const);
+  };
+
+  const itemsSlotFor = (cat: MaintenanceServiceCategory) => {
+    if (!itemsEnabled) return undefined;
+    const charge = draftLine ? lineTotalPreview(draftLine) - lineItemsAmount(draftLine) : 0;
+    return (
+      <ItemsUsedSection
+        jobItems={jobItems.itemsByJob.get(cat.id) ?? []}
+        status={jobItemsStatusFor(cat)}
+        onRetry={() => void jobItems.ensure(cat.parent_id, { force: true })}
+        items={lineExtras.items}
+        onChange={(items) => setLineExtras((prev) => ({ ...prev, items }))}
+        currency={formMeta.currency || "JMD"}
+        jobCharge={Math.round(charge * 100) / 100}
+        onPickPart={(item) => setPickingItem(item)}
+      />
+    );
+  };
+
+  /** Phone: "Job J$ 3,000 + items J$ 2,000 = J$ 5,000" pinned above the footer on Step 3 (Stitch screen 9). */
+  const mobileItemsSummary = (() => {
+    if (!itemsEnabled || step !== "lineDetails" || !activeCategory || !draftLine) return undefined;
+    const total = lineTotalPreview(draftLine);
+    const items = lineItemsAmount(draftLine);
+    const cur = formMeta.currency || "JMD";
+    return (
+      <div className="flex items-baseline justify-between gap-2 tabular-nums">
+        <span className="text-[13px] text-on-surface-variant">
+          Job {money(cur, Math.round((total - items) * 100) / 100)} + items {money(cur, items)}
+        </span>
+        <span className="text-lg font-bold text-[#a73a00]">= {money(cur, total)}</span>
+      </div>
+    );
+  })();
 
   const enterLineDetailsForCategories = (
     cats: MaintenanceServiceCategory[],
@@ -946,6 +1046,10 @@ export function LogMaintenanceServiceDialog({
   const handleSaveCategory = () => {
     if (!activeCategory) return;
     const line = lineFromCategoryValues(activeCategory, fieldValues, lineExtras);
+    if (linesHaveItemErrors([line])) {
+      toast.error("Fix the items marked in red first");
+      return;
+    }
     const newLines = (() => {
       const without = lines.filter((l) => !categoryMatchLine(activeCategory, l));
       return [...without, line];
@@ -1067,7 +1171,7 @@ export function LogMaintenanceServiceDialog({
     }
   };
 
-  const buildSavePayload = (logId: string, invoiceUrl: string) => {
+  const buildSavePayload = (logId: string, invoiceUrl: string, version: number | null = editVersion) => {
     // A package stays the main service even when extra jobs from other groups were added.
     const effectiveMode: "package" | "quick_job" =
       logMode === "package" || selectedPackage ? "package" : "quick_job";
@@ -1087,7 +1191,8 @@ export function LogMaintenanceServiceDialog({
       vehicleId,
       id: logId,
       invoiceUrl,
-      lines,
+      lines: linesForSave(lines, jobItems.enabled),
+      ...(initialLog?.id && version != null ? { expectedVersion: version } : {}),
       cost: sumMaintenanceLogLines(lines),
       currency: formMeta.currency || "JMD",
       odo: Number(formMeta.odo) || 0,
@@ -1119,8 +1224,14 @@ export function LogMaintenanceServiceDialog({
       toast.error("Add at least one line before saving");
       return;
     }
+    if (linesHaveItemErrors(lines)) {
+      toast.error("Fix the items marked in red first");
+      return;
+    }
 
+    const retryingFinish = saveProblem?.kind === "notFinished";
     setIsLoading(true);
+    setSaveProblem((p) => (p?.kind === "notFinished" ? { kind: "notFinished", finish: { kind: "busy" } } : null));
     try {
       const logId = formMeta.id || crypto.randomUUID();
       let invoiceUrl = formMeta.invoiceUrl;
@@ -1135,13 +1246,18 @@ export function LogMaintenanceServiceDialog({
         invoiceUrl = uploadRes.url;
       }
 
-      const payload = buildSavePayload(logId, invoiceUrl);
+      const payload = buildSavePayload(logId, invoiceUrl, editVersion);
       let result: {
         ledgerPosted?: boolean;
         ledgerWarning?: string;
       } = {};
 
-      if (initialLog?.id) {
+      if (initialLog?.id && retryingFinish && initialLog.workOrderId) {
+        // The edit already saved (and moved the version on); only finishing failed. Finish that
+        // saved service instead of re-sending the edit with a version that is now out of date.
+        const done = await api.completeWorkOrder(initialLog.workOrderId);
+        result = { ledgerPosted: done.ledgerPosted, ledgerWarning: done.ledgerWarning };
+      } else if (initialLog?.id) {
         result = await api.updateMaintenanceLog(vehicleId, logId, payload);
       } else {
         let saveKey = idempotencyKey;
@@ -1162,7 +1278,7 @@ export function LogMaintenanceServiceDialog({
           logMode: payload.logMode,
           notes: formMeta.notes || null,
           invoiceUrl: invoiceUrl || null,
-          lines,
+          lines: linesForSave(lines, jobItems.enabled),
           completeNow: true,
           idempotencyKey: saveKey,
           discount: discountAmount > 0 ? discountAmount : 0,
@@ -1236,6 +1352,22 @@ export function LogMaintenanceServiceDialog({
       else onOpenChange(false);
     } catch (error) {
       console.error(error);
+      if (error instanceof MaintenanceSaveError && error.isStale) {
+        // Someone else saved this service first (plan 3: stale_edit → "This service was changed").
+        setSaveProblem(null);
+        setChangedOpen(true);
+        return;
+      }
+      if (error instanceof MaintenanceSaveError && (error.isNotFinished || error.isStillFinishing)) {
+        // The service is saved (in progress) but a finishing step failed. Keep the same save key:
+        // "Finish saving" sends it again and the server finishes the saved service, never a second one.
+        setSaveProblem({
+          kind: "notFinished",
+          finish: error.isStillFinishing ? { kind: "still" } : { kind: "failed", why: finishFailureText(error) },
+        });
+        onSaved?.();
+        return;
+      }
       // Say why: a network failure (server unreachable) reads differently from a server refusal.
       const reason =
         error instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(error.message)
@@ -1249,15 +1381,49 @@ export function LogMaintenanceServiceDialog({
         sentDiscountRef.current = null;
       }
       const discountErr = /discount can't be more|discounts are switched|valid discount|discount changed/i.test(reason);
-      toast.error(
-        discountErr
-          ? reason
-          : reason
-            ? `Failed to save service log: ${reason}`
-            : "Failed to save service log",
-      );
+      if (discountErr) toast.error(reason);
+      else setSaveProblem({ kind: "failed", reason });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  /** "This service was changed" → Reload: take the saved service as it is now, then edit again. */
+  const handleReloadChanged = async () => {
+    if (!initialLog?.id) {
+      setChangedOpen(false);
+      return;
+    }
+    setReloading(true);
+    try {
+      const logs = (await api.getMaintenanceLogs(vehicleId)) as MaintenanceLog[];
+      const fresh = logs.find((l) => l.id === initialLog.id);
+      if (!fresh || fresh.status === "Completed" || fresh.status === "Cancelled") {
+        toast.message(fresh ? `This service is already ${String(fresh.status).toLowerCase()}.` : "This service no longer exists.");
+        setChangedOpen(false);
+        onSaved?.();
+        onOpenChange(false);
+        return;
+      }
+      setLines(fresh.lines ?? []);
+      setFormMeta((prev) => ({
+        ...prev,
+        date: fresh.date || prev.date,
+        odo: fresh.odo ?? prev.odo,
+        provider: fresh.provider ?? "",
+        notes: fresh.notes ?? "",
+        currency: fresh.currency || prev.currency,
+        invoiceUrl: fresh.invoiceUrl ?? "",
+      }));
+      setEditVersion(typeof fresh.version === "number" ? fresh.version : null);
+      setActiveCategory(null);
+      setLineDetailCategories([]);
+      setStep(fresh.lines?.length ? "review" : "dateMileage");
+      setChangedOpen(false);
+    } catch {
+      toast.error("Couldn't reload this service. Try again.");
+    } finally {
+      setReloading(false);
     }
   };
 
@@ -1498,6 +1664,7 @@ export function LogMaintenanceServiceDialog({
           vehicle={strip}
           onClose={() => onOpenChange(false)}
           onStepClick={handleWizardStepClick}
+          mobileSummary={mobileItemsSummary}
           footer={
             <>
               <div className="flex items-center gap-2">
@@ -1511,15 +1678,23 @@ export function LogMaintenanceServiceDialog({
                   {LOG_SERVICE_COPY.cancelLabel}
                 </Button>
                 {step !== "dateMileage" ? (
-                  <Button type="button" variant="outline" onClick={handleBack} className="text-on-surface">
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    {step === "whatWasDone" && hasAddedJobs
-                      ? LOG_SERVICE_COPY.backToReview(lines.length)
-                      : LOG_SERVICE_COPY.backLabel}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleBack}
+                    aria-label={LOG_SERVICE_COPY.backLabel}
+                    className="text-on-surface max-sm:h-11 max-sm:w-11 max-sm:p-0"
+                  >
+                    <ArrowLeft className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">
+                      {step === "whatWasDone" && hasAddedJobs
+                        ? LOG_SERVICE_COPY.backToReview(lines.length)
+                        : LOG_SERVICE_COPY.backLabel}
+                    </span>
                   </Button>
                 ) : null}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 max-sm:flex-1 max-sm:justify-end">
                 {step === "dateMileage" ? (
                   <LogServiceWizardContinueButton
                     label={LOG_SERVICE_COPY.continueLabel}
@@ -1645,6 +1820,7 @@ export function LogMaintenanceServiceDialog({
               components={systemComponents}
               loading={systemComponentsLoading}
               sections={visibleSections(sectionsBySystem.get(selectedSystem.id))}
+              mayNeedByJob={itemsEnabled ? jobItems.itemsByJob : undefined}
               selectedIds={selectedCategoryIds}
               isAdded={categoryHasLine}
               onToggleComponent={handleToggleQuickComponent}
@@ -1736,6 +1912,7 @@ export function LogMaintenanceServiceDialog({
                       currency={formMeta.currency || "JMD"}
                       lineTotal={draftLineTotal}
                       serviceForm={serviceFormFor(cat)}
+                      itemsSlot={itemsSlotFor(cat)}
                     />
                   )}
                   {activeCategory?.id !== cat.id && (
@@ -1809,6 +1986,7 @@ export function LogMaintenanceServiceDialog({
               currency={formMeta.currency || "JMD"}
               lineTotal={draftLineTotal}
               serviceForm={serviceFormFor(activeCategory)}
+              itemsSlot={itemsSlotFor(activeCategory)}
             />
           )}
 
@@ -1823,8 +2001,20 @@ export function LogMaintenanceServiceDialog({
             />
           )}
 
+          {step === "review" && saveProblem?.kind === "failed" ? (
+            <div className="mb-4">
+              <SaveFailedBanner reason={saveProblem.reason} busy={isLoading} onRetry={() => void handleSave()} />
+            </div>
+          ) : null}
+          {step === "review" && saveProblem?.kind === "notFinished" ? (
+            <div className="mb-4">
+              <NotFinishedBanner state={saveProblem.finish} onFinish={() => void handleSave()} />
+            </div>
+          ) : null}
           {step === "review" && (
             <LogServiceReviewStep
+              itemsEnabled={itemsEnabled || lines.some((l) => (l.items?.length ?? 0) > 0)}
+              vehicleLabel={strip.vehicleLabel}
               baySessionLabel={idempotencyKey.slice(0, 8).toUpperCase()}
               date={formMeta.date}
               odometer={formMeta.odo}
@@ -1890,6 +2080,32 @@ export function LogMaintenanceServiceDialog({
           )}
         </LogServiceWizardChrome>
       </ResponsiveDialogContent>
+      <PickPartDialog
+        open={Boolean(pickingItem)}
+        onClose={() => setPickingItem(null)}
+        vehicleId={vehicleId}
+        vehicleLabel={strip.vehicleLabel}
+        partTypeId={pickingItem?.partTypeId ?? null}
+        partTypeName={pickingItem?.itemName ?? ""}
+        current={pickingItem}
+        onUse={(picked) => {
+          const target = pickingItem;
+          setPickingItem(null);
+          if (!target) return;
+          setLineExtras((prev) => ({
+            ...prev,
+            items: prev.items.map((it) =>
+              it.source === "suggested" && it.jobItemId === target.jobItemId ? { ...it, ...picked } : it,
+            ),
+          }));
+        }}
+      />
+      <ServiceChangedDialog
+        open={changedOpen}
+        reloading={reloading}
+        onCancel={() => setChangedOpen(false)}
+        onReload={() => void handleReloadChanged()}
+      />
     </ResponsiveDialog>
   );
 }

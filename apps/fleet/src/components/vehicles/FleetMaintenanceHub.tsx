@@ -57,6 +57,9 @@ type DriverRequestRow = {
   performed_at_miles: number;
   status: string;
   payload_json?: Record<string, unknown> | null;
+  work_order_id?: string | null;
+  /** Version of the request's draft work order (edits send it back). */
+  version?: number;
 };
 
 type FleetHubVehicleRow = {
@@ -315,6 +318,11 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
         provider: "",
         status: "Completed",
         currency: "JMD",
+        version: row.version,
+        workOrderId:
+          row.work_order_id
+          ?? (typeof row.payload_json?.workOrderId === "string" ? row.payload_json.workOrderId : undefined)
+          ?? undefined,
       });
     },
     [prepareLogForVehicle],
@@ -326,6 +334,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
         await api.updateMaintenanceLog(row.vehicle_id, row.id, {
           status: "Cancelled",
           cost: null,
+          ...(typeof row.version === "number" ? { expectedVersion: row.version } : {}),
         });
         toast.success("Request dismissed");
         await loadRequests();

@@ -9,6 +9,7 @@ import type { CompatiblePartsResponse } from '../types/partSourcing';
 import { compressImage } from '../utils/compressImage';
 import { isTollCategory } from '../utils/tollCategoryHelper';
 import { unwrapFuelEntriesPayload } from '@roam/fuel-core';
+import { resolveMaintenanceLogIdempotencyKey } from '../../../../packages/types/src/maintenanceLogIdempotency.ts';
 
 // Helper to get authorization headers (JWT if logged in, else anon key)
 async function getHeaders(contentType: string | null = 'application/json') {
@@ -1404,10 +1405,14 @@ export const api = {
   },
 
   async saveMaintenanceLog(log: unknown) {
+      // A save key makes a retried create safe (one log, never two).
+      const body = log && typeof log === "object"
+        ? { ...(log as Record<string, unknown>), idempotencyKey: resolveMaintenanceLogIdempotencyKey(log) }
+        : log;
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance-logs`, {
           method: 'POST',
           headers: await getHeaders(),
-          body: JSON.stringify(log)
+          body: JSON.stringify(body)
       });
       if (!response.ok) throw new Error("Failed to save maintenance log");
       return response.json();

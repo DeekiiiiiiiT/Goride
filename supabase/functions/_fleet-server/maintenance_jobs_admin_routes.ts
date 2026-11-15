@@ -15,12 +15,24 @@ import {
   isUuid,
   JOB_ACTIONS,
   relationRefusal,
+  renumberSortOrders,
   usedJobPatchRefusal,
   mapCategoryToJob,
   opCodePrefixForSystem,
   parseJobIds,
+  actorUserIdFromRbac,
+  mapJobItemRowToApi,
+  mapServiceItemsDbError,
+  mapSupplyRowToApi,
   pgErrorMessage,
   pgUniqueViolation,
+  tidySupplyName,
+  validateActiveLinkOrder,
+  validateJobItemNeed,
+  validateJobItemNote,
+  validateQtyHint,
+  validateSupplyDescription,
+  validateSupplyIconKey,
   type JobRow,
   type RelationRow,
 } from "./maintenance_jobs_admin_helpers.ts";
@@ -37,6 +49,18 @@ function errMsg(e: unknown): string {
   return pgErrorMessage(e);
 }
 
+function serviceItemsHttpError(
+  c: Context,
+  e: unknown,
+  context: "job_item" | "job_relation" | "supply",
+) {
+  const mapped = mapServiceItemsDbError(pgErrorMessage(e), context, {
+    uniqueViolation: pgUniqueViolation(e),
+  });
+  if (mapped) return c.json({ error: mapped.error }, mapped.status as 400 | 409);
+  return null;
+}
+
 async function fetchUsedIds(supabase: SupabaseClient): Promise<Set<string>> {
   const { data, error } = await supabase.rpc("maintenance_job_used_ids");
   if (error) throw error;
@@ -44,7 +68,7 @@ async function fetchUsedIds(supabase: SupabaseClient): Promise<Set<string>> {
 }
 
 async function buildJobsPayload(supabase: SupabaseClient) {
-  const [groupsRes, sgRes, secRes, memRes, jobsRes, relRes, usedIds] = await Promise.all([
+  const [groupsRes, sgRes, secRes, memRes, jobsRes, relRes, usedIds, itemsRes, suppliesRes, unitsRes] = await Promise.all([
     supabase
       .from("maintenance_service_categories")
       .select("id, code, name, icon_key")
@@ -76,9 +100,21 @@ async function buildJobsPayload(supabase: SupabaseClient) {
       .from("maintenance_job_relations")
       .select("id, from_category_id, to_category_id, note"),
     fetchUsedIds(supabase),
+    supabase
+      .from("maintenance_job_item")
+      .select("*")
+      .is("removed_at", null)
+      .order("sort_order")
+      .order("created_at"),
+    supabase.from("maintenance_supply").select("*").order("name"),
+    supabase
+      .from("maintenance_unit")
+      .select("id, code, label_one, label_many, sort_order")
+      .eq("status", "active")
+      .order("sort_order"),
   ]);
 
-  for (const r of [groupsRes, sgRes, secRes, memRes, jobsRes, relRes]) {
+  for (const r of [groupsRes, sgRes, secRes, memRes, jobsRes, relRes, itemsRes, suppliesRes, unitsRes]) {
     if (r.error) throw r.error;
   }
 
@@ -99,7 +135,66 @@ async function buildJobsPayload(supabase: SupabaseClient) {
     inByTo.set(to, inn);
   }
 
-  const jobs = jobRows.map((row) => mapCategoryToJob(row, usedIds, byId, outByFrom, inByTo));
+  const itemRows = (itemsRes.data || []) as Record<string, unknown>[];
+  const supplyRows = (suppliesRes.data || []) as Record<string, unknown>[];
+  const unitRows = (unitsRes.data || []) as Record<string, unknown>[];
+  const suppliesById = new Map(supplyRows.map((s) => [String(s.id), s]));
+  const unitsById = new Map(unitRows.map((u) => [String(u.id), u]));
+
+  const extraCatIds = new Set<string>();
+  for (const it of itemRows) {
+    const pt = it.part_type_id != null ? String(it.part_type_id) : "";
+    if (pt && !byId.has(pt)) extraCatIds.add(pt);
+  }
+  if (extraCatIds.size > 0) {
+    const { data: extraJobs, error: extraErr } = await supabase
+      .from("maintenance_service_categories")
+      .select("*")
+      .in("id", [...extraCatIds]);
+    if (extraErr) throw extraErr;
+    for (const row of extraJobs || []) {
+      byId.set(String((row as JobRow).id), row as JobRow);
+    }
+  }
+
+  const supplyLinkCounts = new Map<string, number>();
+  const itemsByJob = new Map<string, Record<string, unknown>[]>();
+  for (const it of itemRows) {
+    const jobId = String(it.job_id);
+    const list = itemsByJob.get(jobId) || [];
+    list.push(it);
+    itemsByJob.set(jobId, list);
+    if (it.supply_id != null) {
+      const sid = String(it.supply_id);
+      supplyLinkCounts.set(sid, (supplyLinkCounts.get(sid) ?? 0) + 1);
+    }
+  }
+
+  const jobs = jobRows.map((row) => {
+    const mapped = mapCategoryToJob(row, usedIds, byId, outByFrom, inByTo);
+    const jobId = String(row.id);
+    const links = (itemsByJob.get(jobId) || []).slice().sort(
+      (a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0)
+        || String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")),
+    );
+    const items = links.map((link) => {
+      if (link.part_type_id != null) {
+        const cat = byId.get(String(link.part_type_id));
+        const status = cat ? String(cat.status ?? "active") : "retired";
+        return mapJobItemRowToApi(link, cat ? String(cat.name) : "Unknown", status !== "active");
+      }
+      const sup = suppliesById.get(String(link.supply_id));
+      const unit = sup ? unitsById.get(String(sup.unit_id)) : undefined;
+      const retired = sup ? String(sup.status) !== "active" : true;
+      return mapJobItemRowToApi(
+        link,
+        sup ? String(sup.name) : "Unknown",
+        retired,
+        unit ? { label_one: String(unit.label_one), label_many: String(unit.label_many) } : undefined,
+      );
+    });
+    return { ...mapped, items };
+  });
 
   const membersBySection = new Map<string, Array<{ category_id: string; sort_order: number | null }>>();
   for (const m of memRes.data || []) {
@@ -158,7 +253,23 @@ async function buildJobsPayload(supabase: SupabaseClient) {
       : null,
   }));
 
-  return { groups, sectionGroups, jobs };
+  const supplies = supplyRows.map((row) => {
+    const unit = unitsById.get(String(row.unit_id));
+    return mapSupplyRowToApi(
+      row,
+      unit ? String(unit.code) : "",
+      supplyLinkCounts.get(String(row.id)) ?? 0,
+    );
+  });
+
+  const units = unitRows.map((u) => ({
+    id: String(u.id),
+    code: String(u.code),
+    labelOne: String(u.label_one),
+    labelMany: String(u.label_many),
+  }));
+
+  return { groups, sectionGroups, jobs, supplies, units };
 }
 
 async function loadJobItem(supabase: SupabaseClient, id: string) {
@@ -199,6 +310,99 @@ async function loadJobItem(supabase: SupabaseClient, id: string) {
   return mapCategoryToJob(row as JobRow, usedIds, byId, outByFrom, inByTo);
 }
 
+async function loadSupplyApi(supabase: SupabaseClient, id: string) {
+  const { data: row, error } = await supabase.from("maintenance_supply").select("*").eq("id", id).maybeSingle();
+  if (error) throw error;
+  if (!row) return null;
+  const { data: unit } = await supabase
+    .from("maintenance_unit")
+    .select("code")
+    .eq("id", String(row.unit_id))
+    .maybeSingle();
+  const { count } = await supabase
+    .from("maintenance_job_item")
+    .select("id", { count: "exact", head: true })
+    .eq("supply_id", id)
+    .is("removed_at", null);
+  const names = await staffNamesFor(supabase, [row.created_by, row.updated_by]);
+  return mapSupplyRowToApi(row as Record<string, unknown>, unit ? String(unit.code) : "", count ?? 0, names);
+}
+
+/** Staff name (profile name, else email) for user ids; unknown ids are left out. */
+async function staffNamesFor(supabase: SupabaseClient, ids: unknown[]): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  const unique = [...new Set(ids.map((i) => String(i ?? "").trim()).filter((i) => isUuid(i)))].slice(0, 50);
+  for (const id of unique) {
+    try {
+      const { data } = await supabase.auth.admin.getUserById(id);
+      const u = data?.user;
+      const meta = (u?.user_metadata ?? {}) as { full_name?: string; name?: string };
+      const name = String(meta.full_name || meta.name || u?.email || "").trim();
+      if (name) names.set(id, name);
+    } catch {
+      /* leave unknown */
+    }
+  }
+  return names;
+}
+
+async function loadMayNeedLinkApi(supabase: SupabaseClient, linkId: string) {
+  const { data: link, error } = await supabase
+    .from("maintenance_job_item")
+    .select("*")
+    .eq("id", linkId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!link || link.removed_at != null) return null;
+  const row = link as Record<string, unknown>;
+  if (row.part_type_id != null) {
+    const { data: cat } = await supabase
+      .from("maintenance_service_categories")
+      .select("name, status")
+      .eq("id", String(row.part_type_id))
+      .maybeSingle();
+    return mapJobItemRowToApi(row, cat ? String(cat.name) : "Unknown", cat ? String(cat.status) !== "active" : true);
+  }
+  const { data: sup } = await supabase
+    .from("maintenance_supply")
+    .select("name, status, unit_id")
+    .eq("id", String(row.supply_id))
+    .maybeSingle();
+  let unit: { label_one: string; label_many: string } | undefined;
+  if (sup?.unit_id) {
+    const { data: u } = await supabase
+      .from("maintenance_unit")
+      .select("label_one, label_many")
+      .eq("id", String(sup.unit_id))
+      .maybeSingle();
+    if (u) unit = { label_one: String(u.label_one), label_many: String(u.label_many) };
+  }
+  return mapJobItemRowToApi(
+    row,
+    sup ? String(sup.name) : "Unknown",
+    sup ? String(sup.status) !== "active" : true,
+    unit,
+  );
+}
+
+async function countSupplyHiddenFromJobs(supabase: SupabaseClient, supplyId: string): Promise<number> {
+  const { data: links, error } = await supabase
+    .from("maintenance_job_item")
+    .select("job_id")
+    .eq("supply_id", supplyId)
+    .is("removed_at", null);
+  if (error) throw error;
+  const jobIds = [...new Set((links || []).map((l) => String(l.job_id)))];
+  if (!jobIds.length) return 0;
+  const { data: jobs, error: jErr } = await supabase
+    .from("maintenance_service_categories")
+    .select("id, status")
+    .in("id", jobIds)
+    .eq("status", "active");
+  if (jErr) throw jErr;
+  return (jobs || []).length;
+}
+
 async function memberConflictSectionName(
   supabase: SupabaseClient,
   systemId: string,
@@ -237,6 +441,15 @@ export const MAINTENANCE_JOBS_ADMIN_ROUTE_GUARDS: Record<string, "catalog.write"
   "DELETE /admin/maintenance/sections/:id": "catalog.write",
   "PUT /admin/maintenance/sections/order": "catalog.write",
   "PUT /admin/maintenance/sections/:id/members": "catalog.write",
+  "GET /admin/maintenance/supplies": "staff_read",
+  "POST /admin/maintenance/supplies": "catalog.write",
+  "PATCH /admin/maintenance/supplies/:id": "catalog.write",
+  "POST /admin/maintenance/supplies/:id/retire": "catalog.write",
+  "POST /admin/maintenance/supplies/:id/restore": "catalog.write",
+  "POST /admin/maintenance/job-items": "catalog.write",
+  "PATCH /admin/maintenance/job-items/:id": "catalog.write",
+  "POST /admin/maintenance/job-items/:id/remove": "catalog.write",
+  "PUT /admin/maintenance/jobs/:id/items/order": "catalog.write",
   "POST /admin/maintenance/job-relations": "catalog.write",
   "DELETE /admin/maintenance/job-relations/:id": "catalog.write",
 };
@@ -410,10 +623,16 @@ export function registerMaintenanceJobsAdminRoutes(route: RouteApp, supabase: Su
         }
         throw error;
       }
+      const { count: hiddenFromMayNeed } = await supabase
+        .from("maintenance_job_item")
+        .select("id", { count: "exact", head: true })
+        .is("removed_at", null)
+        .or(`job_id.eq.${id},part_type_id.eq.${id}`);
       const payload = (data ?? {}) as Record<string, unknown>;
       return c.json({
         removedFromSections: Number(payload.removedFromSections ?? 0),
         removedLinks: Number(payload.removedLinks ?? 0),
+        hiddenFromMayNeed: hiddenFromMayNeed ?? 0,
       });
     } catch (e: unknown) {
       return c.json({ error: errMsg(e) }, 500);
@@ -728,6 +947,380 @@ export function registerMaintenanceJobsAdminRoutes(route: RouteApp, supabase: Su
     }
   });
 
+  route.get("/admin/maintenance/supplies", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const status = String(c.req.query("status") ?? "active").trim();
+      if (status !== "active" && status !== "retired") {
+        return c.json({ error: "Status must be active or retired." }, 400);
+      }
+      const { data: supplyRows, error } = await supabase
+        .from("maintenance_supply")
+        .select("*")
+        .eq("status", status)
+        .order("name");
+      if (error) throw error;
+      const { data: units } = await supabase.from("maintenance_unit").select("id, code");
+      const unitsById = new Map((units || []).map((u) => [String(u.id), String(u.code)]));
+      const supplyIds = (supplyRows || []).map((r) => String(r.id));
+      const usedCount = new Map<string, number>();
+      if (supplyIds.length) {
+        const { data: links, error: linkErr } = await supabase
+          .from("maintenance_job_item")
+          .select("supply_id")
+          .in("supply_id", supplyIds)
+          .is("removed_at", null);
+        if (linkErr) throw linkErr;
+        for (const l of links || []) {
+          const sid = String((l as { supply_id: string }).supply_id);
+          usedCount.set(sid, (usedCount.get(sid) ?? 0) + 1);
+        }
+      }
+      const names = await staffNamesFor(
+        supabase,
+        (supplyRows || []).flatMap((r) => [r.created_by, r.updated_by]),
+      );
+      const items = (supplyRows || []).map((row) =>
+        mapSupplyRowToApi(
+          row as Record<string, unknown>,
+          unitsById.get(String(row.unit_id)) ?? "",
+          usedCount.get(String(row.id)) ?? 0,
+          names,
+        )
+      );
+      return c.json({ items });
+    } catch (e: unknown) {
+      return c.json({ error: errMsg(e) }, 500);
+    }
+  });
+
+  route.post("/admin/maintenance/supplies", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogWriteResponse(c);
+    if (denied) return denied;
+    try {
+      const body = (await c.req.json()) as Record<string, unknown>;
+      const nameOk = tidySupplyName(body.name);
+      if (!nameOk.ok) return c.json({ error: nameOk.error }, 400);
+      const descOk = validateSupplyDescription(body.description);
+      if (!descOk.ok) return c.json({ error: descOk.error }, 400);
+      const iconOk = validateSupplyIconKey(body.iconKey ?? "wrench");
+      if (!iconOk.ok) return c.json({ error: iconOk.error }, 400);
+      const unitId = String(body.unitId ?? "").trim();
+      if (!isUuid(unitId)) return c.json({ error: "Choose a unit." }, 400);
+      const { data: unit } = await supabase
+        .from("maintenance_unit")
+        .select("id")
+        .eq("id", unitId)
+        .eq("status", "active")
+        .maybeSingle();
+      if (!unit) return c.json({ error: "Choose a unit." }, 400);
+      const actor = actorUserIdFromRbac(c.get("rbacUser") as { userId?: string; id?: string } | undefined);
+      const { data, error } = await supabase
+        .from("maintenance_supply")
+        .insert({
+          name: nameOk.name,
+          description: descOk.description,
+          icon_key: iconOk.iconKey,
+          unit_id: unitId,
+          created_by: actor,
+          updated_by: actor,
+        })
+        .select("id")
+        .single();
+      if (error) {
+        const mapped = serviceItemsHttpError(c, error, "supply");
+        if (mapped) return mapped;
+        throw error;
+      }
+      const item = await loadSupplyApi(supabase, String(data.id));
+      return c.json({ item });
+    } catch (e: unknown) {
+      const mapped = serviceItemsHttpError(c, e, "supply");
+      if (mapped) return mapped;
+      return c.json({ error: errMsg(e) }, 500);
+    }
+  });
+
+  route.patch("/admin/maintenance/supplies/:id", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogWriteResponse(c);
+    if (denied) return denied;
+    const id = c.req.param("id");
+    if (!isUuid(id)) return c.json({ error: "Invalid supply id." }, 400);
+    try {
+      const body = (await c.req.json()) as Record<string, unknown>;
+      const patch: Record<string, unknown> = {};
+      if (body.name !== undefined) {
+        const nameOk = tidySupplyName(body.name);
+        if (!nameOk.ok) return c.json({ error: nameOk.error }, 400);
+        patch.name = nameOk.name;
+      }
+      if (body.description !== undefined) {
+        const descOk = validateSupplyDescription(body.description);
+        if (!descOk.ok) return c.json({ error: descOk.error }, 400);
+        patch.description = descOk.description;
+      }
+      if (body.iconKey !== undefined) {
+        const iconOk = validateSupplyIconKey(body.iconKey);
+        if (!iconOk.ok) return c.json({ error: iconOk.error }, 400);
+        patch.icon_key = iconOk.iconKey;
+      }
+      if (body.unitId !== undefined) {
+        const unitId = String(body.unitId ?? "").trim();
+        if (!isUuid(unitId)) return c.json({ error: "Choose a unit." }, 400);
+        const { data: unit } = await supabase
+          .from("maintenance_unit")
+          .select("id")
+          .eq("id", unitId)
+          .eq("status", "active")
+          .maybeSingle();
+        if (!unit) return c.json({ error: "Choose a unit." }, 400);
+        patch.unit_id = unitId;
+      }
+      if (!Object.keys(patch).length) return c.json({ error: "Nothing to update." }, 400);
+      const actor = actorUserIdFromRbac(c.get("rbacUser") as { userId?: string; id?: string } | undefined);
+      patch.updated_by = actor;
+      const { error } = await supabase.from("maintenance_supply").update(patch).eq("id", id);
+      if (error) {
+        const mapped = serviceItemsHttpError(c, error, "supply");
+        if (mapped) return mapped;
+        throw error;
+      }
+      const item = await loadSupplyApi(supabase, id);
+      if (!item) return c.json({ error: "Supply was not found." }, 404);
+      return c.json({ item });
+    } catch (e: unknown) {
+      const mapped = serviceItemsHttpError(c, e, "supply");
+      if (mapped) return mapped;
+      return c.json({ error: errMsg(e) }, 500);
+    }
+  });
+
+  route.post("/admin/maintenance/supplies/:id/retire", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogWriteResponse(c);
+    if (denied) return denied;
+    const id = c.req.param("id");
+    if (!isUuid(id)) return c.json({ error: "Invalid supply id." }, 400);
+    try {
+      const actor = actorUserIdFromRbac(c.get("rbacUser") as { userId?: string; id?: string } | undefined);
+      const { error } = await supabase
+        .from("maintenance_supply")
+        .update({ status: "retired", updated_by: actor })
+        .eq("id", id)
+        .eq("status", "active");
+      if (error) throw error;
+      const item = await loadSupplyApi(supabase, id);
+      if (!item) return c.json({ error: "Supply was not found." }, 404);
+      const hiddenFromJobs = await countSupplyHiddenFromJobs(supabase, id);
+      return c.json({ item, hiddenFromJobs });
+    } catch (e: unknown) {
+      return c.json({ error: errMsg(e) }, 500);
+    }
+  });
+
+  route.post("/admin/maintenance/supplies/:id/restore", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogWriteResponse(c);
+    if (denied) return denied;
+    const id = c.req.param("id");
+    if (!isUuid(id)) return c.json({ error: "Invalid supply id." }, 400);
+    try {
+      const actor = actorUserIdFromRbac(c.get("rbacUser") as { userId?: string; id?: string } | undefined);
+      const { error } = await supabase
+        .from("maintenance_supply")
+        .update({ status: "active", updated_by: actor })
+        .eq("id", id)
+        .eq("status", "retired");
+      if (error) {
+        const mapped = serviceItemsHttpError(c, error, "supply");
+        if (mapped) return mapped;
+        throw error;
+      }
+      const item = await loadSupplyApi(supabase, id);
+      if (!item) return c.json({ error: "Supply was not found." }, 404);
+      return c.json({ item });
+    } catch (e: unknown) {
+      const mapped = serviceItemsHttpError(c, e, "supply");
+      if (mapped) return mapped;
+      return c.json({ error: errMsg(e) }, 500);
+    }
+  });
+
+  route.post("/admin/maintenance/job-items", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogWriteResponse(c);
+    if (denied) return denied;
+    try {
+      const body = (await c.req.json()) as Record<string, unknown>;
+      const jobId = String(body.jobId ?? "").trim();
+      const kind = String(body.kind ?? "").trim();
+      const itemId = String(body.itemId ?? "").trim();
+      if (!isUuid(jobId) || !isUuid(itemId)) return c.json({ error: "Job and item are required." }, 400);
+      if (kind !== "part_type" && kind !== "supply") return c.json({ error: "Item kind must be part_type or supply." }, 400);
+      const needOk = validateJobItemNeed(body.need);
+      if (!needOk.ok) return c.json({ error: needOk.error }, 400);
+      const qtyOk = validateQtyHint(body.qtyHint);
+      if (!qtyOk.ok) return c.json({ error: qtyOk.error }, 400);
+      const noteOk = validateJobItemNote(body.note);
+      if (!noteOk.ok) return c.json({ error: noteOk.error }, 400);
+      const note = noteOk.note;
+
+      const { data: job } = await supabase
+        .from("maintenance_service_categories")
+        .select("id, status, kind")
+        .eq("id", jobId)
+        .maybeSingle();
+      if (!job || String(job.kind) !== "component") return c.json({ error: "Job was not found." }, 404);
+      if (String(job.status) !== "active") return c.json({ error: "Retired jobs can't be changed." }, 409);
+
+      if (kind === "part_type") {
+        const { data: pt } = await supabase
+          .from("maintenance_service_categories")
+          .select("id, status, is_part")
+          .eq("id", itemId)
+          .maybeSingle();
+        if (!pt || !pt.is_part) return c.json({ error: "Part type was not found." }, 404);
+        if (String(pt.status) !== "active") return c.json({ error: "Retired items can't be added." }, 409);
+      } else {
+        const { data: sup } = await supabase.from("maintenance_supply").select("id, status").eq("id", itemId).maybeSingle();
+        if (!sup) return c.json({ error: "Supply was not found." }, 404);
+        if (String(sup.status) !== "active") return c.json({ error: "Retired items can't be added." }, 409);
+      }
+
+      const { data: maxRow } = await supabase
+        .from("maintenance_job_item")
+        .select("sort_order")
+        .eq("job_id", jobId)
+        .is("removed_at", null)
+        .order("sort_order", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const sortOrder = Number(maxRow?.sort_order ?? 0) + 10;
+      const actor = actorUserIdFromRbac(c.get("rbacUser") as { userId?: string; id?: string } | undefined);
+      const insertRow: Record<string, unknown> = {
+        job_id: jobId,
+        need: needOk.need,
+        qty_hint: qtyOk.qtyHint,
+        note: note || null,
+        sort_order: sortOrder,
+        created_by: actor,
+        updated_by: actor,
+      };
+      if (kind === "part_type") insertRow.part_type_id = itemId;
+      else insertRow.supply_id = itemId;
+
+      const { data, error } = await supabase.from("maintenance_job_item").insert(insertRow).select("id").single();
+      if (error) {
+        const mapped = serviceItemsHttpError(c, error, "job_item");
+        if (mapped) return mapped;
+        throw error;
+      }
+      const item = await loadMayNeedLinkApi(supabase, String(data.id));
+      return c.json({ item });
+    } catch (e: unknown) {
+      const mapped = serviceItemsHttpError(c, e, "job_item");
+      if (mapped) return mapped;
+      return c.json({ error: errMsg(e) }, 500);
+    }
+  });
+
+  route.patch("/admin/maintenance/job-items/:id", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogWriteResponse(c);
+    if (denied) return denied;
+    const id = c.req.param("id");
+    if (!isUuid(id)) return c.json({ error: "Invalid link id." }, 400);
+    try {
+      const body = (await c.req.json()) as Record<string, unknown>;
+      const keys = Object.keys(body);
+      const allowed = new Set(["need", "qtyHint", "note"]);
+      if (keys.some((k) => !allowed.has(k))) {
+        return c.json({ error: "To change the item, remove it and add the new one." }, 400);
+      }
+      const { data: existing } = await supabase.from("maintenance_job_item").select("id").eq("id", id).is("removed_at", null).maybeSingle();
+      if (!existing) return c.json({ error: "Link was not found." }, 404);
+      const patch: Record<string, unknown> = {};
+      if (body.need !== undefined) {
+        const needOk = validateJobItemNeed(body.need);
+        if (!needOk.ok) return c.json({ error: needOk.error }, 400);
+        patch.need = needOk.need;
+      }
+      if (body.qtyHint !== undefined) {
+        const qtyOk = validateQtyHint(body.qtyHint);
+        if (!qtyOk.ok) return c.json({ error: qtyOk.error }, 400);
+        patch.qty_hint = qtyOk.qtyHint;
+      }
+      if (body.note !== undefined) {
+        const noteOk = validateJobItemNote(body.note);
+        if (!noteOk.ok) return c.json({ error: noteOk.error }, 400);
+        patch.note = noteOk.note;
+      }
+      const actor = actorUserIdFromRbac(c.get("rbacUser") as { userId?: string; id?: string } | undefined);
+      patch.updated_by = actor;
+      const { error } = await supabase.from("maintenance_job_item").update(patch).eq("id", id);
+      if (error) {
+        const mapped = serviceItemsHttpError(c, error, "job_item");
+        if (mapped) return mapped;
+        throw error;
+      }
+      const item = await loadMayNeedLinkApi(supabase, id);
+      return c.json({ item });
+    } catch (e: unknown) {
+      const mapped = serviceItemsHttpError(c, e, "job_item");
+      if (mapped) return mapped;
+      return c.json({ error: errMsg(e) }, 500);
+    }
+  });
+
+  route.post("/admin/maintenance/job-items/:id/remove", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogWriteResponse(c);
+    if (denied) return denied;
+    const id = c.req.param("id");
+    if (!isUuid(id)) return c.json({ error: "Invalid link id." }, 400);
+    try {
+      const actor = actorUserIdFromRbac(c.get("rbacUser") as { userId?: string; id?: string } | undefined);
+      const { data: existing } = await supabase.from("maintenance_job_item").select("removed_at").eq("id", id).maybeSingle();
+      if (!existing) return c.json({ error: "Link was not found." }, 404);
+      if (existing.removed_at != null) return c.json({ success: true });
+      const { error } = await supabase
+        .from("maintenance_job_item")
+        .update({ removed_at: new Date().toISOString(), removed_by: actor })
+        .eq("id", id);
+      if (error) throw error;
+      return c.json({ success: true });
+    } catch (e: unknown) {
+      return c.json({ error: errMsg(e) }, 500);
+    }
+  });
+
+  route.put("/admin/maintenance/jobs/:id/items/order", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogWriteResponse(c);
+    if (denied) return denied;
+    const jobId = c.req.param("id");
+    if (!isUuid(jobId)) return c.json({ error: "Invalid job id." }, 400);
+    try {
+      const body = (await c.req.json()) as Record<string, unknown>;
+      const orderedIds = parseJobIds(body.orderedIds) ?? [];
+      const { data: links, error } = await supabase
+        .from("maintenance_job_item")
+        .select("id")
+        .eq("job_id", jobId)
+        .is("removed_at", null);
+      if (error) throw error;
+      const activeIds = (links || []).map((l) => String(l.id));
+      const orderErr = validateActiveLinkOrder(orderedIds, activeIds);
+      if (orderErr) return c.json({ error: orderErr }, 400);
+      const sorts = renumberSortOrders(orderedIds);
+      for (let i = 0; i < orderedIds.length; i++) {
+        const { error: uErr } = await supabase
+          .from("maintenance_job_item")
+          .update({ sort_order: sorts[i] })
+          .eq("id", orderedIds[i]);
+        if (uErr) throw uErr;
+      }
+      return c.json({ success: true });
+    } catch (e: unknown) {
+      return c.json({ error: errMsg(e) }, 500);
+    }
+  });
+
   route.post("/admin/maintenance/job-relations", requireAuth(), async (c: Context) => {
     const denied = assertCatalogWriteResponse(c);
     if (denied) return denied;
@@ -773,7 +1366,11 @@ export function registerMaintenanceJobsAdminRoutes(route: RouteApp, supabase: Su
         })
         .select("*")
         .single();
-      if (error) throw error;
+      if (error) {
+        const mapped = serviceItemsHttpError(c, error, "job_relation");
+        if (mapped) return mapped;
+        throw error;
+      }
       return c.json({
         id: String(data.id),
         fromJobId,
@@ -781,6 +1378,8 @@ export function registerMaintenanceJobsAdminRoutes(route: RouteApp, supabase: Su
         note: String(data.note),
       });
     } catch (e: unknown) {
+      const mapped = serviceItemsHttpError(c, e, "job_relation");
+      if (mapped) return mapped;
       return c.json({ error: errMsg(e) }, 500);
     }
   });

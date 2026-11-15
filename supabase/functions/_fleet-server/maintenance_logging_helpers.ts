@@ -357,6 +357,8 @@ export function computeWoLineTotal(line: Record<string, unknown>): number {
   if (qty > 0 && unit > 0) total += qty * unit;
   else total += material;
   total += labor;
+  const itemsAmt = Number(line.items_amount ?? line.itemsAmount ?? 0) || 0;
+  total += itemsAmt;
   return Math.round(total * 100) / 100;
 }
 

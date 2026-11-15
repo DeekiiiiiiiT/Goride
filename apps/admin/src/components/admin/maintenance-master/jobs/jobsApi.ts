@@ -78,7 +78,44 @@ export type Job = {
   used: boolean;
   alsoDo: AlsoDoLink[];
   suggestedBy: SuggestedBy[];
+  /** May-need links (S1): active links only, in saved order. */
+  items: MayNeedItem[];
 };
+
+export type ItemNeed = "usually" | "sometimes";
+
+/** One May-need link on a job (GET /admin/maintenance/jobs → jobs[].items). */
+export type MayNeedItem = {
+  linkId: string;
+  kind: "part_type" | "supply";
+  itemId: string;
+  name: string;
+  need: ItemNeed;
+  qtyHint: number | null;
+  note: string | null;
+  sortOrder: number;
+  itemRetired: boolean;
+  unitLabelOne?: string;
+  unitLabelMany?: string;
+};
+
+export type Supply = {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  iconKey: string;
+  unitId: string;
+  unitCode: string;
+  status: "active" | "retired";
+  usedOnJobs: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  createdByName?: string | null;
+  updatedByName?: string | null;
+};
+
+export type Unit = { id: string; code: string; labelOne: string; labelMany: string };
 
 export type JobSection = {
   id: string;
@@ -106,6 +143,10 @@ export type JobsPayload = {
   groups: JobGroup[];
   sectionGroups: JobSectionGroup[];
   jobs: Job[];
+  /** Every supply (active + retired), by name. */
+  supplies: Supply[];
+  /** Active units, in order. */
+  units: Unit[];
 };
 
 function headers(token: string, json = true): HeadersInit {
@@ -147,7 +188,7 @@ export const updateJob = (token: string, id: string, input: Partial<JobInput>) =
 
 // V5
 export const retireJob = (token: string, id: string) =>
-  call<{ removedFromSections: number; removedLinks: number }>(token, `/admin/maintenance/jobs/${id}/retire`, {
+  call<{ removedFromSections: number; removedLinks: number; hiddenFromMayNeed?: number }>(token, `/admin/maintenance/jobs/${id}/retire`, {
     method: "POST",
   });
 export const restoreJob = (token: string, id: string) =>
@@ -183,3 +224,38 @@ export const addAlsoDo = (token: string, fromJobId: string, toJobId: string, not
   call(token, "/admin/maintenance/job-relations", { method: "POST", ...json({ fromJobId, toJobId, note }) });
 export const removeAlsoDo = (token: string, relationId: string) =>
   call(token, `/admin/maintenance/job-relations/${relationId}`, { method: "DELETE" });
+
+// Service items (S1) — May-need links
+export type MayNeedInput = {
+  jobId: string;
+  kind: "part_type" | "supply";
+  itemId: string;
+  need: ItemNeed;
+  qtyHint?: number | null;
+  note?: string | null;
+};
+export const addMayNeed = (token: string, input: MayNeedInput) =>
+  call<{ item: MayNeedItem }>(token, "/admin/maintenance/job-items", { method: "POST", ...json(input) });
+export const updateMayNeed = (
+  token: string,
+  linkId: string,
+  patch: { need?: ItemNeed; qtyHint?: number | null; note?: string | null },
+) => call<{ item: MayNeedItem }>(token, `/admin/maintenance/job-items/${linkId}`, { method: "PATCH", ...json(patch) });
+export const removeMayNeed = (token: string, linkId: string) =>
+  call<{ success: true }>(token, `/admin/maintenance/job-items/${linkId}/remove`, { method: "POST" });
+/** Saves the full order of a job's active May-need links (server renumbers 10, 20, 30…). */
+export const reorderMayNeed = (token: string, jobId: string, orderedIds: string[]) =>
+  call<{ success: true }>(token, `/admin/maintenance/jobs/${jobId}/items/order`, { method: "PUT", ...json({ orderedIds }) });
+
+// Service items (S1) — supplies
+export type SupplyInput = { name: string; description: string; unitId: string; iconKey: string };
+export const fetchSupplies = (token: string, status: "active" | "retired") =>
+  call<{ items: Supply[] }>(token, `/admin/maintenance/supplies?status=${status}`);
+export const createSupply = (token: string, input: SupplyInput) =>
+  call<{ item: Supply }>(token, "/admin/maintenance/supplies", { method: "POST", ...json(input) });
+export const updateSupply = (token: string, id: string, input: Partial<SupplyInput>) =>
+  call<{ item: Supply }>(token, `/admin/maintenance/supplies/${id}`, { method: "PATCH", ...json(input) });
+export const retireSupply = (token: string, id: string) =>
+  call<{ item: Supply; hiddenFromJobs: number }>(token, `/admin/maintenance/supplies/${id}/retire`, { method: "POST" });
+export const restoreSupply = (token: string, id: string) =>
+  call<{ item: Supply }>(token, `/admin/maintenance/supplies/${id}/restore`, { method: "POST" });

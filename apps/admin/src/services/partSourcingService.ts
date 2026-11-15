@@ -407,7 +407,6 @@ export const partsEnterpriseApi = {
   saveSpec: (token: string, body: Record<string, unknown>) => adminSend(token, "catalog/specs", "POST", body),
   universalParts: (token: string) => adminGet(token, "catalog/universal-parts"),
   saveUniversalPart: (token: string, body: Record<string, unknown>) => adminSend(token, "catalog/universal-parts", "POST", body),
-  saveRelatedSupply: (token: string, body: Record<string, unknown>) => adminSend(token, "catalog/related-supplies", "POST", body),
   referenceOffer: (token: string, body: { partId: string; supplierId: string; unitPrice: number; currency: string; supplierSku: string }) => adminSend(token, "catalog/reference-offer", "POST", body),
   matrix: (token: string) => adminGet(token, "catalog/matrix"),
   refreshDemand: (token: string) => adminSend(token, "catalog/refresh-demand", "POST", {}),

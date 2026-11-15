@@ -110,15 +110,12 @@ export function registerPartSourcingRoutes(
         const items = await enrichFleetParts(supabase, catalog.mode, catalog.items, orgId || null, downtime);
         const universal = await overlayUniversalStock(supabase, catalog.universal, orgId || null);
         const sections = assembleMatchSections(items, universal);
-        const componentIds = new Set(items.map((item) => String(item.part?.maintenance_component_id ?? "")));
-        const relatedSupplies = (catalog.relatedSupplies ?? []).filter((row) => componentIds.has(String(row.component_id ?? "")));
         return c.json({
           catalogMatched: true,
           catalogId,
           items,
           sections,
           universal,
-          relatedSupplies,
           count: items.length,
           tiered: catalog.mode === "tiered",
           ready: catalog.ready,

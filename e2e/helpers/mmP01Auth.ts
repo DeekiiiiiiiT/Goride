@@ -295,6 +295,8 @@ export async function seedMmP01Session(page: import("@playwright/test").Page) {
     const json = JSON.stringify(s);
     localStorage.setItem(`sb-${ref}-auth-token`, json);
     localStorage.setItem("sb-example-auth-token", json);
+    /** Test copy (VITE_SUPABASE_URL=http://127.0.0.1:54321) stores the session as sb-127-auth-token. */
+    localStorage.setItem("sb-127-auth-token", json);
   }, { s: stored, ref: projectRef });
 
   return { base, anonKey, stored };
@@ -368,6 +370,8 @@ export async function seedMmP01AnalystSession(page: import("@playwright/test").P
     const json = JSON.stringify(s);
     localStorage.setItem(`sb-${ref}-auth-token`, json);
     localStorage.setItem("sb-example-auth-token", json);
+    /** Test copy (VITE_SUPABASE_URL=http://127.0.0.1:54321) stores the session as sb-127-auth-token. */
+    localStorage.setItem("sb-127-auth-token", json);
   }, { s: stored, ref: projectRef });
 
   return { base, anonKey, stored };

@@ -8,6 +8,8 @@ import { logDualWriteMetric } from "../_shared/unifiedLedger/metrics.ts";
 import { shouldPostUnifiedLedger } from "../_shared/unifiedLedger/flags.ts";
 
 function dualWriteEnabled(island = "kv_ledger_event"): boolean {
+  const override = unifiedLedgerDualWriteTestHooks.dualWriteEnabledOverride;
+  if (override) return override(island);
   return shouldPostUnifiedLedger(island);
 }
 
@@ -22,7 +24,18 @@ function majorToMinor(amount: number): number {
   return Math.round(Math.abs(Number(amount)) * 100);
 }
 
+export const unifiedLedgerDualWriteTestHooks = {
+  postEntryOverride:
+    undefined as
+      | ((params: Record<string, unknown>) => Promise<{ ok: boolean; error?: string }>)
+      | undefined,
+  dualWriteEnabledOverride: undefined as ((island?: string) => boolean) | undefined,
+};
+
 async function postEntry(params: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
+  if (unifiedLedgerDualWriteTestHooks.postEntryOverride) {
+    return unifiedLedgerDualWriteTestHooks.postEntryOverride(params);
+  }
   const { error } = await sb().rpc("ledger_post_entry", params);
   if (error) {
     console.error("[fleet unifiedLedger]", error.message);
@@ -50,7 +63,7 @@ export async function fleetDualWriteCanonicalEvent(event: {
   grossAmount?: number;
   category?: string;
   metadata?: Record<string, unknown>;
-}): Promise<void> {
+}): Promise<{ status: "posted" | "skipped" | "failed"; reason?: string }> {
   if (!dualWriteEnabled()) {
     logDualWriteMetric({
       source_system: "kv_ledger_event",
@@ -59,7 +72,7 @@ export async function fleetDualWriteCanonicalEvent(event: {
       source_id: event.id,
       entry_type: event.eventType,
     });
-    return;
+    return { status: "skipped", reason: "flag_off" };
   }
   if (event.direction === "neutral") {
     logDualWriteMetric({
@@ -69,7 +82,7 @@ export async function fleetDualWriteCanonicalEvent(event: {
       source_id: event.id,
       entry_type: event.eventType,
     });
-    return;
+    return { status: "skipped", reason: "neutral" };
   }
 
   const amountMinor = majorToMinor(event.netAmount);
@@ -82,7 +95,7 @@ export async function fleetDualWriteCanonicalEvent(event: {
       entry_type: event.eventType,
       amount_minor: amountMinor,
     });
-    return;
+    return { status: "skipped", reason: "zero_amount" };
   }
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -104,7 +117,7 @@ export async function fleetDualWriteCanonicalEvent(event: {
       entry_type: event.eventType,
       amount_minor: amountMinor,
     });
-    return;
+    return { status: "skipped", reason: "self_ref_accounts" };
   }
 
   // Product: roam_driver for driver earnings, roam_fleet for org-level
@@ -162,6 +175,8 @@ export async function fleetDualWriteCanonicalEvent(event: {
     entry_type: event.eventType,
     amount_minor: amountMinor,
   });
+  if (posted.ok) return { status: "posted" };
+  return { status: "failed", reason: posted.error };
 }
 
 export async function fleetDualWriteToll(entry: {

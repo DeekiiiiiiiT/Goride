@@ -1,6 +1,7 @@
 /** Fleet side of engine-service-sections (V1 payload + pure helpers). */
 import type { MaintenanceServiceCategory } from "../../../../types/maintenance";
 import { MAINTENANCE_ACTION_LABEL } from "../../../../types/maintenance";
+import type { JobItem } from "@roam/types/serviceItems";
 
 export type RecommendedWith = {
   categoryId: string;
@@ -10,7 +11,7 @@ export type RecommendedWith = {
   homeSystemName: string;
 };
 
-export type SectionJob = MaintenanceServiceCategory & { recommendedWith?: RecommendedWith[] };
+export type SectionJob = MaintenanceServiceCategory & { recommendedWith?: RecommendedWith[]; items?: JobItem[] };
 
 export type SystemSections = {
   groups: Array<{
@@ -19,7 +20,18 @@ export type SystemSections = {
     sections: Array<{ code: string; name: string; description: string; iconKey: string; jobs: SectionJob[] }>;
   }>;
   otherJobs: SectionJob[];
+  /** The fleet's "service items" switch. False → no Items used block. */
+  serviceItemsEnabled?: boolean;
 };
+
+/** Job id → its May-need items, from every job in a group's response (sections and other jobs). */
+export function jobItemsFromSections(s: SystemSections | null | undefined): Map<string, JobItem[]> {
+  const out = new Map<string, JobItem[]>();
+  if (!s) return out;
+  const all = [...(s.groups ?? []).flatMap((g) => g.sections.flatMap((sec) => sec.jobs)), ...(s.otherJobs ?? [])];
+  for (const j of all) if (!out.has(j.id)) out.set(j.id, j.items ?? []);
+  return out;
+}
 
 const isActive = (j: SectionJob): boolean => (j as unknown as { status?: string }).status !== "retired";
 

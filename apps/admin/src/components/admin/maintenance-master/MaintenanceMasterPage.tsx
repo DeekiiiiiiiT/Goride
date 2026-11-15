@@ -39,9 +39,11 @@ import { PackagesTab } from "./PackagesTab";
 import { PartScheduleLadderView } from "./PartScheduleLadderView";
 import { PartSchedulesTab } from "./PartSchedulesTab";
 import { JobsTab } from "./jobs/JobsTab";
+import { fetchJobs } from "./jobs/jobsApi";
+import { SuppliesTab } from "./supplies/SuppliesTab";
 import { ReviewTab } from "./ReviewTab";
 
-type Tab = "schedules" | "packages" | "jobs" | "review" | "history";
+type Tab = "schedules" | "packages" | "jobs" | "supplies" | "review" | "history";
 
 const WRITE_ROLES = new Set(["platform_owner", "platform_support", "platform_catalog_editor"]);
 
@@ -97,6 +99,24 @@ export function MaintenanceMasterPage() {
   const [previewSevere, setPreviewSevere] = useState(false);
   const [previewData, setPreviewData] = useState<PreviewScheduleResponse | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+
+  /** Jobs + Supplies tab counts (active only). A failure leaves the counts off; the tabs still work. */
+  const [jobCounts, setJobCounts] = useState<{ jobs: number; supplies: number } | null>(null);
+  const loadJobCounts = useCallback(async () => {
+    if (!token) return;
+    try {
+      const p = await fetchJobs(token);
+      setJobCounts({
+        jobs: p.jobs.filter((j) => j.status === "active").length,
+        supplies: (p.supplies ?? []).filter((s) => s.status === "active").length,
+      });
+    } catch {
+      setJobCounts(null);
+    }
+  }, [token]);
+  useEffect(() => {
+    void loadJobCounts();
+  }, [loadJobCounts]);
 
   const reload = useCallback(async () => {
     if (!token) return;
@@ -237,9 +257,10 @@ export function MaintenanceMasterPage() {
 
 
   const tabs: { id: Tab; label: string; badge?: number }[] = [
-    { id: "schedules", label: "Part schedules" },
-    { id: "packages", label: "Service packages" },
-    { id: "jobs", label: "Jobs" },
+    { id: "schedules", label: "Part schedules", badge: indexRows.length },
+    { id: "packages", label: "Service packages", badge: packages.length },
+    { id: "jobs", label: "Jobs", badge: jobCounts?.jobs },
+    { id: "supplies", label: "Supplies", badge: jobCounts?.supplies },
     { id: "review", label: "Review list", badge: reviewBadge || summary?.reviewCount },
     { id: "history", label: "History" },
   ];
@@ -289,25 +310,24 @@ export function MaintenanceMasterPage() {
       ) : null}
 
       {!detailCategory ? (
-        <div className="mt-6 flex flex-wrap gap-4 border-b border-outline-variant/30">
+        <nav className="mt-6 flex items-center gap-2 overflow-x-auto pb-2" aria-label="Maintenance templates sections">
           {tabs.map((t) => (
             <button
               key={t.id}
               type="button"
-              className={`relative pb-3 text-sm font-medium ${
-                tab === t.id ? "text-secondary border-b-2 border-secondary" : "text-on-surface-variant"
+              aria-current={tab === t.id ? "page" : undefined}
+              className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13px] font-medium leading-[18px] transition-colors ${
+                tab === t.id ? "bg-[#0153dc] text-white shadow-sm" : "bg-[#f1f3ff] text-[#434655] hover:bg-[#e4e8f8]"
               }`}
               onClick={() => setTab(t.id)}
             >
               {t.label}
-              {t.badge != null && t.badge > 0 ? (
-                <span className="ml-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
-                  {t.badge}
-                </span>
+              {t.badge != null ? (
+                <span className="rounded-full bg-[#dee2f3] px-1.5 text-[11px] text-[#434655]">{t.badge}</span>
               ) : null}
             </button>
           ))}
-        </div>
+        </nav>
       ) : null}
 
       {detailCategory ? (
@@ -386,7 +406,11 @@ export function MaintenanceMasterPage() {
       ) : null}
 
       {!detailCategory && tab === "jobs" ? (
-        <JobsTab token={token} canWrite={canWrite && !analystReadOnly} />
+        <JobsTab token={token} canWrite={canWrite && !analystReadOnly} onCountsChanged={() => void loadJobCounts()} />
+      ) : null}
+
+      {!detailCategory && tab === "supplies" ? (
+        <SuppliesTab token={token} canWrite={canWrite && !analystReadOnly} onCountsChanged={() => void loadJobCounts()} />
       ) : null}
 
       {!detailCategory && tab === "review" ? (

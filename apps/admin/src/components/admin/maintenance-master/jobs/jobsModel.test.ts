@@ -16,6 +16,7 @@ const job = (id: string, name: string, homeGroupId: string, extra: Partial<Job> 
   used: false,
   alsoDo: [],
   suggestedBy: [],
+  items: [],
   ...extra,
 });
 
@@ -53,6 +54,8 @@ const data: JobsPayload = {
     job("fpt", "Fuel Pressure Test", "eng", { defaultAction: "inspect" }),
     job("old", "Old Job", "eng", { status: "retired" }),
   ],
+  supplies: [],
+  units: [],
 };
 
 describe("Jobs list grouping", () => {

@@ -1,3 +1,5 @@
+import { parseLineItems, type LineItemInput } from "@roam/types/serviceItems";
+
 /** How the template translates into next-due scheduling (vendor-independent). */
 export type MaintenanceFrequencyKind = "recurring" | "once_milestone" | "manual_only";
 
@@ -194,6 +196,83 @@ export interface MaintenanceLogLine {
   declined?: boolean;
   /** Raw field values from the category form. */
   values?: Record<string, string | number | boolean | null>;
+  /** Items used on this job (May need ticks + Other items). Saved with the line. */
+  items?: LineItemDraft[];
+  /** Read only: items total the server saved for this line. */
+  itemsAmount?: number;
+  /** Read only: charge + items, as saved. */
+  lineTotal?: number;
+  /** Read only: set when this job was deleted from a completed service. */
+  voidedAt?: string | null;
+}
+
+/**
+ * One item used on a job. Sent as-is to the server (it reads the LineItemInput keys);
+ * `unitLabelOne` / `unitLabelMany` / `partLabel` / `partFit` are screen-only, `id` / `unitLabel` /
+ * `amount` come back on reads.
+ */
+export type LineItemDraft = {
+  id?: string;
+  source: "suggested" | "other";
+  jobItemId?: string | null;
+  itemKind: "part_type" | "supply" | "other";
+  partTypeId?: string | null;
+  supplyId?: string | null;
+  partId?: string | null;
+  itemName: string;
+  unitLabel?: string;
+  unitLabelOne?: string;
+  unitLabelMany?: string;
+  brand?: string | null;
+  partNumber?: string | null;
+  /** Picked part, e.g. "Toyota genuine · Throttle body gasket". */
+  partLabel?: string | null;
+  /** How the picked part fits: catalogue part for this car, or by size. */
+  partFit?: "car" | "size" | null;
+  qty: string | number;
+  /** Blank = cost not recorded (counts as 0). */
+  unitCost?: string | number | null;
+  amount?: number;
+};
+
+/** One item's amount in cents (qty × cost, rounded like the server), or null while it isn't valid. */
+export function lineItemAmountCenti(item: LineItemDraft): bigint | null {
+  const res = parseLineItems([lineItemForWire(item)], { declined: false });
+  return res.ok ? res.itemsAmountCenti : null;
+}
+
+/** The server's validation code for this item, or null when it's fine. */
+export function lineItemError(item: LineItemDraft): string | null {
+  const res = parseLineItems([lineItemForWire(item)], { declined: false });
+  return res.ok ? null : res.code;
+}
+
+/** Items total for a line. Invalid items (still being typed) count as 0. */
+export function lineItemsAmount(line: Pick<MaintenanceLogLine, "items" | "itemsAmount">): number {
+  if (!line.items?.length) return Number(line.itemsAmount ?? 0) || 0;
+  let centi = 0n;
+  for (const item of line.items) centi += lineItemAmountCenti(item) ?? 0n;
+  return Number(centi) / 100;
+}
+
+/** Only the keys the server reads. */
+export function lineItemForWire(item: LineItemDraft): LineItemInput {
+  const isOther = item.itemKind === "other";
+  return {
+    source: item.source,
+    jobItemId: item.source === "suggested" ? item.jobItemId ?? null : null,
+    itemKind: item.itemKind,
+    partTypeId: item.itemKind === "part_type" ? item.partTypeId ?? null : null,
+    supplyId: item.itemKind === "supply" ? item.supplyId ?? null : null,
+    partId: item.itemKind === "part_type" ? item.partId ?? null : null,
+    itemName: isOther ? item.itemName : null,
+    brand: item.brand?.toString().trim() ? item.brand.toString().trim() : null,
+    partNumber: item.itemKind === "part_type" && item.partNumber?.toString().trim()
+      ? item.partNumber.toString().trim()
+      : null,
+    qty: String(item.qty ?? "").trim(),
+    unitCost: item.unitCost == null ? null : String(item.unitCost).trim() || null,
+  };
 }
 
 /** Work order (job card) for a vehicle visit. */
@@ -218,6 +297,12 @@ export interface MaintenanceWorkOrder {
   lines?: MaintenanceLogLine[];
   createdAt?: string;
   updatedAt?: string;
+  /** Edits must send this back as expectedVersion. */
+  version?: number;
+  /** In progress for more than 2 minutes: saved but didn't finish. */
+  notFinished?: boolean;
+  logNumber?: string | null;
+  voidedAt?: string | null;
 }
 
 export interface MaintenanceInspectionTemplate {
@@ -320,6 +405,8 @@ export interface MaintenanceLog {
   invoiceUrl?: string;
   currency?: string;
   status?: "Requested" | "Scheduled" | "In Progress" | "Completed" | "Cancelled";
+  /** Version of the service behind this log; edits send it back as expectedVersion. */
+  version?: number;
 }
 
 /** Line amount: qty×unitPrice (or material) + labor amount (or hours×rate). */
@@ -339,6 +426,7 @@ export function sumMaintenanceLogLines(lines: MaintenanceLogLine[] | undefined |
     if (qty > 0 && unit > 0) total += qty * unit;
     else total += material;
     total += labor;
+    total += lineItemsAmount(line);
   }
   return Math.round(total * 100) / 100;
 }
