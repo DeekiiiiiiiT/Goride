@@ -38,6 +38,8 @@ Every high-voltage job's description and hint says **"High-voltage work: lockout
 
 No screen records that a high-voltage lockout was done before HV work. That's the insurer and warranty exposure. Plan: a **safety checklist on HV jobs** in Log service (lockout done, by whom, gloves checked), saved with the service. It's a screen + server feature, not a catalogue job, so it gets its own plan after the EV file. It's on the service-items audit's Open list with Deeki T as owner.
 
+**Rule (target 30 Nov 2026, from the EV file Rev 4): HV work waits until the checklist ships wherever it can. If it can't wait, log it in the app (never outside it) with "HV lockout done by <name> at <time>" in the service notes; the checklist is filled in from that note once it ships.** As of 15 Nov: 0 HV services logged. Same rule on the audit Open list.
+
 ## Left empty on purpose
 
 - **HV Battery Health Check**: labor only.

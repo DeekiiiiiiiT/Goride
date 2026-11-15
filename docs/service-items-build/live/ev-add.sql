@@ -41,9 +41,9 @@ FROM (VALUES
   ('sys_hybrid', 'hv_cable', 'HV Cable / Connector Replacement', 'HEV-CABLE', 110, true, 'replace', 'spark', 'High-voltage: lockout first.',
    'Replacing a damaged orange high-voltage cable or connector. High-voltage work: lockout first.'),
   ('sys_hybrid', 'ev_battery_coolant_service', 'Battery Thermal Management Coolant Service', 'HEV-BTMS', 120, false, 'flush', 'thermometer', 'Liquid-cooled packs only.',
-   'Draining and refilling the coolant loop that keeps a liquid-cooled drive battery at the right temperature. EVs and plug-in hybrids with liquid-cooled packs.'),
+   'Draining and refilling the coolant loop that keeps a liquid-cooled drive battery at the right temperature. EVs and plug-in hybrids with liquid-cooled packs. If the battery coolant pump is being replaced, log the coolant on Battery Coolant Pump instead; don''t log both for the same visit.'),
   ('sys_hybrid', 'ev_battery_coolant_pump', 'Battery Coolant Pump', 'HEV-BCP', 130, true, 'replace', 'thermometer', 'Electric pump.',
-   'The electric pump that moves coolant through the drive-battery loop. If it fails, the battery overheats and power is cut.'),
+   'The electric pump that moves coolant through the drive-battery loop. If it fails, the battery overheats and power is cut. The refill coolant is logged here; don''t also log Battery Thermal Management Coolant Service for the same visit.'),
   ('sys_hybrid', 'ev_charging_port', 'Charging Port', 'HEV-PORT', 140, true, 'replace', 'spark', 'Replacement only. Never grease the charging pins.',
    'The socket the charging cable plugs into. Burnt, bent or loose pins cause slow or failed charging. EVs and plug-in hybrids. Log this job for a port replacement only; if the port is replaced during an inspection, tick it as the part on Charging Port Inspection & Cleaning instead. Don''t log both in one visit.'),
   ('sys_hybrid', 'ev_charging_port_cleaning', 'Charging Port Inspection & Cleaning', 'HEV-PORTC', 150, false, 'clean', 'spark', 'Service only. A new port goes in as its part item.',
@@ -57,7 +57,7 @@ FROM (VALUES
   ('sys_hybrid', 'ev_reduction_gear_oil', 'Reduction Gear Oil Change', 'HEV-RGO', 190, false, 'replace', 'oil', NULL,
    'Draining and refilling the oil in the single-speed gearbox behind an EV motor. EVs only.'),
   ('sys_hvac', 'electric_ac_compressor', 'Electric A/C Compressor', 'HVAC-ECOMP', 120, true, 'replace', 'wind', 'POE oil only. High-voltage: lockout first.',
-   'The high-voltage electric A/C compressor on hybrids and EVs. It must only get non-conductive POE oil. High-voltage work: lockout first. When the compressor is replaced, the refrigerant is logged here; don''t also log A/C Recharge for the same visit.'),
+   'The high-voltage electric A/C compressor on hybrids and EVs. It must only get non-conductive POE oil. High-voltage work: lockout first. When the compressor is replaced, the refrigerant is logged here; don''t also log A/C Recharge for the same visit. New A/C O-rings and a receiver-drier: add them as Other items until the HVAC file adds them as parts.'),
   ('sys_hvac', 'ac_recharge', 'A/C Recharge', 'HVAC-RECH', 130, false, 'top_up', 'wind', 'Tick the refrigerant the bonnet label names.',
    'Recovering, vacuuming and refilling the A/C refrigerant, on any car, when the A/C blows warm or after a leak repair. If a compressor is being replaced, log the refrigerant on Electric A/C Compressor instead; don''t log both for the same visit.')
 ) AS j(sys_code, code, name, op_code, sort_order, is_part, action, icon_key, hint, description)
@@ -104,6 +104,15 @@ WHERE (s.id IS NOT NULL OR p.id IS NOT NULL)
     WHERE x.job_id = j.id AND x.removed_at IS NULL
       AND (x.supply_id = s.id OR x.part_type_id = p.id)
   );
+
+-- Double-log rule on the live hybrid pair (Inverter Coolant Pump / Inverter Coolant Service): when a
+-- fluid-carrying part is replaced, the fluid is logged on the part job, not on the separate fluid service.
+UPDATE public.maintenance_service_categories
+SET description = description || ' If the inverter coolant pump is being replaced, log the coolant on Inverter Coolant Pump instead; don''t log both for the same visit.'
+WHERE code = 'inverter_coolant_service' AND description NOT LIKE '%don''t log both%';
+UPDATE public.maintenance_service_categories
+SET description = description || ' The refill coolant is logged here; don''t also log Inverter Coolant Service for the same visit.'
+WHERE code = 'inverter_coolant_pump' AND description NOT LIKE '%don''t also log%';
 
 COMMIT;
 

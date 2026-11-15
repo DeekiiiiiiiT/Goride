@@ -1,12 +1,14 @@
-# Electric cars (EV) — for the owner to check (Rev 3, 15 Nov 2026)
+# Electric cars (EV) — for the owner to check (Rev 4, 15 Nov 2026)
 
 **12 jobs**: 10 go into the existing **Hybrid & electric** group, and 2 into **HVAC** (Electric A/C Compressor, and A/C Recharge for every car). 7 part jobs, 5 services. **5 new supplies**, 24 supply suggestions, 1 part suggestion.
 
 **Usually** = used almost every time; **Sometimes** = only when needed. A blank amount means it depends on the car. Nothing is ticked for you in Fleet.
 
-Run `docs/service-items-build/live/ev-add.sql` after you're happy. Rev 3 was tested on the live database with everything undone afterwards: 12 jobs, 5 new supplies, 24 supply links, 1 part link.
+✅ **Ran on live 15 Nov** (the whole `docs/service-items-build/live/ev-add.sql`, by the owner), checked by Claude: 12 jobs, 5 new supplies, 24 supply links, 1 part link; no leftover single "A/C Refrigerant" supply; both Inverter Coolant jobs got their "don't log both" note. Still 0 part-item rows and 0 HV services.
 
 The hybrid jobs already live (HV Battery Health Check, HV Battery Module / Pack Replacement) cover EVs too, so they aren't repeated here.
+
+**Rev 4 changes (after review, docs only; the SQL text changes ran with it):** "don't log both" on both coolant-pump pairs (the live hybrid pair updated by the same SQL); the O-ring / receiver-drier note on Electric A/C Compressor; the HV rule now requires logging in the app with a lockout note, never "outside the app"; the "usually one of these" limitation is written down; conventional A/C compressor + PAG oil named for the HVAC file; follow-ups and conventions sections.
 
 **Rev 3 changes (after review):** A/C refrigerant split into **R-134a** and **R-1234yf** (different products, very different prices, the same reasoning as Hybrid Inverter Coolant). "Don't log both" notes on Electric A/C Compressor / A/C Recharge. HV services gated until the lockout checklist ships. UV Leak Detection Dye confirmed as an existing supply (SUP-00039, already on Leak Inspection).
 
@@ -83,9 +85,21 @@ A drain-plug crush washer comes in sizes, so it's a **part type**, not a supply,
 - **Battery heater / chiller**: logged under Battery Thermal Management Coolant Service until there's demand.
 - **PPE and insulated tools**: shop tooling, not per-car supplies.
 - **12V battery**: the existing Battery job.
+- **Conventional (belt-driven) A/C Compressor job and PAG oil:** not in this batch (EV-only). They're added in the HVAC file, alongside A/C Recharge's long-term home, together with **A/C O-Ring Kit** and **Receiver-Drier** as part types (sized), offered on both compressor jobs. Until then, the Electric A/C Compressor description tells the tech to add O-rings and a receiver-drier as Other items.
+
+## Follow-ups this file leaves
+
+- **Drain Plug Washer → Reduction Gear Oil Change.** When the Fluids / Drivetrain file creates Drain Plug Washer, add it to Reduction Gear Oil Change too. It's the one EV job that needs it and isn't in that file's scope.
+- **2-minute check now that it's live** (nothing saved; HV rule above means don't finish it on a real car): Log service → Hybrid & electric → **Charging Port Inspection & Cleaning** → step 3 → **Charging Port** shows as a part item → tick it → **Pick a part** → Cancel. Proves the part-item path on this batch's own job pair.
+
+## Conventions this file sets (for every future file)
+
+1. **Double-log rule:** when a part that holds a fluid is replaced, the fluid is logged on the **part job**, not on the separate fluid service, and both job descriptions say "don't log both for the same visit". Applied here to Electric A/C Compressor / A/C Recharge, Battery Coolant Pump / Battery Thermal Management Coolant Service, and (live, updated by this SQL) Inverter Coolant Pump / Inverter Coolant Service. The Cooling (water pump / coolant flush), Transmission and Drivetrain files follow it.
+2. **"Usually one of these":** A/C Recharge and Electric A/C Compressor show both refrigerants as Usually, because a recharge almost always uses one, and the bonnet label decides which. The screen can't say "usually one of these" today. The same shape will come back with oil grades, brake fluid DOT 3 / 4 / 5.1 and coolant types. On the audit Open list as a product question.
+3. **Every batch file lists its reused supplies with their SUP codes** ("Existing supplies reused (checked on live)").
 
 ## Open items this file touches
 
 - **Find parts research:** 7 more part jobs (HV Cable / Connector, Battery Coolant Pump, Charging Port, On-Board Charger, DC-DC Converter, Electric A/C Compressor, Traction Motor). **Backlog 22 + 7 = 29.**
-- **HV lockout checklist: target 30 Nov 2026, owner Deeki T, blocked on the screen design** (Deeki makes it in Stitch, then it's built). **As of 15 Nov: 0 HV services logged** (checked on live), so no audit gap exists yet. **Rule: no HV service logged on a real car until the checklist ships.** Until then, HV work waits or is done outside the app. Without this rule, "0 logged" would only be luck: the hybrid jobs have been live since 15 Nov.
+- **HV lockout checklist: target 30 Nov 2026, owner Deeki T, blocked on the screen design** (Deeki makes it in Stitch, then it's built). **As of 15 Nov: 0 HV services logged** (checked on live), so no audit gap exists yet. **Rule (Rev 4): HV work waits until the checklist ships wherever it can. If it can't wait (a safety fault, or the car is off the road), log it in the app, never outside it, with a line in the service notes: "HV lockout done by <name> at <time>".** When the checklist ships, those services get their checklist filled in from that note. "Done outside the app" is not allowed: it would leave no service history at all.
 - **`part_source`: not built. Rule: no Exhaust, Hybrid or EV part items on real services until it ships.** **As of 15 Nov: 1 saved item row in total, and it's a supply; 0 part-item rows** (checked on live). Part items are the only rows `part_source` matters for, so the clean window is still fully open. It ships before the first real part item is saved. It's the next build item after this SQL runs.

@@ -1,4 +1,18 @@
-# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 12, 15 Nov 2026)
+# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 13, 15 Nov 2026)
+
+## Rev 13: EV batch live; your five documentation points
+
+**The whole `ev-add.sql` ran, end to end, on live** (the owner ran it, 15 Nov; it already included the text changes below), and I checked it there: **12 jobs, 5 new supplies, 24 supply links, 1 part link**; no leftover single "A/C Refrigerant" supply; both live Inverter Coolant jobs got the "don't log both" note; still **0 part-item rows** and **0 HV services**. Before that, every change had been tested on live with everything undone; the last full test was declined, so the real run plus the check table is the proof.
+
+1. **Double-log rule is a convention now**, written in the EV file's "Conventions" section and on the audit Open list: a fluid used to refill a replaced part is logged on the part job, and both descriptions say "don't log both for the same visit". Applied to Battery Coolant Pump / Battery Thermal Management Coolant Service (in the job text) and to the live **Inverter Coolant Pump / Inverter Coolant Service** pair (description updates in the same SQL, checked). Cooling, Transmission and Drivetrain follow it.
+2. **"Both refrigerants Usually":** option 1, written down: "a recharge almost always uses one; the bonnet label decides which; the screen can't say 'usually one of these' today." Option 3 is on the Open list as a product question, naming the shapes that repeat it (oil grades, brake fluid DOT 3 / 4 / 5.1, coolant types).
+3. **"Done outside the app" removed.** The rule is now: HV work waits until the checklist ships wherever it can; if it can't wait, it's logged **in the app** with "HV lockout done by <name> at <time>" in the service notes, and the checklist is filled in from that note when it ships. In the EV file, the hybrid file (added as you asked) and the audit.
+4. **Conventional A/C Compressor + PAG oil** named in "Left out on purpose" for the HVAC file, together with **A/C O-Ring Kit** and **Receiver-Drier** as part types on both compressor jobs.
+5. **O-rings / receiver-drier:** the workaround is in the Electric A/C Compressor description ("add them as Other items until the HVAC file adds them as parts"). The part types come with the conventional compressor in the HVAC file, so both compressors get them at once.
+
+**Minor:** Drain Plug Washer follow-up for Reduction Gear Oil Change is written into the EV file. The 2-minute Charging Port Inspection & Cleaning → Charging Port part-item check is written as a follow-up (open the job, Pick a part, Cancel). "Existing supplies reused, with SUP codes" is now convention 3 for every batch file.
+
+**EV batch: live.** Next category: Steering & Suspension components, then Cooling completion, Diagnostics / Inspections, and HVAC (conventional compressor, PAG, O-rings, receiver-drier). First, though, the next build item is `part_source`.
 
 ## Rev 12: EV file Rev 3
 
