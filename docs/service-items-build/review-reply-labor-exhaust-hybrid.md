@@ -1,4 +1,18 @@
-# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 9, 15 Nov 2026)
+# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 10, 15 Nov 2026)
+
+## Rev 10: CI attribution, part_source gate, session-only badge
+
+**1. "Dominion Stitch fidelity" doesn't read catalogue data. Checked, not assumed.** `scripts/stitch-fidelity.mjs` is a static text check: for each Dominion screen marked Ported, at least 80% of the Stitch screen's headings, labels and buttons must appear in the React file. It has no database client, no fetch and no Supabase reference, and CI runs with a placeholder Supabase URL. The failing line in run 43725753181 (commit 367dcb07) is `FAIL S20 75% labels — packages/platform-ops-ui/src/fleet-customer/GasCardsPage.tsx`: the Gas Cards screen, last changed by the fuel-card statement work (3c07a767). It failed the same way on 11d43328, before this batch. The Exhaust / Hybrid / EV batches are hand-run SQL on live and change no file this check reads. **But** "known red, not mine" shouldn't become normal, so it's on the audit Open list as a named known failure (S20 Gas Cards 75% < 80%, owner = the fuel-card work), to fix so CI is green before the next push. Note: CI doesn't gate the Fleet deploy (Vercel is a separate workflow), which is exactly why a red CI needs a named entry instead of being ignored.
+
+**2. `part_source` gate: written as a rule.** Open list: **"No Exhaust / Hybrid / EV part items on real services until `part_source` ships."** The `part_source` round is the next build item after the EV SQL. Nothing in code enforces the rule today; the Open-list line is the gate, and the owner (Deeki T) is the one logging services.
+
+**3. Badge is a live-pick signal only. Stated plainly** in the audit's tick-fix entry: "the three-state badge shows only while a part is being picked; saved services carry `part_id` (picked from the car's list) or brand + part number (not verified) in the data, and no screen currently shows either after saving. Don't build reporting on the badge."
+
+**4. Sequencing in the SQL headers:** `ev-add.sql` now starts with "Requires: the Fleet tick fix (commit 367dcb07 or later) deployed — it is, as of 15 Nov — and `hybrid-add.sql` already run." `hybrid-add.sql` has the same line added for the record (it already ran in that order).
+
+**5. Title:** this file is Rev 10 now; the title and the newest section match.
+
+**Expected, not regressions:** "No compatible parts" / "No parts are listed for this car yet" is the Find parts backlog (now 29 with EV). The fits-by-size branch stays covered by tests only, until research adds fits-by-size parts.
 
 ## Rev 9: the EV file
 

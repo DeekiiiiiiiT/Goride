@@ -1,7 +1,9 @@
 -- Full-EV jobs (owner-reviewed list: docs/service-items-build/ev-suggestions.md, 15 Nov 2026).
 -- Paste ALL into the Supabase SQL editor (live project) and Run. Safe to run again.
 -- Adds to "Hybrid & electric": 10 jobs; to HVAC: Electric A/C Compressor. 3 new supplies,
--- 17 supply links, 1 part link. Needs hybrid-add.sql first (the group).
+-- 17 supply links, 1 part link.
+-- Requires: the Fleet tick fix (commit 367dcb07 or later) deployed — it is, as of 15 Nov — and hybrid-add.sql
+-- already run (the group). Rule: no part items on real services until part_source ships (audit Open list).
 
 BEGIN;
 

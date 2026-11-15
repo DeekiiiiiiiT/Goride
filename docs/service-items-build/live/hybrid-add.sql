@@ -1,7 +1,8 @@
 -- Hybrid high-voltage jobs (owner-reviewed list: docs/service-items-build/hybrid-suggestions.md, 15 Nov 2026).
 -- Paste ALL into the Supabase SQL editor (live project) and Run. Safe to run again.
 -- Adds: the "Hybrid & electric" group, 7 jobs, 1 new supply (Hybrid Inverter Coolant), 10 supply links
--- and 1 part link. Full-EV jobs (charging, traction motor, DC-DC) come later in the same group.
+-- and 1 part link. Requires: the Fleet tick fix (commit 367dcb07 or later) deployed first (done 15 Nov, then this ran).
+-- Full-EV jobs (charging, traction motor, DC-DC) come later in the same group.
 
 BEGIN;
 
