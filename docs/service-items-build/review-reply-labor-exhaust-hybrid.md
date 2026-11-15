@@ -1,4 +1,15 @@
-# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 11, 15 Nov 2026)
+# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 12, 15 Nov 2026)
+
+## Rev 12: EV file Rev 3
+
+All four items done in `ev-suggestions.md` (Rev 3) and `live/ev-add.sql`. The changed part (2 refrigerant supplies, 2 A/C jobs, 7 links) was re-tested on live with everything undone afterwards; the rest of the file is unchanged from the Rev 2 test. **12 jobs, 5 new supplies, 24 supply links, 1 part link.**
+
+1. **UV Leak Detection Dye already exists:** **SUP-00039**, active, and already on **Leak Inspection** (it came in with supplies round 2 and the May-need list, so the "medium-priority gap" from the first review was closed then). The file now has an "Existing supplies reused (checked on live)" line with codes: SUP-00014, SUP-00024, SUP-00046, SUP-00039. So 5 new supplies counts only the truly new ones. (MAF Sensor Cleaner and Carburetor Cleaner in Rev 1 were the same case: they existed. Listing reused supplies with their codes ends that question for future files.)
+2. **Refrigerant split: agreed, your reasoning is right.** **A/C Refrigerant R-134a** and **A/C Refrigerant R-1234yf** (can each), both Usually on A/C Recharge and Electric A/C Compressor, each noted "Only if the bonnet label says …". Same logic as Hybrid Inverter Coolant: different products, very different costs. CO2 / R-744 noted for later, not built.
+3. **"Don't log both"** written into both job descriptions: when a compressor is replaced, the refrigerant goes on Electric A/C Compressor, not A/C Recharge.
+4. **HV gate as a rule:** "No HV service (Hybrid & electric group, Electric A/C Compressor) logged on a real car until the lockout checklist ships", on the audit Open list and in the EV file, alongside the target date (30 Nov 2026) and owner (Deeki T). 0 HV services logged as of 15 Nov.
+
+**Minor:** "Why A/C Recharge is in the EV file" line added (all cars; HVAC long-term). This reply file's title is Rev 12, matching this section.
 
 ## Rev 11: EV file Rev 2, after your review
 

@@ -1,10 +1,12 @@
 -- Full-EV jobs (owner-reviewed list: docs/service-items-build/ev-suggestions.md, 15 Nov 2026).
 -- Paste ALL into the Supabase SQL editor (live project) and Run. Safe to run again.
 -- Adds to "Hybrid & electric": 10 jobs; to HVAC: Electric A/C Compressor + A/C Recharge (all cars).
--- 4 new supplies, 22 supply links, 1 part link. (Rev 2 after review: A/C Recharge + refrigerant,
+-- 5 new supplies, 24 supply links, 1 part link. (Rev 3: refrigerant split into R-134a + R-1234yf, and
+-- compressor / recharge "don't log both" notes. Rev 2: A/C Recharge + refrigerant,
 -- Dielectric Grease on HV cable, charging-port "don't log twice" notes.)
 -- Requires: the Fleet tick fix (commit 367dcb07 or later) deployed — it is, as of 15 Nov — and hybrid-add.sql
--- already run (the group). Rule: no part items on real services until part_source ships (audit Open list).
+-- already run (the group). Rules (audit Open list): no part items on real services until part_source ships;
+-- no HV service on a real car until the HV lockout checklist ships.
 
 BEGIN;
 
@@ -15,7 +17,8 @@ FROM (VALUES
   ('EV Battery Coolant', 'Coolant for the drive-battery thermal management loop on EVs and plug-in hybrids. Use the type the car maker specifies; it is not always the same as the engine or inverter coolant.', 'litre', 'thermometer'),
   ('EV Reduction Gear Oil', 'Oil for the single-speed reduction gearbox behind an EV traction motor. Use the type the car maker specifies.', 'litre', 'oil'),
   ('POE Compressor Oil (Non-Conductive)', 'Non-conductive POE oil for electric A/C compressors. Ordinary PAG oil must never go into an electric compressor.', 'bottle', 'wind'),
-  ('A/C Refrigerant', 'Refrigerant gas for the A/C system: R-134a or R-1234yf. Use the type on the label under the bonnet; never mix the two.', 'can', 'wind')
+  ('A/C Refrigerant R-134a', 'R-134a refrigerant gas, for cars whose bonnet label says R-134a. Never mix with R-1234yf.', 'can', 'wind'),
+  ('A/C Refrigerant R-1234yf', 'R-1234yf refrigerant gas, for cars whose bonnet label says R-1234yf (most newer cars). Costs much more than R-134a. Never mix with R-134a.', 'can', 'wind')
 ) AS v(name, description, unit_code, icon_key)
 JOIN public.maintenance_unit u ON u.code = v.unit_code
 WHERE NOT EXISTS (SELECT 1 FROM public.maintenance_supply s WHERE lower(s.name) = lower(v.name) AND s.status = 'active');
@@ -54,9 +57,9 @@ FROM (VALUES
   ('sys_hybrid', 'ev_reduction_gear_oil', 'Reduction Gear Oil Change', 'HEV-RGO', 190, false, 'replace', 'oil', NULL,
    'Draining and refilling the oil in the single-speed gearbox behind an EV motor. EVs only.'),
   ('sys_hvac', 'electric_ac_compressor', 'Electric A/C Compressor', 'HVAC-ECOMP', 120, true, 'replace', 'wind', 'POE oil only. High-voltage: lockout first.',
-   'The high-voltage electric A/C compressor on hybrids and EVs. It must only get non-conductive POE oil. High-voltage work: lockout first.'),
-  ('sys_hvac', 'ac_recharge', 'A/C Recharge', 'HVAC-RECH', 130, false, 'top_up', 'wind', 'Check the refrigerant type on the bonnet label.',
-   'Recovering, vacuuming and refilling the A/C refrigerant, on any car. Done after an A/C part is replaced or when the A/C blows warm.')
+   'The high-voltage electric A/C compressor on hybrids and EVs. It must only get non-conductive POE oil. High-voltage work: lockout first. When the compressor is replaced, the refrigerant is logged here; don''t also log A/C Recharge for the same visit.'),
+  ('sys_hvac', 'ac_recharge', 'A/C Recharge', 'HVAC-RECH', 130, false, 'top_up', 'wind', 'Tick the refrigerant the bonnet label names.',
+   'Recovering, vacuuming and refilling the A/C refrigerant, on any car, when the A/C blows warm or after a leak repair. If a compressor is being replaced, log the refrigerant on Electric A/C Compressor instead; don''t log both for the same visit.')
 ) AS j(sys_code, code, name, op_code, sort_order, is_part, action, icon_key, hint, description)
 JOIN public.maintenance_service_categories sys ON sys.code = j.sys_code
 ON CONFLICT (code) DO NOTHING;
@@ -82,8 +85,10 @@ WITH wanted (job_code, supply_name, part_code, need, qty_hint, note, sort_order)
   ('ev_traction_motor', 'Electrical Contact Cleaner', NULL, 'sometimes', 1::numeric, NULL, 30),
   ('ev_reduction_gear_oil', 'EV Reduction Gear Oil', NULL, 'usually', NULL::numeric, 'Amount depends on the car.', 10),
   ('electric_ac_compressor', 'POE Compressor Oil (Non-Conductive)', NULL, 'usually', 1::numeric, 'POE only. Never PAG oil in an electric compressor.', 10),
-  ('electric_ac_compressor', 'A/C Refrigerant', NULL, 'usually', NULL::numeric, 'The system is recharged after the compressor is changed. Amount depends on the car.', 20),
-  ('ac_recharge', 'A/C Refrigerant', NULL, 'usually', NULL::numeric, 'Amount is on the bonnet label. Use the type it names.', 10),
+  ('electric_ac_compressor', 'A/C Refrigerant R-134a', NULL, 'usually', NULL::numeric, 'Only if the bonnet label says R-134a. Recharged after the compressor is changed.', 20),
+  ('electric_ac_compressor', 'A/C Refrigerant R-1234yf', NULL, 'usually', NULL::numeric, 'Only if the bonnet label says R-1234yf. Recharged after the compressor is changed.', 30),
+  ('ac_recharge', 'A/C Refrigerant R-134a', NULL, 'usually', NULL::numeric, 'Only if the bonnet label says R-134a. Amount is on the label.', 10),
+  ('ac_recharge', 'A/C Refrigerant R-1234yf', NULL, 'usually', NULL::numeric, 'Only if the bonnet label says R-1234yf. Amount is on the label.', 15),
   ('ac_recharge', 'POE Compressor Oil (Non-Conductive)', NULL, 'sometimes', 1::numeric, 'Electric compressors only.', 20),
   ('ac_recharge', 'UV Leak Detection Dye', NULL, 'sometimes', 1::numeric, 'Only a dye approved for the system; check before using it on an electric compressor.', 30)
 )
@@ -103,7 +108,7 @@ WHERE (s.id IS NOT NULL OR p.id IS NOT NULL)
 COMMIT;
 
 -- Check: 12 rows (supplies/part items). Hybrid & electric: 0/0, 2/0, 2/0, 3/0, 1/0, 1/1, 2/0, 2/0, 3/0, 1/0.
--- HVAC: Electric A/C Compressor 2/0, A/C Recharge 3/0.
+-- HVAC: Electric A/C Compressor 3/0, A/C Recharge 4/0.
 SELECT j.name AS job, sys.name AS "group", CASE WHEN j.is_part THEN 'part job' ELSE 'service' END AS kind,
   count(x.supply_id) AS supplies, count(x.part_type_id) AS part_items
 FROM public.maintenance_service_categories j
