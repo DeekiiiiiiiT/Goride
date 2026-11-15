@@ -1759,10 +1759,7 @@ function FuelPeriodWizardInner({
     ];
     return (
       <div className="space-y-5" data-testid="recon-fuel-panel">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-[#47464c]">
-            {periodLocked ? 'This fuel week is locked.' : finalizeBlockedReason ?? 'Fuel is ready to finalize.'}
-          </p>
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <button
             type="button"
             onClick={onRefresh}

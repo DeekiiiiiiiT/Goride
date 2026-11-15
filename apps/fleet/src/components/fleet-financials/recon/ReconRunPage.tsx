@@ -731,9 +731,11 @@ export function ReconRunPage({
               <ReconCalculatorBanner calculator={run.calculator ?? null} className={run.calculator?.paused ? "w-full" : "rounded-full bg-[#eff4ff] px-3 py-1"} />
             </div>
             <h2 className="text-[28px] font-semibold tracking-tight text-[#0b1c30]">{weekResultView ? 'Week result' : RECON_STEP_LABELS[activeStep]}</h2>
-            <p className="text-base text-[#47464c]">
-              {weekResultView ? `${formatWeekTitle(weekKey)} · ${lineLabel}` : activeStep === 'tolls' ? TOLLS_STEP_QUESTION : STEP_QUESTION[activeStep]}
-            </p>
+            {activeStep === 'fuel' && !weekResultView ? null : (
+              <p className="text-base text-[#47464c]">
+                {weekResultView ? `${formatWeekTitle(weekKey)} · ${lineLabel}` : activeStep === 'tolls' ? TOLLS_STEP_QUESTION : STEP_QUESTION[activeStep]}
+              </p>
+            )}
             {line === 'rush_delivery' ? <ReconCodRemittanceBanner onOpenRemittance={onOpenRemittance} /> : null}
             {statusQuery.data?.line ? (
               <div className="flex flex-wrap items-center gap-3 text-sm text-[#47464c]">
