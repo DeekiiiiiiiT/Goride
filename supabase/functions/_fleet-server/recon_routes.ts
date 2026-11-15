@@ -68,6 +68,7 @@ import {
   periodEndForAnchor,
 } from "../../../packages/finance-core/src/periodKey.ts";
 import { isSettlementPeriodEnded } from "../../../packages/finance-core/src/settlementPeriodGate.ts";
+import { computeWeekResult, type WeekStatementRow } from "../../../packages/finance-core/src/weekResult.ts";
 import {
   computeTagAccountRollForward,
   tagLedgerAmountToRollForwardParts,
@@ -2126,6 +2127,48 @@ export function registerReconRoutes(app: Hono) {
         return c.json({ success: true, activity: shapeWeekActivity((data ?? []) as Parameters<typeof shapeWeekActivity>[0]) });
       } catch (e) {
         return safeErrorResponse(c, e, "recon-week-activity");
+      }
+    },
+  );
+
+  /**
+   * Week result of a closed rideshare week (owner, 15 Nov 2026): Revenue, Expenses, Profit and
+   * Fleet vs Driver profit, added up from every driver's closed statements. Read only.
+   * Open weeks and delivery weeks answer { ready: false } (delivery has no week statements yet).
+   */
+  app.get(
+    `${BASE}/runs/:line/:weekKey/result`,
+    requireAuth({ strict: true }),
+    requireAnyPermission("recon.view", "transactions.view"),
+    async (c: Context) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+        const line = parseLine(c.req.param("line"));
+        const weekKey = String(c.req.param("weekKey") || "").slice(0, 10);
+        if (!line || !WEEK_RE.test(weekKey)) {
+          return c.json({ error: "INVALID_REQUEST", message: "Invalid line or weekKey" }, 400);
+        }
+        const run = await loadWeekRun(orgId, line, weekKey);
+        if (!run || run.state !== "closed" || line !== "rideshare") {
+          return c.json({ success: true, ready: false, reason: !run || run.state !== "closed" ? "NOT_CLOSED" : "LINE_NOT_SUPPORTED" });
+        }
+        const { data, error } = await getServiceClient().from("week_statements")
+          .select("kind, driver_id, version, amounts_minor")
+          .eq("organization_id", orgId).eq("week_key", weekKey).eq("status", "closed")
+          .in("kind", ["earnings", "fuel", "toll"]);
+        if (error) throw new Error(`week statements read failed: ${error.message}`);
+        const rows: WeekStatementRow[] = (data ?? []).map((r: Record<string, unknown>) => ({
+          kind: String(r.kind),
+          driverId: r.driver_id == null ? null : String(r.driver_id),
+          version: Number(r.version) || 0,
+          amountsMinor: (r.amounts_minor ?? null) as Record<string, unknown> | null,
+        }));
+        // Statements are written by the close; until the earnings ones exist the numbers are still adding up.
+        if (!rows.some((r) => r.kind === "earnings")) return c.json({ success: true, ready: false, reason: "ADDING_UP" });
+        return c.json({ success: true, ready: true, result: computeWeekResult(rows) });
+      } catch (e) {
+        return safeErrorResponse(c, e, "recon-week-result");
       }
     },
   );

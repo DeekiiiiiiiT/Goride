@@ -632,6 +632,8 @@ export function ReconRunPage({
   const previousStepId = activeIndex > 0 ? visibleSteps[activeIndex - 1] : null;
   // A closed week: the Close step always opens (badge, History, corrections); nothing waits on files.
   const weekClosed = run.run.state === 'closed';
+  /** Closed rideshare week on step 8 = the Week result page (Stitch): no right column, no card, no footer. */
+  const weekResultView = weekClosed && line === 'rideshare' && activeStep === 'close';
   const activeLocked = activeGate === 'locked' && activeStep !== 'sources' && !(weekClosed && activeStep === 'close');
   const activeLockedBy = lockedByStep.get(activeStep);
   const lineLabel = line === 'rideshare' ? 'Rideshare' : 'Delivery';
@@ -642,7 +644,7 @@ export function ReconRunPage({
 
   return (
     <div className="space-y-4" data-testid="recon-week-desk">
-      <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)_280px]">
+      <div className={`grid gap-6 ${weekResultView ? 'lg:grid-cols-[240px_minmax(0,1fr)]' : 'lg:grid-cols-[240px_minmax(0,1fr)_280px]'}`}>
         {/* Left: All weeks + step list (Stitch screen 6 shell) */}
         <nav className="space-y-4" aria-label="Steps">
           <PastWeeksReturnLink onReturn={() => onNavigate?.('driver-settlements')} />
@@ -719,7 +721,7 @@ export function ReconRunPage({
         </nav>
 
         {/* Middle: the step */}
-        <section className="min-w-0 rounded-[20px] bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)]">
+        <section className={weekResultView ? 'min-w-0' : 'min-w-0 rounded-[20px] bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)]'}>
           <header className="mb-6 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[#0b1c30]">
               <p>
@@ -728,9 +730,9 @@ export function ReconRunPage({
               </p>
               <ReconCalculatorBanner calculator={run.calculator ?? null} className={run.calculator?.paused ? "w-full" : "rounded-full bg-[#eff4ff] px-3 py-1"} />
             </div>
-            <h2 className="text-[28px] font-semibold tracking-tight text-[#0b1c30]">{RECON_STEP_LABELS[activeStep]}</h2>
+            <h2 className="text-[28px] font-semibold tracking-tight text-[#0b1c30]">{weekResultView ? 'Week result' : RECON_STEP_LABELS[activeStep]}</h2>
             <p className="text-base text-[#47464c]">
-              {activeStep === 'tolls' ? TOLLS_STEP_QUESTION : STEP_QUESTION[activeStep]}
+              {weekResultView ? `${formatWeekTitle(weekKey)} · ${lineLabel}` : activeStep === 'tolls' ? TOLLS_STEP_QUESTION : STEP_QUESTION[activeStep]}
             </p>
             {line === 'rush_delivery' ? <ReconCodRemittanceBanner onOpenRemittance={onOpenRemittance} /> : null}
             {statusQuery.data?.line ? (
@@ -853,6 +855,7 @@ export function ReconRunPage({
           )}
 
           {/* Footer: Previous / Continue (Tolls keeps its own Finish until Round 4b). */}
+          {!weekResultView ? (
           <footer className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-[#e5eeff] pt-5">
             {previousStepId ? (
               <button
@@ -877,10 +880,11 @@ export function ReconRunPage({
               </button>
             ) : null}
           </footer>
+          ) : null}
         </section>
 
         {/* Right: summary */}
-        <aside className="space-y-4">
+        <aside className={weekResultView ? 'hidden' : 'space-y-4'}>
           <div className="rounded-[20px] bg-white p-5 shadow-sm" data-testid="recon-summary-sources">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-[#47464c]">Sources</p>
             <p className="mt-1 text-2xl font-bold tabular-nums text-[#0b1c30]">

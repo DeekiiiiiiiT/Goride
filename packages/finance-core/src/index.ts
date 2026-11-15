@@ -424,3 +424,5 @@ export type {
   CorrectionBucketLine,
   FuelCorrectionBuckets,
 } from './pastWeeksCleanup.ts';
+
+export { computeWeekResult, type WeekResult, type WeekStatementRow } from './weekResult.ts';

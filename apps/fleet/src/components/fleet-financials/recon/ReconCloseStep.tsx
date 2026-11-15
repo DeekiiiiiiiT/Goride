@@ -27,6 +27,7 @@ import { ReconApprovalDialog } from './ReconApprovalDialog';
 import { ReconWeekHistory } from './ReconWeekHistory';
 import { approvalErrorMessage, assertWeekUnchanged, useReconApprovals } from './useReconApprovals';
 import { formatWeekRange } from './weekListFormat';
+import { ReconWeekResult } from './ReconWeekResult';
 
 const MONEY = (n: number | null | undefined) => {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -133,6 +134,8 @@ export function ReconCloseStep({
     calculatorPaused: Boolean(run.calculator?.paused),
   });
   const corrections = ((run as { corrections?: ReconCorrection[] }).corrections ?? []) as ReconCorrection[];
+  /** Closed rideshare week shows only the Week result (owner, 15 Nov 2026); delivery has no week statements yet. */
+  const resultView = state.closed && line === 'rideshare';
 
   const queueParams = { weekFrom: weekKey, weekTo: periodEnd, minAmount: 0, pageSize: 200, groupBy: 'week' as const };
   const collectQuery = useSettlementQueue({ view: 'collect', ...queueParams });
@@ -300,14 +303,17 @@ export function ReconCloseStep({
   return (
     <div className="space-y-5" data-testid="recon-close-step">
       {state.closed ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#0b1c30] px-5 py-4 text-white" data-testid="recon-closed-badge">
-          <p className="flex items-center gap-2 text-base font-semibold">
-            <Lock className="h-5 w-5" aria-hidden /> Closed
-            {closedRow ? (
-              <span className="font-normal text-white/80">
-                {' '}· {new Date(closedRow.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })} by {closedRow.by}
-              </span>
-            ) : null}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#1b192e] px-4 py-4 text-white shadow-sm" data-testid="recon-closed-badge">
+          <p className="flex items-center gap-3 text-sm font-medium">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10" aria-hidden>
+              <Lock className="h-[18px] w-[18px]" />
+            </span>
+            <span>
+              Closed
+              {closedRow ? (
+                <> · {new Date(closedRow.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} by {closedRow.by}</>
+              ) : null}
+            </span>
           </p>
           {canChange && !legacyClosed ? (
           <button
@@ -315,7 +321,7 @@ export function ReconCloseStep({
             onClick={() => { setRiskAck(false); setDialog('reopen'); }}
             disabled={busy}
             data-testid="recon-reopen"
-            className="flex h-10 items-center gap-2 rounded-xl bg-[#fff1f2] px-4 text-sm font-semibold text-[#ba1a1a] hover:bg-[#ffdad6]"
+            className="flex h-10 items-center gap-2 rounded-xl border border-[#ba1a1a] bg-white px-4 text-sm font-semibold text-[#ba1a1a] shadow-sm hover:bg-[#ffdad6] hover:text-[#93000a]"
           >
             <Unlock className="h-4 w-4" aria-hidden /> Reopen week
           </button>
@@ -395,6 +401,9 @@ export function ReconCloseStep({
         </>
       ) : null}
 
+      {resultView ? <ReconWeekResult weekKey={weekKey} version={version} /> : null}
+
+      {!resultView ? (
       <section className="rounded-2xl border border-[#e5eeff] bg-white p-5">
         <p className="text-lg font-semibold text-[#0b1c30]">Evidence</p>
         <ul className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -415,6 +424,7 @@ export function ReconCloseStep({
           </p>
         ) : null}
       </section>
+      ) : null}
 
       {!state.closed ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e5eeff] bg-[#f8f9ff] p-5">
@@ -441,7 +451,7 @@ export function ReconCloseStep({
           </button>
           ) : null}
         </div>
-      ) : (
+      ) : resultView ? null : (
         <div className="flex flex-wrap gap-2">
           {[
             { page: 'driver-settlements', label: 'Open Driver Settlements' },
@@ -460,7 +470,7 @@ export function ReconCloseStep({
         </div>
       )}
 
-      <ReconWeekHistory line={line} weekKey={weekKey} version={version} />
+      {!resultView ? <ReconWeekHistory line={line} weekKey={weekKey} version={version} /> : null}
 
       <ReconApprovalDialog
         open={dialog === 'close'}
@@ -492,8 +502,8 @@ export function ReconCloseStep({
         open={dialog === 'reopen'}
         onOpenChange={(o) => !o && setDialog(null)}
         title={`Reopen the week of ${formatWeekRange(weekKey)}?`}
-        summary="Unlocks every step so it can be changed again"
-        detail="Tolls locked by the close reopen too. The week has to be closed again afterwards."
+        summary="Reopening unlocks every step so you can change uploads, tolls, fuel and pay."
+        detail="The week result disappears until you close the week again. Money already paid to or collected from drivers stays recorded."
         confirmLabel="Approve & reopen"
         canApprove={approvals.canApprove}
         otherApprovers={approvals.otherApprovers}

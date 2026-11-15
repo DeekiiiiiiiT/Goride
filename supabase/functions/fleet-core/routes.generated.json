@@ -1,7 +1,7 @@
 {
   "slug": "fleet-core",
-  "generatedAt": "2026-11-14T01:29:23.323Z",
-  "routeCount": 820,
+  "generatedAt": "2026-11-15T16:46:56.147Z",
+  "routeCount": 821,
   "routes": [
     "ALL /make-server-37f42386/webhooks/wipay-fleet-modules",
     "DELETE ${ADMIN_CAT}/:id",
@@ -92,6 +92,7 @@
     "GET ${BASE}/runs/:line/:weekKey/activity",
     "GET ${BASE}/runs/:line/:weekKey/history",
     "GET ${BASE}/runs/:line/:weekKey/money",
+    "GET ${BASE}/runs/:line/:weekKey/result",
     "GET ${BASE}/runs/:line/:weekKey/status",
     "GET ${BASE}/runs/:line/:weekKey/tag-account",
     "GET ${BASE}/rush/courier-cash-balances",

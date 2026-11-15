@@ -733,6 +733,37 @@ export async function fetchWeekHistory(
   return body.items ?? [];
 }
 
+/** Week result of a closed rideshare week (minor units). Mirrors finance-core computeWeekResult. */
+export type ReconWeekResult = {
+  revenueMinor: number;
+  expensesMinor: number;
+  fuelMinor: number;
+  tollsMinor: number;
+  profitMinor: number;
+  fleetProfitMinor: number;
+  driverProfitMinor: number;
+  marginPercent: number | null;
+  fleetSharePercent: number | null;
+  driverSharePercent: number | null;
+  driverCount: number;
+};
+
+export type ReconWeekResultResponse =
+  | { ready: true; result: ReconWeekResult }
+  | { ready: false; reason?: 'NOT_CLOSED' | 'LINE_NOT_SUPPORTED' | 'ADDING_UP' | string };
+
+export async function fetchWeekResult(
+  line: 'rideshare' | 'rush_delivery',
+  weekKey: string,
+): Promise<ReconWeekResultResponse> {
+  const body = await reconJson<{ ready?: boolean; reason?: string; result?: ReconWeekResult }>(
+    runPath(line, weekKey, '/result'),
+    undefined,
+    'Could not load the week result',
+  );
+  return body.ready && body.result ? { ready: true, result: body.result } : { ready: false, reason: body.reason };
+}
+
 export type ReconApprovalAction = 'waive' | 'accept_statement_cash' | 'close' | 'reopen' | 'sign_restatement';
 
 export type ReconApprovalItem = {
