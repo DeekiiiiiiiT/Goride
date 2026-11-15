@@ -1,5 +1,6 @@
 /** Stamped on every new snapshot and inside the input hash. Locked weeks stay on the old engine. */
-export const FUEL_ENGINE_VERSION = 'fuel-chain-v2.1';
+// v2.2 (15 Nov 2026): stop-to-stop windows split trips at the fill time (WRA-55).
+export const FUEL_ENGINE_VERSION = 'fuel-chain-v2.2';
 
 export type ShadowDriverDrift = {
   driverId: string;
