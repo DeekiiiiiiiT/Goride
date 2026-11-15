@@ -3,7 +3,9 @@ import { DateRange } from 'react-day-picker';
 import { ShieldCheck } from 'lucide-react';
 import { FuelPeriodStepper } from './FuelPeriodStepper';
 import { createPortal } from 'react-dom';
-import { FuelDeskSection, FuelDeskFinalizeBar } from './FuelDeskSection';
+import { FuelDeskFinalizeBar } from './FuelDeskSection';
+import { FuelDeskSlides, FuelStillOpenList, openParts, type FuelSlidePart } from './FuelDeskSlides';
+import { FuelDisputesEmpty, FuelPolicyBars } from './FuelSlideParts';
 import { FuelWeekMoneyStrip } from './FuelWeekMoneyStrip';
 import {
   FuelWizardOverflowMenu,
@@ -1598,6 +1600,151 @@ function FuelPeriodWizardInner({
   // sections. No inner stepper, no coach card, no second "Settlement preview".
   if (deskSections) {
     const checkCount = exceptionBlockers.length + unapprovedFuelTxBlockers.length;
+    // Owner 15 Nov 2026: one part at a time (FuelDeskSlides). Status of each part:
+    const flaggedCarsLeft = qualityRows.filter(
+      (r) =>
+        !dqReviewedVehicleIds.has(r.id) &&
+        (r.healthStatus === 'Amber' || r.healthStatus === 'Red' || r.odometerIncomplete),
+    ).length;
+    const chainAckLeft = needsOdometerChainAck && !odometerChainReviewed;
+    const slideStatus = {
+      checks:
+        checkCount > 0
+          ? { text: `${checkCount} to fix`, tone: 'fix' as const }
+          : flaggedCarsLeft > 0 || chainAckLeft
+            ? { text: 'Review', tone: 'review' as const }
+            : { text: 'Done', tone: 'done' as const },
+      disputes:
+        openDisputes.length > 0
+          ? { text: `${openDisputes.length} open`, tone: 'fix' as const }
+          : { text: 'Nothing open', tone: 'done' as const },
+      policy: { text: 'Check', tone: 'info' as const },
+      distance: leakageReviewed
+        ? { text: 'Done', tone: 'done' as const }
+        : stopToStopBlocking
+          ? { text: 'To fix', tone: 'fix' as const }
+          : { text: 'Review', tone: 'review' as const },
+      finalize: periodLocked
+        ? { text: 'Locked', tone: 'done' as const }
+        : finalizeBlockedReason
+          ? { text: 'Not ready', tone: 'locked' as const }
+          : { text: 'Ready', tone: 'done' as const },
+    };
+    const slideParts: FuelSlidePart[] = [
+      {
+        id: 'checks',
+        title: 'Fuel checks',
+        short: 'Fuel checks',
+        description: 'Fills that need a look before the week can lock.',
+        status: slideStatus.checks,
+        testId: 'recon-fuel-section-checks',
+        content: (
+          <div className="space-y-4">
+            <FuelUnapprovedTxBlockersPanel blockers={unapprovedFuelTxBlockers} onOpenReviewQueue={onOpenReviewQueue} />
+            <FuelExceptionBlockersPanel
+              blockers={exceptionBlockers}
+              plateByVehicleId={plateByVehicleId}
+              busyId={exceptionBusyId}
+              onAcceptException={onAcceptFuelException ? handleAcceptException : async () => undefined}
+              onEditFill={
+                onEditFuelEntry
+                  ? (b) => onEditFuelEntry(b.id)
+                  : onOpenTransactionLogs
+                    ? openExceptionInLogs
+                    : undefined
+              }
+            />
+            <FuelDataQualityStep
+              rows={qualityRows}
+              breakdownRows={breakdownRows}
+              periodLocked={periodLocked}
+              showBreakdown={showCostBreakdown}
+              onToggleBreakdown={() => setShowCostBreakdown((v) => !v)}
+              onAddAdjustment={onAddAdjustment}
+              needsOdometerChainAck={needsOdometerChainAck}
+              odometerChainReviewed={odometerChainReviewed}
+              odometerChainNote={odometerChainNoteDraft}
+              onOdometerChainNoteChange={setOdometerChainNoteDraft}
+              onAckOdometerChain={() => void handleAckOdometerChain()}
+              reviewedVehicleIds={dqReviewedVehicleIds}
+              onMarkReviewed={(id) => void handleMarkDataQualityVehicle(id)}
+              weekFuelEntries={weekFuelEntries}
+              weekStartYmd={period.startDate}
+              weekEndYmd={period.endDate}
+              dispositions={dispositions}
+            />
+          </div>
+        ),
+      },
+      {
+        id: 'disputes',
+        title: 'Disputes and adjustments',
+        short: 'Disputes',
+        description: 'Driver disputes and distance adjustments for this week.',
+        status: slideStatus.disputes,
+        testId: 'recon-fuel-section-disputes',
+        content:
+          openDisputes.length > 0 ? (
+            <FuelDisputesStep
+              openDisputes={openDisputes}
+              periodLocked={periodLocked}
+              onResolveDispute={onResolveDispute}
+              onAddAdjustment={onAddAdjustment}
+            />
+          ) : (
+            <FuelDisputesEmpty periodLocked={periodLocked} onAddAdjustment={onAddAdjustment} />
+          ),
+      },
+      {
+        id: 'policy',
+        title: 'Fuel policy',
+        short: 'Policy',
+        description: 'Who pays for each kind of driving.',
+        status: slideStatus.policy,
+        testId: 'recon-fuel-section-policy',
+        content: <FuelPolicyBars policyRows={policyRows} />,
+      },
+      {
+        id: 'distance',
+        title: 'Distance and who pays',
+        short: 'Distance',
+        description: 'How the car was driven this week, and how the fuel cost is split.',
+        status: slideStatus.distance,
+        testId: 'recon-fuel-section-distance',
+        content: leakageStepNode,
+      },
+      {
+        id: 'finalize',
+        title: 'Finalize fuel',
+        short: 'Finalize',
+        description: "Lock this week's fuel so pay can be worked out.",
+        status: slideStatus.finalize,
+        testId: 'recon-fuel-section-finalize',
+        content: ({ goTo }) => (
+          <div className="space-y-5">
+            {periodLocked ? null : (
+              <FuelStillOpenList
+                items={openParts([
+                  { id: 'checks' as const, title: 'Fuel checks', status: slideStatus.checks },
+                  { id: 'disputes' as const, title: 'Disputes and adjustments', status: slideStatus.disputes },
+                  { id: 'policy' as const, title: 'Fuel policy', status: slideStatus.policy },
+                  { id: 'distance' as const, title: 'Distance and who pays', status: slideStatus.distance },
+                  { id: 'finalize' as const, title: 'Finalize fuel', status: slideStatus.finalize },
+                ])}
+                onGo={goTo}
+              />
+            )}
+            {finalizeStepNode}
+            <FuelDeskFinalizeBar
+              blockedReason={finalizeBlockedReason}
+              finalizing={finalizing}
+              locked={periodLocked}
+              onFinalize={() => void handleFinalizeClick()}
+            />
+          </div>
+        ),
+      },
+    ];
     return (
       <div className="space-y-5" data-testid="recon-fuel-panel">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1634,106 +1781,7 @@ function FuelPeriodWizardInner({
           updating={false}
           onRetry={handleRetryWeek}
         >
-          <div className="space-y-4">
-            <FuelDeskSection
-              index={1}
-              title="Fuel checks"
-              description="Fills that need a look before the week can lock."
-              badge={checkCount > 0 ? { text: `${checkCount} to fix`, tone: 'todo' } : { text: 'Clear', tone: 'done' }}
-              testId="recon-fuel-section-checks"
-            >
-              <div className="space-y-4">
-                <FuelUnapprovedTxBlockersPanel
-                  blockers={unapprovedFuelTxBlockers}
-                  onOpenReviewQueue={onOpenReviewQueue}
-                />
-                <FuelExceptionBlockersPanel
-                  blockers={exceptionBlockers}
-                  plateByVehicleId={plateByVehicleId}
-                  busyId={exceptionBusyId}
-                  onAcceptException={onAcceptFuelException ? handleAcceptException : async () => undefined}
-                  onEditFill={
-                    onEditFuelEntry
-                      ? (b) => onEditFuelEntry(b.id)
-                      : onOpenTransactionLogs
-                        ? openExceptionInLogs
-                        : undefined
-                  }
-                />
-                <FuelDataQualityStep
-                  rows={qualityRows}
-                  breakdownRows={breakdownRows}
-                  periodLocked={periodLocked}
-                  showBreakdown={showCostBreakdown}
-                  onToggleBreakdown={() => setShowCostBreakdown((v) => !v)}
-                  onAddAdjustment={onAddAdjustment}
-                  needsOdometerChainAck={needsOdometerChainAck}
-                  odometerChainReviewed={odometerChainReviewed}
-                  odometerChainNote={odometerChainNoteDraft}
-                  onOdometerChainNoteChange={setOdometerChainNoteDraft}
-                  onAckOdometerChain={() => void handleAckOdometerChain()}
-                  reviewedVehicleIds={dqReviewedVehicleIds}
-                  onMarkReviewed={(id) => void handleMarkDataQualityVehicle(id)}
-                  weekFuelEntries={weekFuelEntries}
-                  weekStartYmd={period.startDate}
-                  weekEndYmd={period.endDate}
-                  dispositions={dispositions}
-                />
-              </div>
-            </FuelDeskSection>
-
-            <FuelDeskSection
-              index={2}
-              title="Disputes and adjustments"
-              description="Driver disputes and distance adjustments for this week."
-              badge={openDisputes.length > 0 ? { text: `${openDisputes.length} open`, tone: 'todo' } : null}
-              defaultOpen={openDisputes.length > 0}
-              testId="recon-fuel-section-disputes"
-            >
-              <FuelDisputesStep
-                openDisputes={openDisputes}
-                periodLocked={periodLocked}
-                onResolveDispute={onResolveDispute}
-                onAddAdjustment={onAddAdjustment}
-              />
-            </FuelDeskSection>
-
-            <FuelDeskSection
-              index={3}
-              title="Fuel policy"
-              description="Who pays for each kind of driving."
-              defaultOpen={false}
-              testId="recon-fuel-section-policy"
-            >
-              <FuelPolicyCheckStep policyRows={policyRows} />
-            </FuelDeskSection>
-
-            <FuelDeskSection
-              index={4}
-              title="Distance and who pays"
-              description="How the car was driven this week, and how the fuel cost is split."
-              badge={leakageReviewed ? { text: 'Reviewed', tone: 'done' } : { text: 'Review', tone: 'todo' }}
-              testId="recon-fuel-section-distance"
-            >
-              {leakageStepNode}
-            </FuelDeskSection>
-
-            <FuelDeskSection
-              index={5}
-              title="Before you finalize"
-              description="Last checks, warnings and approvals for locking fuel."
-              testId="recon-fuel-section-finalize"
-            >
-              {finalizeStepNode}
-            </FuelDeskSection>
-
-            <FuelDeskFinalizeBar
-              blockedReason={finalizeBlockedReason}
-              finalizing={finalizing}
-              locked={periodLocked}
-              onFinalize={() => void handleFinalizeClick()}
-            />
-          </div>
+          <FuelDeskSlides key={period.startDate} parts={slideParts} />
         </FuelPeriodWizardBodyGate>
         {overlays}
         {summaryTarget ? createPortal(<FuelWeekMoneyStrip {...moneyStripProps} variant="rail" />, summaryTarget) : null}
