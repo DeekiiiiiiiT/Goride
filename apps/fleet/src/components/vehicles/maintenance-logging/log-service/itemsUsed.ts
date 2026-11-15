@@ -139,3 +139,15 @@ export function money(currency: string | null | undefined, amount: number): stri
   const cur = currency?.trim() || "JMD";
   return `${cur === "JMD" ? "J$" : cur} ${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
+
+/**
+ * Which badge a picked part shows. Only a part picked from this car's own list ("car") gets the green
+ * verified tick; a "fits by size" pick and a typed-in part never do. A saved part read back has no
+ * `partFit` (screen-only), so a saved catalogue part (`partId` set) still counts as "car".
+ */
+export type PickedPartBadge = "car" | "size" | "typed";
+export function pickedPartBadge(item: Pick<LineItemDraft, "partFit" | "partId">): PickedPartBadge {
+  if (item.partFit === "car") return "car";
+  if (item.partFit === "size") return "size";
+  return item.partId ? "car" : "typed";
+}

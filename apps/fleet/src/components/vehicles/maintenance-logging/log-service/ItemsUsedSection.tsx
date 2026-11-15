@@ -13,6 +13,7 @@ import {
   itemErrorText,
   money,
   newOtherItem,
+  pickedPartBadge,
   qtyWithUnit,
   stepQty,
   toggleSuggested,
@@ -52,6 +53,7 @@ export const ITEMS_COPY = {
   remove: "Remove",
   fitsThisCar: "Fits this car",
   fitsBySize: "Check before buying",
+  typedIn: "Typed in",
   change: "Change",
   pickAPart: "Pick a part",
   loadFailTitle: "Couldn't load standard parts for this job",
@@ -161,6 +163,7 @@ function SuggestedRow({
 }) {
   const ticked = Boolean(item);
   const err = item ? itemErrorText(item) : null;
+  const badge = item ? pickedPartBadge(item) : "typed";
   return (
     <div
       data-testid={`may-need-row-${job.linkId}`}
@@ -231,22 +234,29 @@ function SuggestedRow({
         <div className="ml-7 bg-surface-container-lowest rounded-lg p-2.5 px-3 flex flex-wrap items-center justify-between gap-2">
           {item.partLabel ? (
             <span className="flex items-center gap-1.5 flex-wrap">
-              <span className="material-symbols-outlined text-[18px]" style={{ color: ACCENT.green }}>
-                verified
-              </span>
-              <span className={`${bodySm} text-on-surface font-medium`}>{item.partLabel}</span>
-              {item.partFit ? (
-                <span
-                  className={`${labelSm} px-2 py-0.5 rounded-full`}
-                  style={
-                    item.partFit === "car"
-                      ? { backgroundColor: `${ACCENT.greenFixed}80`, color: ACCENT.onGreenFixed }
-                      : { backgroundColor: ACCENT.peach, color: ACCENT.deepOrange }
-                  }
-                >
-                  {item.partFit === "car" ? ITEMS_COPY.fitsThisCar : ITEMS_COPY.fitsBySize}
+              {/* Green tick only for a part from this car's own list (pickedPartBadge); size / typed never. */}
+              {badge === "car" ? (
+                <span className="material-symbols-outlined text-[18px]" style={{ color: ACCENT.green }}>
+                  verified
                 </span>
-              ) : null}
+              ) : (
+                <span className="material-symbols-outlined text-[18px] text-outline">
+                  {badge === "size" ? "straighten" : "edit_note"}
+                </span>
+              )}
+              <span className={`${bodySm} text-on-surface font-medium`}>{item.partLabel}</span>
+              <span
+                className={`${labelSm} px-2 py-0.5 rounded-full ${badge === "typed" ? "bg-surface-container text-on-surface-variant" : ""}`}
+                style={
+                  badge === "car"
+                    ? { backgroundColor: `${ACCENT.greenFixed}80`, color: ACCENT.onGreenFixed }
+                    : badge === "size"
+                      ? { backgroundColor: ACCENT.peach, color: ACCENT.deepOrange }
+                      : undefined
+                }
+              >
+                {badge === "car" ? ITEMS_COPY.fitsThisCar : badge === "size" ? ITEMS_COPY.fitsBySize : ITEMS_COPY.typedIn}
+              </span>
             </span>
           ) : (
             <span className={`${bodySm} text-on-surface-variant`}>{job.name}</span>

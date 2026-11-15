@@ -6,6 +6,7 @@ import {
   linesHaveItemErrors,
   mayNeedSummary,
   newOtherItem,
+  pickedPartBadge,
   qtyWithUnit,
   splitLineTotal,
   stepQty,
@@ -132,5 +133,26 @@ describe("items used", () => {
     expect(groupJobItems([gasket, cleaner])).toEqual({ usually: [cleaner], sometimes: [gasket] });
     expect(mayNeedSummary([gasket, cleaner])).toBe("May need: Throttle body cleaner, Intake Manifold Gasket");
     expect(mayNeedSummary([])).toBe("");
+  });
+});
+
+describe("pickedPartBadge (green tick only for this car's own parts)", () => {
+  it("car-list pick is verified", () => {
+    expect(pickedPartBadge({ partFit: "car", partId: "p1" })).toBe("car");
+  });
+  it("fits-by-size pick is never verified", () => {
+    expect(pickedPartBadge({ partFit: "size", partId: null })).toBe("size");
+  });
+  it("typed-in part is never verified", () => {
+    expect(pickedPartBadge({ partFit: null, partId: null })).toBe("typed");
+    expect(pickedPartBadge({ partId: null })).toBe("typed");
+  });
+  it("a saved catalogue part read back (no partFit) stays verified", () => {
+    expect(pickedPartBadge({ partId: "p1" })).toBe("car");
+  });
+  it("a saved typed-in or fits-by-size part read back is never verified (falls to typed)", () => {
+    // Reads carry no partFit (screen-only) and these have no partId, so the safe default applies.
+    expect(pickedPartBadge({ partId: null, partFit: undefined })).toBe("typed");
+    expect(pickedPartBadge({ partId: undefined })).toBe("typed");
   });
 });
