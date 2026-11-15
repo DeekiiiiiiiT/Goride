@@ -1,4 +1,19 @@
-# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 14, 15 Nov 2026)
+# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 15, 15 Nov 2026)
+
+## Rev 15: double-log SQL Rev 2 (28 jobs, append-proof), Engine oil facts
+
+1. **Six fluids, 28 jobs.** Extraction widened to EV Battery Coolant, EV Reduction Gear Oil and Hybrid Inverter Coolant. New targets: **On-Board Charger, DC-DC Converter, Traction Motor** (refill jobs) and **Reduction Gear Oil Change** (fluid service). Inverter Coolant Pump / Service and Battery Coolant Pump / Thermal Service already carry their own note from the EV SQL, so they're excluded and listed in the header. Totals: **20 refill jobs + 8 fluid services = 28.** The note wording now names gear oil too.
+2. **Append, proven per row.** The job **description** is the target (same as the EV precedent), always `description || ' …'`. The SQL keeps every row's full before-text and checks `not_appended = 0` (each target's new text must start with its old text), plus `changed_other = 0` (no other row's description, name, hint, status or is_part changed). **These checks run before COMMIT; if any is wrong, the SQL stops with "Stopped, nothing saved: …" and the whole thing is undone.** The same four numbers are shown again after it saves.
+3. **Names: targets are by job code, never by name.** "Walnut Blasting", "Valve Stem Seals" and "Timing Chain" were my shorthand in the Rev 14 prose. Live names, checked: `walnut_blasting` = "Intake Valve Carbon Cleaning (Walnut Blasting)" (the cleaning file's Rev 2 rename, written in that file), `valve_stem_seals` = "Valve Stem Seal Replacement", `timing_chain` = "Timing Chain & Tensioner". No renames, no duplicates.
+4. **Engine oil: checked on live across every foreign key to the job table.** `oil` holds all the history (3 work-order lines, ledger, schedules, packages, parts, synonyms, spec keys). `engine_oil_part` has no history: only its own May-need link and 1 spec-field row. Plan written: keep `oil`, move the spec-field row, soft-remove the duplicate link, retire `engine_oil_part`. The "both used" case is written too: keep both, add a pointer note, alias in reporting; never retire a job with history. Runs after `part_source`.
+
+**Minor:**
+- **Classification, corrected the other way:** on live, Piston Ring, Piston, Rod Bearing and Main Bearing Replacement are **part jobs** (is_part = true). Only **Engine Overhaul** and **Walnut Blasting** are services. So it's 18 part jobs + 2 services among the 20 refill jobs, and the SQL header says so.
+- **Extraction query archived** in the SQL file header.
+- **HV backfill "how":** a ship-day query lists HV services with no checklist; each is filled from its lockout note, and a service with no note is marked "not recorded", never guessed.
+- **Sequencing: swapped as you suggested.** The double-log SQL (text only, self-checking) runs first, then `part_source`.
+
+**Not tested on live by me this time:** the owner declined my last self-cancelling test run, so this SQL protects itself instead: it can't save unless all four checks pass.
 
 ## Rev 14: double-log rule on live jobs, HV backfill, screen gates
 
