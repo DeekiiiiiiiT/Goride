@@ -19,9 +19,14 @@ type Props = {
   onClose: () => void;
   onAdded: (item: MayNeedItem) => void;
   onSupplyCreated: (s: Supply) => void;
+  /**
+   * The add was refused (e.g. it clashes with Also do). The section shows the Stitch screen-9 card
+   * ("Couldn't save this item." + View "Also do" + Try again); `retry` re-sends the same add.
+   */
+  onFailed?: (message: string, retry: () => Promise<MayNeedItem>) => void;
 };
 
-export function AddMayNeedDialog({ token, data, job, onClose, onAdded, onSupplyCreated }: Props) {
+export function AddMayNeedDialog({ token, data, job, onClose, onAdded, onSupplyCreated, onFailed }: Props) {
   const [tab, setTab] = useState<Tab>("part_type");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
@@ -70,18 +75,21 @@ export function AddMayNeedDialog({ token, data, job, onClose, onAdded, onSupplyC
     if (!selected || !parsedQty.ok) return;
     setBusy(true);
     setError("");
+    const input = {
+      jobId: job.id,
+      kind: tab,
+      itemId: selected,
+      need,
+      qtyHint: parsedQty.value,
+      note: note.trim() || null,
+    };
     try {
-      const res = await addMayNeed(token, {
-        jobId: job.id,
-        kind: tab,
-        itemId: selected,
-        need,
-        qtyHint: parsedQty.value,
-        note: note.trim() || null,
-      });
+      const res = await addMayNeed(token, input);
       onAdded(res.item);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Couldn't add this item.");
+      const message = e instanceof Error ? e.message : "Couldn't add this item.";
+      if (onFailed) onFailed(message, async () => (await addMayNeed(token, input)).item);
+      else setError(message);
     } finally {
       setBusy(false);
     }

@@ -149,7 +149,7 @@ async function authUserId(page: Page): Promise<string> {
 }
 
 /** A saved Log service draft with Throttle Body Cleaning (J$ 3,000): the wizard opens on Review. */
-async function writeDraft(page: Page) {
+async function writeDraft(page: Page, line: Record<string, unknown> = jobLine()) {
   const userId = await authUserId(page);
   expect(userId).toBeTruthy();
   await page.evaluate(
@@ -181,12 +181,12 @@ async function writeDraft(page: Page) {
         }),
       );
     },
-    { userId, vehicleId: MD_DISC_VEHICLE_ID, line: jobLine() },
+    { userId, vehicleId: MD_DISC_VEHICLE_ID, line },
   );
 }
 
-async function openWizardOnReview(page: Page) {
-  await writeDraft(page);
+async function openWizardOnReview(page: Page, line?: Record<string, unknown>) {
+  await writeDraft(page, line);
   await page.goto("/maintenance");
   await expect(page.getByRole("heading", { name: /fleet maintenance/i })).toBeVisible({ timeout: 60_000 });
   await page.getByRole("button", { name: /^Log service$/i }).click();
@@ -202,8 +202,8 @@ async function openWizardOnReview(page: Page) {
 }
 
 /** Review → Edit the job → Step 3 details. */
-async function openJobDetails(page: Page) {
-  await page.getByTestId("log-service-review-job").filter({ hasText: fx.jobName }).getByRole("button", { name: "Edit" }).click();
+async function openJobDetails(page: Page, jobName: string = fx.jobName) {
+  await page.getByTestId("log-service-review-job").filter({ hasText: jobName }).getByRole("button", { name: "Edit" }).click();
   await expect(page.getByRole("heading", { name: /line details/i })).toBeVisible({ timeout: 30_000 });
 }
 
@@ -482,5 +482,62 @@ test.describe("Fleet service items", () => {
     const edit = await call("PATCH", `/maintenance-work-orders/${wipId}`, { notes: "late edit", expectedVersion: 99 });
     expect(edit.status).toBe(409);
     expect(edit.json.code).toBe("immutable");
+  });
+
+  // Screen 8 states — a picture check against Stitch, not a done-test. Loading, couldn't-load and
+  // save-failed need a slow or failed answer, so those network answers are held or faked here only.
+  test("8 States: loading, couldn't load + Try again, no items, save failed (pictures)", async ({ page }) => {
+    setServiceItems(true);
+    await page.waitForTimeout(FLAG_CACHE_WAIT_MS);
+    // Loading → couldn't load: only this job's own group list is held, then refused (the other
+    // groups still answer, so the screen knows service items are on).
+    const groupId = sql(`SELECT parent_id FROM public.maintenance_service_categories WHERE id = '${fx.jobId}'`);
+    const groupRoute = `**/maintenance-categories/systems/${groupId}/sections`;
+    let release: () => void = () => {};
+    const held = new Promise<void>((r) => (release = r));
+    await page.route(groupRoute, async (route) => {
+      await held;
+      await route.abort("failed");
+    });
+    await openWizardOnReview(page);
+    await openJobDetails(page);
+    await expect(page.getByTestId("items-used-loading")).toBeVisible({ timeout: 30_000 });
+    await snap(page, "08a-loading", page.getByTestId("items-used"));
+    release();
+    const block = page.getByTestId("items-used");
+    await expect(block.getByText("Couldn't load standard parts for this job")).toBeVisible({ timeout: 30_000 });
+    await expect(block.getByTestId("items-used-add-other")).toBeVisible();
+    await snap(page, "08b-couldnt-load", block);
+    // Try again with the real server: the May-need list appears.
+    await page.unroute(groupRoute);
+    await block.getByRole("button", { name: "Try again" }).click();
+    await expect(itemRow(page, fx.cleanerLink)).toBeVisible({ timeout: 30_000 });
+    await page.getByTestId("log-service-cancel").click();
+
+    // No items: a job with no May-need list.
+    const leak = sql(`SELECT id || '|' || name FROM public.maintenance_service_categories WHERE code = 'leak_inspection'`);
+    const [leakId, leakName] = leak.split("|");
+    sql(`DELETE FROM public.maintenance_job_item WHERE job_id = '${leakId}'`);
+    await openWizardOnReview(page, jobLine({ categoryId: leakId, categoryCode: "leak_inspection", categoryName: leakName, action: "inspect" }));
+    await openJobDetails(page, leakName);
+    const empty = page.getByTestId("items-used-empty");
+    await expect(empty).toContainText("No standard items suggested for this service.");
+    await snap(page, "08c-no-items", page.getByTestId("items-used"));
+    await page.getByRole("button", { name: /^Save line$/ }).click();
+    await expect(page.getByRole("heading", { name: /review and save/i })).toBeVisible({ timeout: 30_000 });
+
+    // Save failed: the save is refused once.
+    await page.route("**/maintenance-work-orders", (route) =>
+      route.request().method() === "POST"
+        ? route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "The server is busy. Try again." }) })
+        : route.continue(),
+    );
+    await logAndWait(page);
+    const banner = page.getByTestId("save-failed-banner");
+    await expect(banner).toContainText("Couldn't log this service.");
+    await expect(banner).toContainText("Nothing was saved.");
+    await snap(page, "08d-save-failed", banner);
+    await page.unroute("**/maintenance-work-orders");
+    await page.getByTestId("log-service-cancel").click();
   });
 });

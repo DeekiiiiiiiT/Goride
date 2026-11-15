@@ -145,7 +145,7 @@ export function SaveFailedBanner({ reason, onRetry, busy }: { reason?: string | 
         type="button"
         onClick={onRetry}
         disabled={busy}
-        className="self-start sm:self-auto bg-black text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-1.5 disabled:opacity-50"
+        className="self-start sm:self-auto shrink-0 whitespace-nowrap bg-black text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-1.5 disabled:opacity-50"
       >
         <span className="material-symbols-outlined text-[18px]">sync</span>
         {SAVE_COPY.tryAgain}

@@ -264,6 +264,47 @@ test.describe("Dominion service items (real stack)", () => {
     await expect(drawer.getByRole("button", { name: "Retire" })).toHaveCount(0);
   });
 
+  // Screen 9 states — a picture check against Stitch, not a done-test. The save error is the one
+  // faked answer (a clash reply from the job-items route), so the error card can be photographed.
+  test("9 States: empty May need, no supply match, couldn't save (pictures)", async ({ page }) => {
+    await seedMmP01Session(page);
+    await gotoJobs(page);
+    await page.getByPlaceholder("Search jobs, codes…").fill("Leak Inspection");
+    const row = page.locator("li").filter({ hasText: "Leak Inspection" }).filter({ has: page.getByRole("button", { name: "Edit", exact: true }) }).first();
+    await row.getByRole("button", { name: /^Edit$/ }).click();
+    const drawer = page.getByRole("dialog", { name: /Leak Inspection/ });
+    const section = drawer.getByTestId("may-need-section");
+    await expect(section.getByText("No items yet")).toBeVisible({ timeout: 30_000 });
+    await snapEl(section, "09a-empty-may-need");
+
+    await section.getByRole("button", { name: "Add item" }).first().click();
+    const add = page.getByRole("dialog", { name: "Add to May need" });
+    await add.getByRole("tab", { name: /Supplies/ }).click();
+    await add.getByRole("searchbox", { name: "Search supplies" }).fill("xyz");
+    await expect(add.getByText("Clear query")).toBeVisible();
+    await expect(add.getByText("New supply").last()).toBeVisible();
+    await snapEl(add, "09b-no-supply-match");
+    await add.getByText("Clear query").click();
+    await expect(add.getByRole("searchbox", { name: "Search supplies" })).toHaveValue("");
+
+    await page.route("**/admin/maintenance/job-items", (route) =>
+      route.request().method() === "POST"
+        ? route.fulfill({
+            status: 409,
+            contentType: "application/json",
+            body: JSON.stringify({ code: "job_item_clashes_also_do", error: "This item is already in Also do for this job." }),
+          })
+        : route.continue(),
+    );
+    await add.getByRole("option").first().click();
+    await add.getByRole("button", { name: /^Add/ }).click();
+    await expect(page.getByText("Couldn't save this item.")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("button", { name: /View .Also do./ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+    await snapEl(section, "09c-couldnt-save");
+    await page.unroute("**/admin/maintenance/job-items");
+  });
+
   test("10 Tablet: May need cards at 820 × 1180", async ({ page }) => {
     await page.setViewportSize({ width: 820, height: 1180 });
     await seedMmP01Session(page);

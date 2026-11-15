@@ -161,9 +161,15 @@ export function MayNeedSection({ token, data, job, canWrite, onViewAlsoDo, onCha
                 View &ldquo;Also do&rdquo;
               </WhiteButton>
             ) : null}
-            <WhiteButton icon="refresh" disabled={busy} onClick={() => void failure.retry()}>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void failure.retry()}
+              className={`flex items-center gap-1 rounded-lg bg-[#ba1a1a] px-3 py-1.5 ${T.labelSm} font-semibold text-white transition-colors hover:bg-[#93000a] disabled:cursor-not-allowed disabled:opacity-50`}
+            >
+              <span className="material-symbols-outlined text-[15px]">refresh</span>
               Try again
-            </WhiteButton>
+            </button>
           </div>
         </div>
       ) : null}
@@ -348,6 +354,16 @@ export function MayNeedSection({ token, data, job, canWrite, onViewAlsoDo, onCha
             setAdding(false);
             onChanged();
             toast.success(`${item.name} added to May need`);
+          }}
+          onFailed={(message, resend) => {
+            setAdding(false);
+            const retry = () =>
+              run(async () => {
+                const item = await resend();
+                setItems((prev) => [...prev, item]);
+                toast.success(`${item.name} added to May need`);
+              });
+            setFailure({ message, retry });
           }}
         />
       ) : null}

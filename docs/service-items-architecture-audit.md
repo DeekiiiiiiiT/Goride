@@ -1,6 +1,6 @@
 # Service items ("May need") — build plan
 
-**Rev 13 · 14 Nov 2026.** Database, server, Dominion and Fleet screens are **done and checked** (UI2 incl. the phone screen; Fleet test 5/5). `pnpm test:service-items` runs everything: **14/14 passed**. Next: `/code-review`. B1 (a failed Business Finance write didn’t stop completion) is **fixed in Round S4 and proven** (section 8). **Committed 14 Nov as `9b691c21` on `parts-auto-match` (not pushed).**
+**Rev 14 · 15 Nov 2026 — CLOSED.** Built, reviewed, live and proven. Database, server, Dominion and Fleet screens (all 19 Stitch screens incl. phone and states) done and checked; `pnpm test:service-items` **14/14**; `/code-review` findings fixed (S5); B1 books-failure bug fixed (S4); live since 15 Nov (`main` `3e84a17f` + follow-ups `5b9d79b5`, `d223f19b`, `50c72dd2`); first real service proven (J$ 8,800, 1 books entry); 44 supplies and 164 May-need links on 67 jobs live. Switch `service_items` on for deekiiiiiii's Fleet only. **Only owner follow-up:** try "Pick a part" once on a car with a catalogue (section 8, Open). Not service-items work but found here: Expense Hub accrual posting (section 8, Open).
 
 **Goal:** each job in Dominion lists the **items it may need** (parts and shop supplies). When someone ticks that job in Roam Fleet → Log service, those items show up so they can tick what was actually used. The job and its items are saved together, and the items count in the bill.
 
@@ -372,9 +372,9 @@ Repo search: `reverseAndDeleteWorkOrder` and `syncWorkOrderLines` must find noth
 | D1, S1, D2, S2, S3 | Database + server | **Done + checked 13 Nov** (section 2) |
 | UI1 | Dominion screens 1–10 + `e2e/dominion-service-items.spec.ts` | **Done 14 Nov.** Test 6/6 passed on the test copy; close-ups checked against Stitch. Fixed: sign-in key for the test copy (`e2e/helpers/mmP01Auth.ts`), dark-mode colours in the 7 new files (Add dialog text was invisible), list icon on the "May need" pill. Not screenshotted: screen 9 states (error / empty / no match) — check by eye in UI2's test run. |
 | UI2 | Fleet screens 1–9 + client changes (section 3) | **Done 14 Nov** — see "UI2 result" below. |
-| T1 | `pnpm test:service-items` + `/code-review` | Command **done 14 Nov, 14/14 passed**. `/code-review` not run yet |
-| L | Go live (section 7) | Not started |
-| C | Close out + commit | Not started |
+| T1 | `pnpm test:service-items` + `/code-review` | **Done.** 14/14; code review 10 findings → S5 fixed + checked |
+| L | Go live (section 7) | **Done 15 Nov** — live, first real log proven, lists filled (section 7) |
+| C | Close out + commit | **Done 15 Nov** — this file CLOSED (Rev 14), memory updated |
 
 ### UI2 result (14 Nov)
 
@@ -396,8 +396,8 @@ Repo search: `reverseAndDeleteWorkOrder` and `syncWorkOrderLines` must find noth
 - ~~**B1 (Critical):** a failed Business Finance write was only logged, so a service completed with nothing in the books.~~ **Fixed in S4 (14 Nov)** and checked by Claude: `fleetDualWriteCanonicalEvent` returns posted / skipped / failed and `appendCanonicalLedgerEvents` counts a failure as failed. Server tests 137/137; Fleet spec 5/5 incl. the outage test; `fleet-maintenance-log-service` 3/3 and `dominion-service-items` 6/6 re-run green after the change.
 - **Not service items, for a separate look:** Cursor's S4 caller table found the Expense Hub accrual (`expense_hub_routes.ts` ~215) marks a document posted without checking the books write, and the ledger repair tool (`ledger_ensure_routes.ts` ~166) doesn't count errors. Both were like this before S4.
 - ~~Screen 9 phone~~ — done 14 Nov: compact header "Step 3 of 4 · Details", four thin step bars, labelled item cards, total pinned above the buttons, arrow-only Back (`LogServiceWizardChrome.tsx`, `ItemsUsedSection.tsx`); checked in the click-through at 390 px and against the Stitch PNG. Kept today's red Cancel on phones (Stitch has none) so a draft can still be thrown away.
-- Not checked by eye yet: screen 8 skeleton / couldn't-load / no-match states, Dominion screen 9 states.
-- Test 22 and 33 are proven by unit / server tests only; test 25's "fits this car" pick needs a car with a catalogue (the test car has none).
+- ~~Not checked by eye: screen 8 / Dominion screen 9 states~~ — **done 15 Nov**: picture tests "8 States" (Fleet: loading, couldn't load + real Try again, no items, save failed) and "9 States" (Dominion: empty May need, no supply match, couldn't save) checked against Stitch. Fixed on the way: a refused **add** in Dominion showed only a plain red line in the dialog; it now closes the dialog and shows the Stitch card ("Couldn't save this item." + View "Also do" + red Try again that re-sends the add). Fleet save-failed "Try again" no longer wraps.
+- Test 22 and 33 are proven by unit / server tests only (accepted). **Owner follow-up:** test 25's "fits this car" pick needs a car with a catalogue (the test car has none) — next time a part job is logged on the Roomy, pick a part under "Fits your car" once; Claude can check the saved item.
 - ~~The discount teardown doesn't clean `ledger.*` rows~~ — fixed in S4, proven (8 leftover rows → 0).
 
 The old Cursor prompts and reports stay in `docs/service-items-build/` for reference. They're finished; don't reuse them.
