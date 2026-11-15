@@ -14,6 +14,13 @@ function formatFillDate(ymd: string): string {
   }
 }
 
+/** "High Fuel Consumption" → "High fuel consumption" (title-case codes read as plain words). */
+export function sentenceCase(text: string): string {
+  const s = String(text || '').trim();
+  if (!s || !/^([A-Z][a-z]+)( [A-Z][a-z]+)+$/.test(s)) return s;
+  return s.charAt(0) + s.slice(1).toLowerCase();
+}
+
 /**
  * Hard-block panel for Finalize / Data quality — lists the exact fills to fix in-place.
  */
@@ -60,7 +67,7 @@ export function FuelExceptionBlockersPanel({
                   <p className="text-sm text-[#47464c]">
                     {plateFor(b)} · {b.location}
                   </p>
-                  <p className="text-sm font-semibold text-[#ba1a1a]">! {b.reason}</p>
+                  <p className="text-sm font-semibold text-[#ba1a1a]">! {sentenceCase(b.reason)}</p>
                 </div>
               </div>
               <Button

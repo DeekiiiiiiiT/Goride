@@ -49,17 +49,18 @@ function severityChipClass(r: FuelQualityRow): string {
 
 /** Issue copy aligned with Fuel Flags classifier (not pending-to-post counts). */
 export function plainIssue(r: FuelQualityRow, openFlaggedFillCount = 0): string {
+  // Plain words only — the health colour (Red / Amber) is shown as the chip, never as text.
   const parts: string[] = [];
-  if (r.healthStatus && r.healthStatus !== 'Emerald') parts.push(r.healthStatus);
+  const subtitleIsColour = /^(Red|Amber|Emerald)$/i.test(String(r.subtitle || '').trim());
   if (openFlaggedFillCount > 0) {
     parts.push(
       openFlaggedFillCount === 1
-        ? '1 flagged fill needs review'
-        : `${openFlaggedFillCount} flagged fills need review`,
+        ? '1 flagged fill needs a look'
+        : `${openFlaggedFillCount} flagged fills need a look`,
     );
   } else if (r.odometerIncomplete) {
     parts.push('Incomplete odometer data — unexplained fuel may be inflated');
-  } else if (r.subtitle) {
+  } else if (r.subtitle && !subtitleIsColour) {
     // Health-only / odometer subtitle from toFuelQualityRow (no pending).
     return r.subtitle;
   } else if (r.healthStatus === 'Red') {

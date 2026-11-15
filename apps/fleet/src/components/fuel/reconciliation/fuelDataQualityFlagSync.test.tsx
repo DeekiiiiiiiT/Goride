@@ -64,13 +64,14 @@ describe('plainIssue', () => {
     subtitle: 'Red',
   };
 
-  it('uses open flagged fill count instead of pending', () => {
-    expect(plainIssue(base, 4)).toBe('Red · 4 flagged fills need review');
-    expect(plainIssue(base, 1)).toBe('Red · 1 flagged fill needs review');
+  it('uses open flagged fill count instead of pending, in plain words (no colour word)', () => {
+    expect(plainIssue(base, 4)).toBe('4 flagged fills need a look');
+    expect(plainIssue(base, 1)).toBe('1 flagged fill needs a look');
   });
 
-  it('falls back to health subtitle when no open flags', () => {
-    expect(plainIssue(base, 0)).toBe('Red');
+  it('a colour-only subtitle falls back to a plain sentence', () => {
+    expect(plainIssue(base, 0)).toBe('Needs a fix before you lock the week.');
+    expect(plainIssue({ ...base, subtitle: 'Odometer jumped 2,000 km' }, 0)).toBe('Odometer jumped 2,000 km');
   });
 });
 
