@@ -7,7 +7,7 @@
 import { getServiceClient } from "./service_client.ts";
 import { driverCloseBlockers, earlierWeekCloseBlocker, periodIsFrozen } from "./week_close.ts";
 import { getLatestWeekStatements } from "./week_statements.ts";
-import { listOpenFinanceReconDrifts } from "./finance_recon_drift.ts";
+import { listOpenFinanceReconDrifts, resolveFinanceReconDriftsOfKind } from "./finance_recon_drift.ts";
 import { loadWeekCloseReconContext } from "./week_close_recon.ts";
 import { weekPnlTieSides } from "./business_week_pnl.ts";
 import { weekPnlTieBlockers } from "../../../packages/finance-core/src/weekPnlTie.ts";
@@ -49,6 +49,25 @@ async function replaceScopeBlockers(scope: Scope, blockers: CloseBlocker[]): Pro
     const { error } = await recon().from("week_blockers").delete().in("id", stale);
     if (error) throw new Error(`week blockers cleanup failed: ${error.message}`);
   }
+}
+
+/**
+ * WRA-52: after an earnings seal. A signed (closed) earnings statement was just
+ * published from the engines, so drift noted against the previous statement is
+ * gone — resolve it, then re-save the driver's blockers.
+ */
+export async function refreshDriverBlockersAfterEarningsSeal(
+  orgId: string,
+  weekKey: string,
+  driverId: string,
+  serviceLine: ReconServiceLine,
+): Promise<void> {
+  const statements = await getLatestWeekStatements(orgId, driverId, weekKey);
+  const earnings = statements.find((s) => s.kind === "earnings");
+  if (earnings?.status === "closed") {
+    await resolveFinanceReconDriftsOfKind({ organizationId: orgId, driverId, weekKey, kind: "earnings" });
+  }
+  await writeDriverWeekBlockers(orgId, weekKey, driverId, serviceLine);
 }
 
 /** A driver's blockers, worked out exactly like the Close preview. Frozen drivers with no restatement have none. */
