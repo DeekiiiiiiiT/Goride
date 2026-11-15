@@ -1,4 +1,12 @@
-# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 18, 15 Nov 2026)
+# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 19, 15 Nov 2026)
+
+## Rev 19: double-log notes LIVE
+
+- **DRYRUN (owner, 15 Nov):** `DRY RUN OK, nothing saved: 28 found, 0 not appended, 0 missing, 0 inexact, 0 other rows changed, refill notes=20, fluid notes=8`.
+- **Real run (owner, 15 Nov):** `changed_other 0, not_appended 0, refill_jobs_with_note 20, fluid_services_with_note 8`, the same numbers as the dry run.
+- **Checked by me on live afterwards:** 20 / 8, and no job carries a note twice. Example, Water pump: "Pumps coolant around the engine and radiator. A leaking pump can cause overheating. Fluid used to refill after this job (oil, coolant, brake fluid or gear oil) is logged here; don't also log a separate fluid service for the same visit." The old text is intact and the note is appended once.
+
+**The double-log convention is now true on every live job.** Next: `part_source` (0 part-item rows still) → Charging Port check → Steering & Suspension.
 
 ## Rev 18: before the dry run
 
