@@ -302,6 +302,9 @@ test.describe("Fleet service items", () => {
     await picker.getByRole("button", { name: /Use this part/ }).click();
     await expect(gasket).toContainText("Toyota genuine");
     await expect(gasket.getByRole("button", { name: "Change" })).toBeVisible();
+    // S6: a typed-in part is labelled "Typed in", never the green "Fits this car".
+    await expect(gasket.getByText("Typed in")).toBeVisible();
+    await expect(gasket.getByText("Fits this car")).toHaveCount(0);
 
     // 24: an Other item with no cost.
     await page.getByTestId("items-used-add-other").click();
@@ -363,6 +366,12 @@ test.describe("Fleet service items", () => {
     expect(items).toContain("Shop rags:null:");
     expect(items).toContain("Throttle body cleaner:1200.00:CRC:");
     expect(items).toContain(`${fx.gasketName}:800.00:Toyota genuine:22271-B1010`);
+    expect(sql(`
+      SELECT coalesce(i.part_source, 'null')
+      FROM public.maintenance_work_order_line_item i
+      JOIN public.maintenance_work_orders wo ON wo.id = i.work_order_id
+      WHERE wo.organization_id = '${MD_DISC_ORG}' AND i.brand = 'Toyota genuine'
+      ORDER BY i.created_at DESC LIMIT 1`)).toBe("typed");
 
     await page.getByRole("tab", { name: /service history/i }).click();
     await expect(page.getByText("Maintenance Audit Trail")).toBeVisible({ timeout: 30_000 });

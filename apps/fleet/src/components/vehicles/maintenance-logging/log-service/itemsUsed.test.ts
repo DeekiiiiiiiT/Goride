@@ -6,6 +6,7 @@ import {
   linesHaveItemErrors,
   mayNeedSummary,
   newOtherItem,
+  draftFromSavedItem,
   pickedPartBadge,
   qtyWithUnit,
   splitLineTotal,
@@ -151,8 +152,67 @@ describe("pickedPartBadge (green tick only for this car's own parts)", () => {
     expect(pickedPartBadge({ partId: "p1" })).toBe("car");
   });
   it("a saved typed-in or fits-by-size part read back is never verified (falls to typed)", () => {
-    // Reads carry no partFit (screen-only) and these have no partId, so the safe default applies.
     expect(pickedPartBadge({ partId: null, partFit: undefined })).toBe("typed");
     expect(pickedPartBadge({ partId: undefined })).toBe("typed");
+    expect(pickedPartBadge(draftFromSavedItem({
+      itemKind: "part_type",
+      partSource: "typed",
+      brand: "B",
+      partId: null,
+    }))).toBe("typed");
+    expect(pickedPartBadge(draftFromSavedItem({
+      itemKind: "part_type",
+      partSource: "size",
+      brand: "B",
+      partId: null,
+    }))).toBe("size");
+  });
+  it("never shows car without partId", () => {
+    expect(pickedPartBadge({ partFit: "car", partId: null })).toBe("typed");
+  });
+});
+
+describe("lineItemForWire partSource", () => {
+  const partDraft = () => ({
+    ...draftFromJobItem(gasket),
+    partTypeId: gasket.itemId,
+    partNumber: "",
+    brand: "",
+  });
+
+  it("car / size / typed / unnamed / supply", () => {
+    expect(lineItemForWire({ ...partDraft(), partId: "p1" }).partSource).toBe("car");
+    expect(lineItemForWire({ ...partDraft(), partFit: "size", brand: "B" }).partSource).toBe("size");
+    expect(lineItemForWire({ ...partDraft(), brand: "B" }).partSource).toBe("typed");
+    expect(lineItemForWire({ ...partDraft() }).partSource).toBeNull();
+    expect(lineItemForWire(draftFromJobItem(cleaner)).partSource).toBeNull();
+  });
+});
+
+describe("draftFromSavedItem", () => {
+  it("maps partSource to partFit and partLabel", () => {
+    const typed = draftFromSavedItem({
+      source: "suggested",
+      itemKind: "part_type",
+      partSource: "typed",
+      brand: "Toyota genuine",
+      partNumber: "22271",
+      qty: 1,
+    });
+    expect(typed.partFit).toBeNull();
+    expect(typed.partLabel).toBe("Toyota genuine · 22271");
+    expect(pickedPartBadge(typed)).toBe("typed");
+
+    const nullBrand = draftFromSavedItem({
+      itemKind: "part_type",
+      partSource: null,
+      brand: "ACME",
+      partId: null,
+      qty: 1,
+    });
+    expect(pickedPartBadge(nullBrand)).toBe("typed");
+
+    expect(draftFromSavedItem({ itemKind: "part_type", partSource: "car", partId: "p1" }).partFit).toBe("car");
+    expect(draftFromSavedItem({ itemKind: "part_type", partSource: null, partId: null }).partLabel).toBeUndefined();
   });
 });

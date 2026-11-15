@@ -61,7 +61,7 @@ import { logServiceOemMatchSummary } from "./maintenance-logging/log-service/log
 import { ItemsUsedSection } from "./maintenance-logging/log-service/ItemsUsedSection";
 import { PickPartDialog } from "./maintenance-logging/log-service/PickPartDialog";
 import { useJobItems } from "./maintenance-logging/log-service/useJobItems";
-import { linesHaveItemErrors, money } from "./maintenance-logging/log-service/itemsUsed";
+import { draftFromSavedItem, linesHaveItemErrors, money } from "./maintenance-logging/log-service/itemsUsed";
 import {
   NotFinishedBanner,
   SaveFailedBanner,
@@ -882,7 +882,7 @@ export function LogMaintenanceServiceDialog({
       supplierPartOfferId: existing?.supplierPartOfferId ?? null,
       partConfirmedFit: existing?.partConfirmedFit === true,
       system,
-      items: existing?.items ? existing.items.map((i) => ({ ...i })) : [],
+      items: existing?.items ? existing.items.map((i) => draftFromSavedItem(i)) : [],
     });
     void jobItems.ensure(cat.parent_id);
     setStep("lineDetails");

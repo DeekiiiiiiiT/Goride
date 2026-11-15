@@ -6,6 +6,7 @@ import {
   isBoardOnlyBody,
   isContentEditBody,
   isMixedPatchBody,
+  mapDbLineItemToApi,
   mapSaveWorkOrderError,
   prepareWorkOrderLines,
 } from "./service_items_save.ts";
@@ -20,6 +21,7 @@ const JOB = "11111111-1111-4111-8111-111111111111";
 const SUPPLY_A = "22222222-2222-4222-8222-222222222222";
 const SUPPLY_B = "33333333-3333-4333-8333-333333333333";
 const JOB_ITEM = "44444444-4444-4444-8444-444444444444";
+const PART_TYPE = "55555555-5555-4555-8555-555555555556";
 
 function stubSupabase(handlers: Record<string, unknown>): SupabaseClient {
   return {
@@ -220,6 +222,77 @@ Deno.test("prepareWorkOrderLines line_item_link_mismatch supply", async () => {
   });
   assertEquals(r.ok, false);
   if (!r.ok) assertEquals(r.code, "line_item_link_mismatch");
+});
+
+Deno.test("mapDbLineItemToApi returns partSource", () => {
+  const row = {
+    id: "99999999-9999-4999-8999-999999999999",
+    source: "suggested",
+    job_item_id: JOB_ITEM,
+    item_kind: "part_type",
+    part_type_id: PART_TYPE,
+    supply_id: null,
+    part_id: null,
+    part_source: "typed",
+    item_name: "Gasket",
+    unit_label: "pc",
+    brand: "B",
+    part_number: "1",
+    qty: 1,
+    unit_cost: null,
+    amount: 0,
+  };
+  const api = mapDbLineItemToApi(row);
+  assertEquals(api.partSource, "typed");
+});
+
+Deno.test("prepareWorkOrderLines passes part_source through", async () => {
+  const sb = stubSupabase({
+    "maintenance_job_item:select": {
+      data: [{
+        id: JOB_ITEM,
+        job_id: JOB,
+        part_type_id: PART_TYPE,
+        supply_id: null,
+      }],
+      error: null,
+    },
+    "maintenance_service_categories:select": {
+      data: [{
+        id: PART_TYPE,
+        name: "Gasket",
+        kind: "component",
+        is_part: true,
+        status: "active",
+      }],
+      error: null,
+    },
+  });
+  const r = await prepareWorkOrderLines(sb, {
+    orgId: ORG,
+    vehicleId: VEH,
+    workOrderId: null,
+    rawLines: [{
+      componentId: JOB,
+      declined: false,
+      items: [{
+        source: "suggested",
+        itemKind: "part_type",
+        jobItemId: JOB_ITEM,
+        partTypeId: PART_TYPE,
+        partSource: "typed",
+        brand: "After",
+        partNumber: "PN",
+        qty: 1,
+      }],
+    }],
+    itemsEnabled: true,
+  });
+  assertEquals(r.ok, true);
+  if (r.ok) {
+    const items = r.lines[0].items as Record<string, unknown>[];
+    assertEquals(items[0].part_source, "typed");
+  }
 });
 
 Deno.test("prepareWorkOrderLines create drops client line ids", async () => {

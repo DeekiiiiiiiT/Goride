@@ -229,6 +229,8 @@ export type LineItemDraft = {
   partLabel?: string | null;
   /** How the picked part fits: catalogue part for this car, or by size. */
   partFit?: "car" | "size" | null;
+  /** Saved read-back / wire: how the part was chosen (car, size, typed). */
+  partSource?: "car" | "size" | "typed" | null;
   qty: string | number;
   /** Blank = cost not recorded (counts as 0). */
   unitCost?: string | number | null;
@@ -255,6 +257,16 @@ export function lineItemsAmount(line: Pick<MaintenanceLogLine, "items" | "itemsA
   return Number(centi) / 100;
 }
 
+function partSourceForWire(item: LineItemDraft): "car" | "size" | "typed" | null {
+  if (item.itemKind !== "part_type") return null;
+  if (item.partId) return "car";
+  if (item.partFit === "size") return "size";
+  const brand = item.brand?.toString().trim();
+  const partNumber = item.partNumber?.toString().trim();
+  if (brand || partNumber) return "typed";
+  return null;
+}
+
 /** Only the keys the server reads. */
 export function lineItemForWire(item: LineItemDraft): LineItemInput {
   const isOther = item.itemKind === "other";
@@ -265,6 +277,7 @@ export function lineItemForWire(item: LineItemDraft): LineItemInput {
     partTypeId: item.itemKind === "part_type" ? item.partTypeId ?? null : null,
     supplyId: item.itemKind === "supply" ? item.supplyId ?? null : null,
     partId: item.itemKind === "part_type" ? item.partId ?? null : null,
+    partSource: partSourceForWire(item),
     itemName: isOther ? item.itemName : null,
     brand: item.brand?.toString().trim() ? item.brand.toString().trim() : null,
     partNumber: item.itemKind === "part_type" && item.partNumber?.toString().trim()

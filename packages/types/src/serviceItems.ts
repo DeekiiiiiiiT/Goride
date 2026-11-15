@@ -16,6 +16,8 @@ export type JobItem = {
   defaultFitMode: string | null;
 };
 
+export type PartSource = "car" | "size" | "typed";
+
 export type LineItemInput = {
   source: "suggested" | "other";
   jobItemId?: string | null;
@@ -23,6 +25,7 @@ export type LineItemInput = {
   partTypeId?: string | null;
   supplyId?: string | null;
   partId?: string | null;
+  partSource?: PartSource | null;
   itemName?: string | null;
   brand?: string | null;
   partNumber?: string | null;
@@ -38,6 +41,7 @@ export type LineItem = {
   partTypeId: string | null;
   supplyId: string | null;
   partId: string | null;
+  partSource: PartSource | null;
   itemName: string;
   unitLabel: string;
   brand: string | null;
@@ -54,6 +58,7 @@ export type ParsedLineItem = {
   part_type_id: string | null;
   supply_id: string | null;
   part_id: string | null;
+  part_source: PartSource | null;
   item_name: string;
   unit_label: string;
   brand: string | null;
@@ -197,6 +202,31 @@ export function parseLineItems(
       }
     }
 
+    const partSourceRaw = r.partSource ?? r.part_source;
+    const partSourceProvided = partSourceRaw !== undefined && partSourceRaw !== null;
+    let partSource: PartSource | null = null;
+    if (partSourceProvided) {
+      const s = String(partSourceRaw).trim();
+      if (s === "") return { ok: false, code: "part_source_invalid", index };
+      if (s !== "car" && s !== "size" && s !== "typed") {
+        return { ok: false, code: "part_source_invalid", index };
+      }
+      partSource = s;
+    } else if (itemKind === "part_type" && partId) {
+      partSource = "car";
+    }
+
+    if (itemKind !== "part_type") {
+      if (partSource != null) return { ok: false, code: "part_source_not_allowed", index };
+    } else if (partSource != null) {
+      if (partSource === "car" && !partId) {
+        return { ok: false, code: "part_source_part_mismatch", index };
+      }
+      if ((partSource === "size" || partSource === "typed") && partId) {
+        return { ok: false, code: "part_source_part_mismatch", index };
+      }
+    }
+
     let itemName = "";
     if (itemKind === "other") {
       const nameRaw = r.itemName ?? r.item_name;
@@ -222,6 +252,14 @@ export function parseLineItems(
       }
     }
 
+    if (itemKind === "part_type" && (partSource === "size" || partSource === "typed")) {
+      const hasBrand = brand != null;
+      const hasPartNumber = partNumber != null;
+      if (!hasBrand && !hasPartNumber) {
+        return { ok: false, code: "part_source_needs_part", index };
+      }
+    }
+
     const qtyParsed = parseQtyToMilli(String(r.qty ?? ""));
     if (!qtyParsed.ok) return { ok: false, code: qtyParsed.code, index };
 
@@ -239,6 +277,7 @@ export function parseLineItems(
       part_type_id: partTypeId,
       supply_id: supplyId,
       part_id: partId,
+      part_source: partSource,
       item_name: itemName,
       unit_label: "",
       brand,

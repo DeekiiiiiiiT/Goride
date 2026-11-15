@@ -99,6 +99,10 @@ const ERROR_TEXT: Record<string, string> = {
   item_name_required: "Say what it was.",
   brand_too_long: "Brand is too long.",
   part_number_too_long: "Part number is too long.",
+  part_source_not_allowed: "Part source only applies to part items.",
+  part_source_invalid: "Invalid part source.",
+  part_source_part_mismatch: "Part source does not match the part picked.",
+  part_source_needs_part: "Enter a brand or part number for this part.",
 };
 
 /** Plain message for an item the server would refuse, or null. */
@@ -146,8 +150,34 @@ export function money(currency: string | null | undefined, amount: number): stri
  * `partFit` (screen-only), so a saved catalogue part (`partId` set) still counts as "car".
  */
 export type PickedPartBadge = "car" | "size" | "typed";
+
+type SavedItemLike = Partial<LineItemDraft> & {
+  partSource?: "car" | "size" | "typed" | null;
+  part_source?: "car" | "size" | "typed" | null;
+};
+
+/** Map a saved line item from the API into screen draft fields (partFit, partLabel). */
+export function draftFromSavedItem(item: SavedItemLike): LineItemDraft {
+  const draft = { ...item } as LineItemDraft;
+  const rawSource = item.partSource ?? item.part_source ?? null;
+  if (draft.partSource === undefined) draft.partSource = rawSource;
+
+  if (draft.itemKind === "part_type") {
+    if (rawSource === "car") draft.partFit = "car";
+    else if (rawSource === "size") draft.partFit = "size";
+    else draft.partFit = null;
+
+    const brand = draft.brand?.toString().trim();
+    const partNumber = draft.partNumber?.toString().trim();
+    if (brand || partNumber) {
+      draft.partLabel = brand && partNumber ? `${brand} · ${partNumber}` : (brand || partNumber || null);
+    }
+  }
+  return draft;
+}
+
 export function pickedPartBadge(item: Pick<LineItemDraft, "partFit" | "partId">): PickedPartBadge {
-  if (item.partFit === "car") return "car";
+  if (item.partFit === "car" && item.partId) return "car";
   if (item.partFit === "size") return "size";
   return item.partId ? "car" : "typed";
 }

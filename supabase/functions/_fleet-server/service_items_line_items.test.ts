@@ -74,6 +74,45 @@ Deno.test("parseLineItems sum several items in BigInt", () => {
   if (r.ok) assertEquals(r.itemsAmount, "21.25");
 });
 
+const PART_TYPE = "f1111111-1111-4111-8111-111111111111";
+const JOB_ITEM = "f2222222-2222-4222-8222-222222222222";
+
+function partRow(over: Record<string, unknown> = {}) {
+  return {
+    source: "suggested",
+    itemKind: "part_type",
+    jobItemId: JOB_ITEM,
+    partTypeId: PART_TYPE,
+    qty: 1,
+    ...over,
+  };
+}
+
+Deno.test("parseLineItems part_source validation", () => {
+  assertEquals(parseLineItems([partRow({ partSource: "typed", brand: "B", partNumber: "1" })], { declined: false }).ok, true);
+  const legacy = parseLineItems([partRow({ partId: "a1111111-1111-4111-8111-111111111111" })], { declined: false });
+  assertEquals(legacy.ok, true);
+  if (legacy.ok) assertEquals(legacy.items[0].part_source, "car");
+  const miss = parseLineItems([partRow()], { declined: false });
+  assertEquals(miss.ok, true);
+  if (miss.ok) assertEquals(miss.items[0].part_source, null);
+
+  assertEquals(parseLineItems([baseItem({ partSource: "car" })], { declined: false }).ok, false);
+  assertEquals(parseLineItems([partRow({ partSource: "nope", brand: "B" })], { declined: false }).ok, false);
+  assertEquals(parseLineItems([partRow({ partSource: "", brand: "B" })], { declined: false }).ok, false);
+  assertEquals(parseLineItems([partRow({ partSource: "car" })], { declined: false }).ok, false);
+  assertEquals(
+    parseLineItems([partRow({
+      partSource: "typed",
+      partId: "a1111111-1111-4111-8111-111111111111",
+      brand: "B",
+    })], { declined: false }).ok,
+    false,
+  );
+  assertEquals(parseLineItems([partRow({ partSource: "size" })], { declined: false }).ok, false);
+  assertEquals(parseLineItems([partRow({ partSource: "typed", brand: "B" })], { declined: false }).ok, true);
+});
+
 Deno.test("computeWoLineTotal with items (tests 21–23)", () => {
   assertEquals(
     computeWoLineTotal({ labor_amount: 3000, items_amount: 2000 }),

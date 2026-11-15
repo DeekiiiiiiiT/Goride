@@ -26,6 +26,7 @@ const SQL_TESTS = [
   'service_items_checks',
   'service_items_db_test',
   'service_items_save_db_test',
+  'service_items_part_source_db_test',
   'service_items_completion_db_test',
   'maintenance_discount_checks',
   'maintenance_discount_db_test',
@@ -76,6 +77,7 @@ async function main() {
   }
 
   try {
+    step('supabase migration up', 'npx', ['supabase', 'migration', 'up']);
     step('build fleet-ops bundle', 'node', ['scripts/build-edge-bundle.mjs', 'fleet-ops']);
     step('build fleet-core bundle', 'node', ['scripts/build-edge-bundle.mjs', 'fleet-core']);
 
