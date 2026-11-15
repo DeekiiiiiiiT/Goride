@@ -26,7 +26,15 @@ import { ReconPendingApprovalBanner } from './ReconPendingApprovalBanner';
 import { approvalsForWeek, useReconApprovals } from './useReconApprovals';
 import { formatWeekRange, formatWeekTitle } from './weekListFormat';
 import { api } from '../../../services/api';
-import { RECON_WEEK_CHANGED_EVENT, clearReconWeekContext, setReconWeekContext } from '../../../services/reconWeekContext';
+import {
+  RECON_WEEK_CHANGED_EVENT,
+  RECON_WEEK_SAVED_EVENT,
+  clearReconWeekContext,
+  setReconWeekContext,
+} from '../../../services/reconWeekContext';
+
+/** Calculator hold (2 min) + its once-a-minute wake + slack. */
+const WATCH_AFTER_SAVE_MS = 4 * 60 * 1000;
 import { useAuth } from '../../auth/AuthContext';
 import { hasAnyJwtRole } from '@roam/auth-client';
 import { Button } from '../../ui/button';
@@ -161,6 +169,8 @@ export function ReconRunPage({
   const deliveryTollsSealedKey = useRef<string | null>(null);
   const deliveryTollsFinishInFlight = useRef(false);
 
+  /** WRA-54: after a saved change, keep asking until the calculator's publish (≈2 min hold) arrives. */
+  const watchUntilRef = useRef(0);
   const runQuery = useQuery({
     queryKey: runQueryKey,
     queryFn: () => fetchRun(line, weekKey),
@@ -173,9 +183,20 @@ export function ReconRunPage({
       // WRA-53: while the banner says "Updating N changes…", keep asking until
       // the calculator has published them, so the user never has to reload.
       if ((data?.calculator?.pendingUnits ?? 0) > 0) return 5000;
+      if (Date.now() < watchUntilRef.current) return 5000;
       return false;
     },
   });
+
+  useEffect(() => {
+    const onSaved = () => {
+      watchUntilRef.current = Date.now() + WATCH_AFTER_SAVE_MS;
+      // Restart the interval (it stopped when the last answer looked settled).
+      window.setTimeout(() => void queryClient.refetchQueries({ queryKey: runQueryKey }), 1500);
+    };
+    window.addEventListener(RECON_WEEK_SAVED_EVENT, onSaved);
+    return () => window.removeEventListener(RECON_WEEK_SAVED_EVENT, onSaved);
+  }, [queryClient, runQueryKey]);
 
   const statusQuery = useQuery({
     queryKey: ['recon-projection', line, weekKey],

@@ -3,7 +3,7 @@ import { requireAuthHeaders } from '../utils/authHeaders';
 import { FuelCard, FuelEntry, FuelEntryCorrection, MileageAdjustment, FuelScenario, JaaProgram } from '../types/fuel';
 import { FinancialTransaction } from '../types/data';
 import { API_ENDPOINTS } from './apiConfig';
-import { noteReconWeekResponse, withReconWeekHeader } from './reconWeekContext';
+import { announceReconWeekSave, noteReconWeekResponse, withReconWeekHeader } from './reconWeekContext';
 import { catalogGet, catalogPages } from '@roam/api-client';
 import { settlementService } from './settlementService';
 import { throwIfCatalogGateBlocked } from './api';
@@ -21,9 +21,12 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 
   if (week.sent) {
     const response = await fetchWithRetryInner(url, week.options, retries, backoff);
     await noteReconWeekResponse(week.sent, response);
+    announceReconWeekSave(url, options.method, response.ok);
     return response;
   }
-  return fetchWithRetryInner(url, options, retries, backoff);
+  const response = await fetchWithRetryInner(url, options, retries, backoff);
+  announceReconWeekSave(url, options.method, response.ok);
+  return response;
 }
 
 async function fetchWithRetryInner(url: string, options: RequestInit = {}, retries = 3, backoff = 500): Promise<Response> {

@@ -61,6 +61,20 @@ export function reconWeekHeaderFor(url: string, method: string | undefined): str
   return `${current.runId}@${current.version}`;
 }
 
+/**
+ * WRA-54: a change was saved while a week page is open (an upload, a decision, a seal, Collect…).
+ * The week calculator publishes the new numbers about 2 minutes later, so the week page listens
+ * for this and keeps asking until they arrive — the user never has to reload.
+ */
+export const RECON_WEEK_SAVED_EVENT = 'recon-week-saved';
+
+export function announceReconWeekSave(url: string, method: string | undefined, ok: boolean): void {
+  if (!ok || !current || current.closed) return;
+  if (!CHANGING.has(String(method || 'GET').toUpperCase())) return;
+  if (READ_ONLY_POSTS.some((re) => re.test(url))) return;
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(RECON_WEEK_SAVED_EVENT));
+}
+
 /** Adds the header to fetch options (plain object or Headers). Returns the value used. */
 export function withReconWeekHeader(url: string, options: RequestInit): { options: RequestInit; sent: string | null } {
   const sent = reconWeekHeaderFor(url, options.method);

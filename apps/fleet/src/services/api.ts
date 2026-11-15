@@ -18,7 +18,7 @@ import type { AppendCanonicalLedgerResult, CanonicalLedgerEventInput } from '../
 import { OdometerReading } from '../types/vehicle';
 import { TollPlaza } from '../types/toll';
 import { API_ENDPOINTS } from './apiConfig';
-import { noteReconWeekResponse, withReconWeekHeader } from './reconWeekContext';
+import { announceReconWeekSave, noteReconWeekResponse, withReconWeekHeader } from './reconWeekContext';
 import { catalogPages } from '@roam/api-client';
 import { tollApiErrorFromResponse } from './tollApiError';
 import { TollV2CommandError } from './tollV2CommandError';
@@ -158,9 +158,12 @@ export async function fetchWithRetry(url: string, options: RequestInit = {}, ret
   if (week.sent) {
     const response = await fetchWithRetryInner(url, week.options, retries, backoff);
     await noteReconWeekResponse(week.sent, response);
+    announceReconWeekSave(url, options.method, response.ok);
     return response;
   }
-  return fetchWithRetryInner(url, options, retries, backoff);
+  const response = await fetchWithRetryInner(url, options, retries, backoff);
+  announceReconWeekSave(url, options.method, response.ok);
+  return response;
 }
 
 async function fetchWithRetryInner(url: string, options: RequestInit = {}, retries = 1, backoff = 500): Promise<Response> {

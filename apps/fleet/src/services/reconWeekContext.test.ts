@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { API_ENDPOINTS } from './apiConfig';
 import {
   RECON_WEEK_CHANGED_EVENT,
+  RECON_WEEK_SAVED_EVENT,
+  announceReconWeekSave,
   clearReconWeekContext,
   getReconWeekContext,
   noteReconWeekResponse,
@@ -75,5 +77,35 @@ describe('WRA-27 week version on toll / fuel / settlement changes', () => {
     vi.unstubAllGlobals();
     expect(seen).toEqual(['WEEK_CHANGED']);
     expect(getReconWeekContext()?.version).toBe(7);
+  });
+});
+
+describe('WRA-54: a saved change tells the week page to keep checking', () => {
+  const IMPORT = `${API_ENDPOINTS.toll}/toll/v2/import`;
+  function capture() {
+    const seen: string[] = [];
+    vi.stubGlobal('window', { dispatchEvent: (e: Event) => seen.push(e.type) });
+    return seen;
+  }
+
+  it('an OK change while a week is open announces it', () => {
+    setReconWeekContext({ runId: RUN, version: 3, closed: false });
+    const seen = capture();
+    announceReconWeekSave(IMPORT, 'POST', true);
+    vi.unstubAllGlobals();
+    expect(seen).toEqual([RECON_WEEK_SAVED_EVENT]);
+  });
+
+  it('reads, failures, auto-match, closed weeks and no open week announce nothing', () => {
+    const seen = capture();
+    announceReconWeekSave(IMPORT, 'POST', true); // no week open
+    setReconWeekContext({ runId: RUN, version: 3, closed: false });
+    announceReconWeekSave(`${API_ENDPOINTS.toll}/toll/v2/desk`, 'GET', true);
+    announceReconWeekSave(IMPORT, 'POST', false);
+    announceReconWeekSave(`${API_ENDPOINTS.toll}/toll-reconciliation/auto-match`, 'POST', true);
+    setReconWeekContext({ runId: RUN, version: 3, closed: true });
+    announceReconWeekSave(IMPORT, 'POST', true);
+    vi.unstubAllGlobals();
+    expect(seen).toEqual([]);
   });
 });
