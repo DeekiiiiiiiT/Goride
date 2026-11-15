@@ -26,7 +26,12 @@
 -- with its old text), refill_jobs_with_note = 20, fluid_services_with_note = 8.
 -- Wording is chosen per job CODE (dl_targets.kind), not by is_part: e.g. engine_oil_part is is_part = true but is a
 -- fluid service, so it gets the fluid-service wording. Checked 15 Nov: 0 of the 28 have a NULL description.
--- DRY RUN FIRST: double-log-notes-DRYRUN.sql is this file with an always-stop at the end (nothing saved).
+-- RUN double-log-notes-DRYRUN.sql FIRST and only run this file after it says "DRY RUN OK". The DRYRUN file is
+-- GENERATED from this file (never edit it by hand); after any edit here, regenerate it with the awk command in
+-- docs/service-items-build/live/README-dryrun.md.
+-- Re-running: safe. Each UPDATE skips rows that already have their note, so a second run changes 0 rows and
+-- the checks pass with the same numbers. Two checks look alike on purpose: not_appended = a target lost or
+-- changed its OLD text; "no note" = a target kept its old text but did not get the NEW note (e.g. skipped).
 
 BEGIN;
 

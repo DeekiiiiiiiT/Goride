@@ -1,4 +1,15 @@
-# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 16, 15 Nov 2026)
+# Reply to review: labor-only jobs, Exhaust draft, EV/Hybrid (Rev 17, 15 Nov 2026)
+
+## Rev 17: the three verifications, duplicates, is_part
+
+1. **Apostrophes: already escaped, verified line by line.** Every apostrophe inside the note strings and the LIKE patterns is doubled (`don''t`, `part''s`). There's no "maker's" in this SQL. Also, it's all one transaction: if any statement errored, nothing would be saved, never a partial update.
+2. **Running it twice: already safe.** Both UPDATEs carry `AND coalesce(description,'') NOT LIKE '%<note>%'`, so a second run changes 0 rows and the checks pass with the same numbers (20 / 8). The header now says so.
+3. **The dry run gates on 28: it already did.** The check block is identical in both files, and its first line is `IF found_n <> 28 THEN RAISE 'Stopped, nothing saved: found % of 28'`, before "DRY RUN OK" can be reached.
+4. **Duplicates: systematic.** Normalised-name group-by over every active job: Engine oil is the only exact duplicate. By meaning, I found one more: **"Cabin Air Filter" (Filters) vs "Cabin A/C Filter" (HVAC)**. It's on the Open list with the same plan as Engine oil (check foreign keys, keep the one with history, write down "both used"), done in the HVAC file. The group-by re-runs before every batch.
+5. **Two files can't drift:** the DRYRUN file is now generated from the real file (`live/README-dryrun.md` holds the exact command). It's identical except the one always-stop line and the cut COMMIT. The real file's header says to run DRYRUN first and to regenerate after any edit. The README also records the pattern as the template for the Cooling / Transmission / Drivetrain notes.
+6. **`is_part = true` on fluid jobs is by design**, so I won't change it. In this app it means "the job line asks which product went in and shows in Find parts". For oil (grade), brake fluid (DOT, fit mode "spec") and coolant (type), recording the product is the point. The line's own price is that product; supplies are separate items. When a parts-vs-supplies cost report is built, it must split on **item kind**, not on the job's `is_part`. Written on the Open list.
+
+**Minor:** the header now explains why "not_appended" and "no note" both exist (old text lost vs new note missing). The DRYRUN has no technical blocker; the owner runs it in the SQL editor next.
 
 ## Rev 16: dry run, NULLs, per-job wording
 

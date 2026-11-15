@@ -1,8 +1,6 @@
--- DRY RUN of double-log-notes.sql (15 Nov 2026). Saves NOTHING: it always ends with an error message.
--- Paste ALL into the Supabase SQL editor and Run. Expected red message:
--- "DRY RUN OK, nothing saved: 28 found, 0 not appended, 0 missing, 0 other rows changed, refill notes=20, fluid notes=8"
--- Any "Stopped, nothing saved: ..." message means a check failed; paste it to Claude.
--- (Original header follows.)
+-- DRY RUN of double-log-notes.sql. GENERATED (see README-dryrun.md). Saves NOTHING: it always ends with an error.
+-- Expected: "DRY RUN OK, nothing saved: 28 found, 0 not appended, 0 missing, 0 other rows changed, refill notes=20, fluid notes=8"
+-- Any "Stopped, nothing saved: ..." means a check failed; paste it to Claude.
 -- Double-log rule on jobs that were already live (Rev 2, 15 Nov 2026). Job DESCRIPTION text only, APPENDED
 -- (never replaced); targets are matched by job CODE, not by name. Nothing else changes.
 -- Rule: a fluid used to refill a replaced part is logged on the part job, not on the separate fluid service.
@@ -31,7 +29,12 @@
 -- with its old text), refill_jobs_with_note = 20, fluid_services_with_note = 8.
 -- Wording is chosen per job CODE (dl_targets.kind), not by is_part: e.g. engine_oil_part is is_part = true but is a
 -- fluid service, so it gets the fluid-service wording. Checked 15 Nov: 0 of the 28 have a NULL description.
--- DRY RUN FIRST: double-log-notes-DRYRUN.sql is this file with an always-stop at the end (nothing saved).
+-- RUN double-log-notes-DRYRUN.sql FIRST and only run this file after it says "DRY RUN OK". The DRYRUN file is
+-- GENERATED from this file (never edit it by hand); after any edit here, regenerate it with the awk command in
+-- docs/service-items-build/live/README-dryrun.md.
+-- Re-running: safe. Each UPDATE skips rows that already have their note, so a second run changes 0 rows and
+-- the checks pass with the same numbers. Two checks look alike on purpose: not_appended = a target lost or
+-- changed its OLD text; "no note" = a target kept its old text but did not get the NEW note (e.g. skipped).
 
 BEGIN;
 
@@ -97,6 +100,6 @@ BEGIN
   IF refill_n <> 20 OR fluid_n <> 8 THEN
     RAISE EXCEPTION 'Stopped, nothing saved: refill notes=% (want 20), fluid notes=% (want 8)', refill_n, fluid_n;
   END IF;
-  -- Dry-run file only: the next line always stops, so nothing is saved.
+  -- (double-log-notes-DRYRUN.sql has an always-stop on the next line; this real file does not.)
   RAISE EXCEPTION 'DRY RUN OK, nothing saved: 28 found, 0 not appended, 0 missing, 0 other rows changed, refill notes=%, fluid notes=%', refill_n, fluid_n;
 END $chk$;
