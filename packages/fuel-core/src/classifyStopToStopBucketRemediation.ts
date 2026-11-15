@@ -148,7 +148,7 @@ export function summarizeStopToStopRemediation<
   if (chainN > 0) {
     return `${broken.length} fill window${broken.length === 1 ? '' : 's'}${where} still block Finalize (${chainN} need odometer fixes).`;
   }
-  return `${broken.length} fill window${broken.length === 1 ? '' : 's'}${where} have trip/adjustment km larger than the odometer moved.`;
+  return `${broken.length} fill window${broken.length === 1 ? '' : 's'}${where} ${broken.length === 1 ? 'has' : 'have'} trip/adjustment km larger than the odometer moved.`;
 }
 
 export type StopToStopWeekBlockerInventory<T> = {

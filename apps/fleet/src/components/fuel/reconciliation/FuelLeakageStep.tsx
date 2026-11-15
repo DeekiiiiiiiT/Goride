@@ -184,11 +184,6 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
 
   return (
     <div className="space-y-3">
-      {referenceNumbers.length > 0 && (
-        <p className="rounded-2xl bg-[#f8f9ff] px-4 py-3 text-sm text-[#0b1c30]">
-          Usual economy for this car: {referenceNumbers.map((value) => value.toFixed(1)).join(', ')} km/L.
-        </p>
-      )}
       {referenceOutOfBand && (
         <p className="rounded-2xl bg-[#fffbeb] px-4 py-3 text-sm text-[#92400e]">
           This car’s usual economy came out impossible, so the driver was not charged for unexplained fuel.
@@ -199,7 +194,12 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
           There isn’t enough earlier fuel history to know this car’s usual economy, so the driver was not charged for unexplained fuel.
         </p>
       )}
-      {routingHealth?.message && (
+      {openPriorMessage && (
+        <p className="rounded-2xl bg-[#fffbeb] px-4 py-3 text-sm text-[#92400e]">
+          {openPriorMessage}
+        </p>
+      )}
+      {routingHealth?.message && !routingHealth.ok && (
         <p className={`rounded-lg border px-3 py-2 text-sm ${
           routingHealth.ok
             ? 'border-slate-200 bg-slate-50 text-slate-800'
@@ -208,9 +208,25 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
           {routingHealth.message}
         </p>
       )}
-      {openPriorMessage && (
-        <p className="rounded-2xl bg-[#fffbeb] px-4 py-3 text-sm text-[#92400e]">
-          {openPriorMessage}
+      {referenceNumbers.length > 0 || routingHealth?.ok || varianceRows.length > 0 || sourceNotes.length > 0 ? (
+        <details className="group rounded-2xl bg-[#f8f9ff] px-4 py-3" data-testid="fuel-distance-details">
+          <summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-[#0b1c30]">
+            <span className="transition-transform group-open:rotate-90" aria-hidden>›</span>
+            More details <span className="text-[#47464c]">(usual economy, routes, recent weeks)</span>
+          </summary>
+          <div className="mt-3 space-y-2">
+      {referenceNumbers.length > 0 && (
+        <p className="rounded-2xl bg-[#f8f9ff] px-4 py-3 text-sm text-[#0b1c30]">
+          Usual economy for this car: {referenceNumbers.map((value) => value.toFixed(1)).join(', ')} km/L.
+        </p>
+      )}
+      {routingHealth?.message && routingHealth.ok && (
+        <p className={`rounded-lg border px-3 py-2 text-sm ${
+          routingHealth.ok
+            ? 'border-slate-200 bg-slate-50 text-slate-800'
+            : 'border-amber-200 bg-amber-50 text-amber-900'
+        }`}>
+          {routingHealth.message}
         </p>
       )}
       {varianceRows.map((snap) => {
@@ -232,11 +248,6 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
           </div>
         );
       })}
-      {clockAssumed && (
-        <p className="rounded-2xl bg-[#fffbeb] px-4 py-3 text-sm text-[#92400e]">
-          A fill has no time. We treated it as the end of that day. Add a time or link the gas card.
-        </p>
-      )}
       {sourceNotes.length > 0 && (
         <ul className="space-y-1 text-sm text-slate-600">
           {sourceNotes.map((source, index) => (
@@ -245,6 +256,14 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
             </li>
           ))}
         </ul>
+      )}
+          </div>
+        </details>
+      ) : null}
+      {clockAssumed && (
+        <p className="rounded-2xl bg-[#fffbeb] px-4 py-3 text-sm text-[#92400e]">
+          A fill has no time. We treated it as the end of that day. Add a time or link the gas card.
+        </p>
       )}
       {homeMissing && (
         <p className="rounded-2xl bg-[#fffbeb] px-4 py-3 text-sm text-[#92400e]">

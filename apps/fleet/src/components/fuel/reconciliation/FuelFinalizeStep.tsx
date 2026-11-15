@@ -131,7 +131,8 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
 
   return (
     <div className="space-y-3">
-      {closableBlockMessages.length > 0 && (
+      {/* Desk: the "Still open" list (with Go to) and the Fuel seal reason already say what blocks. */}
+      {closableBlockMessages.length > 0 && !desk && (
         <div className="space-y-2 text-sm text-[#0b1c30]" role="alert">
           <p className="text-[12px] font-semibold uppercase tracking-wider text-[#ba1a1a]">Finalize is blocked</p>
           {stopToStopSummary &&
@@ -309,7 +310,29 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
           </div>
         )
       ) : null}
-      {settlementRows.length > 0 && <FuelSettlementTable rows={settlementRows} showStatus />}
+      {settlementRows.length > 0 && desk ? (
+        <ul className="space-y-2" data-testid="fuel-finalize-cars">
+          {settlementRows.map((r) => (
+            <li key={r.id} className="grid grid-cols-2 gap-3 rounded-2xl bg-[#eff4ff] px-4 py-3 md:grid-cols-4 md:items-center">
+              <span className="w-fit rounded-xl bg-white px-3 py-1 text-[15px] font-semibold text-[#0b1c30]">{r.plate}</span>
+              <span className="text-sm text-[#47464c]">
+                Cash from earnings
+                <span className="block text-[15px] font-semibold tabular-nums text-[#0b1c30]">{formatFuelMoney(r.cashFromEarnings)}</span>
+              </span>
+              <span className="text-sm text-[#0051d5]">
+                Driver pays
+                <span className="block text-[15px] font-semibold tabular-nums">{formatFuelMoney(r.driverShare)}</span>
+              </span>
+              <span className="text-sm text-[#47464c]">
+                Net
+                <span className="block text-[15px] font-semibold tabular-nums text-[#0b1c30]">{formatFuelMoney(r.netPay)}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : settlementRows.length > 0 ? (
+        <FuelSettlementTable rows={settlementRows} showStatus />
+      ) : null}
     </div>
   );
 }

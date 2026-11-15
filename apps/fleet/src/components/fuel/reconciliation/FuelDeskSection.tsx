@@ -49,6 +49,15 @@ export function FuelDeskSection({
   );
 }
 
+/** Server block reasons in plain words, with the part to go to (Week Reconciliation Fuel step). */
+export function plainFuelBlockReason(reason: string | null): string | null {
+  if (!reason) return reason;
+  if (/critical fill flags not dispositioned/i.test(reason)) return 'A flagged fill still needs a decision — see Fuel checks.';
+  if (/data-quality flagged vehicles not marked reviewed/i.test(reason)) return 'A flagged car still needs Mark reviewed — see Fuel checks.';
+  if (/stop-to-stop attribution does not close/i.test(reason)) return "A fill window's km don't add up — see Distance and who pays.";
+  return reason;
+}
+
 /** The step's finish: Finalize fuel locks the fuel week, which completes step 5. */
 export function FuelDeskFinalizeBar({
   blockedReason,
@@ -72,8 +81,8 @@ export function FuelDeskFinalizeBar({
           Fuel seal
           <span
             className={cn(
-              'rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider',
-              locked ? 'bg-[#0b1c30] text-white' : ready ? 'bg-[#ecfdf5] text-[#069669]' : 'bg-[#eff4ff] text-[#0051d5]',
+              'rounded-full px-2 py-0.5 text-[12px] font-semibold',
+              locked ? 'bg-[#0b1c30] text-white' : ready ? 'bg-[#ecfdf5] text-[#069669]' : 'bg-[#f1f5f9] text-[#64748b]',
             )}
           >
             {locked ? 'Locked' : ready ? 'Ready' : 'Not ready'}
@@ -84,7 +93,7 @@ export function FuelDeskFinalizeBar({
             ? 'This fuel week is locked. Driver fuel charges are posted.'
             : ready
               ? 'Everything checks out. Finalizing locks the fuel week and posts driver fuel charges.'
-              : blockedReason}
+              : plainFuelBlockReason(blockedReason)}
         </p>
       </div>
       {locked ? null : (
