@@ -105,6 +105,8 @@ async function refreshDriverBlockersAfterSeal(
 ): Promise<void> {
   try {
     const { writeDriverWeekBlockers } = await import("./recon_week_blockers.ts");
+    const { getLatestWeekStatement } = await import("./week_statements.ts");
+    const { resolveFinanceReconDriftsOfKind } = await import("./finance_recon_drift.ts");
     const { data, error } = await getServiceClient()
       .from("driver_financial_periods")
       .select("driver_id")
@@ -113,7 +115,14 @@ async function refreshDriverBlockersAfterSeal(
     if (error) throw new Error(error.message);
     for (const row of data ?? []) {
       const driverId = String((row as { driver_id?: unknown }).driver_id || "");
-      if (driverId) await writeDriverWeekBlockers(orgId, weekKey, driverId, line);
+      if (!driverId) continue;
+      // WRA-52: a signed (closed) earnings statement came from the engines just
+      // now, so drift noted against the previous statement is gone.
+      const latest = await getLatestWeekStatement(orgId, driverId, weekKey, "earnings");
+      if (latest?.status === "closed") {
+        await resolveFinanceReconDriftsOfKind({ organizationId: orgId, driverId, weekKey, kind: "earnings" });
+      }
+      await writeDriverWeekBlockers(orgId, weekKey, driverId, line);
     }
   } catch (e) {
     console.warn("[recon-seal-earnings] blocker refresh failed", e instanceof Error ? e.message : e);

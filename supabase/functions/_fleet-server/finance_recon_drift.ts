@@ -72,6 +72,27 @@ export async function upsertFinanceReconDrifts(opts: {
   }
 }
 
+/**
+ * WRA-52: a fresh seal publishes the statement from the engines, so open drift
+ * rows of that kind (recorded against the old statement) no longer apply.
+ */
+export async function resolveFinanceReconDriftsOfKind(opts: {
+  organizationId: string;
+  driverId: string;
+  weekKey: string;
+  kind: StatementEngineDrift["kind"];
+}): Promise<void> {
+  const { error } = await sb()
+    .from("finance_recon_drift")
+    .update({ status: "resolved", resolved_at: new Date().toISOString() })
+    .eq("organization_id", opts.organizationId)
+    .eq("driver_id", opts.driverId)
+    .eq("week_key", String(opts.weekKey).slice(0, 10))
+    .eq("kind", opts.kind)
+    .eq("status", "open");
+  if (error) throw new Error(`drift resolve failed: ${error.message}`);
+}
+
 export async function countOpenFinanceReconDrifts(
   organizationId: string,
   weekKey?: string,
