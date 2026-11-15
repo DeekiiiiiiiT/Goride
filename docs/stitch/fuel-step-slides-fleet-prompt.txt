@@ -1,0 +1,167 @@
+ROAM FLEET — FUEL STEP, ONE CARD AT A TIME — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Fuel step in Week Reconciliation (Desktop Web App with a phone layout, for the fleet owner and fleet manager):
+
+Redesign ONE area of step 5 "Fuel" inside "Week Reconciliation" in Roam Fleet. Today the Fuel step shows five long sections stacked on top of each other (1 Fuel checks, 2 Disputes and adjustments, 3 Fuel policy, 4 Distance and who pays, 5 Before you finalize, then the Fuel seal bar). The person has to scroll down and open each section one by one, which is tiring and easy to get lost in. The new design shows ONE section at a time as a large card. A short progress row at the top shows the five parts and where the person is. When they finish a part they click "Next" and the card slides to the next part; "Back" slides to the previous one. The last card, "Before you finalize", ends with the "Finalize fuel" button. Everything outside this area stays exactly as it is today: the app frame, the left step rail, the page title "Fuel" with "Is every fuel fill matched and priced?", the "Refresh Data" and "Refresh fuel" buttons, and the right-hand "Money Check" column. Only the area between the "Refresh fuel" row and the "Previous: Tag account" footer button changes. The person using this is not an accountant: each card says in plain words what it is for, what needs doing, and the one or two buttons that do it. The design must feel modern, calm and effortless, like the best business banking apps. Every screen is tall enough to show everything, with no inner scrolling.
+
+
+BRAND IDENTITY:
+- Keep the existing Roam Fleet app frame exactly as it is today (do not redesign it):
+  - Top: a white nav row with the black "Roam Fleet" app tile, then: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations, Delivery Operations, Analytics, Reports, Business Finance (active, underlined), a bell with a red count, the avatar.
+  - Dark bar below it: a dark navy strip with a search box "Switch vehicle or search hub…" on the left, and on the right "03:36:56 PM EST", "America/Jamaica", "JM (JMD)" and an org chip "DE · Deeki T".
+  - Breadcrumb: "Business Finance › Week Reconciliation".
+- Keep the existing Week Reconciliation desk layout: the "All weeks" button and the left step rail card "WEEK STEPS" with "Step 5 of 8" (1 Upload inputs Complete, 2 Assign service lines Complete, 3 Tolls "Tolls locked", 4 Tag account Complete, 5 Fuel "In progress" highlighted, 6 Trips & earnings, 7 Settlement preview, 8 Close week — the last three greyed with a padlock and "Waiting on Fuel"); the middle white card with "Week of 5 Oct 2026 · Rideshare · 5–11 Oct 2026", the green dot chip "Numbers updated 2 min ago", the title "Fuel", the question "Is every fuel fill matched and priced?", a "Refresh Data" button and a row "Critical fill flags not dispositioned." with a "Refresh fuel" button; and the right column "Money Check" card (Total fuel bought J$28,350.00, Driver charge J$3,930.38, Company keeps J$25,270.51, Payment Sources Breakdown: Gas card J$15,000.00, Cash from earnings J$13,350.00). These stay as they are. The new design goes inside the middle card, below the "Refresh fuel" row and above the footer button "Previous: Tag account".
+- Theme: "Calm finance desk" — clear, trustworthy, quiet and modern. Not a spreadsheet, not a developer tool.
+- LIGHT MODE (default):
+  - Primary: near-black #030213 — Next, Finalize fuel, the current part in the progress row
+  - Page wash: #f8fafc; cards: #FFFFFF with a soft shadow (0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(15,23,42,0.06)) and a hairline border rgba(0,0,0,0.06)
+  - Text: #0b1c30; muted text: #47464c
+  - Done / Clear: green #069669 on a soft green #ecfdf5
+  - Needs a look / Review: amber #b45309 on a soft amber #fffbeb
+  - Blocks Finalize: red #ba1a1a on #fff1f2
+  - Info / Not needed this week: slate #475569 on #f1f5f9
+  - Accent blue for links-that-are-buttons and the driver share: #0051d5 on #eff4ff
+- DARK MODE:
+  - Page #1c1c1e, cards #2a2a2d, border #3a3a3d
+  - Text #fafafa, muted #a1a1aa, primary buttons white #fafafa with near-black text
+  - Green #34d399 on #064e3b; amber #fbbf24 on #451a03; red #f87171 on #450a0a; blue #60a5fa on #172554
+- Shapes: cards 20px corner radius, buttons and inputs 12px, chips and the progress pills fully rounded.
+- Typography: Inter. Card title 22px semibold, card subtitle 15px muted, body 15px, helper text 13px. Money uses tabular figures, right-aligned, always "J$" with 2 decimals (J$5,000.00).
+- Dates and times in plain words: "5 Oct, 7:12 AM", "Week of 5 Oct 2026". Never "2026-10-05", never codes, ids or internal words.
+- Buttons always look like buttons:
+  - Primary = solid near-black with white text ("Next", "Finalize fuel", "Resolve").
+  - Secondary = white with a visible #cbd5e1 border and dark text ("Back", "Review details", "Add adjustment").
+  - Never underlined text links, never grey text-only buttons. Every confirm is an in-app dialog, never a browser pop-up.
+- Sample data (REAL, from Roam's week of 5 Oct 2026, Rideshare, car Toyota Roomy · 5179KZ, driver Kenny Gregory Rattray):
+  - Fuel bought J$28,350.00 (gas card J$15,000.00 + cash from earnings J$13,350.00). Driver pays J$3,930.38, company keeps J$25,270.51.
+  - 9 flagged fills on 5179KZ; 1 fill blocks Finalize: "5 Oct · J$5,000.00 · RideShare Cash · Blaize, Old Harbour Road · High fuel consumption".
+  - Fuel policy for 5179KZ: company pays 90% of rideshare driving, 65% of repositioning, 100% of company errands, 0% of personal driving, 50% of leftover fuel.
+  - No open driver disputes this week.
+
+
+DESIGN PRINCIPLES:
+- One part at a time. Only one card is on screen; the others are reached with Next / Back or by clicking a part in the progress row.
+- The person always knows where they are and what is left: the progress row shows all five parts with their status ("Done", "1 to fix", "Review", "Nothing to do").
+- Moving is never blocked: Next always works, so the person can look ahead. Only "Finalize fuel" waits until every part is clear, and the last card says exactly what is still open with a button that jumps to that part.
+- Every card answers three things at the top: what this part is for (one sentence), its status chip, and what to do now.
+- Problems are rows with their fix button next to them, never error messages.
+- The money always adds up and the right-hand Money Check stays visible the whole time.
+- Calm, not alarming: red only for things that block Finalize.
+- Slides are short and smooth (250 ms, ease-out, the new card slides in from the right on Next and from the left on Back).
+- One view per screen.
+
+
+SCREEN 1: PART 1 OF 5 — FUEL CHECKS (ONE FILL BLOCKS FINALIZE)
+- The full desk as described in Brand Identity, with the new area inside the middle card.
+- Progress row across the top of the area: five rounded pills joined by a thin line — "1 Fuel checks" (current: near-black pill, white text, small red dot and "1 to fix"), "2 Disputes" (slate "Nothing to do"), "3 Fuel policy" (slate "Check"), "4 Distance and who pays" (amber "Review"), "5 Finalize" (grey padlock "Not ready"). Under the pills a thin bar 1/5 filled.
+- The card: title "Fuel checks", subtitle "Fills that need a look before the week can lock.", status chip on the right "1 to fix" (red).
+- A red-tinted box "1 fill is blocking Finalize" with one row: "5 Oct · J$5,000.00 · RideShare Cash", second line "5179KZ · Blaize, Old Harbour Road", third line in red "High fuel consumption", and a primary "Resolve" button on the right.
+- Below: "9 flagged fills · 1 car still needs a review". One row card: "5179KZ · Kenny Gregory Rattray · 9 flagged fills need a look · J$28,350.00" with an amber chip "Needs a look", a secondary "Review details" button and a primary "Mark reviewed" button.
+- A secondary button "Add adjustment" and a secondary button "Show full cost breakdown".
+- Card footer: on the left a disabled-looking secondary "Back" (first part), in the middle small muted text "Part 1 of 5", on the right a primary "Next: Disputes and adjustments →".
+
+
+SCREEN 2: PART 2 OF 5 — DISPUTES AND ADJUSTMENTS (NOTHING OPEN)
+- Same desk; progress row with "1 Fuel checks" now showing a green check "Done", "2 Disputes" current, bar 2/5.
+- The card: title "Disputes and adjustments", subtitle "Driver disputes and distance adjustments for this week.", green chip "Nothing open".
+- A calm empty state: green check circle icon, "No driver disputes this week.", muted line "If a driver drove for personal use or a company errand, add it here so the fuel is split fairly."
+- One secondary button "Add adjustment".
+- Footer: secondary "← Back", "Part 2 of 5", primary "Next: Fuel policy →".
+
+
+SCREEN 3: PART 3 OF 5 — FUEL POLICY
+- Progress row with parts 1 and 2 done, "3 Fuel policy" current, bar 3/5.
+- The card: title "Fuel policy", subtitle "Who pays for each kind of driving.", slate chip "Check".
+- One car card: "Toyota Roomy · 5179KZ", line "Standard fuel policy", then a clean two-column list with a small bar for each row showing the company share:
+  - "Rideshare trips — company pays 90%"
+  - "Driving to the next pickup — company pays 65%"
+  - "Company errands — company pays 100%"
+  - "Personal driving — company pays 0%"
+  - "Leftover fuel — company pays 50%"
+- A muted line: "This is set in Fuel policy. It applies to every week from 3 Aug 2026."
+- Footer: secondary "← Back", "Part 3 of 5", primary "Next: Distance and who pays →".
+
+
+SCREEN 4: PART 4 OF 5 — DISTANCE AND WHO PAYS
+- Progress row with parts 1–3 done, "4 Distance and who pays" current (amber "Review"), bar 4/5.
+- The card: title "Distance and who pays", subtitle "How the car was driven this week, and how the fuel cost is split.", amber chip "Review".
+- A km summary row of four small tiles: "Rideshare trips 1,180 km", "Driving to pickups 96 km", "Personal 0 km", "Not explained 41 km" — and under them one stacked bar in the same four colours.
+- A "Who pays the fuel" box: "Company keeps J$25,270.51" and "Driver pays J$3,930.38" side by side, adding up to "J$28,350.00".
+- A box "Stop-to-stop gaps" with one line "All fill windows on 5179KZ add up." and a green check — or, when there are gaps, rows like "3 Oct → 4 Oct · trips 14 km more than the odometer" with secondary "Review trips" and primary "Accept this gap".
+- A collapsed secondary row "Change the leftover split for this week (optional)".
+- A primary button "Mark reviewed" at the bottom of the card content.
+- Footer: secondary "← Back", "Part 4 of 5", primary "Next: Finalize →".
+
+
+SCREEN 5: PART 5 OF 5 — FINALIZE (STILL BLOCKED)
+- Progress row: parts 2 and 3 done, part 1 shows red "1 to fix", part 4 shows amber "Review", "5 Finalize" current, bar 5/5.
+- The card: title "Finalize fuel", subtitle "Lock this week's fuel so pay can be worked out.", grey chip "Not ready".
+- A "Still open" list, each row with a jump button:
+  - red dot "1 fill is blocking Finalize" — secondary button "Go to Fuel checks"
+  - amber dot "Distance and who pays not reviewed yet" — secondary button "Go to Distance and who pays"
+- A small "What this week used" list in muted text: "Trips: 77 loaded", "Distances: loaded", "Fuel policy: loaded", "Cards: loaded".
+- A checkbox row: "I checked the warnings for this week."
+- A summary line per car: "5179KZ · Cash from earnings J$13,350.00 · Driver pays J$3,930.38 · Net J$9,419.62".
+- At the bottom the Fuel seal bar: padlock icon, "Fuel seal", grey chip "Not ready", muted "2 things still open", and a disabled primary "Finalize fuel" button.
+- Footer: secondary "← Back", "Part 5 of 5", no Next button.
+
+
+SCREEN 6: PART 5 OF 5 — FINALIZE (READY)
+- Same as Screen 5 when everything is clear: all five pills show green "Done", bar full.
+- The card: title "Finalize fuel", green chip "Ready".
+- A green box "Every part is done. Fuel is ready to lock." with the totals "Fuel bought J$28,350.00 · Driver pays J$3,930.38 · Company keeps J$25,270.51".
+- The checkbox "I checked the warnings for this week." ticked.
+- Fuel seal bar: "Fuel seal", green chip "Ready", and an enabled primary "Finalize fuel" button with a padlock icon.
+- Footer: secondary "← Back", "Part 5 of 5".
+
+
+SCREEN 7: FINALIZING AND LOCKED
+- Same desk, Part 5 card right after "Finalize fuel" was clicked.
+- The Fuel seal bar shows a spinner and "Locking fuel… this takes a few seconds." with a thin progress bar.
+- Below it (the moment it finishes) a green banner "Fuel for the week of 5 Oct 2026 is locked." and a primary "Continue to Trips & earnings →" button.
+
+
+SCREEN 8: PHONE 390px — FUEL STEP, PART 1
+- Screen 1 on a 390px phone.
+- Top: compact header "Week of 5 Oct · Rideshare", step chips that scroll sideways with "5 Fuel" active.
+- The progress row becomes five small numbered circles with the current label under them ("1 · Fuel checks · 1 to fix").
+- The card fills the width; rows stack; buttons are full width.
+- A bar stuck to the bottom of the screen with "← Back" and "Next →".
+- The Money Check collapses into a single line above the card: "Fuel J$28,350.00 · Driver J$3,930.38" that opens the full breakdown.
+
+
+ADDITIONAL UI COMPONENTS:
+- Progress row: five fully rounded pills on one line, joined by a 2px line; each pill shows number, short name and a status (green check "Done", red dot "1 to fix", amber "Review", slate "Nothing to do" / "Check", grey padlock "Not ready"). The current pill is near-black with white text. Every pill is a button that slides to that part.
+- Thin step bar under the pills (4px, rounded, near-black fill).
+- Part card: white, 20px radius, soft shadow, 28px padding; header = title + subtitle on the left, status chip on the right; content; footer row with Back, "Part N of 5", Next.
+- Next button text always names the next part: "Next: Fuel policy →".
+- Fix row: icon, plain sentence, amount on the right, one primary fix button.
+- Empty state: green check circle, one sentence, one optional secondary button.
+- Fuel seal bar: padlock, title, status chip, short reason, primary "Finalize fuel".
+- Toast at the bottom right after an action inside a card: "Marked reviewed" with an "Undo" button inside the toast where the action can be undone.
+
+
+INTERACTIONS:
+- "Next" slides the current card out to the left and the next card in from the right (250 ms); "Back" does the reverse. The progress row and bar update at the same moment.
+- Clicking a pill in the progress row slides straight to that part.
+- The step opens on the first part that still needs something; if everything is done it opens on "Finalize".
+- Fixing something inside a card (Resolve, Mark reviewed, Accept this gap) updates that card's chip, the matching pill and the Money Check at once, without leaving the card.
+- On the Finalize card, "Go to …" buttons slide to that part.
+- "Finalize fuel" opens an in-app dialog: "Lock fuel for the week of 5 Oct 2026? Fuel bought J$28,350.00 · Driver pays J$3,930.38." with a primary "Finalize fuel"; then Screen 7.
+- The keyboard works too: left and right arrow keys move Back / Next when no text box is focused.
+- On the phone the Back / Next bar stays at the bottom of the screen.
+
+
+Spec screens / Area
+| Screen | Area |
+| 1 | Part 1 Fuel checks — one fill blocks Finalize, progress row, Next |
+| 2 | Part 2 Disputes and adjustments — nothing open |
+| 3 | Part 3 Fuel policy — who pays for each kind of driving |
+| 4 | Part 4 Distance and who pays — km split, who pays, stop-to-stop gaps, Mark reviewed |
+| 5 | Part 5 Finalize — still blocked, jump buttons, Fuel seal not ready |
+| 6 | Part 5 Finalize — ready, Fuel seal enabled |
+| 7 | Finalizing and locked — continue to Trips & earnings |
+| 8 | Phone 390px — Fuel step, part 1 |
