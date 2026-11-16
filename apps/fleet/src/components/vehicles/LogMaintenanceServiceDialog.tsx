@@ -1704,7 +1704,7 @@ export function LogMaintenanceServiceDialog({
                 type="button"
                 data-testid="log-service-cancel"
                 onClick={clearDraftAndClose}
-                className={`px-4 py-2 max-sm:py-3 rounded-lg ${LT.titleSm} transition-colors ${LS.btnCancel}`}
+                className={`h-10 px-4 max-sm:h-12 rounded-lg ${LT.titleSm} transition-colors ${LS.btnCancel}`}
               >
                 {LOG_SERVICE_COPY.cancelLabel}
               </button>
@@ -1714,9 +1714,9 @@ export function LogMaintenanceServiceDialog({
                     type="button"
                     onClick={handleBack}
                     aria-label={LOG_SERVICE_COPY.backLabel}
-                    className={`flex items-center gap-1.5 px-4 py-2 max-sm:h-11 max-sm:w-11 max-sm:justify-center max-sm:p-0 rounded-lg ${LT.titleSm} transition-colors ${LS.btnBack}`}
+                    className={`h-10 flex items-center gap-1 px-4 max-sm:h-12 max-sm:w-12 max-sm:justify-center max-sm:p-0 rounded-lg ${LT.titleSm} transition-colors bg-[#e8e7f1] text-[#1a1b22] hover:bg-[#eeedf7] dark:bg-[#2a2b36] dark:text-[#e4e1ec]`}
                   >
-                    <ArrowLeft className="w-4 h-4 sm:hidden" />
+                    <ArrowLeft className="w-4 h-4" />
                     <span className="hidden sm:inline">
                       {step === "whatWasDone" && hasAddedJobs
                         ? LOG_SERVICE_COPY.backToReview(lines.length)
@@ -1734,9 +1734,12 @@ export function LogMaintenanceServiceDialog({
                     }}
                   />
                 ) : null}
+                {step === "whatWasDone" ? (
+                  <LogServiceWizardContinueButton label="Continue" disabled onClick={() => {}} />
+                ) : null}
                 {step === "system" ? (
                   <LogServiceWizardContinueButton
-                    label={LOG_SERVICE_COPY.continueWithJobs(selectedCategoryIds.length)}
+                    label={LOG_SERVICE_COPY.continueToDetails}
                     disabled={selectedCategoryIds.length < 1}
                     onClick={handleContinueFromSystem}
                   />
@@ -1866,6 +1869,11 @@ export function LogMaintenanceServiceDialog({
               isAdded={categoryHasLine}
               jobFit={jobFit}
               onBack={handleBack}
+              groups={quickJobs}
+              allJobs={allComponents}
+              onPickGroup={(g) => void handlePickSystem(g)}
+              onRetryJobFit={() => setJobFitTick((n) => n + 1)}
+              onLinkCar={onLinkCar}
               showAll={showAllJobs || showAllInGroup.has(selectedSystem.id)}
               onToggleShowAll={() => {
                 const on = showAllJobs || showAllInGroup.has(selectedSystem.id);

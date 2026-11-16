@@ -1,7 +1,7 @@
 /**
- * Log service window frame — ported exactly from Stitch docs/stitch/powertrain-job-fit-fleet/html/01
- * (header with peach icon tile + subtitle, navy car card with plate chip + powertrain pill, round-dot step
- * bar with mint done steps, lavender surfaces, Cancel / Back / Continue footer). Phone = screen 10.
+ * Log service window frame — ported exactly from Stitch docs/stitch/powertrain-job-fit-fleet/html/04
+ * (grey round icon + subtitle, navy car card with plate chip + mint powertrain pill, step bar in a lavender
+ * rounded bar with four equal parts, Cancel / Back / Continue footer). Phone = screen 10.
  */
 import React from "react";
 import { ArrowRight, Car, Check, Fuel, Gauge, HelpCircle, Wrench, X, Zap } from "lucide-react";
@@ -40,37 +40,40 @@ function StepBar({
           />
         ))}
       </div>
-      <div className="hidden sm:flex items-center justify-between w-full">
+      <div className={`hidden sm:grid grid-cols-4 items-center gap-1 rounded-lg p-2 ${LS.low}`}>
         {STEP_LABELS.map((label, index) => {
           const stepNum = (index + 1) as LogServiceWizardStep;
           const isActive = stepNum === activeStep;
           const isComplete = stepNum < activeStep;
           const canClick = isComplete && onStepClick;
-          const dot = (
-            <span className={`flex items-center gap-2 ${!isActive && !isComplete ? "opacity-60" : ""}`}>
+          const inner = (
+            <span className={`flex items-center gap-1 px-1 min-w-0 ${!isActive && !isComplete ? "opacity-50" : ""}`}>
               <span
-                className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${LT.labelSm} ${
-                  isComplete ? LS.mintDone : isActive ? LS.btnPrimary : `${LS.highest} ${LS.muted}`
+                className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                  isComplete
+                    ? "bg-[#006c4a] text-white"
+                    : isActive
+                      ? `${LS.btnPrimary} ${LT.titleSm}`
+                      : `bg-[#dad9e3] dark:bg-[#32333e] ${LS.muted} ${LT.labelMd}`
                 }`}
               >
                 {isComplete ? <Check className="w-3.5 h-3.5" strokeWidth={3} /> : stepNum}
               </span>
-              <span className={`${LT.labelMd} whitespace-nowrap ${isActive ? `${LS.text} font-semibold` : LS.muted}`}>{label}</span>
+              <span
+                className={`truncate ${isActive ? `${LT.titleSm} ${LS.text}` : isComplete ? `${LT.labelMd} ${LS.text}` : `${LT.labelMd} ${LS.muted}`}`}
+              >
+                {label}
+              </span>
             </span>
           );
-          return (
-            <React.Fragment key={label}>
-              {index > 0 ? (
-                <span className={`flex-1 mx-3 h-0.5 ${stepNum <= activeStep ? LS.mintLine : LS.high}`} aria-hidden />
-              ) : null}
-              {canClick ? (
-                <button type="button" onClick={() => onStepClick(stepNum)} className="rounded-full hover:opacity-80">
-                  {dot}
-                </button>
-              ) : (
-                <span aria-current={isActive ? "step" : undefined}>{dot}</span>
-              )}
-            </React.Fragment>
+          return canClick ? (
+            <button key={label} type="button" onClick={() => onStepClick(stepNum)} className="rounded-md text-left hover:opacity-80 min-w-0">
+              {inner}
+            </button>
+          ) : (
+            <span key={label} aria-current={isActive ? "step" : undefined} className="min-w-0">
+              {inner}
+            </span>
           );
         })}
       </div>
@@ -85,8 +88,8 @@ function PowertrainPill({ label }: { label: string }) {
   const Icon = unknown ? HelpCircle : combustion ? Fuel : Zap;
   return (
     <span
-      className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
-        unknown ? "bg-white/15 text-[#e3e1ec]" : LS.mintPill
+      className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 ${LT.labelMd} font-semibold ${
+        unknown ? "bg-white/15 text-[#e3e1ec]" : "bg-[#82f5c1] text-[#00714e]"
       }`}
       data-testid="powertrain-pill"
     >
@@ -120,17 +123,17 @@ export function LogServiceWizardChrome({
 
   return (
     <div className={`flex flex-col max-h-[90vh] overflow-hidden ${LS.lowest}`}>
-      {/* 1. Header: peach icon tile, title + subtitle, round close button. */}
-      <div className="px-4 sm:px-8 pt-5 sm:pt-6 pb-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm shrink-0 ${LS.peachTile}`}>
-            <Wrench className="w-5 h-5" />
+      {/* 1. Header: grey round icon, title + subtitle, close. */}
+      <div className="px-4 sm:px-8 pt-5 sm:pt-8 pb-4 flex items-start justify-between gap-3">
+        <div className="flex items-center gap-4">
+          <span className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 ${LS.high} ${LS.text}`}>
+            <Wrench className="w-[22px] h-[22px]" />
           </span>
           <div className="flex flex-col">
-            <h2 className={`${LT.headlineMd} ${LS.text}`}>{LOG_SERVICE_COPY.dialogTitle}</h2>
+            <h2 className={`${LT.headlineMd} leading-tight ${LS.text}`}>{LOG_SERVICE_COPY.dialogTitle}</h2>
             <span className={`${LT.bodySm} ${LS.muted}`} data-testid="log-service-step-caption">
               <span className="sm:hidden">{LOG_SERVICE_COPY.stepCaption(activeStep, STEP_LABELS[activeStep - 1])}</span>
-              <span className="hidden sm:inline">Record maintenance tasks and replacement parts.</span>
+              <span className="hidden sm:inline">Vehicle maintenance &amp; repair ledger entry</span>
             </span>
           </div>
         </div>
@@ -138,28 +141,28 @@ export function LogServiceWizardChrome({
           type="button"
           aria-label="Close"
           onClick={onClose}
-          className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${LS.low} ${LS.hoverMid} ${LS.muted}`}
+          className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${LS.muted} ${LS.hoverMid}`}
         >
-          <X className="w-[18px] h-[18px]" />
+          <X className="w-5 h-5" />
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 sm:px-8 pb-6 flex flex-col gap-4">
+      <div className="flex-1 overflow-y-auto px-4 sm:px-8 pb-2 flex flex-col gap-6">
         {/* 2. Car card. */}
-        <div className={`${LS.navy} p-3.5 rounded-xl flex flex-wrap items-center justify-between gap-2 shadow-sm`} data-testid="log-service-car">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${LS.navyTile}`}>
-              <Car className="w-[18px] h-[18px]" />
+        <div className={`${LS.navy} p-4 rounded-xl flex flex-wrap items-center justify-between gap-2 shadow-sm`} data-testid="log-service-car">
+          <div className="flex items-center gap-4 min-w-0">
+            <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-white/10">
+              <Car className="w-5 h-5" />
             </span>
             <div className="flex items-center gap-2 flex-wrap min-w-0">
-              <span className={`${LT.titleSm} truncate`}>{name}</span>
+              <span className={`${LT.titleMd} font-medium truncate`}>{name}</span>
               {plate ? (
-                <span className={`${LT.labelSm} font-mono rounded-full bg-[#e3e1ec]/20 text-[#f1effa] px-2 py-0.5`}>{plate}</span>
+                <span className={`${LT.labelMd} tracking-wider rounded-full bg-[#e3e1ec]/25 text-[#dad9e3] px-2 py-0.5`}>{plate}</span>
               ) : null}
               {vehicle.powertrainLabel ? <PowertrainPill label={vehicle.powertrainLabel} /> : null}
             </div>
           </div>
-          <div className={`${LT.bodySm} ${LS.onNavySoft} flex items-center gap-1.5 tabular-nums max-sm:w-full`}>
+          <div className={`${LT.bodySm} text-[#84819a] flex items-center gap-1 tabular-nums max-sm:w-full`}>
             {odo ? (
               <>
                 <Gauge className="w-4 h-4 opacity-60" />
@@ -190,7 +193,7 @@ export function LogServiceWizardChrome({
         </div>
       ) : null}
       {footer ? (
-        <div className={`px-4 sm:px-8 py-4 flex items-center justify-between gap-2 shadow-[0_-1px_3px_rgba(0,0,0,0.04)] ${LS.lowest}`}>
+        <div className={`px-4 sm:px-8 pt-6 pb-5 sm:pb-8 mt-2 flex items-center justify-between gap-2 ${LS.lowest}`}>
           {footer}
         </div>
       ) : null}
@@ -214,7 +217,7 @@ export function LogServiceWizardContinueButton({
       type="button"
       disabled={disabled || loading}
       onClick={onClick}
-      className={`px-6 py-2 max-sm:py-3 max-sm:flex-1 justify-center rounded-lg ${LT.titleSm} flex items-center gap-1.5 shadow-sm transition-all ${LS.btnPrimary} ${
+      className={`h-10 px-6 max-sm:h-12 max-sm:flex-1 justify-center rounded-lg ${LT.titleSm} flex items-center gap-1 shadow-sm transition-all ${LS.btnPrimary} ${
         disabled || loading ? "opacity-40 cursor-not-allowed" : "hover:opacity-90 active:scale-[0.98]"
       }`}
     >

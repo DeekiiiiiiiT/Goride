@@ -191,7 +191,7 @@ async function openWizardOnReview(page: Page, line?: Record<string, unknown>) {
   await expect(page.getByRole("heading", { name: /fleet maintenance/i })).toBeVisible({ timeout: 60_000 });
   await page.getByRole("button", { name: /^Log service$/i }).click();
   const carPicker = page.getByRole("heading", { name: /which car/i });
-  const review = page.getByRole("heading", { name: /review and save/i });
+  const review = page.getByTestId("log-service-review-summary");
   await expect(carPicker.or(review)).toBeVisible({ timeout: 30_000 });
   if (await carPicker.isVisible()) {
     await page.getByPlaceholder(/search plate/i).fill(MD_DISC_PLATE);
@@ -336,7 +336,7 @@ test.describe("Fleet service items", () => {
     await expect(pinned).toBeHidden();
 
     await page.getByRole("button", { name: /^Save line$/ }).click();
-    await expect(page.getByRole("heading", { name: /review and save/i })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("log-service-review-summary")).toBeVisible({ timeout: 30_000 });
     const job = page.getByTestId("log-service-review-job").filter({ hasText: fx.jobName });
     await expect(job).toContainText("Throttle body cleaner · 1 can");
     await expect(job).toContainText("Shop rags · 1 piece");
@@ -533,7 +533,7 @@ test.describe("Fleet service items", () => {
     await expect(empty).toContainText("No standard items suggested for this service.");
     await snap(page, "08c-no-items", page.getByTestId("items-used"));
     await page.getByRole("button", { name: /^Save line$/ }).click();
-    await expect(page.getByRole("heading", { name: /review and save/i })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("log-service-review-summary")).toBeVisible({ timeout: 30_000 });
 
     // Save failed: the save is refused once.
     await page.route("**/maintenance-work-orders", (route) =>

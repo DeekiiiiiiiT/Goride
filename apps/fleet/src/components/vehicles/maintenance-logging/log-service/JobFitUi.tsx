@@ -32,7 +32,18 @@ export function HighVoltageChip({ className = "" }: { className?: string }) {
 }
 
 /** Stitch 01 / 10: "Showing jobs that fit this car" strip above the group tiles. */
-export function FitBanner({ pill }: { pill: string }) {
+export function FitBanner({ pill, variant = "tiles" }: { pill: string; variant?: "tiles" | "tabs" }) {
+  // Screen 01 (no group picked): light lavender + tick. Screen 04 (group picked): darker lavender + filter icon.
+  if (variant === "tabs") {
+    return (
+      <div className={`w-full flex items-center gap-2 rounded-lg p-2 px-4 ${LS.mid} ${LS.muted}`} data-testid="banner-fit">
+        <Filter className={`h-[18px] w-[18px] shrink-0 ${LS.green}`} aria-hidden />
+        <span className={`${LT.bodySm} leading-tight truncate`}>
+          Showing jobs that fit a <strong className={`font-medium ${LS.text}`}>{pill}</strong> car. Jobs that don&apos;t fit are hidden.
+        </span>
+      </div>
+    );
+  }
   return (
     <div className={`flex items-center gap-2 rounded-lg py-2 px-3 ${LS.low} ${LS.muted}`} data-testid="banner-fit">
       <BadgeCheck className={`h-[18px] w-[18px] shrink-0 ${LS.green}`} aria-hidden />

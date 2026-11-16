@@ -107,7 +107,7 @@ async function openLogServiceWizard(page: Page) {
   await page.getByRole("button", { name: /^Log service$/i }).click();
   // The test org has one car and a saved draft, so the wizard can open straight on Review.
   const carPicker = page.getByRole("heading", { name: /which car/i });
-  const review = page.getByRole("heading", { name: /review and save/i });
+  const review = page.getByTestId("log-service-review-summary");
   await expect(carPicker.or(review)).toBeVisible({ timeout: 30_000 });
   if (await carPicker.isVisible()) {
     await page.getByPlaceholder(/search plate/i).fill(MD_DISC_PLATE);
@@ -117,7 +117,7 @@ async function openLogServiceWizard(page: Page) {
 }
 
 async function expectOnReview(page: Page) {
-  await expect(page.getByRole("heading", { name: /review and save/i })).toBeVisible({
+  await expect(page.getByTestId("log-service-review-summary")).toBeVisible({
     timeout: 30_000,
   });
 }
@@ -170,7 +170,7 @@ test.describe("Fleet maintenance log service discount", () => {
     await expect(page.getByTestId("log-service-review-total")).toContainText("16,600");
 
     await page.getByRole("button", { name: "Close" }).click();
-    await expect(page.getByRole("heading", { name: /review and save/i })).toBeHidden({
+    await expect(page.getByTestId("log-service-review-summary")).toBeHidden({
       timeout: 15_000,
     });
 
