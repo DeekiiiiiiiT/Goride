@@ -39,7 +39,10 @@ export function MaintenanceHubKpiCards({
   costPerKmApprox,
   pmOnTimePct,
 }: MaintenanceHubKpiProps) {
-  const partsReady = partsRequisition?.status === "Ready";
+  // Removed by the owner 16 Nov: cost / km, PM on-time % and parts requisition cards.
+  void partsRequisition;
+  void costPerKmApprox;
+  void pmOnTimePct;
   const nextLabel = nextScheduledWindow?.date
     ? formatScheduledLabel(nextScheduledWindow.date)
     : "—";
@@ -53,31 +56,7 @@ export function MaintenanceHubKpiCards({
 
   return (
     <div className="space-y-3 mb-6">
-      {costPerKmApprox != null || pmOnTimePct != null ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm">
-            <div className="text-[11px] uppercase tracking-wider font-semibold text-stitch-secondary mb-1">
-              Cost / km (latest month)
-            </div>
-            <span className="font-mono text-xl font-bold text-on-surface">
-              {costPerKmApprox != null && Number.isFinite(costPerKmApprox)
-                ? `J$${costPerKmApprox.toFixed(2)}`
-                : "—"}
-            </span>
-          </div>
-          <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm">
-            <div className="text-[11px] uppercase tracking-wider font-semibold text-stitch-secondary mb-1">
-              PM on-time %
-            </div>
-            <span className="font-mono text-xl font-bold text-on-surface">
-              {pmOnTimePct != null && Number.isFinite(pmOnTimePct)
-                ? `${pmOnTimePct.toFixed(0)}%`
-                : "—"}
-            </span>
-          </div>
-        </div>
-      ) : null}
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-0 max-[390px]:grid-cols-1 max-[390px]:gap-2">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-0 max-[390px]:grid-cols-1 max-[390px]:gap-2">
       <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm flex flex-col justify-between">
         <div className="flex items-center justify-between text-stitch-secondary mb-2">
           <span className="text-[11px] uppercase tracking-wider font-semibold">Overdue Service</span>
@@ -119,22 +98,6 @@ export function MaintenanceHubKpiCards({
           ) : null}
         </div>
         <KpiProgressBar pct={nextScheduledWindow ? 75 : 0} barClass="bg-stitch-secondary" />
-      </div>
-
-      <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm flex flex-col justify-between">
-        <div className="flex items-center justify-between text-stitch-secondary mb-2">
-          <span className="text-[11px] uppercase tracking-wider font-semibold">Parts Requisition</span>
-          <span className="material-symbols-outlined text-stitch-secondary text-[18px]">inventory_2</span>
-        </div>
-        <div className="flex items-baseline gap-1 flex-wrap">
-          <span className="font-mono text-lg font-bold text-on-surface">
-            {partsRequisition?.status ?? "—"}
-          </span>
-          <span className="text-[11px] text-stitch-secondary line-clamp-1">
-            {partsRequisition?.detail ?? "—"}
-          </span>
-        </div>
-        <KpiProgressBar pct={partsReady ? 100 : 40} barClass="bg-primary" />
       </div>
     </div>
     </div>

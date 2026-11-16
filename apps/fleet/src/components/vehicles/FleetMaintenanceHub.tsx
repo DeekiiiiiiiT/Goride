@@ -411,10 +411,6 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
               </div>
               <h1 className="text-2xl font-bold text-on-surface tracking-tight">Fleet maintenance</h1>
             </div>
-            <p className="text-sm text-on-surface-variant">
-              What each car is due for, what was done, and parts for your cars.
-            </p>
-            <MaintenanceNightlyStatusLine run={nightlyRun} missed={nightlyMissed} />
           </div>
           <div className="flex flex-wrap gap-2 justify-end max-[390px]:w-full">
             <Button

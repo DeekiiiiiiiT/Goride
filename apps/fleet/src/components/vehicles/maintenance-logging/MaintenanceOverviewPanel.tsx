@@ -520,32 +520,6 @@ export function MaintenanceOverviewPanel({
         </AlertDialogContent>
       </AlertDialog>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-surface-container-low p-4 rounded-xl flex items-start gap-3">
-          <div className="w-8 h-8 rounded bg-surface-container-highest flex items-center justify-center text-on-surface-variant shrink-0">
-            <span className="material-symbols-outlined text-[18px]">verified_user</span>
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-on-surface">Automatic Diagnostic Polling</h3>
-            <p className="text-[11px] text-stitch-secondary mt-0.5">
-              The fleet diagnostic runner automatically scans odometer logs from driver shifts and fuel
-              dispensary receipts daily at 02:00 EST. An alert is raised for every item past its limit.
-            </p>
-          </div>
-        </div>
-        <div className="bg-surface-container-low p-4 rounded-xl flex items-start gap-3">
-          <div className="w-8 h-8 rounded bg-surface-container-highest flex items-center justify-center text-on-surface-variant shrink-0">
-            <span className="material-symbols-outlined text-[18px]">alt_route</span>
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-on-surface">Find parts</h3>
-            <p className="text-[11px] text-stitch-secondary mt-0.5">
-              Look up compatible parts for your fleet vehicles using the catalog — then open the Find parts tab to
-              search by vehicle and component.
-            </p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
