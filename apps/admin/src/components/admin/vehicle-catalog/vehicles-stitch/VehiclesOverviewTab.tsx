@@ -58,11 +58,11 @@ export function VehiclesOverviewTab({ car, specs, jobs, sisters, logoByMake, ite
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-      <div className="lg:col-span-3">
+      {/* Stitch powertrain 01–04: the card leads the main column; the side card stays on the right. */}
+      <div className="flex flex-col gap-6 lg:col-span-2">
         {/* key = id + status so a confirm elsewhere resets the card. */}
         <PowertrainCard key={`${car.id}-${car.powertrain_status}`} car={car} token={token} canWrite onSaved={onPowertrainSaved} />
-      </div>
-      <section className={`${D_CARD} p-6 lg:col-span-2`}>
+      <section className={`${D_CARD} p-6`}>
         <h2 className={`text-[18px] font-semibold ${D_TXT}`}>Facts</h2>
         <p className={`mb-4 text-[14px] ${D_MUTED}`}>What this version is, from the car&apos;s own record.</p>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -86,6 +86,7 @@ export function VehiclesOverviewTab({ car, specs, jobs, sisters, logoByMake, ite
           ))}
         </div>
       </section>
+      </div>
 
       <aside className={`${D_CARD} flex h-fit flex-col gap-5 p-6`}>
         <h2 className={`text-[18px] font-semibold ${D_TXT}`}>At a glance</h2>

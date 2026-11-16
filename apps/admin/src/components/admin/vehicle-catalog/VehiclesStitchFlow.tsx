@@ -406,10 +406,6 @@ export function VehiclesStitchFlow({
         token={token}
         onBack={() => setScreen("home")}
         onConfirmed={mergePowertrain}
-        onOpenCar={(id) => {
-          const r = items.find((x) => x.id === id);
-          if (r) openCar(r, "overview");
-        }}
       />
     );
   }

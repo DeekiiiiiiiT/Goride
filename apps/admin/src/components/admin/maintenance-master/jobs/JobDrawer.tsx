@@ -166,14 +166,13 @@ export function JobDrawer({ token, data, mode, job, presetGroupId, canWrite, onC
           <div className="flex shrink-0 items-start justify-between bg-[#ffffff] px-6 pb-4 pt-6">
             <div>
               <p className={`${T.labelMd} mb-0.5 text-[#565e74]`}>{mode === "add" ? "Add job" : "Edit job"}</p>
-              <h2 id="mm-job-drawer-title" className={`${T.headlineXl} text-[#161b27]`}>
-                {mode === "add" ? name.trim() || "New job" : job?.name}
-              </h2>
-              {hv ? (
-                <div className="mt-1.5">
-                  <HvChip />
-                </div>
-              ) : null}
+              {/* Stitch powertrain 08: the high-voltage chip sits beside the title. */}
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 id="mm-job-drawer-title" className={`${T.headlineXl} text-[#161b27]`}>
+                  {mode === "add" ? name.trim() || "New job" : job?.name}
+                </h2>
+                {hv ? <HvChip /> : null}
+              </div>
             </div>
             <button
               type="button"
@@ -458,15 +457,15 @@ export function JobDrawer({ token, data, mode, job, presetGroupId, canWrite, onC
             />
           </div>
 
-          <div className="flex shrink-0 items-center justify-between bg-[#ffffff] px-6 py-6 shadow-[0_-4px_12px_rgba(0,0,0,0.03)]">
+          {/* Stitch powertrain 07 / 09 footer: red-outline Cancel and one solid Save, on the right. */}
+          <div className="flex shrink-0 items-center justify-end gap-4 border-t border-[#e7e7f2] bg-[#ffffff] px-6 py-6">
             <button
               type="button"
               onClick={onClose}
               disabled={busy}
-              className={`flex h-10 items-center gap-1.5 rounded-xl bg-[#ffdad6]/40 px-5 ${T.labelMd} font-semibold text-[#ba1a1a] transition-colors hover:bg-[#ffdad6]`}
+              className={`flex h-10 items-center rounded-[10px] border border-[#a83836] px-5 ${T.labelMd} font-medium text-[#ba1a1a] transition-colors hover:bg-[#fdf2f2]`}
             >
-              <span className="material-symbols-outlined text-[18px]">close</span>
-              <span>Cancel</span>
+              Cancel
             </button>
             {canWrite ? (
               <BlueButton icon="check" disabled={!canSave} onClick={() => void save()} className="px-6">

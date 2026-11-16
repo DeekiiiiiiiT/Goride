@@ -1,5 +1,5 @@
 /**
- * Group "Fits" drawer — Stitch powertrain-job-fit-dominion screen 9 (2×2 preset cards, Custom…,
+ * Group "Fits" drawer — ported exactly from Stitch powertrain-job-fit-dominion screen 9 (header, 2×2 preset cards, Custom…,
  * "Jobs that set their own", no high-voltage switch). Content: docs/powertrain-job-fit-audit.md section 4.
  */
 import { useEffect, useMemo, useState } from "react";
@@ -7,8 +7,7 @@ import { toast } from "sonner";
 import { getPowertrainSummary } from "../../../../services/vehicleCatalogService";
 import { updateGroupFits, type JobGroup, type JobsPayload } from "./jobsApi";
 import { FitsSection, HvChip } from "./FitsSection";
-import { BlueButton, T } from "./serviceItemsUi";
-import { JobIcon } from "./jobsUi";
+import { BlueButton } from "./serviceItemsUi";
 import {
   FUELS,
   FUEL_LABEL,
@@ -17,6 +16,7 @@ import {
   POWERTRAIN_LABEL,
   POWERTRAIN_PRESETS,
   describeList,
+  presetFor,
   rowFromSaved,
   rowToSave,
   type FitRow,
@@ -92,33 +92,45 @@ export function GroupFitsDrawer({ token, data, group, canWrite, onClose, onSaved
           role="dialog"
           aria-modal="true"
           aria-labelledby="mm-group-fits-title"
-          className="flex h-full w-full max-w-[580px] flex-col overflow-hidden rounded-l-2xl bg-[#ffffff] shadow-[0_20px_25px_-5px_rgba(15,23,42,0.1),0_8px_10px_-6px_rgba(15,23,42,0.05)]"
+          className="flex h-full w-full max-w-[560px] flex-col overflow-hidden border-l border-[#c3c6d7]/30 bg-[#ffffff] shadow-[-12px_0_36px_rgba(17,26,46,0.12)]"
         >
-          <div className="flex shrink-0 items-start justify-between bg-[#ffffff] px-6 pb-4 pt-6">
-            <div className="flex items-start gap-3">
-              <JobIcon iconKey={group.iconKey} className="h-10 w-10" />
-              <div>
-                <h2 id="mm-group-fits-title" className={`${T.headlineXl} text-[#161b27]`}>
-                  {group.name}
-                </h2>
-                <p className={`${T.bodySm} text-[#565e74]`}>
-                  Job group · {jobs.length} active job{jobs.length === 1 ? "" : "s"}
-                </p>
+          {/* Stitch powertrain 09 header: folder tile + group name, "Job group" chip · active job count. */}
+          <header className="shrink-0 border-b border-[#e7e7f2] bg-[#ffffff] p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#dbe1ff] text-[#003ea9]">
+                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>folder_managed</span>
+                  </div>
+                  <h2 id="mm-group-fits-title" className="truncate text-[24px] font-semibold leading-8 tracking-tight text-[#191b23]">
+                    {group.name}
+                  </h2>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-[#d9e2fe] px-2.5 py-0.5 text-[11px] font-semibold leading-[14px] text-[#121b2f]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#003ea9]" />
+                    Job group
+                  </span>
+                  <span className="text-[11px] leading-[14px] text-[#737686]">•</span>
+                  <span className="text-[12px] font-medium leading-4 text-[#434655]">
+                    {jobs.length} active job{jobs.length === 1 ? "" : "s"}
+                  </span>
+                </div>
               </div>
+              <button
+                type="button"
+                aria-label="Close"
+                title="Close drawer"
+                onClick={onClose}
+                disabled={busy}
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-[#434655] transition-colors hover:bg-[#ecedf8] hover:text-[#191b23]"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 20 }}>close</span>
+              </button>
             </div>
-            <button
-              type="button"
-              aria-label="Close"
-              title="Close drawer"
-              onClick={onClose}
-              disabled={busy}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f1f3ff] text-[#565e74] transition-colors hover:bg-[#e4e8f8] hover:text-[#161b27]"
-            >
-              <span className="material-symbols-outlined text-[20px]">close</span>
-            </button>
-          </div>
+          </header>
 
-          <div className="flex-1 space-y-6 overflow-y-auto px-6 py-3">
+          <div className="flex-1 space-y-6 overflow-y-auto bg-[#faf8ff]/50 p-6">
             <FitsSection
               kind="group"
               token={token}
@@ -131,23 +143,38 @@ export function GroupFitsDrawer({ token, data, group, canWrite, onClose, onSaved
               onFu={setFu}
             />
 
-            <section className="space-y-3 rounded-2xl bg-[#f1f3ff]/60 p-4" data-testid="jobs-set-own">
-              <div className="flex items-center gap-2">
-                <span className={`${T.headlineMd} text-[#161b27]`}>Jobs that set their own</span>
-                <span className={`rounded-full bg-[#dee2f3] px-2 py-0.5 ${T.labelSm} text-[#434655]`}>{ownRules.length}</span>
+            <section className="space-y-4 rounded-2xl border border-[#e8e9f2] bg-[#ffffff] p-5 shadow-sm" data-testid="jobs-set-own">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-[18px] font-semibold leading-[26px] tracking-tight text-[#191b23]">Jobs that set their own</h3>
+                    <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-[#e7e7f2] px-1.5 text-[11px] font-bold leading-[14px] text-[#434655]">
+                      {ownRules.length}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-[12px] leading-[18px] text-[#434655]">These jobs don&apos;t follow the group. Change them in the job drawer.</p>
+                </div>
+                <span className="material-symbols-outlined text-[#737686]" style={{ fontSize: 20 }}>rule_folder</span>
               </div>
-              <p className={`${T.bodySm} text-[#565e74]`}>These jobs use their own fit instead of the group&apos;s. Change them in the job drawer.</p>
               {ownRules.length === 0 ? (
-                <p className={`${T.bodySm} text-[#565e74]`}>None. Every job in this group follows the group.</p>
+                <p className="text-[12px] leading-[18px] text-[#434655]">None. Every job in this group follows the group.</p>
               ) : (
                 <ul className="space-y-2">
                   {ownRules.map((j) => (
-                    <li key={j.id} className="flex items-center justify-between gap-3 rounded-xl bg-[#ffffff] px-3.5 py-2.5 shadow-sm">
-                      <span className={`flex min-w-0 items-center gap-2 ${T.labelMd} font-semibold text-[#161b27]`}>
-                        <span className="truncate">{j.name}</span>
+                    <li
+                      key={j.id}
+                      className="flex items-center justify-between gap-3 rounded-lg bg-[#f2f3fe]/40 p-2.5 transition-colors hover:bg-[#f2f3fe]"
+                    >
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-[#003ea9]" />
+                        <span className="truncate text-[12px] font-medium leading-4 text-[#191b23]">{j.name}</span>
                         {j.isHighVoltage ? <HvChip small /> : null}
                       </span>
-                      <span className={`shrink-0 rounded-full bg-[#dae2fd] px-2.5 py-0.5 ${T.labelSm} text-[#003ea9]`}>{own(j)}</span>
+                      <span
+                        className={`block max-w-[230px] shrink-0 truncate rounded-full px-2.5 py-0.5 text-[11px] font-medium leading-[14px] ${ownChip(j.fitsPowertrains)}`}
+                      >
+                        {own(j)}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -155,24 +182,39 @@ export function GroupFitsDrawer({ token, data, group, canWrite, onClose, onSaved
             </section>
           </div>
 
-          <div className="flex shrink-0 items-center justify-between bg-[#ffffff] px-6 py-6 shadow-[0_-4px_12px_rgba(0,0,0,0.03)]">
+          <footer className="flex shrink-0 items-center justify-end gap-4 border-t border-[#e7e7f2] bg-[#ffffff] p-6">
             <button
               type="button"
               onClick={onClose}
               disabled={busy}
-              className={`flex h-10 items-center gap-1.5 rounded-xl bg-[#ffdad6]/40 px-5 ${T.labelMd} font-semibold text-[#ba1a1a] transition-colors hover:bg-[#ffdad6]`}
+              className="h-10 rounded-[10px] border border-[#a83836] px-5 text-[14px] font-medium leading-5 text-[#ba1a1a] transition-colors hover:bg-[#fdf2f2]"
             >
-              <span className="material-symbols-outlined text-[18px]">close</span>
-              <span>Cancel</span>
+              Cancel
             </button>
             {canWrite ? (
-              <BlueButton icon="check" disabled={busy || invalid || !changed} onClick={() => void save()} className="px-6">
+              <BlueButton icon="done" disabled={busy || invalid || !changed} onClick={() => void save()} className="rounded-[10px] px-6">
                 {busy ? "Saving…" : "Save"}
               </BlueButton>
             ) : null}
-          </div>
+          </footer>
         </aside>
       </div>
     </>
   );
+}
+
+/** Stitch 09 colours the "own" chip by the job's powertrain preset. */
+function ownChip(list: string[] | null | undefined): string {
+  switch (list == null ? "none" : presetFor(list, POWERTRAIN_PRESETS)) {
+    case "plugin":
+      return "bg-[#ccfbf1] text-[#0f766e]";
+    case "electrified":
+      return "bg-[#f0f5ff] text-[#003ea9]";
+    case "combustion":
+      return "bg-[#fef3e2] text-[#8a5a00]";
+    case "all":
+      return "bg-[#dbe1ff] text-[#0153dc]";
+    default:
+      return "bg-[#e1e2ec] text-[#434655]";
+  }
 }
