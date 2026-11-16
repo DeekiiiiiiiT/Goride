@@ -204,9 +204,11 @@ export function LogServiceWhatWasDoneStep({
           .map((g) => g.id)
       : [],
   );
+  void ShowAllButton;
   const hiddenJobCount = fitOn
     ? quickJobs.reduce((n, g) => n + (groupCounts.get(g.id)?.hidden ?? 0), 0)
     : 0;
+  void hiddenJobCount;
   const visibleGroups = quickJobs.filter((g) => !hiddenGroupIds.has(g.id));
   const notUsualGroups = quickJobs.filter((g) => hiddenGroupIds.has(g.id));
   const [search, setSearch] = useState("");
@@ -313,9 +315,7 @@ export function LogServiceWhatWasDoneStep({
             <span className={`${LT.titleSm} ${LS.text}`}>Pick a group</span>
             <span className={`${LT.bodySm} ${LS.muted}`}>Its jobs open here.</span>
           </div>
-          {fitOn && onToggleShowAllJobs ? (
-            <ShowAllButton shown={showAllJobs} hidden={hiddenJobCount} onToggle={onToggleShowAllJobs} />
-          ) : null}
+          {/* No "Show all jobs" here (owner 16 Nov): jobs that don't fit are still found by the search box. */}
         </>
       )}
     </div>
