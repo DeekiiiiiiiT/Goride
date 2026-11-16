@@ -1,6 +1,6 @@
 import React from "react";
 import { HighVoltageChip, NotUsualChip } from "./JobFitUi";
-import { Loader2 } from "lucide-react";
+import { Loader2, Info } from "lucide-react";
 import { Checkbox } from "../../../ui/checkbox";
 import { Input } from "../../../ui/input";
 import { Label } from "../../../ui/label";
@@ -325,6 +325,9 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
         </div>
         <div className="flex items-center gap-1.5 flex-wrap min-w-0">
           <h3 className="text-base font-bold text-on-surface">{category.name}</h3>
+          {/* Stitch powertrain 06: the chips sit right after the name, before the action pill. */}
+          {props.notUsual ? <NotUsualChip /> : null}
+          {category.is_high_voltage ? <HighVoltageChip /> : null}
           {actionPill ? (
             <span className="bg-surface-container-high text-on-surface-variant text-[11px] font-medium px-2.5 py-0.5 rounded-full">
               {actionPill}
@@ -333,14 +336,16 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
           {systemName && !props.itemsSlot ? (
             <span className="text-xs text-stitch-secondary">{systemName}</span>
           ) : null}
-          {props.notUsual ? <NotUsualChip /> : null}
-          {category.is_high_voltage ? <HighVoltageChip /> : null}
         </div>
       </div>
       {props.notUsual ? (
-        <p className="-mt-3 text-xs text-stitch-secondary" data-testid="not-usual-helper">
-          You picked this from all jobs. It&apos;s saved as normal.
-        </p>
+        <div
+          className="-mt-2 flex items-center gap-2 rounded-lg bg-surface-container-high/60 px-3 py-2 text-on-surface-variant"
+          data-testid="not-usual-helper"
+        >
+          <Info className="h-4 w-4 shrink-0" aria-hidden />
+          <p className="text-xs">You picked this from all jobs. It&apos;s saved as normal.</p>
+        </div>
       ) : null}
 
       {props.serviceForm ? (

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { CheckCircle2, Circle, Info, Loader2, Plus } from "lucide-react";
+import { Check, CheckCircle2, Info, Loader2, Plus } from "lucide-react";
 import { MaintenanceIcon } from "../../MaintenanceIcon";
 import { LOG_SERVICE_COPY } from "./logServiceCopy";
 import { JobTooltip } from "./JobTooltip";
@@ -51,6 +51,7 @@ export function LogServiceSystemPicker({
     ? [...sections.groups.flatMap((g) => g.sections.flatMap((sec) => sec.jobs)), ...sections.otherJobs]
     : components;
   const notUsual = [...new Map(allJobs.filter(hide).map((j) => [j.id, j])).values()];
+  const allJobsCount = new Set(allJobs.map((j) => j.id)).size;
 
   const card = (cat: SectionJob) => (
     <JobCard
@@ -73,10 +74,17 @@ export function LogServiceSystemPicker({
         <div className="bg-surface-container p-3 rounded-xl text-on-surface">
           <MaintenanceIcon iconKey={system.icon_key} className="w-6 h-6" />
         </div>
-        <div>
-          <h3 className="font-semibold text-on-surface">{system.name}</h3>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-lg font-semibold text-on-surface">{system.name}</h3>
           <p className="text-sm text-stitch-secondary">{LOG_SERVICE_COPY.pickJobsHint}</p>
         </div>
+        {jobFit.status === "known" && !loading ? (
+          <span className="shrink-0 rounded-full bg-surface-container px-2.5 py-1 text-xs text-on-surface-variant" data-testid="group-fit-pill">
+            {showAll || notUsual.length === 0
+              ? `All ${allJobsCount} jobs shown`
+              : `${allJobsCount - notUsual.length} jobs that fit this car · ${notUsual.length} hidden`}
+          </span>
+        ) : null}
       </div>
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-stitch-secondary py-8 justify-center">
@@ -97,7 +105,7 @@ export function LogServiceSystemPicker({
                     <InfoButton label={`About ${sec.name}`} text={sec.description} />
                   </div>
                   {sec.jobs.filter((j) => !hide(j)).length ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{sec.jobs.filter((j) => !hide(j)).map(card)}</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{sec.jobs.filter((j) => !hide(j)).map(card)}</div>
                   ) : (
                     <p className="text-xs text-stitch-secondary">None of these fit this car.</p>
                   )}
@@ -110,23 +118,23 @@ export function LogServiceSystemPicker({
               <h4 className="text-[11px] font-semibold uppercase tracking-wider text-stitch-secondary border-b border-outline-variant/30 pb-1">
                 {LOG_SERVICE_COPY.otherJobsHeading(system.name)}
               </h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{sections.otherJobs.filter((j) => !hide(j)).map(card)}</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{sections.otherJobs.filter((j) => !hide(j)).map(card)}</div>
             </section>
           ) : null}
         </div>
       ) : components.length === 0 ? (
         <p className="text-sm text-stitch-secondary py-4">No components under this system.</p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{components.filter((j) => !hide(j)).map(card)}</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{components.filter((j) => !hide(j)).map(card)}</div>
       )}
       {!loading && showAll && notUsual.length ? (
         <div className="space-y-3" data-testid="not-usual-jobs">
           <NotUsualDivider />
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 opacity-70">{notUsual.map(card)}</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{notUsual.map(card)}</div>
         </div>
       ) : null}
       {!loading && onToggleShowAll ? (
-        <div className="flex justify-center">
+        <div>
           <ShowAllButton shown={showAll} hidden={notUsual.length} inGroup onToggle={onToggleShowAll} />
         </div>
       ) : null}
@@ -160,45 +168,62 @@ function JobCard({
   const related = selected ? cat.recommendedWith ?? [] : [];
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="relative">
+      <div
+        className={`relative rounded-xl border transition-colors ${
+          selected
+            ? "border-on-surface/30 bg-surface-container-low shadow-sm"
+            : notUsual
+              ? "border-outline-variant/40 bg-surface-container-lowest/70 hover:bg-surface-container-low"
+              : "border-outline-variant/40 bg-surface-container-lowest hover:bg-surface-container-low"
+        }`}
+      >
         <JobTooltip text={cat.description}>
           <button
             type="button"
             aria-pressed={selected}
+            aria-label={cat.name}
             data-testid={`log-job-${cat.code}`}
             onClick={onToggle}
-            className={`w-full flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-colors text-center min-h-[108px] ${
-              selected
-                ? "border-primary bg-surface-container-low"
-                : "border-outline-variant/40 bg-surface-container-lowest hover:bg-surface-container-low hover:border-primary/30"
-            }`}
-          >
-            <span className="absolute top-2 right-2" aria-hidden>
-              {selected ? <CheckCircle2 className="w-5 h-5 text-primary" /> : <Circle className="w-5 h-5 text-outline-variant" />}
-            </span>
-            <div className="bg-surface-container p-3 rounded-xl text-on-surface">
-              <MaintenanceIcon iconKey={cat.icon_key} className="w-6 h-6" />
-            </div>
-            <span className="text-sm font-medium text-on-surface leading-tight">{cat.name}</span>
-            {badge ? (
-              <span className="rounded-full bg-surface-container px-2 py-0.5 text-[11px] font-medium text-on-surface-variant">
-                {badge}
-              </span>
-            ) : null}
-            {cat.is_high_voltage || notUsual ? (
-              <span className="flex flex-wrap justify-center gap-1">
+            className="absolute inset-0 rounded-xl"
+          />
+        </JobTooltip>
+        <div className="pointer-events-none relative flex items-center justify-between gap-3 p-3.5">
+          <div className="flex min-w-0 flex-col">
+            {notUsual || cat.is_high_voltage ? (
+              <span className="mb-1.5 flex flex-wrap gap-1">
                 {notUsual ? <NotUsualChip /> : null}
                 {cat.is_high_voltage ? <HighVoltageChip /> : null}
               </span>
             ) : null}
+            <span className={`flex items-center gap-1.5 text-sm font-medium leading-tight ${notUsual && !selected ? "text-on-surface-variant" : "text-on-surface"}`}>
+              {cat.name}
+              {info ? (
+                <span className="pointer-events-auto">
+                  <InfoButton label={`About ${cat.name}`} text={info} />
+                </span>
+              ) : null}
+            </span>
+            {cat.description ? (
+              <span className={`truncate text-[13px] ${notUsual && !selected ? "text-stitch-secondary/70" : "text-stitch-secondary"}`}>
+                {cat.description}
+              </span>
+            ) : null}
             {added ? <span className="text-[11px] font-semibold text-primary">{LOG_SERVICE_COPY.jobAddedBadge}</span> : null}
-          </button>
-        </JobTooltip>
-        {info ? (
-          <div className="absolute top-2 left-2">
-            <InfoButton label={`About ${cat.name}`} text={info} />
           </div>
-        ) : null}
+          <div className="flex shrink-0 items-center gap-2">
+            {badge ? (
+              <span className="rounded bg-surface-container px-2 py-0.5 text-[11px] font-semibold text-on-surface-variant">{badge}</span>
+            ) : null}
+            <span
+              aria-hidden
+              className={`flex h-[18px] w-[18px] items-center justify-center rounded border-2 ${
+                selected ? "border-on-surface bg-on-surface text-surface-container-lowest" : "border-outline-variant bg-surface-container-lowest"
+              }`}
+            >
+              {selected ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
+            </span>
+          </div>
+        </div>
       </div>
       {related.length ? (
         <div className="flex flex-wrap items-center gap-1" data-testid={`also-do-${cat.code}`}>

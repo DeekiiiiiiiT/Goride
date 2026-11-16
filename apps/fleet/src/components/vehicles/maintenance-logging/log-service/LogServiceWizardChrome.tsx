@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowRight, Car, Check, Wrench, X } from "lucide-react";
+import { ArrowRight, Car, Check, Fuel, HelpCircle, Wrench, X, Zap } from "lucide-react";
 import { LOG_SERVICE_COPY } from "./logServiceCopy";
 
 export type LogServiceWizardStep = 1 | 2 | 3 | 4;
@@ -148,20 +148,15 @@ export function LogServiceWizardChrome({
         </button>
       </div>
 
-      <div className="bg-primary text-on-primary px-4 sm:px-6 py-2 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="bg-primary text-on-primary px-4 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <div className="flex flex-wrap items-center gap-2 min-w-0">
           <Car className="w-[18px] h-[18px] shrink-0 opacity-90" />
           <span className="text-sm font-bold truncate">{vehicle.vehicleLabel}</span>
           {vehicle.powertrainLabel ? (
-            <span
-              className="shrink-0 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-semibold text-on-primary"
-              data-testid="powertrain-pill"
-            >
-              {vehicle.powertrainLabel}
-            </span>
+            <PowertrainPill label={vehicle.powertrainLabel} />
           ) : null}
         </div>
-        <div className="shrink-0 flex items-center gap-1 text-xs font-medium opacity-90">
+        <div className="shrink-0 flex items-center gap-1 text-xs font-medium opacity-90 max-sm:w-full">
           {odo ? (
             <>
               <span className="opacity-70">Current</span>
@@ -235,5 +230,23 @@ export function LogServiceWizardContinueButton({
       {loading ? LOG_SERVICE_COPY.loggingLabel : label}
       {!loading && !disabled ? <ArrowRight className="w-[18px] h-[18px]" /> : null}
     </button>
+  );
+}
+
+/** Stitch powertrain 01 / 04 / 05: green pill with a fuel or lightning icon; grey with "?" when unknown. */
+function PowertrainPill({ label }: { label: string }) {
+  const unknown = label === "Engine type unknown";
+  const combustion = ["Petrol", "Diesel", "CNG (gas)"].includes(label);
+  const Icon = unknown ? HelpCircle : combustion ? Fuel : Zap;
+  return (
+    <span
+      className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+        unknown ? "bg-white/15 text-on-primary" : "bg-[#6ffbbe] text-[#002113]"
+      }`}
+      data-testid="powertrain-pill"
+    >
+      <Icon className="h-3 w-3" aria-hidden />
+      {label}
+    </span>
   );
 }

@@ -2,20 +2,8 @@
  * Screen tests for the powertrain job fit Stitch port (docs/powertrain-job-fit-audit.md section 9,
  * Dominion 01–10). Renders each screen to HTML and checks the Keep / Drop / Add content.
  */
-import { describe, expect, it, vi } from "vitest";
-import { createRequire } from "node:module";
-
-// On Windows Vitest can load React twice (c:/ vs C:/ paths). Use the one native copy everywhere.
-vi.mock("react", async () => {
-  const { createRequire: cr } = await import("node:module");
-  const r = cr(import.meta.url)("react");
-  return { ...r, default: r };
-});
-vi.mock("react/jsx-runtime", async () => {
-  const { createRequire: cr } = await import("node:module");
-  return cr(import.meta.url)("react/jsx-runtime");
-});
-const { renderToStaticMarkup } = createRequire(import.meta.url)("react-dom/server") as typeof import("react-dom/server");
+import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 import { PowertrainCard, cardMode } from "../vehicle-catalog/vehicles-stitch/PowertrainCard";
 import { PowertrainHomeCards } from "../vehicle-catalog/vehicles-stitch/PowertrainHomeCards";
 import { PowertrainCheckScreen } from "../vehicle-catalog/vehicles-stitch/PowertrainCheckScreen";

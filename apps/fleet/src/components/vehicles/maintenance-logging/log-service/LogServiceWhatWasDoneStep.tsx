@@ -1,12 +1,20 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, ClipboardCheck, Loader2, Package, Plus, Search } from "lucide-react";
+import { ArrowRight, ChevronRight, ClipboardCheck, Loader2, Package, Plus, Search } from "lucide-react";
 import { MaintenanceIcon } from "../../MaintenanceIcon";
 import { LOG_SERVICE_COPY } from "./logServiceCopy";
 import { JobTooltip } from "./JobTooltip";
 import { actionLabel } from "./systemSections";
 import type { MaintenanceServiceCategory } from "../../../../types/maintenance";
-import { groupFitCounts, isNotUsual, type JobFitState } from "./jobFit";
-import { CouldNotCheckBanner, NotUsualChip, NotUsualDivider, ShowAllButton, UnknownEngineBanner } from "./JobFitUi";
+import { groupFitCounts, isNotUsual, powertrainPill, type JobFitState } from "./jobFit";
+import {
+  CouldNotCheckBanner,
+  FitBanner,
+  GroupsRemovedCaption,
+  NotUsualChip,
+  NotUsualDivider,
+  ShowAllButton,
+  UnknownEngineBanner,
+} from "./JobFitUi";
 
 export type LogServicePackageChoice = {
   id: string;
@@ -422,25 +430,33 @@ export function LogServiceWhatWasDoneStep({
       <section className="flex flex-col gap-3">
         <h3 className="text-lg font-semibold text-on-surface">{LOG_SERVICE_COPY.quickJobs}</h3>
         <p className="text-xs text-stitch-secondary">{LOG_SERVICE_COPY.quickJobsHint}</p>
-        {quickJobsLoading ? (
-          <div className="flex items-center gap-2 text-sm text-stitch-secondary py-6 justify-center">
-            <Loader2 className="w-4 h-4 animate-spin" /> Loading systems…
+        {quickJobsLoading || jobFit.status === "loading" ? (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" aria-busy="true" aria-label="Loading" data-testid="group-grid-loading">
+            {Array.from({ length: 6 }, (_, i) => (
+              <div key={i} className="flex flex-col gap-2 rounded-xl bg-surface-container-low p-4 animate-pulse">
+                <div className="h-8 w-8 rounded-lg bg-surface-container-high" />
+                <div className="h-3 w-2/3 rounded bg-surface-container-high" />
+                <div className="h-2.5 w-1/3 rounded bg-surface-container-high" />
+              </div>
+            ))}
           </div>
         ) : quickJobs.length === 0 ? (
           <p className="text-sm text-stitch-secondary py-2">No systems available.</p>
         ) : (
           <>
-            {jobFit.status === "loading" ? (
-              <p className="flex items-center gap-1.5 text-xs text-stitch-secondary">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking which jobs fit this car…
-              </p>
+            {fitOn ? <FitBanner pill={powertrainPill(jobFit) ?? ""} /> : null}
+            {fitOn && !showAllJobs ? (
+              <GroupsRemovedCaption
+                names={notUsualGroups.map((g) => g.name)}
+                hidden={notUsualGroups.reduce((n, g) => n + (groupCounts.get(g.id)?.hidden ?? 0), 0)}
+              />
             ) : null}
-            <div className="grid grid-cols-1 min-[391px]:grid-cols-2 sm:grid-cols-4 gap-3" data-testid="group-grid">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="group-grid">
               {visibleGroups.map((sys) => (
                 <GroupTile
                   key={sys.id}
                   sys={sys}
-                  count={fitOn ? groupCounts.get(sys.id)?.fit ?? null : null}
+                  count={fitOn || jobFit.status === "unknown" || jobFit.status === "error" ? groupCounts.get(sys.id)?.fit ?? null : null}
                   onPick={() => onPickSystem(sys)}
                 />
               ))}
@@ -448,7 +464,7 @@ export function LogServiceWhatWasDoneStep({
             {fitOn && showAllJobs && notUsualGroups.length ? (
               <>
                 <NotUsualDivider />
-                <div className="grid grid-cols-1 min-[391px]:grid-cols-2 sm:grid-cols-4 gap-3 opacity-70">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 opacity-70">
                   {notUsualGroups.map((sys) => (
                     <GroupTile key={sys.id} sys={sys} count={groupCounts.get(sys.id)?.hidden ?? null} notUsual onPick={() => onPickSystem(sys)} />
                   ))}
@@ -456,7 +472,7 @@ export function LogServiceWhatWasDoneStep({
               </>
             ) : null}
             {fitOn && onToggleShowAllJobs ? (
-              <div className="flex justify-center pt-1">
+              <div className="pt-1">
                 <ShowAllButton shown={showAllJobs} hidden={hiddenJobCount} onToggle={onToggleShowAllJobs} />
               </div>
             ) : null}
@@ -511,18 +527,22 @@ function GroupTile({
         type="button"
         onClick={onPick}
         data-testid={`group-tile-${sys.code}`}
-        className="flex flex-col items-center gap-2 p-4 rounded-xl border border-outline-variant/40 bg-surface-container-lowest hover:bg-surface-container-low transition-colors text-center min-h-[108px]"
+        className="relative flex w-full items-center sm:items-start gap-3 p-4 rounded-xl bg-surface-container-lowest shadow-sm ring-1 ring-outline-variant/30 hover:bg-surface-container-low transition-colors text-left min-h-[72px]"
       >
-        <div className="bg-surface-container p-3 rounded-xl text-on-surface">
-          <MaintenanceIcon iconKey={sys.icon_key} className="w-6 h-6" />
+        <div className="bg-surface-container p-2 rounded-lg text-on-surface shrink-0">
+          <MaintenanceIcon iconKey={sys.icon_key} className="w-5 h-5" />
         </div>
-        <span className="text-sm font-medium text-on-surface leading-tight">{sys.name}</span>
-        {count != null ? (
-          <span className="text-[11px] font-medium text-stitch-secondary">
-            {count} job{count === 1 ? "" : "s"}
-          </span>
-        ) : null}
-        {notUsual ? <NotUsualChip /> : null}
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:pr-6">
+          <span className="text-sm font-medium text-on-surface leading-tight">{sys.name}</span>
+          {count != null ? (
+            <span className="text-[13px] text-stitch-secondary">
+              {count} job{count === 1 ? "" : "s"}
+            </span>
+          ) : null}
+          {notUsual ? <NotUsualChip className="mt-1" /> : null}
+        </div>
+        <span className="hidden sm:block absolute top-3 right-3 h-5 w-5 rounded-full bg-surface-container-high" aria-hidden />
+        <ChevronRight className="sm:hidden h-5 w-5 shrink-0 text-on-surface" aria-hidden />
       </button>
     </JobTooltip>
   );
