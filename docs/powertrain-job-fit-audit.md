@@ -32,11 +32,10 @@ Method: `docs/how-we-build-playbook.md`. All facts were checked in the code and 
 **Owner's lesson from this session (proposed playbook line, not yet added; ask the owner):** in Step 4.3 add *"Before saying a screen is built, open the Stitch screen and the built screen side by side and list every difference; 'built' means the list is empty."*
 
 **Rules that still apply:**
-- **No HV service on a real car until the HV lockout checklist ships.** If it can't wait, log it in the app with "HV lockout done by <name> at <time>" in the notes (service-items audit Open list).
 - Log oil changes on "Engine oil" in the **Engine** group (`oil`), not the Fluids one (`engine_oil_part`).
 - Before trusting any number in this file, re-run its check on live.
 
-**Other open work (not this feature):** `docs/service-items-architecture-audit.md` → Open list (`catalogue_batch_log`, the Charging Port part-item check, Find parts research (29 items), the HV lockout checklist (target 30 Nov 2026), the CI known failure, then the Steering & Suspension list).
+**Other open work (not this feature):** `docs/service-items-architecture-audit.md` → Open list (`catalogue_batch_log`, the Charging Port part-item check, Find parts research (29 items), the CI known failure, then the Steering & Suspension list).
 
 ---
 
@@ -99,7 +98,7 @@ The original text columns stay untouched ("capture, never gate"). Rows the rules
 **Fix:** (1) the schedule builder skips any job where `fits = 'no'`; (2) **every nightly run** (not one-time) sets `schedule_status = 'retired'` and `retired_reason = 'Job doesn''t fit this car''s powertrain'` on any stored row whose job is `fits = 'no'` for its car and isn't already retired. It's idempotent: retired rows aren't touched again. That also catches any row made later by a bug. Rows are never deleted, and `unknown` never retires anything. Expected on live today: **0** rows (both cars' 59 rows fit).
 
 **PT-5 (High, safety). "High-voltage" isn't defined anywhere, and HV jobs are offered to petrol and diesel cars.**
-**Fix:** `is_high_voltage boolean NOT NULL DEFAULT false`, true on exactly these **10 jobs**: HV Battery Health Check, HV Battery Module Replacement, HV Battery Pack Replacement, HV Cable & Insulation Resistance Inspection, HV Cable / Connector Replacement, Charging Port, On-Board Charger, DC-DC Converter, Traction Motor, Electric A/C Compressor. The HV lockout checklist keys off this flag only. The 8 non-HV jobs in the group stay false. **Groups can't carry it:** constraint `CHECK (kind = 'component' OR is_high_voltage = false)` (`kind` is 'system' for groups, 'component' for jobs), and the flag doesn't cascade.
+**Fix:** `is_high_voltage boolean NOT NULL DEFAULT false`, true on exactly these **10 jobs**: HV Battery Health Check, HV Battery Module Replacement, HV Battery Pack Replacement, HV Cable & Insulation Resistance Inspection, HV Cable / Connector Replacement, Charging Port, On-Board Charger, DC-DC Converter, Traction Motor, Electric A/C Compressor. The flag drives the amber "High-voltage" chip (a label only; the lockout checklist was dropped 16 Nov). The 8 non-HV jobs in the group stay false. **Groups can't carry it:** constraint `CHECK (kind = 'component' OR is_high_voltage = false)` (`kind` is 'system' for groups, 'component' for jobs), and the flag doesn't cascade.
 - **Electric A/C Compressor** fits Electrified (hev included) on purpose. Most full hybrids (Toyota, Honda, Hyundai / Kia; the Honda Fit hybrid in this fleet is one) use a high-voltage electric compressor, so hiding it from hevs would hide real HV work. A hybrid with a belt-driven compressor gets a per-model exception (`applicable = false`, reason "belt-driven compressor"). Its description gains: "Belt-driven compressors (petrol cars, a few hybrids) aren't this job; use the conventional A/C Compressor job once the HVAC file adds it."
 - **Charging Port Inspection & Cleaning** is non-HV *by its scope*. Its description gains: "Visual check and pin cleaning with the car switched off and unplugged; the port housing stays closed. If the housing has to be opened, that's high-voltage work: log Charging Port and follow lockout." The owner (Deeki T, the safety owner on the Open list) can flip the switch in Dominion.
 - Checked: none of the 8 non-HV jobs carries a "lockout first" hint. Only Fan & Duct Cleaning's description mentions lockout, conditionally ("if the cover comes off"), which is correct. So no hint text changes.
@@ -299,7 +298,7 @@ Presets: **Combustion** = ice, mhev, hev, phev, erev. **Electrified** = hev, phe
 20. `fuel_category`-only update (e.g. correcting a Gas hybrid to Hybrid) → the trigger fires and the row moves `needs_check` → derived hev.
 21. A mild hybrid (`mhev`) gets Engine and Starter motor jobs, and **no** Alternator, Hybrid & electric or Electric A/C Compressor jobs.
 22. **`part_match.busy` really suppresses the trigger:** on the local copy, wrap the backfill in a test that counts `part_match_oe_chain` calls (or temporarily raises inside it) with `SET LOCAL part_match.busy = 'on'` → 0 calls; without the setting → > 0. If the mechanism ever changes (a setting becomes a table row), this test fails with "part_match.busy no longer suppresses the year trigger".
-23. **No group carries `is_high_voltage`:** the constraint refuses `UPDATE … SET is_high_voltage = true WHERE kind = 'system'`, and the HV checklist query reads jobs only.
+23. **No group carries `is_high_voltage`:** the constraint refuses `UPDATE … SET is_high_voltage = true WHERE kind = 'system'`.
 24. **The past-lines check** returns both numbers (logged as not usual / still don't fit) on a fixture where one rule was widened after logging.
 25. **`job_fit_count`** equals `count(*)` of models where `job_fits_car` = 'yes' (and 'unknown') for 4 fixture jobs: an inheriting job, an overriding job, a job with a model exception, and a job where both the job and its group are NULL / NULL (expected: fits = 2,679 − 12 = 2,667, unknown = 12, total = 2,679). `p_overrides` gives the same count as saving those values and calling it again. **The three override states differ:** for a job saved as `fits_powertrains = {hev}` in the Hybrid & electric group (Electrified), (a) no override → the hev count (203); (b) `{"fits_powertrains": null}` → the group's Electrified count (585); (c) `{"fits_powertrains": [all 7 codes]}` → every placed model (2,667). An empty array or an unknown key raises `job_fit_count_bad_override`.
 26. **Fleet HV chip:** on the Honda Fit, Electric A/C Compressor and the HV jobs in Hybrid & electric show "High-voltage"; Cooling Fan Filter and Charging Port Inspection & Cleaning don't. **On the Roomy, "Show all jobs" → every hidden HV job shows the amber "High-voltage" chip next to the grey "Not usual for this car" chip. Logging one → step 3, Review and Service history show both.** Group tiles never show the HV chip.
@@ -347,7 +346,6 @@ Presets: **Combustion** = ice, mhev, hev, phev, erev. **Electrified** = hev, phe
 - Motorcycles / trucks (`job_fits_car`'s comment marks where to extend).
 - Changing `fuel_type`, `engine_type` or `fuel_category` (parts code keeps using `fuel_category`).
 - Bulk per-model exceptions.
-- The HV lockout checklist itself (it reads `is_high_voltage`).
 - A per-organisation `job_fit_filter` flag.
 - A multi-model `job_fits_car` for a fleet-wide due-items view (PT-10 note).
 
