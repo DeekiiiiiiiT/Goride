@@ -36,6 +36,7 @@ import {
   LogServiceWizardContinueButton,
   LOG_SERVICE_COPY,
 } from "./maintenance-logging/log-service";
+import { LS, LT } from "./maintenance-logging/log-service/logServiceStitch";
 import type { OdometerCheckResult } from "./maintenance-logging/log-service/LogServiceDateMileageStep";
 import type { LogServiceSuggestedOp } from "./maintenance-logging/log-service/LogServiceWhatWasDoneStep";
 import {
@@ -1689,7 +1690,7 @@ export function LogMaintenanceServiceDialog({
 
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
-      <ResponsiveDialogContent hideCloseButton className="sm:max-w-[720px] max-h-[90vh] flex flex-col p-0 overflow-hidden gap-0">
+      <ResponsiveDialogContent hideCloseButton className="sm:max-w-[760px] max-h-[90vh] flex flex-col p-0 overflow-hidden gap-0 sm:rounded-2xl">
         <LogServiceWizardChrome
           activeStep={dialogWizardStep(step)}
           vehicle={strip}
@@ -1698,34 +1699,31 @@ export function LogMaintenanceServiceDialog({
           mobileSummary={mobileItemsSummary}
           footer={
             <>
-              <div className="flex items-center gap-2">
-                {/* Cancel on every step: closes and throws the draft away, so the next open starts at step 1. */}
-                <Button
-                  type="button"
-                  data-testid="log-service-cancel"
-                  onClick={clearDraftAndClose}
-                  className="bg-error text-on-error hover:bg-error/90"
-                >
-                  {LOG_SERVICE_COPY.cancelLabel}
-                </Button>
+              {/* Stitch powertrain 01 footer: soft red Cancel left; grey Back + black Continue right. */}
+              <button
+                type="button"
+                data-testid="log-service-cancel"
+                onClick={clearDraftAndClose}
+                className={`px-4 py-2 max-sm:py-3 rounded-lg ${LT.titleSm} transition-colors ${LS.btnCancel}`}
+              >
+                {LOG_SERVICE_COPY.cancelLabel}
+              </button>
+              <div className="flex items-center gap-2 max-sm:flex-1 max-sm:justify-end">
                 {step !== "dateMileage" ? (
-                  <Button
+                  <button
                     type="button"
-                    variant="outline"
                     onClick={handleBack}
                     aria-label={LOG_SERVICE_COPY.backLabel}
-                    className="text-on-surface max-sm:h-11 max-sm:w-11 max-sm:p-0"
+                    className={`flex items-center gap-1.5 px-4 py-2 max-sm:h-11 max-sm:w-11 max-sm:justify-center max-sm:p-0 rounded-lg ${LT.titleSm} transition-colors ${LS.btnBack}`}
                   >
-                    <ArrowLeft className="w-4 h-4 sm:mr-2" />
+                    <ArrowLeft className="w-4 h-4 sm:hidden" />
                     <span className="hidden sm:inline">
                       {step === "whatWasDone" && hasAddedJobs
                         ? LOG_SERVICE_COPY.backToReview(lines.length)
                         : LOG_SERVICE_COPY.backLabel}
                     </span>
-                  </Button>
+                  </button>
                 ) : null}
-              </div>
-              <div className="flex items-center gap-2 max-sm:flex-1 max-sm:justify-end">
                 {step === "dateMileage" ? (
                   <LogServiceWizardContinueButton
                     label={LOG_SERVICE_COPY.continueLabel}
@@ -1867,6 +1865,7 @@ export function LogMaintenanceServiceDialog({
               selectedIds={selectedCategoryIds}
               isAdded={categoryHasLine}
               jobFit={jobFit}
+              onBack={handleBack}
               showAll={showAllJobs || showAllInGroup.has(selectedSystem.id)}
               onToggleShowAll={() => {
                 const on = showAllJobs || showAllInGroup.has(selectedSystem.id);

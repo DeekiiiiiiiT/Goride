@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Check, CheckCircle2, Info, Loader2, Plus } from "lucide-react";
+import { ArrowLeft, Check, CheckCircle2, Info, Loader2, Plus } from "lucide-react";
+import { LS, LT } from "./logServiceStitch";
 import { MaintenanceIcon } from "../../MaintenanceIcon";
 import { LOG_SERVICE_COPY } from "./logServiceCopy";
 import { JobTooltip } from "./JobTooltip";
@@ -28,6 +29,8 @@ type Props = {
   /** Hidden jobs shown ("Show all jobs" here or on the group grid). */
   showAll?: boolean;
   onToggleShowAll?: () => void;
+  /** Stitch 03 "All groups" button. */
+  onBack?: () => void;
 };
 
 /** Pick one or more jobs inside a group (e.g. Wheel Alignment + Wheel Balancing). */
@@ -44,6 +47,7 @@ export function LogServiceSystemPicker({
   jobFit = { status: "off" },
   showAll = false,
   onToggleShowAll,
+  onBack,
 }: Props) {
   // A ticked job always stays where it is; only unticked "not usual" jobs move behind Show all.
   const hide = (cat: SectionJob) => isNotUsual(jobFit, cat.id) && !selectedIds.includes(cat.id);
@@ -70,21 +74,34 @@ export function LogServiceSystemPicker({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <div className="bg-surface-container p-3 rounded-xl text-on-surface">
-          <MaintenanceIcon iconKey={system.icon_key} className="w-6 h-6" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h3 className="text-lg font-semibold text-on-surface">{system.name}</h3>
-          <p className="text-sm text-stitch-secondary">{LOG_SERVICE_COPY.pickJobsHint}</p>
+      {/* Stitch powertrain 02 / 03: "All groups / <group>" + fit pill, then the caption row. */}
+      <div className={`flex items-center justify-between gap-2 border-b pb-3 border-[#e8e7f1] dark:border-[#2a2b36]`}>
+        <div className="flex min-w-0 items-center gap-2">
+          {onBack ? (
+            <button
+              type="button"
+              onClick={onBack}
+              className={`flex items-center gap-1 rounded-lg px-2.5 py-1 transition-colors ${LT.titleSm} ${LS.muted} ${LS.hoverMid}`}
+            >
+              <ArrowLeft className="h-[18px] w-[18px]" /> All groups
+            </button>
+          ) : null}
+          {onBack ? <span className="font-light text-[#c9c5cd]">/</span> : null}
+          <h3 className={`truncate ${LT.titleMd} ${LS.text}`}>{system.name}</h3>
         </div>
         {jobFit.status === "known" && !loading ? (
-          <span className="shrink-0 rounded-full bg-surface-container px-2.5 py-1 text-xs text-on-surface-variant" data-testid="group-fit-pill">
+          <span className={`shrink-0 rounded-full px-2.5 py-0.5 ${LT.bodySm} ${LS.low} ${LS.muted}`} data-testid="group-fit-pill">
             {showAll || notUsual.length === 0
-              ? `All ${allJobsCount} jobs shown`
+              ? `All ${allJobsCount} jobs shown for this group`
               : `${allJobsCount - notUsual.length} jobs that fit this car · ${notUsual.length} hidden`}
           </span>
         ) : null}
+      </div>
+      <div className="flex items-center justify-between">
+        <span className={`${LT.labelSm} uppercase tracking-wider ${LS.muted}`}>
+          {jobFit.status === "known" ? "Fits this car" : LOG_SERVICE_COPY.pickJobsHint}
+        </span>
+        {selectedIds.length ? <span className={`${LT.labelSm} font-medium ${LS.green}`}>{selectedIds.length} selected</span> : null}
       </div>
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-stitch-secondary py-8 justify-center">
@@ -169,12 +186,12 @@ function JobCard({
   return (
     <div className="flex flex-col gap-1.5">
       <div
-        className={`relative rounded-xl border transition-colors ${
+        className={`relative rounded-xl border shadow-sm transition-colors ${
           selected
-            ? "border-on-surface/30 bg-surface-container-low shadow-sm"
+            ? "bg-[#f4f2fd] border-black/20 dark:bg-[#1c1d26] dark:border-white/20"
             : notUsual
-              ? "border-outline-variant/40 bg-surface-container-lowest/70 hover:bg-surface-container-low"
-              : "border-outline-variant/40 bg-surface-container-lowest hover:bg-surface-container-low"
+              ? "bg-slate-50/80 border-slate-200/70 hover:border-slate-300 dark:bg-slate-800/40 dark:border-slate-700"
+              : "bg-white border-[#e8e7f1] hover:border-[#c9c5cd] hover:bg-[#f4f2fd] dark:bg-[#15161d] dark:border-[#2a2b36]"
         }`}
       >
         <JobTooltip text={cat.description}>
@@ -195,7 +212,7 @@ function JobCard({
                 {cat.is_high_voltage ? <HighVoltageChip /> : null}
               </span>
             ) : null}
-            <span className={`flex items-center gap-1.5 text-sm font-medium leading-tight ${notUsual && !selected ? "text-on-surface-variant" : "text-on-surface"}`}>
+            <span className={`flex items-center gap-1.5 truncate ${LT.titleSm} ${notUsual && !selected ? "text-slate-500" : LS.text}`}>
               {cat.name}
               {info ? (
                 <span className="pointer-events-auto">
@@ -204,7 +221,7 @@ function JobCard({
               ) : null}
             </span>
             {cat.description ? (
-              <span className={`truncate text-[13px] ${notUsual && !selected ? "text-stitch-secondary/70" : "text-stitch-secondary"}`}>
+              <span className={`truncate ${LT.bodySm} ${notUsual && !selected ? "text-slate-400" : LS.muted}`}>
                 {cat.description}
               </span>
             ) : null}
@@ -212,13 +229,11 @@ function JobCard({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {badge ? (
-              <span className="rounded bg-surface-container px-2 py-0.5 text-[11px] font-semibold text-on-surface-variant">{badge}</span>
+              <span className={`rounded px-2 py-0.5 ${LT.labelSm} ${selected ? LS.highest : LS.mid} ${LS.muted}`}>{badge}</span>
             ) : null}
             <span
               aria-hidden
-              className={`flex h-[18px] w-[18px] items-center justify-center rounded border-2 ${
-                selected ? "border-on-surface bg-on-surface text-surface-container-lowest" : "border-outline-variant bg-surface-container-lowest"
-              }`}
+              className={`flex h-5 w-5 items-center justify-center rounded-md ${selected ? LS.btnPrimary : "border-2 border-[#c9c5cd]"}`}
             >
               {selected ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
             </span>

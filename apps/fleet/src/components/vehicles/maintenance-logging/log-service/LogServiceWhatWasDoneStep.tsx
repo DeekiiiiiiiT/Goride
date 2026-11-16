@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, ChevronRight, ClipboardCheck, Loader2, Package, Plus, Search } from "lucide-react";
 import { MaintenanceIcon } from "../../MaintenanceIcon";
+import { LS, LT } from "./logServiceStitch";
 import { LOG_SERVICE_COPY } from "./logServiceCopy";
 import { JobTooltip } from "./JobTooltip";
 import { actionLabel } from "./systemSections";
@@ -261,250 +262,61 @@ export function LogServiceWhatWasDoneStep({
     return [...packages].sort((a, b) => score(b) - score(a));
   }, [packages]);
 
+  // Stitch powertrain 01 / 04 / 05 / 09 / 10: banner, group tiles, Show all. Search, service packages and the
+  // inspection card are not in the design and are not in the audit's Add list (playbook Step 4.3 / 4.5).
+  void sortedPackages;
+  void searchHits;
+  void pickHit;
   return (
-    <div className="flex flex-col gap-8">
-      <div className="flex flex-col gap-4">
-        <div className="flex justify-between items-end gap-4">
-          <div>
-            <span className="text-[11px] text-stitch-secondary uppercase tracking-wider font-semibold">
-              {LOG_SERVICE_COPY.wizardEyebrow}
-            </span>
-            <h2 className="text-2xl font-semibold text-on-surface mt-0.5">
-              {LOG_SERVICE_COPY.whatWasDoneHeading}
-            </h2>
-          </div>
-          {vinLabel ? (
-            <span className="text-xs text-on-surface-variant bg-surface-container px-2 py-0.5 rounded shrink-0 font-mono">
-              VIN: {vinLabel}
-            </span>
-          ) : null}
-        </div>
-
-        <div className="relative w-full" ref={searchBoxRef}>
-          <div className="bg-surface-container-low rounded-lg p-1 flex items-center shadow-sm">
-            <div className="px-2 text-stitch-secondary flex items-center">
-              <Search className="w-5 h-5" />
-            </div>
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setSearchOpen(true);
-              }}
-              onFocus={() => setSearchOpen(true)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape" && (searchOpen || search)) {
-                  // Close the dropdown only — don't let Esc also close the whole Log service window.
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setSearch("");
-                  setSearchOpen(false);
-                }
-                if (e.key === "Enter" && searchHits.length > 0) {
-                  e.preventDefault();
-                  pickHit(searchHits[0]);
-                }
-              }}
-              placeholder="Search a job — e.g. oil change, brake pads, wipers"
-              className="w-full bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none py-1"
-            />
-            <span className="bg-surface-container text-on-surface-variant font-mono text-[10px] px-1.5 py-0.5 rounded mr-1">
-              ESC
-            </span>
-          </div>
-          {searchOpen && (searchHits.length > 0 || hasQuery) ? (
-            <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 bg-surface-container-lowest rounded-lg shadow-xl overflow-hidden p-1 flex flex-col gap-0.5 ring-1 ring-outline-variant/30">
-              <div className="px-3 py-1 text-[10px] text-stitch-secondary uppercase font-semibold">
-                {hasQuery ? LOG_SERVICE_COPY.searchResultsHeading : LOG_SERVICE_COPY.suggestedOperations}
-              </div>
-              {hasQuery && searchHits.length === 0 ? (
-                <p className="px-3 py-2 text-sm text-stitch-secondary">
-                  {LOG_SERVICE_COPY.searchNoMatch(search.trim())}
-                </p>
-              ) : null}
-              {searchHits.map((op) => (
-                <button
-                  key={op.categoryId}
-                  type="button"
-                  className="w-full text-left px-3 py-2 rounded hover:bg-surface-container flex items-center justify-between group transition-colors"
-                  onClick={() => pickHit(op)}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <MaintenanceIcon iconKey={op.iconKey || "wrench"} className="w-4 h-4 text-primary shrink-0" />
-                    <span className="text-sm font-medium text-on-surface truncate">{op.categoryName}</span>
-                    {op.systemName ? (
-                      <>
-                        <span className="text-on-surface-variant/40">—</span>
-                        <span className="text-xs text-on-surface-variant truncate">{op.systemName}</span>
-                      </>
-                    ) : null}
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {isNotUsual(jobFit, op.categoryId) ? <NotUsualChip /> : null}
-                    {op.status === "overdue" ? (
-                      <span className="bg-error-container text-on-error-container text-[10px] px-1.5 py-0.5 rounded">
-                        Due
-                      </span>
-                    ) : null}
-                    <ArrowRight className="w-4 h-4 text-stitch-secondary opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      </div>
-
+    <div className="flex flex-col gap-4" data-testid="log-service-step2">
       {jobFit.status === "unknown" ? <UnknownEngineBanner onLinkCar={onLinkCar} /> : null}
       {jobFit.status === "error" && onRetryJobFit ? <CouldNotCheckBanner onRetry={onRetryJobFit} /> : null}
-
-      <section className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Package className="w-[18px] h-[18px] text-primary" />
-            <h3 className="text-lg font-semibold text-on-surface">{LOG_SERVICE_COPY.servicePackages}</h3>
-          </div>
-          <span className="text-xs text-stitch-secondary">{LOG_SERVICE_COPY.sortedByPriority}</span>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
-          {sortedPackages.map((pkg) => (
-            <button
-              key={pkg.id}
-              type="button"
-              onClick={() => onPickPackage(pkg)}
-              className={`flex flex-col justify-between gap-2 p-4 rounded-xl border transition-colors text-left min-h-[120px] ${packageCardClass(pkg.status)}`}
-            >
-              {pkg.status === "overdue" ? (
-                <div className="absolute top-0 left-0 w-full h-1 bg-error" />
-              ) : null}
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center justify-between gap-1">
-                  {pkg.status === "overdue" ? (
-                    <span className="bg-error text-on-error text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase">
-                      Overdue
-                    </span>
-                  ) : pkg.status === "mandatory" ? (
-                    <span className="bg-surface-container-highest text-on-surface text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase">
-                      Mandatory
-                    </span>
-                  ) : pkg.status === "due_soon" ? (
-                    <span className="bg-tertiary-container text-on-tertiary text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase">
-                      Due soon
-                    </span>
-                  ) : (
-                    <span className="h-5" />
-                  )}
-                  <MaintenanceIcon iconKey={pkg.iconKey} className="w-5 h-5 text-on-surface" />
-                </div>
-                <span className="text-sm font-bold text-on-surface leading-tight">{pkg.shortLabel}</span>
-                {pkg.intervalText ? (
-                  <span className="text-[10px] text-on-surface-variant">{pkg.intervalText}</span>
-                ) : pkg.dueKind ? (
-                  <span className="text-[10px] text-stitch-secondary uppercase tracking-wide">
-                    {pkg.dueKind.replace(/_/g, " ")}
-                  </span>
-                ) : null}
-              </div>
-              <div className="flex items-center justify-between pt-1">
-                {pkg.kmLabel ? (
-                  <span
-                    className={`font-mono text-[10px] font-semibold ${
-                      pkg.status === "overdue" ? "text-error" : "text-stitch-secondary"
-                    }`}
-                  >
-                    {pkg.kmLabel}
-                  </span>
-                ) : (
-                  <span />
-                )}
-                <span className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center">
-                  <Plus className="w-3.5 h-3.5" />
-                </span>
-              </div>
-            </button>
+      {fitOn ? <FitBanner pill={powertrainPill(jobFit) ?? ""} /> : null}
+      {fitOn && !showAllJobs ? (
+        <GroupsRemovedCaption
+          names={notUsualGroups.map((g) => g.name)}
+          hidden={notUsualGroups.reduce((n, g) => n + (groupCounts.get(g.id)?.hidden ?? 0), 0)}
+        />
+      ) : null}
+      {quickJobsLoading || jobFit.status === "loading" ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" aria-busy="true" aria-label="Loading" data-testid="group-grid-loading">
+          {Array.from({ length: 6 }, (_, i) => (
+            <div key={i} className={`flex flex-col gap-2 rounded-xl p-3.5 animate-pulse ${LS.low}`}>
+              <div className={`h-9 w-9 rounded-lg ${LS.high}`} />
+              <div className={`h-3 w-2/3 rounded ${LS.high}`} />
+              <div className={`h-2.5 w-1/3 rounded ${LS.high}`} />
+            </div>
           ))}
         </div>
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <h3 className="text-lg font-semibold text-on-surface">{LOG_SERVICE_COPY.quickJobs}</h3>
-        <p className="text-xs text-stitch-secondary">{LOG_SERVICE_COPY.quickJobsHint}</p>
-        {quickJobsLoading || jobFit.status === "loading" ? (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" aria-busy="true" aria-label="Loading" data-testid="group-grid-loading">
-            {Array.from({ length: 6 }, (_, i) => (
-              <div key={i} className="flex flex-col gap-2 rounded-xl bg-surface-container-low p-4 animate-pulse">
-                <div className="h-8 w-8 rounded-lg bg-surface-container-high" />
-                <div className="h-3 w-2/3 rounded bg-surface-container-high" />
-                <div className="h-2.5 w-1/3 rounded bg-surface-container-high" />
-              </div>
+      ) : quickJobs.length === 0 ? (
+        <p className={`${LT.bodySm} ${LS.outline} py-2`}>No groups available.</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" data-testid="group-grid">
+            {visibleGroups.map((sys) => (
+              <GroupTile
+                key={sys.id}
+                sys={sys}
+                count={fitOn || jobFit.status === "unknown" || jobFit.status === "error" ? groupCounts.get(sys.id)?.fit ?? null : null}
+                onPick={() => onPickSystem(sys)}
+              />
             ))}
           </div>
-        ) : quickJobs.length === 0 ? (
-          <p className="text-sm text-stitch-secondary py-2">No systems available.</p>
-        ) : (
-          <>
-            {fitOn ? <FitBanner pill={powertrainPill(jobFit) ?? ""} /> : null}
-            {fitOn && !showAllJobs ? (
-              <GroupsRemovedCaption
-                names={notUsualGroups.map((g) => g.name)}
-                hidden={notUsualGroups.reduce((n, g) => n + (groupCounts.get(g.id)?.hidden ?? 0), 0)}
-              />
-            ) : null}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="group-grid">
-              {visibleGroups.map((sys) => (
-                <GroupTile
-                  key={sys.id}
-                  sys={sys}
-                  count={fitOn || jobFit.status === "unknown" || jobFit.status === "error" ? groupCounts.get(sys.id)?.fit ?? null : null}
-                  onPick={() => onPickSystem(sys)}
-                />
-              ))}
-            </div>
-            {fitOn && showAllJobs && notUsualGroups.length ? (
-              <>
-                <NotUsualDivider />
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 opacity-70">
-                  {notUsualGroups.map((sys) => (
-                    <GroupTile key={sys.id} sys={sys} count={groupCounts.get(sys.id)?.hidden ?? null} notUsual onPick={() => onPickSystem(sys)} />
-                  ))}
-                </div>
-              </>
-            ) : null}
-            {fitOn && onToggleShowAllJobs ? (
-              <div className="pt-1">
-                <ShowAllButton shown={showAllJobs} hidden={hiddenJobCount} onToggle={onToggleShowAllJobs} />
+          {fitOn && showAllJobs && notUsualGroups.length ? (
+            <>
+              <NotUsualDivider />
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {notUsualGroups.map((sys) => (
+                  <GroupTile key={sys.id} sys={sys} count={groupCounts.get(sys.id)?.hidden ?? null} notUsual onPick={() => onPickSystem(sys)} />
+                ))}
               </div>
-            ) : null}
-          </>
-        )}
-      </section>
-
-      <section>
-        <button
-          type="button"
-          onClick={onOpenInspection}
-          className="w-full flex items-center justify-between gap-3 p-4 rounded-xl border border-dashed border-outline-variant bg-surface-container-low hover:bg-surface-container transition-colors text-left min-h-11"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="bg-surface-container-lowest p-3 rounded-xl shadow-sm text-on-surface shrink-0">
-              <ClipboardCheck className="w-6 h-6" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="text-sm font-semibold text-on-surface">{LOG_SERVICE_COPY.digitalInspection}</p>
-                <span className="text-[10px] font-semibold uppercase tracking-wide bg-surface-container px-2 py-0.5 rounded text-on-surface-variant">
-                  {inspectionPointCount}-point
-                </span>
-              </div>
-              <p className="text-xs text-stitch-secondary">{LOG_SERVICE_COPY.digitalInspectionHint}</p>
-            </div>
-          </div>
-          <span className="text-sm font-semibold text-primary shrink-0 flex items-center gap-0.5">
-            Launch <ArrowRight className="w-4 h-4" />
-          </span>
-        </button>
-      </section>
+            </>
+          ) : null}
+          {fitOn && onToggleShowAllJobs ? (
+            <ShowAllButton shown={showAllJobs} hidden={hiddenJobCount} onToggle={onToggleShowAllJobs} />
+          ) : null}
+        </>
+      )}
     </div>
   );
 }
@@ -527,22 +339,24 @@ function GroupTile({
         type="button"
         onClick={onPick}
         data-testid={`group-tile-${sys.code}`}
-        className="relative flex w-full items-center sm:items-start gap-3 p-4 rounded-xl bg-surface-container-lowest shadow-sm ring-1 ring-outline-variant/30 hover:bg-surface-container-low transition-colors text-left min-h-[72px]"
+        className={`group relative flex w-full items-center sm:items-start justify-between gap-3 p-3.5 rounded-xl shadow-sm transition-all text-left ${LS.lowest} ${LS.hoverMid} ${notUsual ? "opacity-70" : ""}`}
       >
-        <div className="bg-surface-container p-2 rounded-lg text-on-surface shrink-0">
-          <MaintenanceIcon iconKey={sys.icon_key} className="w-5 h-5" />
-        </div>
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:pr-6">
-          <span className="text-sm font-medium text-on-surface leading-tight">{sys.name}</span>
-          {count != null ? (
-            <span className="text-[13px] text-stitch-secondary">
-              {count} job{count === 1 ? "" : "s"}
-            </span>
-          ) : null}
-          {notUsual ? <NotUsualChip className="mt-1" /> : null}
-        </div>
-        <span className="hidden sm:block absolute top-3 right-3 h-5 w-5 rounded-full bg-surface-container-high" aria-hidden />
-        <ChevronRight className="sm:hidden h-5 w-5 shrink-0 text-on-surface" aria-hidden />
+        <span className="flex min-w-0 items-center gap-3">
+          <span className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${LS.low} ${LS.muted}`}>
+            <MaintenanceIcon iconKey={sys.icon_key} className="w-5 h-5" />
+          </span>
+          <span className="flex min-w-0 flex-col">
+            <span className={`${LT.titleSm} ${LS.text}`}>{sys.name}</span>
+            {count != null ? (
+              <span className={`${LT.bodySm} ${LS.outline} tabular-nums`}>
+                {count} job{count === 1 ? "" : "s"}
+              </span>
+            ) : null}
+            {notUsual ? <NotUsualChip className="mt-1" /> : null}
+          </span>
+        </span>
+        <span className={`hidden sm:block h-5 w-5 shrink-0 rounded-full ${LS.high}`} aria-hidden />
+        <ChevronRight className={`sm:hidden h-5 w-5 shrink-0 ${LS.text}`} aria-hidden />
       </button>
     </JobTooltip>
   );
