@@ -25,7 +25,7 @@ Method: `docs/how-we-build-playbook.md`. All facts were checked in the code and 
    - Dominion first (screens show without any switch): 01–04 car card, 05 Powertrain to check, 06 Vehicles home cards, 07–08 job drawer Fits, 09 group drawer, 10 states.
    - Fleet needs the switch on to be seen: set KV `kv_store_37f42386` key `feature_flag:job_fit_filter` to `{"enabled": false, "enabledForOrgs": ["8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823"]}` (the owner's fleet only; ask the owner before writing it). Both cars are already worked out correctly (Roomy petrol, Fit hybrid), so it's safe to view. Then 01–10: step 2 petrol, inside a group, Show all opened, hybrid car, unknown engine, step 3 not usual, Review, Service history, states, phone 390 px.
    - Update the screens' tests in the same round (playbook Step 5).
-2. **Owner confirms** the Roomy and the Fit on their car pages ("What powers this car" → Confirm), then the 12 models on "Powertrain to check" (Vehicles home → Review).
+2. **DONE 16 Nov (checked on live): 14 confirmed, 0 needs_check; Roomy = ice/petrol, Fit = hev/petrol.** Owner confirms the Roomy and the Fit on their car pages ("What powers this car" → Confirm), then the 12 models on "Powertrain to check" (Vehicles home → Review).
 3. **Real check on both cars** with the switch on: done-tests 1, 2, 5, 6, 26 (section 6a) by hand with screenshots. Then switch on globally if wanted (`"enabled": true`).
 4. Close the audit; update the service-items audit's Open list.
 
