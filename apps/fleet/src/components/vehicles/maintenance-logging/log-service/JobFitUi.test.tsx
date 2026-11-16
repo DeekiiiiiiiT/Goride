@@ -50,32 +50,33 @@ const step2 = (jobFit: JobFitState, extra: Partial<React.ComponentProps<typeof L
     />,
   );
 
-describe("Fleet 01 / 10: step 2 petrol", () => {
-  it("shows the fit strip, removes the empty group, counts fitting jobs, and offers Show all with N hidden jobs", () => {
+describe("Fleet step 2 petrol (tabs, nothing picked)", () => {
+  it("shows the fit strip, removes the empty group, shows the tabs and Pick a group, and offers Show all with N hidden jobs", () => {
     step2(petrol);
     expect(screen.getByTestId("banner-fit").textContent).toContain("Petrol");
-    expect(screen.queryByTestId("group-tile-hybrid")).toBeNull();
+    expect(screen.queryByTestId("group-tab-hybrid")).toBeNull();
     expect(screen.getByTestId("caption-groups-removed").textContent).toContain("Hybrid & electric");
-    expect(screen.getByTestId("group-tile-exhaust").textContent).toContain("1 job");
+    expect(screen.getByTestId("group-tab-exhaust")).toBeTruthy();
+    expect(screen.getByTestId("group-jobs-panel").textContent).toContain("Pick a group");
     expect(screen.getByTestId("show-all-jobs").textContent).toBe("Show all jobs (2 hidden)");
   });
 
-  it("flag off: no fit strip, no counts, no Show all", () => {
+  it("flag off: no fit strip, every group, no Show all", () => {
     step2({ status: "off" });
     expect(screen.queryByTestId("banner-fit")).toBeNull();
     expect(screen.queryByTestId("show-all-jobs")).toBeNull();
-    expect(screen.getByTestId("group-tile-exhaust").textContent).not.toContain("job");
-    expect(screen.getByTestId("group-tile-hybrid")).toBeTruthy();
+    expect(screen.getByTestId("group-tab-exhaust")).toBeTruthy();
+    expect(screen.getByTestId("group-tab-hybrid")).toBeTruthy();
   });
 });
 
 describe("Fleet 05 / 09: unknown engine, couldn't check, loading", () => {
-  it("unknown: banner with a Link this car button, every group with its count, nothing hidden", () => {
+  it("unknown: banner with a Link this car button, every group shown, nothing hidden", () => {
     const onLinkCar = vi.fn();
     step2({ status: "unknown", powertrain: null, fuel: null, fits: new Map() }, { onLinkCar });
     fireEvent.click(screen.getByRole("button", { name: /Link this car/ }));
     expect(onLinkCar).toHaveBeenCalled();
-    expect(screen.getByTestId("group-tile-hybrid").textContent).toContain("1 job");
+    expect(screen.getByTestId("group-tab-hybrid")).toBeTruthy();
     expect(screen.queryByTestId("show-all-jobs")).toBeNull();
   });
 

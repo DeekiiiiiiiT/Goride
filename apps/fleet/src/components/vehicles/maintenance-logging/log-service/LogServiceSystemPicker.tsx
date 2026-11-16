@@ -123,36 +123,7 @@ export function LogServiceSystemPicker({
       {jobFit.status === "error" && onRetryJobFit ? <CouldNotCheckBanner onRetry={onRetryJobFit} /> : null}
       {fitOn ? <FitBanner pill={powertrainPill(jobFit) ?? ""} variant="tabs" /> : null}
 
-      {tabs.length ? (
-        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-1" role="tablist" aria-label="Groups">
-          {tabs.map((g) => {
-            const on = g.id === system.id;
-            return (
-              <button
-                key={g.id}
-                type="button"
-                role="tab"
-                aria-selected={on}
-                title={g.name}
-                data-testid={`group-tab-${g.code}`}
-                onClick={() => (on ? undefined : onPickGroup?.(g))}
-                className={`relative flex flex-col items-center justify-center p-2 rounded-lg transition-colors ${
-                  on ? `${LS.btnPrimary} shadow-sm` : `${LS.low} ${LS.hoverMid} ${LS.muted}`
-                }`}
-              >
-                {on ? (
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#006c4a] ring-2 ring-white dark:ring-[#15161d]" />
-                ) : null}
-                <MaintenanceIcon iconKey={g.icon_key} className={`w-[18px] h-[18px] mb-1 ${on ? "text-[#85f8c4]" : ""}`} />
-                <span className={`${LT.labelSm} truncate w-full text-center ${on ? "font-semibold" : ""}`}>
-                  {shortGroupName(g.name)}
-                  {on && !loading ? ` · ${openCount}` : ""}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
+      <GroupTabs groups={tabs} selectedId={system.id} openCount={loading ? null : openCount} onPick={onPickGroup} />
 
       <div className={`w-full rounded-xl p-4 flex flex-col gap-2 ${LS.low}`} data-testid="group-jobs-panel">
         <div className="flex items-center justify-between gap-2 pb-1">
@@ -217,6 +188,55 @@ export function LogServiceSystemPicker({
       </div>
 
       {!loading && onToggleShowAll ? <ShowAllButton shown={showAll} hidden={notUsual.length} inGroup onToggle={onToggleShowAll} /> : null}
+    </div>
+  );
+}
+
+/** Screen 04 group tabs: small icon tabs; the chosen one black with its count and a green dot. */
+export function GroupTabs({
+  groups,
+  selectedId,
+  openCount,
+  onPick,
+  greyIds,
+}: {
+  groups: MaintenanceServiceCategory[];
+  selectedId: string | null;
+  openCount?: number | null;
+  onPick?: (g: MaintenanceServiceCategory) => void;
+  /** Groups shown only because "Show all jobs" is on: greyed. */
+  greyIds?: Set<string>;
+}) {
+  if (!groups.length) return null;
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-1" role="tablist" aria-label="Groups" data-testid="group-tabs">
+      {groups.map((g) => {
+        const on = g.id === selectedId;
+        const grey = !on && greyIds?.has(g.id);
+        return (
+          <button
+            key={g.id}
+            type="button"
+            role="tab"
+            aria-selected={on}
+            title={g.name}
+            data-testid={`group-tab-${g.code}`}
+            onClick={() => (on ? undefined : onPick?.(g))}
+            className={`relative flex flex-col items-center justify-center p-2 rounded-lg transition-colors ${
+              on ? `${LS.btnPrimary} shadow-sm` : `${LS.low} ${LS.hoverMid} ${LS.muted} ${grey ? "opacity-60" : ""}`
+            }`}
+          >
+            {on ? (
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#006c4a] ring-2 ring-white dark:ring-[#15161d]" />
+            ) : null}
+            <MaintenanceIcon iconKey={g.icon_key} className={`w-[18px] h-[18px] mb-1 ${on ? "text-[#85f8c4]" : ""}`} />
+            <span className={`${LT.labelSm} truncate w-full text-center ${on ? "font-semibold" : ""}`}>
+              {shortGroupName(g.name)}
+              {on && openCount != null ? ` · ${openCount}` : ""}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

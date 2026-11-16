@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, ChevronRight, ClipboardCheck, Loader2, Package, Plus, Search } from "lucide-react";
 import { MaintenanceIcon } from "../../MaintenanceIcon";
 import { LS, LT } from "./logServiceStitch";
+import { GroupTabs } from "./LogServiceSystemPicker";
 import { LOG_SERVICE_COPY } from "./logServiceCopy";
 import { JobTooltip } from "./JobTooltip";
 import { actionLabel } from "./systemSections";
@@ -11,8 +12,6 @@ import {
   CouldNotCheckBanner,
   FitBanner,
   GroupsRemovedCaption,
-  NotUsualChip,
-  NotUsualDivider,
   ShowAllButton,
   UnknownEngineBanner,
 } from "./JobFitUi";
@@ -271,7 +270,7 @@ export function LogServiceWhatWasDoneStep({
     <div className="flex flex-col gap-4" data-testid="log-service-step2">
       {jobFit.status === "unknown" ? <UnknownEngineBanner onLinkCar={onLinkCar} /> : null}
       {jobFit.status === "error" && onRetryJobFit ? <CouldNotCheckBanner onRetry={onRetryJobFit} /> : null}
-      {fitOn ? <FitBanner pill={powertrainPill(jobFit) ?? ""} /> : null}
+      {fitOn ? <FitBanner pill={powertrainPill(jobFit) ?? ""} variant="tabs" /> : null}
       {fitOn && !showAllJobs ? (
         <GroupsRemovedCaption
           names={notUsualGroups.map((g) => g.name)}
@@ -279,39 +278,26 @@ export function LogServiceWhatWasDoneStep({
         />
       ) : null}
       {quickJobsLoading || jobFit.status === "loading" ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" aria-busy="true" aria-label="Loading" data-testid="group-grid-loading">
-          {Array.from({ length: 6 }, (_, i) => (
-            <div key={i} className={`flex flex-col gap-2 rounded-xl p-3.5 animate-pulse ${LS.low}`}>
-              <div className={`h-9 w-9 rounded-lg ${LS.high}`} />
-              <div className={`h-3 w-2/3 rounded ${LS.high}`} />
-              <div className={`h-2.5 w-1/3 rounded ${LS.high}`} />
-            </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-1" aria-busy="true" aria-label="Loading" data-testid="group-grid-loading">
+          {Array.from({ length: 14 }, (_, i) => (
+            <div key={i} className={`h-[52px] rounded-lg animate-pulse ${LS.low}`} />
           ))}
         </div>
       ) : quickJobs.length === 0 ? (
         <p className={`${LT.bodySm} ${LS.outline} py-2`}>No groups available.</p>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" data-testid="group-grid">
-            {visibleGroups.map((sys) => (
-              <GroupTile
-                key={sys.id}
-                sys={sys}
-                count={fitOn || jobFit.status === "unknown" || jobFit.status === "error" ? groupCounts.get(sys.id)?.fit ?? null : null}
-                onPick={() => onPickSystem(sys)}
-              />
-            ))}
+          {/* Screen 04 tabs, nothing picked yet (the separate tiles screen was removed, owner 16 Nov). */}
+          <GroupTabs
+            groups={fitOn && showAllJobs ? [...visibleGroups, ...notUsualGroups] : visibleGroups}
+            selectedId={null}
+            onPick={onPickSystem}
+            greyIds={new Set(notUsualGroups.map((g) => g.id))}
+          />
+          <div className={`w-full rounded-xl p-6 flex flex-col items-center gap-1 text-center ${LS.low}`} data-testid="group-jobs-panel">
+            <span className={`${LT.titleSm} ${LS.text}`}>Pick a group</span>
+            <span className={`${LT.bodySm} ${LS.muted}`}>Its jobs open here.</span>
           </div>
-          {fitOn && showAllJobs && notUsualGroups.length ? (
-            <>
-              <NotUsualDivider />
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                {notUsualGroups.map((sys) => (
-                  <GroupTile key={sys.id} sys={sys} count={groupCounts.get(sys.id)?.hidden ?? null} notUsual onPick={() => onPickSystem(sys)} />
-                ))}
-              </div>
-            </>
-          ) : null}
           {fitOn && onToggleShowAllJobs ? (
             <ShowAllButton shown={showAllJobs} hidden={hiddenJobCount} onToggle={onToggleShowAllJobs} />
           ) : null}
@@ -321,43 +307,3 @@ export function LogServiceWhatWasDoneStep({
   );
 }
 
-function GroupTile({
-  sys,
-  count,
-  notUsual = false,
-  onPick,
-}: {
-  sys: MaintenanceServiceCategory;
-  /** Fitting jobs in the group (or hidden ones on a "not usual" tile); null = flag off. */
-  count: number | null;
-  notUsual?: boolean;
-  onPick: () => void;
-}) {
-  return (
-    <JobTooltip text={sys.description}>
-      <button
-        type="button"
-        onClick={onPick}
-        data-testid={`group-tile-${sys.code}`}
-        className={`group relative flex w-full items-center sm:items-start justify-between gap-3 p-3.5 rounded-xl shadow-sm transition-all text-left ${LS.lowest} ${LS.hoverMid} ${notUsual ? "opacity-70" : ""}`}
-      >
-        <span className="flex min-w-0 items-center gap-3">
-          <span className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${LS.low} ${LS.muted}`}>
-            <MaintenanceIcon iconKey={sys.icon_key} className="w-5 h-5" />
-          </span>
-          <span className="flex min-w-0 flex-col">
-            <span className={`${LT.titleSm} ${LS.text}`}>{sys.name}</span>
-            {count != null ? (
-              <span className={`${LT.bodySm} ${LS.outline} tabular-nums`}>
-                {count} job{count === 1 ? "" : "s"}
-              </span>
-            ) : null}
-            {notUsual ? <NotUsualChip className="mt-1" /> : null}
-          </span>
-        </span>
-        <span className={`hidden sm:block h-5 w-5 shrink-0 rounded-full ${LS.high}`} aria-hidden />
-        <ChevronRight className={`sm:hidden h-5 w-5 shrink-0 ${LS.text}`} aria-hidden />
-      </button>
-    </JobTooltip>
-  );
-}
