@@ -278,7 +278,7 @@ function buildFleetSupabase(opts: FleetMockOpts) {
           }
           return { data: null, error: null };
         }
-        if (table === "vehicles") {
+        if (table === "fleet_vehicles") {
           if (opts.vehicleErr) return { data: null, error: { message: "vehicles down" } };
           const v = opts.vehicle;
           if (!v) return { data: null, error: null };

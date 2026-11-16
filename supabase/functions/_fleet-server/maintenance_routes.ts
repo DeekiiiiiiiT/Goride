@@ -150,7 +150,7 @@ async function loadJobFitContext(
   if (!enabled) return { mode: "off" };
 
   const { data: vehicle, error: vehErr } = await fleetDb()
-    .from("vehicles")
+    .from(fleetTable("vehicles"))
     .select("id, vehicle_catalog_id")
     .eq("organization_id", orgId)
     .eq("id", vehicleId)
