@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { HighVoltageChip, NotUsualChip } from "./log-service/JobFitUi";
+import { LS, LT } from "./log-service/logServiceStitch";
 import { ChevronRight, Eye, Loader2, Trash2 } from "lucide-react";
 import { groupJobsPreview, groupServiceHistoryRows } from "./serviceHistoryGroups";
 import {
@@ -58,9 +59,11 @@ function formatDate(iso: unknown, dateUnknown?: boolean): string {
 
 export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: VehicleOption[] }) {
   const [vehicleFilter, setVehicleFilter] = useState<string>("all");
-  const [partFilter, setPartFilter] = useState("");
+  const partFilter = "";
+  /** Stitch 08 search box: filters the loaded services by job, part number or shop. */
+  const [search, setSearch] = useState("");
   const [fromMonths, setFromMonths] = useState("12");
-  const [keyword, setKeyword] = useState("");
+  const keyword = "";
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -121,114 +124,115 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
     return m;
   }, [vehicles]);
 
-  return (
-    <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col max-[390px]:rounded-lg">
-      <div className="p-4 flex flex-col gap-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h2 className="text-lg font-semibold text-on-surface tracking-tight">Maintenance Audit Trail</h2>
-            <p className="text-sm text-on-surface-variant mt-0.5">
-              Every service that was done, grouped by date. Press the arrow to see each job.
-            </p>
-          </div>
-          <div className="flex items-center gap-1 font-mono text-[11px] text-stitch-secondary">
-            <span className="material-symbols-outlined text-[14px]">lock_reset</span>
-            Immutable Ledger
-          </div>
-        </div>
+  // Stitch powertrain 08: filter bar, stat cards, "Recorded maintenance events" table whose rows open to
+  // job cards. Dropped (invented): service health, YTD spend, audit sync, photos, hash, signed PDF.
+  const q = search.trim().toLowerCase();
+  const shownGroups = q
+    ? groups.filter((g) =>
+        [g.jobNames.join(" "), g.providers.join(" "), ...g.rows.map((r) => `${r.brand ?? ""} ${r.part_number ?? r.partNumber ?? ""}`)]
+          .join(" ")
+          .toLowerCase()
+          .includes(q),
+      )
+    : groups;
+  const kmValues = rows.map((r) => Number(r.performed_at_miles)).filter((n) => Number.isFinite(n) && n > 0);
+  const latestKm = kmValues.length ? Math.max(...kmValues) : null;
+  const costRows = rows.map((r) => Number(r.line_total ?? r.lineTotal)).filter((n) => Number.isFinite(n));
+  const avgCost = costRows.length ? costRows.reduce((a, b) => a + b, 0) / costRows.length : null;
+  const cur = String(rows[0]?.currency ?? "JMD");
+  const label = `uppercase mb-1 block ${LT.labelSm} ${LS.muted}`;
+  const control = `h-10 rounded-lg border-0 ${LS.low} ${LS.text}`;
 
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-end justify-between gap-3 bg-surface-container-low p-3 rounded-lg">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap gap-3 flex-1">
-            <div className="min-w-[160px] flex-1 space-y-1">
-              <Label className="text-[10px] uppercase font-semibold text-on-surface-variant tracking-wider">
-                Vehicle
-              </Label>
-              <Select
-                value={vehicleFilter}
-                onValueChange={(v) => {
-                  setVehicleFilter(v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger className="h-9 bg-surface-container-lowest">
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Filter bar */}
+      <div className={`p-4 rounded-xl shadow-sm flex flex-col xl:flex-row items-stretch xl:items-end justify-between gap-4 ${LS.lowest}`}>
+        <div className="flex flex-wrap items-end gap-3 flex-1">
+          <div className="min-w-[260px] flex-1 sm:flex-initial">
+            <Label className={label}>Car</Label>
+            <Select
+              value={vehicleFilter}
+              onValueChange={(v) => {
+                setVehicleFilter(v);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className={control}>
+                <span className="flex items-center gap-2 min-w-0">
+                  <span className="material-symbols-outlined text-[#c76c00]" style={{ fontSize: 20 }}>directions_car</span>
                   <SelectValue placeholder="All cars" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All cars</SelectItem>
-                  {vehicles.map((v) => (
-                    <SelectItem key={v.vehicleId} value={v.vehicleId}>
-                      {vehicleLabel(v)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="min-w-[160px] flex-1 space-y-1">
-              <Label className="text-[10px] uppercase font-semibold text-on-surface-variant tracking-wider">
-                Part
-              </Label>
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All cars</SelectItem>
+                {vehicles.map((v) => (
+                  <SelectItem key={v.vehicleId} value={v.vehicleId}>
+                    {vehicleLabel(v)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="min-w-[170px]">
+            <Label className={label}>Date window</Label>
+            <Select
+              value={fromMonths}
+              onValueChange={(v) => {
+                setFromMonths(v);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className={control}>
+                <span className="flex items-center gap-1.5">
+                  <span className={`material-symbols-outlined ${LS.muted}`} style={{ fontSize: 18 }}>calendar_today</span>
+                  <SelectValue />
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="3">Last 3 months</SelectItem>
+                <SelectItem value="6">Last 6 months</SelectItem>
+                <SelectItem value="12">Last 12 months</SelectItem>
+                <SelectItem value="24">Last 24 months</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="min-w-[200px] flex-1">
+            <Label className={label}>Search logs</Label>
+            <div className="relative flex items-center">
+              <span className={`material-symbols-outlined absolute left-3 ${LS.muted}`} style={{ fontSize: 18 }}>search</span>
               <Input
-                className="h-9 bg-surface-container-lowest"
-                placeholder="All parts"
-                value={partFilter}
-                onChange={(e) => {
-                  setPartFilter(e.target.value);
-                  setPage(1);
-                }}
+                className={`${control} pl-9`}
+                placeholder="Filter by job, part number, shop…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <div className="min-w-[160px] flex-1 space-y-1">
-              <Label className="text-[10px] uppercase font-semibold text-on-surface-variant tracking-wider">
-                Timeline
-              </Label>
-              <Select
-                value={fromMonths}
-                onValueChange={(v) => {
-                  setFromMonths(v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger className="h-9 bg-surface-container-lowest">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="3">Last 3 months</SelectItem>
-                  <SelectItem value="6">Last 6 months</SelectItem>
-                  <SelectItem value="12">Last 12 months</SelectItem>
-                  <SelectItem value="24">Last 24 months</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="min-w-[180px] flex-1 space-y-1">
-              <Label className="text-[10px] uppercase font-semibold text-on-surface-variant tracking-wider">
-                Keyword
-              </Label>
-              <div className="relative">
-                <span className="material-symbols-outlined absolute left-2.5 top-2.5 text-[16px] text-stitch-secondary">
-                  search
-                </span>
-                <Input
-                  className="h-9 pl-8 bg-surface-container-lowest"
-                  placeholder="Search provider or note"
-                  value={keyword}
-                  onChange={(e) => {
-                    setKeyword(e.target.value);
-                    setPage(1);
-                  }}
-                />
-              </div>
-            </div>
           </div>
-          <Button type="button" variant="outline" size="sm" className="gap-1 shrink-0" disabled>
-            <span className="material-symbols-outlined text-[16px]">download</span>
-            Export CSV
-          </Button>
         </div>
       </div>
 
-      {error ? (
-        <div className="px-4 pb-4 text-sm text-error">{error}</div>
-      ) : null}
+      {/* Stat cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" data-testid="service-history-stats">
+        {[
+          { icon: "speed", k: "Odometer reading", v: latestKm != null ? latestKm.toLocaleString() : "—", unit: latestKm != null ? "km" : "" },
+          { icon: "construction", k: "Total logged jobs", v: String(total), unit: total === 1 ? "job" : "jobs" },
+          { icon: "payments", k: "Average job cost", v: avgCost != null ? formatMoney(cur, Math.round(avgCost)) : "—", unit: "" },
+        ].map((c) => (
+          <div key={c.k} className={`p-4 rounded-xl shadow-sm flex items-center gap-4 ${LS.lowest}`}>
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${LS.low}`}>
+              <span className={`material-symbols-outlined ${LS.text}`} style={{ fontSize: 24 }}>{c.icon}</span>
+            </div>
+            <div>
+              <p className={`uppercase ${LT.labelSm} ${LS.muted}`}>{c.k}</p>
+              <p className={`${LT.headlineMd} font-bold tabular-nums ${LS.text}`}>
+                {c.v} {c.unit ? <span className={`${LT.bodySm} font-normal ${LS.muted}`}>{c.unit}</span> : null}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {error ? <div className="text-sm text-error">{error}</div> : null}
 
       <NotFinishedServices
         vehicleId={vehicleFilter === "all" ? null : vehicleFilter}
@@ -237,273 +241,255 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
           return v ? [v.make, v.model, v.licensePlate].filter(Boolean).join(" ") : id;
         }}
         onFinished={() => void load()}
-        onView={(workOrderId, label) => setViewing({ workOrderId, label })}
+        onView={(workOrderId, lbl) => setViewing({ workOrderId, label: lbl })}
       />
 
-      <div className="overflow-x-auto w-full">
-        {loading ? (
-          <div className="flex justify-center py-16">
-            <Loader2 className="w-8 h-8 animate-spin text-stitch-secondary" />
+      {/* Recorded maintenance events */}
+      <div className={`rounded-xl shadow-sm overflow-hidden ${LS.lowest}`}>
+        <div className={`px-6 py-4 flex flex-wrap items-center justify-between gap-2 ${LS.low}`}>
+          <div className="flex items-center gap-2">
+            <h2 className={`${LT.titleMd} font-bold ${LS.text}`}>Recorded maintenance events</h2>
+            <span className={`px-2 py-0.5 rounded-full ${LT.labelSm} ${LS.high} ${LS.muted}`}>
+              {shownGroups.length} {shownGroups.length === 1 ? "entry" : "entries"}
+            </span>
           </div>
-        ) : rows.length === 0 ? (
-          <p className="text-center py-12 text-sm text-stitch-secondary">No completed service lines in this range.</p>
-        ) : (
-          <table className="w-full text-left border-collapse min-w-[880px]">
-            <thead>
-              <tr className="bg-surface-container-low text-stitch-secondary text-[11px] uppercase tracking-wider">
-                <th className="py-2 px-4 font-semibold">Date</th>
-                <th className="py-2 px-4 font-semibold">Vehicle</th>
-                <th className="py-2 px-4 font-semibold">Part</th>
-                <th className="py-2 px-4 font-semibold">Action</th>
-                <th className="py-2 px-4 font-semibold">Odometer</th>
-                <th className="py-2 px-4 font-semibold">Provider</th>
-                <th className="py-2 px-4 font-semibold text-right">Cost</th>
-                <th className="py-2 px-4 font-semibold text-center">Invoice</th>
-                <th className="py-2 px-4 font-semibold text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="text-sm divide-y divide-surface-container">
-              {groups.map((g) => {
-                const open = expanded.has(g.key);
-                const gVeh = vehicleById.get(g.vehicleId);
-                const gPlate = gVeh?.licensePlate ?? "";
-                const gName = gVeh ? [gVeh.make, gVeh.model].filter(Boolean).join(" ") : g.vehicleId;
-                const kmLabel =
-                  g.minKm == null
-                    ? "—"
-                    : g.minKm === g.maxKm
-                      ? `${g.minKm.toLocaleString()} km`
-                      : `${g.minKm.toLocaleString()}–${(g.maxKm ?? g.minKm).toLocaleString()} km`;
-                return (
-                  <React.Fragment key={g.key}>
-                    <tr
-                      className={`cursor-pointer ${open ? "bg-surface-container-low" : "hover:bg-surface-container-low/60"}`}
-                      onClick={() => toggleGroup(g.key)}
-                    >
-                      <td className="py-3 px-4 whitespace-nowrap font-semibold">
-                        <button
-                          type="button"
-                          aria-expanded={open}
-                          aria-label={open ? "Hide jobs" : "Show jobs"}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleGroup(g.key);
-                          }}
-                          className="inline-flex items-center gap-2"
-                        >
-                          <span className="w-7 h-7 rounded-lg border border-outline-variant/50 bg-surface-container-lowest flex items-center justify-center">
-                            <ChevronRight className={`w-4 h-4 transition-transform ${open ? "rotate-90" : ""}`} />
-                          </span>
-                          {formatDate(g.date, false)}
-                        </button>
-                      </td>
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <span>{gName || "—"}</span>
-                          {gPlate ? (
-                            <span className="font-mono text-[10px] bg-surface-container-high px-1.5 py-0.5 rounded font-bold tracking-widest">
-                              {gPlate}
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4" colSpan={2}>
-                        <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-primary text-on-primary mr-2">
-                          {g.rows.length} job{g.rows.length === 1 ? "" : "s"}
-                        </span>
-                        <span className="text-on-surface-variant">{groupJobsPreview(g.jobNames)}</span>
-                      </td>
-                      <td className="py-3 px-4 whitespace-nowrap font-mono text-stitch-secondary">{kmLabel}</td>
-                      <td className="py-3 px-4 whitespace-nowrap">{g.providers.join(", ") || "—"}</td>
-                      <td className="py-3 px-4 whitespace-nowrap text-right font-mono font-semibold">
-                        {formatMoney(g.currency, g.total)}
-                      </td>
-                      <td className="py-3 px-4 text-center text-stitch-secondary">
-                        {g.invoiceCount ? `${g.invoiceCount}` : "—"}
-                      </td>
-                      <td className="py-3 px-4" />
-                    </tr>
-                    {open
-                      ? g.rows.map((row, idx) => {
-                const vid = String(row.vehicle_id ?? row.vehicleId ?? "");
-                const veh = vehicleById.get(vid);
-                const plate = veh?.licensePlate ?? "";
-                const vehName = veh ? [veh.make, veh.model].filter(Boolean).join(" ") : vid;
-                const currency = String(row.currency ?? "JMD");
-                const lineTotal = row.line_total ?? row.lineTotal;
-                const invoice = String(row.invoice_url ?? row.invoiceUrl ?? "").trim();
-                const dateUnknown =
-                  row.date_unknown === true
-                  || (row.payload_json as { dateUnknown?: boolean } | undefined)?.dateUnknown === true;
-                const workOrderId = String(row.work_order_id ?? row.workOrderId ?? "").trim();
-                const lineId = String(row.line_id ?? row.lineId ?? "").trim();
-                const jobName = String(row.category_name ?? row.categoryName ?? "this job");
-                const rowLabel = [
-                  formatDate(row.performed_at_date ?? row.performedAtDate, dateUnknown),
-                  [vehName, plate].filter(Boolean).join(" "),
-                ]
-                  .filter(Boolean)
-                  .join(" · ");
-                const usedText = itemsUsedText(row.items as LineItemDraft[] | undefined, currency);
-                return (
-                  <React.Fragment key={String(row.line_id ?? row.lineId ?? idx)}>
-                  <tr className="bg-surface-container-lowest hover:bg-surface-container-low/60">
-                    <td className="py-3 pl-14 pr-4 whitespace-nowrap text-stitch-secondary text-xs">
-                      {formatDate(row.performed_at_date ?? row.performedAtDate, dateUnknown)}
-                    </td>
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <span>{vehName || "—"}</span>
-                        {plate ? (
-                          <span className="font-mono text-[10px] bg-surface-container-high px-1.5 py-0.5 rounded font-bold tracking-widest">
-                            {plate}
-                          </span>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 whitespace-nowrap font-medium">
-                      <div className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-                        {String(row.category_name ?? row.categoryName ?? "—")}
-                        {row.fit_at_log === "no" || row.fitAtLog === "no" ? <NotUsualChip className="ml-1" /> : null}
-                        {row.is_high_voltage === true || row.isHighVoltage === true ? <HighVoltageChip className="ml-1" /> : null}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      <span className="inline-flex px-2 py-0.5 rounded text-[11px] bg-surface-container-high">
-                        {String(row.action ?? "Service")}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 whitespace-nowrap font-mono text-stitch-secondary">
-                      {row.performed_at_miles != null
-                        ? `${Number(row.performed_at_miles).toLocaleString()} km${
-                          (row.payload_json as { odometerEstimated?: boolean } | undefined)?.odometerEstimated
-                          || (row as { odometerEstimated?: boolean }).odometerEstimated
-                            ? " est."
-                            : ""
-                        }`
-                        : "—"}
-                    </td>
-                    <td className="py-3 px-4 whitespace-nowrap">{String(row.provider ?? "—")}</td>
-                    <td className="py-3 px-4 whitespace-nowrap text-right font-mono font-semibold">
-                      {formatMoney(currency, lineTotal)}
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      {invoice ? (
-                        <a
-                          href={invoice}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex w-8 h-8 rounded bg-surface-container-high items-center justify-center hover:bg-surface-container-highest"
-                        >
-                          <span className="material-symbols-outlined text-[18px]">description</span>
-                        </a>
-                      ) : (
-                        <span className="text-stitch-secondary">—</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center justify-center gap-2">
-                        {workOrderId ? (
-                          <button
-                            type="button"
-                            title="View service"
-                            aria-label="View service"
-                            onClick={() => setViewing({ workOrderId, label: rowLabel })}
-                            className="w-8 h-8 rounded-lg border border-outline-variant/50 bg-surface-container-lowest flex items-center justify-center text-on-surface hover:bg-surface-container"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                        ) : null}
-                        {lineId ? (
-                          <button
-                            type="button"
-                            title={`Delete ${jobName}`}
-                            aria-label={`Delete ${jobName}`}
-                            onClick={() =>
-                              setDeleting({
-                                lineId,
-                                jobName,
-                                costLabel: formatMoney(currency, lineTotal),
-                                summary: rowLabel,
-                              })
-                            }
-                            className="w-8 h-8 rounded-lg bg-error text-on-error flex items-center justify-center hover:bg-error/90"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                  {usedText ? (
-                    <tr className="bg-surface-container-lowest" data-testid="service-history-items-used">
-                      <td />
-                      <td className="pb-3 px-4 text-xs text-on-surface-variant" colSpan={8}>
-                        <span className="inline-flex items-start gap-1.5 rounded-md bg-surface-container-low px-2.5 py-1.5">
-                          <span className="material-symbols-outlined text-[16px] text-[#a73a00]">inventory_2</span>
-                          <span>
-                            <span className="font-semibold text-on-surface">Items used:</span> {usedText}
-                          </span>
-                        </span>
-                      </td>
-                    </tr>
-                  ) : null}
-                  </React.Fragment>
-                );
-                        })
-                      : null}
-                    {open && g.discountAmount > 0 ? (
-                      <>
-                        <tr className="bg-surface-container-lowest" data-testid="service-history-discount-row">
-                          <td className="py-3 pl-14 pr-4 whitespace-nowrap text-stitch-secondary text-xs" colSpan={5}>
-                            Discount
-                          </td>
-                          <td className="py-3 px-4 whitespace-nowrap text-right font-mono font-semibold" colSpan={3}>
-                            −{g.currency === "JMD" ? "JMD" : g.currency} {g.discountAmount.toLocaleString()}
-                          </td>
-                          <td className="py-3 px-4" />
-                        </tr>
-                        <tr className="bg-surface-container-low/80" data-testid="service-history-net-total-row">
-                          <td className="py-3 pl-14 pr-4 whitespace-nowrap text-sm font-semibold text-on-surface" colSpan={5}>
-                            Total
-                          </td>
-                          <td className="py-3 px-4 whitespace-nowrap text-right font-mono font-semibold text-base" colSpan={3}>
-                            {formatMoney(g.currency, g.total)}
-                          </td>
-                          <td className="py-3 px-4" />
-                        </tr>
-                      </>
-                    ) : null}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {total > 50 ? (
-        <div className="p-4 flex items-center justify-between border-t border-surface-container text-sm">
-          <span className="text-stitch-secondary font-mono text-[11px]">
-            Page {page} · {total} services
-          </span>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-              Previous
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={page * 50 >= total}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </Button>
-          </div>
+          <span className={`${LT.labelMd} ${LS.muted}`}>Values in {cur === "JMD" ? "Jamaican dollars (J$)" : cur}</span>
         </div>
-      ) : null}
+        <div className="overflow-x-auto w-full">
+          {loading ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="w-8 h-8 animate-spin text-stitch-secondary" />
+            </div>
+          ) : shownGroups.length === 0 ? (
+            <p className={`text-center py-12 ${LT.bodyMd} ${LS.muted}`}>No completed services in this range.</p>
+          ) : (
+            <table className="w-full text-left border-collapse min-w-[820px]">
+              <thead>
+                <tr className={`uppercase tracking-wider ${LT.labelSm} ${LS.high} ${LS.muted}`}>
+                  <th className="py-2 px-4 font-semibold">Date</th>
+                  <th className="py-2 px-4 font-semibold">Mileage</th>
+                  <th className="py-2 px-4 font-semibold">Service / jobs</th>
+                  <th className="py-2 px-4 font-semibold">Provider / shop</th>
+                  <th className="py-2 px-4 font-semibold text-right">Total cost</th>
+                  <th className="py-2 px-4 font-semibold text-center">Status</th>
+                  <th className="py-2 px-4 font-semibold text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shownGroups.map((g) => {
+                  const open = expanded.has(g.key);
+                  const gVeh = vehicleById.get(g.vehicleId);
+                  const gName = gVeh ? [gVeh.make, gVeh.model, gVeh.licensePlate].filter(Boolean).join(" ") : g.vehicleId;
+                  const kmLabel =
+                    g.minKm == null
+                      ? "—"
+                      : g.minKm === g.maxKm
+                        ? `${g.minKm.toLocaleString()} km`
+                        : `${g.minKm.toLocaleString()}–${(g.maxKm ?? g.minKm).toLocaleString()} km`;
+                  return (
+                    <React.Fragment key={g.key}>
+                      <tr
+                        className={`cursor-pointer transition-colors ${open ? "bg-[#f4f2fd]/70 dark:bg-[#1c1d26]" : "hover:bg-[#f4f2fd]/40"}`}
+                        onClick={() => toggleGroup(g.key)}
+                      >
+                        <td className={`py-4 px-4 whitespace-nowrap ${LT.titleSm} ${LS.text}`}>
+                          <span className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full ${open ? "bg-[#006c4a]" : "bg-[#c9c5cd]"}`} />
+                            {formatDate(g.date, false)}
+                          </span>
+                        </td>
+                        <td className={`py-4 px-4 whitespace-nowrap tabular-nums ${LT.bodyMd} ${LS.text}`}>{kmLabel}</td>
+                        <td className="py-4 px-4">
+                          <span className="flex flex-wrap items-center gap-1.5">
+                            <span className={`${LT.titleSm} font-medium ${LS.text}`}>{groupJobsPreview(g.jobNames)}</span>
+                            <span className={`px-2 py-0.5 rounded-full ${LT.labelSm} ${LS.high} ${LS.muted}`}>
+                              {g.rows.length} job{g.rows.length === 1 ? "" : "s"}
+                            </span>
+                            {vehicleFilter === "all" ? <span className={`${LT.bodySm} ${LS.muted}`}>· {gName}</span> : null}
+                          </span>
+                        </td>
+                        <td className={`py-4 px-4 whitespace-nowrap ${LT.bodyMd} ${LS.muted}`}>
+                          <span className="flex items-center gap-1.5">
+                            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>store</span>
+                            {g.providers.join(", ") || "—"}
+                          </span>
+                        </td>
+                        <td className={`py-4 px-4 whitespace-nowrap text-right tabular-nums font-bold ${LT.titleSm} ${LS.text}`}>
+                          {formatMoney(g.currency, g.total)}
+                        </td>
+                        <td className="py-4 px-4 text-center whitespace-nowrap">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full ${LT.labelMd} font-semibold bg-[#85f8c4] text-[#002114]`}>
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#006c4a]" /> Completed
+                          </span>
+                        </td>
+                        <td className="py-4 px-4 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            aria-expanded={open}
+                            aria-label={open ? "Hide jobs" : "Show jobs"}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleGroup(g.key);
+                            }}
+                            className={`w-8 h-8 rounded-lg inline-flex items-center justify-center transition-colors ${LS.high} ${LS.text} ${LS.hoverMid}`}
+                          >
+                            <ChevronRight className={`w-4 h-4 transition-transform ${open ? "-rotate-90" : "rotate-90"}`} />
+                          </button>
+                        </td>
+                      </tr>
+                      {open ? (
+                        <tr className="bg-[#f4f2fd]/70 dark:bg-[#1c1d26]">
+                          <td colSpan={7} className="px-4 pb-4">
+                            <div className={`rounded-xl p-4 shadow-sm flex flex-col gap-4 ${LS.lowest}`}>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {g.rows.map((row, idx) => {
+                                  const currency = String(row.currency ?? "JMD");
+                                  const lineTotal = row.line_total ?? row.lineTotal;
+                                  const invoice = String(row.invoice_url ?? row.invoiceUrl ?? "").trim();
+                                  const dateUnknown =
+                                    row.date_unknown === true ||
+                                    (row.payload_json as { dateUnknown?: boolean } | undefined)?.dateUnknown === true;
+                                  const workOrderId = String(row.work_order_id ?? row.workOrderId ?? "").trim();
+                                  const lineId = String(row.line_id ?? row.lineId ?? "").trim();
+                                  const jobName = String(row.category_name ?? row.categoryName ?? "this job");
+                                  const rowLabel = [formatDate(row.performed_at_date ?? row.performedAtDate, dateUnknown), gName]
+                                    .filter(Boolean)
+                                    .join(" · ");
+                                  const usedText = itemsUsedText(row.items as LineItemDraft[] | undefined, currency);
+                                  const notUsual = row.fit_at_log === "no" || row.fitAtLog === "no";
+                                  const hv = row.is_high_voltage === true || row.isHighVoltage === true;
+                                  const partLine = [row.brand, row.part_number ?? row.partNumber].filter(Boolean).join(" ");
+                                  return (
+                                    <div
+                                      key={String(row.line_id ?? row.lineId ?? idx)}
+                                      className={`p-4 rounded-xl flex flex-col justify-between gap-2 ${LS.low}`}
+                                      data-testid="service-history-job"
+                                    >
+                                      <div className="flex flex-col gap-1.5">
+                                        <div className="flex items-start justify-between gap-2">
+                                          <span className={`flex items-center gap-1.5 font-bold ${LT.titleSm} ${LS.text}`}>
+                                            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>car_repair</span>
+                                            Job {idx + 1}: {jobName}
+                                          </span>
+                                          <span className={`font-bold tabular-nums ${LT.titleSm} ${LS.text}`}>{formatMoney(currency, lineTotal)}</span>
+                                        </div>
+                                        {notUsual || hv ? (
+                                          <span className="flex flex-wrap gap-1">
+                                            {notUsual ? <NotUsualChip /> : null}
+                                            {hv ? <HighVoltageChip /> : null}
+                                          </span>
+                                        ) : null}
+                                        <p className={`${LT.bodySm} ${LS.muted}`}>
+                                          {String(row.action ?? "Service")}
+                                        </p>
+                                        {usedText ? (
+                                          <p className={`${LT.bodySm} ${LS.muted}`} data-testid="service-history-items-used">
+                                            <span className={`font-semibold ${LS.text}`}>Items used:</span> {usedText}
+                                          </p>
+                                        ) : null}
+                                      </div>
+                                      <div className={`flex items-center justify-between gap-2 px-2 py-1 rounded-lg ${LS.lowest}`}>
+                                        <span className={`${LT.labelSm} font-mono ${LS.muted}`}>{partLine || "No part number"}</span>
+                                        <span className="flex items-center gap-1">
+                                          {invoice ? (
+                                            <a
+                                              href={invoice}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              title="Invoice"
+                                              aria-label="Invoice"
+                                              className={`w-7 h-7 rounded-lg inline-flex items-center justify-center ${LS.mid} ${LS.hoverHigh}`}
+                                            >
+                                              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>description</span>
+                                            </a>
+                                          ) : null}
+                                          {workOrderId ? (
+                                            <button
+                                              type="button"
+                                              title="View service"
+                                              aria-label="View service"
+                                              onClick={() => setViewing({ workOrderId, label: rowLabel })}
+                                              className={`w-7 h-7 rounded-lg inline-flex items-center justify-center ${LS.mid} ${LS.hoverHigh} ${LS.text}`}
+                                            >
+                                              <Eye className="w-4 h-4" />
+                                            </button>
+                                          ) : null}
+                                          {lineId ? (
+                                            <button
+                                              type="button"
+                                              title={`Delete ${jobName}`}
+                                              aria-label={`Delete ${jobName}`}
+                                              onClick={() =>
+                                                setDeleting({
+                                                  lineId,
+                                                  jobName,
+                                                  costLabel: formatMoney(currency, lineTotal),
+                                                  summary: rowLabel,
+                                                })
+                                              }
+                                              className="w-7 h-7 rounded-lg inline-flex items-center justify-center bg-error text-on-error hover:bg-error/90"
+                                            >
+                                              <Trash2 className="w-4 h-4" />
+                                            </button>
+                                          ) : null}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              {g.discountAmount > 0 ? (
+                                <div className={`flex flex-col gap-1 p-4 rounded-xl ${LS.mid}`}>
+                                  <div className={`flex justify-between ${LT.bodyMd} ${LS.muted}`} data-testid="service-history-discount-row">
+                                    <span>Discount</span>
+                                    <span className="tabular-nums font-medium">
+                                      −{g.currency === "JMD" ? "JMD" : g.currency} {g.discountAmount.toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <div className={`flex justify-between ${LT.titleSm} ${LS.text}`} data-testid="service-history-net-total-row">
+                                    <span>Total</span>
+                                    <span className="tabular-nums">{formatMoney(g.currency, g.total)}</span>
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {total > 50 ? (
+          <div className={`px-6 py-3 flex items-center justify-between ${LS.low} ${LT.bodySm}`}>
+            <span className={LS.muted}>
+              Page {page} · {total} jobs
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => p - 1)}
+                className={`px-3 py-1 rounded-lg disabled:opacity-40 ${LT.labelMd} ${LS.high} ${LS.text}`}
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                disabled={page * 50 >= total}
+                onClick={() => setPage((p) => p + 1)}
+                className={`px-3 py-1 rounded-lg disabled:opacity-40 ${LT.labelMd} ${LS.high} ${LS.text}`}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
 
       <ServiceHistoryViewDialog
         workOrderId={viewing?.workOrderId ?? null}

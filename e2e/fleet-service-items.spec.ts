@@ -374,7 +374,7 @@ test.describe("Fleet service items", () => {
       ORDER BY i.created_at DESC LIMIT 1`)).toBe("typed");
 
     await page.getByRole("tab", { name: /service history/i }).click();
-    await expect(page.getByText("Maintenance Audit Trail")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Recorded maintenance events")).toBeVisible({ timeout: 30_000 });
     await page.locator("tr").filter({ hasText: MD_DISC_PLATE }).first().click();
     const used = page.getByTestId("service-history-items-used").first();
     await expect(used).toContainText("Items used:");

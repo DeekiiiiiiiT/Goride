@@ -197,7 +197,7 @@ test.describe("Fleet maintenance log service discount", () => {
     });
 
     await page.getByRole("tab", { name: /service history/i }).click();
-    await expect(page.getByText("Maintenance Audit Trail")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Recorded maintenance events")).toBeVisible({ timeout: 30_000 });
 
     const row = page.locator("tr").filter({ hasText: MD_DISC_PLATE }).first();
     await row.click();
