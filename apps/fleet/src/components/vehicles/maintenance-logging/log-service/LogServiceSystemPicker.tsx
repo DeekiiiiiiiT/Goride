@@ -13,10 +13,9 @@ import { JobTooltip } from "./JobTooltip";
 import type { MaintenanceServiceCategory } from "../../../../types/maintenance";
 import { actionLabel, type RecommendedWith, type SectionJob, type SystemSections } from "./systemSections";
 import { mayNeedSummary, type JobItem } from "./itemsUsed";
-import { groupFitCounts, isNotUsual, powertrainPill, type JobFitState } from "./jobFit";
+import { groupFitCounts, isNotUsual, type JobFitState } from "./jobFit";
 import {
   CouldNotCheckBanner,
-  FitBanner,
   HighVoltageChip,
   NotUsualChip,
   NotUsualDivider,
@@ -52,6 +51,8 @@ type Props = {
   onPickGroup?: (sys: MaintenanceServiceCategory) => void;
   onRetryJobFit?: () => void;
   onLinkCar?: () => void;
+  /** Job search box (owner 16 Nov), in the place of the old fit strip. */
+  searchSlot?: React.ReactNode;
 };
 
 /** Short tab names as screen 04 draws them ("Tires", "Lighting", "Suspension"…). */
@@ -79,6 +80,7 @@ export function LogServiceSystemPicker({
   onPickGroup,
   onRetryJobFit,
   onLinkCar,
+  searchSlot,
 }: Props) {
   // A ticked job always stays where it is; only unticked "not usual" jobs move behind Show all.
   const hide = (cat: SectionJob) => isNotUsual(jobFit, cat.id) && !selectedIds.includes(cat.id);
@@ -121,7 +123,7 @@ export function LogServiceSystemPicker({
     <div className="flex flex-col gap-4" data-testid="log-service-group-open">
       {jobFit.status === "unknown" ? <UnknownEngineBanner onLinkCar={onLinkCar} /> : null}
       {jobFit.status === "error" && onRetryJobFit ? <CouldNotCheckBanner onRetry={onRetryJobFit} /> : null}
-      {fitOn ? <FitBanner pill={powertrainPill(jobFit) ?? ""} variant="tabs" /> : null}
+      {searchSlot}
 
       <GroupTabs groups={tabs} selectedId={system.id} openCount={loading ? null : openCount} onPick={onPickGroup} />
 

@@ -27,6 +27,7 @@ import { MaintenanceInspectionPanel } from "./MaintenanceInspectionPanel";
 import {
   LogServiceDateMileageStep,
   LogServiceWhatWasDoneStep,
+  JobSearchBox,
   LogServiceLineDetailsStep,
   LogServiceLineDetailsMultiStep,
   LogServiceReviewStep,
@@ -1874,6 +1875,18 @@ export function LogMaintenanceServiceDialog({
               onPickGroup={(g) => void handlePickSystem(g)}
               onRetryJobFit={() => setJobFitTick((n) => n + 1)}
               onLinkCar={onLinkCar}
+              searchSlot={
+                <JobSearchBox
+                  jobs={allComponents}
+                  systems={allSystems}
+                  pickableGroups={quickJobs}
+                  packages={packageChoicesForStep}
+                  suggestedOperations={logServiceContext?.suggestedOperations}
+                  sectionNameByJob={sectionNameByJob}
+                  jobFit={jobFit}
+                  onPick={handlePickSuggested}
+                />
+              }
               showAll={showAllJobs || showAllInGroup.has(selectedSystem.id)}
               onToggleShowAll={() => {
                 const on = showAllJobs || showAllInGroup.has(selectedSystem.id);

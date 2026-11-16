@@ -10,7 +10,7 @@ import type { MaintenanceServiceCategory } from "../../../../types/maintenance";
 import { groupFitCounts, isNotUsual, powertrainPill, type JobFitState } from "./jobFit";
 import {
   CouldNotCheckBanner,
-  FitBanner,
+  NotUsualChip,
   GroupsRemovedCaption,
   ShowAllButton,
   UnknownEngineBanner,
@@ -270,7 +270,22 @@ export function LogServiceWhatWasDoneStep({
     <div className="flex flex-col gap-4" data-testid="log-service-step2">
       {jobFit.status === "unknown" ? <UnknownEngineBanner onLinkCar={onLinkCar} /> : null}
       {jobFit.status === "error" && onRetryJobFit ? <CouldNotCheckBanner onRetry={onRetryJobFit} /> : null}
-      {fitOn ? <FitBanner pill={powertrainPill(jobFit) ?? ""} variant="tabs" /> : null}
+      <JobSearchBox
+        jobs={allJobs}
+        systems={allSystems}
+        pickableGroups={quickJobs}
+        packages={packages}
+        suggestedOperations={suggestedOperations}
+        sectionNameByJob={sectionNameByJob}
+        jobFit={jobFit}
+        onPick={(op) => {
+          if (onPickSuggested) onPickSuggested(op);
+          else {
+            const pkg = packages.find((p) => p.id === op.categoryId);
+            if (pkg) onPickPackage(pkg);
+          }
+        }}
+      />
       {fitOn && !showAllJobs ? (
         <GroupsRemovedCaption
           names={notUsualGroups.map((g) => g.name)}
@@ -307,3 +322,116 @@ export function LogServiceWhatWasDoneStep({
   );
 }
 
+
+/**
+ * Job search box (owner 16 Nov: replaces the fit strip on Work done, before and after a group is picked).
+ * Empty = the car's due jobs; typing = jobs, groups and packages that match every word.
+ */
+export function JobSearchBox({
+  jobs,
+  systems,
+  pickableGroups,
+  packages = [],
+  suggestedOperations = [],
+  sectionNameByJob,
+  jobFit = { status: "off" },
+  onPick,
+}: {
+  jobs: MaintenanceServiceCategory[];
+  systems: MaintenanceServiceCategory[];
+  pickableGroups: MaintenanceServiceCategory[];
+  packages?: LogServicePackageChoice[];
+  suggestedOperations?: LogServiceSuggestedOp[];
+  sectionNameByJob?: Map<string, string>;
+  jobFit?: JobFitState;
+  onPick: (op: LogServiceSuggestedOp) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [open]);
+  const dueOps = useMemo(() => dedupeSuggestedOps(suggestedOperations), [suggestedOperations]);
+  const hasQuery = search.trim().length > 0;
+  const hits = useMemo(
+    () =>
+      hasQuery
+        ? searchLogServiceJobs({ query: search, jobs, systems: systems.length ? systems : pickableGroups, pickableGroups, sectionNameByJob, packages, dueOps })
+        : dueOps.slice(0, 5),
+    [hasQuery, search, jobs, systems, pickableGroups, sectionNameByJob, packages, dueOps],
+  );
+  const pick = (op: LogServiceSuggestedOp) => {
+    setOpen(false);
+    setSearch("");
+    onPick(op);
+  };
+  return (
+    <div className="relative w-full" ref={boxRef} data-testid="log-service-job-search">
+      <div className={`h-10 w-full flex items-center gap-2 rounded-lg px-3 ${LS.mid}`}>
+        <Search className={`h-[18px] w-[18px] shrink-0 ${LS.muted}`} aria-hidden />
+        <input
+          type="search"
+          value={search}
+          aria-label="Search a job"
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && (open || search)) {
+              // Close the list only — don't let Esc also close the Log service window.
+              e.preventDefault();
+              e.stopPropagation();
+              setSearch("");
+              setOpen(false);
+            }
+            if (e.key === "Enter" && hits.length > 0) {
+              e.preventDefault();
+              pick(hits[0]);
+            }
+          }}
+          placeholder="Search a job — e.g. oil change, brake pads, wipers"
+          className={`w-full bg-transparent ${LT.bodySm} ${LS.text} placeholder:text-[#78767d] focus:outline-none`}
+        />
+      </div>
+      {open && (hits.length > 0 || hasQuery) ? (
+        <div className={`absolute left-0 right-0 top-[calc(100%+6px)] z-30 rounded-lg shadow-xl p-1 flex flex-col gap-0.5 ring-1 ring-[#c9c5cd]/40 ${LS.lowest}`}>
+          <div className={`px-3 py-1 uppercase ${LT.labelSm} ${LS.muted}`}>
+            {hasQuery ? LOG_SERVICE_COPY.searchResultsHeading : LOG_SERVICE_COPY.suggestedOperations}
+          </div>
+          {hasQuery && hits.length === 0 ? (
+            <p className={`px-3 py-2 ${LT.bodySm} ${LS.muted}`}>{LOG_SERVICE_COPY.searchNoMatch(search.trim())}</p>
+          ) : null}
+          {hits.map((op) => (
+            <button
+              key={op.categoryId}
+              type="button"
+              onClick={() => pick(op)}
+              className={`w-full text-left px-3 py-2 rounded flex items-center justify-between gap-2 group transition-colors ${LS.hoverMid}`}
+            >
+              <span className="flex items-center gap-2 min-w-0">
+                <MaintenanceIcon iconKey={op.iconKey || "wrench"} className={`w-4 h-4 shrink-0 ${LS.muted}`} />
+                <span className={`truncate ${LT.titleSm} ${LS.text}`}>{op.categoryName}</span>
+                {op.systemName ? <span className={`truncate ${LT.bodySm} ${LS.muted}`}>— {op.systemName}</span> : null}
+              </span>
+              <span className="flex items-center gap-1 shrink-0">
+                {isNotUsual(jobFit, op.categoryId) ? <NotUsualChip /> : null}
+                {op.status === "overdue" ? (
+                  <span className="bg-error-container text-on-error-container text-[10px] px-1.5 py-0.5 rounded">Due</span>
+                ) : null}
+                <ArrowRight className={`w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity ${LS.muted}`} />
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}

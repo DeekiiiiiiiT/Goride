@@ -51,9 +51,10 @@ const step2 = (jobFit: JobFitState, extra: Partial<React.ComponentProps<typeof L
   );
 
 describe("Fleet step 2 petrol (tabs, nothing picked)", () => {
-  it("shows the fit strip, removes the empty group, shows the tabs and Pick a group, and offers Show all with N hidden jobs", () => {
+  it("shows the job search, removes the empty group, shows the tabs and Pick a group, and offers Show all with N hidden jobs", () => {
     step2(petrol);
-    expect(screen.getByTestId("banner-fit").textContent).toContain("Petrol");
+    expect(screen.getByTestId("log-service-job-search")).toBeTruthy();
+    expect(screen.queryByTestId("banner-fit")).toBeNull();
     expect(screen.queryByTestId("group-tab-hybrid")).toBeNull();
     expect(screen.getByTestId("caption-groups-removed").textContent).toContain("Hybrid & electric");
     expect(screen.getByTestId("group-tab-exhaust")).toBeTruthy();
@@ -63,7 +64,7 @@ describe("Fleet step 2 petrol (tabs, nothing picked)", () => {
 
   it("flag off: no fit strip, every group, no Show all", () => {
     step2({ status: "off" });
-    expect(screen.queryByTestId("banner-fit")).toBeNull();
+    expect(screen.getByTestId("log-service-job-search")).toBeTruthy();
     expect(screen.queryByTestId("show-all-jobs")).toBeNull();
     expect(screen.getByTestId("group-tab-exhaust")).toBeTruthy();
     expect(screen.getByTestId("group-tab-hybrid")).toBeTruthy();
