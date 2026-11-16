@@ -82,3 +82,20 @@ Deno.test("collectRelatedTxIdsForEntry merges explicit and fingerprint", () => {
   ]);
   assertEquals(ids.sort(), ["exp-1", "linked", "orphan-sig"].sort());
 });
+
+Deno.test("collectRelatedTxIdsForEntry skips look-alikes linked to a different fill (5179KZ 8 Nov)", () => {
+  const entry = {
+    id: "fe-real",
+    transactionId: "tx-real",
+    vehicleId: "5179KZ",
+    date: "2026-11-08T07:30:00",
+    amount: 4000,
+  };
+  const ids = collectRelatedTxIdsForEntry(entry, [
+    { id: "tx-real", vehicleId: "5179KZ", date: "2026-11-08", amount: -4000, category: "Fuel", metadata: { fuelEntryId: "fe-real" } },
+    { id: "tx-repeat-1", vehicleId: "5179KZ", date: "2026-11-08", amount: -4000, category: "Fuel", metadata: { fuelEntryId: "fe-repeat-1" } },
+    { id: "tx-repeat-2", vehicleId: "5179KZ", date: "2026-11-08", amount: -4000, category: "Fuel", metadata: { sourceId: "fe-repeat-2" } },
+    { id: "unlinked-sig", vehicleId: "5179KZ", date: "2026-11-08", amount: -4000, category: "Fuel" },
+  ]);
+  assertEquals(ids.sort(), ["tx-real", "unlinked-sig"]);
+});

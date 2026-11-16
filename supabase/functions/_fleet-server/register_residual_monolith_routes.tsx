@@ -9,6 +9,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { registerTripAnalyticsRoutes } from "./trip_analytics_routes.ts";
 import { searchTripsFromFacts, tripCrossFleetMfaResponse, tripStatsFromFacts } from "./trip_facts_read.ts";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
+import { findRepeatFuelSave, isSameFuelSaveResent } from "./fuel_tx_repeat_save.ts";
 import { fleetSelect } from "./fleet_select.ts";
 import { countBy, listByBatch, queryFleet, fleetDb, fleetTable, rowToKvValue } from "./repos/baseRepo.ts";
 import OpenAI from "npm:openai";
@@ -2761,6 +2762,16 @@ export function registerResidualMonolithRoutes(app: Hono) {
             403,
           );
         }
+        // Driver app re-sent the same fuel save (same id — phone never showed "saved"):
+        // it is already booked, so hand it back instead of re-running the whole save.
+        if (
+          !canFleetEdit &&
+          previousTransaction &&
+          typeof previousTransaction === "object" &&
+          isSameFuelSaveResent(previousTransaction as Record<string, unknown>, Date.now())
+        ) {
+          return c.json({ success: true, data: previousTransaction, repeatSaveOf: String(transaction.id) });
+        }
       }
 
       // Admin manual cash fuel: book as Expense debit (not positive Fuel_Manual_Entry credit).
@@ -2876,6 +2887,17 @@ export function registerResidualMonolithRoutes(app: Hono) {
       if (isFuelCategoryTx && transaction.driverId) {
         const withVehicle = await enrichRecordWithDriverVehicle(transaction, txOrgId);
         Object.assign(transaction, withVehicle);
+      }
+
+      // Same fill pressed Save again (phone never showed "saved") → hand back the first save.
+      if (isFuelCategoryTx && !previousTransaction) {
+        const firstSave = await findRepeatFuelSave(transaction as Record<string, unknown>, txOrgId);
+        if (firstSave) {
+          console.log(
+            `[fuel-repeat-save] tx ${transaction.id} is a repeat of ${String(firstSave.id)} — not booked again`,
+          );
+          return c.json({ success: true, data: firstSave, repeatSaveOf: String(firstSave.id) });
+        }
       }
 
       // Auto-Approve Logic for AI Verified Fuel

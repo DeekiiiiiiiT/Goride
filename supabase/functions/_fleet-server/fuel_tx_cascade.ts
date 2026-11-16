@@ -142,7 +142,12 @@ export function collectRelatedTxIdsForEntry(
       explicit.push(id);
       continue;
     }
-    if (txMatchesFuelEntryFingerprint(t, entry)) {
+    // A look-alike row that is linked to a DIFFERENT fill is not ours (repeat saves of
+    // one fill share vehicle/date/amount — 5179KZ 8 Nov 2026 lost all three on one delete).
+    const linkedElsewhere = [meta.sourceId, meta.linkedFuelId, meta.fuelEntryId]
+      .map(trimId)
+      .some((linked) => linked !== "" && linked !== entryId);
+    if (!linkedElsewhere && txMatchesFuelEntryFingerprint(t, entry)) {
       explicit.push(id);
     }
   }

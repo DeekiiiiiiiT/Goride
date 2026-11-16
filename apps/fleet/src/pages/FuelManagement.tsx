@@ -1794,11 +1794,26 @@ function FuelManagementInner({
           const transactionsToDelete = cleanupMap.relatedTransactions;
           
           // 2. Delete ledger rows first, then the fuel log (avoids orphaned links if a txn delete fails)
+          // One at a time: each server delete also clears its own linked rows, so a later id
+          // may already be gone ("Not found") — that is done, not a failure.
           if (cascadeDelete && transactionsToDelete.length > 0) {
-              await Promise.all(transactionsToDelete.map(tx => api.deleteTransaction(tx.id)));
+              for (const tx of transactionsToDelete) {
+                  try {
+                      await api.deleteTransaction(tx.id);
+                  } catch (txErr) {
+                      const msg = txErr instanceof Error ? txErr.message : String(txErr);
+                      if (!/not found/i.test(msg)) throw txErr;
+                  }
+              }
           }
 
-          await fuelService.deleteFuelEntry(deleteLogConfirmationId);
+          try {
+              await fuelService.deleteFuelEntry(deleteLogConfirmationId);
+          } catch (entryErr) {
+              // The ledger delete above may already have removed this fuel log.
+              const stillThere = await fuelService.getFuelEntry(deleteLogConfirmationId);
+              if (stillThere) throw entryErr;
+          }
           
           let deletedTxCount = cascadeDelete ? transactionsToDelete.length : 0;
 
@@ -1824,7 +1839,10 @@ function FuelManagementInner({
 
       } catch (e) {
           console.error("[FuelManagement] Deletion failure:", e);
-          toast.error("Critical failure during atomic deletion. Some records may remain.");
+          const reason = e instanceof Error && e.message ? e.message : "Unknown error";
+          toast.error("Could not delete this fuel log. Some records may remain.", {
+              description: reason,
+          });
       } finally {
           setIsSyncing(false);
           setDeleteLogConfirmationId(null);

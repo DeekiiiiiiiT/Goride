@@ -6,6 +6,8 @@
 
 ## ⏸ START HERE (paused 15 Nov 2026 ~23:00 UTC — new chat picks up here)
 
+**Checked 15 Nov ~23:45 UTC:** items 1–2 below are DONE — all pushed (origin/main = `0c138843`), edge deploy log lists "Deployed Functions" for fleet-fuel / fleet-toll / fleet-core, Deploy recon-worker green. CI red only on the known S20 fidelity line (Step B "CI" row). Still to see: the ~15–40 s update on the next real change. No new Roam fuel card statement since 14 Nov.
+
 **First, before anything else:**
 1. **Is everything pushed?** On 15 Nov evening these were committed but NOT pushed: `e18f9ed4`, `f09de8b7`, `9ddd06a2`, `49c40e7f`, `c3fa5939` (check with `git fetch origin` + `git log origin/main..HEAD --oneline`). If any are listed, ask the owner to push (`cd C:\Roam\Goride` then `git push origin parts-auto-match:main`). The push also carries the other chat's maintenance / powertrain commits — say so.
 2. **After that push, check the speed-up is live** (commit `c3fa5939`): the edge deploy log lists "Deployed Functions" for fleet-core / fleet-fuel / fleet-toll (see `edge-deploy-diff-whole-push` note) and the "Deploy recon-worker" run is green. The database half is ALREADY live (owner ran `docs/recon_short_publish_hold_LIVE_apply.sql` on 15 Nov: hold 10 s, logbook line `20261115224516` present). Then on the next real change, confirm the week page updates in ~15–40 s with no F5 (week_runs.desk_computed_at moves; edge logs show the `/tick` wake from fleet-core / fleet-fuel). If it still takes minutes, read the edge logs for "[recon] calculator wake failed".

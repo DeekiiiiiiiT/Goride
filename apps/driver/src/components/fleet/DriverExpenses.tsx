@@ -306,6 +306,8 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
   
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  /** One save id per filled-in form: pressing Save again (no "saved" shown) updates the same record. */
+  const pendingExpenseTxIdRef = useRef<string | null>(null);
 
   const [verifiedStations, setVerifiedStations] = useState<StationProfile[]>([]);
 
@@ -346,6 +348,7 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
   };
 
   const resetForm = () => {
+    pendingExpenseTxIdRef.current = null;
     setAmount('');
     setCategory('');
     setNotes('');
@@ -1603,7 +1606,8 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
       toast.error(msg);
     }, SUBMIT_DEADLINE_MS);
     try {
-      const txId = crypto.randomUUID();
+      if (!pendingExpenseTxIdRef.current) pendingExpenseTxIdRef.current = crypto.randomUUID();
+      const txId = pendingExpenseTxIdRef.current;
       let receiptUrl = '';
       if (receiptFile) {
         const uploadRes = await uploadEvidenceFile(receiptFile, {

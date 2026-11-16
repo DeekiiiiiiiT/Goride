@@ -378,6 +378,11 @@ export const settlementService = {
     const signatureMatches = allTransactions.filter(t => {
       // Skip if already found in explicit matches
       if (explicitMatches.some(em => em.id === t.id)) return false;
+      // A look-alike linked to a DIFFERENT fill is not ours (repeat saves share vehicle/date/amount)
+      const linkedElsewhere = [t.metadata?.sourceId, t.metadata?.linkedFuelId, t.metadata?.fuelEntryId]
+        .map((v) => (typeof v === 'string' ? v.trim() : ''))
+        .some((linked) => linked !== '' && linked !== fuelEntry.id);
+      if (linkedElsewhere) return false;
 
       const sameVehicle = t.vehicleId === fuelEntry.vehicleId;
       const sameDate = toYmd(t.date) === entryDate;
