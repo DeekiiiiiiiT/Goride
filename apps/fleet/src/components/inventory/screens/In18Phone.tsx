@@ -1,13 +1,10 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
 import { useIn18PhoneForm } from './hooks/useIn18PhoneForm';
-import { useInventoryLive } from '../inventoryLive';
-import { useInventoryShell } from '../InventoryShellContext';
 import { InventoryOverflowMenu } from '../InventoryOverflowMenu';
 import { firstAssetSerial, strField } from '../inventoryData';
 export function In18Phone() {
   const form = useIn18PhoneForm();
-  const shell = useInventoryShell();
-  const live = useInventoryLive(shell);
+  const { shell, live } = form;
   const primary = live.primaryVehicle;
   const secondary = live.secondaryVehicle;
   const assetSerial = firstAssetSerial(live.assets);

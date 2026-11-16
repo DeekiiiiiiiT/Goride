@@ -235,8 +235,8 @@ export function MaintenanceOverviewPanel({
                 filtered.map((row) => {
                   const primaryAttention =
                     row.worstDueTaskName ??
-                    row.servicesAttention.find((a) => a.kind === "overdue")?.taskName ??
-                    row.servicesAttention[0]?.taskName;
+                    (row.servicesAttention ?? []).find((a) => a.kind === "overdue")?.taskName ??
+                    (row.servicesAttention ?? [])[0]?.taskName;
                   const odo = row.odometerMeta?.reading ?? row.odometer;
                   const needsOdo = row.fleetStatus.toLowerCase().includes("odometer");
                   return (

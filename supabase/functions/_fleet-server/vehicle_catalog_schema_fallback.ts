@@ -269,6 +269,59 @@ export async function listVehicleCatalogWithFallback(
   return { items: legItems, total: legItems.length };
 }
 
+/** Maintenance-master pickers: labels only — avoids multi-megabyte Sentry HTTP warnings. */
+const PICKER_SELECT =
+  "id,make,model,chassis_code,production_start_year,production_end_year,trim_series,status";
+
+export async function listVehicleCatalogPickerWithFallback(
+  supabase: SupabaseClient,
+): Promise<{ items: Record<string, unknown>[]; total: number }> {
+  const modernItems: Record<string, unknown>[] = [];
+  let from = 0;
+  let modernOk = true;
+  for (;;) {
+    const modern = await supabase
+      .from("vehicle_catalog")
+      .select(PICKER_SELECT)
+      .order("make", { ascending: true })
+      .order("model", { ascending: true })
+      .order("production_start_year", { ascending: false })
+      .range(from, from + LIST_PAGE - 1);
+    if (modern.error) {
+      if (!isVehicleCatalogSchemaMismatchError(modern.error)) throw modern.error;
+      modernOk = false;
+      break;
+    }
+    const page = (modern.data || []).map((r: Record<string, unknown>) => catalogRowForApi(r));
+    modernItems.push(...page);
+    if (page.length < LIST_PAGE) break;
+    from += LIST_PAGE;
+    if (from > LIST_MAX_OFFSET) break;
+  }
+  if (modernOk) {
+    return { items: modernItems, total: modernItems.length };
+  }
+
+  const legItems: Record<string, unknown>[] = [];
+  from = 0;
+  for (;;) {
+    const leg = await supabase
+      .from("vehicle_catalog")
+      .select("id,make,model,year,generation_code,trim_series,status")
+      .order("make", { ascending: true })
+      .order("model", { ascending: true })
+      .order("year", { ascending: false })
+      .range(from, from + LIST_PAGE - 1);
+    if (leg.error) throw leg.error;
+    const page = (leg.data || []).map((r: Record<string, unknown>) => catalogRowForApi(r));
+    legItems.push(...page);
+    if (page.length < LIST_PAGE) break;
+    from += LIST_PAGE;
+    if (from > LIST_MAX_OFFSET) break;
+  }
+  return { items: legItems, total: legItems.length };
+}
+
 /** Insert payload built for modern schema → legacy table (single `year`, `generation_code` for chassis). */
 export function insertRowForLegacyDb(row: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = { ...row };

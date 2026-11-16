@@ -7,6 +7,8 @@ const isDev = import.meta.env.DEV;
 const localDevNoise = [
   /Failed to fetch dynamically imported module:.*(?:localhost|127\.0\.0\.1)/i,
   /Cannot read properties of null \(reading 'useState'\)/,
+  /Cannot read properties of null \(reading 'useEffect'\)/,
+  /Missing Supabase config: set VITE_SUPABASE_URL/,
   /Invalid hook call/,
   // Fast Refresh remounts leave TDZ / unbound identifiers mid-edit (ROAM-FLEET-1*).
   /Cannot access '.+' before initialization/,

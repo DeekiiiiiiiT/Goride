@@ -43,9 +43,12 @@ export function buildGroupViews(
         .sort(bySortThenName)
         .map((sg) => ({
           ...sg,
-          sections: [...sg.sections].sort(bySortThenName).map((s) => ({
+          sections: [...(sg.sections ?? [])].sort(bySortThenName).map((s) => ({
             ...s,
-            jobs: s.jobIds.map((id) => jobsById.get(id)).filter((j): j is Job => Boolean(j) && visible(j!)),
+            jobIds: s.jobIds ?? [],
+            jobs: (s.jobIds ?? [])
+              .map((id) => jobsById.get(id))
+              .filter((j): j is Job => Boolean(j) && visible(j!)),
           })),
         }));
       const sectionedIds = new Set(sectionGroups.flatMap((sg) => sg.sections.flatMap((s) => s.jobIds)));

@@ -114,7 +114,9 @@ export function MaintenanceMasterScheduleDrawer({
     void fetchScopeCoverage(token, {
       scope,
       vehicle_catalog_id: scope === "variant" ? vehicleCatalogId : undefined,
-    }).then(setCoversCount);
+    })
+      .then(setCoversCount)
+      .catch(() => setCoversCount(0));
   }, [open, token, scope, vehicleCatalogId]);
 
   const category = useMemo(

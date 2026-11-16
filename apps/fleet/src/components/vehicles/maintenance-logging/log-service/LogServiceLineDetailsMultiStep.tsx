@@ -27,10 +27,11 @@ export function LogServiceLineDetailsMultiStep({
   mechanicNote: string;
   onMechanicNoteChange: (v: string) => void;
   homeBase?: string | null;
-  oemMatch: LogServiceOemMatchSummary;
+  oemMatch?: LogServiceOemMatchSummary | null;
   children: React.ReactNode;
 }) {
-  const showOemSuffix = oemMatch.replaceLineCount > 0 && !oemMatch.cleared;
+  const match = oemMatch ?? { replaceLineCount: 0, missingVerifiedCount: 0, cleared: true };
+  const showOemSuffix = match.replaceLineCount > 0 && !match.cleared;
 
   return (
     <div className="flex flex-col gap-4">
@@ -53,7 +54,7 @@ export function LogServiceLineDetailsMultiStep({
           <span className={LT.bodyMd}>Subtotal summary</span>
           {showOemSuffix ? (
             <span className={`${LT.labelSm} text-[#c76c00]`}>
-              · {LOG_SERVICE_COPY.linesWithoutVerifiedPartSuffix(oemMatch.missingVerifiedCount)}
+              · {LOG_SERVICE_COPY.linesWithoutVerifiedPartSuffix(match.missingVerifiedCount)}
             </span>
           ) : null}
         </div>

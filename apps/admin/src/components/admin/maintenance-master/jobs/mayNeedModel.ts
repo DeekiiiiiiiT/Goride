@@ -9,7 +9,7 @@ export function pickerBlockReason(
   kind: PickerKind,
   itemId: string,
 ): "Already listed" | "Already in Also do" | null {
-  if (job.items.some((i) => i.kind === kind && i.itemId === itemId)) return "Already listed";
+  if ((job.items ?? []).some((i) => i.kind === kind && i.itemId === itemId)) return "Already listed";
   if (kind === "part_type" && job.alsoDo.some((l) => l.jobId === itemId)) return "Already in Also do";
   return null;
 }

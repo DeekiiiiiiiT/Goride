@@ -1,10 +1,7 @@
-import { useEffect } from 'react';
-import { useState } from 'react';
 import './inventory.css';
-import { InventoryTabs, type InventoryTabId } from './InventoryTabs';
+import { InventoryTabs } from './InventoryTabs';
 import { In17OperationalBanners } from './In17OperationalBanners';
 import { In18Phone } from './screens/In18Phone';
-import { InventoryShellProvider } from './InventoryShellContext';
 import { In3ItemDrawer } from './screens/In3ItemDrawer';
 import { In4ReceiveDialog } from './screens/In4ReceiveDialog';
 import { In5IssueDialog } from './screens/In5IssueDialog';
@@ -19,20 +16,6 @@ import { InventoryGapModals } from './InventoryGapModals';
 import { InAssetMoveDialog } from './screens/InAssetMoveDialog';
 import { InAssetConditionDialog } from './screens/InAssetConditionDialog';
 import { InAssetRepairDialog } from './screens/InAssetRepairDialog';
-
-function tabFromSearch(): InventoryTabId {
-  const raw = new URLSearchParams(window.location.search).get('tab');
-  const allowed: InventoryTabId[] = [
-    'overview',
-    'stock',
-    'vehicle-kits',
-    'assets',
-    'movements',
-    'alerts',
-  ];
-  if (raw === 'purchasing' || raw === 'counts') return 'overview';
-  return allowed.includes(raw as InventoryTabId) ? (raw as InventoryTabId) : 'overview';
-}
 
 function InventoryModals() {
   const shell = useInventoryShell();
@@ -94,7 +77,7 @@ function InventoryModals() {
   );
 }
 
-function InventoryPageBody() {
+export function InventoryPageBody() {
   const shell = useInventoryShell();
 
   return (
@@ -117,25 +100,7 @@ function InventoryPageBody() {
   );
 }
 
+/** @deprecated Use InventoryPageGate — provider lives outside the lazy chunk. */
 export function InventoryPage() {
-  const [tab, setTab] = useState<InventoryTabId>(() => tabFromSearch());
-
-  useEffect(() => {
-    const onPop = () => setTab(tabFromSearch());
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, []);
-
-  const setTabAndUrl = (next: InventoryTabId) => {
-    setTab(next);
-    const url = new URL(window.location.href);
-    url.searchParams.set('tab', next);
-    window.history.replaceState({}, '', url.pathname + url.search);
-  };
-
-  return (
-    <InventoryShellProvider tab={tab} setTab={setTabAndUrl}>
-      <InventoryPageBody />
-    </InventoryShellProvider>
-  );
+  return <InventoryPageBody />;
 }

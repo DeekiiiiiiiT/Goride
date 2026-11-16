@@ -82,7 +82,7 @@ export function ImportAreaPicker({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-lg">
         {areas.map((area) => {
           const lastDate = formatImportDate(area.lastImportAt);
-          const typesLine = area.partTypes.length ? area.partTypes.join(" · ") : "—";
+          const typesLine = (area.partTypes ?? []).length ? (area.partTypes ?? []).join(" · ") : "—";
           return (
             <button
               key={area.id}

@@ -12,6 +12,7 @@ export const WEBVIEW_RENDER_GONE_PREF = 'webview_render_process_gone';
 const localDevNoise = [
   /Failed to fetch dynamically imported module:.*(?:localhost|127\.0\.0\.1)/i,
   /Cannot read properties of null \(reading 'useState'\)/,
+  /Missing Supabase config: set VITE_SUPABASE_URL/,
   /Invalid hook call/,
   /Should have a queue\. This is likely a bug in React/,
 ];

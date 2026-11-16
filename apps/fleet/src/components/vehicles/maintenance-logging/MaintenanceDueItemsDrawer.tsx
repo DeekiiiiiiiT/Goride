@@ -168,6 +168,8 @@ export function MaintenanceDueItemsDrawer({
     );
   }
 
+  if (!vehicle) return null;
+
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>

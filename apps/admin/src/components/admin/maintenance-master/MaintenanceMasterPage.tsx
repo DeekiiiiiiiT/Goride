@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "../../auth/AuthContext";
-import { listVehicleCatalog } from "../../../services/vehicleCatalogService";
+import { listVehicleCatalogPicker } from "../../../services/vehicleCatalogService";
 import type { MaintenanceServiceCategory } from "../../../types/maintenance";
 import type { VehicleCatalogRecord } from "../../../types/vehicleCatalog";
 import "./maintenanceMasterTheme.css";
@@ -129,7 +129,7 @@ export function MaintenanceMasterPage() {
         fetchPartSchedulesIndex(token),
         fetchGlobalPackages(token),
         fetchAllMaintenanceCategories(token),
-        listVehicleCatalog(token),
+        listVehicleCatalogPicker(token),
         fetchReviewList(token),
         fetchMaintenanceHistory(token),
       ]);

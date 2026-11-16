@@ -7,6 +7,8 @@ const isDev = import.meta.env.DEV;
 const localDevNoise = [
   /Failed to fetch dynamically imported module:.*(?:localhost|127\.0\.0\.1)/i,
   /Cannot read properties of null \(reading 'useState'\)/,
+  /Cannot read properties of null \(reading 'useEffect'\)/,
+  /Missing Supabase config: set VITE_SUPABASE_URL/,
   /Invalid hook call/,
   /Cannot access '.+' before initialization/,
   /Should have a queue\. This is likely a bug in React/,
@@ -56,7 +58,10 @@ if (dsn) {
     replaysSessionSampleRate: 0.1,
     replaysOnErrorSampleRate: 1.0,
     enableLogs: true,
-    ignoreErrors: isDev ? localDevNoise : [],
+    ignoreErrors: [
+      ...(isDev ? localDevNoise : []),
+      /Failed to fetch \(.*supabase\.co\)/i,
+    ],
     beforeSend(event) {
       if (isDev && eventLooksLikeViteHmr(event)) return null;
       return event;

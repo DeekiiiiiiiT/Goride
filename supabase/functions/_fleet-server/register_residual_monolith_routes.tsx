@@ -327,6 +327,7 @@ import {
   insertRowForLegacyDb,
   isLegacyVehicleCatalogYearNotNullError,
   isPostgrestVehicleCatalogSchemaCacheError,
+  listVehicleCatalogPickerWithFallback,
   listVehicleCatalogWithFallback,
   mergeCatalogTrimIntoTrimSeriesInPlace,
   parseMissingColumnFromVehicleCatalogDbError,
@@ -10314,7 +10315,10 @@ export function registerResidualMonolithRoutes(app: Hono) {
     const denied = assertVehicleCatalogReadAccess(c);
     if (denied) return denied;
     try {
-      const { items, total } = await listVehicleCatalogWithFallback(supabase);
+      const picker = c.req.query("picker") === "1";
+      const { items, total } = picker
+        ? await listVehicleCatalogPickerWithFallback(supabase)
+        : await listVehicleCatalogWithFallback(supabase);
       return c.json({ items, total });
     } catch (e: any) {
       console.error("[vehicle-catalog] list:", e);

@@ -105,6 +105,20 @@ export async function listVehicleCatalog(
   return { items, total };
 }
 
+/** Slim rows for maintenance-template car pickers (id + label fields only). */
+export async function listVehicleCatalogPicker(
+  accessToken: string,
+): Promise<{ items: VehicleCatalogRecord[]; total: number }> {
+  const res = await fetchWithRetry(`${url()}?picker=1`, {
+    headers: edgeHeaders(accessToken),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  const data = await res.json();
+  const items = (data.items || []) as VehicleCatalogRecord[];
+  const total = typeof data.total === "number" ? data.total : items.length;
+  return { items, total };
+}
+
 /** Omit null/undefined so PostgREST does not validate columns absent on older DBs. */
 function jsonBodyOmitNullish(payload: VehicleCatalogCreatePayload): string {
   const o: Record<string, unknown> = {};

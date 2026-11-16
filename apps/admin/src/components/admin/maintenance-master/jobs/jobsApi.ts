@@ -183,8 +183,22 @@ async function call<T>(token: string, path: string, init?: RequestInit): Promise
 
 const json = (body: unknown): RequestInit => ({ body: JSON.stringify(body) });
 
+function normalizeJobsPayload(raw: JobsPayload): JobsPayload {
+  return {
+    groups: raw.groups ?? [],
+    sectionGroups: (raw.sectionGroups ?? []).map((sg) => ({
+      ...sg,
+      sections: (sg.sections ?? []).map((s) => ({ ...s, jobIds: s.jobIds ?? [] })),
+    })),
+    jobs: (raw.jobs ?? []).map((j) => ({ ...j, items: j.items ?? [] })),
+    supplies: raw.supplies ?? [],
+    units: raw.units ?? [],
+  };
+}
+
 // V2
-export const fetchJobs = (token: string) => call<JobsPayload>(token, "/admin/maintenance/jobs");
+export const fetchJobs = async (token: string) =>
+  normalizeJobsPayload(await call<JobsPayload>(token, "/admin/maintenance/jobs"));
 
 // V3
 export type JobInput = {
