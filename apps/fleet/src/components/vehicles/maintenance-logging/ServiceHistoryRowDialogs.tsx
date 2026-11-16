@@ -122,11 +122,14 @@ export function ServiceHistoryViewDialog({
                   <li key={l.id ?? i} className="px-3 py-2">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="flex flex-wrap items-center gap-1.5 font-medium">
-                        {l.categoryName || "—"}
-                        {l.fitAtLog === "no" ? <NotUsualChip /> : null}
-                        {l.isHighVoltage ? <HighVoltageChip /> : null}
-                      </p>
+                      <p className="font-medium">{l.categoryName || "—"}</p>
+                      {/* Stitch powertrain 08: the chips sit on their own line under the job name. */}
+                      {l.fitAtLog === "no" || l.isHighVoltage ? (
+                        <span className="mt-1 flex flex-wrap gap-1">
+                          {l.fitAtLog === "no" ? <NotUsualChip /> : null}
+                          {l.isHighVoltage ? <HighVoltageChip /> : null}
+                        </span>
+                      ) : null}
                       <p className="text-xs text-stitch-secondary">
                         {[l.systemName, l.positions?.length ? l.positions.join(" ") : null, l.brand, l.partNumber]
                           .filter(Boolean)
