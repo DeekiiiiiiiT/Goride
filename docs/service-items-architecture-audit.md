@@ -19,14 +19,13 @@ Example: **Throttle Body Cleaning** may need **Throttle body cleaner** (usually 
 **Where we are (15 Nov 2026, end of session).** Service items itself is closed and live. Since then, all live on 15 Nov unless marked:
 - **Catalogue batches:** cleaning jobs; Exhaust & emissions (petrol + diesel); Hybrid & electric; EV (incl. A/C Recharge + 2 refrigerants); "don't log both" notes on 28 older jobs. Lists and SQL are in `docs/service-items-build/` (`*-suggestions.md`, `live/*.sql`). The review chain for them is **closed** (`review-reply-labor-exhaust-hybrid.md`: no more sections there).
 - **Fleet:** the green "verified" tick only for parts picked from the car's own list; `part_source` (car / size / typed) saved on part items (S6, `cursor-S6-part-source.md`; migrations `20261115165536` + `20261115172616`; code `0b8f779d` on main).
-- **Current feature: powertrain job fit**, so each car is only offered the jobs that fit petrol / diesel / hybrid / electric. **Start at `docs/powertrain-job-fit-audit.md` section 0.** The audit is at Rev 6, waiting for the reviewer; Stitch screens are received; the D1 Cursor round comes next.
+- **Powertrain job fit: DONE and CLOSED 16 Nov 2026** (live, switch on for every fleet, owner confirmed every model, real check passed on both cars). Each car is only offered the jobs that fit petrol / diesel / hybrid / electric. History in `docs/powertrain-job-fit-audit.md` section 0.
 
 **Next steps, in order:**
-1. **Powertrain job fit:** reviewer reply on Rev 6 → D1 Cursor prompt → S1 → UI1 / UI2 → live (that audit's section 0).
-2. **`catalogue_batch_log` round** (Open list): before the Steering & Suspension batch.
-3. **Charging Port part-item check** (owner, 2 minutes; Open list).
-4. **Steering & Suspension catalogue batch** (Open list: the reviewer's handoff and the conventions in memory `feedback-catalogue-batch-conventions`).
-5. Later: the HVAC file (conventional A/C compressor, PAG, O-rings, receiver-drier, the cabin-filter pair), Fluids / Drivetrain (Drain Plug Washer, retire `engine_oil_part`), Find parts research (29), and the CI known failure.
+1. **`catalogue_batch_log` round** (Open list): before the Steering & Suspension batch.
+2. **Charging Port part-item check** (owner, 2 minutes; Open list).
+3. **Steering & Suspension catalogue batch** (Open list: the reviewer's handoff and the conventions in memory `feedback-catalogue-batch-conventions`).
+4. Later: the HVAC file (conventional A/C compressor, PAG, O-rings, receiver-drier, the cabin-filter pair), Fluids / Drivetrain (Drain Plug Washer, retire `engine_oil_part`), Find parts research (29), and the CI known failure.
 
 **Dropped 16 Nov (owner): the high-voltage lockout checklist.** Roam Fleet records work a garage already did; the lockout is the garage's own safety step, which the person logging can't see or confirm. The amber "High-voltage" chip stays as a label only.
 
