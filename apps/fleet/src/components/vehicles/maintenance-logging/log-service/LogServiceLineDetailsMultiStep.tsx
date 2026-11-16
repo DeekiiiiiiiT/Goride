@@ -1,17 +1,19 @@
 import React from "react";
-import { Check, NotebookPen } from "lucide-react";
+import { ReceiptText } from "lucide-react";
 import { LOG_SERVICE_COPY } from "./logServiceCopy";
 import type { LogServiceOemMatchSummary } from "./logServiceOemMatchSummary";
+import { LS, LT } from "./logServiceStitch";
 
+/**
+ * Step 3 "Details" — Stitch docs/stitch/powertrain-job-fit-fleet/html/06: intro line + "Step 3 of 4",
+ * one card per job, "Subtotal summary" strip. The visit note is not in the step 3 design; Review has
+ * the Notes box, so it is entered there.
+ */
 export function LogServiceLineDetailsMultiStep({
   packageLabel,
   componentCount,
-  baySessionLabel,
   configuredCount,
   subtotalLabel,
-  mechanicNote,
-  onMechanicNoteChange,
-  homeBase,
   oemMatch,
   children,
 }: {
@@ -21,86 +23,47 @@ export function LogServiceLineDetailsMultiStep({
   baySessionLabel?: string;
   configuredCount: number;
   subtotalLabel: string;
+  /** Kept so callers don't change; the note is entered on Review. */
   mechanicNote: string;
   onMechanicNoteChange: (v: string) => void;
   homeBase?: string | null;
   oemMatch: LogServiceOemMatchSummary;
   children: React.ReactNode;
 }) {
-  const allConfigured = componentCount > 0 && configuredCount >= componentCount;
-  const showOemSuffix = oemMatch.replaceLineCount > 0;
+  const showOemSuffix = oemMatch.replaceLineCount > 0 && !oemMatch.cleared;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-1">
-        <div>
-          <h2 className="text-2xl font-semibold text-on-surface">
-            {LOG_SERVICE_COPY.lineDetailsTitle}
-            {packageLabel ? ` — ${packageLabel}` : ""}
-          </h2>
-          <p className="text-sm text-stitch-secondary mt-1">{LOG_SERVICE_COPY.lineDetailsSubtitle}</p>
-        </div>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-          {packageLabel ? (
-            <span className="inline-flex items-center gap-2 bg-surface-container px-3 py-1.5 rounded-lg text-sm font-semibold text-on-surface">
-              <span className="w-2 h-2 rounded-full bg-primary" />
-              {packageLabel} ({componentCount} components)
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className={`${LT.bodyMd} ${LS.muted}`}>
+          Enter part details, costs and labour for each job{packageLabel ? ` in ${packageLabel}` : ""}{" "}
+          <span className={`font-semibold ${LS.text}`}>
+            ({componentCount} job{componentCount === 1 ? "" : "s"})
+          </span>
+          .
+        </p>
+        <span className={`hidden sm:block uppercase tracking-wider ${LT.labelSm} ${LS.muted}`}>Step 3 of 4</span>
+      </div>
+
+      <div className="flex flex-col gap-4">{children}</div>
+
+      <div className={`p-4 rounded-xl flex items-center justify-between gap-3 ${LS.low}`} data-testid="line-details-subtotal">
+        <div className={`flex flex-wrap items-center gap-2 ${LS.muted}`}>
+          <ReceiptText className="w-5 h-5" />
+          <span className={LT.bodyMd}>Subtotal summary</span>
+          {showOemSuffix ? (
+            <span className={`${LT.labelSm} text-[#c76c00]`}>
+              · {LOG_SERVICE_COPY.linesWithoutVerifiedPartSuffix(oemMatch.missingVerifiedCount)}
             </span>
           ) : null}
-          {/* "Bay Session #…" dropped: a slice of the save key, an invented code (plan 6a). */}
         </div>
-      </div>
-
-      <div className="space-y-4">{children}</div>
-
-      <div className="rounded-xl border border-outline-variant/40 bg-surface-container-low px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="text-sm text-on-surface flex flex-wrap items-center gap-x-1">
-          <span className="font-semibold">{configuredCount} lines configured</span>
-          {showOemSuffix ? (
-            oemMatch.cleared ? (
-              <span className="text-stitch-secondary uppercase text-xs tracking-wide">
-                {" · "}
-                {LOG_SERVICE_COPY.oemMatchClearedSuffix}
-              </span>
-            ) : (
-              <span className="text-amber-600 uppercase text-xs tracking-wide font-semibold">
-                {" · "}
-                {LOG_SERVICE_COPY.linesWithoutVerifiedPartSuffix(oemMatch.missingVerifiedCount)}
-              </span>
-            )
-          ) : null}
-        </div>
-        <span className="text-sm font-semibold text-on-surface">{subtotalLabel}</span>
-      </div>
-
-      <div className="rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-4 shadow-sm space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <label
-            htmlFor="log-service-mechanic-note"
-            className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide flex items-center gap-1.5"
-          >
-            <NotebookPen className="w-4 h-4" />
-            {LOG_SERVICE_COPY.mechanicNoteLabel}
-          </label>
-          <span className="text-xs text-stitch-secondary">
-            {LOG_SERVICE_COPY.mechanicNoteOptionalHint(homeBase)}
+        <div className="text-right">
+          <span className={`${LT.titleMd} ${LS.text} tabular-nums`}>{subtotalLabel}</span>
+          <span className={`${LT.bodySm} ${LS.muted} ml-1`}>
+            ({configuredCount} item{configuredCount === 1 ? "" : "s"})
           </span>
         </div>
-        <textarea
-          id="log-service-mechanic-note"
-          className="w-full min-h-[72px] rounded-lg border border-outline-variant/40 bg-surface-container-low px-3 py-2 text-sm text-on-surface placeholder:text-outline resize-none"
-          value={mechanicNote}
-          onChange={(e) => onMechanicNoteChange(e.target.value)}
-          placeholder={LOG_SERVICE_COPY.mechanicNotePlaceholder}
-          rows={2}
-        />
       </div>
-
-      {allConfigured ? (
-        <p className="text-xs text-stitch-secondary flex items-center gap-1">
-          <Check className="w-3.5 h-3.5 text-primary" /> All lines saved — continue to review when ready.
-        </p>
-      ) : null}
     </div>
   );
 }

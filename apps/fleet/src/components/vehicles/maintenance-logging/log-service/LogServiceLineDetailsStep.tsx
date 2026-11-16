@@ -1,5 +1,6 @@
 import React from "react";
 import { HighVoltageChip, NotUsualChip } from "./JobFitUi";
+import { LS, LT } from "./logServiceStitch";
 import { Loader2, Info } from "lucide-react";
 import { Checkbox } from "../../../ui/checkbox";
 import { Input } from "../../../ui/input";
@@ -132,7 +133,7 @@ function ServiceJobForm(props: LogServiceLineDetailsStepProps & { serviceForm: N
       <>
         {showPositions ? (
           <div className="space-y-2">
-            <Label>{LOG_SERVICE_COPY.whichWheels}</Label>
+            <Label className={`${LT.labelMd} ${LS.muted}`}>{LOG_SERVICE_COPY.whichWheels}</Label>
             <PositionButtons positions={positions} onTogglePosition={onTogglePosition} onToggleAll={sf.onToggleAllPositions} />
           </div>
         ) : null}
@@ -205,13 +206,13 @@ function ServiceJobForm(props: LogServiceLineDetailsStepProps & { serviceForm: N
     <>
       {showPositions ? (
         <div className="space-y-2">
-          <Label>{LOG_SERVICE_COPY.whichWheels}</Label>
+          <Label className={`${LT.labelMd} ${LS.muted}`}>{LOG_SERVICE_COPY.whichWheels}</Label>
           <PositionButtons positions={positions} onTogglePosition={onTogglePosition} onToggleAll={sf.onToggleAllPositions} />
         </div>
       ) : null}
 
       <div className="space-y-2">
-        <Label htmlFor="service-amount">{LOG_SERVICE_COPY.serviceCostLabel}</Label>
+        <Label htmlFor="service-amount" className={`${LT.labelMd} ${LS.muted}`}>{LOG_SERVICE_COPY.serviceCostLabel}</Label>
         {showPositions ? (
           <div className="inline-flex rounded-lg border border-outline-variant/40 p-1 bg-surface-container-low gap-1">
             {(["total", "per_wheel"] as const).map((mode) => (
@@ -267,7 +268,7 @@ function ServiceJobForm(props: LogServiceLineDetailsStepProps & { serviceForm: N
         </Label>
       </div>
 
-      <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low px-4 py-3 flex justify-between items-center">
+      <div className={`rounded-lg px-4 py-3 flex justify-between items-center ${LS.low}`}>
         <span className="text-sm text-stitch-secondary">{lineTotalLabel}</span>
         <span className="font-semibold text-on-surface">
           {currency} {lineTotal.toLocaleString()}
@@ -320,16 +321,16 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
 
       {/* Stitch screen 1 job header: icon tile, job name, action pill. No internal codes on Fleet (6a). */}
       <div className="flex items-center gap-2.5" data-testid="log-service-job-header">
-        <div className="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface shrink-0">
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${props.notUsual ? "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" : `${LS.high} ${LS.text}`}`}>
           <MaintenanceIcon iconKey={category.icon_key} className="w-5 h-5" />
         </div>
         <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-          <h3 className="text-base font-bold text-on-surface">{category.name}</h3>
+          <h3 className={`${LT.titleMd} ${LS.text}`}>{category.name}</h3>
           {/* Stitch powertrain 06: the chips sit right after the name, before the action pill. */}
           {props.notUsual ? <NotUsualChip /> : null}
           {category.is_high_voltage ? <HighVoltageChip /> : null}
           {actionPill ? (
-            <span className="bg-surface-container-high text-on-surface-variant text-[11px] font-medium px-2.5 py-0.5 rounded-full">
+            <span className={`px-2.5 py-0.5 rounded-full ${LT.labelMd} ${LS.high} ${LS.muted}`}>
               {actionPill}
             </span>
           ) : null}
@@ -340,11 +341,11 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
       </div>
       {props.notUsual ? (
         <div
-          className="-mt-2 flex items-center gap-2 rounded-lg bg-surface-container-high/60 px-3 py-2 text-on-surface-variant"
+          className={`-mt-2 flex items-center gap-2 rounded-lg py-2 px-3 bg-[#e8e7f1]/60 dark:bg-[#2a2b36]/60 ${LS.muted}`}
           data-testid="not-usual-helper"
         >
           <Info className="h-4 w-4 shrink-0" aria-hidden />
-          <p className="text-xs">You picked this from all jobs. It&apos;s saved as normal.</p>
+          <p className={LT.bodySm}>You picked this from all jobs. It&apos;s saved as normal.</p>
         </div>
       ) : null}
 
@@ -353,9 +354,9 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
       ) : (
       <>
       <div className="space-y-2">
-        <Label>Action</Label>
+        <Label className={`${LT.labelMd} ${LS.muted}`}>Action</Label>
         <Select value={action} onValueChange={(v: string) => onActionChange(v as MaintenanceLineAction)}>
-          <SelectTrigger className="bg-surface-container-lowest border-outline-variant/40">
+          <SelectTrigger className="h-10 rounded-lg border-0 bg-white shadow-sm focus-visible:ring-1 focus-visible:ring-[#c9c5cd] dark:bg-[#15161d]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -368,17 +369,17 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
         </Select>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{categoryFields}</div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">{categoryFields}</div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {!props.hiddenFields?.includes("labor_hours") ? (
         <div className="space-y-2">
-          <Label htmlFor="labor-hours">Labor hours</Label>
+          <Label htmlFor="labor-hours" className={`${LT.labelMd} ${LS.muted}`}>Labor hours</Label>
           <Input
             id="labor-hours"
             type="number"
             step="0.1"
-            className="bg-surface-container-lowest border-outline-variant/40"
+            className="h-10 rounded-lg border-0 bg-white shadow-sm focus-visible:ring-1 focus-visible:ring-[#c9c5cd] dark:bg-[#15161d]"
             value={laborHours ?? ""}
             onChange={(e) =>
               onLaborHoursChange(e.target.value === "" ? null : Number(e.target.value))
@@ -388,11 +389,11 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
         ) : null}
         {!props.hiddenFields?.includes("labor_rate") ? (
         <div className="space-y-2">
-          <Label htmlFor="labor-rate">Labor rate</Label>
+          <Label htmlFor="labor-rate" className={`${LT.labelMd} ${LS.muted}`}>Labor rate</Label>
           <Input
             id="labor-rate"
             type="number"
-            className="bg-surface-container-lowest border-outline-variant/40"
+            className="h-10 rounded-lg border-0 bg-white shadow-sm focus-visible:ring-1 focus-visible:ring-[#c9c5cd] dark:bg-[#15161d]"
             value={laborRate ?? ""}
             onChange={(e) =>
               onLaborRateChange(e.target.value === "" ? null : Number(e.target.value))
@@ -402,10 +403,10 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
         ) : null}
         {!props.hiddenFields?.includes("brand") ? (
         <div className="space-y-2">
-          <Label htmlFor="brand">Brand</Label>
+          <Label htmlFor="brand" className={`${LT.labelMd} ${LS.muted}`}>Brand</Label>
           <Input
             id="brand"
-            className="bg-surface-container-lowest border-outline-variant/40"
+            className="h-10 rounded-lg border-0 bg-white shadow-sm focus-visible:ring-1 focus-visible:ring-[#c9c5cd] dark:bg-[#15161d]"
             value={brand}
             onChange={(e) => onBrandChange(e.target.value)}
           />
@@ -413,10 +414,10 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
         ) : null}
         {!props.hiddenFields?.includes("part_number") ? (
         <div className="space-y-2">
-          <Label htmlFor="part-number">Part number</Label>
+          <Label htmlFor="part-number" className={`${LT.labelMd} ${LS.muted}`}>Part number</Label>
           <Input
             id="part-number"
-            className="bg-surface-container-lowest border-outline-variant/40"
+            className="h-10 rounded-lg border-0 bg-white shadow-sm focus-visible:ring-1 focus-visible:ring-[#c9c5cd] dark:bg-[#15161d]"
             value={partNumber}
             onChange={(e) => onPartNumberChange(e.target.value)}
           />
@@ -426,7 +427,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
 
       {showPositions ? (
         <div className="space-y-2">
-          <Label>{props.sideOptions ? "Side" : "Positions"}</Label>
+          <Label className={`${LT.labelMd} ${LS.muted}`}>{props.sideOptions ? "Side" : "Positions"}</Label>
           <div className="flex flex-wrap gap-2">
             {(props.sideOptions ?? TIRE_BRAKE_POSITIONS.map((p) => ({ value: p, label: p }))).map(({ value: pos, label: posLabel }) => {
               const on = positions.includes(pos);
@@ -478,7 +479,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
       </div>
 
       <div className="space-y-2">
-        <Label>Link part (optional)</Label>
+        <Label className={`${LT.labelMd} ${LS.muted}`}>Link part (optional)</Label>
         {partsLoading ? (
           <p className="text-xs text-stitch-secondary flex items-center gap-2">
             <Loader2 className="w-3 h-3 animate-spin" /> Loading compatible parts…
@@ -504,7 +505,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
               );
             }}
           >
-            <SelectTrigger className="bg-surface-container-lowest border-outline-variant/40">
+            <SelectTrigger className="h-10 rounded-lg border-0 bg-white shadow-sm focus-visible:ring-1 focus-visible:ring-[#c9c5cd] dark:bg-[#15161d]">
               <SelectValue placeholder="Select a part…" />
             </SelectTrigger>
             <SelectContent>

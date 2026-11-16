@@ -1917,10 +1917,12 @@ export function LogMaintenanceServiceDialog({
               {lineDetailCategories.map((cat) => (
                 <div
                   key={cat.id}
-                  className={`rounded-xl border bg-surface-container-lowest p-4 shadow-sm ${
-                    activeCategory?.id === cat.id ? "border-primary/50 ring-1 ring-primary/20" : "border-outline-variant/40"
+                  className={`relative overflow-hidden rounded-xl p-6 shadow-sm transition-shadow hover:shadow-md ${LS.lowest} ${
+                    activeCategory?.id === cat.id ? "ring-1 ring-black/10 dark:ring-white/15" : ""
                   }`}
                 >
+                  {/* Stitch powertrain 06: a thin top strip marks a job that isn't usual for this car (grey, audit 9). */}
+                  {isNotUsual(jobFit, cat.id) ? <div className="absolute inset-x-0 top-0 h-1 bg-slate-300 dark:bg-slate-600" /> : null}
                   {activeCategory?.id === cat.id && (
                     <LogServiceLineDetailsStep
                       hideHeading
@@ -1974,8 +1976,8 @@ export function LogMaintenanceServiceDialog({
                   {activeCategory?.id !== cat.id && (
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="font-semibold text-on-surface">{cat.name}</p>
-                        <p className="text-xs text-stitch-secondary">
+                        <p className={`${LT.titleMd} ${LS.text}`}>{cat.name}</p>
+                        <p className={`${LT.bodySm} ${LS.muted}`}>
                           {categoryHasLine(cat) ? "Saved" : "Needs details"}
                         </p>
                       </div>

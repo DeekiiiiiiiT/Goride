@@ -165,7 +165,7 @@ describe("LogServiceReviewStep items (plan screen 4)", () => {
     expect(screen.getByTestId("log-service-review-total")).toHaveTextContent("J$ 4,200");
     expect(screen.getByText("No items on a declined job.")).toBeInTheDocument();
     expect(screen.getByText("Quoted J$ 9,600")).toBeInTheDocument();
-    expect(screen.getByTestId("log-service-review-summary")).toHaveTextContent("Toyota Roomy 5179KZ");
+    expect(screen.getByTestId("log-service-review-summary")).toHaveTextContent("Total payable");
   });
 
   it("switch off: no item split", () => {

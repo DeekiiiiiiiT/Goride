@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { HighVoltageChip, NotUsualChip } from "./JobFitUi";
-import { CheckCircle2, Loader2, Plus, Scan } from "lucide-react";
+import { LS, LT } from "./logServiceStitch";
+import { CheckCircle2, Loader2, Plus, Scan, Wrench } from "lucide-react";
 import { Button } from "../../../ui/button";
 import { Checkbox } from "../../../ui/checkbox";
 import { Input } from "../../../ui/input";
@@ -101,6 +102,7 @@ export function LogServiceReviewStep({
   vehicleLabel,
   lineFit,
 }: LogServiceReviewStepProps) {
+  void vehicleLabel; // the car is in the top car card (Stitch 07)
   const discountInputRef = useRef<HTMLInputElement>(null);
   const showDiscountRow = discountRowOpen || discountAmount > 0;
   const showSubtotalBreakdown = discountAmount > 0;
@@ -114,120 +116,47 @@ export function LogServiceReviewStep({
   }, [showDiscountRow]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
-        <div>
-          <span className="text-[11px] text-stitch-secondary uppercase tracking-wider font-semibold">
-            {LOG_SERVICE_COPY.wizardEyebrow}
+    <div className="flex flex-col gap-4">
+      {/* Stitch powertrain 07: intro line + ready chip, then the summary strip. */}
+      <div className="flex items-center justify-between gap-3">
+        <p className={`${LT.bodyMd} ${LS.muted}`}>{LOG_SERVICE_COPY.reviewSubtitle}</p>
+        {doneLines.length ? (
+          <span className={`shrink-0 rounded-full px-2 py-0.5 uppercase tracking-wider ${LT.labelSm} bg-[#82f5c1]/40 text-[#00714e]`}>
+            Ready to log
           </span>
-          <h2 className="text-2xl font-semibold text-on-surface mt-0.5">{LOG_SERVICE_COPY.reviewHeading}</h2>
-          <p className="text-sm text-stitch-secondary mt-1">{LOG_SERVICE_COPY.reviewSubtitle}</p>
-        </div>
-      </div>
-
-      <div
-        className="bg-surface-container-low rounded-xl p-4 grid grid-cols-2 md:grid-cols-4 gap-4"
-        data-testid="log-service-review-summary"
-      >
-        {[
-          ["Vehicle", vehicleLabel || "—"],
-          ["Service date", date ? formatMaintenanceServiceDateLabel(date, false) : "—"],
-          ["Odometer", odometer ? `${Number(odometer).toLocaleString()} km` : "—"],
-          ["Workshop", provider.trim() || "—"],
-        ].map(([k, v]) => (
-          <div key={k} className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">{k}</p>
-            <p className="text-[15px] font-medium text-on-surface truncate">{v}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="border-2 border-dashed border-outline-variant/50 rounded-xl p-6 flex flex-col items-center justify-center bg-surface-container-low relative group hover:bg-surface-container transition-colors">
-        <Input
-          type="file"
-          accept="image/*,.pdf"
-          onChange={onScanFile}
-          disabled={scanLoading}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-        />
-        <div className="bg-surface-container-lowest p-3 rounded-xl shadow-sm mb-3">
-          {scanLoading ? (
-            <Loader2 className="w-6 h-6 animate-spin text-on-surface" />
-          ) : (
-            <Scan className="w-6 h-6 text-on-surface" />
-          )}
-        </div>
-        <h3 className="font-semibold text-on-surface">{LOG_SERVICE_COPY.scanInvoiceTitle}</h3>
-        <p className="text-sm text-stitch-secondary">{LOG_SERVICE_COPY.scanInvoiceHint}</p>
-        {invoiceUrl ? (
-          <div className="absolute top-4 right-4 bg-secondary-container text-on-secondary-container text-xs px-2 py-1 rounded flex items-center">
-            <CheckCircle2 className="w-3 h-3 mr-1" /> Uploaded
-          </div>
         ) : null}
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Date</Label>
-          <Input type="date" value={date} onChange={(e) => onDateChange(e.target.value)} />
+      <div className={`rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 ${LS.mid}`} data-testid="log-service-review-summary">
+        <div className="flex flex-wrap items-center gap-6">
+          {[
+            ["Date", date ? formatMaintenanceServiceDateLabel(date, false) : "—"],
+            ["Mileage", odometer ? `${Number(odometer).toLocaleString()} km` : "—"],
+            ["Jobs", `${doneLines.length} job${doneLines.length === 1 ? "" : "s"}`],
+          ].map(([k, v], i) => (
+            <React.Fragment key={k}>
+              {i > 0 ? <span className="hidden sm:block w-px h-7 bg-[#c9c5cd]/60" aria-hidden /> : null}
+              <div className="flex flex-col min-w-0">
+                <span className={`uppercase tracking-wider ${LT.labelSm} ${LS.muted}`}>{k}</span>
+                <span className={`${LT.titleSm} ${LS.text} truncate`}>{v}</span>
+              </div>
+            </React.Fragment>
+          ))}
         </div>
-        <div className="space-y-2">
-          <Label>Odometer (km)</Label>
-          <Input
-            type="number"
-            className="font-medium"
-            value={odometer || ""}
-            onChange={(e) => onOdometerChange(parseFloat(e.target.value) || 0)}
-          />
+        <div className="flex flex-col sm:text-right">
+          <span className={`uppercase tracking-wider ${LT.labelSm} ${LS.muted}`}>Total payable</span>
+          <span className={`${LT.headlineMd} font-bold tracking-tight tabular-nums ${LS.text}`}>
+            {moneyLabel(cur, showSubtotalBreakdown ? netTotal : subtotal)}
+          </span>
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Service Provider</Label>
-          <Input
-            value={provider}
-            onChange={(e) => onProviderChange(e.target.value)}
-            placeholder="e.g. Whole-Heated Car Service LTD"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>Currency</Label>
-          <Select value={currency || "JMD"} onValueChange={onCurrencyChange}>
-            <SelectTrigger className="font-medium">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="JMD">JMD</SelectItem>
-              <SelectItem value="USD">USD</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label>Notes</Label>
-        <Textarea
-          className="min-h-[80px]"
-          placeholder="Inspection notes, recommendations…"
-          value={notes}
-          onChange={(e) => onNotesChange(e.target.value)}
-        />
       </div>
 
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Label className="text-sm font-semibold text-on-surface">Service Work Orders</Label>
-            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant">
-              {doneLines.length} Job{doneLines.length === 1 ? "" : "s"} Recorded
-            </span>
-          </div>
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">
-            Breakdown ({cur})
-          </span>
+          <h3 className={`uppercase tracking-wider ${LT.titleSm} ${LS.text}`}>Logged jobs ({doneLines.length})</h3>
+          <span className={`${LT.labelSm} ${LS.muted}`}>Parts &amp; labour included</span>
         </div>
-        <div className="space-y-3" data-testid="log-service-review-jobs">
+        <div className="flex flex-col gap-2" data-testid="log-service-review-jobs">
           {lines.map((line, idx) => {
             const declined = Boolean(line.declined);
             const total = lineTotalPreview(line);
@@ -239,17 +168,20 @@ export function LogServiceReviewStep({
               <div
                 key={`${line.categoryId}-${line.categoryCode}-${idx}`}
                 data-testid="log-service-review-job"
-                className={`rounded-xl p-4 ${declined ? "bg-surface-container-low/60" : "bg-surface-container-low"}`}
+                className={`rounded-xl p-4 flex flex-col gap-1 transition-shadow hover:shadow-sm ${LS.low} ${declined ? "opacity-70" : ""}`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex items-center gap-2 flex-wrap">
-                    <p className="text-base font-semibold text-on-surface">{formatMaintenanceLineLabel(line)}</p>
+                    <span className={`w-7 h-7 rounded-lg flex items-center justify-center ${LS.highest} ${LS.text}`}>
+                      <Wrench className="w-4 h-4" />
+                    </span>
+                    <p className={`${LT.titleMd} ${LS.text}`}>{formatMaintenanceLineLabel(line)}</p>
                     {declined ? (
                       <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant">
                         Declined
                       </span>
                     ) : pill ? (
-                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#ffdbce] text-[#370e00]">{pill}</span>
+                      <span className={`px-2 py-0.5 rounded-full ${LT.labelSm} font-medium ${LS.highest} ${LS.text}`}>{pill}</span>
                     ) : null}
                     {line.recommended && !declined ? (
                       <span className="text-[11px] text-on-surface-variant">Recommended</span>
@@ -259,7 +191,7 @@ export function LogServiceReviewStep({
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {declined ? null : (
-                      <span className="text-lg font-bold text-on-surface tabular-nums">{moneyLabel(cur, total)}</span>
+                      <span className={`${LT.titleMd} tabular-nums ${LS.text}`}>{moneyLabel(cur, total)}</span>
                     )}
                     {!line.recommended ? (
                       <Button
@@ -320,7 +252,7 @@ export function LogServiceReviewStep({
                     ))}
                   </ul>
                 ) : (
-                  <p className="mt-1 text-xs text-stitch-secondary">
+                  <p className={`pl-9 ${LT.bodySm} ${LS.muted}`}>
                     {[
                       line.qty != null ? `Qty ${line.qty}` : null,
                       line.brand || null,
@@ -388,15 +320,16 @@ export function LogServiceReviewStep({
             Add discount
           </Button>
         ) : null}
-        <div className="bg-surface-container-low rounded-xl p-5 space-y-2" data-testid="log-service-review-totals">
+        <div className={`rounded-xl p-4 flex flex-col gap-2 ${LS.high}`} data-testid="log-service-review-totals">
+          <div className={`uppercase tracking-wider ${LT.labelSm} ${LS.muted}`}>Cost breakdown</div>
           {itemsEnabled ? (
             <>
               <div className="flex justify-between items-center text-[15px] text-on-surface-variant" data-testid="log-service-review-jobs-total">
-                <span>Labor &amp; Service Jobs</span>
+                <span>Jobs ({doneLines.length})</span>
                 <span className="font-semibold text-on-surface tabular-nums">{moneyLabel(cur, jobsTotal)}</span>
               </div>
               <div className="flex justify-between items-center text-[15px] text-on-surface-variant" data-testid="log-service-review-items-total">
-                <span>Installed Parts &amp; Consumables</span>
+                <span>Items &amp; parts</span>
                 <span className="font-semibold text-on-surface tabular-nums">{moneyLabel(cur, itemsTotal)}</span>
               </div>
             </>
@@ -421,16 +354,10 @@ export function LogServiceReviewStep({
             className={`flex justify-between items-end gap-3 ${itemsEnabled || showSubtotalBreakdown ? "border-t border-outline-variant/40 pt-3 mt-1" : ""}`}
             data-testid="log-service-review-total"
           >
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Net invoice total</p>
-              <p className="text-xl font-bold text-on-surface">Total Service Cost</p>
-            </div>
-            <div className="text-right">
-              <p className="text-3xl font-extrabold text-on-surface tabular-nums">
-                {moneyLabel(cur, showSubtotalBreakdown ? netTotal : subtotal)}
-              </p>
-              <p className="font-mono text-[11px] text-on-surface-variant">Currency: {cur}</p>
-            </div>
+            <span className={`${LT.headlineMd} font-bold ${LS.text}`}>Total</span>
+            <span className={`${LT.headlineMd} font-bold tracking-tight tabular-nums ${LS.text}`}>
+              {moneyLabel(cur, showSubtotalBreakdown ? netTotal : subtotal)}
+            </span>
           </div>
           {itemsEnabled ? (
             <p className="flex items-center gap-1.5 text-xs text-on-surface-variant pt-1">
@@ -440,6 +367,85 @@ export function LogServiceReviewStep({
           ) : null}
         </div>
       </div>
+
+      {/* Add: Stitch 07 has no boxes for these, but the service cannot be saved without them. */}
+      <div className={`rounded-xl p-4 flex flex-col gap-4 ${LS.low}`} data-testid="log-service-review-details">
+        <div className={`uppercase tracking-wider ${LT.labelSm} ${LS.muted}`}>Service details</div>
+        <div className="border-2 border-dashed border-[#c9c5cd] rounded-xl p-5 flex flex-col items-center justify-center bg-white relative group hover:bg-[#eeedf7] transition-colors dark:bg-[#15161d]">
+          <Input
+            type="file"
+            accept="image/*,.pdf"
+            onChange={onScanFile}
+            disabled={scanLoading}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+          />
+          <div className="bg-surface-container-lowest p-3 rounded-xl shadow-sm mb-3">
+            {scanLoading ? (
+              <Loader2 className="w-6 h-6 animate-spin text-on-surface" />
+            ) : (
+              <Scan className="w-6 h-6 text-on-surface" />
+            )}
+          </div>
+          <h3 className="font-semibold text-on-surface">{LOG_SERVICE_COPY.scanInvoiceTitle}</h3>
+          <p className="text-sm text-stitch-secondary">{LOG_SERVICE_COPY.scanInvoiceHint}</p>
+          {invoiceUrl ? (
+            <div className="absolute top-4 right-4 bg-secondary-container text-on-secondary-container text-xs px-2 py-1 rounded flex items-center">
+              <CheckCircle2 className="w-3 h-3 mr-1" /> Uploaded
+            </div>
+          ) : null}
+        </div>
+  
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className={`${LT.labelMd} ${LS.muted}`}>Date</Label>
+            <Input type="date" className="h-10 rounded-lg border-0 bg-white shadow-sm dark:bg-[#15161d]" value={date} onChange={(e) => onDateChange(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label className={`${LT.labelMd} ${LS.muted}`}>Mileage (km)</Label>
+            <Input
+              type="number"
+              className="h-10 rounded-lg border-0 bg-white shadow-sm dark:bg-[#15161d] font-medium"
+              value={odometer || ""}
+              onChange={(e) => onOdometerChange(parseFloat(e.target.value) || 0)}
+            />
+          </div>
+        </div>
+  
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className={`${LT.labelMd} ${LS.muted}`}>Workshop</Label>
+            <Input
+              value={provider}
+              className="h-10 rounded-lg border-0 bg-white shadow-sm dark:bg-[#15161d]"
+              onChange={(e) => onProviderChange(e.target.value)}
+              placeholder="e.g. Whole-Heated Car Service LTD"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className={`${LT.labelMd} ${LS.muted}`}>Currency</Label>
+            <Select value={currency || "JMD"} onValueChange={onCurrencyChange}>
+              <SelectTrigger className="h-10 rounded-lg border-0 bg-white shadow-sm dark:bg-[#15161d] font-medium">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="JMD">JMD</SelectItem>
+                <SelectItem value="USD">USD</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+  
+        <div className="space-y-2">
+          <Label className={`${LT.labelMd} ${LS.muted}`}>Notes</Label>
+          <Textarea
+            className="min-h-[80px] rounded-lg border-0 bg-white shadow-sm dark:bg-[#15161d]"
+            placeholder="Inspection notes, recommendations…"
+            value={notes}
+            onChange={(e) => onNotesChange(e.target.value)}
+          />
+        </div>
+  
+        </div>
 
       {showMarkPackageComplete ? (
         <div className="flex items-center gap-3 rounded-lg border border-outline-variant/40 bg-surface-container-low px-4 py-3">
