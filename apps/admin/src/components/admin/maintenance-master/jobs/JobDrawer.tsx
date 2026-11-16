@@ -57,6 +57,8 @@ export function JobDrawer({ token, data, mode, job, presetGroupId, canWrite, onC
   );
   const [removed, setRemoved] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
+  /** Stitch 07: job details sit in a row that opens; adding a job starts with it open. */
+  const [detailsOpen, setDetailsOpen] = useState(mode === "add");
   const [newLinkJobId, setNewLinkJobId] = useState("");
   const [newLinkNote, setNewLinkNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -161,171 +163,64 @@ export function JobDrawer({ token, data, mode, job, presetGroupId, canWrite, onC
           role="dialog"
           aria-modal="true"
           aria-labelledby="mm-job-drawer-title"
-          className="flex h-full w-full max-w-[580px] flex-col overflow-hidden rounded-l-2xl bg-[#ffffff] shadow-[0_20px_25px_-5px_rgba(15,23,42,0.1),0_8px_10px_-6px_rgba(15,23,42,0.05)]"
+          className="flex h-full w-full max-w-[560px] flex-col overflow-hidden rounded-l-2xl bg-[#ffffff] shadow-[0_20px_25px_-5px_rgba(15,23,42,0.1),0_8px_10px_-6px_rgba(15,23,42,0.05)]"
         >
-          <div className="flex shrink-0 items-start justify-between bg-[#ffffff] px-6 pb-4 pt-6">
-            <div>
-              <p className={`${T.labelMd} mb-0.5 text-[#565e74]`}>{mode === "add" ? "Add job" : "Edit job"}</p>
-              {/* Stitch powertrain 08: the high-voltage chip sits beside the title. */}
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 id="mm-job-drawer-title" className={`${T.headlineXl} text-[#161b27]`}>
-                  {mode === "add" ? name.trim() || "New job" : job?.name}
-                </h2>
-                {hv ? <HvChip /> : null}
+          {/* Stitch powertrain 07 header: eyebrow, title (+ 08's High-voltage chip), group and type chips. */}
+          <div className="shrink-0 border-b border-[#e8e9f2] bg-[#ffffff] p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <span className="text-[11px] font-semibold uppercase leading-[14px] tracking-wider text-[#737686]">
+                  {mode === "add" ? "Add job" : "Edit job"}
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 id="mm-job-drawer-title" className="text-[22px] font-semibold leading-7 tracking-[-0.015em] text-[#30323b]">
+                    {mode === "add" ? name.trim() || "New job" : job?.name}
+                  </h2>
+                  {hv ? <HvChip /> : null}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <span className="flex items-center gap-1.5 rounded-lg bg-[#f2f3fe] px-2.5 py-1 text-[12px] font-medium leading-4 text-[#434655]">
+                    <span className="material-symbols-outlined text-[#737686]" style={{ fontSize: 16 }}>folder_open</span>
+                    <span>Group:</span>
+                    <strong className="font-semibold text-[#191b23]">{homeGroup?.name ?? "—"}</strong>
+                  </span>
+                  <span className="rounded-full bg-[#f1f2f6] px-2.5 py-1 text-[12px] font-medium leading-4 text-[#30323b]">
+                    {isPart ? "Part" : "Service"} · {JOB_ACTION_LABEL[defaultAction]}
+                  </span>
+                </div>
               </div>
+              <button
+                type="button"
+                aria-label="Close"
+                title="Close drawer"
+                onClick={onClose}
+                disabled={busy}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[#737686] transition-colors hover:bg-[#ecedf8] hover:text-[#30323b]"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 20 }}>close</span>
+              </button>
             </div>
-            <button
-              type="button"
-              aria-label="Close"
-              title="Close drawer"
-              onClick={onClose}
-              disabled={busy}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f1f3ff] text-[#565e74] transition-colors hover:bg-[#e4e8f8] hover:text-[#161b27]"
-            >
-              <span className="material-symbols-outlined text-[20px]">close</span>
-            </button>
           </div>
 
-          <div className="flex-1 space-y-7 overflow-y-auto px-6 py-3">
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="mm-job-name" className={label}>
-                  Name <span className="text-[#ba1a1a]">*</span>
-                </label>
-                <input id="mm-job-name" className={`h-10 px-3.5 ${field}`} value={name} disabled={!canWrite} onChange={(e) => setName(e.target.value)} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <label htmlFor="mm-job-group" className={label}>
-                      Home group
-                    </label>
-                    {locked ? <LockedTag /> : null}
-                  </div>
-                  <div className="relative">
-                    <select
-                      id="mm-job-group"
-                      className={`h-10 cursor-pointer appearance-none pl-3.5 pr-9 ${field}`}
-                      value={homeGroupId}
-                      disabled={locked || !canWrite}
-                      onChange={(e) => setHomeGroupId(e.target.value)}
-                    >
-                      {localData.groups.map((g) => (
-                        <option key={g.id} value={g.id}>
-                          {g.name}
-                        </option>
-                      ))}
-                    </select>
-                    <Chevron />
-                  </div>
-                </div>
-                <div>
-                  <label htmlFor="mm-job-action" className={label}>
-                    Default action
-                  </label>
-                  <div className="relative">
-                    <select
-                      id="mm-job-action"
-                      className={`h-10 cursor-pointer appearance-none pl-3.5 pr-9 ${field}`}
-                      value={defaultAction}
-                      disabled={!canWrite}
-                      onChange={(e) => setDefaultAction(e.target.value as JobAction)}
-                    >
-                      {JOB_ACTIONS.map((a) => (
-                        <option key={a} value={a}>
-                          {JOB_ACTION_LABEL[a]}
-                        </option>
-                      ))}
-                    </select>
-                    <Chevron />
-                  </div>
+          <div className="flex-1 space-y-6 overflow-y-auto p-6">
+            {/* Stitch powertrain 07: info strip about what the job follows from its group. */}
+            {fitPt.inherit || fitFu.inherit ? (
+              <div className="flex items-start gap-3 rounded-xl border border-[#0153dc]/20 bg-[#dbe1ff]/40 p-3.5" data-testid="fits-inherit-banner">
+                <span className="material-symbols-outlined mt-0.5 text-[#0153dc]" style={{ fontSize: 20 }}>verified_user</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[12px] font-semibold leading-4 text-[#003ea8]">Follows its group</span>
+                  <p className="text-[12px] leading-relaxed text-[#434655]">
+                    {fitPt.inherit && fitFu.inherit ? (
+                      <>Which cars get this job comes from the <span className="font-medium text-[#191b23]">{homeGroup?.name ?? "group"}</span> group.</>
+                    ) : fitPt.inherit ? (
+                      <>Powertrain comes from the <span className="font-medium text-[#191b23]">{homeGroup?.name ?? "group"}</span> group; fuel is set for this job.</>
+                    ) : (
+                      <>Fuel comes from the <span className="font-medium text-[#191b23]">{homeGroup?.name ?? "group"}</span> group; powertrain is set for this job.</>
+                    )}
+                  </p>
                 </div>
               </div>
-              {locked ? <Helper icon="info">{LOCK_REASON}</Helper> : null}
-              <p className={`${T.bodySm} -mt-2 text-[#565e74]`}>What a mechanic usually does with this job. Saved on every log line.</p>
-
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className={label}>Form type</span>
-                  {locked ? <LockedTag /> : null}
-                </div>
-                <div className="inline-flex rounded-xl bg-[#f1f3ff] p-1" role="group">
-                  {[
-                    { v: false, t: "Service", i: "build" },
-                    { v: true, t: "Part", i: "category" },
-                  ].map((o) => (
-                    <button
-                      key={o.t}
-                      type="button"
-                      aria-pressed={isPart === o.v}
-                      disabled={locked || !canWrite}
-                      onClick={() => setIsPart(o.v)}
-                      className={`flex items-center gap-1.5 rounded-lg px-5 py-1.5 ${T.labelMd} transition-all disabled:cursor-not-allowed ${
-                        isPart === o.v ? "bg-[#0153dc] font-semibold text-white shadow-sm" : "text-[#565e74] hover:text-[#161b27]"
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-[16px]">{o.i}</span>
-                      <span>{o.t}</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-1.5">
-                  <Helper icon="info">
-                    {locked
-                      ? LOCK_REASON
-                      : isPart
-                        ? "Logged with quantity, price, brand and part number. Also shows in Find parts."
-                        : "Logged with a cost only."}
-                  </Helper>
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="mm-job-desc" className={label}>
-                  Description <span className="text-[#ba1a1a]">*</span>
-                </label>
-                <textarea
-                  id="mm-job-desc"
-                  rows={3}
-                  className={`resize-none p-3 ${field}`}
-                  value={description}
-                  disabled={!canWrite}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="One plain sentence: what this job is and why it's done."
-                />
-                <div className="mt-1.5">
-                  <Helper icon="info">Shown when someone taps ⓘ while logging.</Helper>
-                </div>
-              </div>
-
-              <div>
-                <span className={`${T.labelMd} mb-2 block text-[#565e74]`}>Icon</span>
-                <div className="flex flex-wrap items-center gap-2.5 pb-1">
-                  {JOB_ICON_KEYS.map((k) => {
-                    const on = iconKey === k;
-                    return (
-                      <button
-                        key={k}
-                        type="button"
-                        aria-label={`Icon ${k}`}
-                        aria-pressed={on}
-                        title={k}
-                        disabled={!canWrite}
-                        onClick={() => setIconKey(k)}
-                        className={
-                          on
-                            ? "flex h-10 w-10 items-center justify-center rounded-full bg-[#dae2fd] text-[#003ea9] ring-2 ring-[#0153dc] ring-offset-2 ring-offset-white transition-all"
-                            : "flex h-10 w-10 items-center justify-center rounded-full bg-[#f1f3ff] text-[#565e74] transition-all hover:bg-[#e4e8f8] hover:text-[#161b27]"
-                        }
-                      >
-                        <span className="material-symbols-outlined text-[20px]">{partIconKey(k)}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
+            ) : null}
 
             <FitsSection
               kind="job"
@@ -342,6 +237,174 @@ export function JobDrawer({ token, data, mode, job, presetGroupId, canWrite, onC
               hv={hv}
               onHv={setHv}
             />
+
+            {/* Stitch powertrain 07 collapsed row: the job's own details open on click. */}
+            <div className="rounded-xl border border-[#e8e9f2] bg-[#ffffff]" data-testid="job-details-row">
+              <button
+                type="button"
+                aria-expanded={detailsOpen}
+                onClick={() => setDetailsOpen((o) => !o)}
+                className="group flex w-full items-center justify-between rounded-xl p-4 text-left transition-colors hover:bg-[#f2f3fe]/60"
+              >
+                <span className="flex items-center gap-3">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#ecedf8] text-[#737686] group-hover:text-[#191b23]">
+                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>edit_note</span>
+                  </span>
+                  <span className="flex flex-col">
+                    <span className="text-[14px] font-medium leading-5 text-[#30323b]">Job details</span>
+                    <span className="text-[12px] leading-[18px] text-[#737686]">
+                      Name, group, action, form type, description and icon
+                    </span>
+                  </span>
+                </span>
+                <span className={`material-symbols-outlined text-[#737686] transition-transform group-hover:text-[#191b23] ${detailsOpen ? "rotate-90" : ""}`} style={{ fontSize: 20 }}>
+                  chevron_right
+                </span>
+              </button>
+              {detailsOpen ? (
+                <div className="border-t border-[#e8e9f2] p-4">
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor="mm-job-name" className={label}>
+                      Name <span className="text-[#ba1a1a]">*</span>
+                    </label>
+                    <input id="mm-job-name" className={`h-10 px-3.5 ${field}`} value={name} disabled={!canWrite} onChange={(e) => setName(e.target.value)} />
+                  </div>
+    
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <label htmlFor="mm-job-group" className={label}>
+                          Home group
+                        </label>
+                        {locked ? <LockedTag /> : null}
+                      </div>
+                      <div className="relative">
+                        <select
+                          id="mm-job-group"
+                          className={`h-10 cursor-pointer appearance-none pl-3.5 pr-9 ${field}`}
+                          value={homeGroupId}
+                          disabled={locked || !canWrite}
+                          onChange={(e) => setHomeGroupId(e.target.value)}
+                        >
+                          {localData.groups.map((g) => (
+                            <option key={g.id} value={g.id}>
+                              {g.name}
+                            </option>
+                          ))}
+                        </select>
+                        <Chevron />
+                      </div>
+                    </div>
+                    <div>
+                      <label htmlFor="mm-job-action" className={label}>
+                        Default action
+                      </label>
+                      <div className="relative">
+                        <select
+                          id="mm-job-action"
+                          className={`h-10 cursor-pointer appearance-none pl-3.5 pr-9 ${field}`}
+                          value={defaultAction}
+                          disabled={!canWrite}
+                          onChange={(e) => setDefaultAction(e.target.value as JobAction)}
+                        >
+                          {JOB_ACTIONS.map((a) => (
+                            <option key={a} value={a}>
+                              {JOB_ACTION_LABEL[a]}
+                            </option>
+                          ))}
+                        </select>
+                        <Chevron />
+                      </div>
+                    </div>
+                  </div>
+                  {locked ? <Helper icon="info">{LOCK_REASON}</Helper> : null}
+                  <p className={`${T.bodySm} -mt-2 text-[#565e74]`}>What a mechanic usually does with this job. Saved on every log line.</p>
+    
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className={label}>Form type</span>
+                      {locked ? <LockedTag /> : null}
+                    </div>
+                    <div className="inline-flex rounded-xl bg-[#f1f3ff] p-1" role="group">
+                      {[
+                        { v: false, t: "Service", i: "build" },
+                        { v: true, t: "Part", i: "category" },
+                      ].map((o) => (
+                        <button
+                          key={o.t}
+                          type="button"
+                          aria-pressed={isPart === o.v}
+                          disabled={locked || !canWrite}
+                          onClick={() => setIsPart(o.v)}
+                          className={`flex items-center gap-1.5 rounded-lg px-5 py-1.5 ${T.labelMd} transition-all disabled:cursor-not-allowed ${
+                            isPart === o.v ? "bg-[#0153dc] font-semibold text-white shadow-sm" : "text-[#565e74] hover:text-[#161b27]"
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[16px]">{o.i}</span>
+                          <span>{o.t}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-1.5">
+                      <Helper icon="info">
+                        {locked
+                          ? LOCK_REASON
+                          : isPart
+                            ? "Logged with quantity, price, brand and part number. Also shows in Find parts."
+                            : "Logged with a cost only."}
+                      </Helper>
+                    </div>
+                  </div>
+    
+                  <div>
+                    <label htmlFor="mm-job-desc" className={label}>
+                      Description <span className="text-[#ba1a1a]">*</span>
+                    </label>
+                    <textarea
+                      id="mm-job-desc"
+                      rows={3}
+                      className={`resize-none p-3 ${field}`}
+                      value={description}
+                      disabled={!canWrite}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="One plain sentence: what this job is and why it's done."
+                    />
+                    <div className="mt-1.5">
+                      <Helper icon="info">Shown when someone taps ⓘ while logging.</Helper>
+                    </div>
+                  </div>
+    
+                  <div>
+                    <span className={`${T.labelMd} mb-2 block text-[#565e74]`}>Icon</span>
+                    <div className="flex flex-wrap items-center gap-2.5 pb-1">
+                      {JOB_ICON_KEYS.map((k) => {
+                        const on = iconKey === k;
+                        return (
+                          <button
+                            key={k}
+                            type="button"
+                            aria-label={`Icon ${k}`}
+                            aria-pressed={on}
+                            title={k}
+                            disabled={!canWrite}
+                            onClick={() => setIconKey(k)}
+                            className={
+                              on
+                                ? "flex h-10 w-10 items-center justify-center rounded-full bg-[#dae2fd] text-[#003ea9] ring-2 ring-[#0153dc] ring-offset-2 ring-offset-white transition-all"
+                                : "flex h-10 w-10 items-center justify-center rounded-full bg-[#f1f3ff] text-[#565e74] transition-all hover:bg-[#e4e8f8] hover:text-[#161b27]"
+                            }
+                          >
+                            <span className="material-symbols-outlined text-[20px]">{partIconKey(k)}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+                </div>
+              ) : null}
+            </div>
 
             <div ref={alsoDoRef} className="space-y-3 rounded-2xl bg-[#f1f3ff]/60 p-4" data-testid="also-do-card">
               <div className="flex items-center gap-2">

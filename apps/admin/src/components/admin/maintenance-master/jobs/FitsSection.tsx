@@ -177,7 +177,7 @@ export function FitsSection(props: JobProps | GroupProps) {
                 {props.hv ? <HvChip /> : null}
               </div>
               <p className={`text-[13px] leading-[18px] ${MUTED}`}>
-                Turn on if this job touches the high-voltage battery or cables. The lockout checklist will ask for it.
+                Turn on if this job touches the high-voltage battery or cables. Fleets see a High-voltage label on it.
               </p>
             </div>
             <button
