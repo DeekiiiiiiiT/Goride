@@ -218,9 +218,6 @@ export function MaintenanceOverviewPanel({
                 <th className="py-3 px-3 font-semibold">Plate</th>
                 <th className="py-3 px-3 font-semibold">Odometer</th>
                 <th className="py-3 px-3 font-semibold">Status</th>
-                <th className="py-3 px-3 font-semibold" data-testid="mm-overview-schedule-col">
-                  Dominion schedule status
-                </th>
                 <th className="py-3 px-3 font-semibold">Next due</th>
                 <th className="py-3 px-3 font-semibold">Due items</th>
                 <th className="py-3 px-3 font-semibold">Last service</th>
@@ -230,7 +227,7 @@ export function MaintenanceOverviewPanel({
             <tbody className="text-sm">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-on-surface-variant">
+                  <td colSpan={8} className="py-12 text-center text-on-surface-variant">
                     No vehicles match this filter.
                   </td>
                 </tr>
@@ -312,9 +309,6 @@ export function MaintenanceOverviewPanel({
                           ) : null}
                           {statusBadge(row.fleetStatus, primaryAttention)}
                         </div>
-                      </td>
-                      <td className="py-4 px-3 align-top">
-                        {dominionScheduleChip(row.dominionScheduleStatus)}
                       </td>
                       <td className="py-4 px-3 align-top">
                         {needsOdo && !row.nextDueSummary ? (

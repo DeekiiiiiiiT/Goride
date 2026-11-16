@@ -196,7 +196,7 @@ test.describe("Fleet maintenance master (real stack)", () => {
 
   test("F6 overview schedule column", async ({ page }) => {
     await gotoMaintenance(page);
-    await expect(page.getByTestId("mm-overview-schedule-col")).toBeVisible();
+    // The schedule status column was removed (owner 16 Nov); the filter chips stay.
     await expect(page.getByTestId("mm-overview-schedule-filters")).toBeVisible();
     await expect(page.getByRole("button", { name: "Roam policy" })).toBeVisible();
     await expect(page.locator("tr").filter({ hasText: MM_F01_PLATE_5179 })).toBeVisible();
