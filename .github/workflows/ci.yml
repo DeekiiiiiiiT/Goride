@@ -241,7 +241,7 @@ jobs:
 
       - name: Deno test maintenance jobs + service items
         run: >
-          deno test --no-check --allow-read
+          deno test --no-check --allow-read --allow-env
           supabase/functions/_fleet-server/maintenance_jobs_admin_helpers.test.ts
           supabase/functions/_fleet-server/maintenance_jobs_admin_routes.test.ts
           supabase/functions/_fleet-server/maintenance_supplies_admin_helpers.test.ts
