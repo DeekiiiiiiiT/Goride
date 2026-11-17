@@ -1,6 +1,6 @@
 # Toll architecture — as-built audit and what it lacks
 
-**Rev 14 · 2026-11-17 · For: the architecture reviewer · Status: OPEN, no build until the reviewer and the owner agree.**
+**Rev 15 · 2026-11-17 · For: the architecture reviewer · Status: OPEN, no build until the reviewer and the owner agree.**
 
 **What it's for (one sentence):** every toll the fleet pays ends with the right person bearing it: the platform (paid back first time, or after a dispute), the driver or the fleet. Nothing is decided before the facts are in, and the week still closes on time.
 
@@ -258,6 +258,8 @@ Driver cash charges, Roam native charges, `carry_forward`, duplicate review, tak
 
 **Week Reconciliation, step 3 Tolls** (groups come only from the server state):
 
+**Layout (owner, 17 Nov 2026):** one part at a time, like the Fuel step: a progress row of six parts (1 Matches, 2 Pick a trip, 3 Disputes, 4 No trip, 5 Other checks, 6 Seal), one card on screen, **Back** / **Next**. Next is never blocked; only **Seal tolls** waits. Each group below lives in one part: Suggested matches (both kinds) → part 1; Pick the right trip → 2; Disputes → 3; Tolls with no trip → 4; Part-paid, cash receipts, possible duplicates, paybacks with no toll → 5; Decided + Seal → 6. Look and wording: Stitch prompt `docs/stitch/toll-step-slides-fleet-prompt.txt` (the Stitch screen is the spec for layout; this table is the spec for data and buttons).
+
 | Group | Shows | Buttons |
 |---|---|---|
 | Suggested matches — **payback matches** (Uber) | Toll, trip, payback, score | **Confirm** (one), **Confirm all** |
@@ -512,3 +514,4 @@ sequenceDiagram
 | 18 | 2026-11-17 | Reviewer | Round 6 (Rev 12): signable after fixes. Blocking AA1 (InDrive matches need their own buttons, not payback scores), AA2 (`auto_apply` must never fire for `rider_pays_driver`), AA3 (receivable check must sum only active provisional disputes). Should-fix AB1–AB9 (two senses of "bears", C4.1 independence, cash-trip assumption, report-in scope, done-test 8b, Q5 default). Nits AC1–AC7 (`short_paid` occupant, B7 priority row, remainder row, B6 dependency, matcher note) |
 | 19 | 2026-11-17 | Claude | Rev 13 closes round 6: AA1 Suggested matches split (payback vs rider-pays-driver) with **Confirm Driver pays** / **Fleet pays** / **Confirm all Driver pays** and new C4.16; AA2 `auto_apply` always off for `rider_pays_driver` (seeds, C2, C4.7); AA3 C4.5 sums `to_send` / `sent` only. AB1–AB9 and AC1–AC7 applied inline (economic vs accounting "bears", B7 assumes cash trip and depends on B6, report-in only for `takes_disputes = yes`, B7 P0 row in L2.2, `short_paid` has no live occupant, Q5 default matches owner policy) |
 | 20 | 2026-11-17 | Claude | Rev 14 (owner answered Q6): the dispute text needs no approval; the system fills a per-platform template and the driver copies it into Uber's dispute form, as the old `DriverClaims.tsx` did. B5 card buttons Copy / Open Uber App / Mark as sent; `approved_by` / `approved_at` removed from `dispute_text_templates`; SMS not in the first build; nothing is blocked on Q6 |
+| 21 | 2026-11-17 | Claude | Rev 15 (owner): step 3 Tolls becomes one part at a time like the Fuel step (six parts, Back / Next, only Seal waits); C3 maps every group to a part; Stitch prompt `docs/stitch/toll-step-slides-fleet-prompt.txt` added. No data or rule changed |

@@ -1,0 +1,189 @@
+ROAM FLEET — TOLLS STEP, ONE PART AT A TIME — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Tolls step in Week Reconciliation (Desktop Web App with a phone layout, for the fleet owner and fleet manager):
+
+Redesign ONE area of step 3 "Tolls" inside "Week Reconciliation" in Roam Fleet, the same way the Fuel step was redesigned. Today the Tolls step shows every group stacked in one long page (Suggested matches, Pick the right trip, Tolls with no trip, cash receipts, duplicates, paybacks with no toll, Decided, then the Seal box). The person scrolls and scrolls and loses their place. The new design shows ONE part at a time as a large card. A short progress row at the top shows the six parts and where the person is. When they finish a part they click "Next" and the card slides to the next part; "Back" slides to the previous one. The last card, "Seal tolls", ends with the "Seal tolls" button. The rule behind every part: on a trip, the passenger is always the one who owes the toll, never the fleet. Uber pays it back on the trip; if Uber pays short, the driver disputes the rest with Uber; on an InDrive cash trip the driver collects it from the rider. The fleet or the driver only pays when that fails or when there was no trip. Everything outside this area stays exactly as it is today: the app frame, the left step rail, the week line, the title "Tolls" with "Who pays each toll this week?", the five money tiles, the "3 of 15 tolls decided" bar, and the right-hand column. Only the area between the progress bar and the footer changes. The person using this is not an accountant: each card says in plain words what it is for, what needs doing, and the one or two buttons that do it. The design must feel modern, calm and effortless, like the best business banking apps. Every screen is tall enough to show everything, with no inner scrolling.
+
+
+BRAND IDENTITY:
+- Keep the existing Roam Fleet app frame exactly as it is today (do not redesign it):
+  - Top: a white nav row with the black "Roam Fleet" app tile, then: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations, Delivery Operations, Analytics, Reports, Business Finance (active, underlined).
+  - Dark bar below it: a dark navy strip with a search box "Switch vehicle or search hub…" on the left, and on the right "06:11:49 PM EST" and "America/Jamaica".
+- Keep the existing Week Reconciliation desk layout: the "All weeks" button and the left step rail card "WEEK STEPS" with "Step 3 of 8" (1 Upload inputs Complete, 2 Assign service lines Complete, 3 Tolls "In progress" highlighted, then 4 Tag account, 5 Fuel, 6 Trips & earnings, 7 Settlement preview, 8 Close week — greyed with a padlock and "Waiting on Tolls"), and under it a dashed card "Telematics · Coming soon".
+- Keep the middle white card top as it is: "Week of 9 Nov 2026 · Rideshare · 9–15 Nov 2026", the green dot chip "Numbers updated 2 min ago", the title "Tolls", the question "Who pays each toll this week?", and five money tiles: "TOLL SPEND J$5,410.00 · 15 total transactions", "PAID BACK BY PLATFORMS J$5,170.00", "DRIVER PAYS J$0.00", "FLEET PAYS J$0.00", "STILL TO DECIDE J$240.00". The new design goes inside the middle card, below the tiles.
+- Keep the right column as it is: "SOURCES 5 / 5 required received" with a full bar; "SERVICE LINE SPLIT" (Unattributed rows 0, Unattributed $ —); "DRIVER TOLL CHARGES" (Kenny Gregory Rattray J$0.00); "TAG ACCOUNT" (Opening J$1,279.00, + Top-ups J$5,000.00, − Usage J$5,410.00, = Closing J$869.00) with a secondary "Go to Tag account" button.
+- Theme: "Calm finance desk" — clear, trustworthy, quiet and modern. Not a spreadsheet, not a developer tool.
+- LIGHT MODE (default):
+  - Primary: near-black #030213 — Next, Seal tolls, Confirm all, the current part in the progress row
+  - Page wash: #f8fafc; cards: #FFFFFF with a soft shadow (0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(15,23,42,0.06)) and a hairline border rgba(0,0,0,0.06)
+  - Text: #0b1c30; muted text: #47464c
+  - Done / Matched / Paid back: green #069669 on a soft green #ecfdf5
+  - Needs a decision / Waiting on Uber: amber #b45309 on a soft amber #fffbeb
+  - Blocks sealing / Overdue: red #ba1a1a on #fff1f2
+  - Info / Nothing to do: slate #475569 on #f1f5f9
+  - Suggested by Roam / Dispute: blue #0051d5 on #eff4ff
+- DARK MODE:
+  - Page #1c1c1e, cards #2a2a2d, border #3a3a3d
+  - Text #fafafa, muted #a1a1aa, primary buttons white #fafafa with near-black text
+  - Green #34d399 on #064e3b; amber #fbbf24 on #451a03; red #f87171 on #450a0a; blue #60a5fa on #172554
+- Shapes: cards 20px corner radius, buttons and inputs 12px, chips and the progress pills fully rounded.
+- Typography: Inter. Card title 22px semibold, card subtitle 15px muted, body 15px, helper text 13px. Money uses tabular figures, right-aligned, always "J$" with 2 decimals (J$390.00).
+- Dates and times in plain words: "9 Nov, 7:15 AM", "Week of 9 Nov 2026". Never "2026-11-09", never codes, ids or internal words.
+- How sure Roam is about a match is said in words, never as a number or percent: "Sure match" (green), "Likely match" (blue), "Two trips fit" (amber).
+- Buttons always look like buttons:
+  - Primary = solid near-black with white text ("Next", "Confirm all", "Seal tolls").
+  - Secondary = white with a visible #cbd5e1 border and dark text ("Back", "Driver pays", "Fleet pays", "Mark as sent").
+  - Danger ("Undo", "Lost") = red border and red text.
+  - Never underlined text links, never grey text-only buttons. Every confirm is an in-app dialog, never a browser pop-up.
+- Sample data (REAL, from Roam's week of 9 Nov 2026, Rideshare, car Toyota Roomy · 5179KZ, driver Kenny Gregory Rattray):
+  - 15 tag tolls, J$5,410.00. Uber paid back J$5,170.00.
+  - 3 tolls Uber paid back in full (already confirmed).
+  - 12 tolls Uber paid J$20.00 short each, J$240.00 in all. Rows include: "9 Nov, 7:15 AM · Portmore · J$390.00 · Uber paid J$370.00 · J$20.00 to dispute", "9 Nov, 12:24 PM · Portmore · J$390.00", "10 Nov, 12:55 PM · Spanish Town · J$280.00 · Uber paid J$260.00", "11 Nov, 7:11 AM · Portmore · J$390.00", "12 Nov, 7:54 AM · Portmore · J$390.00".
+  - Uber gives the driver 9 days from the trip to dispute a toll.
+  - For the InDrive part of Screen 1 use one example row: "13 Nov, 5:40 PM · Spanish Town · J$280.00 · InDrive trip 5:12 PM–6:05 PM · cash".
+
+
+DESIGN PRINCIPLES:
+- One part at a time. Only one card is on screen; the others are reached with Next / Back or by clicking a part in the progress row.
+- The person always knows where they are and what is left: the progress row shows all six parts with their status ("Done", "3 to confirm", "12 to send", "Nothing to do").
+- Moving is never blocked: Next always works, so the person can look ahead. Only "Seal tolls" waits until every part is clear, and the last card says exactly what is still open with a button that jumps to that part.
+- Every card answers three things at the top: what this part is for (one sentence), its status chip, and what to do now.
+- A part with nothing in it still shows, with a calm green "Nothing to do" state, so the person sees it was checked.
+- Disputes never block sealing: a toll that is being disputed with Uber counts as decided for now, and the week can still close on time.
+- The money always adds up, and the money tiles and right column stay visible the whole time.
+- Calm, not alarming: red only for things that block sealing or a dispute about to run out of days.
+- Slides are short and smooth (250 ms, ease-out, the new card slides in from the right on Next and from the left on Back).
+- One view per screen.
+
+
+SCREEN 1: PART 1 OF 6 — MATCHES
+- The full desk as described in Brand Identity, with the new area inside the middle card.
+- Progress row across the top of the area: six rounded pills joined by a thin line — "1 Matches" (current: near-black pill, white text, small blue dot and "4 to confirm"), "2 Pick a trip" (slate "Nothing to do"), "3 Disputes" (amber "12 to send"), "4 No trip" (slate "Nothing to do"), "5 Other checks" (slate "Nothing to do"), "6 Seal" (grey padlock "Not ready"). Under the pills a thin bar 1/6 filled.
+- The card: title "Matches", subtitle "Tolls that happened during a trip. Roam lined them up for you.", status chip on the right "4 to confirm" (blue).
+- First block "Uber paid it back" with a primary "Confirm all (3)" button on the right of the block heading. Three rows; each row: a tag icon, "9 Nov, 4:02 PM · Portmore", plate chip "5179KZ", "Kenny Gregory Rattray", "J$390.00", chip "Tag", then a grey-outline trip pill "Uber trip 3:40 PM–4:20 PM · card · paid back J$390.00", a green chip "Sure match", a primary "Confirm" button and a secondary "Pick another trip" button.
+- Second block "InDrive: the rider pays the driver" with a muted line "On an InDrive cash trip the rider owes the toll and the driver collects it. Usually the driver pays it to the fleet." and a primary "Confirm all Driver pays (1)" button on the block heading. One row: tag icon, "13 Nov, 5:40 PM · Spanish Town", "5179KZ", "Kenny Gregory Rattray", "J$280.00", chip "Tag", a trip pill "InDrive trip 5:12 PM–6:05 PM · cash", a muted reason "Rider owed it, driver collects in cash", a primary "Confirm Driver pays" button and a secondary "Fleet pays" button. No score and no payback on this row.
+- Card footer: on the left a disabled-looking secondary "Back" (first part), in the middle small muted text "Part 1 of 6", on the right a primary "Next: Pick a trip →".
+
+
+SCREEN 2: PART 2 OF 6 — PICK THE RIGHT TRIP (NOTHING TO PICK)
+- Same desk; progress row with "1 Matches" now a green check "Done", "2 Pick a trip" current, bar 2/6.
+- The card: title "Pick the right trip", subtitle "Two trips fit this toll. Choose the one it belongs to.", green chip "Nothing to pick".
+- A calm empty state: green check circle icon, "Every toll fits only one trip this week."
+- Footer: secondary "← Back", "Part 2 of 6", primary "Next: Disputes →".
+
+
+SCREEN 3: PART 3 OF 6 — DISPUTES WITH UBER (12 TO SEND)
+- Progress row with parts 1 and 2 done, "3 Disputes" current (amber "12 to send"), bar 3/6.
+- The card: title "Disputes with Uber", subtitle "Uber paid less than the toll. The driver asks Uber for the rest from the driver app.", amber chip "12 to send".
+- A blue info box: "J$240.00 is waiting on Uber. It doesn't stop you sealing this week. Refunds usually arrive in the next pay period or the one after."
+- A small summary row of three tiles: "To send 12 · J$240.00", "Sent, waiting on Uber 0 · J$0.00", "Overdue 0".
+- Rows (show five, then a secondary "Show all 12" button). Each row: a tag icon, "9 Nov, 7:15 AM · Portmore", "5179KZ · Kenny Gregory Rattray", the money line "Toll J$390.00 · Uber paid J$370.00 · J$20.00 to dispute", the trip pill "Uber trip 6:55 AM–7:40 AM", an amber chip "Not sent yet", a small days-left text "8 of 9 days left", and the buttons secondary "Mark as sent" and secondary "Open trip". Rows: 9 Nov 7:15 AM Portmore; 9 Nov 12:24 PM Portmore; 10 Nov 12:55 PM Spanish Town (Toll J$280.00 · Uber paid J$260.00 · J$20.00); 11 Nov 7:11 AM Portmore; 12 Nov 7:54 AM Portmore.
+- A muted helper line under the list: "The driver sees each dispute in the Roam driver app with the text to copy into Uber."
+- Footer: secondary "← Back", "Part 3 of 6", primary "Next: Tolls with no trip →".
+
+
+SCREEN 4: PART 3 OF 6 — DISPUTES, A FEW WEEKS LATER (SENT, WON, LOST)
+- Same card as Screen 3 at a later moment, to show every row state in one list.
+- Summary tiles: "To send 0", "Sent, waiting on Uber 2 · J$40.00", "Overdue 1 · J$20.00" (red).
+- Rows:
+  - "9 Nov, 7:15 AM · Portmore · J$20.00" — blue chip "Sent 11 Nov" — buttons primary "Refund received" (opens a small in-app dialog to pick Uber's refund line), red-outline "Lost", secondary "Open trip".
+  - "9 Nov, 12:24 PM · Portmore · J$20.00" — red chip "No refund after 2 pay periods" — the same buttons.
+  - "10 Nov, 12:55 PM · Spanish Town · J$20.00" — green chip "Won · Uber paid J$20.00 on 17 Nov" — red-outline "Undo".
+  - "11 Nov, 7:11 AM · Portmore · J$20.00" — slate chip "Lost · driver pays" — red-outline "Undo".
+- Footer: secondary "← Back", "Part 3 of 6", primary "Next: Tolls with no trip →".
+
+
+SCREEN 5: PART 4 OF 6 — TOLLS WITH NO TRIP
+- Progress row with parts 1–3 done, "4 No trip" current (amber "1 to decide"), bar 4/6.
+- The card: title "Tolls with no trip", subtitle "No trip at this time, so no passenger owes it. Who pays?", amber chip "1 to decide".
+- One row: tag icon, "14 Nov, 9:30 PM · Spanish Town", "5179KZ · Kenny Gregory Rattray", "J$280.00", chip "Tag", secondary buttons "Driver pays" and "Fleet pays", and a muted hint "Personal driving is usually paid by the driver."
+- Footer: secondary "← Back", "Part 4 of 6", primary "Next: Other checks →".
+
+
+SCREEN 6: PART 5 OF 6 — OTHER CHECKS
+- Progress row with parts 1–4 done, "5 Other checks" current (amber "1 to check"), bar 5/6.
+- The card: title "Other checks", subtitle "Cash receipts, possible duplicates and Uber paybacks with no toll.", amber chip "1 to check".
+- Three small blocks, one under the other, each with a title and a count:
+  - "Cash receipts to check · 1" — one row: a 48px receipt photo thumbnail with a camera badge, "13 Nov, 4:10 PM · Portmore · J$390.00 · Kenny Gregory Rattray", amber chip "Photo to check", primary "Check receipt".
+  - "Possible duplicates · 0" — green check "Nothing to review".
+  - "Uber paybacks with no toll · 0" — green check "Nothing to review".
+- Footer: secondary "← Back", "Part 5 of 6", primary "Next: Seal tolls →".
+
+
+SCREEN 7: PART 6 OF 6 — SEAL TOLLS (STILL BLOCKED)
+- Progress row: part 1 shows blue "4 to confirm", part 4 amber "1 to decide", part 5 amber "1 to check", parts 2 and 3 done, "6 Seal" current, bar 6/6.
+- The card: title "Seal tolls", subtitle "Lock this week's tolls so the tag account and pay can be worked out.", grey chip "Not ready".
+- A "Still open" list, each row with a jump button:
+  - blue dot "4 matches to confirm" — secondary "Go to Matches"
+  - amber dot "1 toll with no trip" — secondary "Go to Tolls with no trip"
+  - amber dot "1 cash receipt to check" — secondary "Go to Other checks"
+- A collapsed "Decided · 3 tolls" list with three rows peeking: green "Matched" chip, "9 Nov, 4:02 PM · Portmore · J$390.00 · Uber trip 3:40 PM–4:20 PM", muted "Deeki T · 15 Nov, 9:40 AM", red-outline "Undo".
+- The seal box at the bottom: padlock icon, "Seal tolls", the sum line "Spend J$5,410.00 = Paid back J$5,170.00 + Driver pays J$0.00 + Fleet pays J$0.00 + Waiting on Uber J$240.00", grey chip "Not ready", muted "3 things still open", and a disabled primary "Seal tolls" button.
+- Footer: secondary "← Back", "Part 6 of 6", no Next button.
+
+
+SCREEN 8: PART 6 OF 6 — SEAL TOLLS (READY)
+- Same as Screen 7 when everything is clear: all six pills show green "Done", bar full.
+- The card: title "Seal tolls", green chip "Ready".
+- A green box "Every toll has an answer. Tolls are ready to seal." with the sum line "Spend J$5,410.00 = Paid back J$5,170.00 + Driver pays J$0.00 + Fleet pays J$0.00 + Waiting on Uber J$240.00" and a green check "Everything adds up".
+- A blue note: "12 disputes (J$240.00) are still with Uber. They'll settle in a later week on their own."
+- Seal box: "Seal tolls", green chip "Ready", and an enabled primary "Seal tolls" button with a padlock icon.
+- Footer: secondary "← Back", "Part 6 of 6".
+
+
+SCREEN 9: SEALING AND SEALED
+- Same desk, Part 6 card right after "Seal tolls" was clicked and confirmed.
+- The seal box shows a spinner and "Sealing tolls… this takes a few seconds." with a thin progress bar.
+- Below it (the moment it finishes) a green banner "Tolls for the week of 9 Nov 2026 are sealed." and a primary "Continue to Tag account →" button.
+
+
+SCREEN 10: PHONE 390px — TOLLS STEP, PART 3
+- Screen 3 on a 390px phone.
+- Top: compact header "Week of 9 Nov · Rideshare", step chips that scroll sideways with "3 Tolls" active.
+- The money tiles become one line "Spend J$5,410.00 · To decide J$240.00" that opens the full tiles.
+- The progress row becomes six small numbered circles with the current label under them ("3 · Disputes · 12 to send").
+- The card fills the width; rows stack; buttons are full width.
+- A bar stuck to the bottom of the screen with "← Back" and "Next →".
+- The right column collapses into a single line above the card: "Tag closing J$869.00 · Driver tolls J$0.00" that opens the full column.
+
+
+ADDITIONAL UI COMPONENTS:
+- Progress row: six fully rounded pills on one line, joined by a 2px line; each pill shows number, short name and a status (green check "Done", blue dot "N to confirm", amber "N to send" / "N to decide" / "N to check", slate "Nothing to do", grey padlock "Not ready"). The current pill is near-black with white text. Every pill is a button that slides to that part.
+- Thin step bar under the pills (4px, rounded, near-black fill).
+- Part card: white, 20px radius, soft shadow, 28px padding; header = title + subtitle on the left, status chip on the right; content; footer row with Back, "Part N of 6", Next.
+- Next button text always names the next part: "Next: Disputes →".
+- Toll row: tag or banknote icon, date and time, place, plate chip, driver, amount right-aligned, payment chip ("Tag" / "Cash"), trip pill, status chip, buttons on the right.
+- Dispute row: as a toll row plus the money line "Toll · Uber paid · to dispute", a state chip ("Not sent yet" amber, "Sent <date>" blue, "No refund after 2 pay periods" red, "Won" green, "Lost · driver pays" slate) and days left ("8 of 9 days left", red at 2 days or fewer).
+- Empty state: green check circle, one sentence.
+- Seal box: padlock, title, the sum line, status chip, short reason, primary "Seal tolls".
+- Toast at the bottom right after an action inside a card: "Confirmed 3 matches" with an "Undo" button inside the toast.
+
+
+INTERACTIONS:
+- "Next" slides the current card out to the left and the next card in from the right (250 ms); "Back" does the reverse. The progress row and bar update at the same moment.
+- Clicking a pill in the progress row slides straight to that part.
+- The step opens on the first part that still needs something; if everything is done it opens on "Seal".
+- Deciding something inside a card (Confirm, Confirm all, Driver pays, Fleet pays, Mark as sent, Check receipt) updates that card's chip, the matching pill, the money tiles and the right column at once, without leaving the card.
+- "Confirm all", "Confirm all Driver pays", "Lost" and "Undo" open an in-app dialog that lists what will happen and the total, with one primary confirm button.
+- "Refund received" opens an in-app dialog listing Uber's refund lines for that driver near that date; the person picks one.
+- On the Seal card, "Go to …" buttons slide to that part.
+- "Seal tolls" opens an in-app dialog: "Seal tolls for the week of 9 Nov 2026? Spend J$5,410.00 · Paid back J$5,170.00 · Waiting on Uber J$240.00." with a primary "Seal tolls"; then Screen 9.
+- The keyboard works too: left and right arrow keys move Back / Next when no text box is focused.
+- On the phone the Back / Next bar stays at the bottom of the screen.
+
+
+Spec screens / Area
+| Screen | Area |
+| 1 | Part 1 Matches — Uber paid back (Confirm, Confirm all) and InDrive rider pays driver (Confirm Driver pays, Fleet pays) |
+| 2 | Part 2 Pick the right trip — nothing to pick |
+| 3 | Part 3 Disputes with Uber — 12 to send, Mark as sent |
+| 4 | Part 3 Disputes — later: sent, overdue, won, lost |
+| 5 | Part 4 Tolls with no trip — Driver pays / Fleet pays |
+| 6 | Part 5 Other checks — cash receipts, duplicates, paybacks with no toll |
+| 7 | Part 6 Seal tolls — still blocked, jump buttons, Decided list |
+| 8 | Part 6 Seal tolls — ready |
+| 9 | Sealing and sealed — continue to Tag account |
+| 10 | Phone 390px — Tolls step, part 3 |
