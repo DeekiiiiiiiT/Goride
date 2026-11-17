@@ -1,4 +1,4 @@
-﻿-- Week recon: Uber activity timeline (D1-D3)
+-- Week recon: Uber activity timeline (D1-D3)
 
 -- D1: driver status at a tag crossing minute (timeline + platform trips)
 CREATE OR REPLACE FUNCTION toll_system.driver_status_at(
