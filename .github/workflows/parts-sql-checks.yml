@@ -60,6 +60,9 @@ on:
       - 'supabase/migrations/20261113031959_toll_v2_carry_forward.sql'
       - 'supabase/tests/toll_v2_screen_reads.sql'
       - 'supabase/migrations/20261113162537_toll_v2_screen_reads.sql'
+      - 'supabase/tests/toll_disputes_schema_checks.sql'
+      - 'supabase/tests/toll_disputes_data_test.sql'
+      - 'supabase/migrations/20261117234730_toll_disputes_data.sql'
       - 'packages/toll-core/src/v2/weekRuleCases.json'
       - '.github/workflows/parts-sql-checks.yml'
   push:
@@ -118,6 +121,9 @@ on:
       - 'supabase/migrations/20261113031959_toll_v2_carry_forward.sql'
       - 'supabase/tests/toll_v2_screen_reads.sql'
       - 'supabase/migrations/20261113162537_toll_v2_screen_reads.sql'
+      - 'supabase/tests/toll_disputes_schema_checks.sql'
+      - 'supabase/tests/toll_disputes_data_test.sql'
+      - 'supabase/migrations/20261117234730_toll_disputes_data.sql'
       - 'packages/toll-core/src/v2/weekRuleCases.json'
       - '.github/workflows/parts-sql-checks.yml'
   workflow_dispatch:
@@ -248,3 +254,7 @@ jobs:
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_v2_carry_forward.sql
           docker cp supabase/tests/toll_v2_screen_reads.sql "$db_container":/tmp/toll_v2_screen_reads.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_v2_screen_reads.sql
+          docker cp supabase/tests/toll_disputes_schema_checks.sql "$db_container":/tmp/toll_disputes_schema_checks.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_disputes_schema_checks.sql
+          docker cp supabase/tests/toll_disputes_data_test.sql "$db_container":/tmp/toll_disputes_data_test.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_disputes_data_test.sql
