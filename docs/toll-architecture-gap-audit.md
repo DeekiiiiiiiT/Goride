@@ -1,6 +1,6 @@
 # Toll architecture — as-built audit and what it lacks
 
-**Rev 4 · 2026-11-17 · For: the architecture reviewer · Status: OPEN, no build until the reviewer and the owner agree.**
+**Rev 5 · 2026-11-17 · For: the architecture reviewer · Status: OPEN, no build until the reviewer and the owner agree.**
 
 **What it's for (one sentence):** every toll the fleet pays ends with the right person bearing it: the platform (paid back first time, or after a dispute), the driver or the fleet. Nothing is decided before the facts are in, and the week still closes on time.
 
@@ -9,10 +9,33 @@ The design doc is `docs/toll-architecture.md` (Rev 9, "Agreed", built Phase 0–
 - **Part B** lists the problems found, numbered, each with **one chosen fix**.
 - **Part C** is the blueprint for those fixes (Data → Server → Screens with every button → Tests).
 - **Part D** holds the done-tests, written before any build.
+- **Part 0** (scope, scale, targets), **Part L2** (the platform envelope: what exists, gaps B12–B21, roles, state tables, flows, rollout) and **Part G** (owner questions) were added in Rev 5 after reviewer round 1.
 
 The reviewer challenges any part. Claude replies and revises until no gap is left. The table at the end records each round.
 
 ---
+
+## Part 0 — Scope, scale and non-functional targets (added Rev 5, reviewer round 1)
+
+**Two layers** (reviewer round 1):
+- **L1, the toll domain** (Parts A–D): who bears each toll, and do the numbers add up?
+- **L2, the platform envelope** (Part L2, after Part D): can we run, prove, secure, change and recover it?
+
+**The reviewer has no access to the app or the database.** Every "exists" claim in this document cites a file, a migration or a live query result (17 Nov 2026), so the reviewer can judge without seeing the system.
+
+| Item | Today (fact) | Target |
+|---|---|---|
+| Companies on toll v2 | 1 (`tolls_v2` on for one company since 14 Nov 2026) | Multi-company by design; size: owner fact needed (Part G, Q1) |
+| Drivers / vehicles | 1 driver, 1 car with a TransJam tag | Owner fact needed (Part G, Q1) |
+| Weekly volume | ~15 tag tolls, ~70–80 Uber trips, ~14 trip paybacks, 0–1 adjustments, ~10 hand-logged InDrive trips | Design for 10× (≈150 tolls / 800 trips a week) with no architecture change; load-test once at that level |
+| Timezone | Every week is Monday–Sunday, Jamaica (UTC−5, no daylight saving; ADR 0007). Platform times are stored as UTC instants and shown in Jamaica time. "`trust_utc`" (old `brain_policies`) means the Uber CSV times are taken as UTC, as written. | Unchanged |
+| Currency | JMD only, all amounts in minor units (cents) as `bigint`; no FX | Unchanged; any other currency is refused at import until an FX policy exists |
+| Rounding | Proportional splits round half-even per slice, and the last slice takes the remainder so the slices sum exactly (design C3, `docs/toll-architecture.md`) | Unchanged |
+| Data residency | Supabase project `us-east-1` (US) | Owner fact needed: any Jamaican residency or insurer rule (Part G, Q2) |
+| Environments | Production + each developer's private local copy (Docker, `supabase start`); **no standing staging** | Add staging (B16 fix) |
+| Settlement cutoff | Weeks are closed by hand when the inputs are in; no fixed weekly deadline yet | Uber report uploaded within 2 days of week end (needed for the 9-day dispute window); toll seal available by the following Monday 09:00 |
+| RPO / RTO | Not set; depends on the Supabase plan's backups (owner fact, Part G, Q8) | RPO ≤ 24 h (daily backup), RTO ≤ 4 h, plus a ledger reconstruction test (B16 fix) |
+| Retention | Raw upload files are **not** kept: they go to the `ephemeral-evidence` bucket, which `evidence-cleanup` empties. Each import batch keeps `file_sha256`, file name, `rows_parsed / committed / duplicate / rejected`, coverage dates | Raw files kept 7 years, immutable (B16 fix) |
 
 ## Part A — What the toll architecture is today (as built)
 
@@ -25,7 +48,7 @@ Every toll the fleet paid gets one answer to "who bears this cost?" (platform, d
 | Table | Rows | What is in it live |
 |---|---|---|
 | `toll.charges` | 71 | **All** `tag_statement` / `tag`. **0** driver cash, **0** Roam, **0** manual |
-| `toll.paybacks` | 70 | Uber only: `trip_line` (received by fleet or driver) and 1 `adjustment` (J$70, 11 Oct, linked to nothing) |
+| `toll.paybacks` | 70 | Uber only: `trip_line` (received by fleet or driver) and 1 `adjustment` (J$70, 11 Oct; the owner kept it "with no toll" on 15 Nov) |
 | `toll.platform_trips` | 512 | **Uber only** (card and cash). No InDrive, no Roam |
 | `toll.allocations` | 83 | Platform and driver slices |
 | `toll.payback_unlinked_decisions` | 3 | "Keep with no toll" |
@@ -106,7 +129,7 @@ Each gap: what the business needs, what the **old system** did (retired 14 Nov),
 
 - **Old:** a dispute refund matched its claim and closed it; if the driver had been charged, the charge was reversed (`disputeRefundTripSyncEnabled`, 5 Jul 2026).
 - **v2:** an Uber support adjustment becomes an `adjustment` payback, matched by driver + date **within 7 days only**. Disputes often take longer. Once the shortfall was decided, the charge is excluded (`fully_decided`), so the refund can't attach. It becomes unallocated money for a person, and a driver charge is never reversed automatically.
-- **Evidence:** the one live adjustment (J$70, 11 Oct) is linked to nothing.
+- **Evidence:** the one live adjustment (J$70, 11 Oct) found no toll and was kept "with no toll" by hand on 15 Nov. There was no dispute for it to settle.
 - **Fix (one):** an `adjustment` payback first looks for an open or expired dispute (same driver and platform, amount ≤ owed, in the platform report for the pay period after the dispute was sent, or the one after that (owner, 17 Nov 2026: a refund always comes in one of those two pay periods, never later); no 7-day limit). If it finds one, it settles that dispute. Only if none fits does today’s 7-day charge match run. A refund on a toll already charged to the driver reverses that charge in the open week (C2).
 
 ### B4. Lost or forgotten disputes have no rule (missing)
@@ -241,6 +264,117 @@ Driver cash charges, Roam native charges, `carry_forward`, duplicate review, tak
 
 ---
 
+## Part L2 — The platform envelope (added Rev 5, reviewer round 1)
+
+### L2.1 What already exists (facts for the reviewer, checked 17 Nov 2026)
+
+| Reviewer asked for | Status | Evidence |
+|---|---|---|
+| Migrations in version control, forward-only, tested on a fresh copy | **Exists** | `supabase/migrations/` (timestamped); `scripts/validate-migration-sql.mjs` refuses future dates; CI `verify-migrations-replay.yml` replays every migration on an empty database; `scripts/assert-migration-versions-parity.mjs` compares the repo with production's version list |
+| DB-enforced amount rules | **Exists** | Check constraints (`amount_minor > 0`, allowed `source`, `kind`, `paid_by`, `evidence_status`, `time_precision`); triggers `charges_amount_caps`, `paybacks_amount_caps`, `allocations_caps`, `payback_unlinked_caps` (allocations can't exceed the amount) |
+| Idempotent imports | **Exists** | Unique `(organization_id, source, source_ref)` on charges, `(organization_id, platform, reference)` on paybacks, `(organization_id, platform, platform_trip_id)` on trips; `(organization_id, command_id)` on decisions |
+| Append-only audit backbone | **Exists** | Triggers `decisions_append_only`, `suggestions_append_only`, `audit_log_append_only`, `nightly_results_append_only` |
+| File provenance on the batch | **Exists** | `fleet.import_batches`: `file_sha256`, `file_name`, `semantic_key`, `supersedes`, `rows_parsed/committed/duplicate/rejected/spilled`, `coverage_start/end`, `week_keys` |
+| Company isolation | **Exists, two levels** | RLS on every `toll` table (25 of 25); the Fleet server uses the service key (which skips RLS), so every write goes through `toll_system.*` functions that take the company from the user's token (design B7) |
+| Single-writer matcher | **Exists** | `toll_system.match_claim` claims queue rows with `FOR UPDATE SKIP LOCKED` and a 10-minute lease; a retried run gets `claim_gone` and does nothing |
+| Recompute after money changes (outbox) | **Exists** | Triggers `toll_*_period_refresh` queue a period refresh; Week Recon queues driver-week rebuilds (WRA-67) and desk rebuilds (WRA-43) |
+| Nightly proof the books add up | **Exists** | `toll.nightly_results` (60 rows, last 04:25 UTC 17 Nov, all `ok`): each `toll:*` account's ledger balance equals its records |
+| Alerts | **Exists, barely used** | `toll.alerts` (one open per company + problem), 0 rows; metric list in `docs/toll-architecture.md` "Metric and alert definitions" (views, not dashboards) |
+| Feature switch per company | **Exists** | `toll.switch_state.tolls_v2` |
+| Deploy through CI only | **Exists** | `deploy-supabase-edge.yml`, `deploy-recon-worker.yml`, `vercel-path-deploy.yml`; pre-push checks (`scripts/check-before-push.mjs`) |
+| Roles | **Exists, coarse** | Permissions in code (`packages/auth-client/src/permissions.ts`): `toll.manage` = owner or an active fleet_owner / fleet_manager seat; `toll.view` adds fleet_accountant; the database mirrors it, and a drift test guards it. Driver cash: the driver's own user only (`toll/v2/driver-cash` uses the caller's driver context) |
+| Correlation IDs and structured logs | **Partly** | Week Recon: `x-recon-correlation-id`, JSON `reconPhase` logs; toll commands carry `command_id`; no trace across import → matcher → ledger |
+| Week-close approval (four eyes) | **Partly** | Week Recon Close: prepare + approve, or self-approve with a written reason (WRA-32). Toll commands have none |
+
+### L2.2 Gaps found, each with one chosen fix
+
+| # | Gap | Fix (one) | Priority |
+|---|---|---|---|
+| **B12** | **Config has two owners** (`MATCHER_CONFIG_V1` in code and `toll.brain_policies`); `platform_settings` has 0 rows (silent defaults); `plaza_rules` has 0 rows | Seed `platform_settings` + `plaza_rules` at switch-on, refuse to match when a company's row is missing (loud, not silent). The v2 matcher reads only these. `brain_policies` stays owned by `toll-brain` (v181) **for Roam ride geofence detection and quotes only**, and an ADR records that boundary. Every settings change is a decision row (actor, before, after, reason) | P0 |
+| **B13** | **Sealed-week protection is in the commands only**, not in the database | A trigger on `allocations`, `charges`, `paybacks`, `payback_unlinked_decisions`, `carried_facts` and `disputes` refuses any insert, update or delete that touches a sealed week (except the seal and reopen functions themselves, by a session flag). Ledger rows already can't change (posting RPC) | P0 |
+| **B14** | **No four-eyes check on risky money commands** | `undo_decision`, `correct_charge_amount`, `correct_charge_week`, `reopen_week`, `close_dispute_lost` and policy changes need a second person above J$5,000 (any amount for `reopen_week`), using the existing Week Recon approval pattern (prepare + approve, or self-approve with a written reason when the company has one manager). Both actors are stored on the decision | P0 |
+| **B15** | **Role matrix not written down** ("a person" in this doc) | Matrix (below, L2.3) mapped to the existing permissions; the driver can only act on their own disputes and cash tolls | P0 |
+| **B16** | **Raw files not kept; no staging; RPO/RTO not set; no rebuild test** | Store every uploaded file in a private, versioned bucket (`toll-evidence`, never cleaned) keyed by `file_sha256`, kept 7 years. A standing **staging** project with masked, real-shaped data, where every release runs the done-tests and the never-used paths (B11). A **ledger reconstruction test**: rebuild every `toll:*` balance from decisions + records and prove it equals the ledger (extends the nightly check). Restore drill each quarter | P0 (files, rebuild test) / P1 (staging, drill) |
+| **B17** | **Kept-with-no-toll money has no end** | `payback_unallocated` holds J$1,200 decided "keep with no toll" (J$70 + J$780 on 15 Nov, J$350 on 17 Nov). Fix: a left-unlinked payback posts on to `toll:other_income` (the fleet's toll income) at the decision, so `payback_unallocated` only ever holds undecided money; a daily "unallocated paybacks" list with age | P0 |
+| **B18** | **Adapters don't detect a changed file layout** | Each adapter validates required columns and their types before writing anything. An unknown or missing column fails the batch with a named error (no partial write: an import batch is all-or-nothing, which `import_batch` already does per batch). The failed file is kept (B16) and can be re-run after a fix; a contract test per adapter uses a real, masked sample file | P1 |
+| **B19** | **No dashboards, SLOs or runbooks for tolls** | Dashboards: dispute funnel, unallocated paybacks, receivable vs open disputes, import row counts, matcher lag, nightly results. SLOs: matcher done ≤ 2 min after an import; nightly check 0 differences; 0 sealed-week changes; Uber report in ≤ 2 days after week end (alert on day 3). Runbooks: import failed, matcher stalled, nightly check failed, seal blocked, dispute job missed, Uber report late | P1 |
+| **B20** | **No property tests for money rules** | Property tests (random charges / paybacks / allocations / disputes): sums conserved, no negative owed, exactly one final dispute state, week adds up; plus chaos cases: kill the matcher mid-run, a corrupt CSV row, replay a batch | P1 |
+| **B21** | **Old claims not mapped** | The 219 `fleet.claims` (`Toll_Refund`, all resolved) stay read-only; a mapping view links each to its toll charge where one exists, so old disputes stay traceable | P1 |
+
+**Explicitly not doing** (reviewer agrees): no sharding, no Kafka or event bus, no generic rules engine, no partitioning at this size.
+
+### L2.3 Role matrix
+
+| Action | Driver | Fleet accountant | Fleet manager / owner | System |
+|---|---|---|---|---|
+| See own tolls, disputes, cash tolls | ✓ (own only) | ✓ | ✓ | — |
+| Log a cash toll | ✓ (own only) | — | ✓ | — |
+| Mark a dispute sent | ✓ (own only) | — | ✓ | — |
+| Upload files, confirm matches, Driver pays / Fleet pays | — | — | ✓ | — |
+| Close a dispute lost, undo, correct amount or week, reopen a week, change toll settings | — | — | ✓ + second person (B14) | — |
+| Open / settle / expire disputes, match, nightly checks | — | — | — | ✓ |
+| View everything | — | ✓ | ✓ | — |
+
+### L2.4 State tables (for the C4 tests to run as a matrix)
+
+**Dispute** (state × event → state):
+
+| From | `mark_dispute_sent` | refund fits (`settle_dispute`) | person closes part | `close_dispute_lost` / 2 periods pass with no refund | deadline passes |
+|---|---|---|---|---|---|
+| `to_send` | `sent` | `won` / stays (part) | — | — | `expired` |
+| `sent` | — | `won` / stays (part) | `part_won` | `lost` | — |
+| `won`, `part_won`, `lost`, `expired` | final (only `undo_decision`) | final | final | final | final |
+
+**Charge** (derived): `pending` → `short_paid` (a payback covers part) → `disputed` (dispute opened) → `decided` (dispute final, or Driver / Fleet pays). Plus the existing `duplicate`, `rejected`, `unverified`, `awaiting_cash`.
+
+### L2.5 Key flows (sequence)
+
+```mermaid
+sequenceDiagram
+  participant U as Uber report upload
+  participant M as Matcher
+  participant D as toll.disputes
+  participant S as Seal
+  participant L as Ledger
+  U->>M: trip payback J$370 on a J$390 toll
+  M->>D: open_dispute J$20 (to_send, deadline = trip + 9 days)
+  Note over D: driver app card, Mark as sent
+  S->>L: seal week: J$20 posts to toll:dispute_receivable
+  U->>M: next week: adjustment J$20
+  M->>D: settle_dispute → won
+  D->>L: carry_forward in the open week: refund clears the receivable
+```
+
+```mermaid
+sequenceDiagram
+  participant N as Nightly / next upload
+  participant D as toll.disputes
+  participant L as Ledger
+  N->>D: to_send past deadline → expired (driver, or fleet if opened_late)
+  N->>D: sent, two pay periods in, no refund → lost (fleet)
+  D->>L: carry_forward the bearer's share in the open week
+```
+
+### L2.6 Rollout
+
+1. Build behind a per-company switch (`toll_disputes`, `cash_in_fare`, `logged_trips`), all off.
+2. Prove on staging with the done-tests + property tests + the 9 Nov replay.
+3. Switch on for the owner's company; one real week with screenshots; the nightly check and receivable check must stay at 0 differences for 14 nights.
+4. Roll back by switching off: no new disputes open; open ones keep their state and can be closed by hand.
+
+## Part G — Questions only the owner can answer (reviewer round 1)
+
+| # | Question | Answer |
+|---|---|---|
+| Q1 | Scale in 1 and 3 years: companies, drivers, cars, weekly tolls and trips | _owner_ |
+| Q2 | Any audit, tax, insurer or data-residency rule on toll records (how long to keep them, where they must live)? | _owner_ |
+| Q3 | Team: who runs this day to day and who is on call when something breaks? | Today: the owner runs the weekly close; Claude (planner) and Cursor (builder) build; no separate ops engineer. _owner to confirm_ |
+| Q4 | Is company isolation a hard security boundary? | **Answered from the code:** yes. RLS is on every toll table, and server writes go through functions that take the company from the user's token (L2.1) |
+| Q5 | InDrive: does the rider pay the toll to the driver inside the cash fare? (decides `cash_in_fare`, B7) | _owner_ |
+| Q6 | Who writes and approves the dispute text the driver sends to Uber? | _owner_ |
+| Q7 | Does finance still need the 219 old claims, and for how long? | _owner_ (they stay in `fleet.claims`, read-only, until told otherwise) |
+| Q8 | Which Supabase plan / backup level is the production project on (sets RPO / RTO)? | _owner_ |
+
 ## Part E — Until this is agreed
 
 On step 3 the owner decides each shortfall as the old claims did (Fleet pays = Business Expense, Driver pays = Charge Driver). A later refund needs a manual decision. WRA-73 (show "paid back less than the toll" correctly) can go ahead, because it changes no money.
@@ -255,3 +389,6 @@ On step 3 the owner decides each shortfall as the old claims did (Fleet pays = B
 | 2 | 2026-11-17 | Claude | Rev 2 (owner: follow the playbook): one-sentence goal; one chosen fix per problem (B1–B11); blueprint C1 Data, C2 Server, C3 Screens with every button, C4 rules; Part D done-tests; no open options |
 | 3 | 2026-11-17 | Claude | Rev 3 (owner fact: Uber gives drivers 9 days to dispute): window moved to the platform setting (Uber 9); disputes open the moment platform data arrives; `opened_late` → fleet bears; done-test 5 + 5b |
 | 4 | 2026-11-17 | Claude | Rev 4 (owner fact: a dispute refund always arrives in the next pay period or the one after, never later): refund matching limited to those two periods; a dispute with no refund after both is lost automatically; done-tests 3, 3b, 6 |
+| 5 | 2026-11-17 | Reviewer | Round 1: L1 domain strong; L2 envelope (NFRs, security, observability, resilience, release, governance) almost absent; asked for Part 0, L2 gaps, roles, state tables, diagrams, rollout, 7 questions |
+| 6 | 2026-11-17 | Claude | Rev 5: checked every L2 point against the code and live data (L2.1, with evidence; much already exists). Added Part 0, gaps B12–B21 each with one fix and a priority, role matrix, dispute/charge state tables, sequence diagrams, rollout, Part G owner questions. Corrected: the J$70 adjustment was kept "with no toll" by the owner (not ownerless); found J| 4 | 2026-11-17 | Claude | Rev 4 (owner fact: a dispute refund always arrives in the next pay period or the one after, never later): refund matching limited to those two periods; a dispute with no refund after both is lost automatically; done-tests 3, 3b, 6 |
+,200 kept-with-no-toll money with no end account (B17) |
