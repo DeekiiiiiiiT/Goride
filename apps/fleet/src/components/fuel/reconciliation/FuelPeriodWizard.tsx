@@ -500,6 +500,7 @@ function FuelPeriodWizardInner({
 
         let hit: {
           id?: string;
+          version?: number;
           leakageReviewedAt?: string | null;
           leakageReviewedBy?: string | null;
           leakageReviewedNote?: string | null;
@@ -519,6 +520,8 @@ function FuelPeriodWizardInner({
           if (p?.id) {
             hit = {
               id: String(p.id),
+              // The bundle carries the week's version; dropping it left the screen with none (or a stale one).
+              version: Number(p.version) || undefined,
               leakageReviewedAt: (p.leakageReviewedAt as string) || null,
               leakageReviewedBy: (p.leakageReviewedBy as string) || null,
               leakageReviewedNote: (p.leakageReviewedNote as string) || null,
@@ -848,11 +851,7 @@ function FuelPeriodWizardInner({
       toast.success('Vehicle marked reviewed');
       setClosableTick((tick) => tick + 1);
     } catch (e: any) {
-      if (e?.message === 'version_conflict') {
-        toast.message('Period changed — refresh and try again.');
-        return;
-      }
-      toast.message(e?.message || 'Saved locally — server sync failed.');
+      toast.error(e?.message || 'Could not save this review. Try again.');
     }
   };
 

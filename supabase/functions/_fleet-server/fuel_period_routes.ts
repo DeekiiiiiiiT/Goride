@@ -281,6 +281,56 @@ async function loadPeriod(orgId: string, periodId: string) {
   return data as Record<string, unknown> | null;
 }
 
+/**
+ * Add a review note (gap accept, vehicle reviewed) to the LATEST copy of the week. These notes
+ * do not depend on the week's numbers, so a version the screen holds from earlier is not
+ * required: background recomputes re-version the week every few minutes, and checking the
+ * screen's version made every accept fail with "version_conflict" (16 Nov, 19 Oct week).
+ * The write itself stays safe against a save landing at the same moment: it only applies on the
+ * version it just read, and re-reads and retries (up to 4 times) when that version moved.
+ */
+async function mergeIntoLatestPeriod(
+  orgId: string,
+  periodId: string,
+  build: (period: Record<string, unknown>) => Record<string, unknown>,
+): Promise<
+  | { ok: true; version: number }
+  | { ok: false; status: 404 | 409 | 500; body: Record<string, unknown> }
+> {
+  const sb = getServiceClient();
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const period = await loadPeriod(orgId, periodId);
+    if (!period) return { ok: false, status: 404, body: { error: "Not found" } };
+    if (String(period.status) === "locked") {
+      return {
+        ok: false,
+        status: 409,
+        body: { error: "period_locked", message: "This fuel week is already locked. Reopen it to change it." },
+      };
+    }
+    const current = Number(period.version) || 1;
+    const fields = build(period);
+    const { data: updated, error } = await sb
+      .from("fuel_reconciliation_period")
+      .update({ ...fields, version: current + 1, updated_at: new Date().toISOString() })
+      .eq("id", periodId)
+      .eq("org_id", orgId)
+      .eq("version", current)
+      .select("id")
+      .maybeSingle();
+    if (error) return { ok: false, status: 500, body: { error: error.message } };
+    if (updated) return { ok: true, version: current + 1 };
+  }
+  return {
+    ok: false,
+    status: 409,
+    body: {
+      error: "busy",
+      message: "The fuel week is being recalculated right now. Wait a few seconds and try again.",
+    },
+  };
+}
+
 async function insertAudit(
   orgId: string,
   periodId: string,
@@ -1521,10 +1571,9 @@ export function registerFuelPeriodRoutes(app: Hono) {
       if (unapproved) {
         return c.json(unapproved, 422);
       }
-      const ifMatch = c.req.header("If-Match");
-      if (ifMatch != null && ifMatch !== "" && Number(ifMatch) !== Number(period.version)) {
-        return c.json({ error: "version_conflict", currentVersion: period.version }, 409);
-      }
+      // No If-Match check here: the week is re-versioned by every background recompute, so a
+      // screen-held version is almost always stale. The snapshot / inputs-hash check below is
+      // what guarantees the locked numbers are current.
       const body = await c.req.json().catch(() => ({}));
       const requestedVersion = Number(body.snapshotVersion);
       if (!Number.isFinite(requestedVersion) || requestedVersion <= 0) {
@@ -1915,43 +1964,19 @@ export function registerFuelPeriodRoutes(app: Hono) {
       const vehicleId = String(body.vehicleId || "").trim();
       if (!vehicleId) return c.json({ error: "vehicleId required" }, 400);
       const note = String(body.note || "").trim() || null;
-      const period = await loadPeriod(orgId, periodId);
-      if (!period) return c.json({ error: "Not found" }, 404);
-      if (String(period.status) === "locked") {
-        return c.json({ error: "period_locked" }, 409);
-      }
-      const ifMatch = c.req.header("If-Match");
-      if (ifMatch != null && ifMatch !== "" && Number(ifMatch) !== Number(period.version)) {
-        return c.json({ error: "version_conflict", currentVersion: period.version }, 409);
-      }
       const actor = actorId(c);
       const now = new Date().toISOString();
-      const existing = Array.isArray(period.data_quality_vehicle_reviews)
-        ? (period.data_quality_vehicle_reviews as Array<Record<string, unknown>>)
-        : [];
-      const filtered = existing.filter((r) => String(r?.vehicleId || r?.vehicle_id || "") !== vehicleId);
-      const next = [
-        ...filtered,
-        { vehicleId, at: now, by: actor, note },
-      ];
-      const nextVersion = (Number(period.version) || 1) + 1;
-      const sb = getServiceClient();
-      const { data: updated, error } = await sb
-        .from("fuel_reconciliation_period")
-        .update({
-          data_quality_vehicle_reviews: next,
-          version: nextVersion,
-          updated_at: now,
-        })
-        .eq("id", periodId)
-        .eq("org_id", orgId)
-        .eq("version", Number(period.version) || 1)
-        .select("id")
-        .maybeSingle();
-      if (error) return c.json({ error: error.message }, 500);
-      if (!updated) {
-        return c.json({ error: "version_conflict", currentVersion: period.version }, 409);
-      }
+      let next: Array<Record<string, unknown>> = [];
+      const merged = await mergeIntoLatestPeriod(orgId, periodId, (period) => {
+        const existing = Array.isArray(period.data_quality_vehicle_reviews)
+          ? (period.data_quality_vehicle_reviews as Array<Record<string, unknown>>)
+          : [];
+        const filtered = existing.filter((r) => String(r?.vehicleId || r?.vehicle_id || "") !== vehicleId);
+        next = [...filtered, { vehicleId, at: now, by: actor, note }];
+        return { data_quality_vehicle_reviews: next };
+      });
+      if (!merged.ok) return c.json(merged.body, merged.status);
+      const nextVersion = merged.version;
       await insertAudit(
         orgId,
         periodId,
@@ -1995,15 +2020,6 @@ export function registerFuelPeriodRoutes(app: Hono) {
         );
       }
       const note = String(body.note || "").trim();
-      const period = await loadPeriod(orgId, periodId);
-      if (!period) return c.json({ error: "Not found" }, 404);
-      if (String(period.status) === "locked") {
-        return c.json({ error: "period_locked" }, 409);
-      }
-      const ifMatch = c.req.header("If-Match");
-      if (ifMatch != null && ifMatch !== "" && Number(ifMatch) !== Number(period.version)) {
-        return c.json({ error: "version_conflict", currentVersion: period.version }, 409);
-      }
       const actor = actorId(c);
       const now = new Date().toISOString();
       const incoming = rawAccepts.map((raw: Record<string, unknown>) => ({
@@ -2021,28 +2037,16 @@ export function registerFuelPeriodRoutes(app: Hono) {
       if (incoming.length === 0) {
         return c.json({ error: "accepts_invalid" }, 400);
       }
-      const existing = Array.isArray(period.stop_to_stop_gap_accepts)
-        ? (period.stop_to_stop_gap_accepts as Parameters<typeof upsertStopToStopGapAccepts>[0])
-        : [];
-      const next = upsertStopToStopGapAccepts(existing, incoming);
-      const nextVersion = (Number(period.version) || 1) + 1;
-      const sb = getServiceClient();
-      const { data: updated, error } = await sb
-        .from("fuel_reconciliation_period")
-        .update({
-          stop_to_stop_gap_accepts: next,
-          version: nextVersion,
-          updated_at: now,
-        })
-        .eq("id", periodId)
-        .eq("org_id", orgId)
-        .eq("version", Number(period.version) || 1)
-        .select("id")
-        .maybeSingle();
-      if (error) return c.json({ error: error.message }, 500);
-      if (!updated) {
-        return c.json({ error: "version_conflict", currentVersion: period.version }, 409);
-      }
+      let next: ReturnType<typeof upsertStopToStopGapAccepts> = [];
+      const merged = await mergeIntoLatestPeriod(orgId, periodId, (period) => {
+        const existing = Array.isArray(period.stop_to_stop_gap_accepts)
+          ? (period.stop_to_stop_gap_accepts as Parameters<typeof upsertStopToStopGapAccepts>[0])
+          : [];
+        next = upsertStopToStopGapAccepts(existing, incoming);
+        return { stop_to_stop_gap_accepts: next };
+      });
+      if (!merged.ok) return c.json(merged.body, merged.status);
+      const nextVersion = merged.version;
       await insertAudit(
         orgId,
         periodId,
@@ -2085,21 +2089,18 @@ export function registerFuelPeriodRoutes(app: Hono) {
       if (!target.vehicleId || !target.endDate) {
         return c.json({ error: "target_required" }, 400);
       }
-      const next = revokeStopToStopGapAccept(existing, target);
+      void existing;
       const actor = actorId(c);
-      const now = new Date().toISOString();
-      const nextVersion = (Number(period.version) || 1) + 1;
-      const sb = getServiceClient();
-      const { error } = await sb
-        .from("fuel_reconciliation_period")
-        .update({
-          stop_to_stop_gap_accepts: next,
-          version: nextVersion,
-          updated_at: now,
-        })
-        .eq("id", periodId)
-        .eq("org_id", orgId);
-      if (error) return c.json({ error: error.message }, 500);
+      let next: ReturnType<typeof revokeStopToStopGapAccept> = [];
+      const merged = await mergeIntoLatestPeriod(orgId, periodId, (latest) => {
+        const current = Array.isArray(latest.stop_to_stop_gap_accepts)
+          ? (latest.stop_to_stop_gap_accepts as Parameters<typeof revokeStopToStopGapAccept>[0])
+          : [];
+        next = revokeStopToStopGapAccept(current, target);
+        return { stop_to_stop_gap_accepts: next };
+      });
+      if (!merged.ok) return c.json(merged.body, merged.status);
+      const nextVersion = merged.version;
       await insertAudit(orgId, periodId, "stop_to_stop_gap_accept_revoke", { target }, actor);
       return c.json({ ok: true, stopToStopGapAccepts: next, version: nextVersion });
     },
