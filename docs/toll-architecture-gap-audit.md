@@ -1,6 +1,6 @@
 # Toll architecture — as-built audit and what it lacks
 
-**Rev 10 · 2026-11-17 · For: the architecture reviewer · Status: OPEN, no build until the reviewer and the owner agree.**
+**Rev 11 · 2026-11-17 · For: the architecture reviewer · Status: OPEN, no build until the reviewer and the owner agree.**
 
 **What it's for (one sentence):** every toll the fleet pays ends with the right person bearing it: the platform (paid back first time, or after a dispute), the driver or the fleet. Nothing is decided before the facts are in, and the week still closes on time.
 
@@ -174,8 +174,9 @@ Each gap: what the business needs, what the **old system** did (retired 14 Nov),
 
 - **Old:** `tollRefundResolution = cash_wash`: the rider paid the toll to the driver in cash, so nobody is charged.
 - **v2:** Uber cash trips are covered (a `trip_line` payback with `received_by = driver`, posted to `recovered_in_driver_cash`). Other platforms' cash trips have no path (follows from B6).
-- **Fix (one):** a new platform payback mode, `cash_in_fare`. For InDrive (and any platform set to it), a toll during a **cash** trip is covered by the rider's fare: the system writes a native-style payback `received_by driver` and allocates it (cash wash). Nobody is charged and no dispute opens. A card trip on a platform that never pays tolls back goes to the policy bearer.
-- **Priority (U7):** **P0, blocked on owner Q5.** It becomes buildable the moment Q5 is answered. Until then, a toll on a hand-logged InDrive trip shows in "Tolls with no trip" (B6 still lets the matcher see the trip).
+- **Owner facts (Q5, 17 Nov 2026):** InDrive trips are cash in practice (digital payment exists but is never used). The toll itself is paid by the **tag** or in **cash** at the booth. The **rider** owes the toll, and on a cash trip the **driver** must collect it from the rider. The fleet then decides whether to charge it to the driver.
+- **Fix (one):** a new platform payback mode, **`rider_pays_driver`** (InDrive's setting; `takes_disputes = no`). A toll during a trip on such a platform (found through B6's logged trips) is matched to the trip like any other, and the system **suggests "Driver pays — the rider owed this toll and the driver collects it in cash"**. Nothing is automatic. A fleet manager confirms **Driver pays** (the default) or chooses **Fleet pays** (for example, the driver couldn't collect). This applies whether the booth was paid by tag or by the driver's cash: either way the rider's toll money is in the driver's hand. No dispute opens, and nobody is charged without a person's decision.
+- **Priority (U7):** **P0, unblocked** (Q5 answered). It needs B6 (logged trips), because the toll has to be matched to the InDrive trip first.
 
 ### B8. "Paid back less than the toll" has no state and is shown as "no trip"
 
@@ -215,7 +216,7 @@ Driver cash charges, Roam native charges, `carry_forward`, duplicate review, tak
 | **`toll.dispute_text_templates`** (new, U3) | One approved version of the dispute text per platform | `platform`, `version` (unique **per platform**: the key is `(platform, version)`, X4), `body` (with placeholders: trip date and time, plaza, toll, paid, owed), `approved_by`, `approved_at`, `retired_at`. Append-only: a version is never edited, only retired. The dispute stores the `text_version` the driver was shown, so the exact text can always be rebuilt |
 | **Pay period (T6)** | — | One Monday–Sunday Jamaica week (Part 0 timezone rule; the same week as ADR 0007). "The pay period after X" = the first full week that **starts after** X. "Both refund periods in" = the platform reports for the first and second full weeks starting after `clock_from` are **in** |
 | `toll_week` statement (changed, R9) | One per company per sealed week | Gains `disputed_minor` (open dispute amounts at seal). Ignored by `resolveTollInputs`; shown as provisional (A8). |
-| `toll.platform_settings` (filled) | One per platform per company | Adds the `payback_mode` value `cash_in_fare`. Written at switch-on with explicit defaults (Uber: `trip_line` + adjustments, opens disputes; InDrive: `cash_in_fare`; Roam: `native`). |
+| `toll.platform_settings` (filled) | One per platform per company | Adds the `payback_mode` value `rider_pays_driver`. Written at switch-on with explicit defaults (Uber: `trip_line` + adjustments, opens disputes; InDrive: `rider_pays_driver`, `takes_disputes = no`; Roam: `native`). |
 | `toll.plaza_rules` (extended) | One per plaza | Adds `tag_price_minor` and `platform_rates` (by platform, each with `valid_from`). |
 | `toll.platform_settings` (dispute fields) | One per platform per company | `takes_disputes` (Uber: yes), `dispute_window_days` (**Uber: 9**), `refund_periods` (**Uber: 2**, the pay periods after sending in which a refund can arrive), `no_report_fallback_days` (**23**, R3, owner Q9). Why 23 (U9): the second full weekly pay period after `clock_from` ends at most 21 days later (up to 7 days to the next Monday, then 14 days), and the Uber report is due within 2 days after a week ends (Part 0). So 23 is the earliest day on which a missing report is really late. It never closes a dispute while its second period is running or its report is still due. On a platform with `takes_disputes = no`, an adjustment follows only today's 7-day charge match, and a refund on an already-decided shortfall is left unlinked by design for a person (S16b). |
 | Fleet Policy (extended) | One per company | `toll_dispute_lost_bearer` (default `fleet`), `toll_dispute_expired_bearer` (default `driver`); a dispute with `opened_late` is always borne by the fleet. |
@@ -237,7 +238,7 @@ Driver cash charges, Roam native charges, `carry_forward`, duplicate review, tak
 | `undo_decision` on a dispute result (changed, R10) | Manager + second person (B14) | Never edits the sealed ledger. Posts a reversing `dispute_result` through `carry_forward` in the open week, and writes a new dispute row (`reopens_id`, `close_reason = undo` on the old one) in the state before the undone result, with that state's `clock_from`. **Allocations:** reverses exactly the allocations the undone step wrote (by `decision_id`) and writes those of the restored state, in one transaction, reversal first (C1 W1 rule 5, Y3). |
 | `seal_week` (changed) | Manager | Accepts a charge whose only provisional allocation is an open dispute's (C1 W1 rule 1), exactly as it already accepts Roam `awaiting_cash`; puts `disputed_minor` = Σ those provisional allocations on the statement (R9). Still refuses a `short_paid` charge (R8 gives it a screen and buttons). |
 | Dispute result after the seal | System | Posted through `carry_forward` (new `kind` `dispute_result`) in **the open week at the moment of posting**, recorded as `posted_in_week_key` when it posts (T1). The sealed week's money is never touched (R1). |
-| Matcher (changed) | System | Adjustments and trip paybacks for a disputed charge: the dispute first (B3, R6). Trip paybacks: compared with the platform's rate on the trip date (B9, S6). Cash trips on `cash_in_fare` platforms: cash wash (B7). |
+| Matcher (changed) | System | Adjustments and trip paybacks for a disputed charge: the dispute first (B3, R6). Trip paybacks: compared with the platform's rate on the trip date (B9, S6). A toll on a trip of a `rider_pays_driver` platform (InDrive): a suggestion "Driver pays — rider owed it, driver collects in cash", shown in **Suggested matches**; a fleet manager confirms Driver pays or picks Fleet pays (B7). |
 | Settings seed (S16) | Owner | At switch-on, the seed values for `platform_settings` and `plaza_rules` are shown to the owner, and approving them writes a decision row. Matching refuses to run for a company whose rows are missing (B12). |
 | Logged-trips adapter | System, on trip save and nightly | Upserts hand-logged `fleet.trips` into `toll.platform_trips` (B6). |
 
@@ -271,7 +272,7 @@ Driver cash charges, Roam native charges, `carry_forward`, duplicate review, tak
 4. The week adds up to the cent (Z3). **Open week:** spend = platform + driver + fleet + the week's open disputes (`to_send` / `sent`, i.e. its provisional dispute allocations). **Sealed week:** spend = platform + driver + fleet + `disputed_minor` **as at the seal**; later results land in later weeks, so the current `receivable_platform_dispute` may differ, and the combined view (A8) reconciles the two per charge.
 5. `receivable_platform_dispute` = Σ (owed − recovered) over non-final disputes, every night; the "Owed by platforms" report = `receivable_platform` + `receivable_platform_dispute`, and no report adds the group to its members (R2, T4).
 6. A refund is matched to a dispute only in the two pay periods after `clock_from`. Auto-close applies only to `sent` disputes with `clock_from` set (U13). Once both periods are in: no refund → `lost` (`no_refund_two_periods`), part refund → `part_won` (`partial_refund_two_periods`) (R4, T5). A missing report closes it at 23 days as `no_report` (R3). Reopened `expired` disputes follow T3, not this rule.
-7. A cash trip on a `cash_in_fare` platform never opens a dispute or charges anyone.
+7. A toll on a `rider_pays_driver` (InDrive) trip never opens a dispute and is never charged to anyone without a person's decision; its suggestion is always "Driver pays".
 8. A sealed week's money never changes. Settling, losing, expiring or undoing a dispute whose charge week is sealed **succeeds**: the sealed ledger stays byte-identical, and the posting lands in **the open week at the moment of posting**, which is stored as `posted_in_week_key` (R1, R10, T1). A dispute that stays open across several weeks posts its result in whatever week is open when it closes.
 9. A trip payback never allocates to a charge with an open dispute; it settles the dispute instead (R6).
 10. Reversing a payback that settled a dispute reopens it as a new row, in the state it was settled from (`sent` with a fresh `clock_from`, or `expired` with the bearer charged again), with `owed` = the reversed link's amount, and reverses the money in the open week (R7, T3, U10). No reopened dispute can stall.
@@ -299,7 +300,8 @@ In Part D, "next week" means the first full pay period (Monday–Sunday) after t
 6. No refund in either of the two pay periods after sending → when the second report is uploaded, the dispute is lost by itself and the fleet bears J$20. (A person can also press **Lost** earlier.)
 7. Uber pays J$10 of J$20 → the person closes it → J$10 recovered, J$10 to the lost bearer.
 7b. Uber pays J$10 of J$20 and nobody closes it → when the second pay period's report is in, it becomes `part_won` by itself: J$10 recovered, J$10 to the lost bearer (R4).
-8. A hand-logged cash InDrive trip covers a toll → cash wash; nothing in "no trip", no dispute. *(Blocked on owner Q5.)*
+8. A tag toll falls inside a hand-logged InDrive cash trip → it shows in **Suggested matches** as "Driver pays — rider owed this toll, driver collects it in cash"; the manager presses **Driver pays** → the driver bears it. Same toll, the manager presses **Fleet pays** instead (the driver couldn't collect) → the fleet bears it. Nothing in "no trip", no dispute.
+8b. The driver paid an InDrive-trip toll in cash at the booth (a driver cash toll) → the same suggestion; Driver pays means the driver isn't paid back for it, because the rider's cash covered it.
 9. A toll during a Roam ride → native, unchanged.
 10. A toll with no trip on any platform → only in "Tolls with no trip".
 11. **Staging only** (forward-only, S11): replay a copy of the week of 9 Nov 2026 → 12 disputes (J$240) in **Disputes**, and the Portmore paybacks are exact matches at Uber's rate. Production's 9 Nov is never touched.
@@ -362,7 +364,7 @@ On step 3 the owner decides each shortfall as the old claims did (Fleet pays = B
 
 **Explicitly not doing** (reviewer agrees): no sharding, no Kafka or event bus, no generic rules engine, no partitioning at this size.
 
-**Blocked on the owner (S13):** B7 (`cash_in_fare`) and done-test 8 are blocked on **Q5**; B5's dispute text and any SMS are blocked on **Q6**; the R3 fallback length (23 days) waits for **Q9**; the late-dispute behaviour (S4) waits for **Q10**; the staging alert owner waits for **Q11**. Everything else can be built in the P0 → P1 order.
+**Blocked on the owner (S13):** B7 is **unblocked** (Q5 answered 17 Nov); B5's dispute text and any SMS are blocked on **Q6**; the R3 fallback length (23 days) waits for **Q9**; the late-dispute behaviour (S4) waits for **Q10**; the staging alert owner waits for **Q11**. Everything else can be built in the P0 → P1 order.
 
 ### L2.3 Role matrix
 
@@ -435,7 +437,7 @@ sequenceDiagram
 ### L2.6 Rollout
 
 0. **Settings first (U1)**, before the "refuse to match without settings" check (B12) ships: (a) run the seed for the live company in dry-run, showing every `platform_settings` and `plaza_rules` value; (b) the owner approves it, which writes a decision row; (c) commit the seed; (d) only then deploy and switch on the refusal. The live matcher never sees a missing row.
-1. Build behind a per-company switch (`toll_disputes`, `cash_in_fare`, `logged_trips`), all off.
+1. Build behind a per-company switch (`toll_disputes`, `rider_pays_driver`, `logged_trips`), all off.
 2. Prove on staging with the done-tests + property tests + the 9 Nov replay.
 3. Switch on for the owner's company; one real week with screenshots; the nightly check and receivable check must stay at 0 differences for 14 nights.
 4. Roll back by switching off: no new disputes open; open ones keep their state and can be closed by hand.
@@ -448,7 +450,7 @@ sequenceDiagram
 | Q2 | Any audit, tax, insurer or data-residency rule on toll records (how long to keep them, where they must live)? | _owner_ |
 | Q3 | Team: who runs this day to day and who is on call when something breaks? | Today: the owner runs the weekly close; Claude (planner) and Cursor (builder) build; no separate ops engineer. _owner to confirm_ |
 | Q4 | Is company isolation a hard security boundary? | **Answered from the code:** yes. RLS is on every toll table, and server writes go through functions that take the company from the user's token (L2.1) |
-| Q5 | InDrive: does the rider pay the toll to the driver inside the cash fare? (decides `cash_in_fare`, B7) | _owner_ |
+| Q5 | InDrive: does the rider pay the toll to the driver inside the cash fare? (B7) | **Answered 17 Nov** (see the log): the rider owes it; the driver collects it in cash; the fleet decides whether to charge the driver |
 | Q6 | Who writes and approves the dispute text the driver sends to Uber? | _owner_ |
 | Q7 | Does finance still need the 219 old claims, and for how long? | **Answered:** leave legacy data alone; they stay in `fleet.claims` untouched |
 | Q8 | Which Supabase plan / backup level is the production project on (sets RPO / RTO)? | _owner_ |
@@ -457,7 +459,7 @@ sequenceDiagram
 | Q11 | Who watches the staging refresh alert and keeps staging working? (U15) | _owner_ |
 | Q12 | When a platform pays **nothing** back on a trip, which trips count as "covered" (so the system should open a dispute by itself)? For example: every card trip on Uber that crossed a plaza? (W2; until answered, a person opens these disputes) | _owner_ |
 
-**Sign-off rule for open questions (X15):** before build starts, every question is either answered (logged below) or marked **deferred** with what it blocks and until when. Today: Q5 blocks B7 and done-test 8; Q6 blocks the dispute text and SMS (B5); Q9 / Q10 / Q11 have working defaults in the design (23 days; send late disputes; Claude watches staging) and can be confirmed later; Q1, Q2, Q8 shape Part 0 targets only; Q12 is a follow-up and doesn't block the first build.
+**Sign-off rule for open questions (X15):** before build starts, every question is either answered (logged below) or marked **deferred** with what it blocks and until when. Today: Q5 is answered; Q6 blocks the dispute text and SMS (B5); Q9 / Q10 / Q11 have working defaults in the design (23 days; send late disputes; Claude watches staging) and can be confirmed later; Q1, Q2, Q8 shape Part 0 targets only; Q12 is a follow-up and doesn't block the first build.
 
 **Answers log (U12).** Every owner answer is recorded here with its date, and the rows it changes are revised in the same revision.
 
@@ -466,6 +468,7 @@ sequenceDiagram
 | 2026-11-17 | — | Uber gives the driver 9 days to dispute a toll | Rev 3: `dispute_window_days` = 9 |
 | 2026-11-17 | — | A dispute refund always arrives in the next pay period or the one after, never later | Rev 4: `refund_periods` = 2, auto-close |
 | 2026-11-17 | Q7 | Leave reconciled weeks and legacy data alone | Rev 6: forward-only rule; B21 dropped |
+| 2026-11-17 | Q5 | InDrive can take digital payments but never does: 100% cash trips. The toll is paid with the tag or with cash. It's still the rider that should pay it; the driver should collect the toll from the passenger on a cash trip, and the fleet decides whether to charge it to the driver or not | Rev 11: B7 rewritten (`cash_in_fare` auto-wash → `rider_pays_driver` with a "Driver pays" suggestion the fleet confirms or changes); C1 setting, C2 matcher, C4.7, done-tests 8 + 8b, rollout switch |
 
 ---
 
@@ -488,3 +491,4 @@ sequenceDiagram
 | 13 | 2026-11-17 | Claude | Rev 9: **W1** solved with the design's existing **provisional allocation** (live `toll.allocations` already has `bearer`, `payback_id`, `provisional`, `reversed_by`; adds `dispute_id`): opening a dispute writes a provisional platform allocation (the seal already accepts provisional ones, as for Roam `awaiting_cash`), and each result turns it firm, moves it to the bearer, or transfers between them (5 rules in C1, named in every C2 command, C4.11). The receivable is now posted when the dispute opens, not at seal. **W2** `open_dispute` refuses sealed charges (`charge_sealed`, C4.12); B1 says auto only for a remainder, zero-paid by a person until Q12. X1–X15 and N1–N7 applied (B22 load test added as P1; C4 renumbered 11–13) |
 | 14 | 2026-11-17 | Reviewer | Round 5 on Rev 9: round 4 (W1, W2, X1–X15, N1–N7) closed; the provisional-allocation design is right. **3 new blocking from W1's own mechanism** — Y1 `decided` (seal criterion, includes provisional) vs `disputed` (screens) vs L2.4's progression contradict each other and will produce three implementations; Y2 L2.4 `to_send` row allows `settle_dispute` that B3 and C3 forbid; Y3 W1 reverse-and-replace must be one transaction, reversal-first, or `allocations_caps` fires mid-transaction. **4 should-fix** — Z1 `expired` is settleable but listed as final with only two exceptions; Z2 role matrix missing "open a dispute by hand"; Z3 C4.4 holds for open weeks only; Z4 B4's late-open rule can't apply to a sealed-week charge (W2 refuses it). 5 nits. Rev 10 |
 | 15 | 2026-11-17 | Claude | Rev 10: **Y1** vocabulary in A6 (`decided` = seal criterion incl. provisional; `disputed` / `resolved` / `short_paid` = screen states), A7, L2.4 and C4.14. **Y2** `to_send` can't be settled. **Y3** checked live: `allocations_caps` is an AFTER-each-row trigger and not deferrable, so **order** matters, not just one transaction; also, a row can't be partly reversed, so every rule now reverses the whole row and re-inserts the moved slice plus any remainder (C1, C2, C4.15). **Z1** `expired` = bearer-set, not final; the nightly receivable sums `to_send` / `sent` only. Z2–Z4 and N8–N12 applied (N9: `allocations.decision_id` already exists live) |
+| 16 | 2026-11-17 | Claude | Rev 11 (owner answered Q5): InDrive is cash in practice; the rider owes the toll and the driver collects it; the fleet decides whether to charge the driver. B7 changed from an automatic cash wash (`cash_in_fare`, nobody charged) to `rider_pays_driver`: the toll is matched to the InDrive trip and the system **suggests Driver pays**, which a fleet manager confirms or changes to Fleet pays. No dispute, nothing automatic. B7 unblocked |
