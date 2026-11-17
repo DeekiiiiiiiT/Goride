@@ -1,6 +1,6 @@
 # Toll architecture — as-built audit and what it lacks
 
-**Rev 5 · 2026-11-17 · For: the architecture reviewer · Status: OPEN, no build until the reviewer and the owner agree.**
+**Rev 6 · 2026-11-17 · For: the architecture reviewer · Status: OPEN, no build until the reviewer and the owner agree.**
 
 **What it's for (one sentence):** every toll the fleet pays ends with the right person bearing it: the platform (paid back first time, or after a dispute), the driver or the fleet. Nothing is decided before the facts are in, and the week still closes on time.
 
@@ -20,6 +20,8 @@ The reviewer challenges any part. Claude replies and revises until no gap is lef
 **Two layers** (reviewer round 1):
 - **L1, the toll domain** (Parts A–D): who bears each toll, and do the numbers add up?
 - **L2, the platform envelope** (Part L2, after Part D): can we run, prove, secure, change and recover it?
+
+**Forward only (owner, 17 Nov 2026):** nothing in this document changes, re-runs or back-fills a week that is already reconciled, or any legacy data (the old toll records, the 219 old `fleet.claims`, money already decided). Every fix applies from the day it is switched on, to open weeks and new records only.
 
 **The reviewer has no access to the app or the database.** Every "exists" claim in this document cites a file, a migration or a live query result (17 Nov 2026), so the reviewer can judge without seeing the system.
 
@@ -294,12 +296,12 @@ Driver cash charges, Roam native charges, `carry_forward`, duplicate review, tak
 | **B13** | **Sealed-week protection is in the commands only**, not in the database | A trigger on `allocations`, `charges`, `paybacks`, `payback_unlinked_decisions`, `carried_facts` and `disputes` refuses any insert, update or delete that touches a sealed week (except the seal and reopen functions themselves, by a session flag). Ledger rows already can't change (posting RPC) | P0 |
 | **B14** | **No four-eyes check on risky money commands** | `undo_decision`, `correct_charge_amount`, `correct_charge_week`, `reopen_week`, `close_dispute_lost` and policy changes need a second person above J$5,000 (any amount for `reopen_week`), using the existing Week Recon approval pattern (prepare + approve, or self-approve with a written reason when the company has one manager). Both actors are stored on the decision | P0 |
 | **B15** | **Role matrix not written down** ("a person" in this doc) | Matrix (below, L2.3) mapped to the existing permissions; the driver can only act on their own disputes and cash tolls | P0 |
-| **B16** | **Raw files not kept; no staging; RPO/RTO not set; no rebuild test** | Store every uploaded file in a private, versioned bucket (`toll-evidence`, never cleaned) keyed by `file_sha256`, kept 7 years. A standing **staging** project with masked, real-shaped data, where every release runs the done-tests and the never-used paths (B11). A **ledger reconstruction test**: rebuild every `toll:*` balance from decisions + records and prove it equals the ledger (extends the nightly check). Restore drill each quarter | P0 (files, rebuild test) / P1 (staging, drill) |
-| **B17** | **Kept-with-no-toll money has no end** | `payback_unallocated` holds J$1,200 decided "keep with no toll" (J$70 + J$780 on 15 Nov, J$350 on 17 Nov). Fix: a left-unlinked payback posts on to `toll:other_income` (the fleet's toll income) at the decision, so `payback_unallocated` only ever holds undecided money; a daily "unallocated paybacks" list with age | P0 |
+| **B16** | **Raw files not kept; no staging; RPO/RTO not set; no rebuild test** | Store every uploaded file in a private, versioned bucket (`toll-evidence`, never cleaned) keyed by `file_sha256`, kept 7 years. A standing **staging** project with masked, real-shaped data, where every release runs the done-tests and the never-used paths (B11). A **ledger reconstruction test**: rebuild every `toll:*` balance from decisions + records **since the 14 Nov 2026 switch** and prove it equals the ledger (extends the nightly check). Restore drill each quarter | P0 (files, rebuild test) / P1 (staging, drill) |
+| **B17** | **Kept-with-no-toll money has no end** | `payback_unallocated` holds J$1,200 decided "keep with no toll" (J$70 + J$780 on 15 Nov, J$350 on 17 Nov). Fix: from switch-on, a left-unlinked payback posts on to `toll:other_income` (the fleet's toll income) at the decision, so `payback_unallocated` only holds undecided money from then on; a daily "unallocated paybacks" list with age. The J$1,200 already kept stays as it is (forward only) | P0 |
 | **B18** | **Adapters don't detect a changed file layout** | Each adapter validates required columns and their types before writing anything. An unknown or missing column fails the batch with a named error (no partial write: an import batch is all-or-nothing, which `import_batch` already does per batch). The failed file is kept (B16) and can be re-run after a fix; a contract test per adapter uses a real, masked sample file | P1 |
 | **B19** | **No dashboards, SLOs or runbooks for tolls** | Dashboards: dispute funnel, unallocated paybacks, receivable vs open disputes, import row counts, matcher lag, nightly results. SLOs: matcher done ≤ 2 min after an import; nightly check 0 differences; 0 sealed-week changes; Uber report in ≤ 2 days after week end (alert on day 3). Runbooks: import failed, matcher stalled, nightly check failed, seal blocked, dispute job missed, Uber report late | P1 |
 | **B20** | **No property tests for money rules** | Property tests (random charges / paybacks / allocations / disputes): sums conserved, no negative owed, exactly one final dispute state, week adds up; plus chaos cases: kill the matcher mid-run, a corrupt CSV row, replay a batch | P1 |
-| **B21** | **Old claims not mapped** | The 219 `fleet.claims` (`Toll_Refund`, all resolved) stay read-only; a mapping view links each to its toll charge where one exists, so old disputes stay traceable | P1 |
+| ~~B21~~ | ~~Old claims not mapped~~ | **Dropped (owner: leave legacy data alone).** The 219 `fleet.claims` stay as they are | — |
 
 **Explicitly not doing** (reviewer agrees): no sharding, no Kafka or event bus, no generic rules engine, no partitioning at this size.
 
@@ -372,7 +374,7 @@ sequenceDiagram
 | Q4 | Is company isolation a hard security boundary? | **Answered from the code:** yes. RLS is on every toll table, and server writes go through functions that take the company from the user's token (L2.1) |
 | Q5 | InDrive: does the rider pay the toll to the driver inside the cash fare? (decides `cash_in_fare`, B7) | _owner_ |
 | Q6 | Who writes and approves the dispute text the driver sends to Uber? | _owner_ |
-| Q7 | Does finance still need the 219 old claims, and for how long? | _owner_ (they stay in `fleet.claims`, read-only, until told otherwise) |
+| Q7 | Does finance still need the 219 old claims, and for how long? | **Answered:** leave legacy data alone; they stay in `fleet.claims` untouched |
 | Q8 | Which Supabase plan / backup level is the production project on (sets RPO / RTO)? | _owner_ |
 
 ## Part E — Until this is agreed
@@ -391,4 +393,5 @@ On step 3 the owner decides each shortfall as the old claims did (Fleet pays = B
 | 4 | 2026-11-17 | Claude | Rev 4 (owner fact: a dispute refund always arrives in the next pay period or the one after, never later): refund matching limited to those two periods; a dispute with no refund after both is lost automatically; done-tests 3, 3b, 6 |
 | 5 | 2026-11-17 | Reviewer | Round 1: L1 domain strong; L2 envelope (NFRs, security, observability, resilience, release, governance) almost absent; asked for Part 0, L2 gaps, roles, state tables, diagrams, rollout, 7 questions |
 | 6 | 2026-11-17 | Claude | Rev 5: checked every L2 point against the code and live data (L2.1, with evidence; much already exists). Added Part 0, gaps B12–B21 each with one fix and a priority, role matrix, dispute/charge state tables, sequence diagrams, rollout, Part G owner questions. Corrected: the J$70 adjustment was kept "with no toll" by the owner (not ownerless); found J| 4 | 2026-11-17 | Claude | Rev 4 (owner fact: a dispute refund always arrives in the next pay period or the one after, never later): refund matching limited to those two periods; a dispute with no refund after both is lost automatically; done-tests 3, 3b, 6 |
+| 7 | 2026-11-17 | Claude | Rev 6 (owner: don't touch reconciled weeks or legacy data): forward-only rule in Part 0; B21 dropped; B17 and the reconstruction test from switch-on only; Q7 answered |
 ,200 kept-with-no-toll money with no end account (B17) |
