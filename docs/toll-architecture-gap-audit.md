@@ -1,6 +1,6 @@
 # Toll architecture — as-built audit and what it lacks
 
-**Rev 18 · 2026-11-17 · For: the architecture reviewer · Status: OPEN, no build until the reviewer and the owner agree.**
+**Rev 19 · 2026-11-17 · For: the architecture reviewer · Status: OPEN, no build until the reviewer and the owner agree.**
 
 **What it's for (one sentence):** every toll the fleet pays ends with the right person bearing it: the platform (paid back first time, or after a dispute), the driver or the fleet. Nothing is decided before the facts are in, and the week still closes on time.
 
@@ -354,6 +354,34 @@ On step 3 the owner decides each shortfall as the old claims did (Fleet pays = B
 
 ---
 
+## Part F — First build: rounds and status (owner said "start", 17 Nov 2026)
+
+**Look-first at build start (planner, checked against the migrations, 17 Nov).** Four places where this document and the real database differ; the build follows the right-hand column:
+
+| # | The document says | The database has | The build does |
+|---|---|---|---|
+| F1 | Uber `payback_mode = trip_line` | `payback_mode` CHECK is `per_trip`, `adjustments`, `none`, `native` (`20261112183806_toll_v2_foundations.sql`) | Uber = `per_trip`; add `rider_pays_driver` to the CHECK. "trip_line" in this document means `per_trip` |
+| F2 | W1 rule 1: a provisional **platform** allocation with no payback | CHECK `allocations_platform_bearer_payback`: a platform row **must** have a `payback_id` | Replace the CHECK: a platform row has a `payback_id`, **or** is `provisional` with a `dispute_id`; a non-platform row never has a `payback_id` |
+| F3 | Fleet Policy holds the two dispute bearers | No fleet-policy table exists in the database | New `toll.dispute_policy` (one row per company); the Fleet Policy screen edits it |
+| F4 | `toll:other_income` (B17); staging for proof (L2.6 step 2) | No `toll:other_income` account; no staging project (staging is second build, AH4) | Add the account in S1 with its posting rule; first-build proof runs on the local Docker copy (playbook step 6) |
+
+Also: `toll.plaza_rules` is keyed by plaza only (not per company), so the dated rates go in a new append-only `toll.plaza_rates` table (one row per plaza, kind, platform, `valid_from`), not as columns, so a rate change never edits history.
+
+**Rounds (playbook step 5: Data → Server → Screens → Tests; one round at a time, each checked before the next):**
+
+| Round | Who | What | Status |
+|---|---|---|---|
+| **D1** | Cursor | Data: switches, settings fields, `plaza_rates`, `dispute_policy`, `dispute_text_templates`, `disputes`, `dispute_links`, allocation `dispute_id` + F2 CHECK, `carried_facts` kind `dispute_result`; SQL tests. Prompt: `docs/toll-build/cursor-D1-disputes-data.md` | **Given to Cursor** |
+| D2 | Cursor | B13 sealed-week database guard (trigger + session flag), run against every existing toll SQL test | — |
+| S1 | Cursor | Commands: `open_dispute`, `mark_dispute_sent`, `settle_dispute`, `close_dispute_lost`, `driver_pays` / `fleet_absorbs` with `suggestion_id`, `seal_week` (`part`, `disputed_minor`), posting rules (`receivable_platform_dispute`, `other_income`), B14 four-eyes, B12 refuse without settings | — |
+| S2 | Cursor | Matcher (dispute first, plaza rates, `rider_pays_driver` suggestions), nightly expire + auto-close + `no_report`, logged-trips adapter, report-late alert | — |
+| S3 | Cursor | Screen reads: step-3 payload with the six parts, disputes company-wide, Results this week, blockers with `part`; driver-app dispute read + `mark_dispute_sent` route | — |
+| UI1 | Claude | Port the six-part Tolls step from `docs/stitch/toll-step-slides/` (C3 Keep / Drop / Fix) + its tests | — |
+| UI2 | Claude | Driver app dispute card, Driver Settlements Disputes tab, Fleet Policy toll settings + tests | — |
+| P | Claude + owner | Proof on the local copy (done-tests, 9 Nov replay), then live switched off, settings seed (L2.6 step 0), switch on, one real week | — |
+
+---
+
 ## Part L2 — The platform envelope (added Rev 5, reviewer round 1)
 
 ### L2.1 What already exists (facts for the reviewer, checked 17 Nov 2026)
@@ -537,3 +565,4 @@ sequenceDiagram
 | 24 | 2026-11-17 | Claude | Rev 17 closes round 7, checked against the code: AD1 three C3 rows from today's screens (Receipt is fine / Reject receipt; Same toll / Different tolls; Match to a toll / Keep with no toll), wrapped not rebuilt; AD2 Disputes shows every active dispute company-wide with a "From week of" chip plus Results this week (C4.8, C4.14); AD3 `seal_week` already returns a structured `blocking` list, now with `part`, Still open list on part 6 (C4.17); AD4 consequence sentence follows the expired-bearer policy (C4.18); AD5 `driver_pays` / `fleet_absorbs` with `suggestion_id` (C4.19). AE1–AE14 and AF1–AF4 inline (Overdue redefined, since two periods auto-close; Open Uber App = `uberdriver://`, no deep link; A9, L2.2 B7 and L2.4 fixed) |
 | 25 | 2026-11-17 | Reviewer | Round 8 on Rev 17: round 7 closed; **signable**, no new blocking items (no wrong-money path, no stale-sealed-week path, no screen the builder can't build). 7 should-fix: AG1 `suggestion_id` on `driver_pays` / `fleet_absorbs`; AG2 Decided scope; AG3 earlier-week dispute results in C4.4; AG4 blocker `part` table; AG5 0-days-left state; AG6 opened_late card incentive; AG7 Uber Confirm = `apply_suggestion`. 4 nits AH1–AH4 |
 | 26 | 2026-11-17 | Claude | Rev 18 closes round 8, checked against the code: AG1 optional `suggestion_id` checked like today's `apply_suggestion`, suggestion withdrawn in the same transaction; AG2 Decided = this week only, no Undo on sealed weeks except dispute results; AG3 **corrected the premise**: an earlier-week dispute result is not in this week's spend, so C4.4's equation is unchanged; it shows in Results this week and as one line under the seal sum; AG4 `part` table in first-match order, with 2-trips before suggestions (a 2-trip charge also has suggestions) and the existing `carried` blocker → 5; AG5 Mark as sent hidden after the deadline; AG6 incentive sentence; AG7 Uber Confirm → `apply_suggestion`; AH2 tiles = count + amount; AH3 Overdue → Late; AH4 first vs second build |
+| 27 | 2026-11-17 | Claude | Rev 19: owner said start. Part F added: look-first at build start found 4 differences from the database (F1 payback_mode is per_trip; F2 the platform-allocation CHECK needs a payback, so it must change for provisional disputes; F3 no fleet-policy table, new toll.dispute_policy; F4 no toll:other_income account and no staging, so first-build proof is on the local copy); dated plaza rates go in a new toll.plaza_rates table; first-build rounds D1, D2, S1–S3 (Cursor), UI1–UI2 (Claude), P (proof + switch-on). D1 given to Cursor |
