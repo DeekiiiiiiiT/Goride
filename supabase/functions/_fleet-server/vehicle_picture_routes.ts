@@ -169,8 +169,7 @@ export async function loadLatestDocumentChecks(
   orgId: string,
 ): Promise<DocumentCheckSummary[]> {
   const { data, error } = await supabase
-    .schema("fleet")
-    .from("vehicle_document_check")
+    .from("fleet_vehicle_document_check")
     .select("doc_type, issue_date, expiry_date, read_at, read_by")
     .eq("vehicle_id", vehicleId)
     .eq("organization_id", orgId)

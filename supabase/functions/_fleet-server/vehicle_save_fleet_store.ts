@@ -40,7 +40,7 @@ export function createFleetVehicleStore(supabase: SupabaseClient): FleetVehicleS
     },
 
     async insertDocumentCheck(row) {
-      const { error } = await supabase.schema("fleet").from("vehicle_document_check").insert({
+      const { error } = await supabase.from("fleet_vehicle_document_check").insert({
         organization_id: row.organization_id,
         vehicle_id: row.vehicle_id,
         doc_type: row.doc_type,
@@ -57,8 +57,7 @@ export function createFleetVehicleStore(supabase: SupabaseClient): FleetVehicleS
 
     async getLatestRegistrationCheck(vehicleId, orgId) {
       const { data, error } = await supabase
-        .schema("fleet")
-        .from("vehicle_document_check")
+        .from("fleet_vehicle_document_check")
         .select("*")
         .eq("vehicle_id", vehicleId)
         .eq("organization_id", orgId)

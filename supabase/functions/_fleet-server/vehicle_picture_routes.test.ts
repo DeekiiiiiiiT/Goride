@@ -187,21 +187,21 @@ Deno.test("document checks: newest per type, names resolved, no file or fields r
     { doc_type: "fitness", issue_date: "2024-08-25", expiry_date: "2025-08-24", read_at: "2025-08-25T09:00:00Z", read_by: "u2" },
   ];
   let selected = "";
+  // No `schema()` on the fake: production does not expose the fleet schema (use the public view).
   const fake = {
-    schema: () => ({
-      from: () => {
-        const q = {
-          select: (s: string) => {
-            selected = s;
-            return q;
-          },
-          eq: () => q,
-          order: () => q,
-          limit: () => Promise.resolve({ data: rows, error: null }),
-        };
-        return q;
-      },
-    }),
+    from: (table: string) => {
+      assertEquals(table, "fleet_vehicle_document_check");
+      const q = {
+        select: (s: string) => {
+          selected = s;
+          return q;
+        },
+        eq: () => q,
+        order: () => q,
+        limit: () => Promise.resolve({ data: rows, error: null }),
+      };
+      return q;
+    },
     auth: { admin: { getUserById: (id: string) => Promise.resolve({ data: { user: { user_metadata: { full_name: id === "u1" ? "Deeki T" : "Other" } } } }) } },
   };
   const out = await loadLatestDocumentChecks(fake as never, "5179KZ", "org-1");

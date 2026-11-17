@@ -233,6 +233,24 @@ function tollMoneyErrorMessage(code: unknown, fallback: string): string {
   return typeof code === 'string' && code.trim() ? code : fallback;
 }
 
+/** A refused fuel-week change, in words a person can act on (the server code stays on .code). */
+export function fuelWeek409Error(body: unknown): Error & { status: number; code: string; body: unknown } {
+  const b = (body ?? {}) as { error?: string; message?: string };
+  const code = b.error || 'version_conflict';
+  const message =
+    b.message ||
+    (code === 'period_locked'
+      ? 'This fuel week is already locked. Reopen it to change it.'
+      : code === 'version_conflict'
+        ? 'This fuel week changed while you were working on it. Reload the page and try again.'
+        : 'The fuel week could not be saved. Try again.');
+  const err = new Error(message) as Error & { status: number; code: string; body: unknown };
+  err.status = 409;
+  err.code = code;
+  err.body = body;
+  return err;
+}
+
 export const api = {
   async getOdometerHistory(vehicleId: string): Promise<OdometerReading[]> {
     // Phase 1: Use JWT for proper org scoping
@@ -1912,7 +1930,9 @@ export const api = {
     }
     return response.json() as Promise<{
       success?: boolean;
-      data?: Record<string, unknown>;
+      // Loose on purpose: AddDriverModal reads these straight into string fields (was `any` before 3b9c9805).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data?: Record<string, any>;
       fields?: Record<string, unknown>;
       colorStandard?: string | null;
       flags?: string[];
@@ -5424,14 +5444,7 @@ export const api = {
       },
     );
     if (response.status === 409) {
-      const err = new Error('version_conflict') as Error & { status?: number; body?: unknown };
-      err.status = 409;
-      try {
-        err.body = await response.json();
-      } catch {
-        err.body = null;
-      }
-      throw err;
+      throw fuelWeek409Error(await response.json().catch(() => null));
     }
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
@@ -5488,14 +5501,7 @@ export const api = {
       },
     );
     if (response.status === 409) {
-      const err = new Error('version_conflict') as Error & { status?: number; body?: unknown };
-      err.status = 409;
-      try {
-        err.body = await response.json();
-      } catch {
-        err.body = null;
-      }
-      throw err;
+      throw fuelWeek409Error(await response.json().catch(() => null));
     }
     if (!response.ok) {
       const errText = await response.text().catch(() => '');

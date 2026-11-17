@@ -30,7 +30,6 @@ export function buildProductionDocumentReadDeps(
     },
     assertUserRateLimit: async (userId) => {
       const { data, error } = await supabase
-        .schema("fleet")
         .rpc("vehicle_document_read_counts", {
           p_user: userId,
           p_org: "",
@@ -51,7 +50,6 @@ export function buildProductionDocumentReadDeps(
     },
     assertOrgRateLimit: async (orgId, _now) => {
       const { data, error } = await supabase
-        .schema("fleet")
         .rpc("vehicle_document_read_counts", {
           p_user: "00000000-0000-0000-0000-000000000000",
           p_org: orgId,
@@ -71,7 +69,7 @@ export function buildProductionDocumentReadDeps(
       } satisfies DocumentReadError;
     },
     recordRead: async (userId, orgId, now) => {
-      const { error } = await supabase.schema("fleet").from("vehicle_document_read_log").insert({
+      const { error } = await supabase.from("fleet_vehicle_document_read_log").insert({
         user_id: userId,
         organization_id: orgId,
         read_at: now.toISOString(),

@@ -4,7 +4,7 @@
  * colour chip and Active / Inactive chip. Whole card opens the vehicle.
  */
 import React from "react";
-import { Camera, Clock, Info, Pause } from "lucide-react";
+import { Camera, Clock, Info, Pause, Trash2 } from "lucide-react";
 import { pictureStateLabel, vehiclePictureSrc } from "@roam/roam-shared";
 import type { Vehicle } from "../../../types/vehicle";
 import { MakerLogo } from "../find-parts/everyday/EverydayShared";
@@ -28,9 +28,12 @@ export function VehicleListCard({
   vehicle,
   onOpen,
   badge,
+  onDelete,
 }: {
   vehicle: Vehicle;
   onOpen: (id: string) => void;
+  /** Shows a delete button; the page asks to confirm in its own dialog. */
+  onDelete?: (id: string) => void;
   /** Extra chip next to the status (e.g. "Waiting for Roam to check this car"). */
   badge?: React.ReactNode;
 }) {
@@ -118,6 +121,20 @@ export function VehicleListCard({
             </span>
           )}
           <div className="flex items-center gap-1.5">
+            {onDelete ? (
+              <button
+                type="button"
+                aria-label={`Delete ${vehicle.make} ${vehicle.model} ${vehicle.licensePlate}`}
+                title="Delete vehicle"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#fecaca] bg-white text-[#b91c1c] transition-colors hover:bg-[#fef2f2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b91c1c] dark:border-[#7f1d1d] dark:bg-[#2a2a2d] dark:text-[#f87171] dark:hover:bg-[#450a0a]"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(vehicle.id);
+                }}
+              >
+                <Trash2 className="h-4 w-4" aria-hidden />
+              </button>
+            ) : null}
             {badge}
             <span
               className={cn(

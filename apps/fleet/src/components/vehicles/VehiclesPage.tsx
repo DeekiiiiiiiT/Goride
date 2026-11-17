@@ -898,6 +898,7 @@ export function VehiclesPage({
                             key={vehicle.id}
                             vehicle={vehicle}
                             onOpen={(id) => setSelectedVehicleId(id)}
+                            onDelete={(id) => setVehicleToDelete(id)}
                             badge={
                               isVehicleParked(vehicle) ? (
                                 <span className="inline-flex items-center rounded-full bg-[#fffbeb] px-2.5 py-1 text-[12px] font-medium text-[#b45309] dark:bg-[#451a03] dark:text-[#fbbf24]">
