@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "on-tertiary-container": "#079669",
+          "surface-tint": "#5e5c74",
+          "surface-container-lowest": "#ffffff",
+          "on-tertiary": "#ffffff",
+          "primary-fixed-dim": "#c8c3df",
+          "tertiary-fixed": "#85f8c4",
+          "on-background": "#1b1b20",
+          "on-primary-fixed": "#1b192e",
+          "on-error-container": "#93000a",
+          "error-container": "#ffdad6",
+          "secondary-fixed": "#dbe1ff",
+          "background": "#fcf8ff",
+          "surface-bright": "#fcf8ff",
+          "on-error": "#ffffff",
+          "inverse-surface": "#303035",
+          "secondary": "#0051d5",
+          "surface-variant": "#e4e1e9",
+          "on-tertiary-fixed-variant": "#005137",
+          "tertiary-container": "#002114",
+          "secondary-container": "#346cef",
+          "inverse-on-surface": "#f3eff7",
+          "surface-container": "#f0ecf4",
+          "primary-fixed": "#e4dffc",
+          "secondary-fixed-dim": "#b4c5ff",
+          "outline": "#78767d",
+          "on-primary-container": "#84819a",
+          "inverse-primary": "#c8c3df",
+          "on-primary": "#ffffff",
+          "error": "#ba1a1a",
+          "on-secondary-fixed": "#00174b",
+          "surface-container-high": "#eae7ee",
+          "on-tertiary-fixed": "#002114",
+          "on-secondary-container": "#fefcff",
+          "on-secondary-fixed-variant": "#003ea7",
+          "on-surface": "#1b1b20",
+          "primary": "#000000",
+          "surface-container-highest": "#e4e1e9",
+          "outline-variant": "#c9c5cd",
+          "tertiary": "#000000",
+          "surface": "#fcf8ff",
+          "surface-container-low": "#f6f2fa",
+          "surface-dim": "#dcd9e0",
+          "tertiary-fixed-dim": "#68dba9",
+          "on-secondary": "#ffffff",
+          "primary-container": "#1b192e",
+          "on-primary-fixed-variant": "#46445b",
+          "on-surface-variant": "#47464c"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.25rem",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+        "spacing": {
+          "margin": "2rem",
+          "space-lg": "1.5rem",
+          "space-xs": "0.25rem",
+          "gutter": "1.25rem",
+          "space-sm": "0.5rem",
+          "space-md": "1rem",
+          "space-xl": "2.25rem"
+        },
+        "fontFamily": {
+          "currency-lg": [
+            "Inter"
+          ],
+          "label-badge": [
+            "Inter"
+          ],
+          "currency-md": [
+            "Inter"
+          ],
+          "headline-xl": [
+            "Inter"
+          ],
+          "headline-md": [
+            "Inter"
+          ],
+          "body-default": [
+            "Inter"
+          ],
+          "label-meta": [
+            "Inter"
+          ],
+          "headline-lg": [
+            "Inter"
+          ],
+          "body-muted": [
+            "Inter"
+          ],
+          "headline-xl-mobile": [
+            "Inter"
+          ]
+        },
+        "fontSize": {
+          "currency-lg": [
+            "22px",
+            {
+              "lineHeight": "28px",
+              "letterSpacing": "-0.01em",
+              "fontWeight": "600"
+            }
+          ],
+          "label-badge": [
+            "12px",
+            {
+              "lineHeight": "16px",
+              "letterSpacing": "0.01em",
+              "fontWeight": "500"
+            }
+          ],
+          "currency-md": [
+            "15px",
+            {
+              "lineHeight": "22px",
+              "fontWeight": "600"
+            }
+          ],
+          "headline-xl": [
+            "32px",
+            {
+              "lineHeight": "40px",
+              "letterSpacing": "-0.02em",
+              "fontWeight": "600"
+            }
+          ],
+          "headline-md": [
+            "18px",
+            {
+              "lineHeight": "24px",
+              "fontWeight": "600"
+            }
+          ],
+          "body-default": [
+            "15px",
+            {
+              "lineHeight": "22px",
+              "fontWeight": "400"
+            }
+          ],
+          "label-meta": [
+            "13px",
+            {
+              "lineHeight": "18px",
+              "fontWeight": "500"
+            }
+          ],
+          "headline-lg": [
+            "22px",
+            {
+              "lineHeight": "28px",
+              "letterSpacing": "-0.01em",
+              "fontWeight": "600"
+            }
+          ],
+          "body-muted": [
+            "15px",
+            {
+              "lineHeight": "22px",
+              "fontWeight": "400"
+            }
+          ],
+          "headline-xl-mobile": [
+            "26px",
+            {
+              "lineHeight": "34px",
+              "letterSpacing": "-0.015em",
+              "fontWeight": "600"
+            }
+          ]
+        }
+      },
+    },
+  }</script></head><body class="bg-surface font-body-default text-on-surface antialiased"><header class="fixed top-0 left-0 right-0 z-50 shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 bg-surface-container-lowest border-b border-outline-variant/40 px-6 flex items-center justify-between"><div class="flex items-center gap-6"><div class="flex items-center gap-3"><div class="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shadow-sm"><span class="material-symbols-outlined text-on-primary text-[20px]">local_shipping</span></div><div class="flex flex-col"><span class="font-headline-md text-headline-md tracking-tight text-primary leading-tight">Roam Fleet</span><span class="font-label-badge text-label-badge text-on-surface-variant font-medium">Enterprise Logistics</span></div></div></div><nav class="hidden xl:flex items-center gap-6 h-full" data-active-classes="text-primary font-semibold relative after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary"><a class="text-on-surface-variant hover:text-on-surface font-label-meta text-label-meta h-full flex items-center transition-colors" data-path="dashboard" href="#">Dashboard</a><a class="text-on-surface-variant hover:text-on-surface font-label-meta text-label-meta h-full flex items-center transition-colors" data-path="fleet-operations" href="#">Fleet Operations</a><a class="text-on-surface-variant hover:text-on-surface font-label-meta text-label-meta h-full flex items-center transition-colors" data-path="driver-operations" href="#">Driver Operations</a><a class="text-on-surface-variant hover:text-on-surface font-label-meta text-label-meta h-full flex items-center transition-colors" data-path="money" href="#">Money</a><a class="text-on-surface-variant hover:text-on-surface font-label-meta text-label-meta h-full flex items-center transition-colors" data-path="vehicle-operations" href="#">Vehicle Operations</a><a class="text-on-surface-variant hover:text-on-surface font-label-meta text-label-meta h-full flex items-center transition-colors" data-path="delivery-operations" href="#">Delivery Operations</a><a class="text-on-surface-variant hover:text-on-surface font-label-meta text-label-meta h-full flex items-center transition-colors" data-path="analytics" href="#">Analytics</a><a class="text-on-surface-variant hover:text-on-surface font-label-meta text-label-meta h-full flex items-center transition-colors" data-path="reports" href="#">Reports</a><a class="text-on-surface-variant hover:text-on-surface font-label-meta text-label-meta h-full flex items-center transition-colors" data-path="business-finance" href="#">Business Finance</a></nav><div class="flex items-center gap-4"><button class="w-9 h-9 rounded-lg hover:bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">notifications</span></button><div class="h-6 w-px bg-outline-variant/60"></div><div class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer"><span class="material-symbols-outlined text-secondary text-[18px]">hub</span><span class="font-label-meta text-label-meta text-on-surface font-medium">Kingston Fleet Hub 01</span><span class="material-symbols-outlined text-on-surface-variant text-[16px]">expand_more</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div><div class="h-10 bg-primary-container px-6 flex items-center justify-between text-on-primary-container font-label-badge text-label-badge border-b border-primary-container"><div class="flex items-center gap-3"><div class="relative flex items-center"><span class="material-symbols-outlined absolute left-2.5 text-on-primary-container text-[16px]">search</span><input class="w-72 bg-on-primary-fixed/60 border border-outline/30 rounded-md pl-8 pr-3 py-1 font-label-badge text-label-badge text-on-primary placeholder:text-on-primary-container focus:outline-none focus:border-secondary transition-colors" placeholder="Switch vehicle or search hub…" type="text"/></div><span class="text-outline-variant/60 text-xs hidden sm:inline">Press ⌘K to open jump list</span></div><div class="flex items-center gap-4"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-on-tertiary-container animate-pulse"></span><span class="font-medium tracking-wide text-on-primary">06:11:49 PM EST</span></div><div class="h-3 w-px bg-outline/40"></div><div class="flex items-center gap-1.5 text-on-primary-container"><span class="material-symbols-outlined text-[14px]">schedule</span><span>America/Jamaica</span></div></div></div></header><main class="w-full pt-[104px] min-h-screen bg-surface"><div class="flex flex-col w-full">
+<div class="w-full px-6 py-8 max-w-[1720px] mx-auto">
+<!-- Breadcrumb & Top Context Header -->
+<div class="flex flex-col md:flex-row md:items-center justify-between pb-6 gap-4">
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-2 text-on-surface-variant font-label-meta text-label-meta">
+<span class="hover:text-primary cursor-pointer transition-colors">Toll Reconciliations</span>
+<span class="material-symbols-outlined text-[14px] text-outline-variant">chevron_right</span>
+<span class="hover:text-primary cursor-pointer transition-colors">FY2026 Q4</span>
+<span class="material-symbols-outlined text-[14px] text-outline-variant">chevron_right</span>
+<span class="text-on-surface font-semibold">Weekly Highway Toll Audit</span>
+</div>
+<div class="flex items-baseline gap-3">
+<h1 class="font-headline-xl text-headline-xl text-on-surface tracking-tight">Week of 9 Nov 2026</h1>
+<span class="px-2.5 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-badge text-label-badge font-semibold">Rideshare</span>
+<span class="text-on-surface-variant font-body-muted text-body-muted">9–15 Nov 2026 · Kingston Metropolitan Area</span>
+</div>
+</div>
+<!-- Quick Action Controls -->
+<div class="flex items-center gap-3">
+<button class="px-3.5 py-2 rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container font-label-meta text-label-meta font-medium shadow-sm transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">history</span>
+<span>Audit Log</span>
+</button>
+<button class="px-3.5 py-2 rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container font-label-meta text-label-meta font-medium shadow-sm transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">download</span>
+<span>Export Summary</span>
+</button>
+</div>
+</div>
+<!-- 6-Step Workflow Connector Bar -->
+<div class="w-full bg-surface-container-lowest rounded-xl p-4 shadow-sm mb-6">
+<div class="flex items-center justify-between gap-2 overflow-x-auto pb-2 sm:pb-0">
+<!-- Step 1: Matches (Done) -->
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container-low text-on-surface font-label-meta text-label-meta">
+<div class="w-5 h-5 rounded-full bg-on-tertiary-container flex items-center justify-center text-on-tertiary">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+<span class="font-medium text-on-surface">1 Matches</span>
+</div>
+<div class="h-0.5 flex-1 bg-on-tertiary-container min-w-[20px]"></div>
+<!-- Step 2: Pick a trip (Done) -->
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container-low text-on-surface font-label-meta text-label-meta">
+<div class="w-5 h-5 rounded-full bg-on-tertiary-container flex items-center justify-center text-on-tertiary">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+<span class="font-medium text-on-surface">2 Pick a trip</span>
+</div>
+<div class="h-0.5 flex-1 bg-primary min-w-[20px]"></div>
+<!-- Step 3: Disputes (CURRENT) -->
+<div class="flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary text-on-primary font-label-meta text-label-meta shadow-md">
+<div class="w-5 h-5 rounded-full bg-primary-fixed text-on-primary-fixed flex items-center justify-center font-bold text-label-badge">
+            3
+          </div>
+<span class="font-semibold text-on-primary">Disputes</span>
+<span class="px-2 py-0.5 rounded-full bg-primary-container text-on-primary font-label-badge text-label-badge font-medium">3 active / updated</span>
+</div>
+<div class="h-0.5 flex-1 bg-surface-container-highest min-w-[20px]"></div>
+<!-- Step 4: No trip -->
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-meta text-label-meta opacity-75">
+<span class="font-medium">4 No trip</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-high font-label-badge text-label-badge">Nothing to do</span>
+</div>
+<div class="h-0.5 flex-1 bg-surface-container-highest min-w-[20px]"></div>
+<!-- Step 5: Other checks -->
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-meta text-label-meta opacity-75">
+<span class="font-medium">5 Other checks</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-high font-label-badge text-label-badge">Nothing to do</span>
+</div>
+<div class="h-0.5 flex-1 bg-surface-container-highest min-w-[20px]"></div>
+<!-- Step 6: Seal -->
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-meta text-label-meta opacity-75">
+<span class="font-medium">6 Seal</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-high font-label-badge text-label-badge">Not ready</span>
+</div>
+</div>
+<!-- Linear Step Progress Indicator (3 of 6) -->
+<div class="w-full bg-surface-container-high h-1 rounded-full mt-3 overflow-hidden">
+<div class="bg-primary h-full rounded-full transition-all duration-500 w-1/2"></div>
+</div>
+</div>
+<!-- 3-Pane Desk Architecture -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+<!-- LEFT STEP RAIL (Fixed Column) -->
+<div class="lg:col-span-3 flex flex-col gap-5">
+<!-- Week Selection Navigation Card -->
+<div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm">
+<div class="flex items-center justify-between mb-4">
+<span class="font-label-meta text-label-meta uppercase tracking-wider text-on-surface-variant font-semibold">Ledger Batches</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface font-label-badge text-label-badge font-mono">Q4-W46</span>
+</div>
+<div class="space-y-2">
+<div class="p-3 rounded-lg bg-surface-container-low flex items-center justify-between cursor-pointer hover:bg-surface-container transition-all">
+<div class="flex flex-col">
+<span class="font-label-meta text-label-meta font-medium text-on-surface">2 Nov – 8 Nov</span>
+<span class="font-label-badge text-label-badge text-on-tertiary-container flex items-center gap-1 font-semibold">
+<span class="material-symbols-outlined text-[13px]">verified</span> Sealed &amp; Committed
+                </span>
+</div>
+<span class="font-currency-md text-currency-md text-on-surface">J$14,280</span>
+</div>
+<div class="p-3 rounded-lg bg-primary text-on-primary shadow-sm flex items-center justify-between cursor-default">
+<div class="flex flex-col">
+<span class="font-label-meta text-label-meta font-semibold text-on-primary">9 Nov – 15 Nov</span>
+<span class="font-label-badge text-label-badge text-primary-fixed flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">pending</span> Part 3: Disputes
+                </span>
+</div>
+<span class="font-currency-md text-currency-md text-on-primary">J$12,940</span>
+</div>
+<div class="p-3 rounded-lg bg-surface-container-lowest flex items-center justify-between cursor-pointer hover:bg-surface-container-low transition-all">
+<div class="flex flex-col">
+<span class="font-label-meta text-label-meta font-medium text-on-surface-variant">16 Nov – 22 Nov</span>
+<span class="font-label-badge text-label-badge text-outline flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">schedule</span> Telematics Syncing
+                </span>
+</div>
+<span class="font-currency-md text-currency-md text-outline">J$11,800</span>
+</div>
+</div>
+</div>
+<!-- Telematics Sync Card -->
+<div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm">
+<span class="font-label-meta text-label-meta uppercase tracking-wider text-on-surface-variant font-semibold block mb-3">Sync Verification</span>
+<div class="space-y-3">
+<div class="flex items-center justify-between text-body-default font-body-default">
+<span class="text-on-surface-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-on-tertiary-container text-[18px]">cell_tower</span>
+                TJ Tollways API
+              </span>
+<span class="font-label-badge text-label-badge font-semibold text-on-tertiary-container bg-surface-container px-2 py-0.5 rounded">Synced</span>
+</div>
+<div class="flex items-center justify-between text-body-default font-body-default">
+<span class="text-on-surface-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[18px]">local_taxi</span>
+                Uber Fleet Webhook
+              </span>
+<span class="font-label-badge text-label-badge font-semibold text-secondary bg-secondary-fixed/40 px-2 py-0.5 rounded">Active 12m ago</span>
+</div>
+<div class="flex items-center justify-between text-body-default font-body-default">
+<span class="text-on-surface-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">gps_fixed</span>
+                Geotab Geofence
+              </span>
+<span class="font-label-badge text-label-badge font-semibold text-on-surface px-2 py-0.5 rounded bg-surface-container-low">100% Locked</span>
+</div>
+</div>
+</div>
+<!-- Portmore & Spanish Town Corridor Mini-Map Mockup -->
+<div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm">
+<div class="flex items-center justify-between mb-3">
+<span class="font-label-meta text-label-meta uppercase tracking-wider text-on-surface-variant font-semibold">Toll Corridor Telemetry</span>
+<span class="font-label-badge text-label-badge text-on-surface-variant font-mono">PJ-E1 Highway</span>
+</div>
+<div class="w-full h-36 bg-cover bg-center rounded-lg relative overflow-hidden flex items-end p-3 shadow-inner" data-alt="Satellite map view of the Kingston to Portmore Toll Road bridge and highway corridor in Jamaica with telemetry path overlays in sharp technical clarity and deep navy tones." data-location="Kingston, Jamaica" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDubzisga4W3vGiP37mU6FwT5mlqiDyoLFqvRozDXp1jK9mjyAgLtgRtfpBFkQaiqy_ZL8SSjO80iabt1JBdQf2ZJcDkkTQeNXc6gj23RiIb1p-ZJ4HESZwvWaJ3QMW34q6VxsNU_BcCx393me9rdFa8_9_TBGIi0rBpARycUf8MNoWe2V9CIYIMfx0ymFrCIBJvLqbesItAiqXRKHi2qHZhdez8iuy30XFplLouu4')">
+<div class="absolute inset-0 bg-gradient-to-t from-primary/80 via-transparent to-transparent"></div>
+<div class="relative z-10 flex items-center justify-between w-full text-on-primary">
+<div class="flex items-center gap-1.5 font-label-badge text-label-badge">
+<span class="w-2 h-2 rounded-full bg-tertiary-fixed animate-ping"></span>
+<span>Portmore Toll Plaza</span>
+</div>
+<span class="font-label-badge text-label-badge bg-primary/70 backdrop-blur px-2 py-0.5 rounded font-mono">14.8 km stretch</span>
+</div>
+</div>
+</div>
+</div>
+<!-- CENTER WORKSTREAM (Fluid Main Action Stage) -->
+<div class="lg:col-span-6 flex flex-col gap-6">
+<!-- PART 3 OF 6: DISPUTES WITH UBER CARD -->
+<div class="bg-surface-container-lowest rounded-xl shadow-md overflow-hidden transition-all">
+<!-- Card Header -->
+<div class="p-6">
+<div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="px-2 py-0.5 rounded bg-surface-container font-label-badge text-label-badge font-mono text-on-surface-variant font-semibold">STAGE 03</span>
+<h2 class="font-headline-lg text-headline-lg text-on-surface font-semibold tracking-tight">Disputes with Uber</h2>
+</div>
+<p class="text-on-surface-variant font-body-default text-body-default">Uber paid less than the toll. The driver asks Uber for the rest from the driver app.</p>
+</div>
+<div class="self-start">
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-badge text-label-badge font-semibold shadow-xs">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+                  Reviewing outcomes
+                </span>
+</div>
+</div>
+<!-- Blue Policy / Reconciliation Info Box -->
+<div class="mt-5 p-4 rounded-xl bg-surface-container-low flex items-start gap-3.5">
+<span class="material-symbols-outlined text-secondary text-[22px] shrink-0 mt-0.5">info</span>
+<div class="flex-1">
+<p class="font-label-meta text-label-meta text-on-surface font-medium leading-relaxed">
+<span class="font-semibold text-secondary">J$240.00</span> original disputes tracked. Disputes do not block ledger closing. Refunds received credit back automatically.
+                </p>
+</div>
+</div>
+<!-- Summary Tiles (Screen 4 Updated Later State) -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mt-5">
+<!-- Tile 1: To send -->
+<div class="p-4 rounded-xl bg-surface-container-low flex flex-col justify-between">
+<span class="font-label-meta text-label-meta text-on-surface-variant font-medium">To send</span>
+<div class="mt-2 flex items-baseline gap-2">
+<span class="font-headline-xl text-headline-xl text-on-surface-variant/80 font-bold font-mono">0</span>
+<span class="font-label-badge text-label-badge text-on-surface-variant">clean</span>
+</div>
+</div>
+<!-- Tile 2: Sent, waiting on Uber -->
+<div class="p-4 rounded-xl bg-secondary-fixed/30 flex flex-col justify-between">
+<span class="font-label-meta text-label-meta text-on-secondary-fixed font-semibold">Sent, waiting on Uber</span>
+<div class="mt-2 flex items-baseline gap-1.5">
+<span class="font-headline-xl text-headline-xl text-secondary font-bold font-mono">2</span>
+<span class="font-headline-md text-headline-md text-secondary font-medium">· J$40.00</span>
+</div>
+</div>
+<!-- Tile 3: Overdue -->
+<div class="p-4 rounded-xl bg-error-container/40 flex flex-col justify-between">
+<span class="font-label-meta text-label-meta text-error font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px]">priority_high</span>
+                  Overdue
+                </span>
+<div class="mt-2 flex items-baseline gap-1.5">
+<span class="font-headline-xl text-headline-xl text-error font-bold font-mono">1</span>
+<span class="font-headline-md text-headline-md text-error font-medium">· J$20.00</span>
+</div>
+</div>
+</div>
+<!-- Row States Container -->
+<div class="mt-6 flex flex-col gap-3.5">
+<!-- ROW 1: Sent / Waiting -->
+<div class="p-4.5 rounded-xl bg-surface-container-lowest shadow-sm hover:shadow-md transition-shadow">
+<div class="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+<div class="flex flex-col gap-1.5 min-w-0">
+<div class="flex items-center flex-wrap gap-2">
+<span class="font-headline-md text-headline-md text-on-surface font-semibold">9 Nov, 7:15 AM · Portmore</span>
+<span class="font-currency-md text-currency-md text-on-surface font-bold font-mono">J$20.00</span>
+<span class="px-2.5 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-badge text-label-badge font-semibold">
+                        Sent 11 Nov
+                      </span>
+</div>
+<div class="flex items-center flex-wrap gap-2 text-on-surface-variant font-label-meta text-label-meta">
+<span class="font-mono bg-surface-container-high px-1.5 py-0.5 rounded text-on-surface font-semibold">5179KZ</span>
+<span>·</span>
+<span class="truncate">Kenny Gregory Rattray</span>
+<span>·</span>
+<span class="px-2 py-0.5 rounded-md bg-surface-container font-label-badge text-label-badge text-on-surface">Uber trip 6:55 AM–7:40 AM</span>
+</div>
+</div>
+<div class="flex items-center gap-2 self-start xl:self-center shrink-0">
+<button class="px-3 py-1.5 rounded-lg bg-primary hover:bg-on-primary-fixed text-on-primary font-label-badge text-label-badge font-semibold shadow-xs transition-colors">
+                      Refund received
+                    </button>
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-lowest text-error hover:bg-error-container/30 font-label-badge text-label-badge font-semibold transition-colors">
+                      Lost
+                    </button>
+<button class="px-2.5 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-label-badge text-label-badge font-medium transition-colors">
+                      Open trip
+                    </button>
+</div>
+</div>
+</div>
+<!-- ROW 2: Overdue / No refund -->
+<div class="p-4.5 rounded-xl bg-surface-container-lowest shadow-sm hover:shadow-md transition-shadow">
+<div class="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+<div class="flex flex-col gap-1.5 min-w-0">
+<div class="flex items-center flex-wrap gap-2">
+<span class="font-headline-md text-headline-md text-on-surface font-semibold">9 Nov, 12:24 PM · Portmore</span>
+<span class="font-currency-md text-currency-md text-on-surface font-bold font-mono">J$20.00</span>
+<span class="px-2.5 py-0.5 rounded-full bg-error-container text-on-error-container font-label-badge text-label-badge font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">alarm</span>
+                        No refund after 2 pay periods
+                      </span>
+</div>
+<div class="flex items-center flex-wrap gap-2 text-on-surface-variant font-label-meta text-label-meta">
+<span class="font-mono bg-surface-container-high px-1.5 py-0.5 rounded text-on-surface font-semibold">5179KZ</span>
+<span>·</span>
+<span class="truncate">Kenny Gregory Rattray</span>
+<span>·</span>
+<span class="px-2 py-0.5 rounded-md bg-surface-container font-label-badge text-label-badge text-on-surface">Uber trip 12:05 PM–12:45 PM</span>
+</div>
+</div>
+<div class="flex items-center gap-2 self-start xl:self-center shrink-0">
+<button class="px-3 py-1.5 rounded-lg bg-primary hover:bg-on-primary-fixed text-on-primary font-label-badge text-label-badge font-semibold shadow-xs transition-colors">
+                      Refund received
+                    </button>
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-lowest text-error hover:bg-error-container/30 font-label-badge text-label-badge font-semibold transition-colors">
+                      Lost
+                    </button>
+<button class="px-2.5 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-label-badge text-label-badge font-medium transition-colors">
+                      Open trip
+                    </button>
+</div>
+</div>
+</div>
+<!-- ROW 3: Won -->
+<div class="p-4.5 rounded-xl bg-surface-container-low shadow-sm">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+<div class="flex flex-col gap-1.5 min-w-0">
+<div class="flex items-center flex-wrap gap-2">
+<span class="font-headline-md text-headline-md text-on-surface font-semibold">10 Nov, 12:55 PM · Spanish Town</span>
+<span class="font-currency-md text-currency-md text-on-surface font-bold font-mono">J$20.00</span>
+<span class="px-2.5 py-0.5 rounded-full bg-surface-container text-on-tertiary-container font-label-badge text-label-badge font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">check_circle</span>
+                        Won · Uber paid J$20.00 on 17 Nov
+                      </span>
+</div>
+<div class="flex items-center flex-wrap gap-2 text-on-surface-variant font-label-meta text-label-meta">
+<span class="font-mono bg-surface-container-high px-1.5 py-0.5 rounded text-on-surface font-semibold">5179KZ</span>
+<span>·</span>
+<span class="truncate">Kenny Gregory Rattray</span>
+<span>·</span>
+<span class="px-2 py-0.5 rounded-md bg-surface-container-high font-label-badge text-label-badge text-on-surface">Uber trip 12:30 PM–1:15 PM</span>
+</div>
+</div>
+<div class="shrink-0 self-start sm:self-center">
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-lowest text-error hover:bg-error-container/30 font-label-badge text-label-badge font-semibold transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">undo</span>
+                      Undo
+                    </button>
+</div>
+</div>
+</div>
+<!-- ROW 4: Lost -->
+<div class="p-4.5 rounded-xl bg-surface-container shadow-sm">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+<div class="flex flex-col gap-1.5 min-w-0">
+<div class="flex items-center flex-wrap gap-2">
+<span class="font-headline-md text-headline-md text-on-surface-variant font-semibold">11 Nov, 7:11 AM · Portmore</span>
+<span class="font-currency-md text-currency-md text-on-surface-variant font-bold font-mono">J$20.00</span>
+<span class="px-2.5 py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant font-label-badge text-label-badge font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">cancel</span>
+                        Lost · driver pays
+                      </span>
+</div>
+<div class="flex items-center flex-wrap gap-2 text-on-surface-variant/80 font-label-meta text-label-meta">
+<span class="font-mono bg-surface-container-high px-1.5 py-0.5 rounded text-on-surface font-semibold">5179KZ</span>
+<span>·</span>
+<span class="truncate">Kenny Gregory Rattray</span>
+<span>·</span>
+<span class="px-2 py-0.5 rounded-md bg-surface-container-high font-label-badge text-label-badge text-on-surface-variant">Uber trip 6:50 AM–7:30 AM</span>
+</div>
+</div>
+<div class="shrink-0 self-start sm:self-center">
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-lowest text-error hover:bg-error-container/30 font-label-badge text-label-badge font-semibold transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">undo</span>
+                      Undo
+                    </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Helper Text Under Rows -->
+<div class="mt-4 flex items-center gap-2 text-on-surface-variant font-label-badge text-label-badge">
+<span class="material-symbols-outlined text-[15px] text-outline">account_balance_wallet</span>
+<span>Dispute resolutions directly reconcile against driver payout settlement ledger.</span>
+</div>
+</div>
+<!-- Card Footer Action Controls -->
+<div class="px-6 py-4 bg-surface-container-low flex items-center justify-between">
+<button class="px-4 py-2 rounded-lg bg-surface-container-lowest hover:bg-surface-container text-on-surface font-label-meta text-label-meta font-medium shadow-xs transition-colors flex items-center gap-1">
+<span>← Back</span>
+</button>
+<span class="font-label-meta text-label-meta text-on-surface-variant font-medium">Part 3 of 6</span>
+<button class="px-4.5 py-2 rounded-lg bg-primary hover:bg-on-primary-fixed text-on-primary font-label-meta text-label-meta font-semibold shadow-sm transition-colors flex items-center gap-1.5">
+<span>Next: Tolls with no trip</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Telematics Dispute Audit Trail / Historical Graph -->
+<div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm">
+<div class="flex items-center justify-between mb-4">
+<div class="flex flex-col">
+<span class="font-headline-md text-headline-md text-on-surface font-semibold">Toll Recovery Velocity</span>
+<span class="font-label-meta text-label-meta text-on-surface-variant">Average resolution: 5.4 calendar days via Kingston Transit Hub</span>
+</div>
+<span class="font-currency-md text-currency-md text-on-tertiary-container font-bold font-mono">83.3% Win Rate</span>
+</div>
+<!-- Inline Technical SVG Progress Bar / Recovery Visual -->
+<div class="w-full bg-surface-container-low rounded-lg p-3">
+<div class="flex items-center justify-between text-label-badge font-label-badge mb-1.5">
+<span class="text-on-surface font-medium">Resolution Timeline (Nov 2026 Batch)</span>
+<span class="font-mono text-on-surface-variant">J$200.00 / J$240.00 Recovered</span>
+</div>
+<div class="w-full h-3 rounded-full bg-surface-container overflow-hidden flex">
+<div class="bg-on-tertiary-container h-full w-[65%]" title="Won (J$160)"></div>
+<div class="bg-secondary h-full w-[17%]" title="Sent / In Review (J$40)"></div>
+<div class="bg-error h-full w-[8%]" title="Overdue (J$20)"></div>
+<div class="bg-outline h-full w-[10%]" title="Lost (J$20)"></div>
+</div>
+<div class="flex items-center gap-4 mt-2.5 font-label-badge text-label-badge text-on-surface-variant flex-wrap">
+<div class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container"></span>
+<span>Recovered (65%)</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-secondary"></span>
+<span>Under Review (17%)</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-error"></span>
+<span>Overdue (8%)</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-outline"></span>
+<span>Driver Absorbed (10%)</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- RIGHT FINANCIAL DRAWER (Fixed 340px Column) -->
+<div class="lg:col-span-3 flex flex-col gap-5">
+<!-- Sources Verification Card -->
+<div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm">
+<div class="flex items-center justify-between mb-3">
+<span class="font-label-meta text-label-meta uppercase tracking-wider text-on-surface-variant font-semibold">Sources</span>
+<span class="material-symbols-outlined text-[18px] text-outline">tune</span>
+</div>
+<div class="space-y-3">
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-low">
+<div class="flex flex-col">
+<span class="font-label-meta text-label-meta font-semibold text-on-surface">Trans-Jamaica Toll Tag</span>
+<span class="font-label-badge text-label-badge text-on-surface-variant">Primary Highway Account</span>
+</div>
+<span class="font-currency-md text-currency-md text-on-surface font-mono font-semibold">J$12,940</span>
+</div>
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-low">
+<div class="flex flex-col">
+<span class="font-label-meta text-label-meta font-semibold text-on-surface">Uber Reimbursement Feed</span>
+<span class="font-label-badge text-label-badge text-on-surface-variant">Driver app sync verified</span>
+</div>
+<span class="font-currency-md text-currency-md text-secondary font-mono font-semibold">J$11,880</span>
+</div>
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-low">
+<div class="flex flex-col">
+<span class="font-label-meta text-label-meta font-semibold text-on-surface">Variance / Pending Float</span>
+<span class="font-label-badge text-label-badge text-on-surface-variant">Disputed or unmatched</span>
+</div>
+<span class="font-currency-md text-currency-md text-error font-mono font-semibold">J$1,060</span>
+</div>
+</div>
+</div>
+<!-- Service Line Split Card -->
+<div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm">
+<span class="font-label-meta text-label-meta uppercase tracking-wider text-on-surface-variant font-semibold block mb-3">Service Line Split</span>
+<div class="space-y-2.5">
+<div>
+<div class="flex justify-between font-label-meta text-label-meta mb-1">
+<span class="text-on-surface font-medium">Uber Passenger Rideshare</span>
+<span class="font-mono font-semibold text-on-surface">J$10,240 (79%)</span>
+</div>
+<div class="w-full bg-surface-container-high h-2 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full w-[79%]"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between font-label-meta text-label-meta mb-1">
+<span class="text-on-surface font-medium">Direct Corporate Dispatch</span>
+<span class="font-mono font-semibold text-on-surface">J$2,700 (21%)</span>
+</div>
+<div class="w-full bg-surface-container-high h-2 rounded-full overflow-hidden">
+<div class="bg-secondary h-full rounded-full w-[21%]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Driver Toll Charges Card -->
+<div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm">
+<div class="flex items-center justify-between mb-3">
+<span class="font-label-meta text-label-meta uppercase tracking-wider text-on-surface-variant font-semibold">Driver Toll Charges</span>
+<span class="font-label-badge text-label-badge text-on-surface-variant font-mono">Week 46</span>
+</div>
+<div class="space-y-2.5">
+<div class="flex items-center justify-between py-1.5 border-b border-surface-container-high">
+<div class="flex flex-col min-w-0 pr-2">
+<span class="font-label-meta text-label-meta font-medium text-on-surface truncate">Kenny Gregory Rattray</span>
+<span class="font-label-badge text-label-badge text-on-surface-variant font-mono">5179KZ</span>
+</div>
+<span class="font-currency-md text-currency-md text-on-surface font-mono font-semibold shrink-0">J$3,420</span>
+</div>
+<div class="flex items-center justify-between py-1.5 border-b border-surface-container-high">
+<div class="flex flex-col min-w-0 pr-2">
+<span class="font-label-meta text-label-meta font-medium text-on-surface truncate">Marlon Andre Sterling</span>
+<span class="font-label-badge text-label-badge text-on-surface-variant font-mono">8421LA</span>
+</div>
+<span class="font-currency-md text-currency-md text-on-surface font-mono font-semibold shrink-0">J$2,960</span>
+</div>
+<div class="flex items-center justify-between py-1.5">
+<div class="flex flex-col min-w-0 pr-2">
+<span class="font-label-meta text-label-meta font-medium text-on-surface truncate">Dave Fitzroy Morrison</span>
+<span class="font-label-badge text-label-badge text-on-surface-variant font-mono">3104TX</span>
+</div>
+<span class="font-currency-md text-currency-md text-on-surface font-mono font-semibold shrink-0">J$2,140</span>
+</div>
+</div>
+</div>
+<!-- Tag Account Balance & Replenishment -->
+<div class="bg-primary text-on-primary rounded-xl p-5 shadow-md flex flex-col justify-between relative overflow-hidden">
+<div class="relative z-10">
+<div class="flex items-center justify-between mb-2">
+<span class="font-label-badge text-label-badge uppercase tracking-wider text-primary-fixed font-semibold">Prepaid Tag Account</span>
+<span class="material-symbols-outlined text-tertiary-fixed text-[20px]">contactless</span>
+</div>
+<span class="font-headline-xl text-headline-xl font-bold font-mono tracking-tight block">J$48,650.00</span>
+<span class="font-label-badge text-label-badge text-primary-fixed mt-1 block">Account #TJ-8849-0191 · Active</span>
+</div>
+<div class="mt-5 pt-4 border-t border-on-primary-fixed-variant/40 flex items-center justify-between relative z-10">
+<span class="font-label-meta text-label-meta text-on-primary font-medium">Auto-top up threshold</span>
+<span class="font-currency-md text-currency-md text-tertiary-fixed font-mono font-semibold">J$15,000</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div></main></body></html>
