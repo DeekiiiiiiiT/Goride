@@ -128,14 +128,15 @@ export function resolveSealedResidualSettlement(input: {
     const v = Number((snap as Record<string, unknown>).settlement_amount);
     if (Number.isFinite(v)) return round2(v);
   }
-  const rev = Number(input.earliestRevisionSettlement);
+  // null / undefined mean "no revision" — Number(null) is 0 and would hide a real balance.
+  const rev = input.earliestRevisionSettlement == null ? Number.NaN : Number(input.earliestRevisionSettlement);
   if (
     Number.isFinite(rev) &&
     (!input.revisionCreatedAt || sealedRevisionCounts(input.revisionCreatedAt))
   ) {
     return round2(rev);
   }
-  const pre = Number(input.preFuelToolSettlement);
+  const pre = input.preFuelToolSettlement == null ? Number.NaN : Number(input.preFuelToolSettlement);
   if (Number.isFinite(pre)) return round2(pre);
   const live = Number(input.liveSettlementAmount);
   if (input.balanceMovedTo && Number.isFinite(live) && projectedBeforeFuelTool(input.projectedAt)) {

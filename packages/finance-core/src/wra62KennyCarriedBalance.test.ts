@@ -27,6 +27,31 @@ const DRIFT_RESTORE_WEEKS = [
 ];
 
 describe('WRA-62 Kenny carried balance (live audited numbers)', () => {
+  it('server shape: no revision comes back as null, not 0 (live Feb 2)', () => {
+    expect(
+      resolveSealedResidualSettlement({
+        metadata: { financeCore: { balanceMovedTo: '2026-10-19' } },
+        liveSettlementAmount: -10_640.43,
+        balanceMovedTo: '2026-10-19',
+        earliestRevisionSettlement: null,
+        revisionCreatedAt: null,
+        preFuelToolSettlement: -10_640.43,
+        projectedAt: '2026-09-10 01:48:44.578+00',
+      }),
+    ).toBe(-10_640.43);
+    expect(
+      resolveSealedResidualSettlement({
+        metadata: {},
+        liveSettlementAmount: 9_020.63,
+        balanceMovedTo: '2026-10-19',
+        earliestRevisionSettlement: null,
+        revisionCreatedAt: null,
+        preFuelToolSettlement: null,
+        projectedAt: '2026-11-08 12:33:35+00',
+      }),
+    ).toBeNaN();
+  });
+
   it('resolves sealed residual from pre-fuel projected rows without snapshot', () => {
     for (const { week, sealed } of KENNY_OWED_WEEKS) {
       const v = resolveSealedResidualSettlement({
