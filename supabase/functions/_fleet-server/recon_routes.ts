@@ -62,6 +62,7 @@ import { acknowledgeCashSourceMismatch, reopenWeek, sealEarningsLaneForWeek } fr
 import { startWeekWorkflow } from "./recon_close_workflow.ts";
 import { registerReconImportRoutes } from "./recon_import_routes.ts";
 import { loadLastUploadsForWeek, type ReconLastUpload } from "./recon_after_source_upload.ts";
+import { loadIndriveLoggedDaysForWeek } from "./recon_indrive_logged_days.ts";
 import { shapeWeekActivity } from "./recon_activity.ts";
 import { shapeWeekTimeline } from "./recon_activity_timeline.ts";
 import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
@@ -804,7 +805,10 @@ async function computeWeekDesk(
     closeCheck,
     corrections,
     sources: await (async () => {
-      const uploads = await loadLastUploadsForWeek(orgId, weekKey);
+      const [uploads, indriveLogged] = await Promise.all([
+        loadLastUploadsForWeek(orgId, weekKey),
+        loadIndriveLoggedDaysForWeek(orgId, weekKey),
+      ]);
       return sources.map((s) => {
         const def = RECON_SOURCES.find((d) => d.id === s.id);
         return {
@@ -817,6 +821,9 @@ async function computeWeekDesk(
           inputHash: s.inputHash,
           lastRequestedAt: s.lastRequestedAt,
           lastUpload: uploads.get(s.id) ?? null,
+          ...(s.id === "indrive_trips" && indriveLogged.length > 0
+            ? { loggedDays: indriveLogged }
+            : {}),
         };
       });
     })(),
@@ -944,13 +951,19 @@ async function overlayLastUploadsOnDesk(
 ): Promise<Record<string, unknown>> {
   const raw = desk.sources;
   if (!Array.isArray(raw)) return desk;
-  const uploads = await loadLastUploadsForWeek(orgId, weekKey);
-  if (uploads.size === 0) return desk;
+  const [uploads, indriveLogged] = await Promise.all([
+    loadLastUploadsForWeek(orgId, weekKey),
+    loadIndriveLoggedDaysForWeek(orgId, weekKey),
+  ]);
   const sources = raw.map((row) => {
     const id = String((row as { id?: string }).id || "");
     const last = uploads.get(id as ReconSourceId);
-    if (!last) return row;
-    return { ...row, lastUpload: last as ReconLastUpload };
+    let next = row;
+    if (last) next = { ...next, lastUpload: last as ReconLastUpload };
+    if (id === "indrive_trips" && indriveLogged.length > 0) {
+      next = { ...next, loggedDays: indriveLogged };
+    }
+    return next;
   });
   return { ...desk, sources };
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatCoverageRangeShort,
+  formatIndriveLoggedDayLine,
   formatUploadReceiptLine,
   sourceCardSubtitle,
 } from './reconSourceUploadReceipt.ts';
@@ -21,6 +22,14 @@ describe('formatUploadReceiptLine', () => {
     expect(line).toContain('kenny-timeline.csv');
     expect(line).toContain('550 rows');
     expect(line).toContain('9–15 Nov');
+  });
+});
+
+describe('formatIndriveLoggedDayLine', () => {
+  it('formats weekday, trip count and J$ total (WRA-71)', () => {
+    expect(
+      formatIndriveLoggedDayLine({ day: '2026-11-15', tripCount: 8, amountMajor: 10650 }),
+    ).toBe('Sun 15 · 8 trips logged · J$10,650');
   });
 });
 

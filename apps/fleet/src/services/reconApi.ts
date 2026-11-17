@@ -135,6 +135,12 @@ export type ReconRunSourceLastUpload = {
   coverageEnd: string;
 };
 
+export type ReconRunSourceLoggedDay = {
+  day: string;
+  tripCount: number;
+  amountMajor: number;
+};
+
 export type ReconRunSource = {
   id: string;
   label: string;
@@ -144,6 +150,8 @@ export type ReconRunSource = {
   coverage: Record<string, string>;
   inputHash?: string;
   lastUpload?: ReconRunSourceLastUpload | null;
+  /** WRA-71: hand-logged InDrive days (read overlay, not stored on desk). */
+  loggedDays?: ReconRunSourceLoggedDay[];
 };
 
 export type ReconExternalQueueItem = {

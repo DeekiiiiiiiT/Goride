@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import { AlertCircle, Bell, CheckCircle2, Info, Loader2, UploadCloud } from 'lucide-react';
 import { toast } from 'sonner';
 import {
+  formatIndriveLoggedDayLine,
   formatUploadReceiptLine,
   roamFuelExternalCopy,
   sourceCardSubtitle,
@@ -319,6 +320,17 @@ export function ReconSourceCard({
               {receiptLine}
             </p>
           ) : null}
+          {source.id === 'indrive_trips' && source.loggedDays?.length
+            ? source.loggedDays.map((day) => (
+              <p
+                key={day.day}
+                className="text-xs text-slate-600"
+                data-testid="recon-source-indrive-logged-day"
+              >
+                {formatIndriveLoggedDayLine(day)}
+              </p>
+            ))
+            : null}
           <CoverageMini weekKey={weekKey} coverage={source.coverage ?? {}} />
         </div>
         {needsAction ? (

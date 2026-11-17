@@ -391,9 +391,10 @@ export {
 export {
   formatUploadReceiptLine,
   formatCoverageRangeShort,
+  formatIndriveLoggedDayLine,
   sourceCardSubtitle,
 } from './reconSourceUploadReceipt.ts';
-export type { ReconSourceLastUpload } from './reconSourceUploadReceipt.ts';
+export type { ReconSourceLastUpload, IndriveLoggedDay } from './reconSourceUploadReceipt.ts';
 export {
   coverageInputHash,
   isReconHumanSourceStatus,

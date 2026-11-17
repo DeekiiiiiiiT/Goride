@@ -281,6 +281,59 @@ describe('ReconSourceCard — WRA-70 upload receipt', () => {
   });
 });
 
+describe('ReconSourceCard — WRA-71 InDrive logged days', () => {
+  const lastUpload = {
+    uploadedAt: '2026-11-17T18:00:00.000Z',
+    fileName: 'indrive.csv',
+    rowCount: 12,
+    coverageStart: '2026-11-09',
+    coverageEnd: '2026-11-15',
+  };
+
+  it('shows logged-day line beside upload receipt and attest empty days only', async () => {
+    const onAttestNone = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ReconSourceCard
+        weekKey="2026-11-09"
+        source={{
+          id: 'indrive_trips',
+          label: 'InDrive trip export',
+          requirement: 'required',
+          status: 'partial',
+          coverage: {
+            '2026-11-09': 'missing',
+            '2026-11-10': 'missing',
+            '2026-11-11': 'missing',
+            '2026-11-12': 'missing',
+            '2026-11-13': 'missing',
+            '2026-11-14': 'missing',
+            '2026-11-15': 'covered',
+          },
+          lastUpload,
+          loggedDays: [{ day: '2026-11-15', tripCount: 8, amountMajor: 10650 }],
+        }}
+        onUpload={() => {}}
+        onAttestNone={onAttestNone}
+      />,
+    );
+    expect(screen.getByTestId('recon-source-upload-receipt').textContent).toMatch(/indrive\.csv/);
+    expect(screen.getByTestId('recon-source-indrive-logged-day').textContent).toMatch(
+      /Sun 15 · 8 trips logged · J\$10,650/,
+    );
+    const btn = screen.getByRole('button', { name: /No activity on 6 empty days/i });
+    await user.click(btn);
+    expect(onAttestNone).toHaveBeenCalledWith('indrive_trips', [
+      '2026-11-09',
+      '2026-11-10',
+      '2026-11-11',
+      '2026-11-12',
+      '2026-11-13',
+      '2026-11-14',
+    ]);
+  });
+});
+
 describe('ReconSourceCard — Uber activity timeline (optional)', () => {
   it('shows Optional, the day dots, and an Upload button that opens the Uber upload', async () => {
     const onUpload = vi.fn();

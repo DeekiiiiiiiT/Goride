@@ -66,6 +66,32 @@ export function formatUploadReceiptLine(
 /**
  * Status line under the card title (receipt is shown separately).
  */
+export type IndriveLoggedDay = {
+  day: string;
+  tripCount: number;
+  amountMajor: number;
+};
+
+function formatWeekdayDayUtc(ymd: string): string {
+  const [y, m, d] = ymd.slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return ymd.slice(0, 10);
+  const when = new Date(Date.UTC(y, m - 1, d, 12));
+  const weekday = when.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+  return `${weekday} ${d}`;
+}
+
+/** WRA-71 — e.g. "Sun 15 · 8 trips logged · J$10,650" */
+export function formatIndriveLoggedDayLine(day: IndriveLoggedDay): string {
+  const trips =
+    day.tripCount === 1 ? '1 trip logged' : `${day.tripCount} trips logged`;
+  const amount = Math.abs(Number(day.amountMajor) || 0);
+  const money =
+    amount % 1 === 0
+      ? `J$${amount.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+      : `J$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${formatWeekdayDayUtc(day.day)} · ${trips} · ${money}`;
+}
+
 export function sourceCardSubtitle(opts: {
   status: string;
   lastUpload?: ReconSourceLastUpload | null;
