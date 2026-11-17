@@ -5,6 +5,7 @@ import {
   type VehiclePictureDb,
   type VehiclePictureVersionRow,
 } from "./vehicle_picture_db.ts";
+import { jamaicaPictureDay } from "./vehicle_picture_status.ts";
 import type { VehiclePictureRow } from "./vehicle_picture_types.ts";
 import type { VehiclePicturesSettingsKv } from "./vehicle_pictures_settings.ts";
 import { mergeVehiclePicturesSettings } from "./vehicle_pictures_settings.ts";
@@ -265,10 +266,10 @@ export function createMemoryVehiclePictureDb(): {
       if (v) fleetVehicles.set(vehicleId, { ...v, picture_id: pictureId });
     },
     async countOrgQueuedToday(orgId, now) {
-      const day = now.toISOString().slice(0, 10);
+      const day = jamaicaPictureDay(now);
       let count = 0;
       for (const p of pictures.values()) {
-        if (p.queued_by_org === orgId && p.created_at.slice(0, 10) === day) count += 1;
+        if (p.queued_by_org === orgId && jamaicaPictureDay(new Date(p.created_at)) === day) count += 1;
       }
       return count;
     },

@@ -151,7 +151,9 @@ Deno.test("T28: org daily limit → limited", async () => {
     const cat = { ...defaultTestCatalog(), model: `roomy-${i}` };
     const lk = buildLook(cat, "white");
     if ("error" in lk) throw new Error("bad look");
-    await mem.db.insertQueuedPicture(lk, ORG, CAT);
+    const row = await mem.db.insertQueuedPicture(lk, ORG, CAT);
+    // Stamp on the test's fixed "today" (deps.now), not the real clock.
+    if (row) mem.pictures.set(row.id, { ...row, created_at: "2026-11-16T15:00:00.000Z" });
   }
   const r = await runPictureLookup(deps(mem), {
     vehicleId: "V-LIM",

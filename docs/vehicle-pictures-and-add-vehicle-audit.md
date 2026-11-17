@@ -1,35 +1,40 @@
 # Vehicle pictures + Add vehicle — audit
 
-**Rev 8 · 16 Nov 2026** · Roam Fleet (first), Roam Dominion (staff screen)
+**Rev 9 · 17 Nov 2026** · Roam Fleet (first), Roam Dominion (staff screen). Rev 9: live on production (switch still off); §0 rewritten for a new chat.
 
 **Goal:** when a fleet adds a vehicle, Roam reads its fitness and registration certificates and keeps the details, not the files. It then shows a studio picture of that exact car in that exact colour. Each picture is made once by AI, stored on Cloudflare R2, and reused for every later vehicle with the same car and colour.
 
 **Rev 8 is a slimmed version.** Rev 7 (signed off by the reviewer at Rev 5, with owner corrections in Rev 6–7) went through review, build and screen check. Rev 8 removes the review history, the old findings, the "what exists today" survey and the Stitch Keep/Drop/Add lists, because all of that is built. The full Rev 7 is in git history.
 
-**Depends on:** [cloudflare-r2-storage-migration-audit.md](./cloudflare-r2-storage-migration-audit.md). Its R2 storage code and the maker-logo slice are in the codebase (uncommitted).
+**Depends on:** [cloudflare-r2-storage-migration-audit.md](./cloudflare-r2-storage-migration-audit.md). Its R2 storage code and the maker-logo slice are committed and live (17 Nov).
 
 ---
 
 ## 0. START HERE (new chat)
 
-**Where we are (16 Nov 2026):**
-- **All code is built and tested on branch `parts-auto-match`, and nothing is committed.** Production has none of it: no migrations applied, no functions deployed, no apps deployed.
-- **Server** (Cursor rounds C1–C3d) passed, each after one fix round, with 120+ Deno tests.
-- **Screens** (Claude, UI1–UI3):
-  - built, with 22 Fleet tests and 10 Dominion tests
-  - **compared with the owner's Stitch screens on the test copy** (23 screens) and the gaps fixed
-  - no new type errors (Fleet baseline 335, Dominion 0)
-- **Next step (16 Nov, late): Cursor round C4b**, [cursor-C4b-rerun.md](./vehicle-pictures-build/cursor-C4b-rerun.md), which finishes C4 Parts 2–3 after Claude's fixes. Original round: Prompt: [cursor-C4-preprod-and-reset.md](./vehicle-pictures-build/cursor-C4-preprod-and-reset.md). It covers the reset script, a pre-production run with one real AI picture, and a check of the owner's real Jamaican documents.
-- **Owner setup for C4 is DONE (16 Nov)**: see §2 row 1. Earlier list, kept for reference (§10):
-  1. Cloudflare: create the `roam-scratch` bucket and its token, turn on Image Transformations, add the X-Robots-Tag rule.
-  2. Put the scratch token, `GEMINI_API_KEY` and `OPENAI_API_KEY` into `.env.local` themselves.
-  3. Put one real fitness and one real registration into `C:\Roam\Goride\.vehicle-docs-test\`.
-- After C4 → go-live (§2).
+**Where we are (17 Nov 2026, ~01:45 UTC): LIVE, but AI pictures not switched on yet.**
+- **Proven end to end on the local test copy (17 Nov):** the owner added a real red Toyota C-HR (5404LK). Gemini read both certificates, the car matched the catalogue, and a correct red C-HR studio picture was made in seconds and shown.
+- **Committed and pushed:** `3b9c9805` (all of this work, 146 files) + `ebd374fc` (strips a UTF-8 BOM from another chat's migration `20261116235152_week_recon_activity_timeline.sql`, so the pre-push check passes). Both are on `parts-auto-match` **and on `main`** (main moved from `cbd83e83` to `ebd374fc`). `main` also carries `f7835f2b` (another chat's Week Recon activity timeline).
+- **Done on production (17 Nov):**
+  - Supabase secrets set: `GEMINI_API_KEY` (the owner's new key, billing on), `R2_ACCESS_KEY_ID` + `R2_SECRET_ACCESS_KEY` (the new `roam-app` token: read/write on roam-public + roam-private, tested). `R2_ACCOUNT_ID` and `R2_PUBLIC_BASE_URL` were already right. No OpenAI needed.
+  - The 7 migrations applied with `npx supabase db push --remote=csfllzzastacofsvcdsc --include-all --yes`, which also writes the logbook lines.
+  - The push to main ran **Deploy Supabase Edge Function** (run 43997030787): success, and the log lists fleet-core under "Deployed Functions" (with all other functions).
+  - **Vercel path deploy** (run 43997030955): success. Hooks fired HTTP 201 for roam-fleet, roam-dominion and the other apps. Vercel builds take a few minutes after that.
+- **Runs on `ebd374fc` checked (17 Nov, ~02:10 UTC):** Deploy Edge, Vercel, Parts SQL, Parts auto-match e2e and Deploy recon-worker passed. **CI** and **Test Supabase Functions** failed, both from the test helper `vehicle_picture_test_harness.ts`, not live code: its fake day counter used a plain UTC date slice (trips the one-week rule check) and stamped pictures with the real clock while T28 fixes "today" at 16 Nov, so T28 failed once the real date became 17 Nov. **Fixed locally (not pushed yet):** the helper uses `jamaicaPictureDay` like live code, and T28 stamps its 50 pictures on the test's own day. Local: date check OK, all `_fleet-server` Deno tests pass (1137), the other CI node checks pass (two need CI-only secrets). Most CI steps were skipped after the first failure, so the next push is the first full CI run.
+- **Live apps checked (17 Nov):** roamfleet.co has the new Add vehicle flow ("Send for checking", "Filled by Roam"); roamdominion.co has the Vehicle pictures page with the AI pictures switch.
 
-**How a new chat should continue:**
-1. Read this §0, §1 and §2, then the C4 prompt.
-2. If the owner pastes Cursor's C4 report, check it against the C4 prompt and the real files and database. A test passing isn't proof on its own.
-3. Never paste secrets in chat. Never touch production, git branches or commits without the owner saying so.
+**How a new chat should continue (in this order):**
+1. Read this §0, §1 and §2.
+2. `gh run list --branch main --limit 10`: report the result of every run on `ebd374fc` (CI, Test Supabase Functions, Parts SQL checks, Parts auto-match e2e, Deploy recon-worker). Fix anything red.
+3. Check that roamfleet.co (Fleet) and Dominion show the new Add vehicle flow / Vehicle pictures page (the Vercel builds finished).
+4. **Owner:** in live Dominion → Vehicles → Vehicle pictures, turn **AI pictures: On** (owner-only switch). It is off by default.
+5. **Real run (§2 row 7):** the owner adds one real vehicle in live Fleet; the picture appears in about a minute. A second vehicle of the same car + colour reuses it.
+6. Then the leftovers in §2 row 6: production settings/budgets check, the reset script on production (§8: dry run first; it needs the prod service-role key, which is not in `.env.local`), and deleting the `roam-scratch` bucket + its token in Cloudflare.
+7. Never paste secrets in chat. The Supabase MCP connector was broken in the 16–17 Nov chat; the `npx supabase` CLI is logged in and works (it asks for `--yes` on production changes, and the owner has to have said go).
+
+**Separate, not part of this audit:** the prod `service_role` key was public in the repo until 16 Nov (repo now private) and still needs rotating. See memory `service-role-key-public-repo`.
+
+**Local test copy (works end to end):** `pnpm testcopy` passes the owner's Gemini/R2 keys and the local cron secret into the served functions (`scripts/testcopy.mjs`). Fleet http://127.0.0.1:5181 (`mm-f01-fleet@local.test` / `MmF01Local2026!`), Dominion http://127.0.0.1:5180 (`mm-p01-owner@local.test` / `MmP01Local2026!`, TOTP key `JBSWY3DPEHPK3PXP`). Local AI pictures are on; pictures go to the real roam-public. The local catalogue has only Roomy + a C-HR row Claude added. Before testing server changes locally, run `node scripts/build-edge-bundle.mjs fleet-core` (the local bundle goes stale). Stop with `pnpm testcopy:stop`.
 
 **Working rules (owner):**
 - Cursor does the server and database rounds. Claude ports the screens and checks Cursor's work.
@@ -46,7 +51,7 @@
 | Part | Where | Notes |
 |---|---|---|
 | Build rounds and prompts | [docs/vehicle-pictures-build/](./vehicle-pictures-build/README.md) | README table: C1–C3d passed, UI1–UI3 done |
-| Database (7 migrations, local only) | `supabase/migrations/20261116175911_vehicle_pictures.sql` … `20261116200225_vehicle_picture_stale_flag.sql`; checks in `supabase/tests/vehicle_pictures_checks.sql` | Tables: `vehicle_picture`, `vehicle_picture_version`, `vehicle_picture_worker_lock`, `fleet.vehicle_document_check`, `fleet.vehicle_document_read_log`. Columns `fleet.vehicles.color_standard` and `picture_id`; the view `public.fleet_vehicles` was recreated to include them. Two `pg_cron` jobs. Each needs a **logbook line** when applied to production. |
+| Database (7 migrations, applied to production 17 Nov) | `supabase/migrations/20261116175911_vehicle_pictures.sql` … `20261116200225_vehicle_picture_stale_flag.sql`; checks in `supabase/tests/vehicle_pictures_checks.sql` | Tables: `vehicle_picture`, `vehicle_picture_version`, `vehicle_picture_worker_lock`, `fleet.vehicle_document_check`, `fleet.vehicle_document_read_log`. Columns `fleet.vehicles.color_standard` and `picture_id`; the view `public.fleet_vehicles` was recreated to include them. Two `pg_cron` jobs. Each needs a **logbook line** when applied to production. |
 | Shared server code | `supabase/functions/_shared/vehiclePictures/` (colour, look key, prompt, document whitelist, reader prompt, last error), `supabase/functions/_shared/objectStorage/` (R2) | |
 | Server routes | `supabase/functions/_fleet-server/vehicle_picture_*.ts`, `vehicle_document_read*.ts`, `vehicle_save_*.ts`, `vehicle_pictures_settings.ts` | All in **fleet-core**. The route list `supabase/functions/fleet-core/routes.generated.json` was refreshed (837 routes). |
 | Fleet screens | `apps/fleet/src/components/vehicles/add-vehicle/` (AddVehicleFlow, AddVehicleUi, VehiclePicture, VehicleListCard, vehicleColors), `detail/VehicleCertificateCards.tsx`, `detail/VehicleDetailHeader.tsx`, `VehiclesPage.tsx` | The old AddVehicleModal and VehicleCard are deleted. The Vehicles page opens on the picture cards; the table view is one click away. |
@@ -74,8 +79,8 @@ There is **no** `new_add_vehicle_flow` flag: the new add flow simply replaces th
 | 2 | **C4:** Part 0 (Imagen → `gemini-3.1-flash-image`, because Imagen 4 returns 404), reset script + T22, pre-production run (§11), real document check | Cursor, then Claude checks | **DONE (16 Nov), all checks pass.** C4b ran. Claude verified it ([preprod-run.md](./vehicle-pictures-build/preprod-run.md), last section): the real Gemini picture is good (Tank-twin grille noted), cleanup is proven (keeps current + newest retired), sweep works, real documents read OK, and Gemini sends JPEG (now handled). Check e passed (AVIF/WebP ~13 KB from an 857 KB PNG). |
 | 3 | Manual accessibility check (keyboard only, 200% zoom / 320 px, reduce motion, no meaning by colour alone) on the Fleet add flow and Dominion page; axe has no serious/critical issues (T21) | Claude on the test copy | **DONE 17 Nov.** axe 4.10.2 (WCAG 2.1 A/AA) + Tab sweep + 320 px reflow + reduced motion on 7 screens: Vehicles list, add flow F1–F5, Dominion Vehicle pictures. **Fixed:** names on the Vehicles filters + view toggle (`aria-pressed`); green step / notice / chip text `#059669` → `#047857` (contrast); TollClassPicker label linked to its select; Dominion card title shows "Toyota Roomy" / "Toyota C-HR" / "BMW X5" instead of the lower-case look names (+ test). **After fixes:** 0 serious/critical on these screens, no sideways scroll at 320 px, nothing animates under reduced motion. Status always has a word next to its colour. **Outside this work (app shell):** sidebar avatar alt, sidebar section buttons with no focus ring, the test-copy banner contrast. Dominion 11 tests, Fleet vehicles 133 tests pass; tsc Dominion 0, Fleet 334 (≤ 335). Note: the local `fleet-core` bundle (git-ignored) was stale; `deploy:fleet-core` rebuilds it, so go-live is unaffected. |
 | 4 | Security checklist (§6) | Claude | **DONE 16 Nov.** All 7 items pass for this work (detail in §6). Found during the scan and tracked outside this audit: the repo was public with the prod service_role key in the baseline migration (made private 16 Nov; key rotation still to do), and older dependency issues. |
-| 5 | Commit (owner says when). The R2 storage work and this work are both uncommitted on `parts-auto-match`. | Owner's say | Not done |
-| 6 | **Go-live:** apply the 7 migrations to production, each with a logbook line → deploy fleet-core (check the deploy log says "Deployed Functions") → deploy Fleet and Dominion → set the Supabase secret `GEMINI_API_KEY` to the owner's new key (billing on; no OpenAI needed) → set the production settings row and the Gemini budgets → delete the `roam-scratch` bucket and its token → reset script on production (§8): dry run, then apply | Cursor prompt + owner | Not done |
+| 5 | Commit | Claude | **DONE 17 Nov:** `3b9c9805` + `ebd374fc`, pushed to `parts-auto-match` and `main` |
+| 6 | **Go-live:** apply the 7 migrations to production, each with a logbook line → deploy fleet-core (check the deploy log says "Deployed Functions") → deploy Fleet and Dominion → set the Supabase secret `GEMINI_API_KEY` to the owner's new key (billing on; no OpenAI needed) → set the production settings row and the Gemini budgets → delete the `roam-scratch` bucket and its token → reset script on production (§8): dry run, then apply | Claude + owner | **Mostly DONE 17 Nov:** secrets set, 7 migrations applied, fleet-core deployed, Vercel hooks fired. **Left:** push the test-helper fix and see CI + Test Supabase Functions go green (live apps checked 17 Nov: new screens are there); settings/budgets check; reset script on prod (§8); delete `roam-scratch` + its token |
 | 7 | **Real run:** turn on `ai_vehicle_pictures` → add one real vehicle with a new look → picture made → add a second with the same car and colour → reused, with no Imagen call in the logs | Owner + Claude | Not done |
 | 8 | Owner paperwork (§10 items 3, 5) | Owner | Not done |
 
