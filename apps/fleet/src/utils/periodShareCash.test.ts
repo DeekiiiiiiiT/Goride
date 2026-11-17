@@ -11,7 +11,7 @@ describe('computeWeekCommissionShare', () => {
     const r = computeWeekCommissionShare({
       fareEntries: [
         { date: '2026-06-30', eventType: 'fare_earning', grossAmount: 10000 },
-        { date: '2026-06-01', eventType: 'fare_earning', grossAmount: 80000 }, // MTD → Silver
+        { date: '2026-06-15', eventType: 'fare_earning', grossAmount: 80000 },
       ],
       tipEntries: [{ date: '2026-07-01', eventType: 'tip', netAmount: 500 }],
       periodAnchor: '2026-06-29',

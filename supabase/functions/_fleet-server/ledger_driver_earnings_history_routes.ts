@@ -19,6 +19,7 @@ import {
   getTierForEarningsEH,
   mondayYmdFromYmd,
 } from "./earnings_policy_runtime.ts";
+import { computeTierMonthToDateFares } from "./period_share_cash.ts";
 
 const PREFIX = "/make-server-37f42386";
 
@@ -293,21 +294,15 @@ export function registerLedgerDriverEarningsHistoryRoutes(app: Hono) {
           expenseTypes.has(e.eventType) || e.eventType === "driver_payout" || e.eventType === "adjustment"
         ).length;
 
-        // Monthly-reset cumulative earnings for tier lookup
-        const refMonthStartMs = startOfMonthMsEH(bStart);
-        const refMonthEndMs = endOfMonthMsEH(bStart);
-        const cumulativeCap = Math.min(bEnd, refMonthEndMs);
-
-        const cumulativeEarnings = fareEntriesEH.reduce((s: number, e: any) => {
-          if (e._dateMs >= refMonthStartMs && e._dateMs <= cumulativeCap) {
-            const g = Number.isFinite(e.grossAmount) ? Number(e.grossAmount) : Math.abs(Number(e.netAmount) || 0);
-            return s + g;
-          }
-          return s;
-        }, 0);
-
-        // Policy resolve key: Monday of bucket start (daily/weekly = that day/week; monthly = first day in bucket).
-        const weekStartYmd = mondayYmdFromYmd(bucket.startDate);
+        // WRA-66: tier month-to-date = full weeks by Monday anchor month (not calendar 1st).
+        const weekStartYmd =
+          periodType === "monthly"
+            ? mondayYmdFromYmd(bucket.endDate)
+            : mondayYmdFromYmd(bucket.startDate);
+        const cumulativeEarnings = computeTierMonthToDateFares({
+          fareEntries: fareEntriesEH,
+          periodAnchor: weekStartYmd,
+        });
         const bundleEH = resolveActiveEarningsBundleForDriverWeek({
           policies: earningsPoliciesEH,
           driverId,

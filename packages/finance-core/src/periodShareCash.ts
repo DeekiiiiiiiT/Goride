@@ -8,6 +8,7 @@ import { normalizePlatform } from './normalizePlatform.ts';
 import { round2, MONEY_EPS } from './money.ts';
 import { fleetCalendarDay, DEFAULT_FLEET_TZ } from './periodKey.ts';
 import { isLedgerReversal } from './platformFeeRecognition.ts';
+import { computeTierMonthToDateFares } from './tierMonthToDate.ts';
 
 export type LedgerFareLike = {
   date?: string;
@@ -67,10 +68,6 @@ function fareGross(e: LedgerFareLike): number {
 
 function dayKey(d: string | undefined, timezone: string): string {
   return fleetCalendarDay(String(d || ''), timezone);
-}
-
-function monthStartYmd(periodAnchor: string): string {
-  return `${periodAnchor.slice(0, 7)}-01`;
 }
 
 /** Tips count toward weekly quota; paid to driver only if quota is met (or quota is off). */
@@ -162,13 +159,12 @@ export function computeWeekCommissionShare(params: {
       }, 0),
   );
 
-  // D4: full-week cumulative — do not truncate at month-end.
-  const mStart = monthStartYmd(periodAnchor);
-  const cumulativeEarnings = fareEntries.reduce((s, e) => {
-    const d = dayKey(e.date, timezone);
-    if (d >= mStart && d <= periodEnd) return s + fareGross(e);
-    return s;
-  }, 0);
+  // WRA-66 / D4: anchor-month full weeks (never calendar days from the 1st).
+  const cumulativeEarnings = computeTierMonthToDateFares({
+    fareEntries,
+    periodAnchor,
+    timezone,
+  });
 
   const tier = getTierForEarningsEH(cumulativeEarnings, tiers || []);
   const pct = Number(tier.sharePercentage) || 0;

@@ -1,28 +1,34 @@
 import { TierConfig, Trip, MonthlyPerformance } from '../types/data';
 import { getDriverPortalTripEarnings } from './tripEarnings';
-import { startOfMonth, endOfMonth, isWithinInterval, parseISO, format } from 'date-fns';
+import { parseISO, format } from 'date-fns';
+import {
+  computeTierMonthToDateFromTrips,
+  DEFAULT_FLEET_TZ,
+  periodKeyFor,
+} from '@roam/finance-core';
 
 export const TierCalculations = {
   calculateMonthlyEarnings(trips: Trip[], referenceDate: Date = new Date()): number {
       if (!trips || trips.length === 0) return 0;
+      const refYmd = format(referenceDate, 'yyyy-MM-dd');
+      const periodAnchor = periodKeyFor(refYmd, DEFAULT_FLEET_TZ);
+      if (!periodAnchor) return 0;
 
-      const start = startOfMonth(referenceDate);
-      const end = endOfMonth(referenceDate);
-
-      return trips.reduce((sum, trip) => {
-          // Guard against invalid dates
-          if (!trip.date) return sum;
-          
-          try {
-              const tripDate = typeof trip.date === 'string' ? parseISO(trip.date) : trip.date;
-              if (isWithinInterval(tripDate, { start, end })) {
-                  return sum + getDriverPortalTripEarnings(trip);
+      return computeTierMonthToDateFromTrips({
+          trips,
+          periodAnchor,
+          tripEarnings: getDriverPortalTripEarnings,
+          tripDate: (trip) => {
+              if (!trip.date) return undefined;
+              try {
+                  const tripDate = typeof trip.date === 'string' ? parseISO(trip.date) : trip.date;
+                  return format(tripDate, 'yyyy-MM-dd');
+              } catch {
+                  return undefined;
               }
-          } catch (e) {
-              console.warn("Invalid trip date encountered in tier calculation", trip);
-          }
-          return sum;
-      }, 0);
+          },
+          timezone: DEFAULT_FLEET_TZ,
+      });
   },
 
   getTierForEarnings(cumulativeEarnings: number, tiers: TierConfig[]): TierConfig {

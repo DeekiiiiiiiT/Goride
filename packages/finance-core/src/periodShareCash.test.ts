@@ -54,10 +54,10 @@ describe('computeWeekCommissionShare — D3 tips quota + D4 full week', () => {
     expect(r.tipsPaidToDriver).toBe(80);
   });
 
-  it('includes July days of a Jun 29 week in the tier cumulative (D4)', () => {
+  it('includes July days of a Jun 29 week in June anchor-month MTD (WRA-66)', () => {
     const r = computeWeekCommissionShare({
       fareEntries: [
-        { date: '2026-06-01', eventType: 'fare_earning', grossAmount: 70000 },
+        { date: '2026-06-15', eventType: 'fare_earning', grossAmount: 70000 },
         { date: '2026-07-02', eventType: 'fare_earning', grossAmount: 10000 },
       ],
       periodAnchor: '2026-06-29',

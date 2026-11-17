@@ -85,11 +85,11 @@ function share(fareEntries: Record<string, unknown>[]) {
   });
 }
 
-Deno.test("WRA-51: day-dated fares keep 1–6 Sep in September → 33%", () => {
+Deno.test("WRA-51 / WRA-66: day-dated fares → September anchor-month MTD → 31%", () => {
   const out = share(rangeSummaryToCanonicalEvents(DAYS));
   assertEquals(out.grossRevenue, 102688.43);
-  assertEquals(out.driverSharePercent, 33);
-  assertEquals(out.driverShare, 33887.18);
+  assertEquals(out.driverSharePercent, 31);
+  assertEquals(out.driverShare, 31833.41);
 });
 
 Deno.test("WRA-51: Monday-dated week sums drop 1–6 Sep into August (the bug) → 31%", () => {

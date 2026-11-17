@@ -129,6 +129,21 @@ export {
   getTierForEarningsEH,
 } from './periodShareCash.ts';
 export type { LedgerFareLike, TripCashLike, QuotaConfigLike } from './periodShareCash.ts';
+export {
+  computeTierMonthToDateFares,
+  computeTierMonthToDateFaresCalendarLegacy,
+  computeTierMonthToDateFromTrips,
+  sumWeekFareGross,
+  mondayAnchorsInMonthThrough,
+  fareGrossForTier,
+} from './tierMonthToDate.ts';
+export {
+  previewTierMonthToDateCorrections,
+} from './tierMonthToDateCorrectionPreview.ts';
+export type {
+  TierMonthToDateCorrectionWeekInput,
+  TierMonthToDateCorrectionPreviewRow,
+} from './tierMonthToDateCorrectionPreview.ts';
 export { foldPayoutCashByWeek } from './payoutCashDedupe.ts';
 export type { PayoutCashLike } from './payoutCashDedupe.ts';
 export { importMoneyIdempotencyKey } from './importIdempotency.ts';
