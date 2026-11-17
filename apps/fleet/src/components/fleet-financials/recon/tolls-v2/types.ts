@@ -60,7 +60,13 @@ export type TollV2Charge = {
   receipt?: Record<string, unknown> | null;
   decision?: TollV2Decision | null;
   reviewPairId?: string | null;
+  /** What the driver was doing at the crossing, from the Uber activity timeline + trips (any platform). */
+  driverStatus?: TollV2DriverStatus | null;
+  /** Pending, no trip, and the driver was offline: likely personal use. Flag only; the owner decides. */
+  offlineFlag?: boolean;
 };
+
+export type TollV2DriverStatus = 'on_trip' | 'online' | 'offline' | 'no_timeline' | 'unknown';
 
 export type TollV2Payback = {
   id: string;
@@ -186,6 +192,7 @@ export type TollV2Desk = {
   reviewPairs: TollV2ReviewPair[];
   blockers: TollV2Blocker[];
   late?: TollV2LateItem[];
+  summary?: { offlineFlagged?: number; offlineFlaggedMinor?: number };
 };
 
 export type TollV2CommandIntent =

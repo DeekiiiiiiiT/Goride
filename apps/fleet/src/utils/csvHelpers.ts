@@ -279,9 +279,24 @@ export function validateImmutableRecord(row: ParsedRow, lastAnchorDate?: string,
     return { valid: true };
 }
 
-export function detectFileType(headers: string[], fileName: string = ''): FileData['type'] {
+const UBERTimelineDayLine =
+    /^(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}\s+\d{4}$/i;
+
+export function detectFileType(
+    headers: string[],
+    fileName: string = '',
+    firstContentLine: string = '',
+): FileData['type'] {
     const has = (keyword: string) => headers.some(h => h.toLowerCase().includes(keyword.toLowerCase()));
     const name = fileName.toLowerCase();
+    const headerLine = headers.join(',').toLowerCase();
+
+    if (
+        (!headers.length || (headers.length === 1 && !headerLine.includes(','))) &&
+        UBERTimelineDayLine.test(firstContentLine.trim())
+    ) {
+        return 'uber_activity_timeline';
+    }
     
     // 1. Trip Activity (The main ledger)
     if (has('Trip UUID') && has('Trip request time') && has('Pickup address')) return 'uber_trip';
@@ -326,6 +341,16 @@ export function detectFileType(headers: string[], fileName: string = ''): FileDa
         (has('Earnings Per Hour') || has('Total Earnings'))) ||
         name.includes('vehicle_performance')
     ) return 'uber_vehicle_performance';
+
+    // 7.0a Owner Uber copy: Driver UUID/name columns + Activity, no Date/Time columns
+    const hasDriverUuidCol = has('Driver UUID') || has('Driver ID');
+    const hasDriverNameCol = has('Driver first name') || has('Driver last name') || has('Driver First Name');
+    const hasActivityCol = has('Activity') || has('Event') || has('Activity / Event');
+  const hasDateCol = has('Date') || has('Day');
+    const hasTimeCol = has('Time') || has('Timestamp');
+    if ((hasDriverUuidCol || hasDriverNameCol) && hasActivityCol && !hasDateCol && !hasTimeCol) {
+        return 'uber_activity_timeline';
+    }
 
     // 7. Driver Activity (Hours) — official weekly Uber report only.
     // Do not match filename alone: app timeline Excel is often named Driver_Activity*.xlsx

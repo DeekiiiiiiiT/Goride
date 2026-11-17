@@ -208,3 +208,29 @@ describe('ReconSourceCard', () => {
     expect(screen.queryByRole('button', { name: /No activity/i })).toBeNull();
   });
 });
+
+describe('ReconSourceCard — Uber activity timeline (optional)', () => {
+  it('shows Optional, the day dots, and an Upload button that opens the Uber upload', async () => {
+    const onUpload = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ReconSourceCard
+        weekKey="2026-10-26"
+        source={{
+          id: 'uber_activity_timeline',
+          label: 'Uber activity timeline',
+          requirement: 'optional',
+          status: 'missing',
+          coverage: { '2026-10-26': 'covered', '2026-10-27': 'covered' },
+        }}
+        onUpload={onUpload}
+        onAttestNone={() => {}}
+      />,
+    );
+    const card = screen.getByTestId('recon-source-uber_activity_timeline');
+    expect(card.textContent).toMatch(/Uber activity timeline/);
+    expect(card.textContent).toMatch(/Optional/);
+    await user.click(screen.getByRole('button', { name: /^Upload$/ }));
+    expect(onUpload).toHaveBeenCalledWith('uber_activity_timeline');
+  });
+});

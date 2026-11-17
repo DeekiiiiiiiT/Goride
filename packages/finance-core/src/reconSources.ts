@@ -14,6 +14,7 @@ export type SourceRequirement = 'required' | 'optional' | 'not_applicable';
 
 export type ReconSourceId =
   | 'uber_bundle'
+  | 'uber_activity_timeline'
   | 'indrive_trips'
   | 'roam_trips'
   | 'toll_usage'
@@ -74,6 +75,16 @@ export const RECON_SOURCES: readonly ReconSourceDef[] = [
     feeds: ['trips_earnings', 'tolls', 'settlement_preview'],
     requiredWhen: (p) =>
       lineActive(p, 'rideshare') && p.hasUberDrivers ? 'required' : 'not_applicable',
+  },
+  {
+    id: 'uber_activity_timeline',
+    line: 'rideshare',
+    kind: 'upload',
+    label: 'Uber activity timeline',
+    coverage: 'daily_rows',
+    feeds: ['trips_earnings', 'tolls'],
+    requiredWhen: (p) =>
+      lineActive(p, 'rideshare') && p.hasUberDrivers ? 'optional' : 'not_applicable',
   },
   {
     id: 'indrive_trips',

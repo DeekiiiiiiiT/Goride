@@ -12,12 +12,13 @@ import {
   canCommitUberActivityTimeline,
   extractUberTimelineDriverIdentity,
   looksLikeOfficialUberDriverActivityCsv,
-  looksLikeUberActivityTimeline,
   parseUberActivityTimelineFromTable,
   parseUberActivityTimelineMatrix,
   parseUberActivityTimelineText,
   pickUberActivityTimelineSheetName,
+  splitUberTimelineCsvWithDriverColumns,
   structuredRowsToImportText,
+  uberTimelinePasteFromDriverColumns,
   UBER_ACTIVITY_PREFERRED_SHEET,
   type UberTimelineFileDriverIdentity,
   type UberTimelineParseResult,
@@ -25,11 +26,7 @@ import {
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
-import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { Textarea } from '../ui/textarea';
 import { pathForDriverDetail } from '../../navigation/pageRegistry';
 
 type DriverOption = {
@@ -47,12 +44,20 @@ function formatHours(seconds: number): string {
   return `${h}h ${m}m`;
 }
 
+const NO_ID_IN_FILE =
+  'This file has no driver Uber ID. Add the Driver UUID, Driver first name and Driver last name columns at the front, then upload it again.';
+
+function noDriverForIdentity(identity: UberTimelineFileDriverIdentity): string {
+  return identity.uberUuid
+    ? `No driver has Uber ID ${identity.uberUuid}${identity.displayName ? ` (${identity.displayName})` : ''}. Save it on the driver's Profile, then upload again.`
+    : `No driver matches “${identity.displayName}”. Add the Driver UUID column to the file, then upload again.`;
+}
+
 export function UberActivityTimelineImportPanel() {
   const fleetTimezone = useFleetTimezone() || 'America/Jamaica';
   const [drivers, setDrivers] = useState<DriverOption[]>([]);
   const [driversLoading, setDriversLoading] = useState(true);
   const [driverId, setDriverId] = useState('');
-  const [driverQuery, setDriverQuery] = useState('');
   const [driverFromFile, setDriverFromFile] = useState(false);
   const [fileIdentity, setFileIdentity] = useState<UberTimelineFileDriverIdentity | null>(null);
   const [matchError, setMatchError] = useState<string | null>(null);
@@ -94,8 +99,14 @@ export function UberActivityTimelineImportPanel() {
     ): { driver: DriverOption | null; identity: UberTimelineFileDriverIdentity } => {
       const identity = extractUberTimelineDriverIdentity(headers, rows);
       setFileIdentity(identity);
+      setDriverId('');
+      setDriverFromFile(false);
       if (!identity.uberUuid && !identity.displayName) {
-        setDriverFromFile(false);
+        setMatchError(NO_ID_IN_FILE);
+        return { driver: null, identity };
+      }
+      // Roster still loading: the effect below matches once it arrives.
+      if (!roster.length) {
         setMatchError(null);
         return { driver: null, identity };
       }
@@ -104,15 +115,9 @@ export function UberActivityTimelineImportPanel() {
         setDriverId(matched.id);
         setDriverFromFile(true);
         setMatchError(null);
-        setDriverQuery(matched.name);
         return { driver: matched, identity };
       }
-      setDriverFromFile(false);
-      setMatchError(
-        identity.uberUuid
-          ? `No fleet driver matches Uber UUID ${identity.uberUuid}. Pick the driver below.`
-          : `Found “${identity.displayName}” in the file but couldn’t match a fleet driver. Pick the driver below.`,
-      );
+      setMatchError(noDriverForIdentity(identity));
       return { driver: null, identity };
     },
     [resolveDriverFromIdentity],
@@ -144,41 +149,9 @@ export function UberActivityTimelineImportPanel() {
     };
   }, []);
 
-  const filteredDrivers = useMemo(() => {
-    const q = driverQuery.trim().toLowerCase();
-    if (!q) return drivers.slice(0, 80);
-    return drivers
-      .filter((d) => {
-        const name = String(d.name || '').toLowerCase();
-        const uber = String(d.uberDriverId || '').toLowerCase();
-        const id = String(d.id || '').toLowerCase();
-        return name.includes(q) || uber.includes(q) || id.includes(q);
-      })
-      .slice(0, 80);
-  }, [drivers, driverQuery]);
-
   const selectedDriver = useMemo(
     () => drivers.find((d) => d.id === driverId) || null,
     [drivers, driverId],
-  );
-
-  const runParse = useCallback(
-    (text: string, chronological = assumeChronological) => {
-      if (!text.trim()) {
-        setParseResult(null);
-        return;
-      }
-      if (!looksLikeUberActivityTimeline(text) && !text.includes('Online') && !text.includes('Offline')) {
-        toast.warning('This does not look like an Uber app activity timeline. Check the paste.');
-      }
-      const result = parseUberActivityTimelineText(text, {
-        timeZone: fleetTimezone,
-        driverId: driverId || 'preview',
-        assumeChronological: chronological,
-      });
-      setParseResult(result);
-    },
-    [assumeChronological, driverId, fleetTimezone],
   );
 
   // Re-parse when driver changes so source_event_ids use the real driver id
@@ -203,25 +176,26 @@ export function UberActivityTimelineImportPanel() {
       setDriverId(matched.id);
       setDriverFromFile(true);
       setMatchError(null);
-      setDriverQuery(matched.name);
-      toast.success(`Matched driver ${matched.name} from CSV Uber UUID`);
-    } else if (fileIdentity.uberUuid) {
-      setMatchError(
-        `No fleet driver matches Uber UUID ${fileIdentity.uberUuid}. Pick the driver below.`,
-      );
+      toast.success(`Matched driver ${matched.name} from the file's Uber ID`);
+    } else {
+      setMatchError(noDriverForIdentity(fileIdentity));
     }
   }, [driverId, drivers, driversLoading, fileIdentity, resolveDriverFromIdentity]);
 
-  const onPasteBlur = () => {
-    setAssumeChronological(false);
+  /** Every new file starts clean: no driver until the file names one. */
+  const resetForNewFile = () => {
+    setDriverId('');
     setDriverFromFile(false);
     setFileIdentity(null);
     setMatchError(null);
-    runParse(pasteText, false);
+    setParseResult(null);
+    setPasteText('');
+    setLastImport(null);
   };
 
   const onUploadFile = async (file: File | null) => {
     if (!file) return;
+    resetForNewFile();
     const lower = file.name.toLowerCase();
     try {
       if (lower.endsWith('.txt') || lower.endsWith('.csv')) {
@@ -233,6 +207,24 @@ export function UberActivityTimelineImportPanel() {
           toast.error(
             'That file is Uber’s weekly Driver Activity report (hours totals). Use Overview Time Metrics import for it — this box needs the app timeline paste/Excel.',
           );
+          return;
+        }
+        // Uber app paste with Driver UUID / name columns added in front
+        const withDriver = splitUberTimelineCsvWithDriverColumns(text);
+        if (withDriver) {
+          const { driver } = applyFileDriverMatch(withDriver.headers, withDriver.rows, drivers);
+          const result = parseUberActivityTimelineText(withDriver.pasteText, {
+            timeZone: fleetTimezone,
+            driverId: driver?.id || 'preview',
+            assumeChronological: false,
+          });
+          setAssumeChronological(false);
+          setPasteText(withDriver.pasteText);
+          setParseResult(result);
+          if (driver) toast.success(`Matched driver ${driver.name} from the file's Uber ID`);
+          if (!canCommitUberActivityTimeline(result)) {
+            toast.warning('Could not find timeline events in that file.');
+          }
           return;
         }
         if (headers.some((h) => /date|event|time/i.test(h)) && text.includes(',')) {
@@ -248,7 +240,7 @@ export function UberActivityTimelineImportPanel() {
             return row;
           });
           const { driver } = applyFileDriverMatch(hdrs, rows, drivers);
-          const resolvedId = driver?.id || driverId || 'preview';
+          const resolvedId = driver?.id || 'preview';
           const result = parseUberActivityTimelineFromTable(hdrs, rows, {
             timeZone: fleetTimezone,
             driverId: resolvedId,
@@ -273,16 +265,12 @@ export function UberActivityTimelineImportPanel() {
           setPasteText(importText);
           setParseResult(result);
           if (driver) {
-            toast.success(`Matched driver ${driver.name} from CSV Uber UUID`);
+            toast.success(`Matched driver ${driver.name} from the file's Uber ID`);
           }
           return;
         }
-        setDriverFromFile(false);
-        setFileIdentity(null);
-        setMatchError(null);
-        setAssumeChronological(false);
-        setPasteText(text);
-        runParse(text, false);
+        // Plain Uber paste with no driver columns: the file can't say whose it is.
+        setMatchError(NO_ID_IN_FILE);
         return;
       }
 
@@ -302,11 +290,30 @@ export function UberActivityTimelineImportPanel() {
         const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as unknown[][];
         // Prefer Chronological matrix parse (Date | Time | Activity | Duration)
         if (/chronological/i.test(preferred) || preferred === UBER_ACTIVITY_PREFERRED_SHEET) {
+          // Driver comes from the sheet's own Driver UUID / name columns.
+          const hdrRowIdx = matrix.findIndex((r) =>
+            (r || []).some((c) => /driver uuid|first name|^date$/i.test(String(c ?? '').trim())),
+          );
+          let matched: DriverOption | null = null;
+          if (hdrRowIdx >= 0) {
+            const hdrs = (matrix[hdrRowIdx] || []).map((c) => String(c ?? '').trim());
+            const rows = matrix.slice(hdrRowIdx + 1).map((r) => {
+              const row: Record<string, string> = {};
+              hdrs.forEach((h, i) => {
+                if (h) row[h] = String((r || [])[i] ?? '');
+              });
+              return row;
+            });
+            matched = applyFileDriverMatch(hdrs, rows, drivers).driver;
+          } else {
+            setMatchError(NO_ID_IN_FILE);
+          }
           const result = parseUberActivityTimelineMatrix(matrix, {
             timeZone: fleetTimezone,
-            driverId: driverId || 'preview',
+            driverId: matched?.id || 'preview',
             assumeChronological: true,
           });
+          if (matched) toast.success(`Matched driver ${matched.name} from the file's Uber ID`);
           // Rebuild import text from structured rows for server
           const headerIdx = matrix.findIndex((r) =>
             String((r || [])[0] ?? '').toLowerCase() === 'date',
@@ -343,21 +350,22 @@ export function UberActivityTimelineImportPanel() {
           return out;
         });
         const { driver } = applyFileDriverMatch(headers, stringRows, drivers);
-        const resolvedId = driver?.id || driverId || 'preview';
+        const resolvedId = driver?.id || 'preview';
         const result = parseUberActivityTimelineFromTable(headers, stringRows, {
           timeZone: fleetTimezone,
           driverId: resolvedId,
           assumeChronological: true,
         });
+        const driverPaste = uberTimelinePasteFromDriverColumns(headers, stringRows);
         const flat = matrix
           .flat()
           .map((c) => String(c ?? '').trim())
           .filter(Boolean)
           .join('\n');
-        setAssumeChronological(true);
-        setPasteText(flat || JSON.stringify(json));
+        setAssumeChronological(driverPaste == null);
+        setPasteText(driverPaste ?? (flat || JSON.stringify(json)));
         setParseResult(result);
-        if (driver) toast.success(`Matched driver ${driver.name} from file`);
+        if (driver) toast.success(`Matched driver ${driver.name} from the file's Uber ID`);
         if (!canCommitUberActivityTimeline(result)) {
           toast.warning('Could not find timeline events in that file.');
         }
@@ -373,11 +381,11 @@ export function UberActivityTimelineImportPanel() {
 
   const onImport = async () => {
     if (!driverId) {
-      toast.error('Select a driver first');
+      toast.error(matchError || NO_ID_IN_FILE);
       return;
     }
     if (!pasteText.trim()) {
-      toast.error('Paste or upload a timeline first');
+      toast.error('Upload a timeline first');
       return;
     }
     const preview =
@@ -397,6 +405,7 @@ export function UberActivityTimelineImportPanel() {
         text: pasteText,
         timeZone: fleetTimezone,
         assumeChronological,
+        uberDriverUuid: fileIdentity?.uberUuid || undefined,
       });
       setLastImport({
         inserted: res.inserted,
@@ -426,16 +435,16 @@ export function UberActivityTimelineImportPanel() {
           <div className="min-w-0">
             <CardTitle className="text-base">Activity timeline (optional)</CardTitle>
             <CardDescription className="mt-1">
-              Upload an <strong>Uber Activity Timeline</strong> CSV/Excel (Date, Time, Activity,
-              Duration). If Driver UUID is in the file, the driver is matched automatically — only
-              pick manually when it is missing. Paste still works for the raw Uber app log.
+              Upload the <strong>Uber Activity Timeline</strong> with the driver&apos;s Driver UUID,
+              first name and last name columns in front. The driver is found from their Uber ID —
+              the same way every other Uber upload is matched.
             </CardDescription>
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="uber-activity-driver">Driver</Label>
+        <div className="space-y-2" data-testid="uber-activity-driver">
+          <Label>Driver</Label>
           {driverFromFile && selectedDriver ? (
             <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
               <p className="font-medium">{selectedDriver.name}</p>
@@ -444,99 +453,37 @@ export function UberActivityTimelineImportPanel() {
                   Uber UUID: {selectedDriver.uberDriverId}
                 </p>
               )}
-              <p className="text-xs text-emerald-700 mt-1">Matched from file — no need to pick manually.</p>
-              <Button
-                type="button"
-                variant="link"
-                className="h-auto p-0 text-xs"
-                onClick={() => {
-                  setDriverFromFile(false);
-                  setMatchError(null);
-                }}
-              >
-                Change driver
-              </Button>
+              <p className="text-xs text-emerald-700 mt-1">Found from the Uber ID in the file.</p>
             </div>
+          ) : matchError ? (
+            <p
+              className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+              role="alert"
+            >
+              {matchError}
+            </p>
+          ) : fileIdentity && driversLoading ? (
+            <p className="text-sm text-slate-600">Finding the driver…</p>
           ) : (
-            <>
-              {matchError && (
-                <p className="text-xs text-amber-700" role="status">
-                  {matchError}
-                </p>
-              )}
-              {fileIdentity?.uberUuid && !driverId && (
-                <p className="text-xs text-slate-600">
-                  File UUID: <span className="font-mono">{fileIdentity.uberUuid}</span>
-                  {fileIdentity.displayName ? ` · ${fileIdentity.displayName}` : ''}
-                </p>
-              )}
-              <Input
-                id="uber-activity-driver-search"
-                placeholder="Search name or Uber UUID…"
-                value={driverQuery}
-                onChange={(e) => setDriverQuery(e.target.value)}
-                disabled={driversLoading}
-              />
-              <Select
-                value={driverId || undefined}
-                onValueChange={(id) => {
-                  setDriverId(id);
-                  setDriverFromFile(false);
-                }}
-                disabled={driversLoading}
-              >
-                <SelectTrigger aria-label="Select driver for activity import">
-                  <SelectValue placeholder={driversLoading ? 'Loading drivers…' : 'Select driver'} />
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  {filteredDrivers.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.name}
-                      {d.uberDriverId ? ` · ${d.uberDriverId.slice(0, 8)}…` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedDriver?.uberDriverId && (
-                <p className="text-xs text-slate-600">
-                  Uber UUID: <span className="font-mono">{selectedDriver.uberDriverId}</span>
-                </p>
-              )}
-            </>
+            <p className="text-sm text-slate-600">Upload a timeline — the driver is found from the file.</p>
           )}
         </div>
 
-        <Tabs defaultValue="paste">
-          <TabsList>
-            <TabsTrigger value="paste">Paste</TabsTrigger>
-            <TabsTrigger value="upload">Upload</TabsTrigger>
-          </TabsList>
-          <TabsContent value="paste" className="space-y-2">
-            <Textarea
-              aria-label="Uber activity timeline paste"
-              placeholder={'October 18 2026\n\nOffline\n10:57 AM\n42m\n\nOnline\n10:15 AM\n37m\n…'}
-              className="min-h-[180px] font-mono text-xs bg-white"
-              value={pasteText}
-              onChange={(e) => setPasteText(e.target.value)}
-              onBlur={onPasteBlur}
-            />
-            <Button type="button" variant="outline" size="sm" onClick={() => runParse(pasteText)}>
-              Preview
-            </Button>
-          </TabsContent>
-          <TabsContent value="upload" className="space-y-2">
-            <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg p-8 bg-white cursor-pointer hover:bg-slate-50">
-              <Upload className="h-6 w-6 text-slate-400" />
-              <span className="text-sm text-slate-600">.txt / .csv / .xlsx timeline</span>
-              <input
-                type="file"
-                accept=".txt,.csv,.xls,.xlsx"
-                className="hidden"
-                onChange={(e) => onUploadFile(e.target.files?.[0] || null)}
-              />
-            </label>
-          </TabsContent>
-        </Tabs>
+        <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg p-8 bg-white cursor-pointer hover:bg-slate-50">
+          <Upload className="h-6 w-6 text-slate-400" />
+          <span className="text-sm text-slate-600">Upload timeline (.csv or .xlsx)</span>
+          <input
+            type="file"
+            accept=".txt,.csv,.xls,.xlsx"
+            className="hidden"
+            aria-label="Upload Uber activity timeline"
+            onChange={(e) => {
+              const picked = e.target.files?.[0] || null;
+              e.target.value = '';
+              void onUploadFile(picked);
+            }}
+          />
+        </label>
 
         {preview && (
           <div className="rounded-lg border bg-white p-3 space-y-2 text-sm">
@@ -574,6 +521,7 @@ export function UberActivityTimelineImportPanel() {
             disabled={
               importing ||
               !driverId ||
+              !driverFromFile ||
               !pasteText.trim() ||
               (preview != null && !canCommitUberActivityTimeline(preview))
             }

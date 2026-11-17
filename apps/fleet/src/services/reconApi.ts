@@ -687,6 +687,41 @@ export async function fetchWeekActivity(
   return res.activity;
 }
 
+/** Step 6: one day of hours from the Uber app activity timeline (server: recon_activity_timeline.ts). */
+export type ReconTimelineDay = {
+  day: string;
+  onlineHours: number;
+  enrouteHours: number;
+  onTripHours: number;
+  waitingHours: number;
+  tripsCompleted: number;
+  tripsInUberFile: number;
+  driverCancels: number;
+  riderCancels: number;
+  offersAccepted: number;
+  roamOnlineHours: number;
+};
+
+export type ReconWeekTimeline =
+  | { status: 'none' }
+  | {
+      status: 'ok';
+      drivers: Array<{ driverId: string; name: string; days: ReconTimelineDay[]; week: Omit<ReconTimelineDay, 'day'> }>;
+    };
+
+/** Step 6: Uber weekly-report hours (`activity`) and the activity timeline (`timeline`) in one read. */
+export async function fetchWeekActivityAndTimeline(
+  line: 'rideshare' | 'rush_delivery',
+  weekKey: string,
+): Promise<{ activity: ReconWeekActivity; timeline: ReconWeekTimeline }> {
+  const res = await reconJson<{ activity: ReconWeekActivity; timeline?: ReconWeekTimeline }>(
+    runPath(line, weekKey, '/activity'),
+    undefined,
+    'Could not load activity',
+  );
+  return { activity: res.activity, timeline: res.timeline ?? { status: 'none' } };
+}
+
 /** Step 6: statement cash vs trip cash, from saved driver weeks (no live calculation). */
 export async function fetchWeekMoney(
   line: 'rideshare' | 'rush_delivery',

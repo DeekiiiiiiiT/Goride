@@ -22,6 +22,8 @@ import {
   previewUberCashRefresh,
   type UberCashRefreshPreview,
 } from '../../utils/commitUberImportFromFiles';
+import { api, fetchFleetTimezone } from '../../services/api';
+import { importUberTimelinesForWeek, type TimelineWeekImportLine } from '../../utils/importUberTimelinesForWeek';
 
 function fileTypeLabel(type: FileData['type']): string {
   switch (type) {
@@ -33,6 +35,8 @@ function fileTypeLabel(type: FileData['type']): string {
       return 'Trip activity';
     case 'uber_payment_org':
       return 'Org payments';
+    case 'uber_activity_timeline':
+      return 'Activity timeline';
     default:
       return type.replace(/^uber_/, '').replace(/_/g, ' ');
   }
@@ -72,6 +76,7 @@ export function CloseWeekUberReimportDialog({
   const [rebuildBusy, setRebuildBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [preview, setPreview] = useState<UberCashRefreshPreview | null>(null);
+  const [timelineLines, setTimelineLines] = useState<TimelineWeekImportLine[]>([]);
 
   const reset = () => {
     setFiles([]);
@@ -81,6 +86,7 @@ export function CloseWeekUberReimportDialog({
     setRebuildBusy(false);
     setDragOver(false);
     setPreview(null);
+    setTimelineLines([]);
   };
 
   const close = () => {
@@ -115,37 +121,43 @@ export function CloseWeekUberReimportDialog({
         finishOne();
         continue;
       }
-      Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
-        complete: (results) => {
-          if (!results.meta.fields?.length) {
+      const readAndParse = async () => {
+        const text = await file.text();
+        const firstLine = text.split(/\r?\n/).find((l) => l.trim()) || '';
+        Papa.parse(text, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => {
+            const fields = results.meta.fields ?? [];
+            const type = detectFileType(fields, file.name, firstLine);
+            if (!isUberImportFileType(type) && type !== 'uber_activity_timeline') {
+              toast.message(`${file.name}: skipped (not an Uber export)`);
+              finishOne();
+              return;
+            }
+            const fileData: FileData & { rawFile?: File; rawText?: string } = {
+              id: Math.random().toString(36).slice(2, 11),
+              name: file.name,
+              rows: results.data as FileData['rows'],
+              headers: fields,
+              type,
+              rawFile: file,
+            };
+            if (type === 'uber_activity_timeline') fileData.rawText = text;
+            fileData.validationErrors = validateFile(fileData);
+            fileData.reportDate = extractReportDate(fileData);
+            next.push(fileData);
             finishOne();
-            return;
-          }
-          const type = detectFileType(results.meta.fields, file.name);
-          if (!isUberImportFileType(type)) {
-            toast.message(`${file.name}: skipped (not an Uber export)`);
+          },
+          error: () => {
+            toast.error(`Failed to parse ${file.name}`);
             finishOne();
-            return;
-          }
-          const fileData: FileData & { rawFile?: File } = {
-            id: Math.random().toString(36).slice(2, 11),
-            name: file.name,
-            rows: results.data as FileData['rows'],
-            headers: results.meta.fields,
-            type,
-            rawFile: file,
-          };
-          fileData.validationErrors = validateFile(fileData);
-          fileData.reportDate = extractReportDate(fileData);
-          next.push(fileData);
-          finishOne();
-        },
-        error: () => {
-          toast.error(`Failed to parse ${file.name}`);
-          finishOne();
-        },
+          },
+        });
+      };
+      void readAndParse().catch(() => {
+        toast.error(`Failed to read ${file.name}`);
+        finishOne();
       });
     }
   }, []);
@@ -157,7 +169,7 @@ export function CloseWeekUberReimportDialog({
     }
     setPreviewBusy(true);
     try {
-      const p = await previewUberCashRefresh(files, weekKey);
+      const p = await previewUberCashRefresh(files.filter((f) => f.type !== 'uber_activity_timeline'), weekKey);
       setPreview(p);
     } catch (e) {
       setPreview(null);
@@ -173,38 +185,68 @@ export function CloseWeekUberReimportDialog({
       return;
     }
     setBusy(true);
-    const paymentFile = files.find((f) => f.type === 'uber_payment' && 'rawFile' in f);
-    const tripFile = files.find((f) => f.type === 'uber_trip' && 'rawFile' in f);
+    setTimelineLines([]);
+    // Activity timelines go to their own import; the cash / toll steps only see the Uber reports.
+    const timelineFiles = files.filter((f) => f.type === 'uber_activity_timeline') as Array<
+      FileData & { rawText?: string }
+    >;
+    const uberFiles = files.filter((f) => f.type !== 'uber_activity_timeline');
+    const paymentFile = uberFiles.find((f) => f.type === 'uber_payment' && 'rawFile' in f);
+    const tripFile = uberFiles.find((f) => f.type === 'uber_trip' && 'rawFile' in f);
     const tollFiles = {
       paymentsTransaction:
         paymentFile && 'rawFile' in paymentFile ? (paymentFile as { rawFile?: File }).rawFile : undefined,
       tripActivity: tripFile && 'rawFile' in tripFile ? (tripFile as { rawFile?: File }).rawFile : undefined,
     };
     try {
-      if (!preview) {
-        const p = await previewUberCashRefresh(files, weekKey);
-        setPreview(p);
+      if (uberFiles.length > 0) {
+        if (!preview) {
+          const p = await previewUberCashRefresh(uberFiles, weekKey);
+          setPreview(p);
+        }
+        try {
+          const result = await commitUberCashRefresh(uberFiles, weekKey, { closeWeekMode: true });
+          toast.success(
+            `Cash refresh saved · ${result.tripCount} trip(s) · statement ${MONEY(result.statementCashTotal)}`,
+          );
+        } catch (e) {
+          // P3-R4: the same files again (e.g. after "Fix driver" / "Which car?"). Cash is not posted twice, but the
+          // toll import still runs: it changes nothing on a repeat and reads the rows that were just fixed.
+          if ((e as { code?: string })?.code !== 'DUPLICATE_FILE_HASH') throw e;
+          toast.info('These Uber files were already imported, so cash was not posted again. Reading their tolls again.');
+        }
+        // Every Uber upload also goes to the new toll system (paybacks and take-backs). Week Reconciliation step 1
+        // passes its own handler (it shows the read on its card); every other place uses the plain toll upload.
+        if (onUberFilesForToll) {
+          await onUberFilesForToll(tollFiles);
+        } else {
+          await readUberTollsIntoNewSystem(tollFiles);
+        }
       }
-      try {
-        const result = await commitUberCashRefresh(files, weekKey, { closeWeekMode: true });
-        toast.success(
-          `Cash refresh saved · ${result.tripCount} trip(s) · statement ${MONEY(result.statementCashTotal)}`,
-        );
-      } catch (e) {
-        // P3-R4: the same files again (e.g. after "Fix driver" / "Which car?"). Cash is not posted twice, but the
-        // toll import still runs: it changes nothing on a repeat and reads the rows that were just fixed.
-        if ((e as { code?: string })?.code !== 'DUPLICATE_FILE_HASH') throw e;
-        toast.info('These Uber files were already imported, so cash was not posted again. Reading their tolls again.');
+      // A timeline problem never undoes or blocks the Uber reports above. When one fails, the dialog stays
+      // open so its message (add the ID columns / save the Uber ID on the Profile) can be read.
+      let timelineFailed = false;
+      if (timelineFiles.length > 0) {
+        let lines: TimelineWeekImportLine[];
+        try {
+          const rosterRes = await api.getDriversRoster();
+          const roster = (rosterRes?.data || []) as Array<{ id: string; name: string; uberDriverId?: string }>;
+          const tz = await fetchFleetTimezone();
+          lines = await importUberTimelinesForWeek(timelineFiles, roster, tz, (driverId, body) =>
+            api.importUberActivityTimeline(driverId, body),
+          );
+        } catch (e) {
+          lines = timelineFiles.map((f) => ({
+            fileName: f.name,
+            ok: false,
+            message: `${f.name}: ${e instanceof Error ? e.message : 'Activity timeline import failed'}`,
+          }));
+        }
+        setTimelineLines(lines);
+        timelineFailed = lines.some((l) => !l.ok);
+        for (const line of lines) if (line.ok) toast.success(line.message);
       }
-      // Every Uber upload also goes to the new toll system (paybacks and take-backs). Week Reconciliation step 1
-      // passes its own handler (it shows the read on its card); every other place uses the plain toll upload.
-      if (onUberFilesForToll) {
-        await onUberFilesForToll(tollFiles);
-      } else {
-        await readUberTollsIntoNewSystem(tollFiles);
-      }
-      reset();
-      onOpenChange(false);
+      if (!timelineFailed) onOpenChange(false);
       await onImported();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Uber cash refresh failed');
@@ -318,6 +360,9 @@ export function CloseWeekUberReimportDialog({
             {parsing ? 'Reading files…' : 'Drop Uber CSVs here or click to browse'}
           </p>
           <p className="mt-1 text-xs text-slate-500">Multiple files OK · .csv only</p>
+          <p className="mt-1 text-xs text-slate-500" data-testid="uber-upload-timeline-hint">
+            Add each driver's activity timeline here too — with the reports or on its own.
+          </p>
           <span className="mt-4 inline-flex h-10 items-center rounded-md border border-indigo-300 bg-white px-4 text-sm font-medium text-slate-900 shadow-sm">
             Browse files…
           </span>
@@ -351,6 +396,17 @@ export function CloseWeekUberReimportDialog({
             </li>
           ))}
         </ul>
+      ) : null}
+
+      {timelineLines.length > 0 ? (
+        <div className="mt-3 rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-950">
+          <p className="font-medium text-violet-900">Activity timelines</p>
+          <ul className="mt-1 space-y-0.5">
+            {timelineLines.map((line) => (
+              <li key={line.fileName}>{line.message}</li>
+            ))}
+          </ul>
+        </div>
       ) : null}
 
       {preview ? (

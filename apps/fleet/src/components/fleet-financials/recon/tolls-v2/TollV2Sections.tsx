@@ -103,6 +103,7 @@ export function TollV2Sections({
                 </span>
               </div>
               <p className="mt-1 text-sm text-[#47464c]">{sec.explanation}</p>
+              {sec.key === 'no_trip' ? <OfflineCrossingsLine rows={rows} /> : null}
             </header>
             {sec.key === 'suggested' && !sealed && sureCount > 0 && onConfirmAllSure ? (
               <div className="border-b border-[#eff4ff] px-4 py-2">
@@ -219,5 +220,17 @@ function PaybackRow({
         </div>
       ) : null}
     </li>
+  );
+}
+
+/** "No trip" header line: crossings made while the driver was offline (Uber activity timeline). */
+function OfflineCrossingsLine({ rows }: { rows: TollV2Charge[] }) {
+  const flagged = rows.filter((c) => c.offlineFlag);
+  if (!flagged.length) return null;
+  const total = flagged.reduce((n, c) => n + (c.openMinor ?? c.amountMinor ?? 0), 0);
+  return (
+    <p className="mt-1 text-sm font-semibold text-[#93000a]" data-testid="toll-v2-offline-summary">
+      {flagged.length} crossed while the driver was offline · {fmtTollMinor(total)}
+    </p>
   );
 }

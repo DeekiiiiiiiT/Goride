@@ -756,6 +756,63 @@ export function looksLikeUberActivityTimeline(text: string): boolean {
 }
 
 /**
+ * Owner layout: Uber's app paste kept as-is in one column (e.g. "Activity"), with
+ * Driver UUID / first name / last name columns added in front (filled on the first
+ * row only). No Date / Time columns. Returns the paste text (Uber's own order,
+ * newest first) or null when the table is not this layout.
+ */
+export function uberTimelinePasteFromDriverColumns(
+  headers: string[],
+  rows: Record<string, string>[],
+): string | null {
+  const norm = headers.map((h) => h.replace(/^﻿/, '').trim().toLowerCase());
+  const hasDriverCol = norm.some(
+    (h) =>
+      h.includes('driver uuid') ||
+      h === 'driver id' ||
+      h === 'uber uuid' ||
+      h.includes('first name') ||
+      h.includes('last name') ||
+      h === 'driver name',
+  );
+  const hasDate = norm.some((h) => h === 'date' || h === 'day');
+  const hasTime = norm.some((h) => h === 'time');
+  const pasteIdx = norm.findIndex(
+    (h) => h === 'activity' || h === 'event' || h.includes('activity') || h.includes('event'),
+  );
+  if (!hasDriverCol || hasDate || hasTime || pasteIdx < 0) return null;
+  const key = headers[pasteIdx];
+  return rows.map((r) => String(r[key] ?? '').trim()).join('\n');
+}
+
+/**
+ * CSV text in the owner layout above → headers, rows and the paste text.
+ * The paste column is the last header; anything after the driver columns is
+ * joined back (so a stray comma in an event label is kept). Null when not this layout.
+ */
+export function splitUberTimelineCsvWithDriverColumns(
+  text: string,
+): { headers: string[]; rows: Record<string, string>[]; pasteText: string } | null {
+  const lines = String(text || '').replace(/^﻿/, '').split(/\r?\n/);
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  if (lines.length < 2) return null;
+  const unquote = (c: string) => c.trim().replace(/^"(.*)"$/, '$1').trim();
+  const headers = lines[0].split(',').map(unquote);
+  if (headers.length < 2) return null;
+  const lastIdx = headers.length - 1;
+  const rows = lines.slice(1).map((line) => {
+    const cols = line.split(',');
+    const row: Record<string, string> = {};
+    headers.forEach((h, i) => {
+      row[h] = i < lastIdx ? unquote(cols[i] ?? '') : unquote(cols.slice(lastIdx).join(','));
+    });
+    return row;
+  });
+  const pasteText = uberTimelinePasteFromDriverColumns(headers, rows);
+  return pasteText == null ? null : { headers, rows, pasteText };
+}
+
+/**
  * If a sheet is a single column of paste lines, join and parse as text.
  * If headers match Date/Event/Time, parse as structured rows.
  */
@@ -794,6 +851,12 @@ export function parseUberActivityTimelineFromTable(
       ...options,
       assumeChronological: options?.assumeChronological !== false,
     });
+  }
+
+  // Uber paste with driver columns in front: read only the paste column.
+  const unwrapped = uberTimelinePasteFromDriverColumns(headers, rows);
+  if (unwrapped != null) {
+    return parseUberActivityTimelineText(unwrapped, { ...options, assumeChronological: false });
   }
 
   // Single-column / free-text: concatenate non-empty cells in row order

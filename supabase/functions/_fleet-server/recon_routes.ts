@@ -62,6 +62,7 @@ import { acknowledgeCashSourceMismatch, reopenWeek, sealEarningsLaneForWeek } fr
 import { startWeekWorkflow } from "./recon_close_workflow.ts";
 import { registerReconImportRoutes } from "./recon_import_routes.ts";
 import { shapeWeekActivity } from "./recon_activity.ts";
+import { shapeWeekTimeline } from "./recon_activity_timeline.ts";
 import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
 import { fuelCardProgramsForOrg } from "./fuel_card_programs.ts";
 import {
@@ -2113,8 +2114,12 @@ export function registerReconRoutes(app: Hono) {
         if (!line || !WEEK_RE.test(weekKey)) {
           return c.json({ error: "INVALID_REQUEST", message: "Invalid line or weekKey" }, 400);
         }
-        if (line !== "rideshare") return c.json({ success: true, activity: { status: "no_upload" } });
-        const { data, error } = await getServiceClient()
+        // `activity` keeps its old shape (the step 6 card reads it); `timeline` is new and sits beside it.
+        if (line !== "rideshare") {
+          return c.json({ success: true, activity: { status: "no_upload" }, timeline: { status: "none" } });
+        }
+        const sb = getServiceClient();
+        const { data, error } = await sb
           .from("fleet_import_batches")
           .select("created_at, payload_json")
           .eq("organization_id", orgId)
@@ -2124,7 +2129,65 @@ export function registerReconRoutes(app: Hono) {
           .order("created_at", { ascending: false })
           .limit(1);
         if (error) throw new Error(`uber upload read failed: ${error.message}`);
-        return c.json({ success: true, activity: shapeWeekActivity((data ?? []) as Parameters<typeof shapeWeekActivity>[0]) });
+        const activity = shapeWeekActivity((data ?? []) as Parameters<typeof shapeWeekActivity>[0]);
+        const days = weekDayKeys(weekKey);
+        // Jamaica week = Monday 00:00 → next Monday 00:00 (05:00 UTC, no daylight saving).
+        // Start one day early so a driver already online at midnight carries into Monday.
+        const weekStartMs = Date.parse(`${days[0]}T05:00:00.000Z`);
+        const windowFrom = new Date(weekStartMs - 86_400_000).toISOString();
+        const windowTo = new Date(weekStartMs + 7 * 86_400_000).toISOString();
+        // PostgREST caps a read at 1000 rows; a week is ~500 events per driver, so page through.
+        const pageAll = async <T>(
+          read: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>,
+          what: string,
+        ): Promise<T[]> => {
+          const out: T[] = [];
+          for (let from = 0; ; from += 1000) {
+            const { data: page, error: pageErr } = await read(from, from + 999);
+            if (pageErr) throw new Error(`${what} read failed: ${pageErr.message}`);
+            const rows = (page ?? []) as T[];
+            out.push(...rows);
+            if (rows.length < 1000) return out;
+          }
+        };
+        const evRows = await pageAll<Parameters<typeof shapeWeekTimeline>[0][number]>(
+          (from, to) =>
+            sb.from("fleet_driver_activity_events")
+              .select("id, driver_id, service_line, source, event_type, occurred_at")
+              .eq("organization_id", orgId)
+              .gte("occurred_at", windowFrom)
+              .lt("occurred_at", windowTo)
+              .order("occurred_at", { ascending: true })
+              .order("id", { ascending: true })
+              .range(from, to),
+          "activity events",
+        );
+        const tripRows = await pageAll<Parameters<typeof shapeWeekTimeline>[1][number]>(
+          (from, to) =>
+            sb.from("fleet_trips")
+              .select("driver_id, date, platform, status")
+              .eq("organization_id", orgId)
+              .gte("date", days[0])
+              .lte("date", days[6])
+              .order("id", { ascending: true })
+              .range(from, to),
+          "trips",
+        );
+        const driverIds = [...new Set(evRows.map((r) => String(r.driver_id)))];
+        const names = new Map<string, string>();
+        if (driverIds.length) {
+          const { data: nameRows, error: nameErr } = await sb
+            .from("fleet_drivers")
+            .select("id, name")
+            .eq("organization_id", orgId)
+            .in("id", driverIds);
+          if (nameErr) throw new Error(`driver names read failed: ${nameErr.message}`);
+          for (const r of (nameRows ?? []) as { id: string; name: string | null }[]) {
+            if (r.name) names.set(String(r.id), r.name);
+          }
+        }
+        const timeline = shapeWeekTimeline(evRows, tripRows, weekKey, names);
+        return c.json({ success: true, activity, timeline });
       } catch (e) {
         return safeErrorResponse(c, e, "recon-week-activity");
       }

@@ -11,7 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 import { TRIPS_EARNINGS_BLOCKER_CODES } from '@roam/finance-core';
 import {
-  fetchWeekActivity,
+  fetchWeekActivityAndTimeline,
   fetchWeekMoney,
   sealEarnings,
   sendForApproval,
@@ -26,6 +26,7 @@ import { toast } from 'sonner';
 import { ReconApprovalDialog } from './ReconApprovalDialog';
 import { approvalErrorMessage, assertWeekUnchanged, useReconApprovals } from './useReconApprovals';
 import { formatWeekRange } from './weekListFormat';
+import { ReconActivityTimelineCard } from './ReconActivityTimelineCard';
 
 const TRIPS_EARNINGS_CODES = new Set<string>(TRIPS_EARNINGS_BLOCKER_CODES);
 const EARNINGS_SEAL_CODES = new Set(['EARNINGS_STATEMENT_MISSING', 'EARNINGS_STATEMENT_UNVERIFIED', 'EARNINGS_ENGINE_DRIFT']);
@@ -89,11 +90,12 @@ function ActivityVsTrips({
 }) {
   const query = useQuery({
     queryKey: ['recon-week-activity', line, weekKey],
-    queryFn: () => fetchWeekActivity(line, weekKey),
+    queryFn: () => fetchWeekActivityAndTimeline(line, weekKey),
     staleTime: 5 * 60_000,
     retry: false,
   });
-  const activity = query.data;
+  const activity = query.data?.activity;
+  const timeline = query.data?.timeline;
   const rows = activityCardRows(activity, roamNames);
 
   return (
@@ -101,14 +103,18 @@ function ActivityVsTrips({
       <div>
         <p className="text-lg font-semibold text-[#0b1c30]">Activity vs trips</p>
         <p className="text-sm text-[#47464c]">
-          Uber hours online against hours on a trip, from this week&apos;s Uber upload. For a look only — it never stops Close.
-          InDrive has no activity export.
+          {timeline?.status === 'ok'
+            ? 'Each day from the Uber activity timeline: online, waiting, driving to a pickup and on a trip, with trips checked against Uber\x27s trip file. For a look only — it never stops Close.'
+            : 'Uber hours online against hours on a trip, from this week\x27s Uber upload. For a look only — it never stops Close. Add the activity timeline in step 1 for a day-by-day view.'}
+          {' '}InDrive has no activity export.
         </p>
       </div>
       {query.isLoading ? (
         <p className="flex items-center gap-2 text-sm text-[#47464c]"><Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading activity…</p>
       ) : query.isError ? (
         <p className="text-sm text-[#93000a]">Could not load activity. Reload the week.</p>
+      ) : timeline?.status === 'ok' ? (
+        <ReconActivityTimelineCard timeline={timeline} roamNames={roamNames} />
       ) : !activity || activity.status === 'no_upload' ? (
         <p className="text-sm text-[#47464c]">No Uber upload for this week yet.</p>
       ) : activity.status === 'not_recorded' ? (

@@ -15,6 +15,7 @@ import { getOrgId } from "./org_scope.ts";
 import { appendDriverAuditEvent } from "./drivers_audit.ts";
 import { isFeatureEnabled, FEATURE_FLAGS } from "./feature_flags.ts";
 import * as kv from "./kv_store.tsx";
+import { uberTimelineDriverIdMismatch } from "./recon_activity_timeline.ts";
 import {
   buildCoverageBySource,
   buildCoverageWindows,
@@ -1094,14 +1095,6 @@ export function registerDriverActivityRoutes(app: Hono) {
       const driverId = String(c.req.param("id") || "").trim();
       if (!driverId) return c.json({ error: "driverId required" }, 400);
 
-      const flagOn = await isFeatureEnabled(FEATURE_FLAGS.DRIVER_ACTIVITY, orgId);
-      if (!flagOn) {
-        return c.json({
-          error: "driver_activity_disabled",
-          message: "Driver Activity is not enabled for this organization.",
-        }, 404);
-      }
-
       let body: {
         text?: string;
         timeZone?: string;
@@ -1109,6 +1102,7 @@ export function registerDriverActivityRoutes(app: Hono) {
         replaceTo?: string;
         importBatchId?: string;
         assumeChronological?: boolean;
+        uberDriverUuid?: string;
       };
       try {
         body = await c.req.json();
@@ -1118,6 +1112,36 @@ export function registerDriverActivityRoutes(app: Hono) {
 
       const text = String(body?.text || "");
       if (!text.trim()) return c.json({ error: "text required" }, 400);
+
+      const uberDriverUuid = String(body?.uberDriverUuid || "").trim();
+      if (uberDriverUuid) {
+        // Saved Uber ID: the drivers table first (what the roster shows), the old KV record second.
+        let savedUber = "";
+        const { data: drv, error: drvErr } = await serviceClient()
+          .from("fleet_drivers")
+          .select("uber_driver_id")
+          .eq("organization_id", orgId)
+          .eq("id", driverId)
+          .maybeSingle();
+        if (drvErr) return c.json({ error: "driver_lookup_failed", message: drvErr.message }, 500);
+        savedUber = String((drv as { uber_driver_id?: string | null } | null)?.uber_driver_id || "").trim();
+        if (!savedUber) {
+          try {
+            const rec = await kv.get(`driver:${driverId}`);
+            if (rec && typeof rec === "object") {
+              savedUber = String((rec as Record<string, unknown>).uberDriverId || "").trim();
+            }
+          } catch {
+            /* no KV record */
+          }
+        }
+        if (uberTimelineDriverIdMismatch(savedUber, uberDriverUuid)) {
+          return c.json({
+            error: "uber_id_mismatch",
+            message: "This timeline belongs to another driver",
+          }, 409);
+        }
+      }
 
       const timeZone = String(body?.timeZone || "America/Jamaica").trim() || "America/Jamaica";
       const assumeChronological = Boolean(body?.assumeChronological);

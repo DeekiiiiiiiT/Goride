@@ -1,5 +1,5 @@
 import React from 'react';
-import { Banknote, Car, Check, Tag } from 'lucide-react';
+import { Banknote, Car, Check, Tag, UserX } from 'lucide-react';
 import type { TollV2Charge, TollV2Suggestion } from './types';
 import {
   chargeWhen,
@@ -184,6 +184,23 @@ export function TollV2ChargeRow({ charge, actions }: { charge: TollV2Charge; act
         <TollRowIcon charge={charge} />
         <div className="min-w-0 flex-1 space-y-2">
           <ChargeMeta charge={charge} />
+          {charge.offlineFlag ? (
+            <p
+              className="inline-flex w-fit items-center gap-1.5 rounded-full bg-[#ffdad6] px-2.5 py-0.5 text-xs font-semibold text-[#93000a]"
+              data-testid="toll-v2-offline-flag"
+            >
+              <UserX className="h-3.5 w-3.5" aria-hidden />
+              Driver offline at {formatTimeJm(charge.occurredAt)} · likely personal
+            </p>
+          ) : charge.section === 'no_trip' && charge.driverStatus === 'online' ? (
+            <p className="text-xs text-[#47464c]" data-testid="toll-v2-status-online">
+              Driver was online on Uber, waiting or driving to a pickup
+            </p>
+          ) : charge.section === 'no_trip' && charge.driverStatus === 'no_timeline' ? (
+            <p className="text-xs text-[#47464c]" data-testid="toll-v2-status-no-timeline">
+              No activity timeline for this day
+            </p>
+          ) : null}
           {charge.section === 'awaiting_cash' ? (
             <p className="text-xs font-medium text-amber-800">Waiting for the rider&apos;s cash</p>
           ) : null}
@@ -226,9 +243,15 @@ export function TollV2ChargeRow({ charge, actions }: { charge: TollV2Charge; act
         {!sealed && charge.section === 'no_trip' ? (
           <>
             {actions.onDriverPays ? (
-              <TollV2SecondaryButton type="button" onClick={() => actions.onDriverPays!(charge)}>
-                Driver pays
-              </TollV2SecondaryButton>
+              charge.offlineFlag ? (
+                <TollV2PrimaryButton type="button" onClick={() => actions.onDriverPays!(charge)}>
+                  Driver pays
+                </TollV2PrimaryButton>
+              ) : (
+                <TollV2SecondaryButton type="button" onClick={() => actions.onDriverPays!(charge)}>
+                  Driver pays
+                </TollV2SecondaryButton>
+              )
             ) : null}
             {actions.onFleetPays ? (
               <TollV2SecondaryButton type="button" onClick={() => actions.onFleetPays!(charge)}>

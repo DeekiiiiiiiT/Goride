@@ -1401,6 +1401,8 @@ export const api = {
       importBatchId?: string;
       /** True for Chronological Excel/CSV (oldest→newest). False for Uber app paste. */
       assumeChronological?: boolean;
+      /** Uber Driver UUID from the file (S3 mismatch guard). */
+      uberDriverUuid?: string;
     },
   ) {
     const response = await fetchWithRetry(

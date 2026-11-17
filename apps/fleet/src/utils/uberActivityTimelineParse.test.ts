@@ -13,6 +13,8 @@ import {
   parseUberActivityTimelineRows,
   parseUberActivityTimelineText,
   pickUberActivityTimelineSheetName,
+  splitUberTimelineCsvWithDriverColumns,
+  uberTimelinePasteFromDriverColumns,
   zonedWallClockToIso,
 } from './uberActivityTimelineParse';
 
@@ -275,5 +277,60 @@ describe('structured rows + table helpers', () => {
     expect(looksLikeOfficialUberDriverActivityCsv(['Date', 'Event', 'Time', 'Duration'])).toBe(
       false,
     );
+  });
+});
+
+describe('Uber paste with driver columns in front', () => {
+  const CSV = [
+    '\uFEFFDriver UUID,Driver first name,Driver last name,Activity',
+    '52FF47DA-ef48-41b8-93d5-80a09b85ce5b,KENNY GREGORY,RATTRAYCAS,October 31 2026',
+    ',,,Offline',
+    ',,,8:16 pm',
+    ',,,3m',
+    ',,,',
+    ',,,Trip completed',
+    ',,,8:12 pm',
+    ',,,32m',
+    ',,,',
+    ',,,On trip',
+    ',,,7:40 pm',
+    ',,,4m',
+    ',,,',
+    ',,,Online',
+    ',,,7:00 pm',
+    ',,,18h 25m',
+    '',
+  ].join('\r\n');
+
+  it('reads the paste column and the driver id', () => {
+    const split = splitUberTimelineCsvWithDriverColumns(CSV);
+    expect(split).not.toBeNull();
+    expect(split!.pasteText.split('\n')[0]).toBe('October 31 2026');
+    expect(extractUberTimelineDriverIdentity(split!.headers, split!.rows).uberUuid).toBe(
+      '52ff47da-ef48-41b8-93d5-80a09b85ce5b',
+    );
+    const r = parseUberActivityTimelineText(split!.pasteText, { timeZone: 'America/Jamaica' });
+    expect(r.warnings).toEqual([]);
+    expect(r.events.map((e) => e.event_type)).toEqual([
+      'went_online',
+      'job_started',
+      'job_completed',
+      'went_offline',
+    ]);
+  });
+
+  it('Excel rows in the same layout parse through the table path', () => {
+    const split = splitUberTimelineCsvWithDriverColumns(CSV)!;
+    const r = parseUberActivityTimelineFromTable(split.headers, split.rows, {
+      timeZone: 'America/Jamaica',
+    });
+    expect(r.stats.tripsCompleted).toBe(1);
+  });
+
+  it('leaves plain Uber paste and Date/Time tables alone', () => {
+    expect(splitUberTimelineCsvWithDriverColumns('October 31 2026\r\nOffline\r\n8:16 pm')).toBeNull();
+    expect(
+      uberTimelinePasteFromDriverColumns(['Driver UUID', 'Date', 'Time', 'Activity / Event'], []),
+    ).toBeNull();
   });
 });

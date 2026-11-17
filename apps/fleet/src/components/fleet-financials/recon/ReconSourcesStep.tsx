@@ -86,6 +86,8 @@ const FLEET_UPLOAD_SOURCES = new Set([
   'fuel_card_self',
   'uber_bundle',
   'indrive_trips',
+  // Opens the same Uber upload: the timeline is dropped in with the week's other Uber files.
+  'uber_activity_timeline',
 ]);
 
 function statusTone(status: string): string {
@@ -235,7 +237,9 @@ export function ReconSourceCard({
     !roamWait &&
     BLOCKING.has(source.status);
   const uploadLabel =
-    source.id === 'uber_bundle' || source.id === 'indrive_trips' ? 'Upload' : 'Upload statement';
+    source.id === 'uber_bundle' || source.id === 'indrive_trips' || source.id === 'uber_activity_timeline'
+      ? 'Upload'
+      : 'Upload statement';
   const uncoveredDays = uncoveredDaysForSource(weekKey, source.coverage);
   const attestLabel = attestNoneButtonLabel(uncoveredDays);
   const attestTip =
@@ -250,7 +254,14 @@ export function ReconSourceCard({
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
-          <h3 className="text-sm font-semibold text-slate-900">{source.label}</h3>
+          <h3 className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900">
+            {source.label}
+            {source.requirement === 'optional' ? (
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                Optional
+              </span>
+            ) : null}
+          </h3>
           {roamCopy ? (
             <p className={cn('text-xs font-medium', roamCopy.isOverdue ? 'text-amber-800' : 'text-slate-700')}>
               {roamCopy.statusLine}
@@ -345,6 +356,8 @@ export function ReconSourcesStep({
   const [fuelModalOpen, setFuelModalOpen] = useState(false);
   const [fuelSourceId, setFuelSourceId] = useState<'fuel_card_self' | 'fuel_card_roam'>('fuel_card_self');
   const [uberOpen, setUberOpen] = useState(false);
+  /** Which card the Uber upload opens under (the Uber reports card or the activity timeline card). */
+  const [uberPanelSource, setUberPanelSource] = useState<'uber_bundle' | 'uber_activity_timeline'>('uber_bundle');
   const [indriveOpen, setIndriveOpen] = useState(false);
   const [attestBusyIds, setAttestBusyIds] = useState<ReadonlySet<string>>(() => new Set());
   const [waiveSourceId, setWaiveSourceId] = useState<string | null>(null);
@@ -527,7 +540,8 @@ export function ReconSourcesStep({
       setFuelModalOpen(true);
       return;
     }
-    if (sourceId === 'uber_bundle') {
+    if (sourceId === 'uber_bundle' || sourceId === 'uber_activity_timeline') {
+      setUberPanelSource(sourceId);
       setUberOpen(true);
       return;
     }
@@ -627,6 +641,7 @@ export function ReconSourcesStep({
                   readProblems={readProblems[source.id] ?? []}
                   onReplace={() => {
                     if (source.id === 'uber_bundle') {
+                      setUberPanelSource('uber_bundle');
                       setUberOpen(true);
                       return;
                     }
@@ -642,6 +657,7 @@ export function ReconSourcesStep({
                   }
                   onUploadAgain={() => {
                     if (source.id === 'uber_bundle') {
+                      setUberPanelSource('uber_bundle');
                       setUberOpen(true);
                       return;
                     }
@@ -649,7 +665,7 @@ export function ReconSourcesStep({
                   }}
                 />
               )}
-              {source.id === 'uber_bundle' ? uberPanel : null}
+              {source.id === uberPanelSource ? uberPanel : null}
               </ReconSourceCard>
             </div>
           ))}
