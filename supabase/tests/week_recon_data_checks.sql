@@ -47,6 +47,7 @@ WITH code_step AS (
     ('SOURCE_ATTESTED_NONE', 'sources'),
     ('STEP_STALE', 'sources'),
     ('LINE_UNATTRIBUTED', 'attribution'),
+    ('MOVED_BALANCE_NOT_CARRIED', 'settlement_preview'),
     ('EARNINGS_STATEMENT_MISSING', 'trips_earnings'),
     ('EARNINGS_STATEMENT_UNVERIFIED', 'trips_earnings'),
     ('EARNINGS_ENGINE_DRIFT', 'trips_earnings'),
