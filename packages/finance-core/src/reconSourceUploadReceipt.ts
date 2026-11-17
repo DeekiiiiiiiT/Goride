@@ -92,6 +92,32 @@ export function formatIndriveLoggedDayLine(day: IndriveLoggedDay): string {
   return `${formatWeekdayDayUtc(day.day)} · ${trips} · ${money}`;
 }
 
+/** WRA-72 — week-level cash tolls line for Step 1. */
+export function formatCashTollsDriverWeekLine(
+  rowCount: number,
+  amountMinor: number | null | undefined,
+): string {
+  if (!rowCount || rowCount <= 0) return 'None logged by the driver';
+  const tollWord = rowCount === 1 ? 'cash toll' : 'cash tolls';
+  const minor = Math.abs(Number(amountMinor) || 0);
+  const major = minor / 100;
+  const money =
+    major % 1 === 0
+      ? `J$${major.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+      : `J$${major.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${rowCount} ${tollWord} logged by driver · ${money}`;
+}
+
+/** True when coverage still has a "no activity" attest but real data also arrived. */
+export function coverageHasAttestDataConflict(coverage: Record<string, string> | undefined): boolean {
+  if (!coverage) return false;
+  return Object.values(coverage).some((v) => v === 'covered_over_attest');
+}
+
+export function reconAttestDataConflictLine(): string {
+  return 'Marked no activity, but data arrived';
+}
+
 export function sourceCardSubtitle(opts: {
   status: string;
   lastUpload?: ReconSourceLastUpload | null;

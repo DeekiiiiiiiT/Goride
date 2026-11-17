@@ -819,6 +819,8 @@ async function computeWeekDesk(
           status: s.status,
           coverage: s.coverage,
           inputHash: s.inputHash,
+          rowCount: s.rowCount,
+          amountMinor: s.amountMinor,
           lastRequestedAt: s.lastRequestedAt,
           lastUpload: uploads.get(s.id) ?? null,
           ...(s.id === "indrive_trips" && indriveLogged.length > 0

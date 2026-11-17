@@ -167,6 +167,7 @@ export const RECON_SOURCES: readonly ReconSourceDef[] = [
     line: "rideshare",
     kind: "driver_submitted",
     label: "Cash tolls",
+    // WRA-72: self-resolves from toll v2 driver_cash (no attest button).
     coverage: "daily_rows",
     feeds: ["tolls"],
     requiredWhen: (p) => (lineActive(p, "rideshare") ? "optional" : "not_applicable"),
@@ -255,7 +256,12 @@ export function weekDayKeys(weekKey: string): string[] {
   return out;
 }
 
-export type SourceCoverageDay = "covered" | "zero_attested" | "missing" | "spill";
+export type SourceCoverageDay =
+  | "covered"
+  | "covered_over_attest"
+  | "zero_attested"
+  | "missing"
+  | "spill";
 
 export type SourceAggregateStatus =
   | "not_applicable"
@@ -266,7 +272,11 @@ export type SourceAggregateStatus =
   | "waived"
   | "waiting_external";
 
-const COVERED_LIKE = new Set<SourceCoverageDay>(["covered", "zero_attested"]);
+const COVERED_LIKE = new Set<SourceCoverageDay>([
+  "covered",
+  "covered_over_attest",
+  "zero_attested",
+]);
 
 export function computeSourceStatusFromCoverage(
   coverage: Record<string, string>,
@@ -280,7 +290,7 @@ export function computeSourceStatusFromCoverage(
   const weekStatus = coverage.week;
   if (weekStatus != null && weekStatus !== "") {
     if (weekStatus === "zero_attested") return "attested_none";
-    if (weekStatus === "covered") return "received";
+    if (weekStatus === "covered" || weekStatus === "covered_over_attest") return "received";
     return requirement === "optional" ? "missing" : "missing";
   }
 

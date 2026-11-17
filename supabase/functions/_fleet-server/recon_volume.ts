@@ -15,11 +15,25 @@ export async function sourceVolumeMetrics(
   const sb = getServiceClient();
   const end = periodEndForAnchor(weekKey);
 
-  if (sourceId === "toll_usage" || sourceId === "toll_topup" || sourceId === "cash_tolls") {
+  if (sourceId === "cash_tolls") {
+    const { data, error } = await sb.rpc("cash_tolls_week_volume", {
+      p_org: orgId,
+      p_week: weekKey,
+    });
+    if (error) {
+      console.warn("[recon] cash_tolls_week_volume failed", error.message);
+      return { rowCount: 0, amountMinor: 0 };
+    }
+    const row = data as { charge_count?: number; amount_minor?: number } | null;
+    return {
+      rowCount: Number(row?.charge_count ?? 0) || 0,
+      amountMinor: Number(row?.amount_minor ?? 0) || 0,
+    };
+  }
+
+  if (sourceId === "toll_usage" || sourceId === "toll_topup") {
     const typeFilter = sourceId === "toll_topup"
       ? ["top_up", "topup", "Top-up"]
-      : sourceId === "cash_tolls"
-      ? null
       : ["usage", "Usage", "toll_usage"];
     let q = sb
       .from("fleet_toll_ledger")
@@ -28,15 +42,14 @@ export async function sourceVolumeMetrics(
       .gte("date", weekKey)
       .lte("date", end)
       .limit(100000);
-    if (typeFilter) q = q.in("type", typeFilter);
+    q = q.in("type", typeFilter);
     const { data } = await q;
     const rows = data ?? [];
     let amountMinor = 0;
     let rowCount = 0;
     for (const r of rows) {
       const pm = String((r as { payment_method?: string }).payment_method || "").toLowerCase();
-      if (sourceId === "cash_tolls" && !(pm.includes("cash"))) continue;
-      if (sourceId !== "cash_tolls" && pm.includes("cash")) continue;
+      if (pm.includes("cash")) continue;
       rowCount += 1;
       amountMinor += Math.round(Math.abs(Number((r as { amount?: number }).amount) || 0) * 100);
     }

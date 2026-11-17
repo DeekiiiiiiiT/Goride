@@ -392,6 +392,9 @@ export {
   formatUploadReceiptLine,
   formatCoverageRangeShort,
   formatIndriveLoggedDayLine,
+  formatCashTollsDriverWeekLine,
+  coverageHasAttestDataConflict,
+  reconAttestDataConflictLine,
   sourceCardSubtitle,
 } from './reconSourceUploadReceipt.ts';
 export type { ReconSourceLastUpload, IndriveLoggedDay } from './reconSourceUploadReceipt.ts';

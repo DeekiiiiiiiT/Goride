@@ -1,6 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
+import { weekDayKeys } from '@roam/finance-core';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -331,6 +332,68 @@ describe('ReconSourceCard — WRA-71 InDrive logged days', () => {
       '2026-11-13',
       '2026-11-14',
     ]);
+  });
+});
+
+describe('ReconSourceCard — WRA-72 cash tolls', () => {
+  it('shows green driver line and no No activity button', () => {
+    const { rerender } = render(
+      <ReconSourceCard
+        weekKey="2026-11-09"
+        source={{
+          id: 'cash_tolls',
+          label: 'Cash tolls',
+          kind: 'driver_submitted',
+          requirement: 'optional',
+          status: 'received',
+          coverage: Object.fromEntries(
+            weekDayKeys('2026-11-09').map((d) => [d, 'covered']),
+          ),
+          rowCount: 0,
+          amountMinor: 0,
+        }}
+        onAttestNone={() => {}}
+      />,
+    );
+    expect(screen.getByText('None logged by the driver')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /No activity/i })).toBeNull();
+
+    rerender(
+      <ReconSourceCard
+        weekKey="2026-11-09"
+        source={{
+          id: 'cash_tolls',
+          label: 'Cash tolls',
+          kind: 'driver_submitted',
+          requirement: 'optional',
+          status: 'received',
+          coverage: { '2026-11-09': 'covered' },
+          rowCount: 3,
+          amountMinor: 82500,
+        }}
+        onAttestNone={() => {}}
+      />,
+    );
+    expect(screen.getByText('3 cash tolls logged by driver · J$825')).toBeTruthy();
+  });
+});
+
+describe('ReconSourceCard — attest beats data message', () => {
+  it('shows conflict when coverage has covered_over_attest', () => {
+    render(
+      <ReconSourceCard
+        weekKey="2026-11-09"
+        source={{
+          id: 'toll_topup',
+          label: 'Tag account top-ups',
+          requirement: 'required',
+          status: 'received',
+          coverage: { week: 'covered_over_attest' },
+        }}
+        onAttestNone={() => {}}
+      />,
+    );
+    expect(screen.getByText('Marked no activity, but data arrived')).toBeTruthy();
   });
 });
 

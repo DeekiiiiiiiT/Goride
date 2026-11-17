@@ -149,6 +149,8 @@ export type ReconRunSource = {
   status: string;
   coverage: Record<string, string>;
   inputHash?: string;
+  rowCount?: number | null;
+  amountMinor?: number | null;
   lastUpload?: ReconRunSourceLastUpload | null;
   /** WRA-71: hand-logged InDrive days (read overlay, not stored on desk). */
   loggedDays?: ReconRunSourceLoggedDay[];

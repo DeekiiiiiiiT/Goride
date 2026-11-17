@@ -98,7 +98,7 @@ export function dayDots(
     const day = addDays(weekKey, i);
     const hasData = sources.some((s) => {
       const v = s.coverage?.[day];
-      return v === 'covered' || v === 'zero_attested';
+      return v === 'covered' || v === 'covered_over_attest' || v === 'zero_attested';
     });
     return { day, label, hasData };
   });

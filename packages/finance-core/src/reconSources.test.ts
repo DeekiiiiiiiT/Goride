@@ -95,10 +95,20 @@ describe('computeSourceStatusFromCoverage', () => {
 
   it('reads statement week coverage', () => {
     expect(computeSourceStatusFromCoverage({ week: 'covered' }, 'required')).toBe('received');
+    expect(computeSourceStatusFromCoverage({ week: 'covered_over_attest' }, 'required')).toBe(
+      'received',
+    );
     expect(computeSourceStatusFromCoverage({ week: 'zero_attested' }, 'required')).toBe(
       'attested_none',
     );
     expect(computeSourceStatusFromCoverage({ week: 'missing' }, 'required')).toBe('missing');
+  });
+
+  it('treats covered_over_attest days as received', () => {
+    const cov = Object.fromEntries(
+      weekDayKeys('2026-11-09').map((d, i) => [d, i === 0 ? 'covered_over_attest' : 'covered']),
+    );
+    expect(computeSourceStatusFromCoverage(cov, 'required')).toBe('received');
   });
 });
 

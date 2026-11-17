@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  coverageHasAttestDataConflict,
+  formatCashTollsDriverWeekLine,
   formatCoverageRangeShort,
   formatIndriveLoggedDayLine,
   formatUploadReceiptLine,
+  reconAttestDataConflictLine,
   sourceCardSubtitle,
 } from './reconSourceUploadReceipt.ts';
 
@@ -36,6 +39,27 @@ describe('formatIndriveLoggedDayLine', () => {
 describe('formatCoverageRangeShort', () => {
   it('collapses same-month ranges', () => {
     expect(formatCoverageRangeShort('2026-11-09', '2026-11-15')).toBe('9–15 Nov');
+  });
+});
+
+describe('formatCashTollsDriverWeekLine', () => {
+  it('shows none when no tolls', () => {
+    expect(formatCashTollsDriverWeekLine(0, 0)).toBe('None logged by the driver');
+  });
+
+  it('shows count and J$ total', () => {
+    expect(formatCashTollsDriverWeekLine(2, 55000)).toBe('2 cash tolls logged by driver · J$550');
+  });
+});
+
+describe('attest vs data conflict', () => {
+  it('detects covered_over_attest', () => {
+    expect(coverageHasAttestDataConflict({ week: 'covered_over_attest' })).toBe(true);
+    expect(coverageHasAttestDataConflict({ '2026-11-09': 'covered' })).toBe(false);
+  });
+
+  it('has stable copy', () => {
+    expect(reconAttestDataConflictLine()).toBe('Marked no activity, but data arrived');
   });
 });
 

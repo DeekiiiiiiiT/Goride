@@ -25,6 +25,8 @@ import {
   resolveDriverIdForUser,
   resolvePlazaId,
 } from "./toll_v2_import_lookups.ts";
+import { DEFAULT_FLEET_TZ, periodKeyFor } from "../../../packages/finance-core/src/periodKey.ts";
+import { queueWeekDeskRefresh } from "./recon_desk_queue.ts";
 import {
   driverCashReceipt,
   indrive,
@@ -352,6 +354,15 @@ export async function handleDriverCash(
   if (imp.error) {
     const mapped = mapTollCommandError(imp.error);
     return { status: mapped.status, body: mapped.body as Record<string, unknown> };
+  }
+
+  const weekKey = periodKeyFor(String(body.occurred_at ?? ""), DEFAULT_FLEET_TZ);
+  if (weekKey) {
+    try {
+      await queueWeekDeskRefresh(orgId, [weekKey], { heldLine: "rideshare" });
+    } catch (err) {
+      console.warn("[toll-v2] driver-cash desk queue failed", err);
+    }
   }
 
   await deps.runMatcher(orgId);

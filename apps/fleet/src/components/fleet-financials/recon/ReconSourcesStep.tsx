@@ -2,8 +2,11 @@ import React, { useCallback, useRef, useState } from 'react';
 import { AlertCircle, Bell, CheckCircle2, Info, Loader2, UploadCloud } from 'lucide-react';
 import { toast } from 'sonner';
 import {
+  coverageHasAttestDataConflict,
+  formatCashTollsDriverWeekLine,
   formatIndriveLoggedDayLine,
   formatUploadReceiptLine,
+  reconAttestDataConflictLine,
   roamFuelExternalCopy,
   sourceCardSubtitle,
   weekDayKeys,
@@ -122,7 +125,7 @@ export function uncoveredDaysForSource(
 ): string[] {
   return weekDayKeys(weekKey).filter((d) => {
     const v = coverage?.[d] ?? 'missing';
-    return v !== 'covered' && v !== 'zero_attested';
+    return v !== 'covered' && v !== 'covered_over_attest' && v !== 'zero_attested';
   });
 }
 
@@ -178,7 +181,7 @@ function CoverageMini({
       <div className="flex gap-0.5">
         {keys.map((d) => {
           const v = coverage[d] ?? 'missing';
-          const ok = v === 'covered' || v === 'zero_attested';
+          const ok = v === 'covered' || v === 'covered_over_attest' || v === 'zero_attested';
           return (
             <span
               key={d}
@@ -267,12 +270,18 @@ export function ReconSourceCard({
   const attestLabel = attestNoneButtonLabel(uncoveredDays);
   const uncoveredLabels = formatUncoveredDayLabels(uncoveredDays);
   const receiptLine = source.lastUpload ? formatUploadReceiptLine(source.lastUpload) : null;
+  const attestConflict = coverageHasAttestDataConflict(source.coverage);
   const statusLine = sourceCardSubtitle({
     status: source.status,
     lastUpload: source.lastUpload,
     uncoveredDayLabels: uncoveredLabels || null,
     pendingUnits: pendingUnits ?? 0,
   });
+  const cashTollsLine =
+    source.id === 'cash_tolls' && source.status === 'received'
+      ? formatCashTollsDriverWeekLine(source.rowCount ?? 0, source.amountMinor)
+      : null;
+  const displayStatusLine = cashTollsLine ?? statusLine;
   const attestTip =
     uncoveredDays.length === 0
       ? 'Every day already has activity or was marked empty.'
@@ -305,14 +314,20 @@ export function ReconSourceCard({
             </p>
           ) : source.id === 'fuel_card_roam' && source.status === 'received' ? (
             <p className="text-xs font-medium text-emerald-800">Received from Roam</p>
-          ) : statusLine ? (
+          ) : attestConflict ? (
+            <p className="text-xs font-medium text-emerald-800">{reconAttestDataConflictLine()}</p>
+          ) : displayStatusLine ? (
             <p
               className={cn(
                 'text-xs font-medium',
-                checkingAfterUpload ? 'text-amber-800' : 'text-slate-600 capitalize',
+                cashTollsLine || source.status === 'received'
+                  ? 'text-emerald-800'
+                  : checkingAfterUpload
+                    ? 'text-amber-800'
+                    : 'text-slate-600 capitalize',
               )}
             >
-              {statusLine}
+              {displayStatusLine}
             </p>
           ) : null}
           {receiptLine ? (
@@ -374,6 +389,7 @@ export function ReconSourceCard({
             && onAttestNone
             // RF-06: nobody marks the Roam fuel card "no activity" — Roam's statement covers it.
             && source.id !== 'fuel_card_roam'
+            && source.id !== 'cash_tolls'
             && uncoveredDays.length > 0 ? (
             <ActionTip label={attestTip}>
               <Button
