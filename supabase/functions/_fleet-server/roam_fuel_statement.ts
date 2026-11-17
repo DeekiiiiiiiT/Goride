@@ -6,7 +6,7 @@
  */
 import { getServiceClient } from "./service_client.ts";
 import { ensureReconImportBatch } from "./recon_batch_bridge.ts";
-import { queueWeekDeskRefresh } from "./recon_desk_queue.ts";
+import { afterReconSourceUpload } from "./recon_after_source_upload.ts";
 import { fleetsWithRoamCards } from "./fuel_card_programs.ts";
 import { periodEndForAnchor } from "../../../packages/finance-core/src/periodKey.ts";
 
@@ -95,7 +95,16 @@ export async function registerRoamStatementWeeks(
       if (res.ok) registered += 1;
       else failed.push(`${orgId}:${week}:${res.error ?? "failed"}`);
     }
-    await queueWeekDeskRefresh(orgId, clean);
+    if (clean.length) {
+      await afterReconSourceUpload({
+        orgId,
+        sourceId: "fuel_card_roam",
+        coverageStart: clean[0],
+        coverageEnd: periodEndForAnchor(clean[clean.length - 1]),
+        weekKeys: clean,
+        fileName,
+      });
+    }
   }
   return { fleets: orgs.length, weeks: clean, registered, failed };
 }
@@ -116,7 +125,15 @@ export async function unregisterRoamStatementWeeks(weeks: string[], stillCovered
         .eq("organization_id", orgId);
       if (!error) removed += 1;
     }
-    await queueWeekDeskRefresh(orgId, drop);
+    if (drop.length) {
+      await afterReconSourceUpload({
+        orgId,
+        sourceId: "fuel_card_roam",
+        coverageStart: drop[0],
+        coverageEnd: periodEndForAnchor(drop[drop.length - 1]),
+        weekKeys: drop,
+      });
+    }
   }
   return removed;
 }

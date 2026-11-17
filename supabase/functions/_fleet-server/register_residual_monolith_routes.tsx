@@ -5314,13 +5314,13 @@ export function registerResidualMonolithRoutes(app: Hono) {
           if (type === "merged_import" || type.includes("uber")) sourceId = "uber_bundle";
           if (type.includes("indrive")) sourceId = "indrive_trips";
           if (orgId && sourceId && /^\d{4}-\d{2}-\d{2}$/.test(covStart) && /^\d{4}-\d{2}-\d{2}$/.test(covEnd)) {
-            await ensureReconImportBatch({
-              batchId: id,
+            const { afterReconSourceUpload } = await import("./recon_after_source_upload.ts");
+            await afterReconSourceUpload({
               orgId,
               sourceId,
               coverageStart: covStart,
               coverageEnd: covEnd,
-              status: "completed",
+              batchId: id,
               rowsCommitted: typeof merged.recordCount === "number" ? merged.recordCount : null,
               fileName: typeof merged.fileName === "string" ? merged.fileName : null,
               type: String(merged.type || sourceId),

@@ -127,6 +127,14 @@ export function isReconUnavailable(err: unknown): boolean {
   return false;
 }
 
+export type ReconRunSourceLastUpload = {
+  uploadedAt: string;
+  fileName: string | null;
+  rowCount: number | null;
+  coverageStart: string;
+  coverageEnd: string;
+};
+
 export type ReconRunSource = {
   id: string;
   label: string;
@@ -135,6 +143,7 @@ export type ReconRunSource = {
   status: string;
   coverage: Record<string, string>;
   inputHash?: string;
+  lastUpload?: ReconRunSourceLastUpload | null;
 };
 
 export type ReconExternalQueueItem = {

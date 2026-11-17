@@ -61,6 +61,7 @@ import {
 import { acknowledgeCashSourceMismatch, reopenWeek, sealEarningsLaneForWeek } from "./week_close.ts";
 import { startWeekWorkflow } from "./recon_close_workflow.ts";
 import { registerReconImportRoutes } from "./recon_import_routes.ts";
+import { loadLastUploadsForWeek, type ReconLastUpload } from "./recon_after_source_upload.ts";
 import { shapeWeekActivity } from "./recon_activity.ts";
 import { shapeWeekTimeline } from "./recon_activity_timeline.ts";
 import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
@@ -802,19 +803,23 @@ async function computeWeekDesk(
     attribution,
     closeCheck,
     corrections,
-    sources: sources.map((s) => {
-      const def = RECON_SOURCES.find((d) => d.id === s.id);
-      return {
-        id: s.id,
-        label: s.label,
-        kind: def?.kind ?? "upload",
-        requirement: s.requirement,
-        status: s.status,
-        coverage: s.coverage,
-        inputHash: s.inputHash,
-        lastRequestedAt: s.lastRequestedAt,
-      };
-    }),
+    sources: await (async () => {
+      const uploads = await loadLastUploadsForWeek(orgId, weekKey);
+      return sources.map((s) => {
+        const def = RECON_SOURCES.find((d) => d.id === s.id);
+        return {
+          id: s.id,
+          label: s.label,
+          kind: def?.kind ?? "upload",
+          requirement: s.requirement,
+          status: s.status,
+          coverage: s.coverage,
+          inputHash: s.inputHash,
+          lastRequestedAt: s.lastRequestedAt,
+          lastUpload: uploads.get(s.id) ?? null,
+        };
+      });
+    })(),
     steps,
   };
 
@@ -929,6 +934,25 @@ function withLiveRun(
     deskReady: true,
     run: { ...snapshot.run, ...deskRunFields(run) },
   };
+}
+
+/** WRA-70: upload receipts from import_batches (read-only overlay on the saved desk). */
+async function overlayLastUploadsOnDesk(
+  orgId: string,
+  weekKey: string,
+  desk: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const raw = desk.sources;
+  if (!Array.isArray(raw)) return desk;
+  const uploads = await loadLastUploadsForWeek(orgId, weekKey);
+  if (uploads.size === 0) return desk;
+  const sources = raw.map((row) => {
+    const id = String((row as { id?: string }).id || "");
+    const last = uploads.get(id as ReconSourceId);
+    if (!last) return row;
+    return { ...row, lastUpload: last as ReconLastUpload };
+  });
+  return { ...desk, sources };
 }
 
 async function calculatorIsPaused(): Promise<boolean> {
@@ -1061,13 +1085,15 @@ async function readStoredDesk(orgId: string, line: ReconLine, weekKey: string): 
   const run = await loadWeekRun(orgId, line, weekKey);
   if (run && isDeskSnapshot(run.desk_snapshot)) {
     const calculator = await loadCalculatorStatus(orgId, run.desk_computed_at ?? null);
-    return { ...withLiveRun(run.desk_snapshot, run), calculator };
+    const desk = { ...withLiveRun(run.desk_snapshot, run), calculator };
+    return overlayLastUploadsOnDesk(orgId, weekKey, desk);
   }
   const calculator = await loadCalculatorStatus(orgId, null);
-  return {
+  const desk = {
     ...preparingPayload(run ?? notCreatedRun(orgId, line, weekKey), calculator.paused),
     calculator,
   };
+  return overlayLastUploadsOnDesk(orgId, weekKey, desk);
 }
 
 /** WRA-69: so the week page can watch until the calculator publish after step saves. */

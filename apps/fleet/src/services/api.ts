@@ -1467,6 +1467,7 @@ export const api = {
       assumeChronological?: boolean;
       /** Uber Driver UUID from the file (S3 mismatch guard). */
       uberDriverUuid?: string;
+      fileName?: string;
     },
   ) {
     const response = await fetchWithRetry(

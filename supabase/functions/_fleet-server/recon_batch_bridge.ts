@@ -6,6 +6,7 @@ import { getServiceClient } from "./service_client.ts";
 
 export type ReconBatchSourceId =
   | "uber_bundle"
+  | "uber_activity_timeline"
   | "indrive_trips"
   | "toll_usage"
   | "toll_topup"
@@ -26,6 +27,9 @@ function semanticKeyFor(
   coverageEnd: string,
 ): string {
   if (sourceId === "uber_bundle") return `uber:${orgId}:${coverageStart}:${coverageEnd}`;
+  if (sourceId === "uber_activity_timeline") {
+    return `uber_tl:${orgId}:${coverageStart}:${coverageEnd}`;
+  }
   if (sourceId === "indrive_trips") return `indrive:${orgId}:${coverageStart}:${coverageEnd}`;
   if (sourceId.startsWith("toll_")) return `toll:${sourceId}:${orgId}:${coverageStart}:${coverageEnd}`;
   return `fuel:${sourceId}:${orgId}:${coverageStart}:${coverageEnd}`;

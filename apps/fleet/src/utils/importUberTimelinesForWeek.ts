@@ -34,6 +34,7 @@ export type TimelineImportApi = (
     timeZone: string;
     assumeChronological: boolean;
     uberDriverUuid?: string;
+    fileName?: string;
   },
 ) => Promise<{ summary: { days: number; eventCount?: number }; inserted: number }>;
 
@@ -155,6 +156,7 @@ export async function importUberTimelinesForWeek(
         timeZone,
         assumeChronological: split.chronological,
         uberDriverUuid: identity.uberUuid || undefined,
+        fileName: file.name,
       });
       const days = res.summary?.days ?? 0;
       lines.push({

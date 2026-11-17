@@ -13,17 +13,15 @@ Deno.test("register queues a desk refresh for the file's weeks before answering"
   const start = source.indexOf('"/make-server-37f42386/recon/imports/:id/register"');
   assert(start >= 0, "register route not found");
   const block = source.slice(start);
-  const refresh = block.indexOf("await queueDeskRefresh(orgId, weekKeys)");
+  const refresh = block.indexOf("await afterReconSourceUpload(");
   const answer = block.indexOf("return c.json({ success: true, importId, batchId })");
-  assert(refresh >= 0, "register must call queueDeskRefresh");
+  assert(refresh >= 0, "register must call afterReconSourceUpload");
   assert(answer > refresh, "the refresh is queued before the success answer");
 });
 
 Deno.test("the refresh uses the calculator's queue and never fails the upload", async () => {
-  const start = source.indexOf("async function queueDeskRefresh");
-  assert(start >= 0, "queueDeskRefresh not found");
-  const fn = source.slice(start, source.indexOf("\n}\n", start));
-  assert(fn.includes("queueWeekDeskRefresh("), "goes through the shared desk queue");
+  const helper = await Deno.readTextFile(new URL("./recon_after_source_upload.ts", import.meta.url));
+  assert(helper.includes("queueWeekDeskRefresh(orgId, weekKeys)"), "shared helper uses desk queue");
   const queue = await Deno.readTextFile(new URL("./recon_desk_queue.ts", import.meta.url));
   assert(queue.includes('rpc("recon_enqueue_week_desk"'), "uses recon_enqueue_week_desk");
   assert(queue.includes("p_delay_seconds"), "sends all 4 arguments (the database function has no 3-argument form)");

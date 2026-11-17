@@ -25,13 +25,10 @@ import {
   parseStatementPeriodBanner,
   ymdSpan,
 } from "../../../packages/finance-core/src/statementCoverage.ts";
-import {
-  ensureReconImportBatch,
-  type ReconBatchSourceId,
-} from "./recon_batch_bridge.ts";
 import { isReconWeekFrozen } from "./recon_week_writable.ts";
 import { uploadWeekKeys } from "./recon_desk_shape.ts";
-import { queueWeekDeskRefresh } from "./recon_desk_queue.ts";
+import { afterReconSourceUpload } from "./recon_after_source_upload.ts";
+import type { ReconSourceId } from "./recon_sources_mirror.ts";
 
 function actorCanApproveWideCoverage(c: Context): boolean {
   const user = c.get("rbacUser") as { resolvedRole?: Role } | undefined;
@@ -52,11 +49,6 @@ async function refuseFrozenImportWeek(
 /** The fleet.import_batches row id for a batch named either "<id>" or "batch:<id>". */
 export function batchRowId(name: string): string {
   return name.startsWith("batch:") ? name.slice("batch:".length) : name;
-}
-
-/** Queue a desk publish for every existing week run (any line) of these weeks. Never fails the upload. */
-async function queueDeskRefresh(orgId: string, weekKeys: string[]): Promise<void> {
-  await queueWeekDeskRefresh(orgId, weekKeys);
 }
 
 const IMPORTS = "/make-server-37f42386/recon/imports";
@@ -480,18 +472,22 @@ export function registerReconImportRoutes(app: Hono) {
             if (fuelGap) {
               return c.json({ error: "COVERAGE_EXCLUDES_ROWS", message: fuelGap }, 400);
             }
-            await ensureReconImportBatch({
-              batchId: clientBatchId,
-              orgId,
-              sourceId: sourceId as ReconBatchSourceId,
+            const fuelWeekKeys = uploadWeekKeys({
+              weekKey: staging.week_key ? String(staging.week_key).slice(0, 10) : null,
               coverageStart,
               coverageEnd,
-              dataStart,
-              dataEnd,
-              status: "completed",
+            });
+            await afterReconSourceUpload({
+              orgId,
+              sourceId: sourceId as ReconSourceId,
+              coverageStart,
+              coverageEnd,
+              batchId: clientBatchId,
               rowsCommitted,
               fileName: staging.file_name || "fuel_import.csv",
-              type: sourceId,
+              weekKeys: fuelWeekKeys,
+              dataStart: dataStart ?? undefined,
+              dataEnd: dataEnd ?? undefined,
             });
           }
           const sb = getServiceClient();
@@ -672,26 +668,6 @@ export function registerReconImportRoutes(app: Hono) {
         }, c);
         await kv.set(`batch:${batchId}`, merged);
 
-        if (
-          coverageStart &&
-          coverageEnd &&
-          (isTollSource(sourceId) || isFuelSource(sourceId) || sourceId === "uber_bundle" ||
-            sourceId === "indrive_trips")
-        ) {
-          await ensureReconImportBatch({
-            batchId,
-            orgId,
-            sourceId: sourceId as ReconBatchSourceId,
-            coverageStart,
-            coverageEnd,
-            dataStart,
-            dataEnd,
-            status: "completed",
-            rowsCommitted,
-            type: sourceId,
-          });
-        }
-
         const sb = getServiceClient();
         const existing = await getStagingImport(orgId, importId);
         if (existing) {
@@ -712,9 +688,20 @@ export function registerReconImportRoutes(app: Hono) {
           });
         }
 
-        // P3-R4: a v2 toll file writes no row the calculator watches, so ask for the week to be
-        // worked out again; otherwise Step 1 shows the file as missing until the nightly check.
-        await queueDeskRefresh(orgId, weekKeys);
+        if (coverageStart && coverageEnd) {
+          await afterReconSourceUpload({
+            orgId,
+            sourceId: sourceId as ReconSourceId,
+            coverageStart,
+            coverageEnd,
+            batchId,
+            rowsCommitted,
+            fileName: body.fileName ? String(body.fileName) : null,
+            weekKeys,
+            dataStart,
+            dataEnd,
+          });
+        }
 
         return c.json({ success: true, importId, batchId });
       } catch (e) {

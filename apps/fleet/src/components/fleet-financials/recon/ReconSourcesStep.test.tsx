@@ -209,6 +209,78 @@ describe('ReconSourceCard', () => {
   });
 });
 
+describe('ReconSourceCard — WRA-70 upload receipt', () => {
+  const lastUpload = {
+    uploadedAt: '2026-11-17T19:36:44.000Z',
+    fileName: 'timeline.csv',
+    rowCount: 550,
+    coverageStart: '2026-11-09',
+    coverageEnd: '2026-11-15',
+  };
+
+  it('shows receipt and amber checking while calculator is pending', () => {
+    render(
+      <ReconSourceCard
+        weekKey="2026-11-09"
+        pendingUnits={1}
+        source={{
+          id: 'uber_activity_timeline',
+          label: 'Uber activity timeline',
+          requirement: 'optional',
+          status: 'missing',
+          coverage: {},
+          lastUpload,
+        }}
+        onUpload={() => {}}
+        onAttestNone={() => {}}
+      />,
+    );
+    expect(screen.getByTestId('recon-source-upload-receipt').textContent).toMatch(/timeline\.csv/);
+    expect(screen.getByTestId('recon-source-uber_activity_timeline').textContent).toMatch(
+      /Uploaded — checking/,
+    );
+  });
+
+  it('shows uploaded-but-nothing-for when still missing after publish', () => {
+    render(
+      <ReconSourceCard
+        weekKey="2026-11-09"
+        pendingUnits={0}
+        source={{
+          id: 'uber_activity_timeline',
+          label: 'Uber activity timeline',
+          requirement: 'optional',
+          status: 'missing',
+          coverage: { '2026-11-09': 'missing', '2026-11-10': 'missing' },
+          lastUpload: { ...lastUpload, rowCount: 0 },
+        }}
+        onUpload={() => {}}
+        onAttestNone={() => {}}
+      />,
+    );
+    expect(screen.getByTestId('recon-source-uber_activity_timeline').textContent).toMatch(
+      /Uploaded, but nothing for/,
+    );
+  });
+
+  it('shows receipt on received source', () => {
+    render(
+      <ReconSourceCard
+        weekKey="2026-11-09"
+        source={{
+          id: 'uber_activity_timeline',
+          label: 'Uber activity timeline',
+          requirement: 'optional',
+          status: 'received',
+          coverage: {},
+          lastUpload,
+        }}
+      />,
+    );
+    expect(screen.getByTestId('recon-source-upload-receipt')).toBeTruthy();
+  });
+});
+
 describe('ReconSourceCard — Uber activity timeline (optional)', () => {
   it('shows Optional, the day dots, and an Upload button that opens the Uber upload', async () => {
     const onUpload = vi.fn();

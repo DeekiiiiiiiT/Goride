@@ -1103,6 +1103,7 @@ export function registerDriverActivityRoutes(app: Hono) {
         importBatchId?: string;
         assumeChronological?: boolean;
         uberDriverUuid?: string;
+        fileName?: string;
       };
       try {
         body = await c.req.json();
@@ -1240,6 +1241,19 @@ export function registerDriverActivityRoutes(app: Hono) {
       } catch (auditErr) {
         console.warn("[activity] uber import audit failed", auditErr);
       }
+
+      const { afterReconSourceUpload } = await import("./recon_after_source_upload.ts");
+      await afterReconSourceUpload({
+        orgId,
+        sourceId: "uber_activity_timeline",
+        coverageStart: rangeFrom.slice(0, 10),
+        coverageEnd: rangeTo.slice(0, 10),
+        batchId: importBatchId,
+        rowsCommitted: inserted,
+        fileName: body.fileName ? String(body.fileName).trim() || null : null,
+        dataStart: rangeFrom.slice(0, 10),
+        dataEnd: rangeTo.slice(0, 10),
+      });
 
       return c.json({
         success: true,

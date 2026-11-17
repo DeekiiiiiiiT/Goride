@@ -389,6 +389,12 @@ export {
   resolveSourceLine,
 } from './reconSources.ts';
 export {
+  formatUploadReceiptLine,
+  formatCoverageRangeShort,
+  sourceCardSubtitle,
+} from './reconSourceUploadReceipt.ts';
+export type { ReconSourceLastUpload } from './reconSourceUploadReceipt.ts';
+export {
   coverageInputHash,
   isReconHumanSourceStatus,
   RECON_HUMAN_SOURCE_STATUSES,

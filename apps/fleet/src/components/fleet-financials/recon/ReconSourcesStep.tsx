@@ -1,7 +1,12 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { AlertCircle, Bell, CheckCircle2, Info, Loader2, UploadCloud } from 'lucide-react';
 import { toast } from 'sonner';
-import { roamFuelExternalCopy, weekDayKeys } from '@roam/finance-core';
+import {
+  formatUploadReceiptLine,
+  roamFuelExternalCopy,
+  sourceCardSubtitle,
+  weekDayKeys,
+} from '@roam/finance-core';
 import { ReconApiError, type ReconRunPayload, type ReconRunSource } from '../../../services/reconApi';
 import { RECON_WEEK_CHANGED_EVENT } from '../../../services/reconWeekContext';
 
@@ -90,7 +95,17 @@ const FLEET_UPLOAD_SOURCES = new Set([
   'uber_activity_timeline',
 ]);
 
-function statusTone(status: string): string {
+function statusTone(
+  status: string,
+  opts?: { lastUpload?: boolean; pendingUnits?: number },
+): string {
+  if (
+    opts?.lastUpload
+    && BLOCKING.has(status)
+    && (opts.pendingUnits ?? 0) > 0
+  ) {
+    return 'border-amber-200 bg-amber-50/80';
+  }
   if (status === 'received' || status === 'not_applicable' || status === 'attested_none') {
     return 'border-emerald-200 bg-emerald-50/80';
   }
@@ -209,6 +224,7 @@ export function ReconSourceCard({
   attestBusy,
   canUploadExternalSources = false,
   canWaive = false,
+  pendingUnits = 0,
   children,
 }: {
   /** Extra content shown inside the card (toll v2 file results). */
@@ -224,8 +240,14 @@ export function ReconSourceCard({
   canUploadExternalSources?: boolean;
   /** R3-09: waive is approver-only. */
   canWaive?: boolean;
+  /** WRA-70: while the calculator is still publishing after an upload. */
+  pendingUnits?: number;
 }) {
   const needsAction = BLOCKING.has(source.status) || isRoamFuelWaiting(source);
+  const checkingAfterUpload =
+    Boolean(source.lastUpload)
+    && BLOCKING.has(source.status)
+    && (pendingUnits ?? 0) > 0;
   const roamWait = isRoamFuelWaiting(source);
   const roamCopy = roamWait ? roamFuelExternalCopy(weekKey) : null;
   const showUpload = needsAction && onUpload && canShowUpload(source, canUploadExternalSources);
@@ -242,6 +264,14 @@ export function ReconSourceCard({
       : 'Upload statement';
   const uncoveredDays = uncoveredDaysForSource(weekKey, source.coverage);
   const attestLabel = attestNoneButtonLabel(uncoveredDays);
+  const uncoveredLabels = formatUncoveredDayLabels(uncoveredDays);
+  const receiptLine = source.lastUpload ? formatUploadReceiptLine(source.lastUpload) : null;
+  const statusLine = sourceCardSubtitle({
+    status: source.status,
+    lastUpload: source.lastUpload,
+    uncoveredDayLabels: uncoveredLabels || null,
+    pendingUnits: pendingUnits ?? 0,
+  });
   const attestTip =
     uncoveredDays.length === 0
       ? 'Every day already has activity or was marked empty.'
@@ -249,7 +279,13 @@ export function ReconSourceCard({
 
   return (
     <article
-      className={cn('rounded-xl border p-4 shadow-sm', statusTone(source.status))}
+      className={cn(
+        'rounded-xl border p-4 shadow-sm',
+        statusTone(source.status, {
+          lastUpload: Boolean(source.lastUpload),
+          pendingUnits,
+        }),
+      )}
       data-testid={`recon-source-${source.id}`}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -268,13 +304,28 @@ export function ReconSourceCard({
             </p>
           ) : source.id === 'fuel_card_roam' && source.status === 'received' ? (
             <p className="text-xs font-medium text-emerald-800">Received from Roam</p>
-          ) : (
-            <p className="text-xs capitalize text-slate-600">{source.status.replace(/_/g, ' ')}</p>
-          )}
+          ) : statusLine ? (
+            <p
+              className={cn(
+                'text-xs font-medium',
+                checkingAfterUpload ? 'text-amber-800' : 'text-slate-600 capitalize',
+              )}
+            >
+              {statusLine}
+            </p>
+          ) : null}
+          {receiptLine ? (
+            <p className="text-xs text-slate-600" data-testid="recon-source-upload-receipt">
+              {receiptLine}
+            </p>
+          ) : null}
           <CoverageMini weekKey={weekKey} coverage={source.coverage ?? {}} />
         </div>
         {needsAction ? (
-          <AlertCircle className="h-5 w-5 shrink-0 text-rose-600" aria-hidden />
+          <AlertCircle
+            className={cn('h-5 w-5 shrink-0', checkingAfterUpload ? 'text-amber-600' : 'text-rose-600')}
+            aria-hidden
+          />
         ) : (
           <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" aria-hidden />
         )}
@@ -631,6 +682,7 @@ export function ReconSourcesStep({
                 attestBusy={attestBusyIds.has(source.id)}
                 canUploadExternalSources={canUploadExternalSources}
                 canWaive={canWaive}
+                pendingUnits={run.calculator?.pendingUnits ?? 0}
               >
               {(
                 <ReconTollV2SourceEnhancement
