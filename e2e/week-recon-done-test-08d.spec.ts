@@ -35,9 +35,9 @@ test('done-test 8d: sent → out of date → withdrawn; no Approve on an out-of-
   await stale.getByRole('button', { name: 'Withdraw' }).click();
   await expect(acc.page.getByTestId('recon-approval-stale')).toHaveCount(0);
   await acc.page.reload();
-  const history = acc.page.getByTestId('recon-history');
-  await expect(history).toContainText(/sent for approval/i);
-  await expect(history).toContainText('Withdrawn');
+  // History list removed from the Close step (owner, 17 Nov): the withdrawn request stays gone after a reload.
+  await expect(acc.page.getByTestId('recon-approval-stale')).toHaveCount(0);
+  await expect(acc.page.getByTestId('recon-history')).toHaveCount(0);
   expect(live).toEqual([]);
   await acc.ctx.close();
   await mgr.ctx.close();

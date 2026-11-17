@@ -2,7 +2,7 @@
 import { expect, test } from '@playwright/test';
 import { closablePlan, openWeekStep, pageAs, requireLocalRun, seedPlan, startClose, weekState } from './helpers/weekReconDoneTest';
 
-test('done-test 8a: Send for approval → Approve from the bell → closed, "Prepared by … · Approved by …"', async ({ browser }) => {
+test('done-test 8a: Send for approval → Approve from the bell → closed', async ({ browser }) => {
   requireLocalRun();
   const plan = seedPlan();
   const week = closablePlan()[0];
@@ -25,7 +25,8 @@ test('done-test 8a: Send for approval → Approve from the bell → closed, "Pre
   await expect.poll(() => weekState(plan.org, week), { timeout: 120_000 }).toBe('closed');
   await openWeekStep(mgr.page, week, 'close');
   await expect(mgr.page.getByTestId('recon-closed-badge')).toBeVisible();
-  await expect(mgr.page.getByTestId('recon-history')).toContainText(/Prepared by WR Done Accountant · Approved by WR Done Manager/);
+  // History list removed from the Close step (owner, 17 Nov).
+  await expect(mgr.page.getByTestId('recon-history')).toHaveCount(0);
   expect(live).toEqual([]);
   await acc.ctx.close();
   await mgr.ctx.close();
