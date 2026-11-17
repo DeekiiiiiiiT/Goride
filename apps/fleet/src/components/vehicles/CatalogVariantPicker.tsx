@@ -4,7 +4,7 @@
 //   - 1 candidate:  green auto-match card; we report it to the parent.
 //   - 2+ candidates: force-pick list; parent's Save stays disabled until pick.
 //
-// Used by AddVehicleModal (new "Confirm motor type" sub-step) and by
+// Used by the Add a vehicle flow (add-vehicle/AddVehicleFlow, "Is this your car?") and by
 // VehicleDetail (replaces the bespoke alignSearch* state) so behaviour stays
 // identical across the app.
 import { useEffect, useMemo, useRef, useState } from "react";

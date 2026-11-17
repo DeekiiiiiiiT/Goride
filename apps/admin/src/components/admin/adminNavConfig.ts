@@ -92,6 +92,7 @@ export const WORLD_MAPS_CHILDREN: NavChild[] = [
 export const VEHICLE_DATABASE_CHILDREN: NavChild[] = [
   { id: 'motor-vehicles', label: 'Vehicle Catalog', icon: Car },
   { id: 'pending-motor-vehicles', label: 'Pending catalog', icon: Inbox },
+  { id: 'vehicle-pictures', label: 'Vehicle pictures', icon: Car },
   { id: 'maintenance-templates', label: 'Maintenance templates', icon: Wrench },
   { id: 'parts-catalog', label: 'Parts database', icon: ClipboardList },
   { id: 'suppliers-prices', label: 'Suppliers & prices', icon: Store },
@@ -161,6 +162,7 @@ const SHARED_PLATFORM_PAGES = [
   'platforms',
   'platforms-engines',
   'pending-motor-vehicles',
+  'vehicle-pictures',
   'maintenance-templates',
   'parts-catalog',
   'suppliers-prices',
@@ -278,7 +280,7 @@ export const DOMINION_SECTIONS: { id: string; label: string; icon: typeof Layout
         id: 'vehicles-home',
         label: 'Vehicles',
         icon: Car,
-        activeWhen: ['motor-vehicles', 'platforms', 'platforms-engines', 'pending-motor-vehicles', 'maintenance-templates', 'parts-catalog', 'suppliers-prices', 'catalog-quality'],
+        activeWhen: ['motor-vehicles', 'platforms', 'platforms-engines', 'pending-motor-vehicles', 'vehicle-pictures', 'maintenance-templates', 'parts-catalog', 'suppliers-prices', 'catalog-quality'],
       },
       {
         id: 'places-home',

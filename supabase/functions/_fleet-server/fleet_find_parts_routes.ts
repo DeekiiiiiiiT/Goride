@@ -37,6 +37,12 @@ import { readComponentFitHints } from "./parts_component_fit_hints.ts";
 import { resolvePartsFitPairs } from "../../../packages/types/src/partsFitParam.ts";
 import { readFleetPartLookup } from "./fleet_parts_lookup.ts";
 import { readBrakesOverview } from "./read_brakes_overview.ts";
+import { publicMediaUrl } from "../_shared/objectStorage/index.ts";
+
+/** Maker logo key → media.roamfleet.co address (null when no logo). */
+export function makerLogoUrl(key: string | null): string | null {
+  return publicMediaUrl(key);
+}
 
 const PREFIX = "/make-server-37f42386/parts";
 
@@ -366,18 +372,13 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
 
   app.get(`${PREFIX}/catalog-makers`, ...view, async (c: Context) => {
     try {
-      const LOGO_BUCKET = "catalog-maker-logos";
+      // Logos are keys in Cloudflare R2 (roam-public), served from media.roamfleet.co.
       const { data, error } = await supabase.from("catalog_maker").select("make, logo_storage_path").order("make");
       if (error) return c.json({ error: errorText(error) }, 500);
       const items = (data ?? []).map((row) => {
         const make = String((row as { make?: string }).make ?? "");
-        const storagePath = (row as { logo_storage_path?: string | null }).logo_storage_path?.trim() || null;
-        let logoUrl: string | null = null;
-        if (storagePath) {
-          const { data: pub } = supabase.storage.from(LOGO_BUCKET).getPublicUrl(storagePath);
-          logoUrl = pub?.publicUrl ?? null;
-        }
-        return { make, logoUrl };
+        const key = (row as { logo_storage_path?: string | null }).logo_storage_path?.trim() || null;
+        return { make, logoUrl: makerLogoUrl(key) };
       });
       return c.json({ items });
     } catch (error) {

@@ -1,0 +1,195 @@
+ROAM DOMINION — VEHICLE PICTURES — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Dominion - Vehicle Pictures (Desktop Admin, for the owner and catalogue editors, who are not mechanics):
+
+Design a new "Vehicle pictures" page inside the Vehicles section of the Roam Dominion admin console.
+
+What Dominion is:
+- Roam Dominion is Roam's master database. It builds the reference data that every Roam app reads: cars, makers, parts, specs, and now car pictures.
+- Dominion never shows anything from the apps: no fleets, no customers, no vehicles, plates, drivers or counts of use. This page shows only the pictures themselves.
+
+What the page is for:
+- Roam keeps one studio picture for each car and colour, for example "White Toyota Roomy, 1st generation". The apps read these pictures from Dominion.
+- This page is where Roam staff look after the pictures:
+  - see them all in one gallery
+  - spot one that came out wrong and make a new one
+  - upload a better one
+  - put back the previous one
+- The owner can also switch the AI picture maker on or off, see this month's picture spend, and remake every picture after a prompt change.
+
+Look and feel:
+- Calm, modern and visual, like a photo library in a premium app. The pictures are the hero.
+- Each screen is tall enough to show everything with no inner scrolling.
+- Draw each screen in light mode. Dark mode uses the colours below.
+
+
+BRAND IDENTITY:
+- Keep the Dominion console frame exactly as it is today:
+  - dark navy left sidebar "Dominion · Roam Admin Console" (MASTER DATA: Overview, Vehicles active, Places and Maps, Fuel, Tolls, Tax and Vendors; ENGINES; DISTRIBUTION; PLATFORM; BACK OFFICE)
+  - top bar: search "Search entities, engines, routes…" with ⌘K, moon icon, user "Deeki T · Owner"
+- Breadcrumb above the title: "Vehicles › Vehicle pictures", with a "Back to Vehicles" button (secondary).
+- The page title is simply "Vehicle pictures" with the muted line "One studio picture per car and colour." No system ids, no mono breadcrumb strips, no engine/poll labels.
+- Theme: "Calm modern workspace".
+- LIGHT MODE (default):
+  - Primary: #0153dc; primary container: #dbe1ff
+  - Success: #006e31 on #e6f4ea; warning: #8a5a00 on #fff4dc; error: #a83836 on #fdecec
+  - Outline: #797a84; hairlines #e6e7ee
+  - Background: #faf8fe; cards white, 16px radius, hairline border plus a very soft shadow (0 4px 16px rgba(1,83,220,0.04))
+  - Text: #30323b; muted text: #5d5f68
+- DARK MODE:
+  - Background #0b1220; cards #111a2e; hairlines #1e293b
+  - Text #e2e8f0; muted #94a3b8; primary #5b8def; success #4ade80; warning #fbbf24; error #f87171
+- Maker logos in round tiles, always first where a maker is named.
+- Typography: Inter. Title 26px semibold, section titles 18px semibold, body 15px, hints 13px muted. Money and counts use tabular numerals (US$12.40, 1,204).
+- Pictures are always shown the same way:
+  - a studio photo of the car facing right, front three-quarter view, on pure white with a soft shadow under the tyres, in a white 4:3 frame with 12px radius
+  - a picture not ready yet shows a soft grey car outline instead
+- Colour chips: a filled dot in the colour plus the colour NAME as text ("● White"); white and pearl white dots get a thin grey ring.
+- Status chips (fully rounded, icon + word): "Ready" (green check), "Being made" (blue spinner dot), "Failed" (red), "Stale" (amber: no car in the catalogue matches it any more), "Looks good" (green thumbs-up), "Looks wrong" (red thumbs-down), "AI" (slate sparkle), "Uploaded by staff" (slate upload icon), "Restored" (slate history icon).
+- Buttons always look like buttons:
+  - Primary = solid #0153dc.
+  - Secondary = white with a visible #c5c6d0 border and dark text.
+  - Danger (Remove, Cancel, Turn off) = red #a83836 border and red text; solid red only for a final confirm.
+  - Icon buttons 32px with a visible border.
+  - No underlined text links, no grey text-only buttons. Every confirm is an in-app dialog, never a browser pop-up.
+- NEVER on any screen: fleet or company names, plates, drivers, "used by", vehicle counts, "live on route", certificate text, or per-fleet settings.
+- Sample data (use exactly):
+  - Pictures:
+    - White Toyota Roomy · 1st gen · 2016–2020 · Hatchback · made 16 Nov 2026 · AI · Ready
+    - Grey Honda Fit · 3rd gen · 2013–2020 · Hatchback · made 16 Nov 2026 · AI · Ready
+    - Red Toyota Vitz · 3rd gen · 2014–2020 · Hatchback · made 14 Nov 2026 · AI · Ready · Looks good
+    - Pearl White Toyota Aqua · 1st gen · 2011–2021 · Hatchback · made 12 Nov 2026 · AI · Ready
+    - Blue Nissan Note · 2nd gen · 2012–2020 · Hatchback · made 10 Nov 2026 · AI · Ready · Looks wrong
+    - Silver Mazda Demio · 4th gen · 2014–2019 · Hatchback · Being made
+    - Pearl White Suzuki Swift · 4th gen · 2017–2023 · Hatchback · Failed ("The picture service refused this car")
+    - Black Toyota Probox · 1st gen · 2002–2014 · Wagon · made 4 May 2026 · AI · Stale
+  - Header counts: Ready 1,204 · Being made 3 · Failed 2 · Stale 6.
+  - Picture spend this month: US$12.40 of US$50.00.
+
+
+DESIGN PRINCIPLES:
+- Desktop-first at 1440px; content column max 1200px. One phone screen (390px) is included.
+- The gallery is the page. Counts and filters sit above it in one calm row; nothing pushes the pictures below the fold.
+- Each picture card says in plain words which car and colour it is, and how and when it was made. Nothing else.
+- Clicking a card opens a right-side drawer (560px) with the large picture and every action for it.
+- Owner-only controls (the AI on/off switch, remake all) sit in one "AI settings" card at the top right, clearly separate from everyday picture fixes.
+- Every action that costs money says the cost before it runs ("About US$0.04").
+- Every change can be undone for 30 days ("Restore previous"), and the dialogs say so.
+- A picture the apps already use can't be removed; its Remove button is disabled with a short reason.
+
+
+SCREEN 1: VEHICLE PICTURES — GALLERY
+- Breadcrumb "Vehicles › Vehicle pictures", then the title "Vehicle pictures" with the muted line.
+- A row of four count tiles: "Ready 1,204", "Being made 3", "Failed 2", "Stale 6". Each tile is a button that sets the matching filter.
+- An "AI settings" card on the right of the count row (owner only):
+  - One spend bar: "Pictures this month US$12.40 of US$50.00" (blue).
+  - A switch "AI pictures: On" with the switch control.
+  - A "Remake all from older prompt" button (secondary).
+- A filter row: search box "Search a car…", a "Colour" dropdown, a "Status" dropdown, a "Rating" dropdown, a "Stale look" toggle chip.
+- A grid of picture cards, 4 per row, using the sample pictures. Each card shows:
+  - the picture frame (or the grey outline for Being made / Failed)
+  - the maker logo, "Toyota Roomy", "1st gen · 2016–2020 · Hatchback"
+  - the colour chip
+  - "Made 16 Nov 2026 · AI"
+  - the status chip and, if rated, the rating chip
+  - an "Open" button (secondary)
+- Paging at the bottom: "Showing 1–24 of 1,215", with "Previous" and "Next" buttons (secondary).
+
+SCREEN 2: PICTURE DRAWER
+- The gallery dimmed on the left; a 560px drawer on the right for "White Toyota Roomy".
+- Top: the Toyota logo, "Toyota Roomy · 1st gen", "2016–2020 · Hatchback", the colour chip "● White", the status chip "Ready", and a close icon button.
+- The large picture in its frame.
+- "Is this picture right?" with two buttons side by side: "Looks good" (secondary, thumbs-up) and "Looks wrong" (secondary, red thumbs-down).
+- A "How it was made" card:
+  - "AI picture · prompt version 1"
+  - "Model: Imagen 4"
+  - "Cost: US$0.04"
+  - "Made 16 Nov 2026, 2:14 PM"
+  - "Attempts: 1"
+- A "Versions" card:
+  - "Version 2 · current · AI · 16 Nov 2026"
+  - "Version 1 · previous · AI · 16 Nov 2026" with a small thumbnail
+- Action buttons at the bottom: "Regenerate" (secondary), "Upload replacement" (secondary), "Restore previous" (secondary), "Remove picture" (red outline, shown disabled with the hint "Apps already use this picture — regenerate or replace it instead"), and "Close" (secondary).
+
+SCREEN 3: MAKE A NEW PICTURE (DIALOG)
+- An in-app dialog over the drawer.
+- Title "Make a new picture?".
+- The current picture as a small thumbnail with "White Toyota Roomy · 1st gen".
+- Text: "Roam will make a new picture for this car and colour. About US$0.04. The new one replaces it everywhere. You can restore this one for 30 days."
+- Buttons: "Cancel" (red outline) and "Make new picture" (primary).
+
+SCREEN 4: UPLOAD A REPLACEMENT
+- The drawer now shows an upload panel.
+- Title "Upload a replacement picture".
+- A drop zone: "Drop a PNG, JPEG or WebP here · up to 5 MB", with a "Choose file" button (primary).
+- A side-by-side preview: "Now" (the current picture) and "New" (the uploaded picture of the same white Roomy).
+- A tip line: "Best results: the car facing right, on a plain white background."
+- Buttons: "Cancel" (red outline) and "Use this picture" (primary).
+
+SCREEN 5: REMOVE A PICTURE (DIALOG)
+- An in-app dialog for "Black Toyota Probox · 1st gen" (Stale).
+- Text: "Remove this picture? It will be deleted after 30 days. If it's needed again later, Roam will make a new one."
+- Buttons: "Cancel" (secondary) and "Remove picture" (solid red).
+
+SCREEN 6: REMAKE ALL FROM AN OLDER PROMPT (DIALOG)
+- An in-app dialog titled "Remake older pictures?".
+- Three numbers in tiles: "1,204 pictures", "About US$48.16", "About 10 hours".
+- An amber notice: "This month has US$37.60 of picture budget left. About 940 pictures will be remade this month; the rest continue from 1 Dec."
+- Text: "New pictures always come first — this runs in the background. Every picture can be restored for 30 days."
+- Buttons: "Cancel" (red outline) and "Start remaking" (primary).
+
+SCREEN 7: STATE — PAUSED, NO PICTURES YET
+- The gallery page with one amber banner at the top: "Paused: the picture service keeps failing. Roam will try again at 3:40 PM." and a "Turn AI pictures off" button (red outline).
+- Below the banner, the empty gallery: a soft illustration of a car outline in a frame, "No pictures yet", and "Roam makes them as cars are added."
+- The same banner spot is also used, in red, for "Picture service key rejected — check the picture service key" and, in amber, for "80% of this month's picture budget used" and "Remake paused at the monthly budget — 264 left, resumes 1 Dec" (same banner style, one at a time).
+
+SCREEN 8: STATE — LOADING
+- The gallery while loading: grey shimmer count tiles, a shimmer "AI settings" card, and 8 grey shimmer picture cards in the grid.
+
+SCREEN 9: STATE — COULDN'T LOAD
+- The page frame with an error card in the middle: a red icon circle, "We couldn't load the pictures", one muted sentence "Check your connection and try again.", and a "Try again" button (primary).
+
+SCREEN 10: PHONE — VEHICLE PICTURES (390px)
+- The gallery on a phone: the title, the four count tiles in a two-column grid, the search box, and picture cards one per row (picture on top, car name, colour chip, made line, status chip, "Open" as a full-width secondary button).
+
+
+ADDITIONAL UI COMPONENTS:
+- Count tile: a white rounded tile with a big number, a label, and a soft coloured left edge (green Ready, blue Being made, red Failed, amber Stale); selected = primary border.
+- Spend bar: label left, "US$12.40 of US$50.00" right, a rounded bar (blue; turns amber over 80%).
+- Picture card: frame, logo + name, generation line, colour chip, made line, chips, "Open" button.
+- Right drawer: 560px, white, soft shadow, sticky action bar at the bottom.
+- Version row: small thumbnail, "Version 2 · current", source chip, date.
+- Switch: a rounded toggle with the words "On"/"Off" beside it, never the toggle alone.
+- Banner: full-width rounded card, icon, one bold sentence, one action button.
+- Disabled button with hint: the button greyed with a small muted line under it saying why.
+
+
+INTERACTIONS:
+- Clicking a count tile filters the gallery; clicking it again clears the filter.
+- "Open" on a card slides in the drawer (Screen 2); Escape or the close icon closes it.
+- "Looks good" / "Looks wrong" set the rating at once (the chip updates); "Looks wrong" also highlights the "Regenerate" button.
+- "Regenerate" opens Screen 3; after confirming, the card shows "Being made" and swaps to the new picture by itself when ready.
+- "Upload replacement" opens Screen 4 inside the drawer; "Use this picture" swaps it in and adds a version row "Uploaded by staff".
+- "Restore previous" asks in a small in-app dialog ("Put back version 1? You can undo this for 30 days." with "Cancel" red outline and "Restore" primary), then adds a version row "Restored".
+- "Remove picture" is enabled only when the apps don't use the picture; it opens Screen 5.
+- Turning the AI switch off confirms in an in-app dialog ("Turn off AI pictures? Roam stops making new pictures; existing pictures stay." with "Cancel" secondary and "Turn off" solid red).
+- "Remake all from older prompt" opens Screen 6 before anything is queued.
+
+
+Spec screens / Area
+
+| Screen | Area |
+|---|---|
+| 1 | Vehicle pictures — gallery |
+| 2 | Picture drawer |
+| 3 | Make a new picture (dialog) |
+| 4 | Upload a replacement |
+| 5 | Remove a picture (dialog) |
+| 6 | Remake all from an older prompt (dialog) |
+| 7 | State — paused, no pictures yet |
+| 8 | State — loading |
+| 9 | State — couldn't load |
+| 10 | Phone — vehicle pictures |

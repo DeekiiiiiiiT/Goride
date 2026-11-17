@@ -54,6 +54,7 @@ const GEMINI_IMAGE_PER_IMG: Record<string, number> = {
   "imagen-4.0-generate-001":       0.04,
   "imagen-4.0-ultra-generate-001": 0.06,
   "gemini-2.0-flash-exp-image-generation": 0.04,
+  "gemini-3.1-flash-image": 0.04,
 };
 
 // ---------------------------------------------------------------------------

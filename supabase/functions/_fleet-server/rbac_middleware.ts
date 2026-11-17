@@ -487,6 +487,9 @@ export function requireAuth(options?: RequireAuthOptions) {
       // a user session is not one, and the login gate must not answer first.
       path.includes("/internal/seal-") ||
       path.includes("/internal/activity/") ||
+      // Machine callers (cron + service key). The route handler checks the
+      // cron secret or service role; a user session is not one.
+      path.includes("/internal/vehicle-pictures/") ||
       // Machine callers (GitHub schedule + service key). The route handler
       // checks the cron secret or service role; a user session is not one.
       path.includes("/fuel/period-jobs/sweep") ||

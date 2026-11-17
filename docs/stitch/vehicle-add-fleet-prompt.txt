@@ -1,0 +1,278 @@
+ROAM FLEET — ADD A VEHICLE (WITH STUDIO PICTURES) — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Add a Vehicle (Desktop Web App with a phone layout, for the fleet owner and fleet manager):
+
+Design the new "Add a vehicle" flow inside Roam Fleet, plus the places where a vehicle's picture and documents show afterwards.
+
+How the flow works:
+- The fleet owner scans two Jamaican documents: the Certificate of Fitness, then the Motor Vehicle Registration.
+- Roam reads them, shows what it read so the person can fix anything, then asks them to confirm which car it is (maker logo, model, generation, years).
+- After saving, the vehicle gets a beautiful studio picture of that exact car in that exact colour. If Roam already has that picture it appears at once; if not, Roam makes it in a few seconds.
+- Roam reads the documents and keeps the details, not the files. Every scan screen says so in one calm line.
+
+Who uses it:
+- Fleet owners in Jamaica, adding Japanese-import cars such as the Toyota Roomy and Honda Fit.
+- They are not mechanics and not tech people. Every screen asks one thing, in plain words, with one obvious next button.
+
+Look and feel:
+- Modern, effortless and premium, like the best consumer car apps: generous spacing, large friendly type, soft shadows, rounded cards, and the car picture as the hero.
+- Each screen is tall enough to show everything with no inner scrolling.
+- Draw each screen in light mode. Dark mode uses the colours below.
+
+
+BRAND IDENTITY:
+- Keep the existing Roam Fleet app frame exactly as it is today (do not redesign it):
+  - Top: a white nav row with the black "Roam Fleet" app tile, then: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations (active, underlined), Delivery Operations, Analytics, Reports, Business Finance, a bell with a red count, the avatar.
+  - Dark bar below it: a dark navy strip with a search box "Switch vehicle or search hub…" on the left, and on the right "09:10:28 PM EST", "America/Jamaica", "JM (JMD)" and an org chip "DE · Deeki T".
+  - Breadcrumb: "Vehicle Operations › Vehicles › Add a vehicle".
+  - Everything below the breadcrumb is the design.
+- The add flow is a focused page, not a small pop-up:
+  - one centred white card, 760px wide, on the page wash
+  - a step bar at the top of the card: 1 Fitness · 2 Registration · 3 Confirm car · 4 Done
+  - the current step is solid near-black with white text; finished steps show a green check; later steps are muted
+- Theme: "Calm, modern car app". Not a form-heavy admin tool, not a spreadsheet.
+- LIGHT MODE (default):
+  - Primary: near-black #030213 (main buttons, current step)
+  - Page wash: #f8fafc
+  - Cards: #FFFFFF with a soft shadow (0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(15,23,42,0.06)) and a hairline border rgba(0,0,0,0.06)
+  - Text: #0a0a0a; muted text: #64748b
+  - Done / Valid / Picture ready: green #059669 on soft green #ecfdf5
+  - Needs a look / Expires soon / Waiting for check: amber #b45309 on soft amber #fffbeb
+  - Expired / Couldn't read it: red #d4183d on #fff1f2
+  - Info / Picture coming: slate #475569 on #f1f5f9
+  - Read by Roam: blue #2563eb on #eff6ff
+- DARK MODE:
+  - Page #1c1c1e, cards #2a2a2d, border #3a3a3d
+  - Text #fafafa, muted #a1a1aa; primary buttons white #fafafa with near-black text
+  - Green #34d399 on #064e3b; amber #fbbf24 on #451a03; red #f87171 on #450a0a; blue #60a5fa on #172554
+- Shapes: cards 20px corner radius, buttons and inputs 12px, chips and badges fully rounded, picture frames 16px.
+- Typography: Inter. Step titles 26px semibold, card titles 18px semibold, body 16px, helper text 13px muted. Plates in a slightly wider, letter-spaced style (5179KZ).
+- Dates in plain words: "12 Mar 2026", never "2026-03-12". No codes, ids or internal words on screen (never "look_key", "queued", "R2", "catalog id").
+- The car picture is always shown the same way:
+  - a studio photo of the car facing right, front three-quarter view, on a pure white background with a soft shadow under the tyres, sitting in a white rounded frame
+  - while the picture is not ready, the frame shows a soft grey car outline (a simple side-and-front silhouette) with a gentle shimmer and a small label under it
+- Colour is shown as a round chip with a filled dot in that colour and the colour NAME as text ("● White"), never the dot alone.
+- Maker logos sit in round tiles and always come first where a maker is named.
+- Buttons always look like buttons:
+  - Primary = solid near-black with white text.
+  - Secondary = white with a visible #cbd5e1 border and dark text.
+  - Danger (Cancel) = red #d4183d border and red text.
+  - Icon buttons are 32px with a visible border.
+  - Never underlined text links, never grey text-only buttons. Every confirm is an in-app dialog, never a browser pop-up.
+- The privacy line on every scan screen: a small lock icon + "We read your certificate and keep the details — not the file." (muted, 13px).
+- Sample data (REAL, from Roam's own fleet):
+  - Vehicle 1: Toyota Roomy, 1st generation, 2016–2020, Hatchback, colour White, plate 5179KZ.
+    - Certificate of Fitness says colour "WHITE"; year of manufacture 2019; engine no. 1KR-H123456; CC 996; fitness issued 12 Mar 2026, expires 11 Mar 2027.
+    - Registration: plate 5179KZ; chassis M900A-0412345; control no. 0458812; registration issued 12 Mar 2026, expires 11 Mar 2027.
+  - Vehicle 2: Honda Fit, 3rd generation, 2013–2020, Hatchback, colour Grey, plate 1505LM; Certificate of Fitness says colour "SILVER GREY".
+  - Fleet: "Deeki T" fleet.
+
+
+DESIGN PRINCIPLES:
+- Desktop-first at 1440px; the add card is 760px wide and centred. Two phone screens (390px) are included.
+- One question per screen. The main button always says exactly what happens next ("Looks right — next", "This is my car").
+- Roam fills in everything it can read. The person only checks and corrects.
+- Every field Roam read gets a tiny blue "Read by Roam" tick on the right; a field the person changed shows "Edited".
+- A field Roam could not trust (for example a date that doesn't make sense) is empty with an amber "Check this date" hint under it, never a wrong value.
+- The car picture is the reward at the end and the hero of the vehicle card; it never blocks saving.
+- Plain, warm wording. No tech terms. Errors say what to do next.
+- Generous white space; nothing cramped; at most two buttons side by side, with Cancel on its own at the left.
+
+
+SCREEN 1: ADD A VEHICLE — CERTIFICATE OF FITNESS
+- Step bar: "1 Fitness" active, the other three muted.
+- Title "Add a vehicle". Sub-line "Start with the Certificate of Fitness. We'll read it for you."
+- A large drop zone (dashed #cbd5e1 border, 20px radius, 220px tall) with a document-scan illustration, the line "Drop a photo or PDF of the Certificate of Fitness here", and under it "JPG, PNG, HEIC or PDF · up to 8 MB".
+- Inside the drop zone, two buttons side by side: "Choose file" (primary) and "Take photo" (secondary, camera icon).
+- Under the drop zone, the privacy line with the lock icon.
+- A small tip row with three tiny icons: "Whole page in view", "Good light", "Not blurry".
+- Bottom of the card: "Cancel" (red outline) on the left.
+
+SCREEN 2: READING YOUR CERTIFICATE
+- Step bar: "1 Fitness" active.
+- Title "Reading your certificate…".
+- A file row: a small document thumbnail, "fitness-5179KZ.jpg", "2.1 MB".
+- A soft animated progress line under the file row.
+- A checklist that fills in as Roam reads, each with a green check or a small spinner: "Make and model" ✓, "Year of manufacture" ✓, "Colour" ✓, "Engine number and CC" (spinner), "Issue and expiry dates" (waiting).
+- The privacy line.
+- Bottom: "Cancel" (red outline) on the left.
+
+SCREEN 3: CHECK THE FITNESS DETAILS
+- Step bar: "1 Fitness" active.
+- Title "Check the fitness details". Sub-line "We read these from your certificate. Fix anything that's wrong."
+- A two-column form of large inputs, each with a label above, the value, and a tiny blue "Read by Roam" tick on the right:
+  - Make: Toyota
+  - Model: Roomy
+  - Year of manufacture: 2019
+  - Body: Hatchback
+  - Engine number: 1KR-H123456
+  - CC: 996
+  - Fitness issued: 12 Mar 2026
+  - Fitness expires: 11 Mar 2027
+- A full-width "Colour" row as its own soft card:
+  - the colour chip "● White" with a dropdown arrow (opens the 16 colours: White, Pearl White, Black, Silver, Grey, Dark Grey, Blue, Dark Blue, Red, Maroon, Green, Brown, Beige, Gold, Yellow, Orange)
+  - under it, muted: "Certificate says: WHITE"
+- Bottom of the card: "Cancel" (red outline) on the left; on the right "Scan again" (secondary) and "Looks right — next" (primary).
+
+SCREEN 4: ADD THE REGISTRATION
+- Step bar: "1 Fitness" done (green check), "2 Registration" active.
+- Title "Now the registration". Sub-line "Add the Motor Vehicle Registration certificate."
+- The same large drop zone as Screen 1, with "Drop a photo or PDF of the Motor Vehicle Registration here", "Choose file" (primary) and "Take photo" (secondary).
+- The privacy line.
+- Bottom: "Cancel" (red outline) on the left; "Back" (secondary) on the right.
+
+SCREEN 5: CHECK THE REGISTRATION DETAILS
+- Step bar: "2 Registration" active.
+- Title "Check the registration details".
+- A large plate field at the top, shown like a number plate (letter-spaced, bold): "5179KZ", labelled "Plate (required)".
+- A two-column form with "Read by Roam" ticks:
+  - Chassis / VIN: M900A-0412345
+  - Control number: 0458812
+  - MVID: 1188420
+  - LA number: LA 20441
+  - Registration issued: 12 Mar 2026
+  - Registration expires: 11 Mar 2027
+- One amber notice card (only this screen shows it): "The registration says Toyota Tank, the fitness says Toyota Roomy. You'll pick the right car on the next step."
+- Bottom: "Cancel" (red outline) on the left; on the right "Back" (secondary), "Scan again" (secondary) and "Looks right — next" (primary).
+
+SCREEN 6: CONFIRM YOUR CAR
+- Step bar: "1" and "2" done, "3 Confirm car" active.
+- Title "Is this your car?".
+- One large car card, centred:
+  - the Toyota maker logo in a round tile, "Toyota Roomy" in 24px semibold
+  - "1st generation · 2016–2020 · Hatchback" muted
+  - the colour chip "● White" and the plate "5179KZ"
+  - a soft grey car outline in a white frame on the right (the picture comes after saving)
+- Under it, a muted line "Not right? Pick a different car."
+- Bottom: "Cancel" (red outline) on the left; on the right "Back" (secondary), "Pick a different car" (secondary) and "This is my car" (primary).
+
+SCREEN 7: SAVED — MAKING YOUR PICTURE
+- Step bar: all four steps done or active ("4 Done" active).
+- A big friendly title "Vehicle added" with a green check.
+- The vehicle card, wide:
+  - left: the picture frame showing the grey car outline with a soft shimmer and the label "Making your picture — this takes a few seconds"
+  - right: the Toyota logo, "Toyota Roomy", "1st generation · 2016–2020", "● White", the plate "5179KZ"
+  - a green chip "Matched to Roam's car list"
+- Bottom: "Add another" (secondary) and "Go to vehicle" (primary) on the right.
+
+SCREEN 8: SAVED — PICTURE READY
+- The same layout as Screen 7, but the picture frame now shows the studio picture: a white Toyota Roomy, facing right, front three-quarter view, on pure white with a soft shadow under the tyres.
+- A small green chip on the frame corner: "Picture ready".
+- Title "Vehicle added" with a green check.
+- Bottom: "Add another" (secondary) and "Go to vehicle" (primary).
+
+SCREEN 9: SAVED — WAITING FOR ROAM TO CHECK THIS CAR
+- Step bar: "4 Done" active.
+- Title "Vehicle added".
+- The vehicle card with the grey outline picture, the details as typed ("Toyota Roomy", "2019", "● White", "5179KZ").
+- An amber card under it: an hourglass icon, "Waiting for Roam to check this car", and "We don't have this exact car in our list yet. We'll check it and let you know — you can't assign it to a driver until then."
+- Bottom: "Add another" (secondary) and "Go to vehicle" (primary).
+
+SCREEN 10: WE COULDN'T READ IT
+- Step bar: "1 Fitness" active.
+- A soft red icon circle with a document and a question mark.
+- Title "We couldn't read this file".
+- One sentence under it: "The photo looks blurry, so the words aren't clear."
+- Three tips in small rounded cards side by side, each with an icon: "Lay the page flat", "Use good light", "Fill the frame with the page".
+- Bottom: "Cancel" (red outline) on the left; on the right "Type the details" (secondary) and "Try another file" (primary).
+
+SCREEN 11: TOO MANY SCANS FOR NOW
+- Step bar: "1 Fitness" active.
+- A soft amber icon circle with a clock.
+- Title "Let's take a short break".
+- One sentence: "You've scanned a lot of documents — try again in an hour, or type the details."
+- Bottom: "Cancel" (red outline) on the left; "Type the details" (primary) on the right.
+
+SCREEN 12: PHONE — ADD A VEHICLE (390px)
+- The phone version of Screen 1, inside the Roam Fleet phone header (back arrow, "Add a vehicle").
+- A compact step bar (four dots with "Step 1 of 4 · Fitness").
+- "Take photo" first as a full-width primary button with a camera icon; "Choose file" as a full-width secondary button under it.
+- A smaller drop area, the privacy line, and the tips as three small icon rows.
+- "Cancel" as a full-width red outline button at the bottom.
+
+SCREEN 13: PHONE — CHECK THE FITNESS DETAILS (390px)
+- The phone version of Screen 3.
+- Fields stacked one per row, full width, each with its "Read by Roam" tick.
+- The colour card: "● Grey" chip with a dropdown, and "Certificate says: SILVER GREY" (Honda Fit sample).
+- One field shows the amber hint "Check this date" under an empty "Fitness expires" input.
+- Full-width "Looks right — next" (primary), then "Scan again" (secondary), then "Cancel" (red outline).
+
+SCREEN 14: VEHICLE PAGE — TOP OF THE PAGE
+- Breadcrumb "Vehicle Operations › Vehicles › 5179KZ".
+- A hero card across the page:
+  - left, large: the studio picture of the white Toyota Roomy in its white rounded frame
+  - under the picture, muted 12px: "Studio picture of this model — your vehicle may look different."
+  - right: the Toyota logo, "Toyota Roomy", "1st generation · 2016–2020 · Hatchback", the plate "5179KZ", the status chip "Active"
+  - a "Colour" row: the chip "● White" and a "Change colour" button (secondary)
+- The existing vehicle tabs under the hero (Overview, Trips, Fuel, Maintenance, Documents, …) unchanged.
+
+SCREEN 15: VEHICLE PAGE — DOCUMENTS TAB
+- The Documents tab of the vehicle page.
+- Two document rows as cards:
+  - "Certificate of Fitness": issued 12 Mar 2026, expires 11 Mar 2027, a green "Valid" chip, and an "Update" button (secondary).
+  - "Motor Vehicle Registration": issued 12 Mar 2026, expires 2 Dec 2026, an amber "Expires soon" chip, and an "Update" button (secondary).
+- Under each row, muted: "Checked by Deeki T on 12 Mar 2026".
+- A muted note at the bottom with the lock icon: "Roam keeps the details from your documents, not the files."
+- No "View file" button anywhere.
+
+SCREEN 16: VEHICLES LIST WITH PICTURES
+- The Vehicles page with a grid of vehicle cards (3 per row). Each card: the picture frame on top, then the maker logo, model, plate, colour chip and status chip.
+  - Card 1: studio picture of the white Toyota Roomy, "Toyota Roomy · 5179KZ", "● White", "Active".
+  - Card 2: studio picture of a grey Honda Fit facing right, "Honda Fit · 1505LM", "● Grey", "Active".
+  - Card 3: grey outline with "Picture coming", "Toyota Vitz · 7712LM", "● Red", "Inactive".
+  - Card 4: grey outline with "Picture will be added tomorrow", "Nissan Note · 3390KX", "● Blue", "Active".
+  - Card 5: grey outline with "Pictures are paused for now — Roam will add yours shortly", "Mazda Demio · 6021LP", "● Silver", "Active".
+  - Card 6: grey outline with "Picture unavailable — Roam is on it", "Suzuki Swift · 2284MA", "● Pearl White", "Active".
+- An "Add a vehicle" button (primary) at the top right of the page.
+
+
+ADDITIONAL UI COMPONENTS:
+- Step bar: four steps with numbers, labels and connecting lines; done = green check, current = solid near-black, later = muted.
+- Drop zone: dashed border, illustration, two buttons inside, a highlighted state when a file is dragged over (border turns near-black, wash turns #f1f5f9).
+- "Read by Roam" tick: tiny blue check + the words, 12px, right side of an input. "Edited" in slate replaces it after a change.
+- Colour chip: rounded, a 12px filled dot in the colour (white and pearl white get a thin grey ring), then the colour name.
+- Colour dropdown: the 16 colours as rows with their dot and name, the current one checked.
+- Car picture frame: white, 16px radius, 4:3, with either the studio picture or the grey outline + label; a shimmer only while "Making your picture".
+- Number plate field: letter-spaced bold text in a rounded box with a thin border.
+- Notice cards: soft amber or soft blue, 16px radius, icon on the left, one bold line and one plain line.
+- Status chips: "Active" (green), "Inactive" (slate), "Valid" (green), "Expires soon" (amber), "Expired" (red), "Picture ready" (green).
+- Privacy line: lock icon + one muted sentence.
+
+
+INTERACTIONS:
+- Choosing or dropping a file goes straight to "Reading your certificate…" (Screen 2), then to the check screen.
+- The colour chip opens the 16-colour dropdown; picking one replaces the chip and shows "Edited".
+- "Looks right — next" moves one step forward; "Back" moves one step back and keeps everything typed.
+- "Pick a different car" opens an in-app dialog with three dropdowns (Make with logos, Model, Year), then shows matching car cards to choose from.
+- "This is my car" saves the vehicle and opens Screen 8 if the picture already exists, otherwise Screen 7.
+- On Screen 7 the picture frame swaps to the studio picture by itself when it's ready (a soft fade, no page reload). After 60 seconds without it, the label changes to "Still making it" and a "Check again" button (secondary) appears.
+- "Type the details" opens the check screen with empty fields instead of read ones.
+- "Change colour" on the vehicle page opens the same 16-colour dropdown in a small in-app dialog with "Save" (primary) and "Cancel" (red outline); after saving, the picture frame shows "Picture coming" until the new picture arrives.
+- "Update" on a document opens the add flow at that document's scan step and returns to the Documents tab when done.
+- With "reduce motion" turned on, the shimmer and the fade are off.
+- Cancel on any step asks in an in-app dialog: "Stop adding this vehicle? Nothing will be saved." with "Keep going" (secondary) and "Stop" (solid red).
+
+
+Spec screens / Area
+
+| Screen | Area |
+|---|---|
+| 1 | Add a vehicle — Certificate of Fitness |
+| 2 | Reading your certificate |
+| 3 | Check the fitness details |
+| 4 | Add the registration |
+| 5 | Check the registration details |
+| 6 | Confirm your car |
+| 7 | Saved — making your picture |
+| 8 | Saved — picture ready |
+| 9 | Saved — waiting for Roam to check this car |
+| 10 | We couldn't read it |
+| 11 | Too many scans for now |
+| 12 | Phone — add a vehicle |
+| 13 | Phone — check the fitness details |
+| 14 | Vehicle page — top of the page |
+| 15 | Vehicle page — Documents tab |
+| 16 | Vehicles list with pictures |

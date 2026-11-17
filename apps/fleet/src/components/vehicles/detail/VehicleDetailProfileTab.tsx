@@ -20,6 +20,7 @@ import {
   getVehicleDocumentExpiryState,
 } from '../../../utils/vehicleDocumentDisplay';
 import { VehicleDocumentDetailsDialog } from './VehicleDocumentDetailsDialog';
+import { VehicleCertificateCards } from './VehicleCertificateCards';
 
 export type VehicleDetailGeneralInfoFields = {
   make: string;
@@ -49,6 +50,8 @@ export interface VehicleDetailProfileTabProps {
   /** Org-enabled platforms; when both, platforms can be edited. */
   orgServiceLines?: VehicleServiceLine[];
   onSaveServiceLines?: (lines: VehicleServiceLine[]) => Promise<void>;
+  /** Documents → Update on the fitness or registration card (opens the scan flow in update mode). */
+  onUpdateCertificate?: (doc: 'fitness' | 'registration') => void;
 }
 
 const PLATFORM_OPTIONS: { id: VehicleServiceLine; label: string }[] = [
@@ -67,12 +70,15 @@ export function VehicleDetailProfileTab({
   handleRefreshMaintenance,
   orgServiceLines = ['rideshare'],
   onSaveServiceLines,
+  onUpdateCertificate,
 }: VehicleDetailProfileTabProps) {
   const inventoryKitsEnabled = useInventoryPhase3Enabled();
   const showPlatformEditor = orgServiceLines.length > 1 && Boolean(onSaveServiceLines);
   const [draftLines, setDraftLines] = useState<VehicleServiceLine[]>(() => vehicleServiceLines(vehicle));
   const [savingLines, setSavingLines] = useState(false);
   const [viewingDocument, setViewingDocument] = useState<VehicleDocument | null>(null);
+  /** Fitness and registration show as cards above; this list is insurance and uploads only. */
+  const otherDocuments = documents.filter((d) => d.type !== 'Fitness' && d.type !== 'Registration');
 
   useEffect(() => {
     setDraftLines(vehicleServiceLines(vehicle));
@@ -234,10 +240,15 @@ export function VehicleDetailProfileTab({
                   </TabsContent>
 
                   <TabsContent value="documents" className="space-y-6">
+                      {/* Stitch F15: fitness + registration as cards with dates and Update (no file is kept). */}
+                      <VehicleCertificateCards
+                        vehicle={vehicle}
+                        onUpdate={(doc) => onUpdateCertificate?.(doc)}
+                      />
                       <Card className="dark:bg-slate-900 dark:border-slate-800">
                           <CardHeader>
                               <div className="flex justify-between items-center">
-                                  <CardTitle className="dark:text-slate-50">Documents</CardTitle>
+                                  <CardTitle className="dark:text-slate-50">Other documents</CardTitle>
                                   <Button variant="outline" size="sm" onClick={() => setIsUploadOpen(true)}>
                                       <Upload className="h-4 w-4 mr-2" /> Upload
                                   </Button>
@@ -245,7 +256,7 @@ export function VehicleDetailProfileTab({
                           </CardHeader>
                           <CardContent>
                               <div className="space-y-2" data-testid="vehicle-documents-list">
-                                  {documents.map(doc => {
+                                  {otherDocuments.map(doc => {
                                     const expiryState = getVehicleDocumentExpiryState(doc.expiryDate, doc.status);
                                     return (
                                       <div
@@ -285,7 +296,7 @@ export function VehicleDetailProfileTab({
                                       </div>
                                     );
                                   })}
-                                  {documents.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">No documents uploaded.</p>}
+                                  {otherDocuments.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">No other documents uploaded.</p>}
                               </div>
                           </CardContent>
                       </Card>

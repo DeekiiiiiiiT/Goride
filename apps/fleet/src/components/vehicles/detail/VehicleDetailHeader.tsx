@@ -20,7 +20,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../../ui/dialog';
-import { ImageWithFallback } from '../../figma/ImageWithFallback';
+import { VehicleColorRow, VehiclePicture } from '../add-vehicle/VehiclePicture';
+import { MakerLogo } from '../find-parts/everyday/EverydayShared';
 import { Vehicle } from '../../../types/vehicle';
 import { api } from '../../../services/api';
 import type { VehicleCatalogRecord } from '../../../types/vehicleCatalog';
@@ -86,29 +87,42 @@ export function VehicleDetailHeader({
       <div className="grid grid-cols-1 gap-6">
           <Card className="overflow-hidden border-indigo-100 shadow-sm">
              <div className="flex flex-col md:flex-row h-full">
-                 <div className="md:w-1/3 relative bg-slate-100 min-h-[200px]">
-                     {vehicle.image?.startsWith('figma:') ? (
-                        <ImageWithFallback src={vehicle.image} alt={vehicle.model} className="h-full w-full object-cover" />
-                     ) : (
-                        <img src={vehicle.image} alt={vehicle.model} className="h-full w-full object-cover" />
-                     )}
-                     <div className="absolute top-3 left-3">
-                         <Badge className={vehicle.status === 'Active' ? 'bg-emerald-500' : 'bg-slate-500'}>
-                             {vehicle.status}
-                         </Badge>
-                     </div>
+                 {/* Studio picture (Stitch F14): shared picture for this car + colour, or the outline. */}
+                 <div className="md:w-[42%] relative flex flex-col gap-2 bg-white p-6 dark:bg-slate-900">
+                     <VehiclePicture
+                       picture={vehicle.picture}
+                       vehicleId={vehicle.id}
+                       slot="detail"
+                       className="rounded-[16px] border-[#e2e8f0] bg-[#f8fafc] dark:border-[#3a3a3d]"
+                     />
+                     {vehicle.picture?.status === 'ready' ? (
+                       <p className="px-1 text-[13px] text-[#47464c] dark:text-slate-400">
+                         Studio picture of this model — your vehicle may look different.
+                       </p>
+                     ) : null}
                  </div>
                  <div className="p-6 flex-1 flex flex-col justify-between">
                      <div>
-                         <div className="flex justify-between items-start">
-                             <div>
-                                 <div className="flex flex-wrap items-center gap-2">
-                                   <h1 className="text-2xl font-bold text-slate-900">
-                                     {vehicle.year} {vehicle.model}
-                                   </h1>
+                         <div className="flex justify-between items-start gap-4">
+                             <div className="min-w-0">
+                                 {/* Stitch F14 hero: maker logo, make + model, generation line, plate block, colour. */}
+                                 <div className="flex items-center gap-3">
+                                   <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#eff4ff] dark:bg-[#2a2a2d]">
+                                     <MakerLogo make={vehicle.make} size={28} />
+                                   </span>
+                                   <div className="min-w-0">
+                                     <h1 className="text-[30px] font-semibold leading-tight tracking-tight text-[#0b1c30] dark:text-slate-50">
+                                       {vehicle.make} {vehicle.model}
+                                     </h1>
+                                     <p className="text-[15px] text-[#47464c] dark:text-slate-400">
+                                       {[vehicle.year, vehicle.vehicle_catalog_generation_hint, vehicle.bodyType].filter((x) => x && String(x).trim()).join(' · ')}
+                                     </p>
+                                   </div>
+                                 </div>
+                                 <div className="mt-3 flex flex-wrap items-center gap-2">
                                    {showCatalogVerifiedBadge && (
                                      <Badge
-                                       className="border-0 bg-emerald-600 text-white hover:bg-emerald-600 gap-1 font-medium shadow-sm"
+                                       className="gap-1 rounded-full border-0 bg-[#ecfdf5] px-2.5 py-0.5 font-medium text-[#047857] hover:bg-[#ecfdf5] dark:bg-[#064e3b] dark:text-[#34d399]"
                                        title={
                                          linkedCatalog
                                            ? `Linked to catalog ${linkedCatalog.make} ${linkedCatalog.model} (${vehicle.vehicle_catalog_id})`
@@ -144,15 +158,32 @@ export function VehicleDetailHeader({
                                      </>
                                    )}
                                  </div>
-                                 <div className="flex items-center gap-2 mt-1">
-                                     <span className="font-mono text-sm bg-slate-100 px-2 py-0.5 rounded text-slate-600">{vehicle.licensePlate}</span>
-                                     <span className="text-sm text-slate-400">|</span>
-                                     <span className="text-sm text-slate-500">VIN: {vehicle.vin}</span>
+                                 <div className="mt-4 flex flex-wrap items-center gap-3">
+                                     <span className="inline-flex items-center gap-2 rounded-lg bg-[#dbe7ff] px-3 py-1.5 dark:bg-[#1e3a8a]/40">
+                                       <span className="text-[9px] font-bold leading-none text-[#47464c] dark:text-slate-300">JM</span>
+                                       <span className="font-mono text-[20px] font-bold tracking-[0.2em] text-[#0b1c30] dark:text-slate-50">{vehicle.licensePlate}</span>
+                                     </span>
+                                     <VehicleColorRow vehicle={vehicle} onUpdated={onUpdate} />
                                  </div>
+                                 {vehicle.vin ? (
+                                   <p className="mt-2 text-[13px] text-[#47464c] dark:text-slate-400">VIN: {vehicle.vin}</p>
+                                 ) : null}
                              </div>
-                             <div className="text-right">
-                                 <p className="text-sm text-slate-500">Lifetime Earnings</p>
-                                 <p className="text-2xl font-bold text-emerald-600">${vehicle.metrics.totalLifetimeEarnings.toLocaleString()}</p>
+                             <div className="flex shrink-0 flex-col items-end gap-3 text-right">
+                                 <span
+                                   className={
+                                     vehicle.status === 'Active'
+                                       ? 'inline-flex items-center gap-1.5 rounded-full bg-[#85f8c4]/30 px-3 py-1 text-[13px] font-semibold uppercase tracking-wide text-[#069669] dark:bg-[#064e3b] dark:text-[#34d399]'
+                                       : 'inline-flex items-center gap-1.5 rounded-full bg-[#e5eeff] px-3 py-1 text-[13px] font-semibold uppercase tracking-wide text-[#47464c] dark:bg-[#2a2a2d] dark:text-slate-300'
+                                   }
+                                 >
+                                   <span className={`h-2 w-2 rounded-full ${vehicle.status === 'Active' ? 'bg-[#069669]' : 'bg-[#94a3b8]'}`} />
+                                   {vehicle.status}
+                                 </span>
+                                 <div>
+                                   <p className="text-sm text-slate-500">Lifetime Earnings</p>
+                                   <p className="text-2xl font-bold text-emerald-600">${vehicle.metrics.totalLifetimeEarnings.toLocaleString()}</p>
+                                 </div>
                              </div>
                          </div>
                          

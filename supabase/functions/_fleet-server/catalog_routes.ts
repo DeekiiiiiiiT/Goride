@@ -19,6 +19,13 @@ import { FEATURE_FLAGS, setFeatureFlag } from "./feature_flags.ts";
 import { findParts } from "./parts_finder.ts";
 import { readFindPartsCoverage, readPartTerm, readPartsBrowse, readSymptoms } from "./parts_catalog_read.ts";
 import { enrichCatalogMasterPart, enrichCatalogMasterSearch } from "./catalog_master_enrich.ts";
+import {
+  finishUpload,
+  type FlowDeps,
+  startUpload,
+  storageDepsFromEnv,
+  StorageFlowError,
+} from "../_shared/objectStorage/index.ts";
 /** No signed-in user means not an owner (hasPlatformOwnerAccess needs a user). */
 const isOwnerUser = (u: RbacUser | undefined): boolean => !!u && hasPlatformOwnerAccess(u);
 
@@ -34,6 +41,19 @@ type RouteApp = {
 function fail(c: Context, error: unknown) {
   const message = error instanceof Error ? error.message : "Could not read the catalog.";
   return c.json({ error: message }, 500);
+}
+
+let storageDepsOverride: FlowDeps | null = null;
+/** Tests only: swap R2 for an in-memory store. */
+export function setCatalogStorageDepsForTests(deps: FlowDeps | null): void {
+  storageDepsOverride = deps;
+}
+function logoStorageDeps(): FlowDeps {
+  return storageDepsOverride ?? storageDepsFromEnv();
+}
+function storageFail(c: Context, error: unknown) {
+  if (error instanceof StorageFlowError) return c.json({ error: error.message }, error.status);
+  return fail(c, error);
 }
 
 function optionalYear(value: unknown): number | null | false {
@@ -1153,46 +1173,64 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
     }
   });
 
-  route.post("/make-server-37f42386/admin/catalog/makers/:make/logo", requireAuth(), async (c: Context) => {
+  // Maker logos live in Cloudflare R2 (roam-public/catalogue/logos/…), served from media.roamfleet.co.
+  // Plan: docs/cloudflare-r2-storage-migration-audit.md (M3). Step 1: one-time upload link.
+  route.post("/make-server-37f42386/admin/catalog/makers/:make/logo/start", requireAuth(), async (c: Context) => {
     const denied = assertCatalogWrite(c);
     if (denied) return denied;
-    const BUCKET = "catalog-maker-logos";
     try {
       const make = decodeURIComponent(c.req.param("make") ?? "").trim();
       if (!make) return c.json({ error: "make required" }, 400);
-      const body = await c.req.parseBody();
-      const file = body.file;
-      if (!file || (!(file instanceof File) && !(file instanceof Blob))) {
-        return c.json({ error: "Logo file required" }, 400);
-      }
-      const blob = file as Blob;
-      const mime = (file as File).type || blob.type || "image/png";
-      const allowed = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
-      if (!allowed.includes(mime)) return c.json({ error: "Use PNG, JPEG, WebP, or SVG" }, 400);
-      const ext = mime === "image/jpeg" ? "jpg" : mime === "image/svg+xml" ? "svg" : mime.split("/")[1] ?? "png";
-      const slug = make.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "maker";
-      const storagePath = `${slug}.${ext}`;
-      const buf = new Uint8Array(await blob.arrayBuffer());
-      const { error: uploadError } = await supabase.storage.from(BUCKET).upload(storagePath, buf, {
-        contentType: mime,
-        upsert: true,
-      });
-      if (uploadError) throw uploadError;
+      const user = c.get("rbacUser") as RbacUser | undefined;
+      const body = await c.req.json().catch(() => ({})) as { contentType?: unknown; size?: unknown };
+      const started = await startUpload({
+        purpose: "catalogue-logos",
+        scopeId: "platform",
+        userId: user?.userId ?? "",
+        contentType: String(body.contentType ?? ""),
+        size: Number(body.size),
+      }, logoStorageDeps());
+      return c.json(started);
+    } catch (error) {
+      return storageFail(c, error);
+    }
+  });
+
+  // Step 2 (after the browser PUT the file to R2): check it, move it into place, save the key.
+  route.post("/make-server-37f42386/admin/catalog/makers/:make/logo/finish", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogWrite(c);
+    if (denied) return denied;
+    try {
+      const make = decodeURIComponent(c.req.param("make") ?? "").trim();
+      if (!make) return c.json({ error: "make required" }, 400);
+      const user = c.get("rbacUser") as RbacUser | undefined;
+      const body = await c.req.json().catch(() => ({})) as { ticket?: unknown };
+      const deps = logoStorageDeps();
+      const done = await finishUpload({ ticket: String(body.ticket ?? ""), userId: user?.userId ?? "" }, deps);
+      if (done.purpose !== "catalogue-logos") return c.json({ error: "Wrong upload ticket" }, 400);
+
+      const { data: before } = await supabase.from("catalog_maker").select("logo_storage_path").eq("make", make).maybeSingle();
       const { data, error } = await supabase
         .from("catalog_maker")
-        .upsert({ make, logo_storage_path: storagePath, updated_at: new Date().toISOString() }, { onConflict: "make" })
+        .upsert({ make, logo_storage_path: done.key, updated_at: new Date().toISOString() }, { onConflict: "make" })
         .select()
         .maybeSingle();
-      if (error) throw error;
-      const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(storagePath);
+      if (error) {
+        await deps.store.remove("public", [done.key]).catch(() => {});
+        throw error;
+      }
+      const oldKey = (before as { logo_storage_path?: string | null } | null)?.logo_storage_path?.trim();
+      if (oldKey && oldKey !== done.key && oldKey.startsWith("catalogue/logos/")) {
+        await deps.store.remove("public", [oldKey]).catch((e) => console.warn("[maker-logo] old logo not removed", e));
+      }
       return staffJson(c, {
         make,
-        logo_storage_path: storagePath,
-        publicUrl: pub?.publicUrl ?? null,
-        row: data ?? { make, logo_storage_path: storagePath },
+        logo_storage_path: done.key,
+        publicUrl: done.publicUrl,
+        row: data ?? { make, logo_storage_path: done.key },
       });
     } catch (error) {
-      return fail(c, error);
+      return storageFail(c, error);
     }
   });
 

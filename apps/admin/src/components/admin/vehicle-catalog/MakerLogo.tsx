@@ -1,11 +1,8 @@
-import { supabase } from "../../../utils/supabase/client";
+import { mediaPublicUrl } from "@roam/roam-shared";
 
-const BUCKET = "catalog-maker-logos";
-
+/** Logo keys live in Cloudflare R2 (roam-public), served from media.roamfleet.co. */
 export function makerLogoPublicUrl(logoStoragePath: string | null | undefined): string | null {
-  if (!logoStoragePath?.trim()) return null;
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(logoStoragePath.trim());
-  return data.publicUrl || null;
+  return mediaPublicUrl(logoStoragePath);
 }
 
 export function MakerLogo({

@@ -4,7 +4,7 @@
  * Stop with: pnpm testcopy:stop
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -24,6 +24,44 @@ const APP_COMMANDS = [
   { label: 'driver', filter: '@roam/driver', port: 5182 },
   { label: 'plug', filter: '@roam/plug', port: 5183 },
 ];
+
+/**
+ * Vehicle pictures on the test copy: when the owner's git-ignored .env.local has these keys,
+ * the served functions get them, so certificate reading (Gemini) and AI pictures (Gemini + R2) work locally.
+ * Without them the test copy behaves as before. Values are never printed.
+ */
+const PASS_THROUGH_KEYS = [
+  'GEMINI_API_KEY',
+  'R2_ACCOUNT_ID',
+  'R2_ACCESS_KEY_ID',
+  'R2_SECRET_ACCESS_KEY',
+  'R2_PUBLIC_BASE_URL',
+  'R2_BUCKET_PUBLIC',
+  'R2_BUCKET_PRIVATE',
+];
+
+function ownerKeysFromEnvLocal() {
+  const file = join(root, '.env.local');
+  if (!existsSync(file)) return [];
+  const lines = [];
+  for (const raw of readFileSync(file, 'utf8').split(/\r?\n/)) {
+    const m = raw.match(/^([A-Z0-9_]+)=(.*)$/);
+    if (m && PASS_THROUGH_KEYS.includes(m[1]) && m[2].trim()) lines.push(`${m[1]}=${m[2].trim()}`);
+  }
+  return lines;
+}
+
+/** The local database's cron key, so its pg_cron calls (e.g. the vehicle picture worker) are accepted by the served functions. */
+function localCronSecretLine() {
+  const r = spawnSync(
+    'docker',
+    ['exec', 'supabase_db_Goride', 'psql', '-U', 'postgres', '-d', 'postgres', '-Atc',
+      "select value from private.fleet_ops_secrets where name = 'fleet_cron_secret'"],
+    { encoding: 'utf8' },
+  );
+  const v = (r.stdout || '').trim();
+  return r.status === 0 && v.length >= 8 ? [`FLEET_CRON_SECRET=${v}`] : [];
+}
 
 const children = [];
 
@@ -102,7 +140,15 @@ async function main() {
   // Local-only secrets the edge functions refuse to start without (test values, never real ones).
   mkdirSync(stateDir, { recursive: true });
   const functionsEnvFile = join(stateDir, 'functions.env');
-  writeFileSync(functionsEnvFile, 'PLUG_USER_HASH_PEPPER=testcopy-local-only-pepper\n', 'utf8');
+  const ownerKeys = ownerKeysFromEnvLocal();
+  writeFileSync(
+    functionsEnvFile,
+    ['PLUG_USER_HASH_PEPPER=testcopy-local-only-pepper', ...localCronSecretLine(), ...ownerKeys].join('\n') + '\n',
+    'utf8',
+  );
+  if (ownerKeys.length) {
+    console.error(`Using ${ownerKeys.map((l) => l.split('=')[0]).join(', ')} from .env.local (vehicle pictures).`);
+  }
   console.error('Serving edge functions (fleet-core, fleet-ops, driver, explorer, platform-catalog)…');
   spawnBg('functions', npx, [
     'supabase',

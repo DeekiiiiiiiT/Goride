@@ -1022,19 +1022,70 @@ export const api = {
     });
     if (!response.ok) {
       await throwIfCatalogGateBlocked(response, "Cannot save vehicle — pending catalog approval");
-      const err = await response.json().catch(() => ({}));
-      throw new Error(
+      const err = await response.json().catch(() => ({})) as { error?: string; code?: string };
+      const message =
         typeof err?.error === 'string' && err.error.trim()
           ? err.error
-          : 'Failed to save vehicle',
-      );
+          : 'Failed to save vehicle';
+      const thrown = new Error(message) as Error & { code?: string };
+      if (err.code) thrown.code = err.code;
+      throw thrown;
     }
     return response.json() as Promise<{
       success?: boolean;
       data?: unknown;
+      picture?: { status: string; url: string | null };
       catalogMatched?: boolean;
       catalogStatus?: 'matched' | 'pending_catalog' | 'needs_info';
     }>;
+  },
+
+  /** Studio picture status for one vehicle (audit §3.6). Polled by the add flow while a picture is being made. */
+  async getVehiclePicture(vehicleId: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetCore}/vehicles/${encodeURIComponent(vehicleId)}/picture`,
+      { headers: await getHeaders(null, { requireAuth: true }) },
+    );
+    if (!response.ok) throw new Error('Could not check the picture');
+    const body = (await response.json()) as { picture?: { status: string; url: string | null } };
+    return body.picture ?? { status: 'none', url: null };
+  },
+
+  /** Latest fitness + registration checks (dates, who checked, when). No file is ever kept. */
+  async getVehicleDocumentChecks(vehicleId: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetCore}/vehicles/${encodeURIComponent(vehicleId)}/document-checks`,
+      { headers: await getHeaders(null, { requireAuth: true }) },
+    );
+    if (!response.ok) throw new Error('Could not load document checks');
+    const body = (await response.json()) as {
+      checks?: Array<{
+        docType: 'fitness' | 'registration';
+        issueDate: string | null;
+        expiryDate: string | null;
+        readAt: string;
+        readByName: string | null;
+      }>;
+    };
+    return body.checks ?? [];
+  },
+
+  /** Change a vehicle's standard colour; the server unlinks the old picture and looks up the new one. */
+  async setVehicleColor(vehicleId: string, colorStandard: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetCore}/vehicles/${encodeURIComponent(vehicleId)}/color`,
+      {
+        method: 'POST',
+        headers: await getHeaders(),
+        body: JSON.stringify({ colorStandard }),
+      },
+    );
+    if (!response.ok) {
+      const err = (await response.json().catch(() => ({}))) as { error?: string };
+      throw new Error(err.error || 'Could not change the colour');
+    }
+    const body = (await response.json()) as { picture?: { status: string; url: string | null } };
+    return body.picture ?? { status: 'none', url: null };
   },
 
   async handOverVehicle(vehicleId: string) {
@@ -1833,7 +1884,11 @@ export const api = {
     }
   },
 
-  async parseDocument(file: File, type: 'license' | 'address' | 'vehicle_registration', backFile?: File) {
+  async parseDocument(
+    file: File,
+    type: 'license' | 'address' | 'vehicle_registration' | 'fitness_certificate',
+    backFile?: File,
+  ) {
     const formData = new FormData();
     formData.append('file', file);
     if (backFile) {
@@ -1849,24 +1904,20 @@ export const api = {
     // Handle 503 specifically? Or just let it throw?
     // If it throws, frontend catches and allows manual entry.
     if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to parse document");
+        const err = await response.json().catch(() => ({})) as { error?: string; code?: string };
+        const message = err.error || "Failed to parse document";
+        const thrown = new Error(message) as Error & { code?: string };
+        if (err.code) thrown.code = err.code;
+        throw thrown;
     }
-    return response.json();
-  },
-
-  async generateVehicleImage(vehicleData: { make: string, model: string, year: string, color: string, bodyType: string, licensePlate?: string }) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/generate-vehicle-image`, {
-      method: 'POST',
-      headers: await requireAuthHeaders(),
-      body: JSON.stringify(vehicleData)
-    });
-    
-    if (!response.ok) {
-        throw new Error("Failed to generate vehicle image");
-    }
-    
-    return response.json();
+    return response.json() as Promise<{
+      success?: boolean;
+      data?: Record<string, unknown>;
+      fields?: Record<string, unknown>;
+      colorStandard?: string | null;
+      flags?: string[];
+      fileSha256?: string;
+    }>;
   },
 
   async getPreferences() {

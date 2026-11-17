@@ -132,8 +132,16 @@ export interface Vehicle {
   vehicle_catalog_engine_code_hint?: string;
   vehicle_catalog_engine_type_hint?: string;
   color?: string;
+  /** @deprecated Old per-vehicle AI image link (expired after a year). Use `picture`. */
   image?: string;
-  
+  /** One of the 16 standard colours (audit §3.2), from the fleet row. */
+  colorStandard?: string | null;
+  /** Shared studio picture status + media URL (audit §3.6). Sent by the vehicle list API. */
+  picture?: {
+    status: "ready" | "queued" | "generating" | "paused" | "limited" | "failed" | "none" | string;
+    url: string | null;
+  };
+
   status: VehicleStatus;
   currentDriverId?: string;
   currentDriverName?: string;

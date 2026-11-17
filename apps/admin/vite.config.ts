@@ -92,5 +92,24 @@ export default defineConfig({
       /** Deno edge-function tests (Deno.test + https: imports) run via `deno test`, not Vitest. */
       '**/supabase/functions/**',
     ],
+    // Same as fleet NEW-14: screen tests need @testing-library to share admin's one React.
+    alias: {
+      react: reactRoot,
+      'react-dom': reactDomRoot,
+      'react/jsx-runtime': path.join(reactRoot, 'jsx-runtime.js'),
+      'react/jsx-dev-runtime': path.join(reactRoot, 'jsx-dev-runtime.js'),
+      'react-dom/client': path.join(reactDomRoot, 'client.js'),
+      // Its CommonJS build require()s react-dom from node_modules/.deno (a second React);
+      // the ES build goes through the aliases above.
+      '@testing-library/react': path.join(
+        path.dirname(require.resolve('@testing-library/react/package.json')),
+        'dist/@testing-library/react.esm.js',
+      ),
+    },
+    server: {
+      deps: {
+        inline: [/@testing-library\/.*/],
+      },
+    },
   },
 });

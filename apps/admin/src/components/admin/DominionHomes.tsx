@@ -168,6 +168,7 @@ export function VehiclesHome({ onNavigate }: { onNavigate: (page: string) => voi
         { id: 'motor-vehicles', label: 'Vehicle catalog', detail: 'Makes, models, and the record you open with the eye button.' },
         { id: 'platforms-engines', label: 'Platforms and engines', detail: 'Shared platforms and engine families.' },
         { id: 'pending-motor-vehicles', label: 'Pending catalog', detail: 'Rows waiting for a person to approve.' },
+        { id: 'vehicle-pictures', label: 'Vehicle pictures', detail: 'One studio picture per car and colour.' },
         { id: 'maintenance-templates', label: 'Maintenance templates', detail: 'Service schedules used by the apps.' },
         { id: 'parts-catalog', label: 'Parts catalog', detail: 'Parts that belong to a vehicle.' },
         { id: 'suppliers-prices', label: 'Suppliers and prices', detail: 'Who sells a part, and for how much.' },

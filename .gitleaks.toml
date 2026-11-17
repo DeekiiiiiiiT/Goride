@@ -1,0 +1,8 @@
+# Secret scan settings for CI (job "secret-scan" in .github/workflows/ci.yml).
+# Uses gitleaks' default rules. Mark a known-safe test value inline with `// gitleaks:allow (reason)`.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Lock files hold package hashes, not secrets"
+paths = ['''(^|/)deno\.lock$''', '''(^|/)pnpm-lock\.yaml$''']

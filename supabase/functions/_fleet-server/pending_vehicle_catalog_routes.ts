@@ -28,6 +28,7 @@ import {
 import { filterCatalogRowsByFleetMonth, type CatalogVariantRow } from "../../../packages/types/src/vehicleCatalogResolution.ts";
 import { parseCatalogMonthFromUnknown } from "../../../packages/types/src/catalogMonthParse.ts";
 import { VEHICLE_CATALOG_WRITABLE_KEYS } from "../../../packages/types/src/vehicleCatalogCsvImport.ts";
+import { runPictureLookupAfterCatalogLink } from "./vehicle_picture_catalog_hook.ts";
 import { resolveApproveVehicleClass } from "../../../packages/types/src/vehicleCatalog.ts";
 import { isEnforcementEnabled, listRecentCatalogGateEvents } from "./vehicle_catalog_gate.ts";
 import { resolveDriverVehicleAssignment } from "./driver_vehicle_assignment.ts";
@@ -733,6 +734,7 @@ export function registerPendingVehicleCatalogRoutes(
         const fleetId = String((reqRow as { fleet_vehicle_id: string }).fleet_vehicle_id);
         const raw = await kv.get(`vehicle:${fleetId}`);
         if (!raw || typeof raw !== "object") return c.json({ error: "Fleet vehicle not found" }, 404);
+        const prevCatalogId = String((raw as { vehicle_catalog_id?: string }).vehicle_catalog_id ?? "").trim() || null;
         // The platform admin has linked an existing catalog row — flip the
         // fleet vehicle out of the parked state. We deliberately leave
         // `status` alone so the operator decides when to set Active.
@@ -742,6 +744,13 @@ export function registerPendingVehicleCatalogRoutes(
           catalogStatus: "matched",
         };
         await kv.set(`vehicle:${fleetId}`, vehicle);
+        await runPictureLookupAfterCatalogLink(
+          supabase,
+          fleetId,
+          existingId,
+          prevCatalogId,
+          "matched",
+        );
 
         const rbacUser = c.get("rbacUser") as { id?: string; userId?: string } | undefined;
         await supabase
@@ -946,6 +955,7 @@ export function registerPendingVehicleCatalogRoutes(
         const fleetId = pr.fleet_vehicle_id;
         const raw = await kv.get(`vehicle:${fleetId}`);
         if (!raw || typeof raw !== "object") return c.json({ error: "Fleet vehicle not found" }, 404);
+        const prevCatalogId = String((raw as { vehicle_catalog_id?: string }).vehicle_catalog_id ?? "").trim() || null;
         // Fresh catalog row was just created — flip the fleet vehicle out of
         // the parked state. Operational `status` is left to the operator.
         const vehicle = {
@@ -954,6 +964,13 @@ export function registerPendingVehicleCatalogRoutes(
           catalogStatus: "matched",
         };
         await kv.set(`vehicle:${fleetId}`, vehicle);
+        await runPictureLookupAfterCatalogLink(
+          supabase,
+          fleetId,
+          catalogId,
+          prevCatalogId,
+          "matched",
+        );
 
         const rbacUser = c.get("rbacUser") as { id?: string; userId?: string } | undefined;
         await supabase

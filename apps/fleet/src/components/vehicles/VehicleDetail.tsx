@@ -68,6 +68,7 @@ import type {
 import { catalogOptionsFromScheduleRows } from '../../utils/maintenanceCatalogOptions';
 import { VehicleDetailCatalogGate } from './detail/VehicleDetailCatalogGate';
 import { VehicleDetailHeader } from './detail/VehicleDetailHeader';
+import { AddVehicleFlow } from './add-vehicle/AddVehicleFlow';
 import { VehicleDetailPerformanceTab } from './detail/VehicleDetailPerformanceTab';
 import { VehicleDetailOdometerTab } from './detail/VehicleDetailOdometerTab';
 import { VehicleDetailKmTrackingTab } from './detail/VehicleDetailKmTrackingTab';
@@ -378,6 +379,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
   // State for document management
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [extraDocuments, setExtraDocuments] = useState<VehicleDocument[]>([]);
+  const [updatingCertificate, setUpdatingCertificate] = useState<'fitness' | 'registration' | null>(null);
   const [deletedDocIds, setDeletedDocIds] = useState<string[]>([]);
   const [isParsing, setIsParsing] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -988,9 +990,20 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
     setEditingDocId(null);
   };
 
+  // Documents → Update: rescan one certificate in the add flow's update mode (Stitch F15).
+  if (updatingCertificate) {
+    return (
+      <AddVehicleFlow
+        update={{ vehicle, doc: updatingCertificate }}
+        onClose={() => setUpdatingCertificate(null)}
+        onVehicleAdded={(v) => onUpdate?.(v)}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6 animate-in slide-in-from-right duration-300">
-      
+
       {/* --- Top Navigation --- */}
       <div className="flex flex-wrap justify-between items-center gap-3">
         <Button variant="ghost" onClick={onBack} className="pl-0 hover:bg-transparent hover:text-indigo-600">
@@ -1127,6 +1140,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
             handleRefreshMaintenance={handleRefreshMaintenance}
             orgServiceLines={orgServiceLines}
             onSaveServiceLines={handleSaveServiceLines}
+            onUpdateCertificate={setUpdatingCertificate}
           />
       </Tabs>
 

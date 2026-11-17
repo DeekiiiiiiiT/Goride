@@ -52,3 +52,18 @@ export {
   type FuelCardWithAssignmentHistory,
   type ApplyFuelCardAssignmentOpts,
 } from './fuel/fuelCardAssignmentHistory';
+export { MEDIA_BASE_URL, mediaPublicUrl } from './storage/mediaUrl';
+export {
+  pictureStateLabel,
+  vehiclePictureSrc,
+  type PictureDisplayStatus,
+  type PictureSlot,
+} from './storage/vehiclePicture';
+export {
+  fitWithin,
+  shrinkPhoto,
+  uploadToStorage,
+  type FinishedUpload,
+  type StartUploadResponse,
+  type UploadToStorageOptions,
+} from './storage/uploadToStorage';

@@ -2,6 +2,7 @@ import { API_ENDPOINTS } from "../../../services/apiConfig";
 import { publicAnonKey } from "../../../utils/supabase/info";
 import { supabase } from "../../../utils/supabase/client";
 import { getJson, patchJson, postJson } from "../parts-database/partsDatabaseApi";
+import { type StartUploadResponse, uploadToStorage } from "@roam/roam-shared";
 
 export type CatalogMakerSummary = {
   make: string;
@@ -57,24 +58,45 @@ export function patchCatalogMaker(make: string, body: { country?: string; logo_s
   return patchJson<Record<string, unknown>>(`makers/${encodeURIComponent(make)}`, body);
 }
 
+/**
+ * Logo goes straight from the browser to Cloudflare R2:
+ * start (one-time link) → PUT to R2 → finish (server checks it and saves the key).
+ */
 export async function uploadCatalogMakerLogo(make: string, file: File) {
-  const token = (await supabase.auth.getSession()).data.session?.access_token ?? "";
-  const form = new FormData();
-  form.append("file", file);
-  const response = await fetch(
-    `${API_ENDPOINTS.admin}/admin/catalog/makers/${encodeURIComponent(make)}/logo`,
-    {
+  const base = `${API_ENDPOINTS.admin}/admin/catalog/makers/${encodeURIComponent(make)}/logo`;
+  const call = async <T,>(step: "start" | "finish", payload: unknown): Promise<T> => {
+    const token = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+    const response = await fetch(`${base}/${step}`, {
       method: "POST",
       headers: {
         Authorization: token ? `Bearer ${token}` : "",
         apikey: publicAnonKey,
+        "Content-Type": "application/json",
       },
-      body: form,
+      body: JSON.stringify(payload),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error((body as { error?: string }).error || "Could not upload logo");
+    return body as T;
+  };
+  let saved: { make: string; logo_storage_path: string; publicUrl?: string | null } | null = null;
+  await uploadToStorage({
+    file,
+    // Logos keep their exact file (SVG, transparent PNG); they are already small.
+    shrinkPhotos: false,
+    start: (req) => call<StartUploadResponse>("start", req),
+    finish: async (req) => {
+      saved = await call<{ make: string; logo_storage_path: string; publicUrl?: string | null }>("finish", req);
+      return {
+        key: saved.logo_storage_path,
+        bucket: "public",
+        size: file.size,
+        contentType: file.type,
+        publicUrl: saved.publicUrl ?? null,
+      };
     },
-  );
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error((body as { error?: string }).error || "Could not upload logo");
-  return body as { make: string; logo_storage_path: string; publicUrl?: string | null };
+  });
+  return saved!;
 }
 
 export function saveCatalogSpecsBulk(payload: {

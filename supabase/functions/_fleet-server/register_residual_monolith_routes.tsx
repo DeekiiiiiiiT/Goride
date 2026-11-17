@@ -26,6 +26,18 @@ import { stampDriverHomePin } from "./fuel_shift_km.ts";
 import { splitCashAwaitingSaveBlocked } from "../../../packages/fuel-core/src/fuelSplitCashLifecycle.ts";
 import * as cache from "./cache.ts";
 import { trackedProviderCall, logProviderCall, checkProviderGuards, ProviderBlockedError } from "./api_usage_logger.ts";
+import {
+  mapLegacyParseType,
+  readVehicleCertificate,
+} from "./vehicle_document_read.ts";
+import { buildProductionDocumentReadDeps } from "./vehicle_document_read_runtime.ts";
+import { commitVehicleSave, validateVehicleSave } from "./vehicle_save_rules.ts";
+import { createFleetVehicleStore } from "./vehicle_save_fleet_store.ts";
+import { createProductionPictureLookupDeps } from "./vehicle_picture_lookup.ts";
+import { registerVehiclePictureRoutes } from "./vehicle_picture_routes.ts";
+import { registerVehiclePictureAdminRoutes } from "./vehicle_picture_admin_routes.ts";
+import { enrichVehiclesWithPictures } from "./vehicle_picture_enrich.ts";
+import { loadVehiclePicturesSettings } from "./vehicle_pictures_settings.ts";
 import * as memCache from "./memory_cache.ts";
 import { generatePerformanceReport } from "./performance-metrics.tsx";
 import { pMap } from "./concurrency.ts";
@@ -502,6 +514,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
   registerFleetAdminMaintenanceLedgerRoutes(app, supabase, kv);
   registerReconWorkerSwitchRoutes(app, supabase);
   registerPendingVehicleCatalogRoutes(app, supabase);
+  registerVehiclePictureRoutes(app, supabase);
+  registerVehiclePictureAdminRoutes(app, supabase);
   registerPartSourcingRoutes(app, supabase);
   registerUberFleetRoutes(app);
   // RETIRED: registerMaintenanceRoutes(app, supabase); — live on fleet-ops
@@ -1869,7 +1883,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
         const all = await listByOrg("vehicles", orgId, { limit: offset + limit });
         const page = all.slice(offset, offset + limit);
         const vehicles = await filterByOrgSafe(page, c, { endpoint: '/vehicles' });
-        return c.json(vehicles);
+        const withPictures = await enrichVehiclesWithPictures(supabase, vehicles);
+        return c.json(withPictures);
       }
 
       const { data, error } = await fromKvStore()
@@ -1889,16 +1904,50 @@ export function registerResidualMonolithRoutes(app: Hono) {
 
   app.post("/make-server-37f42386/vehicles", requireAuth(), requirePermission('vehicles.create'), async (c) => {
     try {
-      let vehicle = await c.req.json();
-      if (!vehicle.id) {
-        return c.json({ error: "Vehicle ID (License Plate) is required" }, 400);
+      const rawBody = await c.req.json() as Record<string, unknown>;
+      const documentChecks = Array.isArray(rawBody.documentChecks)
+        ? rawBody.documentChecks as import("./vehicle_save_rules.ts").DocumentCheckInput[]
+        : undefined;
+      const updateDocumentsOnly = rawBody.updateDocumentsOnly === true;
+      const clientColorStandard =
+        typeof rawBody.colorStandard === "string" ? rawBody.colorStandard : undefined;
+      let vehicle = { ...rawBody } as Record<string, unknown>;
+      delete vehicle.documentChecks;
+      delete vehicle.updateDocumentsOnly;
+      delete vehicle.colorStandard;
+
+      vehicle = stampOrg(vehicle, c);
+      const orgId = (vehicle as { organizationId?: string }).organizationId ?? "";
+      const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+      const userId = String(rbacUser?.id ?? rbacUser?.userId ?? "");
+
+      const saveRulesDeps = {
+        loadSettings: loadVehiclePicturesSettings,
+        store: createFleetVehicleStore(supabase),
+        pictureLookup: createProductionPictureLookupDeps(supabase),
+      };
+      const saveRulesInput = {
+        vehicle,
+        organizationId: orgId,
+        userId,
+        documentChecks,
+        updateDocumentsOnly,
+        colorStandard: clientColorStandard,
+      };
+      const validatedResult = await validateVehicleSave(saveRulesDeps, saveRulesInput);
+      if (!validatedResult.ok) {
+        return c.json(
+          { error: validatedResult.error, code: validatedResult.code },
+          validatedResult.httpStatus,
+        );
       }
+      vehicle = validatedResult.validated.vehicle;
+
       const previous = await loadVehicleForGate(String(vehicle.id));
       // Update path: refuse overwrite of another org's vehicle
       if (previous && !belongsToOrg(previous as Record<string, unknown>, c)) {
         return c.json({ error: "Forbidden" }, 403);
       }
-      vehicle = stampOrg(vehicle, c);
       // Normalize platform tags (legacy / missing → rideshare)
       {
         const raw = (vehicle as { serviceLines?: unknown; service_lines?: unknown }).serviceLines
@@ -1910,8 +1959,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
           ? [...new Set(lines as string[])]
           : ["rideshare"];
       }
-      const orgId = (vehicle as { organizationId?: string }).organizationId ?? null;
-      const rbacUser = c.get('rbacUser') as RbacUser | undefined;
       const canBypass = rbacUserCanBypassCatalogGate(rbacUser);
 
       const catalogId = await resolveCatalogIdForKvVehicle(supabase, vehicle as Record<string, unknown>);
@@ -1945,6 +1992,33 @@ export function registerResidualMonolithRoutes(app: Hono) {
       );
 
       await kv.set(`vehicle:${vehicle.id}`, vehicle);
+
+      // The catalogue match the server resolved is the only one written (never the client's claim),
+      // so an unmatched vehicle stays parked and never gets a picture lookup.
+      const commitInput = {
+        ...saveRulesInput,
+        vehicle: { ...saveRulesInput.vehicle, vehicle_catalog_id: catalogId ?? null },
+      };
+      const commitResult = await commitVehicleSave(
+        saveRulesDeps,
+        commitInput,
+        validatedResult.validated,
+      );
+      if (!commitResult.ok) {
+        if (!previous && commitResult.code === "PLATE_IN_OTHER_FLEET") {
+          try {
+            await kv.del(`vehicle:${vehicle.id}`);
+          } catch (rollbackErr: unknown) {
+            console.error("[vehicles] KV rollback after plate conflict failed:", rollbackErr);
+          }
+        }
+        return c.json(
+          { error: commitResult.error, code: commitResult.code },
+          commitResult.httpStatus,
+        );
+      }
+      const vehiclePicture = commitResult.picture;
+      vehicle = commitResult.vehicle;
 
       try {
         // One driver ↔ one vehicle — release duplicates before mirroring driver cache
@@ -2019,6 +2093,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
       return c.json({
         success: true,
         data: vehicle,
+        picture: vehiclePicture,
         catalogMatched: !!catalogId,
         catalogStatus: (vehicle as { catalogStatus?: string }).catalogStatus ?? (catalogId ? "matched" : "pending_catalog"),
         maintenanceBootstrap,
@@ -4917,7 +4992,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
   });
 
   // AI Document Parsing Endpoint
-  app.post("/make-server-37f42386/parse-document", async (c) => {
+  app.post("/make-server-37f42386/parse-document", requireAuth(), async (c) => {
     try {
       const body = await c.req.parseBody();
       const file = body['file'];
@@ -4925,6 +5000,35 @@ export function registerResidualMonolithRoutes(app: Hono) {
       const type = body['type'] as string;
 
       if (!file || !(file instanceof File)) return c.json({ error: "No file provided" }, 400);
+
+      const certDocType = mapLegacyParseType(type);
+      if (certDocType) {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const orgId = getOrgId(c) ?? "";
+        const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+        const userId = String(rbacUser?.id ?? rbacUser?.userId ?? "");
+        const deps = buildProductionDocumentReadDeps(
+          supabase,
+          () => Deno.env.get("OPENAI_API_KEY"),
+          () => Deno.env.get("GEMINI_API_KEY"),
+        );
+        const result = await readVehicleCertificate(deps, {
+          docType: certDocType,
+          fileBytes: bytes,
+          userId,
+          orgId,
+        });
+        if (!result.ok) {
+          return c.json({ error: result.error, code: result.code }, result.httpStatus);
+        }
+        return c.json({
+          success: true,
+          fields: result.fields,
+          colorStandard: result.colorStandard,
+          flags: result.flags,
+          fileSha256: result.fileSha256,
+        });
+      }
 
       const apiKey = Deno.env.get("OPENAI_API_KEY");
       if (!apiKey) return c.json({ error: "OpenAI API Key not configured" }, 503);
@@ -5061,112 +5165,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
       await kv.del(`fuel_adjustment:${id}`);
       return c.json({ success: true });
     } catch (e: any) {
-      return c.json({ error: e.message }, 500);
-    }
-  });
-
-  app.post("/make-server-37f42386/generate-vehicle-image", async (c) => {
-    try {
-      const { make, model, year, color, bodyType, licensePlate } = await c.req.json();
-      
-      // Switch to Gemini/Imagen as requested
-      const apiKey = Deno.env.get("GEMINI_API_KEY");
-      if (!apiKey) {
-          return c.json({ error: "Gemini API Key not configured" }, 503);
-      }
-
-      // Update prompt for better vehicle accuracy
-      const prompt = `Professional studio photography of a ${year} ${color} ${make} ${model} ${bodyType}, automotive photoshoot style. 
-      The car is positioned on a clean, seamless white background with soft reflections on the floor. 
-      Front 3/4 angle view, high resolution, 8k, photorealistic, sharp focus. 
-      Ensure the design matches the specific production year ${year}. No license plates.`;
-
-      let imageB64 = null;
-      let lastError = null;
-
-      try {
-          // Using Imagen 4.0 (Production Standard 2026) as requested
-          // Endpoint: Google Generative Language API (Gemini API)
-          const data: any = await trackedProviderCall({
-              provider: "gemini",
-              service: "image",
-              route: "/make-server-37f42386/generate-vehicle-image",
-              model: "imagen-4.0-generate-001",
-              images: 1,
-              run: async () => {
-                  const response = await fetch(
-                      `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key=${apiKey}`,
-                      {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                              instances: [{ prompt: prompt }],
-                              parameters: {
-                                  sampleCount: 1,
-                                  aspectRatio: "1:1"
-                              }
-                          })
-                      }
-                  );
-                  if (!response.ok) {
-                      const errorText = await response.text();
-                      throw new Error(`Google Imagen API Error: ${response.status} - ${errorText}`);
-                  }
-                  return await response.json();
-              },
-              extractUsage: () => ({ images: 1 }),
-          });
-
-          // Handle Imagen response structure
-          // The API returns { predictions: [ { bytesBase64Encoded: "..." } ] }
-          if (data.predictions && data.predictions[0]) {
-               const prediction = data.predictions[0];
-               imageB64 = prediction.bytesBase64Encoded || prediction;
-          }
-
-          if (!imageB64) {
-              throw new Error("No image data received from Gemini/Imagen");
-          }
-
-      } catch (e: any) {
-          if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
-          lastError = e.message;
-          console.error("Gemini Imagen Failed:", e);
-      }
-
-      if (!imageB64) {
-           return c.json({ 
-               error: `Image Generation failed: ${lastError}` 
-           }, 500);
-      }
-      
-      // Convert Base64 to Buffer for Upload
-      const buffer = Buffer.from(imageB64, 'base64');
-      const bucketName = `make-37f42386-vehicles`;
-      await ensureBucket(supabase, "make-37f42386-vehicles");
-
-      const fileName = `${licensePlate || crypto.randomUUID()}.png`;
-
-      const { error: uploadError } = await supabase.storage
-          .from(bucketName)
-          .upload(fileName, buffer, { 
-              contentType: 'image/png', 
-              upsert: true 
-          });
-
-      if (uploadError) throw uploadError;
-
-      // Generate Signed URL (valid for 1 year)
-      const { data: signedUrlData, error: signError } = await supabase.storage
-          .from(bucketName)
-          .createSignedUrl(fileName, 31536000); 
-
-      if (signError) throw signError;
-
-      return c.json({ url: signedUrlData.signedUrl });
-
-    } catch (e: any) {
-      console.error("Image Generation Error:", e);
       return c.json({ error: e.message }, 500);
     }
   });

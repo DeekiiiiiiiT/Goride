@@ -4,12 +4,13 @@ import { api } from '../../services/api';
 import { Trip } from '../../types/data';
 import { Vehicle } from '../../types/vehicle'; // New Type
 import { applyDriverAssignmentChange } from '../../utils/vehicleDriverAssignmentHistory';
-import { VehicleCard } from './VehicleCard'; // New Component
+import { VehicleListCard } from './add-vehicle/VehicleListCard';
 import { VehicleDetail } from './VehicleDetail'; // New Component
 import { DriverAssignmentModal } from './DriverAssignmentModal';
 import { FuelLogForm } from '../driver-portal/FuelLogForm';
 import { LogMaintenanceServiceDialog } from './LogMaintenanceServiceDialog';
-import { AddVehicleModal } from './AddVehicleModal';
+import { AddVehicleFlow } from './add-vehicle/AddVehicleFlow';
+import { VehicleThumb } from './add-vehicle/VehiclePicture';
 import { FrameDecodeButton } from './FrameDecodeDialog';
 import type { CatalogMaintenanceTaskOption, VehicleMaintenanceScheduleRowApi } from '../../types/maintenance';
 import { catalogOptionsFromScheduleRows } from '../../utils/maintenanceCatalogOptions';
@@ -155,7 +156,8 @@ export function VehiclesPage({
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [serviceFilter, setServiceFilter] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list'); // Toggle view (Future proofing)
+  // Stitch F16: the picture cards are the first view; the table stays one click away.
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   // Pending-catalog drawer (read-only queue surface). Triggered from the
   // banner, the filter pill, and the per-card warning.
@@ -651,6 +653,25 @@ export function VehiclesPage({
     );
   }
 
+  // Add a vehicle opens as a focused page in place of the list (Stitch F1–F11).
+  if (isAddModalOpen) {
+    return (
+      <AddVehicleFlow
+        onClose={() => setIsAddModalOpen(false)}
+        onVehicleAdded={handleVehicleAdded}
+        onGoToVehicle={(vehicleId) => {
+          setIsAddModalOpen(false);
+          setSelectedVehicleId(vehicleId);
+        }}
+        existingVehicles={manualVehicles}
+        defaultServiceLines={[activeServiceLine]}
+        orgServiceLines={orgServiceLines.filter(
+          (l): l is VehicleServiceLine => l === 'rideshare' || l === 'rush_delivery',
+        )}
+      />
+    );
+  }
+
   return (
     <>
       {selectedVehicle ? (
@@ -796,7 +817,7 @@ export function VehiclesPage({
                       </div>
                       
                       <Select value={statusFilter} onValueChange={setStatusFilter}>
-                        <SelectTrigger className="w-[180px]">
+                        <SelectTrigger className="w-[180px]" aria-label="Filter by status">
                           <SelectValue placeholder="Status" />
                         </SelectTrigger>
                         <SelectContent>
@@ -809,7 +830,7 @@ export function VehiclesPage({
                       </Select>
 
                       <Select value={serviceFilter} onValueChange={setServiceFilter}>
-                        <SelectTrigger className="w-[140px]">
+                        <SelectTrigger className="w-[140px]" aria-label="Filter by health">
                           <SelectValue placeholder="Service" />
                         </SelectTrigger>
                         <SelectContent>
@@ -827,16 +848,20 @@ export function VehiclesPage({
                         size="sm" 
                         className="h-8 w-8 p-0"
                         onClick={() => setViewMode('grid')}
+                        aria-label="Picture cards"
+                        aria-pressed={viewMode === 'grid'}
                       >
-                          <LayoutGrid className="h-4 w-4" />
+                          <LayoutGrid className="h-4 w-4" aria-hidden />
                       </Button>
                       <Button 
                         variant={viewMode === 'list' ? 'white' : 'ghost'} 
                         size="sm" 
                         className="h-8 w-8 p-0"
                         onClick={() => setViewMode('list')}
+                        aria-label="Table"
+                        aria-pressed={viewMode === 'list'}
                       >
-                          <List className="h-4 w-4" />
+                          <List className="h-4 w-4" aria-hidden />
                       </Button>
                   </div>
               </div>
@@ -867,17 +892,19 @@ export function VehiclesPage({
           {/* --- CONTENT --- */}
           {filteredVehicles.length > 0 ? (
               viewMode === 'grid' ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <div className="grid w-full grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3" data-testid="vehicle-grid">
                     {filteredVehicles.map(vehicle => (
-                        <VehicleCard 
-                            key={vehicle.id} 
+                        <VehicleListCard
+                            key={vehicle.id}
                             vehicle={vehicle}
-                            catalogPending={catalogPendingByFleetId.get(vehicle.id) ?? null}
-                            onViewAnalytics={(id) => setSelectedVehicleId(id)}
-                            onAssignDriver={(id) => handleOpenAssignModal(id)}
-                            onLogService={handleLogService}
-                            onAddFuel={handleAddFuel}
-                            onSendAlert={handleSendAlert}
+                            onOpen={(id) => setSelectedVehicleId(id)}
+                            badge={
+                              isVehicleParked(vehicle) ? (
+                                <span className="inline-flex items-center rounded-full bg-[#fffbeb] px-2.5 py-1 text-[12px] font-medium text-[#b45309] dark:bg-[#451a03] dark:text-[#fbbf24]">
+                                  Waiting for Roam to check
+                                </span>
+                              ) : null
+                            }
                         />
                     ))}
                 </div>
@@ -902,7 +929,7 @@ export function VehiclesPage({
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex min-w-0 items-center gap-3">
                               <div className="relative h-12 w-16 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100">
-                                <img src={vehicle.image} alt="" className="h-full w-full object-cover" />
+                                <VehicleThumb picture={vehicle.picture} />
                               </div>
                               <div className="min-w-0">
                                 <p className="truncate font-medium text-slate-900 dark:text-slate-100">
@@ -1037,7 +1064,7 @@ export function VehiclesPage({
                                     <TableCell className="pl-6">
                                         <div className="flex items-center gap-4">
                                             <div className="h-12 w-20 relative rounded-md overflow-hidden bg-slate-100 flex-shrink-0 border border-slate-200">
-                                                <img src={vehicle.image} alt={vehicle.model} className="h-full w-full object-cover" />
+                                                <VehicleThumb picture={vehicle.picture} />
                                             </div>
                                             <div>
                                                 <div className="flex flex-wrap items-center gap-2">
@@ -1212,17 +1239,6 @@ export function VehiclesPage({
           }}
         />
       ) : null}
-
-      <AddVehicleModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        onVehicleAdded={handleVehicleAdded}
-        existingVehicles={manualVehicles}
-        defaultServiceLines={[activeServiceLine]}
-        orgServiceLines={orgServiceLines.filter(
-          (l): l is VehicleServiceLine => l === 'rideshare' || l === 'rush_delivery',
-        )}
-      />
 
       <PendingCatalogRequestsDrawer
         open={pendingDrawerOpen}

@@ -29,7 +29,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { cn } from '../ui/utils';
 import { AddDriverModal } from '../drivers/AddDriverModal';
-import { AddVehicleModal } from '../vehicles/AddVehicleModal';
+import { AddVehicleFlow } from '../vehicles/add-vehicle/AddVehicleFlow';
 import { WorkforceInvitePanel } from '../workforce/WorkforceInvitePanel';
 import { CourierDetailSheet } from '../couriers/CourierDetailSheet';
 import type { CourierProfile } from '../couriers/CouriersPage';
@@ -722,6 +722,19 @@ export function Dashboard({ onSelectDriver, onNavigate }: Props) {
     </>
   );
 
+  // Add a vehicle opens as a focused page in place of the dashboard (Stitch F1–F11).
+  if (isAddVehicleOpen) {
+    return (
+      <AddVehicleFlow
+        onClose={() => setIsAddVehicleOpen(false)}
+        existingVehicles={vehicleList}
+        onVehicleAdded={() => {
+          void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+        }}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Desktop: title + add actions */}
@@ -904,17 +917,6 @@ export function Dashboard({ onSelectDriver, onNavigate }: Props) {
           void queryClient.invalidateQueries({ queryKey: ['driversRoster'] });
           void queryClient.invalidateQueries({ queryKey: ['drivers'] });
           toast.success('Driver added');
-        }}
-      />
-
-      <AddVehicleModal
-        isOpen={isAddVehicleOpen}
-        onClose={() => setIsAddVehicleOpen(false)}
-        existingVehicles={vehicleList}
-        onVehicleAdded={() => {
-          setIsAddVehicleOpen(false);
-          void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
-          toast.success('Vehicle added');
         }}
       />
 

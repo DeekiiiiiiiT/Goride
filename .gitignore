@@ -113,3 +113,11 @@ scripts/tmp-migrations/
 scripts/.fp-replay*.json
 scripts/mismatch-versions.json
 functions-serve.log
+
+# Vehicle pictures C4: owner real documents (never commit) + reset backups
+/.vehicle-docs-test/
+/.vehicle-pictures-preprod.env
+/supabase/functions/.env
+/.vehicle-pictures-backup/
+/.vehicle-pictures-preprod-download/
+/.vehicle-pictures-serve.pid

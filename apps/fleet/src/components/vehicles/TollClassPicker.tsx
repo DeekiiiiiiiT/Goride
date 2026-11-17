@@ -1,7 +1,7 @@
 /**
  * Toll class picker — options from Super Admin Toll Info vehicleClasses.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { Label } from '../ui/label';
 import { api } from '../../services/api';
 import { listVehicleClassesFromStore, migrateToVersionedStore } from '../../utils/officialTollRate';
@@ -17,13 +17,8 @@ interface TollClassPickerProps {
   needsReview?: boolean;
 }
 
-export function TollClassPicker({
-  value,
-  onChange,
-  required,
-  className,
-  needsReview,
-}: TollClassPickerProps) {
+/** Toll classes from Super Admin Toll Info (falls back to the built-in list). Shared by the picker and Add vehicle. */
+export function useTollClasses(): { classes: TollVehicleClassDef[]; loading: boolean } {
   const [classes, setClasses] = useState<TollVehicleClassDef[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -45,12 +40,26 @@ export function TollClassPicker({
     };
   }, []);
 
+  return { classes, loading };
+}
+
+export function TollClassPicker({
+  value,
+  onChange,
+  required,
+  className,
+  needsReview,
+}: TollClassPickerProps) {
+  const selectId = useId();
+  const { classes, loading } = useTollClasses();
+
   return (
     <div className={cn('space-y-1.5', className)}>
-      <Label className="text-xs font-medium uppercase text-slate-500">
+      <Label htmlFor={selectId} className="text-xs font-medium uppercase text-slate-500">
         Toll class{required ? ' *' : ''}
       </Label>
       <select
+        id={selectId}
         className="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
         value={value || ''}
         disabled={loading}

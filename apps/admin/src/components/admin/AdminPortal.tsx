@@ -15,6 +15,7 @@ const GlobalPlatformSettingsPage = lazyNamed(() => import('@roam/admin-core/sett
 const ApiCommandCenter = lazyNamed(() => import('./api-center/ApiCommandCenter'), 'ApiCommandCenter');
 const VehicleCatalogManager = lazyNamed(() => import('./vehicle-catalog/VehicleCatalogManager'), 'VehicleCatalogManager');
 const PendingVehicleCatalogManager = lazyNamed(() => import('./vehicle-catalog/PendingVehicleCatalogManager'), 'PendingVehicleCatalogManager');
+const VehiclePicturesPage = lazyNamed(() => import('./vehicle-catalog/vehicle-pictures/VehiclePicturesPage'), 'VehiclePicturesPage');
 const MaintenanceMasterPage = lazyNamed(() => import('./maintenance-master/MaintenanceMasterPage'), 'MaintenanceMasterPage');
 const PartsSourcingManager = lazyNamed(() => import('./parts-sourcing/PartsSourcingManager'), 'PartsSourcingManager');
 const PartsDatabasePage = lazyNamed(() => import('./parts-database/PartsDatabasePage'), 'PartsDatabasePage');
@@ -302,6 +303,11 @@ export function AdminPortal() {
         </div>
       )}
       {currentPage === 'pending-motor-vehicles' && <PendingVehicleCatalogManager />}
+      {currentPage === 'vehicle-pictures' && (
+        <Suspense fallback={<div className="p-8 text-slate-500">Loading vehicle pictures…</div>}>
+          <VehiclePicturesPage isOwner={role === 'platform_owner'} onBack={() => setCurrentPage('vehicles-home')} />
+        </Suspense>
+      )}
       {currentPage === 'maintenance-templates' && (
         <Suspense fallback={<div className="p-8 text-slate-500">Loading maintenance templates…</div>}>
           <MaintenanceMasterPage />
