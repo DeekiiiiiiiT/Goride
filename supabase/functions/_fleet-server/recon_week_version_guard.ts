@@ -17,22 +17,12 @@ import { queueWeekDeskRefresh } from "./recon_desk_queue.ts";
 import { requireAuth } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
 import { correlationIdFrom, idempotencyKeyFrom } from "./recon_week_change.ts";
+import { isReconWeekReadLikePath } from "../../../packages/finance-core/src/reconWeekReadLikePaths.ts";
 
 const CHANGING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
-/**
- * POSTs that only (re)build the week's numbers — no user decision. They skip the check and
- * never bump the version: before this, each fuel "prepare the week" after a Resolve moved
- * the version and the next call answered WEEK_CHANGED (false "This week changed" banner, 15 Nov).
- */
-const READ_LIKE_PATHS = [
-  /\/fuel\/periods\/ensure\/?$/,
-  /\/fuel\/periods\/[^/]+\/compute\/?$/,
-  /\/fuel\/periods\/[^/]+\/materialize\/?$/,
-];
 
 export function isReadLikeWeekCall(path: string): boolean {
-  const clean = String(path || "").split("?")[0];
-  return READ_LIKE_PATHS.some((re) => re.test(clean));
+  return isReconWeekReadLikePath(path);
 }
 
 const HEADER_RE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})@(\d+)$/i;

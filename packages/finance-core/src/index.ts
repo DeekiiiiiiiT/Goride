@@ -417,6 +417,10 @@ export {
   roamFuelStatementDeadlineYmd,
 } from './reconExternalRoam.ts';
 export {
+  RECON_WEEK_READ_LIKE_PATH_PATTERNS,
+  isReconWeekReadLikePath,
+} from './reconWeekReadLikePaths.ts';
+export {
   asYmd,
   ymdSpan,
   formatCoverDay,

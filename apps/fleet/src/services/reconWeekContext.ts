@@ -3,43 +3,45 @@
  * toll / fuel / settlement CHANGE carries `x-recon-week: <run id>@<version>`, so the
  * server refuses it if the week moved on (another tab, another person) or closed.
  *
- *  - After each saved change the server adds 1 to the week version; so do we, so your
- *    own clicks in a row never conflict.
- *  - A newer version from the page's own reload replaces ours (never an older one).
+ *  - After a saved change we move the version only when the server returns X-Recon-Week-Version.
+ *  - A run reload takes the server's version unless our own save (confirmed by that header) is newer.
  *  - A refusal (WEEK_CHANGED / WEEK_CLOSED) raises `recon-week-changed`; the week page
  *    shows "This week changed — Reload week".
  * Outside Week Reconciliation nothing is added, so the old pages work as before.
  */
+import { isReconWeekReadLikePath } from '@roam/finance-core';
 import { API_ENDPOINTS } from './apiConfig';
 
 type WeekContext = { runId: string; version: number; closed: boolean };
 
 let current: WeekContext | null = null;
+/** Latest version the server confirmed via X-Recon-Week-Version on our own change. */
+let lastServerConfirmedVersion: number | null = null;
 
 export const RECON_WEEK_CHANGED_EVENT = 'recon-week-changed';
 
 const CHANGING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-/**
- * POSTs that are not a person's decision; they must not count as a change to the week.
- *  - impact-preview only reads.
- *  - auto-match runs by itself every time the Tolls step opens. Sending the week with it
- *    made opening Tolls in one tab move the version, so the other tab's next click got
- *    "This week changed" (done-test 9t). What it matches still reaches the week: the
- *    toll trigger queues the calculator, and the calculator's publish moves the version.
- */
-const READ_ONLY_POSTS = [/\/toll-info\/impact-preview(\?|$)/, /\/toll-reconciliation\/auto-match(\?|$)/];
 
 export function setReconWeekContext(next: WeekContext) {
-  // Our own saved changes can be ahead of a reload that started before them.
+  if (current?.runId !== next.runId) lastServerConfirmedVersion = null;
   if (current && current.runId === next.runId && current.version > next.version) {
-    current = { ...current, closed: next.closed };
-    return;
+    if (
+      lastServerConfirmedVersion !== null &&
+      current.version === lastServerConfirmedVersion &&
+      lastServerConfirmedVersion > next.version
+    ) {
+      current = { ...current, closed: next.closed };
+      return;
+    }
   }
   current = { ...next };
 }
 
 export function clearReconWeekContext(runId?: string) {
-  if (!runId || current?.runId === runId) current = null;
+  if (!runId || current?.runId === runId) {
+    current = null;
+    lastServerConfirmedVersion = null;
+  }
 }
 
 export function getReconWeekContext(): Readonly<WeekContext> | null {
@@ -57,7 +59,7 @@ function laneUrl(url: string): boolean {
 export function reconWeekHeaderFor(url: string, method: string | undefined): string | null {
   if (!current || current.closed) return null;
   if (!CHANGING.has(String(method || 'GET').toUpperCase())) return null;
-  if (!laneUrl(url) || READ_ONLY_POSTS.some((re) => re.test(url))) return null;
+  if (!laneUrl(url) || isReconWeekReadLikePath(url)) return null;
   return `${current.runId}@${current.version}`;
 }
 
@@ -71,7 +73,7 @@ export const RECON_WEEK_SAVED_EVENT = 'recon-week-saved';
 export function announceReconWeekSave(url: string, method: string | undefined, ok: boolean): void {
   if (!ok || !current || current.closed) return;
   if (!CHANGING.has(String(method || 'GET').toUpperCase())) return;
-  if (READ_ONLY_POSTS.some((re) => re.test(url))) return;
+  if (isReconWeekReadLikePath(url)) return;
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(RECON_WEEK_SAVED_EVENT));
 }
 
@@ -84,16 +86,15 @@ export function withReconWeekHeader(url: string, options: RequestInit): { option
   return { options: { ...options, headers }, sent };
 }
 
-/** After the response: count our own saved change, or announce a refusal. */
+/** After the response: apply server version on our save, or announce a refusal. */
 export async function noteReconWeekResponse(sent: string | null, response: Response): Promise<void> {
   if (!sent || !current || !sent.startsWith(`${current.runId}@`)) return;
   if (response.ok) {
-    const sentVersion = Number(sent.split('@')[1]);
-    // The server says the week's real version after our change (a calculator publish in between
-    // makes it more than +1). Without it, count our own change as +1.
     const told = Number(response.headers.get('X-Recon-Week-Version'));
-    if (Number.isFinite(told) && told > current.version) current = { ...current, version: told };
-    else if (current.version === sentVersion) current = { ...current, version: sentVersion + 1 };
+    if (Number.isFinite(told) && told > current.version) {
+      current = { ...current, version: told };
+      lastServerConfirmedVersion = told;
+    }
     return;
   }
   if (response.status !== 409) return;

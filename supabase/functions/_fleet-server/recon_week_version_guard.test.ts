@@ -243,3 +243,29 @@ Deno.test("15 Nov: fuel compute / materialize / ensure skip the week check and n
   assertEquals(claimCalls.length, 0);
   assertEquals(runRead, 0);
 });
+
+Deno.test("WRA-65: toll impact-preview and auto-match skip the week check", async () => {
+  assertEquals(isReadLikeWeekCall("/toll-info/impact-preview"), true);
+  assertEquals(isReadLikeWeekCall("/toll-reconciliation/auto-match"), true);
+
+  const claimCalls = { length: 0 };
+  let runRead = 0;
+  const deps: WeekGuardDeps = {
+    requireAuthStrict: signedIn(),
+    reconClient: () => {
+      runRead += 1;
+      return fakeRecon({ ...RUN_ROW, version: 9 }, claimCalls, "ok", true);
+    },
+    refreshWeek: async () => {},
+  };
+  const app = new Hono();
+  app.use("*", reconWeekVersionGuardWith(deps));
+  app.post("/toll-info/impact-preview", (c) => c.json({ ok: true }, 200));
+  app.post("/toll-reconciliation/auto-match", (c) => c.json({ ok: true }, 200));
+  for (const path of ["/toll-info/impact-preview", "/toll-reconciliation/auto-match"]) {
+    const res = await app.request(path, { method: "POST", headers: { "x-recon-week": HEADER } });
+    assertEquals(res.status, 200);
+    assertEquals(claimCalls.length, 0);
+  }
+  assertEquals(runRead, 0);
+});
