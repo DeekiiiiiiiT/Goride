@@ -1,6 +1,6 @@
 # Toll architecture — as-built audit and what it lacks
 
-**Rev 3 · 2026-11-17 · For: the architecture reviewer · Status: OPEN, no build until the reviewer and the owner agree.**
+**Rev 4 · 2026-11-17 · For: the architecture reviewer · Status: OPEN, no build until the reviewer and the owner agree.**
 
 **What it's for (one sentence):** every toll the fleet pays ends with the right person bearing it: the platform (paid back first time, or after a dispute), the driver or the fleet. Nothing is decided before the facts are in, and the week still closes on time.
 
@@ -107,7 +107,7 @@ Each gap: what the business needs, what the **old system** did (retired 14 Nov),
 - **Old:** a dispute refund matched its claim and closed it; if the driver had been charged, the charge was reversed (`disputeRefundTripSyncEnabled`, 5 Jul 2026).
 - **v2:** an Uber support adjustment becomes an `adjustment` payback, matched by driver + date **within 7 days only**. Disputes often take longer. Once the shortfall was decided, the charge is excluded (`fully_decided`), so the refund can't attach. It becomes unallocated money for a person, and a driver charge is never reversed automatically.
 - **Evidence:** the one live adjustment (J$70, 11 Oct) is linked to nothing.
-- **Fix (one):** an `adjustment` payback first looks for an open or expired dispute (same driver and platform, amount ≤ owed, up to the dispute deadline + 30 days, no 7-day limit). If it finds one, it settles that dispute. Only if none fits does today’s 7-day charge match run. A refund on a toll already charged to the driver reverses that charge in the open week (C2).
+- **Fix (one):** an `adjustment` payback first looks for an open or expired dispute (same driver and platform, amount ≤ owed, in the platform report for the pay period after the dispute was sent, or the one after that (owner, 17 Nov 2026: a refund always comes in one of those two pay periods, never later); no 7-day limit). If it finds one, it settles that dispute. Only if none fits does today’s 7-day charge match run. A refund on a toll already charged to the driver reverses that charge in the open week (C2).
 
 ### B4. Lost or forgotten disputes have no rule (missing)
 
@@ -182,7 +182,7 @@ Driver cash charges, Roam native charges, `carry_forward`, duplicate review, tak
 | `open_dispute` | System (the matcher, when a trip payback leaves a remainder) or a person | Creates a `to_send` dispute for the remainder. Charge state → `disputed`. |
 | `mark_dispute_sent` | Driver (driver app) or a person | `to_send` → `sent`; stamps `sent_at`. |
 | `settle_dispute` | System (the matcher, when an `adjustment` payback fits) or a person (link) | Writes a `dispute_link` and raises `recovered_minor`. Full → `won`. Part, then the person closes it → `part_won` (the rest to the lost bearer). If the driver was charged for that amount, the charge is reversed in the open week. |
-| `close_dispute_lost` | A person | → `lost`; the rest goes to the policy lost bearer. |
+| `close_dispute_lost` | System, or a person | **Automatic:** once the platform reports for both pay periods after `sent_at` are in and neither held the refund, the dispute → `lost` and the rest goes to the policy lost bearer. A person can also close it as lost earlier (for example, the platform replied no). |
 | Nightly `expire_disputes` | System | `to_send` past `deadline` → `expired`; the rest goes to the policy expired bearer. |
 | `seal_week` (changed) | A person | An open dispute counts as decided: its open amount posts to `toll:dispute_receivable`. It still refuses a `short_paid` charge, which only happens on a platform that doesn't take disputes, because the system opens the dispute first. |
 | Dispute result after the seal | System | Posted in the open week through `carry_forward` (new `kind` `dispute_result`); the sealed week is never touched. |
@@ -217,7 +217,7 @@ Driver cash charges, Roam native charges, `carry_forward`, duplicate review, tak
 3. The seal never waits on an open dispute, and never seals a `short_paid` charge.
 4. With disputes open, the week still adds up to the cent: spend = platform + driver + fleet + `dispute_receivable`.
 5. `toll:dispute_receivable` = Σ open disputes, every night.
-6. A refund matches a dispute of any age within its deadline + 30 days.
+6. A refund is matched to a dispute only in the two pay periods after it was sent; once both are in with no refund, the dispute is lost by itself.
 7. A cash trip on a `cash_in_fare` platform never opens a dispute or charges anyone.
 8. A sealed week never changes; dispute results land in the open week.
 
@@ -227,11 +227,12 @@ Driver cash charges, Roam native charges, `carry_forward`, duplicate review, tak
 
 1. A J$390 toll on an Uber trip, Uber pays J$370 → a J$20 dispute opens by itself, and the driver sees it in the app.
 2. The week seals with that dispute open; Driver Settlements pays the driver; J$20 sits in "owed by Uber".
-3. The driver taps **Mark as sent**; 20 days later Uber's J$20 adjustment arrives → the dispute is won and the J$20 clears.
+3. The driver taps **Mark as sent**; Uber's J$20 adjustment arrives in the next week's report → the dispute is won and the J$20 clears.
+3b. The adjustment arrives one week later instead (the second pay period after sending) → still matched and won.
 4. The same, but the fleet had charged the driver the J$20 → the charge is reversed in the open week.
 5. The driver never sends it; 9 days from the trip pass → the dispute expires, and the driver bears J$20 in the open week.
 5b. The Uber report is uploaded 10 days after the trip → the dispute opens already late (`opened_late`) → the fleet bears J$20, never the driver.
-6. Uber rejects it → **Lost** → the fleet bears J$20.
+6. No refund in either of the two pay periods after sending → when the second report is uploaded, the dispute is lost by itself and the fleet bears J$20. (A person can also press **Lost** earlier.)
 7. Uber pays J$10 of J$20 → the person closes it → J$10 recovered, J$10 to the lost bearer.
 8. A hand-logged cash InDrive trip covers a toll → cash wash; nothing in "no trip", no dispute.
 9. A toll during a Roam ride → native, unchanged.
@@ -253,3 +254,4 @@ On step 3 the owner decides each shortfall as the old claims did (Fleet pays = B
 | 1 | 2026-11-17 | Claude | Rev 1: as-built audit (Part A), gaps B1–B11, questions and a proposed direction |
 | 2 | 2026-11-17 | Claude | Rev 2 (owner: follow the playbook): one-sentence goal; one chosen fix per problem (B1–B11); blueprint C1 Data, C2 Server, C3 Screens with every button, C4 rules; Part D done-tests; no open options |
 | 3 | 2026-11-17 | Claude | Rev 3 (owner fact: Uber gives drivers 9 days to dispute): window moved to the platform setting (Uber 9); disputes open the moment platform data arrives; `opened_late` → fleet bears; done-test 5 + 5b |
+| 4 | 2026-11-17 | Claude | Rev 4 (owner fact: a dispute refund always arrives in the next pay period or the one after, never later): refund matching limited to those two periods; a dispute with no refund after both is lost automatically; done-tests 3, 3b, 6 |
