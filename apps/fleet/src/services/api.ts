@@ -153,15 +153,10 @@ export function getLastFleetCoreLatencyMs() {
 }
 
 export async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 1, backoff = 500): Promise<Response> {
-  // WRA-27: inside Week Reconciliation, toll / fuel / settlement changes carry the week version.
+  // WRA-27 / WRA-69: lane header when needed; recon desk returns X-Recon-Week-Version on its own saves.
   const week = withReconWeekHeader(url, options);
-  if (week.sent) {
-    const response = await fetchWithRetryInner(url, week.options, retries, backoff);
-    await noteReconWeekResponse(week.sent, response);
-    announceReconWeekSave(url, options.method, response.ok);
-    return response;
-  }
-  const response = await fetchWithRetryInner(url, options, retries, backoff);
+  const response = await fetchWithRetryInner(url, week.options, retries, backoff);
+  await noteReconWeekResponse(week.sent, response, url, options.method);
   announceReconWeekSave(url, options.method, response.ok);
   return response;
 }

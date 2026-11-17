@@ -30,16 +30,10 @@ import {
   RECON_WEEK_CHANGED_EVENT,
   RECON_WEEK_SAVED_EVENT,
   clearReconWeekContext,
+  getReconWeekContext,
   setReconWeekContext,
 } from '../../../services/reconWeekContext';
-
-/**
- * 15 Nov 2026: a change wakes the calculator itself (10 s hold + 10 s quiet), so new numbers arrive in
- * seconds. Keep asking every 3 s until the week's numbers are newer than the save; this cap only covers a
- * missed wake (the database wakes the calculator once a minute as a fallback).
- */
-const WATCH_AFTER_SAVE_MS = 3 * 60 * 1000;
-const WATCH_EVERY_MS = 3000;
+import { WATCH_AFTER_SAVE_MS, WATCH_EVERY_MS, reconRunSaveWatchRefetchInterval } from './reconRunSaveWatch';
 import { useAuth } from '../../auth/AuthContext';
 import { hasAnyJwtRole } from '@roam/auth-client';
 import { Button } from '../../ui/button';
@@ -174,46 +168,30 @@ export function ReconRunPage({
   const deliveryTollsSealedKey = useRef<string | null>(null);
   const deliveryTollsFinishInFlight = useRef(false);
 
-  /** WRA-54: after a saved change, keep asking until the calculator's new numbers arrive. */
+  /** WRA-54 / WRA-69: after a saved change, poll until the calculator's final publish. */
   const watchUntilRef = useRef(0);
-  /** The numbers' "worked out at" when the change was saved (server clock; no browser clock compare). */
-  const computedAtSaveRef = useRef<string | null>(null);
-  /** One more look 15 s after new numbers: a recheck that started before the save may land first. */
-  const lastLookDoneRef = useRef(true);
+  /** Run version after the save (X-Recon-Week-Version or cached run at save time). */
+  const versionAtSaveRef = useRef<number | null>(null);
   const runQuery = useQuery({
     queryKey: runQueryKey,
     queryFn: () => fetchRun(line, weekKey),
     staleTime: 0,
     retry: false,
-    refetchInterval: (query) => {
-      const data = query.state.data;
-      if (data?.calculatorPaused) return 8000;
-      if (data?.deskReady === false) return 3000;
-      // WRA-53: while the banner says "Updating N changes…", keep asking until
-      // the calculator has published them, so the user never has to reload.
-      if ((data?.calculator?.pendingUnits ?? 0) > 0) return WATCH_EVERY_MS;
-      if (Date.now() < watchUntilRef.current) {
-        // Stop as soon as the numbers were worked out again after the last save.
-        const now = data?.calculator?.lastComputedAt ?? null;
-        if (now && now !== computedAtSaveRef.current) {
-          if (!lastLookDoneRef.current) {
-            lastLookDoneRef.current = true;
-            return 15_000;
-          }
-          return false;
-        }
-        return WATCH_EVERY_MS;
-      }
-      return false;
-    },
+    refetchInterval: (query) =>
+      reconRunSaveWatchRefetchInterval(query.state.data, {
+        watchUntilMs: watchUntilRef.current,
+        versionAtSave: versionAtSaveRef.current,
+      }, Date.now()),
   });
 
   useEffect(() => {
     const onSaved = () => {
-      lastLookDoneRef.current = false;
-      computedAtSaveRef.current =
-        queryClient.getQueryData<{ calculator?: { lastComputedAt?: string | null } | null }>(runQueryKey)?.calculator
-          ?.lastComputedAt ?? null;
+      const cached = queryClient.getQueryData<ReconRunPayload>(runQueryKey);
+      const fromContext = getReconWeekContext()?.version;
+      versionAtSaveRef.current =
+        fromContext != null && Number.isFinite(fromContext)
+          ? fromContext
+          : (cached?.run?.version ?? null);
       watchUntilRef.current = Date.now() + WATCH_AFTER_SAVE_MS;
       // Restart the interval (it stopped when the last answer looked settled).
       window.setTimeout(() => void queryClient.refetchQueries({ queryKey: runQueryKey }), 1500);

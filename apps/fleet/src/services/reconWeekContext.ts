@@ -55,6 +55,12 @@ function laneUrl(url: string): boolean {
   );
 }
 
+/** WRA-69: Week Reconciliation desk routes (step complete, seal, attest…) — expectedVersion in body. */
+export function isReconDeskChangePath(url: string): boolean {
+  const base = API_ENDPOINTS.fleetCore;
+  return Boolean(base && url.startsWith(`${base}/recon/`));
+}
+
 /** The header value to add to this request, or null. */
 export function reconWeekHeaderFor(url: string, method: string | undefined): string | null {
   if (!current || current.closed) return null;
@@ -86,13 +92,27 @@ export function withReconWeekHeader(url: string, options: RequestInit): { option
   return { options: { ...options, headers }, sent };
 }
 
+function isTrackedWeekChange(sent: string | null, url: string | undefined, method: string | undefined): boolean {
+  if (!current) return false;
+  if (sent && sent.startsWith(`${current.runId}@`)) return true;
+  const m = String(method || 'GET').toUpperCase();
+  if (!CHANGING.has(m)) return false;
+  if (!url || !isReconDeskChangePath(url) || isReconWeekReadLikePath(url)) return false;
+  return true;
+}
+
 /** After the response: apply server version on our save, or announce a refusal. */
-export async function noteReconWeekResponse(sent: string | null, response: Response): Promise<void> {
-  if (!sent || !current || !sent.startsWith(`${current.runId}@`)) return;
+export async function noteReconWeekResponse(
+  sent: string | null,
+  response: Response,
+  url?: string,
+  method?: string,
+): Promise<void> {
+  if (!isTrackedWeekChange(sent, url, method)) return;
   if (response.ok) {
     const told = Number(response.headers.get('X-Recon-Week-Version'));
-    if (Number.isFinite(told) && told > current.version) {
-      current = { ...current, version: told };
+    if (Number.isFinite(told) && told > current!.version) {
+      current = { ...current!, version: told };
       lastServerConfirmedVersion = told;
     }
     return;

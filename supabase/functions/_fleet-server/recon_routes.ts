@@ -1070,6 +1070,14 @@ async function readStoredDesk(orgId: string, line: ReconLine, weekKey: string): 
   };
 }
 
+/** WRA-69: so the week page can watch until the calculator publish after step saves. */
+function attachWeekVersionHeader(res: Response, version: number): Response {
+  if (Number.isFinite(version) && version > 0) {
+    res.headers.set("X-Recon-Week-Version", String(version));
+  }
+  return res;
+}
+
 /** One response shape for every change: refused, repeated, or applied (desk rebuilt). */
 async function weekChangeResponse<T>(
   c: Context,
@@ -1083,15 +1091,21 @@ async function weekChangeResponse<T>(
   if (outcome.kind === "refused") return outcome.response;
   if (outcome.kind === "replay") {
     const stored = await readStoredDesk(orgId, line, weekKey);
-    return c.json({ success: true, idempotent: true, correlationId: outcome.correlationId, ...stored });
+    return attachWeekVersionHeader(
+      c.json({ success: true, idempotent: true, correlationId: outcome.correlationId, ...stored }),
+      outcome.version,
+    );
   }
   const payload = await buildRunPayload(orgId, line, weekKey, actor);
-  return c.json({
-    success: true,
-    correlationId: outcome.correlationId,
-    ...(extra ? extra(outcome.result) : {}),
-    ...(payload ?? {}),
-  });
+  return attachWeekVersionHeader(
+    c.json({
+      success: true,
+      correlationId: outcome.correlationId,
+      ...(extra ? extra(outcome.result) : {}),
+      ...(payload ?? {}),
+    }),
+    outcome.version,
+  );
 }
 
 function canAccessExternalQueue(user: RbacUser): boolean {

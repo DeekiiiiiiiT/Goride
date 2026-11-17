@@ -6,6 +6,7 @@ import {
   announceReconWeekSave,
   clearReconWeekContext,
   getReconWeekContext,
+  isReconDeskChangePath,
   noteReconWeekResponse,
   reconWeekHeaderFor,
   setReconWeekContext,
@@ -165,6 +166,69 @@ describe('WRA-65: fuel prep does not drift the week version', () => {
     vi.unstubAllGlobals();
     expect(getReconWeekContext()?.version).toBe(8);
     expect(seen).toEqual(['WEEK_CHANGED']);
+  });
+});
+
+describe('WRA-69: recon desk saves apply X-Recon-Week-Version without lane header', () => {
+  const STEP = `${API_ENDPOINTS.fleetCore}/recon/runs/rideshare/2026-11-02/steps/settlement_preview/complete`;
+  const SEAL = `${API_ENDPOINTS.fleetCore}/recon/runs/rideshare/2026-11-02/seal-earnings`;
+
+  it('recognizes desk change URLs under fleet-core/recon', () => {
+    expect(isReconDeskChangePath(STEP)).toBe(true);
+    expect(isReconDeskChangePath(SEAL)).toBe(true);
+    expect(isReconDeskChangePath(`${API_ENDPOINTS.fleetCore}/recon/weeks`)).toBe(true);
+    expect(isReconDeskChangePath(`${API_ENDPOINTS.toll}/toll/v2/import`)).toBe(false);
+  });
+
+  it('step complete bumps context from the response header (sent null)', async () => {
+    setReconWeekContext({ runId: RUN, version: 73, closed: false });
+    await noteReconWeekResponse(
+      null,
+      new Response('{}', { status: 200, headers: { 'X-Recon-Week-Version': '74' } }),
+      STEP,
+      'POST',
+    );
+    expect(getReconWeekContext()?.version).toBe(74);
+  });
+
+  it('reseal bumps context the same way', async () => {
+    setReconWeekContext({ runId: RUN, version: 80, closed: false });
+    await noteReconWeekResponse(
+      null,
+      new Response('{}', { status: 200, headers: { 'X-Recon-Week-Version': '81' } }),
+      SEAL,
+      'POST',
+    );
+    expect(getReconWeekContext()?.version).toBe(81);
+  });
+
+  it('note runs before announce so onSaved reads post-save version', async () => {
+    setReconWeekContext({ runId: RUN, version: 73, closed: false });
+    const atSave: number[] = [];
+    vi.stubGlobal('window', {
+      dispatchEvent: () => atSave.push(getReconWeekContext()?.version ?? -1),
+    });
+    await noteReconWeekResponse(
+      null,
+      new Response('{}', { status: 200, headers: { 'X-Recon-Week-Version': '74' } }),
+      STEP,
+      'POST',
+    );
+    announceReconWeekSave(STEP, 'POST', true);
+    vi.unstubAllGlobals();
+    expect(atSave).toEqual([74]);
+  });
+
+  it('recon GET does not apply a version header without lane sent', async () => {
+    setReconWeekContext({ runId: RUN, version: 73, closed: false });
+    const runGet = `${API_ENDPOINTS.fleetCore}/recon/runs/rideshare/2026-11-02`;
+    await noteReconWeekResponse(
+      null,
+      new Response('{}', { status: 200, headers: { 'X-Recon-Week-Version': '99' } }),
+      runGet,
+      'GET',
+    );
+    expect(getReconWeekContext()?.version).toBe(73);
   });
 });
 
