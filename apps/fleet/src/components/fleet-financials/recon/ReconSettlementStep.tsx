@@ -23,6 +23,10 @@ import { SettleFromBalanceModal } from './SettleFromBalanceModal';
 import { formatWeekRange } from './weekListFormat';
 import { Button } from '../../ui/button';
 import { toast } from 'sonner';
+import {
+  reconDriverSettlementBreakdown,
+  type ReconDriverSettlementBreakdown,
+} from '../../../utils/reconDriverSettlementBreakdown';
 
 const MONEY = (n: number | null | undefined) => {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -91,6 +95,7 @@ export function ReconSettlementStep({
     name: string;
     amount: number;
   } | null>(null);
+  const [correctionsOpen, setCorrectionsOpen] = useState<Set<string>>(() => new Set());
 
   const movementsQuery = useQuery({
     queryKey: ['recon-settlement-movements', weekKey, periodEnd],
@@ -134,14 +139,23 @@ export function ReconSettlementStep({
     type Row = {
       driverId: string;
       driverName?: string;
+      periodAnchor?: string;
       amountOwed?: number | null;
       collectKind?: string | null;
       cashStillHeld?: number | null;
       settlementAmount?: number | null;
+      metadata?: Record<string, unknown> | null;
     };
     const byId = new Map<
       string,
-      { driverId: string; name: string; owed: number; fleet: number; held: number }
+      {
+        driverId: string;
+        name: string;
+        owed: number;
+        fleet: number;
+        held: number;
+        breakdown: ReconDriverSettlementBreakdown | null;
+      }
     >();
     for (const r of (collectQuery.data?.rows || []) as Row[]) {
       const id = String(r.driverId || '').trim();
@@ -152,10 +166,15 @@ export function ReconSettlementStep({
         owed: 0,
         fleet: 0,
         held: 0,
+        breakdown: null,
       };
       if (r.driverName) cur.name = String(r.driverName);
       if (r.collectKind !== 'cash_held') cur.owed += collectOwedMajor(r);
       else cur.held += collectOwedMajor(r);
+      if (String(r.periodAnchor || '') === weekKey) {
+        const b = reconDriverSettlementBreakdown(r);
+        if (b) cur.breakdown = b;
+      }
       byId.set(id, cur);
     }
     for (const r of (payQuery.data?.rows || []) as Row[]) {
@@ -167,15 +186,20 @@ export function ReconSettlementStep({
         owed: 0,
         fleet: 0,
         held: 0,
+        breakdown: null,
       };
       if (r.driverName) cur.name = String(r.driverName);
       cur.fleet += resolvePayQueueOwed(r);
+      if (String(r.periodAnchor || '') === weekKey) {
+        const b = reconDriverSettlementBreakdown(r);
+        if (b) cur.breakdown = b;
+      }
       byId.set(id, cur);
     }
     return Array.from(byId.values()).sort((a, b) =>
       a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
     );
-  }, [collectQuery.data?.rows, payQuery.data?.rows]);
+  }, [collectQuery.data?.rows, payQuery.data?.rows, weekKey]);
 
   const loading = collectQuery.isLoading || payQuery.isLoading;
 
@@ -259,6 +283,39 @@ export function ReconSettlementStep({
                     {d.name}
                     {awaitingDriverIds.has(d.driverId) ? (
                       <span className="mt-1 block text-xs font-normal text-amber-800">Awaiting bank clear</span>
+                    ) : null}
+                    {d.breakdown ? (
+                      <div className="mt-2 space-y-1 text-xs font-normal text-slate-600">
+                        <p className="tabular-nums">
+                          This week: <span className="font-medium text-slate-800">{MONEY(d.breakdown.thisWeek)}</span>
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-auto min-h-0 px-2 py-1 text-xs font-medium"
+                          onClick={() =>
+                            setCorrectionsOpen((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(d.driverId)) next.delete(d.driverId);
+                              else next.add(d.driverId);
+                              return next;
+                            })
+                          }
+                        >
+                          Earlier corrections ({d.breakdown.correctionCount})
+                        </Button>
+                        {correctionsOpen.has(d.driverId) ? (
+                          <ul className="mt-1 max-w-md space-y-1 rounded-lg border border-slate-200 bg-white/80 p-2 text-slate-700">
+                            {d.breakdown.lines.map((line, idx) => (
+                              <li key={`${line.sourceWeek}-${line.kind}-${idx}`}>
+                                <span>{line.sentence}</span>{' '}
+                                <span className="tabular-nums font-medium text-slate-900">{MONEY(line.amount)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </div>
                     ) : null}
                   </td>
                   <td className="px-3 py-2 tabular-nums">

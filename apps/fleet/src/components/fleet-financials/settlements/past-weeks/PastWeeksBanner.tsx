@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
+import { settlementKeys } from '../../../../hooks/useSettlementQueue';
 import { SettlementCommandApiError, settlementCommandsApi } from '../../../../services/settlementCommandsApi';
+import { carriedBalanceSuccessToast } from '../../../../utils/carriedBalanceRepairCopy';
 import { bannerLabel, keptRepairCopy, PAST_WEEKS_NOT_LIVE } from '../../../../utils/pastWeeksCleanupCopy';
+import { CarriedBalanceRepairBox } from './CarriedBalanceRepairBox';
 import {
   ackPastWeeks,
   isPastWeeksAcked,
@@ -29,6 +32,9 @@ export function PastWeeksBanner({
   const [initialStep, setInitialStep] = useState<StepId>(1);
   const [hidden, setHidden] = useState(false);
   const [repairBusy, setRepairBusy] = useState(false);
+  const [carriedBusy, setCarriedBusy] = useState(false);
+  const [carriedApplyError, setCarriedApplyError] = useState<string | null>(null);
+  const qc = useQueryClient();
   const statusQuery = useQuery({
     queryKey: ['past-weeks-cleanup-status'],
     queryFn: () => settlementCommandsApi.pastWeeksStatus(),
@@ -47,6 +53,49 @@ export function PastWeeksBanner({
   const status = statusQuery.data;
   const namedDriver = status?.keptRepair?.driverId || status?.driverId || '';
   const driverName = namedDriver ? driverNameFor(namedDriver) || 'Driver' : 'Driver';
+
+  const carriedQuery = useQuery({
+    queryKey: ['carried-balance-corrections', namedDriver],
+    queryFn: () =>
+      settlementCommandsApi.carriedBalanceCorrections({
+        confirm: false,
+        driverId: namedDriver || undefined,
+      }),
+    enabled: Boolean(namedDriver),
+    staleTime: 15_000,
+  });
+  const carriedPreview = carriedQuery.data;
+  const showCarried =
+    (carriedPreview?.lines?.length ?? 0) > 0 || (carriedPreview?.drift?.length ?? 0) > 0;
+
+  const runCarriedApply = async () => {
+    if (!namedDriver) return;
+    setCarriedBusy(true);
+    setCarriedApplyError(null);
+    try {
+      const result = await settlementCommandsApi.carriedBalanceCorrections({
+        confirm: true,
+        driverId: namedDriver,
+      });
+      const expected = result.expectedLandingSettlement ?? carriedPreview?.expectedLandingSettlement;
+      toast.success(carriedBalanceSuccessToast(driverName, expected));
+      await Promise.all([
+        carriedQuery.refetch(),
+        statusQuery.refetch(),
+        qc.invalidateQueries({ queryKey: settlementKeys.all }),
+      ]);
+    } catch (error) {
+      const message =
+        error instanceof SettlementCommandApiError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : 'Could not move the rest onto 19 Oct';
+      setCarriedApplyError(message);
+    } finally {
+      setCarriedBusy(false);
+    }
+  };
 
   const openOn = (step: StepId) => {
     if (status?.partialWriteOff !== true) return;
@@ -85,7 +134,15 @@ export function PastWeeksBanner({
 
   // Keep the overlay mounted if it is open. A status refetch must not close it.
   if (!open && statusQuery.isLoading) return null;
-  if (!open && !showCleanup && !repair && !undeployed && !statusQuery.isError && peekPastWeeksReturn() == null) {
+  if (
+    !open
+    && !showCleanup
+    && !repair
+    && !showCarried
+    && !undeployed
+    && !statusQuery.isError
+    && peekPastWeeksReturn() == null
+  ) {
     return null;
   }
 
@@ -136,6 +193,15 @@ export function PastWeeksBanner({
             </Button>
           </div>
         </div>
+      ) : null}
+      {showCarried && carriedPreview ? (
+        <CarriedBalanceRepairBox
+          driverName={driverName}
+          preview={carriedPreview}
+          busy={carriedBusy}
+          applyError={carriedApplyError}
+          onApply={() => void runCarriedApply()}
+        />
       ) : null}
       {showCleanup && status?.complete ? (
         <div className="flex items-center justify-between gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">

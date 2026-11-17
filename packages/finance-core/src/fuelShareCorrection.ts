@@ -20,6 +20,9 @@ export const AUGUST_FUEL_CORRECTIONS: Record<string, number> = {
 /** Oct 12 company-fuel credit, posted as a correction on the open week. */
 export const OCT12_CORRECTION = -13191.88;
 
+/** Fuel-share correction tool first posted (UTC). Pre-fuel stored settlement fallback before this date. */
+export const FUEL_SHARE_TOOL_POSTED_ON = '2026-10-25';
+
 export type WeekSettlementRebuildInput = {
   driverShare: number;
   /** Driver fuel charge stored on the week. Not the later sealed-statement restatement. */
@@ -81,10 +84,118 @@ export type CorrectionLine = {
   sourceWeek: string;
   amount: number;
   sentence: string;
-  kind: 'fuel_share' | 'legacy_balance' | 'settle_from_balance';
+  kind: 'fuel_share' | 'legacy_balance' | 'settle_from_balance' | 'carried_balance';
   /** Shared id for linked settle-from-balance pairs. */
   offsetId?: string;
 };
+
+/** True when a period revision was written before the fuel-share tool (safe for sealed residual). */
+export function sealedRevisionCounts(createdAt: string | null | undefined): boolean {
+  const day = String(createdAt || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
+  return day < FUEL_SHARE_TOOL_POSTED_ON;
+}
+
+/** Weeks fully handled by legacy cleanup must not get a carried_balance line. */
+export function weekExcludedFromCarriedBalance(
+  financeCore: { legacyCleanup?: unknown } | null | undefined,
+): boolean {
+  return Boolean(financeCore?.legacyCleanup);
+}
+
+function projectedBeforeFuelTool(projectedAt: string | null | undefined): boolean {
+  const day = String(projectedAt || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
+  return day < FUEL_SHARE_TOOL_POSTED_ON;
+}
+
+/**
+ * Sealed residual for a moved week: signedSnapshot → vetted revision → pre-fuel stored value.
+ * When balanceMovedTo is set, never use the live settlement_amount column without a pre-fuel gate.
+ */
+export function resolveSealedResidualSettlement(input: {
+  metadata?: Record<string, unknown> | null;
+  liveSettlementAmount?: number | null;
+  balanceMovedTo?: string | null;
+  earliestRevisionSettlement?: number | null;
+  preFuelToolSettlement?: number | null;
+  projectedAt?: string | null;
+  revisionCreatedAt?: string | null;
+}): number {
+  const meta = input.metadata || {};
+  const snap = meta.signedSnapshot;
+  if (snap && typeof snap === 'object') {
+    const v = Number((snap as Record<string, unknown>).settlement_amount);
+    if (Number.isFinite(v)) return round2(v);
+  }
+  const rev = Number(input.earliestRevisionSettlement);
+  if (
+    Number.isFinite(rev) &&
+    (!input.revisionCreatedAt || sealedRevisionCounts(input.revisionCreatedAt))
+  ) {
+    return round2(rev);
+  }
+  const pre = Number(input.preFuelToolSettlement);
+  if (Number.isFinite(pre)) return round2(pre);
+  const live = Number(input.liveSettlementAmount);
+  if (input.balanceMovedTo && Number.isFinite(live) && projectedBeforeFuelTool(input.projectedAt)) {
+    return round2(live);
+  }
+  if (input.balanceMovedTo) {
+    return Number.NaN;
+  }
+  return Number.isFinite(live) ? round2(live) : 0;
+}
+
+/** Whole balance to land on the open week when a week is marked balanceMovedTo. */
+export function balanceMovedToOpenWeekAmount(sealedResidual: number, fuelShareDelta: number): number {
+  return round2((Number(sealedResidual) || 0) + (Number(fuelShareDelta) || 0));
+}
+
+export function correctionLinesForSourceWeek(
+  lines: CorrectionLine[] | null | undefined,
+  sourceWeek: string,
+): CorrectionLine[] {
+  const w = String(sourceWeek).slice(0, 10);
+  return (lines || []).filter((line) => String(line.sourceWeek).slice(0, 10) === w);
+}
+
+export function sumCorrectionLinesForSourceWeek(
+  lines: CorrectionLine[] | null | undefined,
+  sourceWeek: string,
+): number {
+  return round2(
+    correctionLinesForSourceWeek(lines, sourceWeek).reduce(
+      (sum, line) => sum + (Number(line.amount) || 0),
+      0,
+    ),
+  );
+}
+
+/** Amount still to post on the landing week after fuel / legacy lines for that source week. */
+export function carriedBalanceCorrectionAmount(
+  sealedResidual: number,
+  fuelShareDelta: number,
+  existingLinesForSourceWeek: CorrectionLine[] | null | undefined,
+): number {
+  const whole = balanceMovedToOpenWeekAmount(sealedResidual, fuelShareDelta);
+  const already = round2(
+    (existingLinesForSourceWeek || []).reduce((sum, line) => sum + (Number(line.amount) || 0), 0),
+  );
+  return round2(whole - already);
+}
+
+export function carriedBalanceSentence(input: { week: string; amount: number }): string {
+  const week = String(input.week).slice(0, 10);
+  const money = Math.abs(Number(input.amount) || 0).toFixed(2);
+  if (Number(input.amount) < -0.005) {
+    return `Week of ${week}: the rest of his balance, he owes $${money}.`;
+  }
+  if (Number(input.amount) > 0.005) {
+    return `Week of ${week}: the rest of his balance, the company owes him $${money}.`;
+  }
+  return `Week of ${week}: the rest of his balance, already on the open week.`;
+}
 
 export function sumCorrectionLines(lines: CorrectionLine[] | null | undefined): number {
   return round2((lines || []).reduce((sum, line) => sum + (Number(line.amount) || 0), 0));

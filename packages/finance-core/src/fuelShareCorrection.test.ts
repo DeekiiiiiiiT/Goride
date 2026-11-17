@@ -3,9 +3,13 @@ import {
   AUGUST_FUEL_CORRECTIONS,
   FUEL_CORRECTION_NET,
   OCT12_CORRECTION,
+  balanceMovedToOpenWeekAmount,
+  carriedBalanceCorrectionAmount,
+  carriedBalanceSentence,
   correctionPreviewAccepted,
   fuelShareCorrectionDelta,
   fuelShareCorrectionSentence,
+  resolveSealedResidualSettlement,
 } from './fuelShareCorrection';
 
 const jan19 = {
@@ -86,5 +90,68 @@ describe('fuelShareCorrectionSentence', () => {
       delta: 2425.36,
       gasCard: 0,
     })).toContain('taken twice');
+  });
+});
+
+describe('balanceMovedToOpenWeekAmount', () => {
+  it('carries sealed residual plus fuel fix (Kenny 2026-02-02)', () => {
+    const sealed = -10_640.43;
+    const fuelFix = 7_316.23;
+    expect(balanceMovedToOpenWeekAmount(sealed, fuelFix)).toBeCloseTo(-3_324.2, 2);
+    expect(carriedBalanceCorrectionAmount(sealed, fuelFix, [
+      { sourceWeek: '2026-02-02', amount: fuelFix, sentence: '', kind: 'fuel_share' },
+    ])).toBeCloseTo(sealed, 2);
+    expect(carriedBalanceSentence({ week: '2026-02-02', amount: -3_324.2 })).toContain('3324.20');
+  });
+
+  it('settled-at-zero week carries only the fuel fix', () => {
+    const fuelFix = -7_040.65;
+    expect(balanceMovedToOpenWeekAmount(0, fuelFix)).toBeCloseTo(fuelFix, 2);
+    expect(carriedBalanceCorrectionAmount(0, fuelFix, [
+      { sourceWeek: '2026-08-03', amount: fuelFix, sentence: '', kind: 'fuel_share' },
+    ])).toBeCloseTo(0, 2);
+  });
+});
+
+describe('resolveSealedResidualSettlement', () => {
+  it('prefers signedSnapshot over live settlement when moved', () => {
+    expect(
+      resolveSealedResidualSettlement({
+        metadata: { signedSnapshot: { settlement_amount: -10_640.43 } },
+        liveSettlementAmount: 7_316.23,
+        balanceMovedTo: '2026-10-19',
+      }),
+    ).toBeCloseTo(-10_640.43, 2);
+  });
+
+  it('refuses live column when moved and no seal', () => {
+    expect(
+      resolveSealedResidualSettlement({
+        liveSettlementAmount: 7_316.23,
+        balanceMovedTo: '2026-10-19',
+      }),
+    ).toBeNaN();
+  });
+
+  it('uses live settlement when projected before fuel tool and moved', () => {
+    expect(
+      resolveSealedResidualSettlement({
+        liveSettlementAmount: -10_640.43,
+        balanceMovedTo: '2026-10-19',
+        projectedAt: '2026-09-10T12:00:00Z',
+      }),
+    ).toBeCloseTo(-10_640.43, 2);
+  });
+
+  it('ignores revision created on or after fuel tool', () => {
+    expect(
+      resolveSealedResidualSettlement({
+        liveSettlementAmount: -10_640.43,
+        balanceMovedTo: '2026-10-19',
+        earliestRevisionSettlement: 7_316.23,
+        revisionCreatedAt: '2026-11-08T00:00:00Z',
+        projectedAt: '2026-09-10T12:00:00Z',
+      }),
+    ).toBeCloseTo(-10_640.43, 2);
   });
 });

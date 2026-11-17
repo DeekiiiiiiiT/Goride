@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildCashSettlementPersistFields, buildPeriodMetadata } from './periodPersistBody.ts';
+import {
+  buildCashSettlementPersistFields,
+  buildPeriodMetadata,
+  pickSealedMoneyForFrozenCashSync,
+} from './periodPersistBody.ts';
 import { computePeriodSettlement } from './driverPeriodSettlement.ts';
 
 describe('periodPersistBody', () => {
@@ -164,6 +168,21 @@ describe('periodPersistBody', () => {
       },
     });
     expect((meta.financeCore as { cashSourceAck?: unknown }).cashSourceAck).toEqual(ack);
+  });
+
+  it('pickSealedMoneyForFrozenCashSync keeps signed settlement when live row drifted', () => {
+    const picked = pickSealedMoneyForFrozenCashSync({
+      metadata: { signedSnapshot: { settlement_amount: 0, payout_net: 120, cash_still_held: 0 } },
+      row: {
+        settlement_amount: 7040.65,
+        payout_net: 120,
+        settlement_status: 'company_owes',
+        payout_status: 'finalized',
+        cash_still_held: 0,
+      },
+    });
+    expect(picked.settlement).toBe(0);
+    expect(picked.settlementStatus).toBe('settled');
   });
 
   it('keeps the driver leftover share across a cash rebuild that does not recompute it', () => {

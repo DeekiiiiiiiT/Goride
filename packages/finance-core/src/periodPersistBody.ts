@@ -1,6 +1,43 @@
 import { round2, toMoneyMinor } from './money.ts';
 import type { PeriodSettlementResult } from './driverPeriodSettlement.ts';
 import { preservePeriodMetaKeys, resolveSignedSnapshot } from './periodSignedSnapshot.ts';
+import { deriveDirectionalSettlementStatus } from './settlementStatusRepair.ts';
+
+export type FrozenPeriodMoneyRow = {
+  settlement_amount?: number | null;
+  payout_net?: number | null;
+  settlement_status?: string | null;
+  payout_status?: string | null;
+  cash_still_held?: number | null;
+};
+
+/** Frozen cash-sync: keep sealed settlement / payout; never recompute from live fuel inputs. */
+export function pickSealedMoneyForFrozenCashSync(input: {
+  metadata?: Record<string, unknown> | null;
+  row: FrozenPeriodMoneyRow;
+}): {
+  settlement: number;
+  netPayout: number;
+  settlementStatus: string;
+  payoutStatus: string;
+  cashStillHeld: number;
+} {
+  const snap = input.metadata?.signedSnapshot as Record<string, unknown> | undefined;
+  const settlement = snap?.settlement_amount != null
+    ? round2(Number(snap.settlement_amount))
+    : round2(Number(input.row.settlement_amount) || 0);
+  const netPayout = snap?.payout_net != null
+    ? round2(Number(snap.payout_net))
+    : round2(Number(input.row.payout_net) || 0);
+  const cashStillHeld = snap?.cash_still_held != null
+    ? round2(Number(snap.cash_still_held))
+    : round2(Number(input.row.cash_still_held) || 0);
+  const settlementStatus = snap
+    ? deriveDirectionalSettlementStatus(settlement)
+    : String(input.row.settlement_status || deriveDirectionalSettlementStatus(settlement));
+  const payoutStatus = String(input.row.payout_status || 'finalized');
+  return { settlement, netPayout, settlementStatus, payoutStatus, cashStillHeld };
+}
 
 export type DerivedPeriodStatusLike = {
   settlementStatus: string;

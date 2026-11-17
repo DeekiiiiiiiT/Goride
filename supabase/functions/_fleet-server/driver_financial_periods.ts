@@ -50,7 +50,7 @@ import {
   PERIOD_LIST_SELECT,
   RECONCILED_PERIOD_LIST_SELECT,
 } from "./settlement_period_select.ts";
-import { derivePeriodStatus } from "./period_projector.ts";
+import { derivePeriodStatus, type DerivedPeriodStatus } from "./period_projector.ts";
 import { persistPeriodRowWithVersion, updatePeriodCashWithVersion } from "./period_persist.ts";
 import { isPeriodFrozen, periodGateFromRow } from "./settlement_period_freeze.ts";
 import { getServiceClientWithSchema } from "./service_client.ts";
@@ -70,6 +70,7 @@ import {
 import {
   buildCashSettlementPersistFields,
   buildPeriodMetadata,
+  pickSealedMoneyForFrozenCashSync,
 } from "../../../packages/finance-core/src/periodPersistBody.ts";
 import {
   projectionAllowsFuelSnapshotFallback,
@@ -2247,7 +2248,7 @@ export async function syncPeriodCashFromTransactions(
   const { data: existing, error } = await sb()
     .from("driver_financial_periods")
     .select(
-      "id, period_end, cash_collected, driver_share, fuel_deduction, fuel_driver_spend, fuel_fleet_share, toll_cash_spend, toll_charged_to_driver, fuel_finalized, settlement_status, settlement_paid, payout_status, toll_status, toll_workflow_actionable, toll_unmatched_count, tips_paid_to_driver, tips_withheld, metadata, status, closed_at",
+      "id, period_end, cash_collected, driver_share, fuel_deduction, fuel_driver_spend, fuel_fleet_share, toll_cash_spend, toll_charged_to_driver, fuel_finalized, settlement_amount, payout_net, cash_still_held, settlement_status, settlement_paid, payout_status, toll_status, toll_workflow_actionable, toll_unmatched_count, tips_paid_to_driver, tips_withheld, metadata, status, closed_at",
     )
     .eq("driver_id", driverId)
     .eq("period_anchor", periodAnchor)
@@ -2297,7 +2298,15 @@ export async function syncPeriodCashFromTransactions(
     ),
   );
 
-  const settled = computePeriodSettlement({
+  const fuelFinalized = !!existing.fuel_finalized;
+  const tollStatus = String(existing.toll_status || "n/a");
+  const tollWorkflowActionable = Number(existing.toll_workflow_actionable || 0);
+  const tollUnmatchedCount = Number(existing.toll_unmatched_count || 0);
+  const forceMeta = (meta.forceRelease || {}) as Record<string, unknown>;
+  const forceRelease = !!forceMeta.at || !!meta.forceReleasedAt;
+  const frozen = isPeriodFrozen(periodGateFromRow(existing));
+
+  let settled = computePeriodSettlement({
     driverShare: Number(existing.driver_share) || 0,
     fuelDeduction: Number(existing.fuel_deduction) || 0,
     baseCashOwed: Number(existing.cash_collected) || 0,
@@ -2314,27 +2323,56 @@ export async function syncPeriodCashFromTransactions(
     postedAdjustments: resolvePostedAdjustments(fc),
   });
 
-  const fuelFinalized = !!existing.fuel_finalized;
-  const tollStatus = String(existing.toll_status || "n/a");
-  const tollWorkflowActionable = Number(existing.toll_workflow_actionable || 0);
-  const tollUnmatchedCount = Number(existing.toll_unmatched_count || 0);
-  const forceMeta = (meta.forceRelease || {}) as Record<string, unknown>;
-  const forceRelease = !!forceMeta.at || !!meta.forceReleasedAt;
-
-  const derived = derivePeriodStatus({
-    fuelFinalized,
-    forceRelease,
-    settled,
-    tolls: { tollStatus, tollWorkflowActionable, tollUnmatchedCount },
-  });
-  const cashStillHeld = derived.cashStillHeld;
-  const settlementStatus = derived.settlementStatus;
-  const payoutStatus = derived.payoutStatus;
-  const periodStatus = derived.periodStatus;
-  const tollsClear = derived.tollsClear;
-  const moneyUnlocked = derived.moneyUnlocked;
-
   const prevPaid = Number(existing.settlement_paid) || 0;
+  const periodStatus = (String(existing.status || "closed").toLowerCase() === "open"
+    ? "open"
+    : String(existing.status || "closed").toLowerCase() === "reopened"
+    ? "reopened"
+    : "closed") as "open" | "closed" | "reopened";
+
+  let derived: DerivedPeriodStatus;
+  let tollsClear: boolean;
+  let moneyUnlocked: boolean;
+
+  if (frozen) {
+    const sealedMoney = pickSealedMoneyForFrozenCashSync({ metadata: meta, row: existing });
+    settled = {
+      ...settled,
+      settlement: sealedMoney.settlement,
+      netPayout: sealedMoney.netPayout,
+      settlementPaid: settlementPaidRaw,
+      overpaidAmount: round2(
+        Math.max(0, settlementPaidRaw - Math.max(0, sealedMoney.settlement)),
+      ),
+    };
+    const tollGate = derivePeriodStatus({
+      fuelFinalized,
+      forceRelease,
+      settled,
+      tolls: { tollStatus, tollWorkflowActionable, tollUnmatchedCount },
+    });
+    tollsClear = tollGate.tollsClear;
+    moneyUnlocked = tollGate.moneyUnlocked;
+    derived = {
+      settlementStatus: sealedMoney.settlementStatus,
+      payoutStatus: sealedMoney.payoutStatus,
+      periodStatus,
+      cashStillHeld: sealedMoney.cashStillHeld,
+      tollsClear,
+      moneyUnlocked,
+    };
+  } else {
+    const liveDerived = derivePeriodStatus({
+      fuelFinalized,
+      forceRelease,
+      settled,
+      tolls: { tollStatus, tollWorkflowActionable, tollUnmatchedCount },
+    });
+    derived = liveDerived;
+    tollsClear = liveDerived.tollsClear;
+    moneyUnlocked = liveDerived.moneyUnlocked;
+  }
+
   const periodMetadata = buildPeriodMetadata({
     priorMeta: meta,
     prevSettlementPaid: prevPaid,
@@ -2355,10 +2393,10 @@ export async function syncPeriodCashFromTransactions(
     cashWrittenOff,
     settled,
     derived: {
-      settlementStatus,
-      payoutStatus,
-      periodStatus: periodStatus as "open" | "closed" | "reopened",
-      cashStillHeld,
+      settlementStatus: derived.settlementStatus,
+      payoutStatus: derived.payoutStatus,
+      periodStatus: derived.periodStatus,
+      cashStillHeld: derived.cashStillHeld,
       tollsClear,
       moneyUnlocked,
     },
@@ -2394,6 +2432,7 @@ export type CompanyOwesPeriodRow = {
   moneyUnlocked?: boolean;
   /** Set when this week's balance was moved onto the open week. */
   balanceMovedTo?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 /** M-4: fail-closed org scope for every period list query. */
@@ -2744,6 +2783,7 @@ function mapPeriodListRow(r: any): CompanyOwesPeriodRow {
     periodFrozen: isPeriodFrozen(periodGateFromRow(r)),
     moneyUnlocked: fc.moneyUnlocked === true,
     balanceMovedTo: fc.balanceMovedTo ? String(fc.balanceMovedTo).slice(0, 10) : null,
+    metadata: (r.metadata as Record<string, unknown> | null) ?? null,
   };
 }
 

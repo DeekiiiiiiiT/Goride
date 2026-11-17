@@ -411,6 +411,37 @@ export const settlementCommandsApi = {
     }>('/fuel-share-corrections', body, 'Could not load corrections');
   },
 
+  async carriedBalanceCorrections(body: { confirm?: boolean; driverId?: string }) {
+    return postJson<{
+      preview?: boolean;
+      lines: Array<{
+        sourceWeek: string;
+        amount: number;
+        sentence: string;
+        kind: string;
+        driverId: string;
+        sealedResidual?: number;
+        fuelShareDelta?: number;
+        wholeCarry?: number;
+      }>;
+      drift: Array<{
+        driverId: string;
+        week: string;
+        liveAmount: number;
+        sealedAmount: number;
+        liveStatus: string;
+        sealedStatus: string;
+      }>;
+      landingWeek?: string | null;
+      newPostedAdjustments?: number | null;
+      expectedLandingSettlement?: number | null;
+      currentLandingSettlement?: number | null;
+      reason?: string;
+      applied?: boolean;
+      restored?: Array<{ driverId: string; week: string; liveAmount: number; sealedAmount: number }>;
+    }>('/carried-balance-corrections', body, 'Could not load carried balance corrections');
+  },
+
   async legacyKeptRepair(body: { confirm: boolean; action: 'restore' | 'leave'; driverId?: string }) {
     return postJson<{
       available: boolean;

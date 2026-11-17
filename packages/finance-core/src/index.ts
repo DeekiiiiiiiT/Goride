@@ -89,7 +89,33 @@ export {
   statementBackedSettlement,
 } from './driverPeriodSettlement.ts';
 export type { PeriodSettlementInput, PeriodSettlementResult, PeriodSettlementMinorResult } from './driverPeriodSettlement.ts';
-export { resolvePostedAdjustments } from './fuelShareCorrection.ts';
+export {
+  FUEL_CORRECTION_FROM,
+  FUEL_CORRECTION_THROUGH,
+  FUEL_CORRECTION_NET,
+  FUEL_SHARE_TOOL_POSTED_ON,
+  AUGUST_FUEL_CORRECTIONS,
+  OCT12_CORRECTION,
+  fuelShareCorrectionDelta,
+  fuelShareCorrectionSentence,
+  correctionPreviewAccepted,
+  sumCorrectionLines,
+  resolvePostedAdjustments,
+  resolveSealedResidualSettlement,
+  sealedRevisionCounts,
+  weekExcludedFromCarriedBalance,
+  balanceMovedToOpenWeekAmount,
+  carriedBalanceCorrectionAmount,
+  carriedBalanceSentence,
+  correctionLinesForSourceWeek,
+  sumCorrectionLinesForSourceWeek,
+} from './fuelShareCorrection.ts';
+export type { CorrectionLine, WeekSettlementRebuildInput } from './fuelShareCorrection.ts';
+export {
+  carriedBalanceMustLandOnReason,
+  resolveCarriedBalanceLanding,
+} from './carriedBalanceLanding.ts';
+export type { CarriedBalanceLandingResult } from './carriedBalanceLanding.ts';
 export {
   getAdjCashBalance,
   getPeriodSettlementComponents,
@@ -157,8 +183,10 @@ export type {
 export {
   buildPeriodMetadata,
   buildCashSettlementPersistFields,
+  pickSealedMoneyForFrozenCashSync,
   reconciliationStatusFromDerived,
 } from './periodPersistBody.ts';
+export type { FrozenPeriodMoneyRow } from './periodPersistBody.ts';
 export { deriveDirectionalSettlementStatus } from './settlementStatusRepair.ts';
 export {
   checkPeriodVsLedgerEvents,

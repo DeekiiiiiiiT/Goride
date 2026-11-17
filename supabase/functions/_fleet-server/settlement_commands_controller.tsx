@@ -768,6 +768,29 @@ app.post(`${BASE}/fuel-share-corrections`, requireSettlementPerm("settlements.ap
   }
 });
 
+app.post(`${BASE}/carried-balance-corrections`, requireSettlementPerm("settlements.approve"), async (c) => {
+  try {
+    const orgOrResp = await requireOrgId(c);
+    if (typeof orgOrResp !== "string") return orgOrResp;
+    const user = c.get("rbacUser") as RbacUser;
+    const body = assertOnlyKeys(
+      await c.req.json().catch(() => ({})),
+      ["confirm", "driverId"],
+      "Carried balance corrections",
+    );
+    const { applyCarriedBalanceCorrections } = await import("./settlement_corrections.ts");
+    const result = await applyCarriedBalanceCorrections({
+      organizationId: orgOrResp,
+      driverId: body.driverId ? String(body.driverId) : undefined,
+      actorId: user?.userId || null,
+      confirm: body.confirm === true,
+    });
+    return c.json({ success: true, ...result });
+  } catch (e) {
+    return commandErrorResponse(c, e);
+  }
+});
+
 /** §1.5 — post +3201.27 only when owner confirms Uber cash = trip sum. */
 app.post(`${BASE}/oct12-cash-mismatch-correction`, requireSettlementPerm("settlements.approve"), async (c) => {
   try {
@@ -1797,6 +1820,7 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
           periodFrozen: r.periodFrozen === true,
           moneyUnlocked: r.moneyUnlocked === true,
           overpaidAmount: r.overpaidAmount,
+          metadata: r.metadata ?? null,
         };
       });
     } else if (view === "reconciled") {
@@ -1861,6 +1885,7 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
           collectKind: "cash_held",
           overpaidAmount: r.overpaidAmount,
           cashSourceMismatch: r.cashSourceMismatch,
+          metadata: r.metadata ?? null,
         });
       }
       for (const r of owes) {
@@ -1884,6 +1909,7 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
           collectKind: "driver_owes",
           overpaidAmount: r.overpaidAmount,
           cashSourceMismatch: r.cashSourceMismatch,
+          metadata: r.metadata ?? null,
         });
       }
       raw = [...byKey.values()];
