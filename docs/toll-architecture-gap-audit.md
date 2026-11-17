@@ -1,6 +1,6 @@
 # Toll architecture — as-built audit and what it lacks
 
-**Rev 7 · 2026-11-17 · For: the architecture reviewer · Status: OPEN, no build until the reviewer and the owner agree.**
+**Rev 8 · 2026-11-17 · For: the architecture reviewer · Status: OPEN, no build until the reviewer and the owner agree.**
 
 **What it's for (one sentence):** every toll the fleet pays ends with the right person bearing it: the platform (paid back first time, or after a dispute), the driver or the fleet. Nothing is decided before the facts are in, and the week still closes on time.
 
@@ -9,7 +9,7 @@ The design doc is `docs/toll-architecture.md` (Rev 9, "Agreed", built Phase 0–
 - **Part B** lists the problems found, numbered, each with **one chosen fix**.
 - **Part C** is the blueprint for those fixes (Data → Server → Screens with every button → Tests).
 - **Part D** holds the done-tests, written before any build.
-- **Part 0** (scope, scale, targets), **Part L2** (the platform envelope: what exists, gaps B12–B20, roles, state tables, flows, rollout) and **Part G** (owner questions) were added in Rev 5 after reviewer round 1. Rev 7 closes reviewer round 2 (R1–R10, S1–S16, nits); see the Rounds table.
+- **Part 0** (scope, scale, targets), **Part L2** (the platform envelope: what exists, gaps B12–B20, roles, state tables, flows, rollout) and **Part G** (owner questions) were added in Rev 5 after reviewer round 1. Rev 7 closed reviewer round 2 (R1–R10, S1–S16); Rev 8 closes round 3 (T1–T6, U1–U15, nits); see the Rounds table.
 
 The reviewer challenges any part. Claude replies and revises until no gap is left. The table at the end records each round.
 
@@ -104,7 +104,7 @@ Double-entry postings P1–P20 to `org:<co>:toll:*` accounts (`payback_unallocat
 ### A9. Week Reconciliation use
 
 - Step 1: tag usage, top-ups, cash tolls (driver-reported since WRA-72).
-- Step 3 Tolls: groups *Suggested matches*, *Pick the right trip*, *Tolls with no trip*, *Decided*; Seal tolls.
+- Step 3 Tolls (today): groups *Suggested matches*, *Pick the right trip*, *Tolls with no trip*, *Decided*; Seal tolls. (The proposed **Disputes** and **Part-paid** groups are in C3, U6.)
 - Step 4 Tag account: reads `toll_sys_tag_account_weeks`.
 - Steps 7–8: settlement and close read the sealed toll statement.
 
@@ -127,7 +127,7 @@ Each gap: what the business needs, what the **old system** did (retired 14 Nov),
 - **Need:** the week should close and drivers get paid while a dispute is still open.
 - **v2:** `seal_week` requires every charge decided, so the person must press Driver pays or Fleet pays on the shortfall before the dispute could ever come back.
 - **Effect:** the dispute's outcome can't be honoured without a manual undo/carry-forward.
-- **Fix (one):** an open dispute counts as decided for the seal. At seal, its open amount (owed − recovered) posts to a new sub-account `toll:receivable_platform:dispute` (owed by the platform, pending; a child of `receivable_platform`, R2). The dispute’s result posts later in the open week, using the existing `carry_forward` rule (C1, C2).
+- **Fix (one):** an open dispute counts as decided for the seal. At seal, its open amount (owed − recovered) posts to a new account `toll:receivable_platform_dispute` (owed by the platform, pending; a sibling of `receivable_platform`, reported together as "Owed by platforms", R2, T4). The dispute’s result posts later in the open week, using the existing `carry_forward` rule (C1, C2).
 
 ### B3. Dispute refunds don't reliably find their toll (partial)
 
@@ -136,8 +136,8 @@ Each gap: what the business needs, what the **old system** did (retired 14 Nov),
 - **Evidence:** the one live adjustment (J$70, 11 Oct) found no toll and was kept "with no toll" by hand on 15 Nov. There was no dispute for it to settle.
 - **Fix (one):** a payback for a disputed amount always goes to the dispute, never to the charge directly:
   - **An `adjustment`** first looks for an open or expired dispute: same driver and platform, amount ≤ owed − recovered (S7), in the platform report for one of the two pay periods after the dispute was sent (owner, 17 Nov 2026: a refund always comes in one of those two, never later). No 7-day limit. Only if none fits does today's 7-day charge match run.
-  - **A `trip_line` payback** for a charge that has an open dispute is linked to the dispute (`settle_dispute`), and any suggestion to allocate it to the charge is withdrawn, so the same toll is never paid twice (R6).
-  - **A refund on an `expired` dispute** settles it (`won` / `part_won`) and reverses the driver's expired-bearer charge in the open week through `carry_forward` (R5). The same applies to any toll already charged to the driver.
+  - **A `trip_line` payback** for a charge that has an open dispute is linked to the dispute (`settle_dispute`), and any suggestion to allocate it to the charge is withdrawn, so the same toll is never paid twice (R6). Trip lines only look at **open** disputes, while adjustments also look at `expired` ones, on purpose (U14): a trip line is the platform's same-trip refund and comes in the trip's own weekly report, before any dispute could expire; a late correction always arrives as a support adjustment.
+  - **A refund on an `expired` dispute** settles it and reverses **the bearer's charge by the recovered amount** in the open week through `carry_forward` (R5, T2): the driver's charge when `opened_late = false`, the fleet's when `opened_late = true`. A part refund → `part_won`, and the unrecovered rest stays with that same bearer. The same applies to a toll already charged to the driver by hand.
 
 ### B4. Lost or forgotten disputes have no rule (missing)
 
@@ -168,7 +168,8 @@ Each gap: what the business needs, what the **old system** did (retired 14 Nov),
 
 - **Old:** `tollRefundResolution = cash_wash`: the rider paid the toll to the driver in cash, so nobody is charged.
 - **v2:** Uber cash trips are covered (a `trip_line` payback with `received_by = driver`, posted to `recovered_in_driver_cash`). Other platforms' cash trips have no path (follows from B6).
-- **Fix (one):** a new platform payback mode, `cash_in_fare`. For InDrive (and any platform set to it), a toll during a **cash** trip is covered by the rider’s fare: the system writes a native-style payback `received_by driver` and allocates it (cash wash). Nobody is charged and no dispute opens. A card trip on a platform that never pays tolls back goes to the policy bearer.
+- **Fix (one):** a new platform payback mode, `cash_in_fare`. For InDrive (and any platform set to it), a toll during a **cash** trip is covered by the rider's fare: the system writes a native-style payback `received_by driver` and allocates it (cash wash). Nobody is charged and no dispute opens. A card trip on a platform that never pays tolls back goes to the policy bearer.
+- **Priority (U7):** **P0, blocked on owner Q5.** It becomes buildable the moment Q5 is answered. Until then, a toll on a hand-logged InDrive trip shows in "Tolls with no trip" (B6 still lets the matcher see the trip).
 
 ### B8. "Paid back less than the toll" has no state and is shown as "no trip"
 
@@ -201,13 +202,15 @@ Driver cash charges, Roam native charges, `carry_forward`, duplicate review, tak
 
 | Record | One row per | Fields and rules |
 |---|---|---|
-| **`toll.disputes`** (new) | One amount a platform should have paid on one charge and didn't | `organization_id`, `charge_id`, `charge_week_key` (the charge's week, sealed or not), `result_week_key` (the open week a result posts in), `platform`, `platform_trip_id`, `driver_id`, `owed_minor` > 0, `state` (`to_send` \| `sent` \| `won` \| `part_won` \| `lost` \| `expired`), `close_reason` (`refund` \| `platform_said_no` \| `no_refund_two_periods` \| `no_report` \| `window_closed` \| `person`), `opened_at`, `sent_at`, `deadline` (end of the Nth Jamaica day after the trip date, N = the platform's `dispute_window_days`), `opened_late` (boolean), `text_version`, `recovered_minor`, `bearer` (set on `lost` / `expired` / the rest of `part_won`), `reopens_id` (R7), `decision_ids`, `version`. **DB rules:** check `owed_minor > 0`, `0 ≤ recovered_minor ≤ owed_minor`; a partial unique index allows at most one non-final dispute per charge; foreign keys to the charge and the platform trip. **Final-state rule:** a final state never changes, with two named exceptions: `undo_decision` (R10) and a reversal of a linked payback (R7). Each exception writes a **new** dispute row with `reopens_id`, so the history is never edited. |
+| **`toll.disputes`** (new) | One amount a platform should have paid on one charge and didn't | `organization_id`, `charge_id`, `charge_week_key` (the charge's week: the week whose sealed statement shows this dispute in `disputed_minor`, so the R9 combined view can join the provisional figure to its result; also indexed for that view, U2), `platform`, `platform_trip_id`, `driver_id`, `owed_minor` > 0, `state` (`to_send` \| `sent` \| `won` \| `part_won` \| `lost` \| `expired`), `close_reason` (`refund` \| `partial_refund_two_periods` \| `platform_said_no` \| `no_refund_two_periods` \| `no_report` \| `window_closed` \| `undo` \| `reversal`; who acted is on the decision row, T5, U11), `opened_at`, `sent_at`, `clock_from` (the start of the refund clock: `sent_at` normally, the reversal time on an R7 reopen, T3), `deadline` (end of the Nth Jamaica day after the trip date, N = the platform's `dispute_window_days`), `opened_late` (boolean), `text_version` (→ `toll.dispute_text_templates`, U3), `recovered_minor`, `bearer` (set on `lost` / `expired` / the rest of `part_won`), `posted_in_week_key` (**set when a result posts**: the open week at that moment, never stored at open, T1), `reopens_id` (R7), `decision_ids`, `version`. **DB rules:** check `owed_minor > 0`, `0 ≤ recovered_minor ≤ owed_minor`; a partial unique index allows at most one non-final dispute per charge; foreign keys to the charge and the platform trip. **Final-state rule:** a final state never changes, with two named exceptions: `undo_decision` (R10) and a reversal of a linked payback (R7). Each exception writes a **new** dispute row with `reopens_id`, so the history is never edited. |
 | `toll.dispute_links` (new) | One payback slice that settled a dispute | `dispute_id`, `payback_id`, `amount_minor`, `decision_id`, `reversed_by`. **DB rule:** Σ active links ≤ `owed_minor`. |
-| Account `org:<co>:toll:receivable_platform:dispute` (new sub-account) | — | A **child of `toll:receivable_platform`** (R2): what the platform owes while a dispute is open. Reports roll up child accounts only, never parent + child, so nothing counts twice. Balance = Σ (`owed_minor` − `recovered_minor`) over non-final disputes, excluding none (it starts at 0 on switch-on). **Nightly check:** the balance equals that sum, and `receivable_platform` (parent roll-up) equals the sum of its children. |
+| Account `org:<co>:toll:receivable_platform_dispute` (new leaf account) | — | What the platform owes while a dispute is open (R2). **Two leaf accounts, no ledger parent (T4):** the existing `toll:receivable_platform` (trip and adjustment paybacks owed by the platform, live balance J$9,425.00 on 17 Nov 04:25 UTC) stays exactly as it is, and the new account is its sibling. Reports show "Owed by platforms" as a **reporting group** that sums the two leaves; no report sums a group plus its members, so nothing counts twice. This needs no carve-out: a fixed carve-out of the existing balance would not stay fixed, because every platform payout (P10) reduces it. **Nightly check:** `receivable_platform_dispute` = Σ (`owed_minor` − `recovered_minor`) over non-final disputes (starts at 0 on switch-on); the existing `receivable_platform` check is unchanged. |
+| **`toll.dispute_text_templates`** (new, U3) | One approved version of the dispute text per platform | `platform`, `version`, `body` (with placeholders: trip date and time, plaza, toll, paid, owed), `approved_by`, `approved_at`, `retired_at`. Append-only: a version is never edited, only retired. The dispute stores the `text_version` the driver was shown, so the exact text can always be rebuilt |
+| **Pay period (T6)** | — | One Monday–Sunday Jamaica week (Part 0 timezone rule; the same week as ADR 0007). "The pay period after X" = the first full week that **starts after** X. "Both refund periods in" = the platform reports for the first and second full weeks starting after `clock_from` are **in** |
 | `toll_week` statement (changed, R9) | One per company per sealed week | Gains `disputed_minor` (open dispute amounts at seal). Ignored by `resolveTollInputs`; shown as provisional (A8). |
 | `toll.platform_settings` (filled) | One per platform per company | Adds the `payback_mode` value `cash_in_fare`. Written at switch-on with explicit defaults (Uber: `trip_line` + adjustments, opens disputes; InDrive: `cash_in_fare`; Roam: `native`). |
 | `toll.plaza_rules` (extended) | One per plaza | Adds `tag_price_minor` and `platform_rates` (by platform, each with `valid_from`). |
-| `toll.platform_settings` (dispute fields) | One per platform per company | `takes_disputes` (Uber: yes), `dispute_window_days` (**Uber: 9**), `refund_periods` (**Uber: 2**, the pay periods after sending in which a refund can arrive), `no_report_fallback_days` (**21**, R3, owner Q9). On a platform with `takes_disputes = no`, an adjustment follows only today's 7-day charge match, and a refund on an already-decided shortfall is left unlinked by design for a person (S16b). |
+| `toll.platform_settings` (dispute fields) | One per platform per company | `takes_disputes` (Uber: yes), `dispute_window_days` (**Uber: 9**), `refund_periods` (**Uber: 2**, the pay periods after sending in which a refund can arrive), `no_report_fallback_days` (**23**, R3, owner Q9). Why 23 (U9): the second full weekly pay period after `clock_from` ends at most 21 days later (up to 7 days to the next Monday, then 14 days), and the Uber report is due within 2 days after a week ends (Part 0). So 23 is the earliest day on which a missing report is really late. It never closes a dispute while its second period is running or its report is still due. On a platform with `takes_disputes = no`, an adjustment follows only today's 7-day charge match, and a refund on an already-decided shortfall is left unlinked by design for a person (S16b). |
 | Fleet Policy (extended) | One per company | `toll_dispute_lost_bearer` (default `fleet`), `toll_dispute_expired_bearer` (default `driver`); a dispute with `opened_late` is always borne by the fleet. |
 | "Report in" (R3 definition) | — | A pay period's platform report is **in** when a committed `import_batch` for that platform has `coverage_start ≤ period start` and `coverage_end ≥ period end`. |
 | Charge states (derived) | — | Adds `short_paid` (part paid, no dispute: only on a `takes_disputes = no` platform, because the system opens a dispute otherwise) and `disputed` to the list in A6. |
@@ -218,15 +221,15 @@ Driver cash charges, Roam native charges, `carry_forward`, duplicate review, tak
 | Command / job | Who | What it does |
 |---|---|---|
 | `open_dispute` | System (the matcher, when a trip payback leaves a remainder on a `takes_disputes` platform) or a person | Creates a `to_send` dispute for the remainder, or an `expired` one with `opened_late` when the deadline has already passed (S4). Charge state → `disputed`. |
-| `mark_dispute_sent` | Driver (own disputes only) or a person | `to_send` → `sent`; stamps `sent_at`. **Refused with `window_closed` after the deadline** (S3); the nightly job then expires it. |
-| `settle_dispute` | System (the matcher, when an `adjustment` or a `trip_line` payback fits) or a person (manager; second person above J$5,000, B14) | Writes a `dispute_link` for at most `owed − recovered` (S7) and raises `recovered_minor`. Full → `won`. On an `expired` dispute it also reverses the driver's bearer charge in the open week (R5). A charge already charged to the driver is reversed the same way. |
-| Auto-close (system, on each platform upload and nightly) | System | Once both `refund_periods` after `sent_at` are **in** (C1 definition): `recovered = 0` → `lost` (`no_refund_two_periods`); `0 < recovered < owed` → `part_won`, the rest to the lost bearer (R4). **Fallback (R3):** if `sent_at` + `no_report_fallback_days` (21) passes while a report is still missing → `lost` (`no_report`), fleet bears, and the "Uber report late" alert is already open (B19). |
-| `close_dispute_lost` | A person | Closes early: `lost` (`platform_said_no`), or `part_won` if some was recovered. Rest to the lost bearer. |
+| `mark_dispute_sent` | Driver (own disputes only) or a fleet manager / owner | `to_send` → `sent`; stamps `sent_at` and sets `clock_from = sent_at`. **Refused with `window_closed` after the deadline** (S3); the nightly job then expires it. |
+| `settle_dispute` | System (the matcher, when an `adjustment` or a `trip_line` payback fits) or a person (fleet manager / owner only; second person above J$5,000, B14; the accountant cannot, U8) | Writes a `dispute_link` for at most `owed − recovered` (S7) and raises `recovered_minor`. Full → `won` (`refund`). **On an `expired` dispute (R5, T2):** it reverses the **bearer's** charge by the recovered amount, in the open week: the driver's when `opened_late = false`, the fleet's when `opened_late = true`. Full → `won`; part → `part_won`, and the unrecovered rest **stays with that same bearer** (the lost-bearer rule applies only to `sent` disputes). A toll already charged to the driver by hand is reversed the same way, by the recovered amount. |
+| Auto-close (system, on each platform upload and nightly) | System | Applies only to `sent` disputes with `clock_from` set (U13). Once both refund periods after `clock_from` are **in** (C1 definitions): `recovered = 0` → `lost` (`no_refund_two_periods`); `0 < recovered < owed` → `part_won` (`partial_refund_two_periods`, T5), the rest to the lost bearer (R4). **Fallback (R3):** if `clock_from` + `no_report_fallback_days` (23) passes while a report is still missing → `lost` (`no_report`), fleet bears, and the "Uber report late" alert is already open (B19). |
+| `close_dispute_lost` | Fleet manager / owner (second person above J$5,000) | Closes a `sent` dispute early: `lost`, or `part_won` if some was recovered; `close_reason = platform_said_no` either way (U11). Rest to the lost bearer. |
 | Nightly `expire_disputes` | System | `to_send` past `deadline` → `expired` (`window_closed`); the rest goes to the expired bearer (fleet if `opened_late`). |
-| `reverse_payback` on a linked payback (changed, R7) | System (import of a take-back) | Reverses the `dispute_link`, writes a **new** dispute row (`reopens_id` = the closed one) in state `sent` with the reversed amount owed again, and reverses the receivable / bearer postings in the open week. The one named system exception to the final-state rule. |
-| `undo_decision` on a dispute result (changed, R10) | Manager + second person (B14) | Never edits the sealed ledger. Posts a reversing `dispute_result` through `carry_forward` in the open week, and writes a new dispute row (`reopens_id`) in the state before the undone result. |
-| `seal_week` (changed) | Manager | An open dispute counts as decided: its open amount (owed − recovered) posts to `toll:receivable_platform:dispute`, and `disputed_minor` goes on the statement (R9). Still refuses a `short_paid` charge (R8 gives it a screen and buttons). |
-| Dispute result after the seal | System | Posted in the open week through `carry_forward` (new `kind` `dispute_result`, `result_week_key`); the sealed week's money is never touched (R1). |
+| `reverse_payback` on a linked payback (changed, R7, T3, U10) | System (import of a take-back) | Reverses that one `dispute_link` and writes a **new** dispute row (`reopens_id` = the closed one, `close_reason` of the old row stays; the new row's `owed_minor` = **the reversed link's `amount_minor`**; any other links stay on the original row, untouched). The new row reopens **in the state the dispute was in when that payback settled it**: <br>• it was `sent` → new row `sent`, `clock_from` = the reversal time, so it gets two fresh refund periods and the normal auto-close; <br>• it was `expired` → new row `expired` at once, and the bearer's charge (driver, or fleet if `opened_late`) is posted again for the reversed amount. Final immediately; nothing can stall. <br>Money moves in the open week. The one named system exception to the final-state rule. |
+| `undo_decision` on a dispute result (changed, R10) | Manager + second person (B14) | Never edits the sealed ledger. Posts a reversing `dispute_result` through `carry_forward` in the open week, and writes a new dispute row (`reopens_id`, `close_reason = undo` on the old one) in the state before the undone result, with that state's `clock_from`. |
+| `seal_week` (changed) | Manager | An open dispute counts as decided: its open amount (owed − recovered) posts to `toll:receivable_platform_dispute`, and `disputed_minor` goes on the statement (R9). Still refuses a `short_paid` charge (R8 gives it a screen and buttons). |
+| Dispute result after the seal | System | Posted through `carry_forward` (new `kind` `dispute_result`) in **the open week at the moment of posting**, recorded as `posted_in_week_key` when it posts (T1). The sealed week's money is never touched (R1). |
 | Matcher (changed) | System | Adjustments and trip paybacks for a disputed charge: the dispute first (B3, R6). Trip paybacks: compared with the platform's rate on the trip date (B9, S6). Cash trips on `cash_in_fare` platforms: cash wash (B7). |
 | Settings seed (S16) | Owner | At switch-on, the seed values for `platform_settings` and `plaza_rules` are shown to the owner, and approving them writes a decision row. Matching refuses to run for a company whose rows are missing (B12). |
 | Logged-trips adapter | System, on trip save and nightly | Upserts hand-logged `fleet.trips` into `toll.platform_trips` (B6). |
@@ -245,7 +248,7 @@ Driver cash charges, Roam native charges, `carry_forward`, duplicate review, tak
 | Decided | Toll and how it was decided | **Undo** |
 | Seal tolls | Spend = platform + driver + fleet **+ disputed (provisional)** | **Seal tolls** |
 
-**Driver Settlements** — a **Disputes** tab per driver: open disputes, days left, overdue in red. Buttons: **Mark as sent**, **Lost**, **Open week**.
+**Driver Settlements** — a **Disputes** tab per driver: open disputes, days left, overdue in red. Buttons: **Mark as sent**, **Lost**, **Open week**. No **Refund received** here: linking a refund is done on step 3 only (the driver app never settles either; the driver sees the card but cannot settle).
 
 **Roam driver app** — a "Dispute this toll with Uber" card per `to_send` dispute: trip date and time, toll, amount owed, the dispute text. Buttons: **Copy text**, **Mark as sent**.
 
@@ -256,16 +259,16 @@ Driver cash charges, Roam native charges, `carry_forward`, duplicate review, tak
 ### C4. Tests — rules that must always hold (each one a test)
 
 1. Every dispute ends in exactly one final state, and its amounts add up: recovered + borne = owed.
-2. A won dispute never leaves the driver charged for that amount, including one won after it expired (R5).
+2. No final dispute state leaves the driver bearing more than the policy says (U5): `won` → the driver bears 0; `part_won` / `lost` on a `sent` dispute → the rest goes to the lost bearer; `expired` → the driver bears the unrecovered amount only when `opened_late = false`; any refund on an `expired` dispute reduces its bearer's charge by exactly the recovered amount (T2).
 3. The seal never waits on an open dispute; it never seals a `short_paid` charge, and the "Part-paid" group's buttons are the only way to clear one (R8).
-4. With disputes open, the week still adds up to the cent: spend = platform + driver + fleet + `receivable_platform:dispute`.
-5. `receivable_platform:dispute` = Σ (owed − recovered) over non-final disputes, every night; the parent `receivable_platform` = Σ its children (R2).
-6. A refund is matched to a dispute only in the two pay periods after it was sent. Once both are in: no refund → `lost`, part refund → `part_won` (R4). A missing report closes it at 21 days as `no_report` (R3).
+4. With disputes open, the week still adds up to the cent: spend = platform + driver + fleet + `receivable_platform_dispute`.
+5. `receivable_platform_dispute` = Σ (owed − recovered) over non-final disputes, every night; the "Owed by platforms" report = `receivable_platform` + `receivable_platform_dispute`, and no report adds the group to its members (R2, T4).
+6. A refund is matched to a dispute only in the two pay periods after `clock_from`. Auto-close applies only to `sent` disputes with `clock_from` set (U13). Once both periods are in: no refund → `lost` (`no_refund_two_periods`), part refund → `part_won` (`partial_refund_two_periods`) (R4, T5). A missing report closes it at 23 days as `no_report` (R3). Reopened `expired` disputes follow T3, not this rule.
 7. A cash trip on a `cash_in_fare` platform never opens a dispute or charges anyone.
-8. A sealed week's money never changes. Settling, losing, expiring or undoing a dispute whose charge week is sealed **succeeds**: the sealed ledger stays byte-identical, and the posting lands in the open week (R1, R10).
+8. A sealed week's money never changes. Settling, losing, expiring or undoing a dispute whose charge week is sealed **succeeds**: the sealed ledger stays byte-identical, and the posting lands in **the open week at the moment of posting**, which is stored as `posted_in_week_key` (R1, R10, T1). A dispute that stays open across several weeks posts its result in whatever week is open when it closes.
 9. A trip payback never allocates to a charge with an open dispute; it settles the dispute instead (R6).
-10. Reversing a payback that settled a dispute reopens it as a new row and reverses the money in the open week (R7).
-11. `payback_unallocated` holds only undecided money **plus** `legacy_kept_minor` (the J$1,200 kept before switch-on, S14); the check subtracts that fixed carve-out.
+10. Reversing a payback that settled a dispute reopens it as a new row, in the state it was settled from (`sent` with a fresh `clock_from`, or `expired` with the bearer charged again), with `owed` = the reversed link's amount, and reverses the money in the open week (R7, T3, U10). No reopened dispute can stall.
+11. `payback_unallocated` holds only undecided money **plus** `legacy_kept_minor` = 120000 (J$1,200.00, kept before switch-on, S14); the check subtracts that fixed carve-out. (This one can be fixed, because kept-with-no-toll money never moves again; the platform receivable can't, T4.)
 
 ---
 
@@ -279,6 +282,7 @@ Driver cash charges, Roam native charges, `carry_forward`, duplicate review, tak
 5. The driver never sends it; 9 days from the trip pass → the dispute expires, and the driver bears J$20 in the open week.
 5b. The Uber report is uploaded 10 days after the trip → the dispute opens directly as **expired** (`opened_late`), with no driver card → the fleet bears J$20, never the driver.
 5c. The dispute expired and the driver bore J$20; Uber's J$20 refund then arrives within the two pay periods → the dispute is won, and the driver's J$20 is reversed in the open week (R5).
+5d. The dispute opened late (`opened_late`), expired, and the fleet bore J$20; Uber then refunds J$10 → `part_won`; the fleet's charge drops by J$10; the other J$10 stays with the fleet; the driver is never charged (T2).
 6. No refund in either of the two pay periods after sending → when the second report is uploaded, the dispute is lost by itself and the fleet bears J$20. (A person can also press **Lost** earlier.)
 7. Uber pays J$10 of J$20 → the person closes it → J$10 recovered, J$10 to the lost bearer.
 7b. Uber pays J$10 of J$20 and nobody closes it → when the second pay period's report is in, it becomes `part_won` by itself: J$10 recovered, J$10 to the lost bearer (R4).
@@ -288,16 +292,19 @@ Driver cash charges, Roam native charges, `carry_forward`, duplicate review, tak
 11. **Staging only** (forward-only, S11): replay a copy of the week of 9 Nov 2026 → 12 disputes (J$240) in **Disputes**, and the Portmore paybacks are exact matches at Uber's rate. Production's 9 Nov is never touched.
 12. A dispute's charge week is sealed; the refund arrives → the dispute is won, the sealed week's ledger is unchanged, and the open week gets the posting (R1).
 13. Uber's trip line for a disputed toll arrives late (a trip payback, not an adjustment) → it settles the dispute; the toll is never covered twice (R6).
-14. Uber takes back a J$20 refund that had won a dispute → the dispute reopens as a new row in `sent`, and J$20 is owed by Uber again in the open week (R7).
+14. Uber takes back a J$20 refund that had won a `sent` dispute → the dispute reopens as a new row in `sent` with the refund clock starting at the take-back, and J$20 is owed by Uber again in the open week (R7).
+14b. Uber takes back a J$20 refund that had won an **expired** dispute (driver bearer) → it reopens as `expired`, not `sent`; the driver is charged the J$20 again in the open week; it is final at once and never stalls (T3).
 15. A manager undoes a dispute result after its result week was sealed, with a second person approving → a reversing posting lands in the current open week; the sealed week is unchanged (R10).
-16. The Uber reports for the two pay periods after sending never arrive → 21 days after sending, the dispute is lost (`no_report`), the fleet bears it, and the "Uber report late" alert was raised on day 3 (R3).
+16. The Uber reports for the two pay periods after sending never arrive → 23 days after sending, the dispute is lost (`no_report`), the fleet bears it, and the "Uber report late" alert was raised on day 3 after the first missing week (R3).
 17. Driver taps **Mark as sent** after the deadline → refused, "The 9 days to dispute this toll have passed"; the nightly job expires it (S3).
+18. **Staging only:** switch disputes on with a copy of production's 14–17 Nov toll data → the first nightly run passes every check: `receivable_platform_dispute` = 0, the existing `receivable_platform` check unchanged, `payback_unallocated` = undecided + J$1,200.00 carve-out. No false alarm on day one (T4, S14).
+19. A dispute is sent in one week and refunded two weeks later → the refund posts in the week that is open when it arrives (`posted_in_week_key`), not the week that was open when the dispute opened (T1).
 
 ---
 
 ## Part E — Until this is agreed
 
-On step 3 the owner decides each shortfall as the old claims did (Fleet pays = Business Expense, Driver pays = Charge Driver). A later refund needs a manual decision. WRA-73 (show "paid back less than the toll" correctly) can go ahead, because it changes no money.
+On step 3 the owner decides each shortfall as the old claims did (Fleet pays = Business Expense, Driver pays = Charge Driver). A later refund needs a manual decision. WRA-73 (show "paid back less than the toll" correctly) can go ahead, because it changes no money. It must take each charge's group from the **server** state (B8), never compute it on the screen, so the later `short_paid` / `disputed` states slot in without a screen rewrite.
 
 ---
 
@@ -329,11 +336,11 @@ On step 3 the owner decides each shortfall as the old claims did (Fleet pays = B
 | # | Gap | Fix (one) | Priority |
 |---|---|---|---|
 | **B12** | **Config has two owners** (`MATCHER_CONFIG_V1` in code and `toll.brain_policies`); `platform_settings` has 0 rows (silent defaults); `plaza_rules` has 0 rows | Seed `platform_settings` + `plaza_rules` at switch-on, refuse to match when a company's row is missing (loud, not silent). The v2 matcher reads only these. `brain_policies` stays owned by `toll-brain` (v181) **for Roam ride geofence detection and quotes only**, and an ADR records that boundary. Every settings change is a decision row (actor, before, after, reason); the switch-on seed values are approved by the owner as a decision row (S16) | P0 |
-| **B13** | **Sealed-week protection is in the commands only**, not in the database | Scoped to **money in the sealed week** (R1): a trigger refuses any insert, update or delete of `allocations`, `payback_unlinked_decisions` and ledger postings whose counted week is sealed, and any change to a sealed-week charge's or payback's amount or week (except the seal and reopen functions themselves, by a session flag). **Dispute state is not blocked:** `disputes` may change `state`, `recovered_minor` and `bearer` at any time, because every money effect of a dispute posts in its `result_week_key` (an open week) through `carry_forward` | P0 |
+| **B13** | **Sealed-week protection is in the commands only**, not in the database | Scoped to **money in the sealed week** (R1): a trigger refuses any insert, update or delete of `allocations`, `payback_unlinked_decisions` and ledger postings whose counted week is sealed, and any change to a sealed-week charge's or payback's amount or week (except the seal and reopen functions themselves, by a session flag). **Dispute state is not blocked:** `disputes` may change `state`, `recovered_minor` and `bearer` at any time, because every money effect of a dispute posts through `carry_forward` in the week open **at the moment of posting** (`posted_in_week_key`, T1) | P0 |
 | **B14** | **No four-eyes check on risky money commands** | `undo_decision`, `correct_charge_amount`, `correct_charge_week`, `close_dispute_lost`, a person's `settle_dispute`, and policy changes need a second person **above J$5,000**; `reopen_week` **always** needs one. Uses the existing Week Recon approval pattern (prepare + approve). **Sole-manager exception (S15):** when the company has exactly one active owner / fleet_manager seat (checked at the moment of the command), they may self-approve with a written reason of at least 8 characters, stored on the decision. Both actors (or the self-approval and its reason) are stored on the decision | P0 |
 | **B15** | **Role matrix not written down** ("a person" in this doc) | Matrix (below, L2.3) mapped to the existing permissions; the driver can only act on their own disputes and cash tolls | P0 |
-| **B16** | **Raw files not kept; no staging; RPO/RTO not set; no rebuild test** | Store every uploaded file in a private, versioned bucket (`toll-evidence`, never cleaned) keyed by `file_sha256`, kept 7 years. A standing **staging** project with masked, real-shaped data, where every release runs the done-tests and the never-used paths (B11). A **ledger reconstruction test**: rebuild every `toll:*` balance from decisions + records **since the 14 Nov 2026 switch** and prove it equals the ledger (extends the nightly check). Restore drill each quarter | P0 (files, rebuild test) / P1 (staging, drill) |
-| **B17** | **Kept-with-no-toll money has no end** | `payback_unallocated` holds J$1,200 decided "keep with no toll" (J$70 + J$780 on 15 Nov, J$350 on 17 Nov). Fix: from switch-on, a left-unlinked payback posts on to `toll:other_income` (the fleet's toll income) at the decision, so `payback_unallocated` only holds undecided money from then on; a daily "unallocated paybacks" list with age. The J$1,200 already kept stays as it is (forward only) and is recorded once as a fixed carve-out, `legacy_kept_minor = 120000`, which the C4.11 check subtracts, so the invariant holds from day one (S14) | P0 |
+| **B16** | **Raw files not kept; no staging; RPO/RTO not set; no rebuild test** | Store every uploaded file in a private, versioned bucket (`toll-evidence`, never cleaned) keyed by `file_sha256`, kept 7 years. A standing **staging** project with masked, real-shaped data, where every release runs the done-tests and the never-used paths (B11). Its data is refreshed automatically each week by a scheduled job (masked copy of the last 4 weeks), so it can't go stale without an owner; the job's failure raises an alert in the shared table (B19). Who watches that alert is owner question **Q11** (U15). A **ledger reconstruction test**: rebuild every `toll:*` balance from decisions + records **since the 14 Nov 2026 switch** and prove it equals the ledger (extends the nightly check). Restore drill each quarter | P0 (files, rebuild test) / P1 (staging, drill) |
+| **B17** | **Kept-with-no-toll money has no end** | `payback_unallocated` holds J$1,200 decided "keep with no toll" (J$70 + J$780 on 15 Nov, J$350 on 17 Nov). Fix: from switch-on, a left-unlinked payback posts on to `toll:other_income` (the fleet's toll income) at the decision, so `payback_unallocated` only holds undecided money from then on; a daily "unallocated paybacks" list with age. The J$1,200 already kept stays as it is (forward only) and is recorded once as a fixed carve-out, `legacy_kept_minor = 120000` (J$1,200.00), which the C4.11 check subtracts, so the invariant holds from day one (S14) | P0 |
 | **B18** | **Adapters don't detect a changed file layout** | Each adapter validates required columns and their types before writing anything. An unknown or missing column fails the **whole batch** with a named error and nothing is written. Data-level problems in single rows keep today's behaviour: the row is rejected and counted, and the good rows commit (S8). The failed file is kept (B16) and can be re-run after a fix; a contract test per adapter uses a real, masked sample file | P1 |
 | **B19** | **No dashboards, SLOs or runbooks for tolls** | Dashboards: dispute funnel, unallocated paybacks, receivable vs open disputes, import row counts, matcher lag, nightly results. SLOs: matcher done ≤ 2 min after an import; nightly check 0 differences; 0 sealed-week changes; Uber report in ≤ 2 days after week end (alert on day 3). Runbooks: import failed, matcher stalled, nightly check failed, seal blocked, dispute job missed, Uber report late. **One alert table** for all of these plus B11's `first_live_post` (kind, company, first seen, last seen, owner, runbook link). The Uber-report-late alert is **P0**, because the 9-day window makes it a hard operational deadline | P1 (report-late alert P0) |
 | **B20** | **No property tests for money rules** | Property tests (random charges / paybacks / allocations / disputes): sums conserved, no negative owed, exactly one final dispute state, week adds up; plus chaos cases: kill the matcher mid-run, a corrupt CSV row, replay a batch | P1 |
@@ -341,13 +348,15 @@ On step 3 the owner decides each shortfall as the old claims did (Fleet pays = B
 
 **Explicitly not doing** (reviewer agrees): no sharding, no Kafka or event bus, no generic rules engine, no partitioning at this size.
 
-**Blocked on the owner (S13):** B7 (`cash_in_fare`) and done-test 8 are blocked on **Q5**; B5's dispute text and any SMS are blocked on **Q6**; the R3 fallback length (21 days) waits for **Q9**; the late-dispute behaviour (S4) waits for **Q10**. Everything else can be built in the P0 → P1 order.
+**Blocked on the owner (S13):** B7 (`cash_in_fare`) and done-test 8 are blocked on **Q5**; B5's dispute text and any SMS are blocked on **Q6**; the R3 fallback length (23 days) waits for **Q9**; the late-dispute behaviour (S4) waits for **Q10**; the staging alert owner waits for **Q11**. Everything else can be built in the P0 → P1 order.
 
 ### L2.3 Role matrix
 
 | Action | Driver | Fleet accountant | Fleet manager / owner | System |
 |---|---|---|---|---|
-| See own tolls, disputes, cash tolls | ✓ (own only) | ✓ | ✓ | — |
+| See own tolls, disputes, cash tolls | ✓ (own only) | — | — | — |
+| See all drivers' tolls, disputes, cash tolls | — | ✓ | ✓ | — |
+| Link a refund to a dispute by hand (**Refund received**) | — | — | ✓ (+ second person above J$5,000) | ✓ (matcher) |
 | Log a cash toll | ✓ (own only) | — | ✓ | — |
 | Mark a dispute sent | ✓ (own only) | — | ✓ | — |
 | Upload files, confirm matches, Driver pays / Fleet pays | — | — | ✓ | — |
@@ -360,15 +369,17 @@ On step 3 the owner decides each shortfall as the old claims did (Fleet pays = B
 
 **Dispute** (state × event → state):
 
-| From | `mark_dispute_sent` | refund fits (`settle_dispute`) | person closes | both refund periods in | report missing 21 days after sending | deadline passes |
+| From | `mark_dispute_sent` | refund fits (`settle_dispute`) | person closes (`close_dispute_lost`) | both refund periods after `clock_from` in | report missing 23 days after `clock_from` | deadline passes |
 |---|---|---|---|---|---|---|
-| (opened after the deadline) | — | — | — | — | — | opens as `expired` (`opened_late`, fleet) |
-| `to_send` | `sent` (refused after the deadline: `window_closed`) | full → `won`; part → stays, `recovered` up | — | — | — | `expired` |
-| `sent` | — | full → `won`; part → stays, `recovered` up | `lost`, or `part_won` if `recovered > 0` | `recovered = 0` → `lost`; `0 < recovered < owed` → `part_won` | `lost` (`no_report`, fleet) | — |
-| `expired` | — | full → `won`, part → `part_won`; **reverses the driver's bearer charge** (R5) | — | — | — | — |
+| (opened after the deadline) | — | — | — | — | — | opens as `expired` (`opened_late`, fleet bears) |
+| `to_send` | `sent`, sets `clock_from` (refused after the deadline: `window_closed`) | full → `won` (`refund`); part → stays, `recovered` up | — | — | — | `expired` (`window_closed`) |
+| `sent` | — | full → `won` (`refund`); part → stays, `recovered` up | `recovered = 0` → `lost`; `> 0` → `part_won` (both `platform_said_no`) | `recovered = 0` → `lost` (`no_refund_two_periods`); `0 < recovered < owed` → `part_won` (`partial_refund_two_periods`) | `lost` (`no_report`, fleet) | — |
+| `expired` | — | full → `won`; part → `part_won`; **reduces the bearer's charge by the recovered amount** (driver if not `opened_late`, fleet if `opened_late`); the rest stays with that bearer (R5, T2) | — | — | — | — |
 | `won`, `part_won`, `lost` | final | final | final | final | final | final |
 
-**The only two exits from a final state**, each writing a **new** dispute row with `reopens_id` (C1): `reverse_payback` on a linked payback → `sent` (R7); `undo_decision` → the state before the undone result (R10). Both post their money in the open week.
+**The only two exits from a final state**, each writing a **new** dispute row with `reopens_id` (C1), each posting its money in the open week:
+- `reverse_payback` on a linked payback (R7, T3): reopens in the state it was settled from. `sent` → new `sent` row with `clock_from` = the reversal time (normal auto-close applies). `expired` → new `expired` row, with the bearer charged again for the reversed amount: final at once. The new row owes only the reversed link's amount (U10).
+- `undo_decision` (R10): the state before the undone result, with that state's `clock_from`.
 
 **Charge** (derived): `pending` → `short_paid` (a payback covers part) → `disputed` (dispute opened) → `decided` (dispute final, or Driver / Fleet pays). Plus the existing `duplicate`, `rejected`, `unverified`, `awaiting_cash`.
 
@@ -384,7 +395,7 @@ sequenceDiagram
   U->>M: trip payback J$370 on a J$390 toll
   M->>D: open_dispute J$20 (to_send, deadline = trip + 9 days)
   Note over D: driver app card, Mark as sent
-  S->>L: seal week: J$20 posts to toll:receivable_platform:dispute (disputed_minor on the statement)
+  S->>L: seal week: J$20 posts to toll:receivable_platform_dispute (disputed_minor on the statement)
   U->>M: next week: adjustment J$20
   M->>D: settle_dispute → won
   D->>L: carry_forward in the open week: refund clears the receivable
@@ -396,13 +407,14 @@ sequenceDiagram
   participant D as toll.disputes
   participant L as Ledger
   N->>D: to_send past deadline → expired (driver, or fleet if opened_late)
-  N->>D: sent, both refund periods in: no refund → lost (fleet); part → part_won
-  N->>D: sent, a report still missing 21 days after sending → lost (no_report, fleet)
-  D->>L: carry_forward the bearer's share in the open week (result_week_key)
+  N->>D: sent, both refund periods after clock_from in: no refund → lost (fleet); part → part_won
+  N->>D: sent, a report still missing 23 days after clock_from → lost (no_report, fleet)
+  D->>L: carry_forward the bearer's share in the week open now (posted_in_week_key)
 ```
 
 ### L2.6 Rollout
 
+0. **Settings first (U1)**, before the "refuse to match without settings" check (B12) ships: (a) run the seed for the live company in dry-run, showing every `platform_settings` and `plaza_rules` value; (b) the owner approves it, which writes a decision row; (c) commit the seed; (d) only then deploy and switch on the refusal. The live matcher never sees a missing row.
 1. Build behind a per-company switch (`toll_disputes`, `cash_in_fare`, `logged_trips`), all off.
 2. Prove on staging with the done-tests + property tests + the 9 Nov replay.
 3. Switch on for the owner's company; one real week with screenshots; the nightly check and receivable check must stay at 0 differences for 14 nights.
@@ -420,8 +432,17 @@ sequenceDiagram
 | Q6 | Who writes and approves the dispute text the driver sends to Uber? | _owner_ |
 | Q7 | Does finance still need the 219 old claims, and for how long? | **Answered:** leave legacy data alone; they stay in `fleet.claims` untouched |
 | Q8 | Which Supabase plan / backup level is the production project on (sets RPO / RTO)? | _owner_ |
-| Q9 | If the Uber reports for the two pay periods after sending never arrive, how many days before the dispute counts as lost? (R3; the design uses 21 until answered) | _owner_ |
+| Q9 | If the Uber reports for the two pay periods after sending never arrive, how many days before the dispute counts as lost? (R3; the design uses 23 until answered, reasoning in C1) | _owner_ |
 | Q10 | When Uber's data arrives with under 2 days left to dispute, should the driver still get the dispute to send? (S4; the design says yes, and the fleet bears it if it expires) | _owner_ |
+| Q11 | Who watches the staging refresh alert and keeps staging working? (U15) | _owner_ |
+
+**Answers log (U12).** Every owner answer is recorded here with its date, and the rows it changes are revised in the same revision.
+
+| Date | Q | Answer (owner's words) | Changed |
+|---|---|---|---|
+| 2026-11-17 | — | Uber gives the driver 9 days to dispute a toll | Rev 3: `dispute_window_days` = 9 |
+| 2026-11-17 | — | A dispute refund always arrives in the next pay period or the one after, never later | Rev 4: `refund_periods` = 2, auto-close |
+| 2026-11-17 | Q7 | Leave reconciled weeks and legacy data alone | Rev 6: forward-only rule; B21 dropped |
 
 ---
 
@@ -438,3 +459,5 @@ sequenceDiagram
 | 7 | 2026-11-17 | Claude | Rev 6 (owner: don't touch reconciled weeks or legacy data): forward-only rule in Part 0; B21 dropped; B17 and the reconstruction test from switch-on only; Q7 answered |
 | 8 | 2026-11-17 | Reviewer | Round 2 on Rev 6: structure accepted; 10 blocking (R1 sealed-week trigger vs dispute settlement, R2 receivable double-count, R3 auto-loss depends on reports that may never come, R4 partial-refund stall, R5 expired + refund bearer, R6 trip payback vs open dispute, R7 reversal reopen, R8 `short_paid` screen home, R9 week-statement semantics, R10 undo after seal), 16 should-fix, rounds table corrupted. Rev 7 |
 | 9 | 2026-11-17 | Claude | Rev 7: R1 B13 scoped to sealed-week money, disputes carry `charge_week_key` / `result_week_key`; R2 `receivable_platform:dispute` sub-account, C4.5 = Σ (owed − recovered); R3 "report in" defined + 21-day `no_report` fallback (Q9); R4 auto-`part_won`; R5 refund on expired reverses the driver charge; R6 trip paybacks settle the dispute; R7 reversal reopens as a new row (`reopens_id`); R8 "Part-paid" group; R9 `disputed_minor` provisional, ignored by settlement; R10 undo via reversing carry-forward. S1 rounds repaired (rows 6–7 had been cut by a script quirk); S2–S16 applied; nits: Part E moved before L2, nightly row count explained, `opened_late` = boolean + `expired` state, shared alert table, Refund received only on `sent`, person-settle in B14. New done-tests 5c, 7b, 12–17; Q9, Q10 |
+| 10 | 2026-11-17 | Reviewer | Round 3 on Rev 7: round 2 (R1–R10, S1–S16) closed. 6 new blocking from joint-cases of the round-2 fixes — T1 `result_week_key` vs "open week at posting", T2 R5 wrong bearer for `opened_late` and partial recovery, T3 R7 reopens `expired` as `sent` (stall), T4 `receivable_platform` Σ-children fails on legacy balance, T5 `close_reason` missing `partial_refund_two_periods`, T6 "pay period" undefined. 15 should-fix (U1–U15). New done-tests D5d, D14b, D18. Rev 8 |
+| 11 | 2026-11-17 | Claude | Rev 8: T1 `result_week_key` dropped, `posted_in_week_key` set at posting; T2 a refund on `expired` reduces the actual bearer's charge (driver, or fleet if `opened_late`) by the recovered amount, rest stays with that bearer; T3 reopen in the state settled from (`sent` with fresh `clock_from`, or `expired` final at once); T4 changed from the proposed carve-out to **two sibling leaf accounts + a reporting group**, because the live `receivable_platform` (J$9,425.00 on 17 Nov) moves with every payout, so a fixed carve-out would break; T5 `partial_refund_two_periods` added, `person` removed (actor is on the decision); T6 pay period = Monday–Sunday Jamaica week. U1–U15 applied; U9 changed the fallback from 21 to **23 days** (the second period can end 21 days after `clock_from`, plus the 2-day report deadline). New done-tests 5d, 14b, 18, 19; Q11; answers log |
