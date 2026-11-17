@@ -106,6 +106,15 @@ export class SettlementCommandError extends Error {
   }
 }
 
+/** WRA-64: live POST /settle-from-balance is disabled; history helpers remain. */
+export function settleFromBalanceRemovedError(): SettlementCommandError {
+  return new SettlementCommandError(
+    "SETTLE_FROM_BALANCE_REMOVED",
+    "Settle each week by Collect or Pay.",
+    400,
+  );
+}
+
 /** Major units → integer minor units (cents). */
 export function toMinor(amount: number): number {
   return Math.round(Number(amount) * 100);

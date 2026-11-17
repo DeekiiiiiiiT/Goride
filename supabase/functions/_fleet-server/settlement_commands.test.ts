@@ -14,6 +14,7 @@ import {
   movementReversalPairNetsToZero,
   residualDeltaMinor,
   reverseResidualDeltaMinor,
+  settleFromBalanceRemovedError,
 } from "./settlement_commands.ts";
 
 Deno.test("toMinor rounds major units to cents", () => {
@@ -198,4 +199,11 @@ Deno.test("movement + reverse net to zero on residual projection", () => {
     residualDeltaMinor("pay", 5000, "posted") + reverseResidualDeltaMinor("pay", 5000),
     0,
   );
+});
+
+Deno.test("settleFromBalanceRemovedError — POST /settle-from-balance refuses (WRA-64)", () => {
+  const e = settleFromBalanceRemovedError();
+  assertEquals(e.code, "SETTLE_FROM_BALANCE_REMOVED");
+  assertEquals(e.message, "Settle each week by Collect or Pay.");
+  assertEquals(e.status, 400);
 });

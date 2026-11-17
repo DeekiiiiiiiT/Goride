@@ -86,6 +86,12 @@ describe('ReconSettlementStep driver-owes breakdown', () => {
     expect(screen.getByText(/rest of his balance/)).toBeTruthy();
     expect(screen.getByText(/10,640.43/)).toBeTruthy();
   });
+
+  it('offers Collect only — no Settle from balance (WRA-64)', () => {
+    renderStep();
+    expect(screen.getByRole('button', { name: /^Collect$/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Settle from balance/i })).toBeNull();
+  });
 });
 
 describe('Recon settlement step breakdown copy', () => {

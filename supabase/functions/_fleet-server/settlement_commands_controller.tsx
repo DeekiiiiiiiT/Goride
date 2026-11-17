@@ -41,6 +41,7 @@ import {
   buildMovementRow,
   assertOnlyKeys,
   SettlementCommandError,
+  settleFromBalanceRemovedError,
   type SettlementMovementKind,
 } from "./settlement_commands.ts";
 import {
@@ -57,7 +58,6 @@ import {
 import { reviewSettlementPay } from "../../../packages/finance-core/src/driverFuelCredit.ts";
 import { hasPendingRestatementDrafts } from "../../../packages/finance-core/src/weekStatement.ts";
 import { getLatestWeekStatements } from "./week_statements.ts";
-import { settleFromBalance } from "./settlement_settle_from_balance.ts";
 import {
   assertTollWeekSealedForPay,
   serviceLineFromPeriodRow,
@@ -574,33 +574,7 @@ app.post(`${BASE}/collect`, requireSettlementPerm("settlements.collect"), async 
 // ── POST /settle-from-balance ───────────────────────────────────────────────
 app.post(`${BASE}/settle-from-balance`, requireSettlementPerm("settlements.collect"), async (c) => {
   try {
-    const orgOrResp = await requireOrgId(c);
-    if (typeof orgOrResp !== "string") return orgOrResp;
-    const organizationId = orgOrResp;
-    const user = c.get("rbacUser") as RbacUser;
-    const body = await c.req.json();
-    const driverId = String(body.driverId || "").trim();
-    const result = await settleFromBalance({
-      organizationId,
-      actorId: user.userId,
-      driverId,
-      owingWeekStart: String(body.owingWeekStart || body.weekAnchor || "").slice(0, 10),
-      creditWeekStart: String(body.creditWeekStart || "").slice(0, 10),
-      amount: Number(body.amount),
-      idempotencyKey: String(body.idempotencyKey || "").trim(),
-      note: body.note ? String(body.note) : undefined,
-      authHeader: c.req.header("Authorization") ?? null,
-    });
-    const [owingPeriod, creditPeriod] = await Promise.all([
-      getDriverFinancialPeriodDetail(driverId, result.owingWeekStart),
-      getDriverFinancialPeriodDetail(driverId, result.creditWeekStart),
-    ]);
-    return c.json({
-      success: true,
-      ...result,
-      owingPeriod: mapPeriod(owingPeriod),
-      creditPeriod: mapPeriod(creditPeriod),
-    });
+    throw settleFromBalanceRemovedError();
   } catch (e) {
     return commandErrorResponse(c, e);
   }
