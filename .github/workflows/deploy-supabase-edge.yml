@@ -92,6 +92,7 @@ jobs:
             fleet-fuel
             fleet-toll
             fleet-toll-cron
+            fleet-picture-cron
             fleet-ops
             fleet-claims
             fleet-pay

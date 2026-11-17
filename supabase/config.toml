@@ -483,5 +483,9 @@ verify_jwt = false
 [functions.fleet-toll-cron]
 verify_jwt = false
 
+# Database jobs send the fleet cron secret. This function then runs the vehicle-picture worker / fill.
+[functions.fleet-picture-cron]
+verify_jwt = false
+
 [functions.catalog-research]
 verify_jwt = false
