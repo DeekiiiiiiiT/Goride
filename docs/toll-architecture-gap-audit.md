@@ -371,8 +371,8 @@ Also: `toll.plaza_rules` is keyed by plaza only (not per company), so the dated 
 
 | Round | Who | What | Status |
 |---|---|---|---|
-| **D1** | Cursor | Data: switches, settings fields, `plaza_rates`, `dispute_policy`, `dispute_text_templates`, `disputes`, `dispute_links`, allocation `dispute_id` + F2 CHECK, `carried_facts` kind `dispute_result`; SQL tests. Prompt: `docs/toll-build/cursor-D1-disputes-data.md` | **Given to Cursor** |
-| D2 | Cursor | B13 sealed-week database guard (trigger + session flag), run against every existing toll SQL test | — |
+| **D1** | Cursor | Data: switches, settings fields, `plaza_rates`, `dispute_policy`, `dispute_text_templates`, `disputes`, `dispute_links`, allocation `dispute_id` + F2 CHECK, `carried_facts` kind `dispute_result`; SQL tests. Prompt: `docs/toll-build/cursor-D1-disputes-data.md` | **Done** (97bec27e). Review fixed 3 bugs: the link cap counted the new link twice (a valid first refund was refused), the seed crashed on its second run, InDrive was seeded as "pays tolls back". 14 toll SQL test files pass on the local copy |
+| D2 | Cursor | B13 sealed-week database guard (trigger + session flag), run against every existing toll SQL test. Prompt: `docs/toll-build/cursor-D2-sealed-week-guard.md` | **Given to Cursor** |
 | S1 | Cursor | Commands: `open_dispute`, `mark_dispute_sent`, `settle_dispute`, `close_dispute_lost`, `driver_pays` / `fleet_absorbs` with `suggestion_id`, `seal_week` (`part`, `disputed_minor`), posting rules (`receivable_platform_dispute`, `other_income`), B14 four-eyes, B12 refuse without settings | — |
 | S2 | Cursor | Matcher (dispute first, plaza rates, `rider_pays_driver` suggestions), nightly expire + auto-close + `no_report`, logged-trips adapter, report-late alert | — |
 | S3 | Cursor | Screen reads: step-3 payload with the six parts, disputes company-wide, Results this week, blockers with `part`; driver-app dispute read + `mark_dispute_sent` route | — |
