@@ -21,7 +21,6 @@ import {
 } from "./fuel_org_preferences.ts";
 import { sealFuelWeek } from "./fuel_week_seal.ts";
 import { decideMaterializeWrite } from "./fuel_materialize_write.ts";
-import { runSealSideEffects } from "./seal_side_effects.ts";
 import { runFuelSpendShadow } from "./fuel_week_category_loader.ts";
 import { authorizeCronOrServiceRole } from "../_shared/authorizeCronOrServiceRole.ts";
 import {
@@ -504,18 +503,31 @@ async function sealAndFinishFuelWeek(args: {
         .update({ fuel_seal_error: null, close_receipt: closeReceipt, updated_at: now })
         .eq("id", periodId)
         .eq("org_id", orgId);
-      const sideEffects = await runSealSideEffects({
-        organizationId: orgId,
-        weekKey,
-        actorId: actor,
-        serviceLine: "rideshare",
-        driverWeekEnqueueReason: "wra67_fuel_finalize",
-      });
-      if (sideEffects.rebuildErrors.length) {
+      try {
+        const { enqueueDriverWeekUnitsForWeek } = await import("./recon_enqueue_driver_weeks.ts");
+        const queued = await enqueueDriverWeekUnitsForWeek(orgId, weekKey, "wra67_fuel_finalize");
+        if (queued.errors.length) {
+          console.warn(
+            "[fuel_period] post-seal driver_week enqueue partial errors",
+            weekKey,
+            queued.errors.slice(0, 8),
+          );
+        }
+      } catch (enqErr) {
         console.warn(
-          "[fuel_period] post-seal side effects partial errors",
+          "[fuel_period] post-seal driver_week enqueue failed",
           weekKey,
-          sideEffects.rebuildErrors.slice(0, 8),
+          enqErr instanceof Error ? enqErr.message : enqErr,
+        );
+      }
+      try {
+        const { queueWeekDeskRefresh } = await import("./recon_desk_queue.ts");
+        await queueWeekDeskRefresh(orgId, [weekKey], { heldLine: "rideshare" });
+      } catch (deskErr) {
+        console.warn(
+          "[fuel_period] post-seal desk refresh enqueue failed",
+          weekKey,
+          deskErr instanceof Error ? deskErr.message : deskErr,
         );
       }
     } catch (sealErr: unknown) {

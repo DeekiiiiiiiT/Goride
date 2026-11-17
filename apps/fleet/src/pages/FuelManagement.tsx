@@ -2098,9 +2098,14 @@ function FuelManagementInner({
           }
           const jobId = String((jobRes as { jobId?: string })?.jobId || '');
           if (jobId && (jobRes as { state?: string }).state !== 'succeeded') {
-            jobRes = await api.pollFuelPeriodJob(jobId, (latest) => {
-              setMessage(fuelFinalizeProgressLabel(latest));
-            });
+            try {
+              jobRes = await api.pollFuelPeriodJob(jobId, (latest) => {
+                setMessage(fuelFinalizeProgressLabel(latest));
+              });
+            } catch (pollErr) {
+              if (await recoverIfAlreadyLocked()) return true;
+              throw pollErr;
+            }
           }
           const jobInterp = interpretFuelFinalizeJobResult(jobRes);
           if (jobInterp.incomplete) {
@@ -2123,6 +2128,7 @@ function FuelManagementInner({
           return true;
       } catch (e: any) {
           console.error(e);
+          if (await recoverIfAlreadyLocked()) return true;
           toast.error(`Finalization failed: ${e.message}`);
           return false;
       } finally {

@@ -79,10 +79,19 @@ Deno.test("WRA-67: settlement movement changes merged hash", async () => {
   assertNotEquals(without, withMove);
 });
 
-Deno.test("WRA-67 contract: seal side effects enqueues driver_week when reason set", async () => {
-  const src = await Deno.readTextFile(new URL("./seal_side_effects.ts", import.meta.url));
-  assert(src.includes("enqueueDriverWeekUnitsForWeek"), "seal path enqueues driver_week");
-  assert(src.includes("driverWeekEnqueueReason"), "reason param exists");
+Deno.test("WRA-67/68 contract: toll seal enqueues driver_week after RPC", async () => {
+  const src = await Deno.readTextFile(new URL("./toll_v2_command_controller.ts", import.meta.url));
+  assert(src.includes("enqueueDriverWeekUnitsForWeek"), "toll seal path enqueues driver_week");
+  assert(src.includes("wra67_toll_seal"), "seal_week reason");
+  assert(src.includes("queueWeekDeskRefresh"), "toll seal queues desk refresh");
+  assert(!src.includes("runSealSideEffects"), "no inline seal side effects");
+});
+
+Deno.test("WRA-67/68 contract: fuel finalize seal enqueues driver_week", async () => {
+  const src = await Deno.readTextFile(new URL("./fuel_period_routes.ts", import.meta.url));
+  assert(src.includes("wra67_fuel_finalize"), "fuel finalize reason");
+  assert(src.includes("enqueueDriverWeekUnitsForWeek"), "fuel seal enqueues driver_week");
+  assert(!src.includes("runSealSideEffects"), "no inline seal side effects");
 });
 
 Deno.test("WRA-67 contract: earnings seal enqueues driver_week", async () => {

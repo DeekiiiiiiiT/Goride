@@ -1,7 +1,6 @@
 /**
- * Fuel finalize seal contract — mirrors toll_finish_seal_path.test.ts.
- * After sealFuelWeek, runSealSideEffects must clear FUEL_STATEMENT_MISSING
- * or steps/fuel/complete stays 409 STEP_HAS_ACTIONABLE.
+ * Fuel finalize seal contract — worker clears FUEL_STATEMENT_MISSING after sealFuelWeek
+ * (desk/blockers refresh is queued, not inline — WRA-68).
  */
 import { assertEquals } from "jsr:@std/assert";
 import {

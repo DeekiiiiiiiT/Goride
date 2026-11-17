@@ -23,6 +23,7 @@ vi.mock('sonner', () => ({
 }));
 
 const fetchDesk = vi.fn();
+const fetchTollV2DeskRpc = vi.fn();
 vi.mock('./useTollV2Desk', () => ({
   useTollV2Desk: () => ({
     isLoading: false,
@@ -30,6 +31,7 @@ vi.mock('./useTollV2Desk', () => ({
     data: fetchDesk(),
     refetch: vi.fn(),
   }),
+  fetchTollV2Desk: (...args: unknown[]) => fetchTollV2DeskRpc(...args),
 }));
 
 const weeksOverview = vi.hoisted(() => ({
@@ -84,6 +86,7 @@ describe('ReconTollsV2Step', () => {
 
   beforeEach(() => {
     tollV2Command.mockReset();
+    fetchTollV2DeskRpc.mockReset();
     toastSuccess.mockReset();
     toastError.mockReset();
     weeksOverview.takeBacks = [];
@@ -335,6 +338,31 @@ describe('ReconTollsV2Step', () => {
     await waitFor(() => expect(tollV2Command.mock.calls.length).toBeGreaterThanOrEqual(5));
     await waitFor(() => {
       expect(toastSuccess).toHaveBeenCalledWith(expect.stringMatching(/matched/));
+    });
+  });
+
+  it('WRA-68: seal 546 but desk shows sealed — no error toast, success toast', async () => {
+    const openDesk = deskAug24Fixture({
+      sealed: false,
+      blockers: [],
+      charges: deskAug24Fixture().charges.map((c) => ({
+        ...c,
+        state: 'decided',
+        section: 'decided',
+        openMinor: 0,
+      })),
+    });
+    fetchDesk.mockReturnValue(openDesk);
+    tollV2Command.mockRejectedValue(new TollV2CommandError('CPU limit', 546, 'REQUEST_FAILED'));
+    fetchTollV2DeskRpc.mockResolvedValue(deskAug24Fixture({ sealed: true, blockers: [] }));
+    wrap(
+      <ReconTollsV2Step weekKey="2026-08-24" summaryTarget={null} onGoToTagAccount={() => {}} />,
+    );
+    fireEvent.click(screen.getByTestId('toll-v2-seal-button'));
+    await waitFor(() => {
+      expect(fetchTollV2DeskRpc).toHaveBeenCalledWith('2026-08-24');
+      expect(toastError).not.toHaveBeenCalled();
+      expect(toastSuccess).toHaveBeenCalledWith('Tolls sealed for this week');
     });
   });
 });

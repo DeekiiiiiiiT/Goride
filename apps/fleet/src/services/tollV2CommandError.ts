@@ -18,6 +18,35 @@ export class TollV2CommandError extends Error {
   }
 }
 
+/** Edge / gateway died after the RPC may have committed (WRA-68). */
+export function isTollCommandTransportFailure(error: unknown): boolean {
+  if (error instanceof TollV2CommandError) {
+    const s = error.status;
+    return s === 546 || s === 502 || s === 504 || s === 524 || (s >= 500 && error.code === 'REQUEST_FAILED');
+  }
+  if (error instanceof TypeError) return true;
+  if (error instanceof Error) {
+    const m = error.message.toLowerCase();
+    return (
+      m.includes('failed to fetch') ||
+      m.includes('network') ||
+      m.includes('timeout') ||
+      m.includes('server error: 5')
+    );
+  }
+  return false;
+}
+
+/** After a transport failure, the week desk shows whether seal / reopen actually landed. */
+export function commandSavedDespiteFailure(
+  intent: 'seal_week' | 'reopen_week',
+  desk: { sealed?: boolean },
+): boolean {
+  if (intent === 'seal_week') return desk.sealed === true;
+  if (intent === 'reopen_week') return desk.sealed === false;
+  return false;
+}
+
 /** The week's drivers are already paid: the answer is "move it to the open week", never reopen.
  *  reopen_week refuses with DRIVERS_ALREADY_PAID; carry_forward's other cases with REOPEN_INSTEAD. */
 export function isPaidWeekRefusal(error: unknown): boolean {

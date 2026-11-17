@@ -2,7 +2,13 @@ import { useCallback, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '../../../../services/api';
-import { isPaidWeekRefusal, TollV2CommandError, tollV2UserMessage } from '../../../../services/tollV2CommandError';
+import {
+  commandSavedDespiteFailure,
+  isPaidWeekRefusal,
+  isTollCommandTransportFailure,
+  TollV2CommandError,
+  tollV2UserMessage,
+} from '../../../../services/tollV2CommandError';
 import type { TollV2CommandIntent } from './types';
 
 type ClickState = {
@@ -47,13 +53,29 @@ export function useTollV2Commands(weekKey: string) {
         if (isPaidWeekRefusal(err)) {
           throw err;
         }
+        if (
+          (intent === 'seal_week' || intent === 'reopen_week') &&
+          isTollCommandTransportFailure(err)
+        ) {
+          try {
+            const { fetchTollV2Desk } = await import('./useTollV2Desk');
+            const desk = await fetchTollV2Desk(weekKey);
+            if (commandSavedDespiteFailure(intent, desk)) {
+              pendingClick.current = null;
+              await refetchDesk();
+              return {};
+            }
+          } catch {
+            /* fall through */
+          }
+        }
         toast.error(tollV2UserMessage(err, 'That toll command could not be completed.'));
         throw err;
       } finally {
         setBusy(false);
       }
     },
-    [refetchDesk],
+    [refetchDesk, weekKey],
   );
 
   const clearVersionConflict = useCallback(() => {

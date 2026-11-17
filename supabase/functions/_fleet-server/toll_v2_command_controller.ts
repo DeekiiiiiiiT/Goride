@@ -67,31 +67,35 @@ app.post(
       const organizationId = getOrgId(c);
       const weekKey = typeof body.week_key === "string" ? body.week_key : String(body.week_key ?? "");
       if (organizationId && weekKey) {
+        const driverReason = intent === "seal_week" ? "wra67_toll_seal" : "wra68_toll_reopen";
         try {
-          const { runSealSideEffects } = await import("./seal_side_effects.ts");
-          for (const serviceLine of ["rideshare", "rush_delivery"] as const) {
-            const sideEffects = await runSealSideEffects({
+          const { enqueueDriverWeekUnitsForWeek } = await import("./recon_enqueue_driver_weeks.ts");
+          const queued = await enqueueDriverWeekUnitsForWeek(organizationId, weekKey, driverReason);
+          if (queued.errors.length > 0) {
+            console.warn("[toll-v2-command] driver_week enqueue partial errors", {
+              intent,
               organizationId,
               weekKey,
-              serviceLine,
-              driverWeekEnqueueReason: intent === "seal_week" ? "wra67_toll_seal" : null,
+              errors: queued.errors.slice(0, 8),
             });
-            if (sideEffects.rebuildErrors.length > 0) {
-              console.error("[toll-v2-command] seal side effects had errors", {
-                intent,
-                organizationId,
-                weekKey,
-                serviceLine,
-                errors: sideEffects.rebuildErrors,
-              });
-            }
           }
-        } catch (sideErr) {
-          console.error("[toll-v2-command] seal side effects failed", {
+        } catch (enqErr) {
+          console.warn("[toll-v2-command] driver_week enqueue failed", {
             intent,
             organizationId,
             weekKey,
-            error: sideErr instanceof Error ? sideErr.message : String(sideErr),
+            error: enqErr instanceof Error ? enqErr.message : String(enqErr),
+          });
+        }
+        try {
+          const { queueWeekDeskRefresh } = await import("./recon_desk_queue.ts");
+          await queueWeekDeskRefresh(organizationId, [weekKey], { heldLine: "rideshare" });
+        } catch (deskErr) {
+          console.warn("[toll-v2-command] desk refresh enqueue failed", {
+            intent,
+            organizationId,
+            weekKey,
+            error: deskErr instanceof Error ? deskErr.message : String(deskErr),
           });
         }
       }
