@@ -42,6 +42,7 @@ export const SERVER_STEP_BY_BLOCKER: Record<string, RunStepId> = {
   SETTLEMENT_DRIVER_OWES: 'settlement_preview',
   SETTLEMENT_CASH_HELD: 'settlement_preview',
   CASH_HELD_OVER_RETURNED: 'settlement_preview',
+  MOVED_BALANCE_NOT_CARRIED: 'settlement_preview',
   STATEMENT_ACCOUNTS_UNBALANCED: 'close',
   SETTLEMENT_PNL_MISMATCH: 'close',
   BUSINESS_WEEK_PNL_UNAVAILABLE: 'close',

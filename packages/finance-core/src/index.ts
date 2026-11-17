@@ -168,6 +168,23 @@ export {
 } from './periodInvariants.ts';
 export type { PersistedPeriodRow, PeriodInvariantDrift } from './periodInvariants.ts';
 export {
+  checkMovedBalanceCarried,
+  checkMovedBalanceCarryDrifts,
+  fuelShareDeltaForSourceWeek,
+  formatShortWeekLabel,
+  movedBalanceItemsToCloseBlockers,
+  movedBalanceNotCarriedMessage,
+  movedBalanceSourceInputFromPeriodRow,
+  preFuelToolSettlementFromProjected,
+  residualBaseForCarryCheck,
+  shouldSkipMovedBalanceSource,
+} from './movedBalanceCarryCheck.ts';
+export type {
+  CheckMovedBalanceCarriedInput,
+  MovedBalanceNotCarriedItem,
+  MovedBalanceSourceInput,
+} from './movedBalanceCarryCheck.ts';
+export {
   resolveSignedSnapshot,
   preservePeriodMetaKeys,
   PRESERVED_PERIOD_META_KEYS,

@@ -73,6 +73,14 @@ import {
 } from "../../../packages/finance-core/src/closeInvariantInput.ts";
 import { tollPeriodDisagreesWithSeal } from "../../../packages/finance-core/src/tollPeriodSealDrift.ts";
 import { stampCloseInvariantSnapshotOnMeta } from "../../../packages/finance-core/src/periodSignedSnapshot.ts";
+import {
+  checkMovedBalanceCarried,
+  movedBalanceItemsToCloseBlockers,
+  preFuelToolSettlementFromProjected,
+  type MovedBalanceSourceInput,
+} from "../../../packages/finance-core/src/movedBalanceCarryCheck.ts";
+import type { CorrectionLine } from "../../../packages/finance-core/src/fuelShareCorrection.ts";
+import { earliestPreFuelRevisionSettlement } from "./settlement_corrections.ts";
 import type { WeekStatement } from "../../../packages/finance-core/src/weekStatement.ts";
 import {
   accumulateWeekDirectory,
@@ -584,6 +592,76 @@ function earningsFromStatement(
   return earningsStatementForClose(s, acceptRestatementDrafts);
 }
 
+/** WRA-63: moved weeks must land their full balance on this landing week's correction lines. */
+async function movedBalanceCarryCloseBlockers(opts: {
+  orgId: string;
+  driverId: string;
+  week: string;
+  period: Record<string, unknown>;
+}): Promise<CloseBlocker[]> {
+  const landingWeek = String(opts.week).slice(0, 10);
+  const periodMeta = (opts.period.metadata as Record<string, unknown> | null) || {};
+  const landingFc = (periodMeta.financeCore as Record<string, unknown> | undefined) || {};
+  const landingLines = Array.isArray(landingFc.correctionLines)
+    ? (landingFc.correctionLines as CorrectionLine[])
+    : [];
+
+  const { data, error } = await getServiceClient()
+    .from("driver_financial_periods")
+    .select("*")
+    .eq("organization_id", opts.orgId)
+    .eq("driver_id", opts.driverId);
+  if (error) {
+    console.warn("[week_close] moved balance carry source read failed", opts.driverId, landingWeek, error);
+    return [];
+  }
+
+  const movedRows = (data || []).filter((row) => {
+    const rowMeta = (row.metadata || {}) as Record<string, unknown>;
+    const fc = (rowMeta.financeCore || {}) as Record<string, unknown>;
+    const moved = String(fc.balanceMovedTo || "").slice(0, 10);
+    return moved === landingWeek;
+  });
+
+  const sources: MovedBalanceSourceInput[] = [];
+  for (const row of movedRows) {
+    const sourceWeek = String(row.period_anchor).slice(0, 10);
+    const projectedAt = row.projected_at != null ? String(row.projected_at) : null;
+    const liveSettlement = Number(row.settlement_amount) || 0;
+    const { settlement: earliest, createdAt: revisionCreatedAt } = await earliestPreFuelRevisionSettlement(
+      opts.driverId,
+      sourceWeek,
+    );
+    sources.push({
+      periodAnchor: sourceWeek,
+      metadata: (row.metadata || {}) as Record<string, unknown>,
+      balanceMovedTo: landingWeek,
+      liveSettlementAmount: liveSettlement,
+      projectedAt,
+      preFuelToolSettlement: preFuelToolSettlementFromProjected(liveSettlement, projectedAt),
+      earliestRevisionSettlement: earliest,
+      revisionCreatedAt,
+      driverShare: Number(row.driver_share) || 0,
+      fuelDeduction: Number(row.fuel_deduction) || 0,
+      cashCollected: Number(row.cash_collected) || 0,
+      cashReturned: Number(row.cash_returned) || 0,
+      tollChargedToDriver: Number(row.toll_charged_to_driver) || 0,
+      tollCashSpend: Number(row.toll_cash_spend) || 0,
+      fuelDriverSpend: Number(row.fuel_driver_spend) || 0,
+      cashWrittenOff: Number(row.cash_written_off) || 0,
+      settlementPaid: Number(row.settlement_paid) || 0,
+      tipsPaidToDriver: Number(row.tips_paid_to_driver) || 0,
+    });
+  }
+
+  const items = checkMovedBalanceCarried({
+    landingWeek,
+    landingCorrectionLines: landingLines,
+    sources,
+  });
+  return movedBalanceItemsToCloseBlockers(items, { driverId: opts.driverId, week: landingWeek });
+}
+
 /**
  * One owner for a driver's close blockers on a week (R19-01). The Close preview
  * and the background worker both call this, so the step list, the Close panel
@@ -656,6 +734,18 @@ export async function driverCloseBlockers(opts: {
     } catch (e) {
       console.warn("[week_close] custody preflight failed (non-fatal preview)", driverId, e);
     }
+  }
+  try {
+    blockers.push(
+      ...(await movedBalanceCarryCloseBlockers({
+        orgId,
+        driverId,
+        week,
+        period,
+      })),
+    );
+  } catch (e) {
+    console.warn("[week_close] moved balance carry check failed (non-fatal)", driverId, week, e);
   }
   return { blockers, acceptRestatementDrafts, fuelStatement, tollStatement };
 }

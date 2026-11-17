@@ -106,6 +106,8 @@ export const BLOCKER_LABELS: Record<string, string> = {
   STEP_STALE: 'A recon step was reviewed before new data arrived — re-review',
   LINE_UNATTRIBUTED: 'Rows not assigned to Rideshare or Delivery',
   CASH_HELD_OVER_RETURNED: 'Fleet returned more cash than the driver held — resolve before close',
+  MOVED_BALANCE_NOT_CARRIED:
+    'An older week’s balance was hidden but not fully carried onto this week — fix on Driver Settlements',
   COVERAGE_WIDER_THAN_DATA: 'A file was declared to cover more days than its transactions',
   EARLIER_WEEK_OPEN: 'An earlier week is still open — close it first',
 };

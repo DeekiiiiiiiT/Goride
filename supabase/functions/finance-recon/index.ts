@@ -5,6 +5,11 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireInternalSecret } from "../_shared/requireInternalSecret.ts";
 import { checkPeriodInvariants } from "../../../packages/finance-core/src/periodInvariants.ts";
+import {
+  checkMovedBalanceCarryDrifts,
+  movedBalanceSourceInputFromPeriodRow,
+  type MovedBalanceSourceInput,
+} from "../../../packages/finance-core/src/movedBalanceCarryCheck.ts";
 import { checkPeriodVsLedgerEvents } from "../../../packages/finance-core/src/periodLedgerRecon.ts";
 import {
   checkCloseInvariants,
@@ -111,13 +116,23 @@ Deno.serve(async (req) => {
     const { data: periods, error } = await supabase
       .from("driver_financial_periods")
       .select(
-        "driver_id, period_anchor, status, closed_at, cash_collected, cash_returned, cash_written_off, cash_still_held, settlement_amount, settlement_paid, organization_id, payout_net, driver_share, fleet_share, fuel_deduction, fuel_fleet_share, fuel_driver_spend, fuel_gas_card_spend, toll_cash_spend, toll_tag_spend, toll_spend, toll_charged_to_driver, toll_reimbursed, earnings_gross, tips_paid_to_driver, settlement_amount_minor, payout_net_minor, cash_still_held_minor, metadata",
+        "driver_id, period_anchor, projected_at, status, closed_at, cash_collected, cash_returned, cash_written_off, cash_still_held, settlement_amount, settlement_paid, organization_id, payout_net, driver_share, fleet_share, fuel_deduction, fuel_fleet_share, fuel_driver_spend, fuel_gas_card_spend, toll_cash_spend, toll_tag_spend, toll_spend, toll_charged_to_driver, toll_reimbursed, earnings_gross, tips_paid_to_driver, settlement_amount_minor, payout_net_minor, cash_still_held_minor, metadata",
       )
       .gte("period_anchor", fromYmd)
       .order("period_anchor", { ascending: true });
     if (error) throw error;
 
     const rows = periods || [];
+
+    const sourcesByLanding = new Map<string, MovedBalanceSourceInput[]>();
+    for (const row of rows) {
+      const src = movedBalanceSourceInputFromPeriodRow(row);
+      if (!src?.balanceMovedTo) continue;
+      const key = `${row.driver_id}|${String(src.balanceMovedTo).slice(0, 10)}`;
+      const list = sourcesByLanding.get(key) || [];
+      list.push(src);
+      sourcesByLanding.set(key, list);
+    }
 
     const { data: eventRows, error: evErr } = await supabase
       .from("financial_events")
@@ -181,6 +196,22 @@ Deno.serve(async (req) => {
           expected: d.expected,
           severity: d.kind.includes("minor") ? "critical" : "warning",
         });
+      }
+      const landingKey = `${p.driver_id}|${String(p.period_anchor).slice(0, 10)}`;
+      const movedSources = sourcesByLanding.get(landingKey);
+      if (movedSources?.length) {
+        for (const d of checkMovedBalanceCarryDrifts(p, movedSources)) {
+          drifts.push({
+            runId,
+            driverId: d.driverId ?? String(p.driver_id),
+            week: d.week ?? String(p.period_anchor).slice(0, 10),
+            kind: d.kind,
+            field: d.kind,
+            persisted: d.persisted,
+            expected: d.expected,
+            severity: "critical",
+          });
+        }
       }
       const evKey = `${p.driver_id}|${String(p.period_anchor).slice(0, 10)}`;
       for (const d of checkPeriodVsLedgerEvents(p, eventsByPeriod.get(evKey) || [])) {

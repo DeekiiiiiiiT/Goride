@@ -14,7 +14,6 @@ import {
   carriedBalanceCorrectionAmount,
   carriedBalanceSentence,
   correctionLinesForSourceWeek,
-  fuelShareCorrectionDelta,
   fuelShareCorrectionSentence,
   FUEL_SHARE_TOOL_POSTED_ON,
   resolveSealedResidualSettlement,
@@ -23,6 +22,7 @@ import {
   weekExcludedFromCarriedBalance,
   type CorrectionLine,
 } from "../../../packages/finance-core/src/fuelShareCorrection.ts";
+import { fuelShareDeltaForSourceWeek } from "../../../packages/finance-core/src/movedBalanceCarryCheck.ts";
 import { computePeriodSettlement } from "../../../packages/finance-core/src/driverPeriodSettlement.ts";
 import { deriveDirectionalSettlementStatus } from "../../../packages/finance-core/src/settlementStatusRepair.ts";
 import { round2, toMoneyMinor } from "../../../packages/finance-core/src/money.ts";
@@ -364,7 +364,7 @@ async function stampBalanceMoved(
   if (updErr) throw new Error(updErr.message);
 }
 
-async function earliestPreFuelRevisionSettlement(
+export async function earliestPreFuelRevisionSettlement(
   driverId: string,
   week: string,
 ): Promise<{ settlement: number | null; createdAt: string | null }> {
@@ -481,29 +481,23 @@ export type CarriedBalancePreviewLine = CorrectionLine & {
   wholeCarry: number;
 };
 
-function fuelDeltaForSourceWeek(
-  sourceWeek: string,
-  openLines: CorrectionLine[],
-  row: PeriodRow,
-  sealedResidual: number,
-): number {
-  const fuelLine = correctionLinesForSourceWeek(openLines, sourceWeek).find(
-    (line) => line.kind === "fuel_share",
-  );
-  if (fuelLine) return round2(Number(fuelLine.amount) || 0);
-  return fuelShareCorrectionDelta({
+function sourceInputFromPeriodRow(row: PeriodRow, landingWeek: string) {
+  return {
+    periodAnchor: String(row.period_anchor).slice(0, 10),
+    metadata: (row.metadata || {}) as Record<string, unknown>,
+    balanceMovedTo: landingWeek,
+    liveSettlementAmount: Number(row.settlement_amount) || 0,
     driverShare: Number(row.driver_share) || 0,
     fuelDeduction: Number(row.fuel_deduction) || 0,
     cashCollected: Number(row.cash_collected) || 0,
     cashReturned: Number(row.cash_returned) || 0,
     tollChargedToDriver: Number(row.toll_charged_to_driver) || 0,
     tollCashSpend: Number(row.toll_cash_spend) || 0,
-    driverPaidFuel: Number(row.fuel_driver_spend) || 0,
+    fuelDriverSpend: Number(row.fuel_driver_spend) || 0,
     cashWrittenOff: Number(row.cash_written_off) || 0,
     settlementPaid: Number(row.settlement_paid) || 0,
     tipsPaidToDriver: Number(row.tips_paid_to_driver) || 0,
-    storedSettlement: sealedResidual,
-  });
+  };
 }
 
 function landingSettlementAfterLines(open: PeriodRow, lines: CorrectionLine[]): number {
@@ -606,7 +600,12 @@ export async function previewCarriedBalanceCorrections(
     if (openLines.some((line) => line.kind === "carried_balance" && String(line.sourceWeek).slice(0, 10) === week)) {
       continue;
     }
-    const fuelDelta = fuelDeltaForSourceWeek(week, openLines, row, sealed);
+    const fuelDelta = fuelShareDeltaForSourceWeek(
+      week,
+      openLines,
+      sourceInputFromPeriodRow(row, CORRECTIONS_LAND_ON),
+      sealed,
+    );
     const existingForWeek = correctionLinesForSourceWeek(openLines, week);
     const amount = carriedBalanceCorrectionAmount(sealed, fuelDelta, existingForWeek);
     if (Math.abs(amount) <= 0.01) continue;
