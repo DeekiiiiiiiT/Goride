@@ -43,6 +43,14 @@ export type OrgReconProfile = {
   rushDeliveryEnabled: boolean;
 };
 
+/** WRA-70: server paths that save upload data — used by recon_upload_queue_routes.test.ts */
+export type ReconSourceUploadRoute = {
+  file: string;
+  route: string;
+  exception?: "client_register";
+  clientRegister?: string;
+};
+
 export type ReconSourceDef = {
   id: ReconSourceId;
   line: ManifestSourceLine;
@@ -51,6 +59,29 @@ export type ReconSourceDef = {
   coverage: CoverageMode;
   feeds: readonly RunStepId[];
   requiredWhen: (org: OrgReconProfile, weekKey: string) => SourceRequirement;
+  uploadRoutes?: readonly ReconSourceUploadRoute[];
+};
+
+const CLASSIC_BATCH_COMPLETE_ROUTE: ReconSourceUploadRoute = {
+  file: "register_residual_monolith_routes.tsx",
+  route: "/make-server-37f42386/batches/:id",
+};
+
+const RECON_IMPORT_REGISTER_ROUTE: ReconSourceUploadRoute = {
+  file: "recon_import_routes.ts",
+  route: "/recon/imports/:id/register",
+};
+
+const RECON_IMPORT_FUEL_COMMIT_ROUTE: ReconSourceUploadRoute = {
+  file: "recon_import_routes.ts",
+  route: "/recon/imports/:id/commit",
+};
+
+const TOLL_V2_CLIENT_REGISTER: ReconSourceUploadRoute = {
+  file: "toll_v2_import_controller.ts",
+  route: "/toll/v2/import",
+  exception: "client_register",
+  clientRegister: "apps/fleet/src/utils/registerTollV2WithRecon.ts",
 };
 
 function lineActive(profile: OrgReconProfile, line: ReconServiceLine): boolean {
@@ -72,6 +103,7 @@ export const RECON_SOURCES: readonly ReconSourceDef[] = [
     feeds: ["trips_earnings", "tolls", "settlement_preview"],
     requiredWhen: (p) =>
       lineActive(p, "rideshare") && p.hasUberDrivers ? "required" : "not_applicable",
+    uploadRoutes: [CLASSIC_BATCH_COMPLETE_ROUTE, RECON_IMPORT_REGISTER_ROUTE],
   },
   {
     id: "uber_activity_timeline",
@@ -82,6 +114,12 @@ export const RECON_SOURCES: readonly ReconSourceDef[] = [
     feeds: ["trips_earnings", "tolls"],
     requiredWhen: (p) =>
       lineActive(p, "rideshare") && p.hasUberDrivers ? "optional" : "not_applicable",
+    uploadRoutes: [
+      {
+        file: "driver_activity_routes.ts",
+        route: "import-uber-timeline",
+      },
+    ],
   },
   {
     id: "indrive_trips",
@@ -93,6 +131,7 @@ export const RECON_SOURCES: readonly ReconSourceDef[] = [
     feeds: ["trips_earnings"],
     requiredWhen: (p) =>
       lineActive(p, "rideshare") && p.hasIndriveDrivers ? "required" : "not_applicable",
+    uploadRoutes: [CLASSIC_BATCH_COMPLETE_ROUTE, RECON_IMPORT_REGISTER_ROUTE],
   },
   {
     id: "roam_trips",
@@ -111,6 +150,7 @@ export const RECON_SOURCES: readonly ReconSourceDef[] = [
     coverage: "statement_period",
     feeds: ["tolls", "tag_account"],
     requiredWhen: (p) => (p.hasTollTags ? "required" : "not_applicable"),
+    uploadRoutes: [RECON_IMPORT_REGISTER_ROUTE, TOLL_V2_CLIENT_REGISTER],
   },
   {
     id: "toll_topup",
@@ -120,6 +160,7 @@ export const RECON_SOURCES: readonly ReconSourceDef[] = [
     coverage: "statement_period",
     feeds: ["tag_account"],
     requiredWhen: (p) => (p.hasTollTags ? "required" : "not_applicable"),
+    uploadRoutes: [RECON_IMPORT_REGISTER_ROUTE, TOLL_V2_CLIENT_REGISTER],
   },
   {
     id: "cash_tolls",
@@ -149,6 +190,7 @@ export const RECON_SOURCES: readonly ReconSourceDef[] = [
     feeds: ["fuel"],
     requiredWhen: (p) =>
       lineActive(p, "rideshare") && p.hasSelfServeJaa ? "required" : "not_applicable",
+    uploadRoutes: [RECON_IMPORT_REGISTER_ROUTE, RECON_IMPORT_FUEL_COMMIT_ROUTE],
   },
   {
     id: "cash_fuel",

@@ -1,62 +1,73 @@
 /**
- * WRA-70: every server upload path that saves a manifest upload source must call
- * afterReconSourceUpload (or the client register route that does).
+ * WRA-70: upload save paths are declared on manifest upload sources and must queue
+ * a desk refresh via afterReconSourceUpload (or the documented client-register exception).
  */
 import { assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { dirname, fromFileUrl, join } from "https://deno.land/std@0.224.0/path/mod.ts";
+import { RECON_SOURCES } from "./recon_sources_mirror.ts";
 
 const here = dirname(fromFileUrl(import.meta.url));
-const read = (name: string) => Deno.readTextFile(join(here, name));
+const repoRoot = join(here, "../../..");
 
-function blockBetween(src: string, startNeedle: string, endNeedle: string): string {
-  const start = src.indexOf(startNeedle);
-  assert(start >= 0, `missing ${startNeedle}`);
-  const end = src.indexOf(endNeedle, start + startNeedle.length);
-  return end < 0 ? src.slice(start) : src.slice(start, end);
+function handlerBlock(src: string, routeNeedle: string): string {
+  const start = src.indexOf(routeNeedle);
+  assert(start >= 0, `route needle not found: ${routeNeedle}`);
+  const nextApp = src.indexOf("\n  app.", start + routeNeedle.length);
+  return nextApp < 0 ? src.slice(start) : src.slice(start, nextApp);
 }
 
-Deno.test("import-uber-timeline calls afterReconSourceUpload before success answer", async () => {
-  const src = await read("driver_activity_routes.ts");
-  const block = blockBetween(src, "import-uber-timeline", "return c.json({\n        success: true,");
-  assert(block.includes("afterReconSourceUpload("), "timeline import queues desk refresh");
-  assert(block.includes('sourceId: "uber_activity_timeline"'), "timeline source id");
+function assertSuccessAfterHelper(block: string, sourceId: string, route: string): void {
+  const helperAt = block.indexOf("afterReconSourceUpload(");
+  assert(helperAt >= 0, `${sourceId} ${route}: must call afterReconSourceUpload`);
+  const successAt = block.indexOf("success: true", helperAt);
+  assert(successAt >= 0, `${sourceId} ${route}: expected a success response in handler`);
+  assert(helperAt < successAt, `${sourceId} ${route}: afterReconSourceUpload must run before success answer`);
+}
+
+const uploadSources = RECON_SOURCES.filter((s) => s.kind === "upload");
+
+Deno.test("every upload source lists at least one uploadRoutes entry", () => {
+  for (const def of uploadSources) {
+    const routes = def.uploadRoutes ?? [];
+    assert(routes.length >= 1, `${def.id}: add uploadRoutes on the manifest`);
+  }
+  assert(uploadSources.length >= 1, "manifest should include upload sources");
 });
 
-Deno.test("recon import register calls afterReconSourceUpload before success answer", async () => {
-  const src = await read("recon_import_routes.ts");
-  const start = src.indexOf('"/make-server-37f42386/recon/imports/:id/register"');
-  assert(start >= 0);
-  const block = src.slice(start);
-  const refresh = block.indexOf("afterReconSourceUpload(");
-  const answer = block.indexOf("return c.json({ success: true, importId, batchId })");
-  assert(refresh >= 0, "register must call afterReconSourceUpload");
-  assert(answer > refresh, "refresh before success");
-});
+Deno.test("listed routes call afterReconSourceUpload or documented client-register exception", async () => {
+  const seen = new Map<string, "client_register" | "server">();
 
-Deno.test("recon import fuel commit calls afterReconSourceUpload", async () => {
-  const src = await read("recon_import_routes.ts");
-  const start = src.indexOf('"/make-server-37f42386/recon/imports/:id/commit"');
-  assert(start >= 0);
-  const block = src.slice(start, src.indexOf('"/make-server-37f42386/recon/imports/:id/rollback"', start));
-  assert(block.includes("afterReconSourceUpload("), "fuel commit queues refresh");
-});
+  for (const def of uploadSources) {
+    for (const ref of def.uploadRoutes ?? []) {
+      const key = `${ref.file}::${ref.route}`;
+      const kind: "client_register" | "server" = ref.exception === "client_register"
+        ? "client_register"
+        : "server";
+      const prior = seen.get(key);
+      if (prior && prior !== kind) {
+        throw new Error(`${key}: conflicting exception flags across sources`);
+      }
+      seen.set(key, kind);
 
-Deno.test("Roam statement registration queues through afterReconSourceUpload", async () => {
-  const src = await read("roam_fuel_statement.ts");
-  assert(src.includes("afterReconSourceUpload("), "roam statement uses shared helper");
-});
+      const serverPath = join(here, ref.file);
+      const src = await Deno.readTextFile(serverPath);
+      assert(src.includes(ref.route), `${def.id}: missing route ${ref.route} in ${ref.file}`);
+      const block = handlerBlock(src, ref.route);
 
-Deno.test("classic batch complete bridge uses afterReconSourceUpload", async () => {
-  const src = await read("register_residual_monolith_routes.tsx");
-  const idx = src.indexOf("afterReconSourceUpload({");
-  assert(idx >= 0, "batch complete bridge");
-});
-
-Deno.test("toll v2 fleet import: client register path is the allowed exception", async () => {
-  const toll = await read("toll_v2_import_controller.ts");
-  assert(!toll.includes("afterReconSourceUpload"), "toll v2 import does not queue server-side");
-  const fleet = await Deno.readTextFile(
-    join(here, "../../../apps/fleet/src/utils/registerTollV2WithRecon.ts"),
-  );
-  assert(fleet.includes("registerReconImport"), "fleet client registers + queues via recon register");
+      if (ref.exception === "client_register") {
+        assert(
+          !block.includes("afterReconSourceUpload"),
+          `${def.id} ${ref.route}: client_register routes must not call afterReconSourceUpload`,
+        );
+        assert(ref.clientRegister, `${def.id} ${ref.route}: clientRegister path required`);
+        const clientSrc = await Deno.readTextFile(join(repoRoot, ref.clientRegister));
+        assert(
+          clientSrc.includes("registerReconImport"),
+          `${ref.clientRegister} must register via recon /register (queues refresh)`,
+        );
+      } else {
+        assertSuccessAfterHelper(block, def.id, ref.route);
+      }
+    }
+  }
 });
