@@ -74,6 +74,7 @@ app.post(
               organizationId,
               weekKey,
               serviceLine,
+              driverWeekEnqueueReason: intent === "seal_week" ? "wra67_toll_seal" : null,
             });
             if (sideEffects.rebuildErrors.length > 0) {
               console.error("[toll-v2-command] seal side effects had errors", {

@@ -509,6 +509,7 @@ async function sealAndFinishFuelWeek(args: {
         weekKey,
         actorId: actor,
         serviceLine: "rideshare",
+        driverWeekEnqueueReason: "wra67_fuel_finalize",
       });
       if (sideEffects.rebuildErrors.length) {
         console.warn(

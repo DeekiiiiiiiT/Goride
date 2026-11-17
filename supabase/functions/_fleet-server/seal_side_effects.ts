@@ -20,6 +20,8 @@ export async function runSealSideEffects(opts: {
   weekKey: string;
   actorId?: string | null;
   serviceLine?: ReconServiceLine;
+  /** WRA-67: queue driver_week units (e.g. wra67_fuel_finalize, wra67_toll_seal). */
+  driverWeekEnqueueReason?: string | null;
 }): Promise<SealSideEffectsResult> {
   const orgId = opts.organizationId;
   const weekKey = opts.weekKey;
@@ -82,6 +84,21 @@ export async function runSealSideEffects(opts: {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       rebuildErrors.push(`blockers ${driverId}: ${msg}`);
+    }
+  }
+
+  const enqueueReason = String(opts.driverWeekEnqueueReason ?? "").trim();
+  if (enqueueReason) {
+    try {
+      const { enqueueDriverWeekUnitsForWeek } = await import("./recon_enqueue_driver_weeks.ts");
+      const queued = await enqueueDriverWeekUnitsForWeek(orgId, weekKey, enqueueReason);
+      for (const err of queued.errors) {
+        rebuildErrors.push(`enqueue ${err}`);
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn("[seal-side-effects] driver_week enqueue failed", weekKey, msg);
+      rebuildErrors.push(`enqueue: ${msg}`);
     }
   }
 

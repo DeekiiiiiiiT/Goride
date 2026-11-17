@@ -1123,6 +1123,16 @@ export async function sealEarningsLaneForWeek(args: {
       status: "succeeded",
       resultJson: { ok: true, transport: useEarningsHttp ? "http" : "in-process" },
     });
+    try {
+      const { enqueueDriverWeekUnitsForWeek } = await import("./recon_enqueue_driver_weeks.ts");
+      await enqueueDriverWeekUnitsForWeek(orgId, week, "wra67_earnings_seal");
+    } catch (enqErr) {
+      console.warn(
+        "[week_close] earnings seal driver_week enqueue failed",
+        week,
+        enqErr instanceof Error ? enqErr.message : enqErr,
+      );
+    }
   } catch (e) {
     if (e instanceof WeekSealLogError && e.code === "CLOSE_IN_PROGRESS") {
       throw new WeekCloseError(e.code, e.message, e.status, e.details);
