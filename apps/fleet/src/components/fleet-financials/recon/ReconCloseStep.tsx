@@ -24,7 +24,6 @@ import { useSettlementQueue } from '../../../hooks/useSettlementQueue';
 import { resolvePayQueueOwed } from '../../../utils/driverSettlementsPayAmount';
 import { toast } from 'sonner';
 import { ReconApprovalDialog } from './ReconApprovalDialog';
-import { ReconWeekHistory } from './ReconWeekHistory';
 import { approvalErrorMessage, assertWeekUnchanged, useReconApprovals } from './useReconApprovals';
 import { formatWeekRange } from './weekListFormat';
 import { ReconWeekResult } from './ReconWeekResult';
@@ -469,8 +468,6 @@ export function ReconCloseStep({
           ))}
         </div>
       )}
-
-      {!resultView ? <ReconWeekHistory line={line} weekKey={weekKey} version={version} /> : null}
 
       <ReconApprovalDialog
         open={dialog === 'close'}

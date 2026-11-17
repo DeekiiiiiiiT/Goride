@@ -6,7 +6,6 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { ReconApprovalDialog, approvalSubmitError } from './ReconApprovalDialog';
 import { closeStepState } from './ReconCloseStep';
 import { activityCardRows, tripsStepBlockers } from './ReconTripsEarningsStep';
-import { filterHistory } from './ReconWeekHistory';
 
 const blocker = (code: string, severity = 'block') => ({
   code, severity, driver_id: null, source_id: null, message: code, persisted: null, expected: null, delta: null,
@@ -80,17 +79,6 @@ describe('Trips & earnings reads the saved check only', () => {
     const r = tripsStepBlockers({ status: 'ok', blockers: [blocker('EARNINGS_STATEMENT_MISSING'), blocker('TOLL_OPEN')] });
     expect(r.needsSeal).toBe(true);
     expect(r.items.map((i) => i.code)).toEqual(['EARNINGS_STATEMENT_MISSING']);
-  });
-});
-
-describe('History filter', () => {
-  it('Show self-approved keeps only self-approved rows', () => {
-    const rows = [
-      { id: '1', at: '', step: null, label: 'a', reason: null, by: 'x', approval: null, selfApproved: false, status: 'applied', system: false },
-      { id: '2', at: '', step: null, label: 'b', reason: 'r', by: 'x', approval: 'Self-approved', selfApproved: true, status: 'applied', system: false },
-    ];
-    expect(filterHistory(rows, true).map((r) => r.id)).toEqual(['2']);
-    expect(filterHistory(rows, false)).toHaveLength(2);
   });
 });
 

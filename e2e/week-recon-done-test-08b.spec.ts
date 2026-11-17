@@ -2,7 +2,7 @@
 import { expect, test } from '@playwright/test';
 import { closablePlan, openWeekStep, pageAs, requireLocalRun, seedPlan, startClose, weekState } from './helpers/weekReconDoneTest';
 
-test('done-test 8b: Approve it myself needs a reason; History shows Self-approved with it', async ({ browser }) => {
+test('done-test 8b: Approve it myself needs a reason; the week closes', async ({ browser }) => {
   requireLocalRun();
   const plan = seedPlan();
   const week = closablePlan()[1];
@@ -22,11 +22,9 @@ test('done-test 8b: Approve it myself needs a reason; History shows Self-approve
   await mgr.page.getByTestId('recon-approval-submit').click();
 
   await expect.poll(() => weekState(plan.org, week), { timeout: 120_000 }).toBe('closed');
+  // History list removed from the Close step (owner, 17 Nov): the close still happens, no list shows.
   await openWeekStep(mgr.page, week, 'close');
-  const history = mgr.page.getByTestId('recon-history');
-  await history.getByRole('radio', { name: 'Show self-approved' }).click();
-  await expect(history).toContainText('Self-approved');
-  await expect(history).toContainText(reason);
+  await expect(mgr.page.getByTestId('recon-history')).toHaveCount(0);
   expect(live).toEqual([]);
   await mgr.ctx.close();
 });
