@@ -1,8 +1,15 @@
 # Toll architecture — as-built audit and what it lacks
 
-**Rev 11 · 2026-11-17 · For: the architecture reviewer · Status: OPEN, no build until the reviewer and the owner agree.**
+**Rev 12 · 2026-11-17 · For: the architecture reviewer · Status: OPEN, no build until the reviewer and the owner agree.**
 
 **What it's for (one sentence):** every toll the fleet pays ends with the right person bearing it: the platform (paid back first time, or after a dispute), the driver or the fleet. Nothing is decided before the facts are in, and the week still closes on time.
+
+**The first principle (owner, 17 Nov 2026): on a trip, the passenger is always responsible for the toll, never the fleet.** Every rule in this document is a way of getting the passenger's toll money back through the channel that trip used:
+- **Uber:** Uber charges the rider and pays the toll back on the trip line; any shortfall is disputed (B1–B4).
+- **InDrive:** the rider pays the driver in cash, and the driver collects it (B7).
+- **Roam:** the rider is charged the actual tolls by the ride app (native).
+
+The fleet or the driver bears a toll only when that recovery fails or doesn't apply: a dispute lost or never sent, a driver who couldn't collect, or a toll with no trip at all (personal driving or deadhead). Those are always explicit, recorded decisions or policy rules, never a default.
 
 The design doc is `docs/toll-architecture.md` (Rev 9, "Agreed", built Phase 0–3, live since the 14 Nov 2026 switch). This audit does not repeat it. Following the build playbook (`docs/how-we-build-playbook.md`):
 - **Part A** is Step 2, "look before you plan": what is actually built and live, checked in code and in the live database on 17 Nov 2026.
@@ -492,3 +499,4 @@ sequenceDiagram
 | 14 | 2026-11-17 | Reviewer | Round 5 on Rev 9: round 4 (W1, W2, X1–X15, N1–N7) closed; the provisional-allocation design is right. **3 new blocking from W1's own mechanism** — Y1 `decided` (seal criterion, includes provisional) vs `disputed` (screens) vs L2.4's progression contradict each other and will produce three implementations; Y2 L2.4 `to_send` row allows `settle_dispute` that B3 and C3 forbid; Y3 W1 reverse-and-replace must be one transaction, reversal-first, or `allocations_caps` fires mid-transaction. **4 should-fix** — Z1 `expired` is settleable but listed as final with only two exceptions; Z2 role matrix missing "open a dispute by hand"; Z3 C4.4 holds for open weeks only; Z4 B4's late-open rule can't apply to a sealed-week charge (W2 refuses it). 5 nits. Rev 10 |
 | 15 | 2026-11-17 | Claude | Rev 10: **Y1** vocabulary in A6 (`decided` = seal criterion incl. provisional; `disputed` / `resolved` / `short_paid` = screen states), A7, L2.4 and C4.14. **Y2** `to_send` can't be settled. **Y3** checked live: `allocations_caps` is an AFTER-each-row trigger and not deferrable, so **order** matters, not just one transaction; also, a row can't be partly reversed, so every rule now reverses the whole row and re-inserts the moved slice plus any remainder (C1, C2, C4.15). **Z1** `expired` = bearer-set, not final; the nightly receivable sums `to_send` / `sent` only. Z2–Z4 and N8–N12 applied (N9: `allocations.decision_id` already exists live) |
 | 16 | 2026-11-17 | Claude | Rev 11 (owner answered Q5): InDrive is cash in practice; the rider owes the toll and the driver collects it; the fleet decides whether to charge the driver. B7 changed from an automatic cash wash (`cash_in_fare`, nobody charged) to `rider_pays_driver`: the toll is matched to the InDrive trip and the system **suggests Driver pays**, which a fleet manager confirms or changes to Fleet pays. No dispute, nothing automatic. B7 unblocked |
+| 17 | 2026-11-17 | Claude | Rev 12 (owner principle): "the passenger is always responsible for the toll, never the fleet" stated at the top as the first principle; every platform rule (Uber dispute, InDrive driver-collects, Roam native) is a recovery channel for the passenger's toll; fleet / driver bear a toll only when recovery fails or there is no trip, always by an explicit decision or policy. No other rule changed: it already matched |
