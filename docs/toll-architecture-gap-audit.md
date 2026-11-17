@@ -1,6 +1,6 @@
 # Toll architecture — as-built audit and what it lacks
 
-**Rev 2 · 2026-11-17 · For: the architecture reviewer · Status: OPEN, no build until the reviewer and the owner agree.**
+**Rev 3 · 2026-11-17 · For: the architecture reviewer · Status: OPEN, no build until the reviewer and the owner agree.**
 
 **What it's for (one sentence):** every toll the fleet pays ends with the right person bearing it: the platform (paid back first time, or after a dispute), the driver or the fleet. Nothing is decided before the facts are in, and the week still closes on time.
 
@@ -113,7 +113,8 @@ Each gap: what the business needs, what the **old system** did (retired 14 Nov),
 
 - **Need:** a dispute the platform rejects, or one the driver never sends, must end with a clear bearer.
 - **v2:** no deadline, reminder, expiry or policy. The bearer is whatever a person picks on step 3, with no rule behind it.
-- **Fix (one):** Fleet Policy holds, per company: the dispute window, **14 days** from the trip; a **lost** dispute is borne by the **fleet** (as old `Business Expense`); an **expired** dispute (never sent in time) is borne by the **driver** (as old `Charge Driver`). The owner can change all three. A nightly job expires overdue disputes and posts the bearer (C1, C2).
+- **Fix (one):** the dispute window is the **platform's** rule, so it lives on the platform setting: **Uber = 9 days from the trip** (owner, 17 Nov 2026). Fleet Policy holds, per company: a **lost** dispute is borne by the **fleet** (as old `Business Expense`); an **expired** dispute the driver had time to send is borne by the **driver** (as old `Charge Driver`). A dispute that **opened too late to send** (the platform's data arrived after the window, or with under 2 days left) is borne by the **fleet**, because the driver never had a fair chance. The owner can change the bearers. A nightly job expires overdue disputes and posts the bearer (C1, C2).
+- **What 9 days means for the architecture:** a dispute can only be sent while the window is open, so it must open the moment the platform's data arrives, not when the week is reconciled. The Uber weekly report must be uploaded within days of the week ending. Weeks reconciled weeks later (as with October, done in mid-November) can't be disputed and go straight to the late-open rule above.
 
 ### B5. The driver is never asked to dispute (missing)
 
@@ -164,12 +165,13 @@ Driver cash charges, Roam native charges, `carry_forward`, duplicate review, tak
 
 | Record | One row per | Fields and rules |
 |---|---|---|
-| **`toll.disputes`** (new) | One amount a platform should have paid on one charge and didn't | `organization_id`, `charge_id`, `platform`, `platform_trip_id`, `driver_id`, `owed_minor` > 0, `state` (`to_send` \| `sent` \| `won` \| `part_won` \| `lost` \| `expired`), `opened_at`, `sent_at`, `deadline` (trip date + policy window), `recovered_minor`, `bearer` (set on `lost` / `expired` / the rest of `part_won`), `decision_ids`, `version`. **Rules:** at most one open dispute per charge; `recovered_minor` ≤ `owed_minor`; a final state (`won`, `part_won`, `lost`, `expired`) never changes except by `undo_decision`. |
+| **`toll.disputes`** (new) | One amount a platform should have paid on one charge and didn't | `organization_id`, `charge_id`, `platform`, `platform_trip_id`, `driver_id`, `owed_minor` > 0, `state` (`to_send` \| `sent` \| `won` \| `part_won` \| `lost` \| `expired`), `opened_at`, `sent_at`, `deadline` (trip date + the platform's `dispute_window_days`), `opened_late` (true when opened with under 2 days left or after the deadline), `recovered_minor`, `bearer` (set on `lost` / `expired` / the rest of `part_won`), `decision_ids`, `version`. **Rules:** at most one open dispute per charge; `recovered_minor` ≤ `owed_minor`; a final state (`won`, `part_won`, `lost`, `expired`) never changes except by `undo_decision`. |
 | `toll.dispute_links` (new) | One payback slice that settled a dispute | `dispute_id`, `payback_id`, `amount_minor`, `decision_id`, `reversed_by` |
 | Account `org:<co>:toll:dispute_receivable` (new) | — | Asset: amounts the platform owes while a dispute is open. Balance = Σ open dispute `owed_minor` − recovered. **Check:** it equals the sum of open disputes at every nightly run. |
 | `toll.platform_settings` (filled) | One per platform per company | Adds the `payback_mode` value `cash_in_fare`. Written at switch-on with explicit defaults (Uber: `trip_line` + adjustments, opens disputes; InDrive: `cash_in_fare`; Roam: `native`). |
 | `toll.plaza_rules` (extended) | One per plaza | Adds `tag_price_minor` and `platform_rates` (by platform, each with `valid_from`). |
-| Fleet Policy (extended) | One per company | `toll_dispute_window_days` (default 14), `toll_dispute_lost_bearer` (default `fleet`), `toll_dispute_expired_bearer` (default `driver`). |
+| `toll.platform_settings` (dispute fields) | One per platform per company | `takes_disputes` (Uber: yes), `dispute_window_days` (**Uber: 9**). |
+| Fleet Policy (extended) | One per company | `toll_dispute_lost_bearer` (default `fleet`), `toll_dispute_expired_bearer` (default `driver`); a dispute with `opened_late` is always borne by the fleet. |
 | Charge states (derived) | — | Adds `short_paid` and `disputed` to the list in A6. |
 | `toll.platform_trips` | — | New source: the "logged trips" adapter from `fleet.trips` (B6). |
 
@@ -204,7 +206,9 @@ Driver cash charges, Roam native charges, `carry_forward`, duplicate review, tak
 
 **Roam driver app** — a "Dispute this toll with Uber" card per `to_send` dispute: trip date and time, toll, amount owed, the dispute text. Buttons: **Copy text**, **Mark as sent**.
 
-**Fleet Admin → Fleet Policy → Tolls** — fields: dispute window (days), who pays a lost dispute, who pays an expired dispute; per platform: payback mode, pays tolls back (yes / no); per plaza: tag price and each platform's rate with a date. Buttons: **Save**, **Add rate**.
+**Fleet Admin → Fleet Policy → Tolls** — fields: who pays a lost dispute, who pays an expired dispute; per platform: payback mode, pays tolls back (yes / no), takes disputes (yes / no), dispute window in days (Uber 9); per plaza: tag price and each platform's rate with a date. Buttons: **Save**, **Add rate**.
+
+**Roam driver app card** shows the days left of the platform's window ("6 of 9 days left"); it turns red with 2 days left.
 
 ### C4. Tests — rules that must always hold (each one a test)
 
@@ -225,7 +229,8 @@ Driver cash charges, Roam native charges, `carry_forward`, duplicate review, tak
 2. The week seals with that dispute open; Driver Settlements pays the driver; J$20 sits in "owed by Uber".
 3. The driver taps **Mark as sent**; 20 days later Uber's J$20 adjustment arrives → the dispute is won and the J$20 clears.
 4. The same, but the fleet had charged the driver the J$20 → the charge is reversed in the open week.
-5. The driver never sends it; 14 days pass → the dispute expires, and the driver bears J$20 in the open week.
+5. The driver never sends it; 9 days from the trip pass → the dispute expires, and the driver bears J$20 in the open week.
+5b. The Uber report is uploaded 10 days after the trip → the dispute opens already late (`opened_late`) → the fleet bears J$20, never the driver.
 6. Uber rejects it → **Lost** → the fleet bears J$20.
 7. Uber pays J$10 of J$20 → the person closes it → J$10 recovered, J$10 to the lost bearer.
 8. A hand-logged cash InDrive trip covers a toll → cash wash; nothing in "no trip", no dispute.
@@ -247,3 +252,4 @@ On step 3 the owner decides each shortfall as the old claims did (Fleet pays = B
 |---|---|---|---|
 | 1 | 2026-11-17 | Claude | Rev 1: as-built audit (Part A), gaps B1–B11, questions and a proposed direction |
 | 2 | 2026-11-17 | Claude | Rev 2 (owner: follow the playbook): one-sentence goal; one chosen fix per problem (B1–B11); blueprint C1 Data, C2 Server, C3 Screens with every button, C4 rules; Part D done-tests; no open options |
+| 3 | 2026-11-17 | Claude | Rev 3 (owner fact: Uber gives drivers 9 days to dispute): window moved to the platform setting (Uber 9); disputes open the moment platform data arrives; `opened_late` → fleet bears; done-test 5 + 5b |
