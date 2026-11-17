@@ -335,6 +335,8 @@ export async function fetchExternalQueue(): Promise<ReconExternalQueueItem[] | n
 export type TagAccountRollForwardPayload = {
   weekKey: string;
   priorWeekKey: string | null;
+  /** Weeks between the last saved closing and this one whose top-ups and tolls are in the opening. */
+  carriedWeekKeys?: string[];
   openingMinor: number;
   /** First week with no earlier closing: the opening is worked out from this week's statement closing. */
   openingFromStatement?: boolean;

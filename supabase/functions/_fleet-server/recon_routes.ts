@@ -72,8 +72,9 @@ import { isSettlementPeriodEnded } from "../../../packages/finance-core/src/sett
 import { computeWeekResult, type WeekStatementRow } from "../../../packages/finance-core/src/weekResult.ts";
 import {
   computeTagAccountRollForward,
-  tagLedgerAmountToRollForwardParts,
+  tagAccountOpeningFromWeeks,
 } from "../../../packages/finance-core/src/tagAccountRollForward.ts";
+import { addDaysYmd } from "../../../packages/finance-core/src/ledgerMoneyAggregate.ts";
 import {
   coverageInputHash,
   countTripsEarningsBlockers,
@@ -1228,16 +1229,19 @@ async function loadExternalQueue(): Promise<ExternalQueueItem[]> {
  */
 async function tagAccountRollFor(orgId: string, weekKey: string, runId: string | null) {
   const prior = await loadPriorTagClosingMinor(orgId, weekKey);
-  const { topUpsMinor, tagUsageMinor } = await sumTagLedgerWeekMinor(orgId, weekKey);
+  // Weeks after the last saved TransJam closing and before this week (e.g. 12 Oct, closed before
+  // step 4 saved closings): their top-ups and tolls carry into this week's opening.
+  const firstWeek = prior.priorWeekKey ? addDaysYmd(prior.priorWeekKey, 7) : weekKey;
+  const weeks = await tagAccountWeeksFromTollSystem(orgId, firstWeek, weekKey);
   const stored = runId ? await loadStoredStatementClosing(runId) : null;
   const statementClosingMinor = stored?.minor ?? null;
-  const openingFromStatement = prior.priorWeekKey === null && statementClosingMinor != null;
-  const openingMinor = openingFromStatement
-    ? Math.round(Number(statementClosingMinor)) - topUpsMinor + tagUsageMinor
-    : prior.openingMinor;
+  const { openingMinor, openingFromStatement, topUpsMinor, tagUsageMinor, carriedWeekKeys } =
+    tagAccountOpeningFromWeeks({ weekKey, prior, weeks, statementClosingMinor });
   const roll = computeTagAccountRollForward({ openingMinor, topUpsMinor, tagUsageMinor, statementClosingMinor });
   return {
     priorWeekKey: prior.priorWeekKey,
+    /** Weeks between the last saved closing and this one whose movements are in the opening. */
+    carriedWeekKeys,
     openingMinor,
     openingFromStatement,
     topUpsMinor,
@@ -1282,43 +1286,29 @@ async function loadPriorTagClosingMinor(
   return { openingMinor: 0, priorWeekKey: null };
 }
 
-async function sumTagLedgerWeekMinor(
+/**
+ * Tag top-ups and tag usage per week from the NEW toll system (toll_system.week_result →
+ * tagAccount, the same numbers the Tolls step shows). The old fleet.toll_ledger stopped
+ * receiving tag files at the 14 Nov switch, so reading it gave 0 / 0 from 19 Oct on.
+ */
+export async function tagAccountWeeksFromTollSystem(
   orgId: string,
-  weekKey: string,
-): Promise<{ topUpsMinor: number; tagUsageMinor: number }> {
-  const sb = getServiceClient();
-  const end = periodEndForAnchor(weekKey);
-  const { data, error } = await sb
-    .from("fleet_toll_ledger")
-    .select("amount, type, payment_method, status, metadata, payload_json")
-    .eq("organization_id", orgId)
-    .gte("date", weekKey)
-    .lte("date", end)
-    .limit(100000);
-  if (error) {
-    console.warn("[recon] tag ledger week sum failed", error.message);
-    return { topUpsMinor: 0, tagUsageMinor: 0 };
-  }
-
-  let topUpsMinor = 0;
-  let tagUsageMinor = 0;
-  for (const row of data ?? []) {
-    const payload = (row.payload_json as Record<string, unknown>) || {};
-    const meta = {
-      ...((row.metadata as Record<string, unknown>) || {}),
-      ...((payload.metadata as Record<string, unknown>) || {}),
-    };
-    const parts = tagLedgerAmountToRollForwardParts({
-      type: String(row.type || payload.type || ""),
-      amount: Number(row.amount),
-      paymentMethod: String(row.payment_method || payload.paymentMethod || ""),
-      status: String(row.status || ""),
-      metadata: meta as { voided?: boolean },
-    });
-    topUpsMinor += parts.topUpMinor;
-    tagUsageMinor += parts.usageMinor;
-  }
-  return { topUpsMinor, tagUsageMinor };
+  fromWeek: string,
+  toWeek: string,
+): Promise<Array<{ weekKey: string; topUpsMinor: number; usageMinor: number }>> {
+  if (fromWeek > toWeek) return [];
+  const { data, error } = await getServiceClient().rpc("toll_sys_tag_account_weeks", {
+    p_company: orgId,
+    p_from: fromWeek,
+    p_to: toWeek,
+  });
+  // A wrong tag balance is worse than none: never fall back to zeros.
+  if (error) throw new Error(`tag account read failed: ${error.message}`);
+  return ((data ?? []) as Array<{ weekKey: string; topUpsMinor: number; usageMinor: number }>).map((r) => ({
+    weekKey: String(r.weekKey).slice(0, 10),
+    topUpsMinor: Math.round(Number(r.topUpsMinor) || 0),
+    usageMinor: Math.round(Number(r.usageMinor) || 0),
+  }));
 }
 
 async function loadStoredStatementClosing(

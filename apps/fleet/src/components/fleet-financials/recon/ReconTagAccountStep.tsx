@@ -176,7 +176,12 @@ export function ReconTagAccountStep({
           <dd className="text-lg font-semibold tabular-nums text-slate-900">
             {fmtMajor(data.openingMinor)}
             {data.priorWeekKey ? (
-              <span className="ml-2 text-xs font-normal text-slate-500">after week {data.priorWeekKey}</span>
+              <span className="ml-2 text-xs font-normal text-slate-500" data-testid="tag-account-opening-source">
+                after week {data.priorWeekKey}
+                {data.carriedWeekKeys?.length
+                  ? ` · includes ${data.carriedWeekKeys.length === 1 ? 'week' : 'weeks'} of ${data.carriedWeekKeys.join(', ')}`
+                  : ''}
+              </span>
             ) : data.openingFromStatement ? (
               <span className="ml-2 text-xs font-normal text-slate-500">
                 (first week — worked out from the statement closing below)

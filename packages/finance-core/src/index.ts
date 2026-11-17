@@ -182,6 +182,7 @@ export {
 export {
   computeTagAccountRollForward,
   tagLedgerAmountToRollForwardParts,
+  tagAccountOpeningFromWeeks,
 } from './tagAccountRollForward.ts';
 export type {
   TagAccountRollForwardInput,

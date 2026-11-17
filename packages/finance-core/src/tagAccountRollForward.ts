@@ -79,3 +79,44 @@ export function tagLedgerAmountToRollForwardParts(entry: {
   if (amt < 0) return { topUpMinor: 0, usageMinor: Math.round(Math.abs(amt) * 100) };
   return { topUpMinor: 0, usageMinor: 0 };
 }
+
+/**
+ * Step 4 opening / week movements from per-week tag numbers (new toll system).
+ * `weeks` covers the week after the last saved closing up to and including `weekKey`.
+ * Weeks before `weekKey` carry into the opening (a closed week with no saved closing is
+ * never skipped). With no saved closing at all, the statement closing anchors the opening.
+ */
+export function tagAccountOpeningFromWeeks(input: {
+  weekKey: string;
+  prior: { openingMinor: number; priorWeekKey: string | null };
+  weeks: Array<{ weekKey: string; topUpsMinor: number; usageMinor: number }>;
+  statementClosingMinor: number | null;
+}): {
+  openingMinor: number;
+  openingFromStatement: boolean;
+  topUpsMinor: number;
+  tagUsageMinor: number;
+  carriedWeekKeys: string[];
+} {
+  const thisWeek = input.weeks.find((w) => w.weekKey === input.weekKey);
+  const topUpsMinor = thisWeek?.topUpsMinor ?? 0;
+  const tagUsageMinor = thisWeek?.usageMinor ?? 0;
+  const carried = input.weeks.filter((w) => w.weekKey < input.weekKey);
+  const openingFromStatement = input.prior.priorWeekKey === null && input.statementClosingMinor != null;
+  if (openingFromStatement) {
+    return {
+      openingMinor: Math.round(Number(input.statementClosingMinor)) - topUpsMinor + tagUsageMinor,
+      openingFromStatement,
+      topUpsMinor,
+      tagUsageMinor,
+      carriedWeekKeys: [],
+    };
+  }
+  return {
+    openingMinor: input.prior.openingMinor + carried.reduce((n, w) => n + w.topUpsMinor - w.usageMinor, 0),
+    openingFromStatement,
+    topUpsMinor,
+    tagUsageMinor,
+    carriedWeekKeys: carried.map((w) => w.weekKey),
+  };
+}
