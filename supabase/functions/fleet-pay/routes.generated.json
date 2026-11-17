@@ -1,7 +1,7 @@
 {
   "slug": "fleet-pay",
-  "generatedAt": "2026-11-15T22:27:03.574Z",
-  "routeCount": 41,
+  "generatedAt": "2026-11-17T13:48:11.394Z",
+  "routeCount": 42,
   "routes": [
     "GET ${BASE}/:anchor",
     "GET ${BASE}/approval-settings",
@@ -23,6 +23,7 @@
     "POST ${BASE}/:movementId/approve",
     "POST ${BASE}/approval-settings",
     "POST ${BASE}/backfill",
+    "POST ${BASE}/carried-balance-corrections",
     "POST ${BASE}/collect",
     "POST ${BASE}/driver-quality-snapshots/import",
     "POST ${BASE}/force-release",
