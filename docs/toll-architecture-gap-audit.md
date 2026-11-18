@@ -1,93 +1,80 @@
 # Toll architecture: disputes and InDrive (plan + build status)
 
-**Rev 26 · 18 Nov 2026 · Status: BUILDING (first build).** Rev 26: S2b reviewed by Claude, 4 product fixes (S2b-R1 to R4 under "Things learned") + the test's trimmed checks restored, 25 toll SQL files + 74 engine + 7 runner tests pass; the whole server side (S1–S2b) is built; next is the S3 prompt. Rev 25: S2b prompt written; S2b choices under "Things learned". Rev 24: S2a reviewed by Claude, 9 findings fixed (S2a-R1 to R9 under "Things learned"), 24 toll SQL files + 67 engine tests pass; next is the S2b prompt. Rev 23: S2 split into S2a (matcher) and S2b (jobs, logged trips, InDrive); S2a prompt written; S2a choices under "Things learned". Rev 22: S1b reviewed by Claude, 5 findings fixed (R1–R5 under "Things learned"), 23 toll SQL files pass; next is S2. Rev 21: S1b prompt written; S1b choices added under "Things learned". The reviewer signed the design (round 8, Rev 18). Rev 20 trims everything already done (review rounds, as-built evidence, finished build rounds); the full history is in git (`git log -- docs/toll-architecture-gap-audit.md`, Rev 1–19).
+**Rev 27 · 18 Nov 2026 · Status: BUILDING (first build). The server side is complete (D1–S2b); next are the screen reads (S3), the screens (UI1, UI2) and the proof (P).** Rev 27 trims everything already built: the design of the built rounds, every review's fix list and the answered owner questions. All of it stays in git (`git log -- docs/toll-architecture-gap-audit.md`; Rev 26 is the last full version, Rev 19 the last full design).
 
 ## START HERE (for a new chat)
 
-**What this is:** every toll the fleet pays ends with the right person bearing it. **First principle (owner):** on a trip the **passenger** always owes the toll, never the fleet. Uber pays it back (any shortfall is **disputed** by the driver within 9 days; the refund comes in the next pay period or the one after); InDrive trips are cash, so the **driver collects it from the rider** and the fleet decides Driver pays / Fleet pays; Roam charges the rider natively. The fleet or driver bears a toll only when recovery fails or there was no trip, always by an explicit decision or policy, never a default.
+**What this is:** every toll the fleet pays ends with the right person bearing it. **First principle (owner):** on a trip the **passenger** always owes the toll, never the fleet. Uber pays it back (any shortfall is **disputed** by the driver within 9 days; the refund comes in the next pay period or the one after); InDrive trips are cash, so the **driver collects it from the rider** and the fleet decides Driver pays / Fleet pays; Roam charges the rider natively. The fleet or driver bears a toll only when recovery fails or there was no trip, always by an explicit decision or policy, never a default. **Forward only:** nothing here changes a reconciled week or legacy data (the 219 old `fleet.claims`, the J$1,200 already kept).
+
+**Prompt to start a new chat:** "Continue the toll disputes build. Read `docs/toll-architecture-gap-audit.md` START HERE first. The server side (D1–S2b) is done and committed. Next step: write the Cursor prompt for round S3 (screen reads) in `docs/toll-build/`, following the playbook and the 'Rules for Cursor prompts' in START HERE, and keep me updated in short plain replies."
 
 **How we work (owner's playbook, `docs/how-we-build-playbook.md`):**
 - Build layers in order: Data → Server → Screens → Tests, one round at a time.
-- **Cursor** builds the data and server rounds from a prompt file in `docs/toll-build/`. **Claude** reviews every round by reading the code and running the tests itself, fixes what's wrong, commits only the relevant files, and the owner pushes.
-- **Claude ports the screens** (UI rounds), not Cursor.
-- Cursor's "done" is not trusted until Claude has run the tests: twice so far it reported done with failing or missing tests.
-- How to run the database tests on the local copy:
-  1. Start Docker Desktop.
-  2. Run `npx supabase start`, then `npx supabase db reset`.
-  3. In Git Bash, set `MSYS_NO_PATHCONV=1`, then `docker cp supabase/tests/<f>.sql supabase_db_Goride:/tmp/` and `docker exec supabase_db_Goride psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q -f /tmp/<f>.sql` for every `toll_v2_*` (18), `toll_disputes_*` (2), `toll_sealed_week_guard_test`, `toll_dispute_commands_test`, `toll_four_eyes_settings_income_test`, `toll_matcher_disputes_test` and `toll_sweep_logged_trips_test` file (25 files), plus the toll-core engine tests (`npx vitest run packages/toll-core/src/v2/matcher` from PowerShell at `C:\Roam\Goride`). All must pass. (Earlier revs said 20/21 files; the real count was always 3 higher.)
-  4. Run `npx supabase stop` after.
-- Never touch the live database. Nothing of this build is live yet.
+- **Cursor** builds the data and server rounds (S3 is the last one) from a prompt file in `docs/toll-build/`. **Claude** reviews every round by reading the code and running the tests itself, fixes what's wrong, commits only the relevant files, and the owner pushes. No branches.
+- **Claude ports the screens** (UI1, UI2), not Cursor.
+- Never touch the live database. **Nothing of this build is live yet** (all commits are local until the owner pushes; every switch is off on the live company).
 - Migration files are created with `npx supabase migration new <name>` (real UTC time).
-- No branches; the owner pushes.
-- Every Cursor prompt ends: "In your report, give clickable links to the files you changed and the results of what you ran. Don't paste file contents."
+- **How to run the tests on the local copy:**
+  1. Start Docker Desktop.
+  2. `npx supabase start`, then `npx supabase db reset`.
+  3. In Git Bash, `export MSYS_NO_PATHCONV=1`, then for each file: `docker cp supabase/tests/<f>.sql supabase_db_Goride:/tmp/` and `docker exec supabase_db_Goride psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q -f /tmp/<f>.sql`. The toll files (25): every `toll_v2_*` (18), `toll_disputes_*` (2), `toll_sealed_week_guard_test`, `toll_dispute_commands_test`, `toll_four_eyes_settings_income_test`, `toll_matcher_disputes_test`, `toll_sweep_logged_trips_test`. All must pass.
+  4. Engine tests: `npx vitest run packages/toll-core/src/v2/matcher` from **PowerShell** at `C:\Roam\Goride` (74 tests). Runner: `deno test --allow-all --no-check supabase/functions/_fleet-server/toll_v2_matcher_run.test.ts` (7 tests). Then `node scripts/validate-migration-sql.mjs` and `pnpm check`.
+  5. `npx supabase stop` after. (Deno runs can upset the local Fleet app: if it errors, the owner stops it and runs `pnpm install`.)
 
 **Where the build is (18 Nov 2026):**
 
 | Round | Who | What | Status |
 |---|---|---|---|
-| D1 | Cursor | Data: switches (`toll_disputes`, `rider_pays_driver`, `logged_trips`, all off), platform_settings dispute fields, `plaza_rates`, `dispute_policy`, `dispute_text_templates`, `disputes`, `dispute_links`, allocation `dispute_id`, `seed_dispute_setup` (dry-run). `supabase/migrations/20261117234730_toll_disputes_data.sql` | **Done** (97bec27e) |
-| D2 | Cursor | The database refuses money changes in a sealed week (B13). `20261118000711_toll_sealed_week_guard.sql` | **Done** (beec4537) |
-| S1 | Cursor | Dispute commands and money: `open_dispute`, `mark_dispute_sent`, `settle_dispute`, `close_dispute_lost`, `dispute_expire` / `dispute_auto_close` (functions, not scheduled), undo of a dispute result, `driver_pays` / `fleet_absorbs` with `suggestion_id`, seal blockers with `part`, `disputedMinor`, posting rules P21–P24, nightly checks extended. `20261118001833_toll_dispute_commands.sql` + `supabase/tests/toll_dispute_commands_test.sql` | **Done** (3a3dfbb6, a7be5937). 20 toll SQL files pass |
-| S1b | Cursor | B14 four-eyes (second person above J$5,000; `reopen_week` and settings changes always; sole-manager self-approve with reason), B12 `change_toll_settings` + `approve_settings_seed` + refuse to match without settings, B17 `toll:other_income` (P25 on each keep from switch-on; `legacy_carve_outs` row, 120000 on live, in the nightly check). `20261118060401_toll_four_eyes_settings_income.sql` + `supabase/tests/toll_four_eyes_settings_income_test.sql`, ADR 0024 | **Done** (reviewed + 5 fixes by Claude, 18 Nov). 23 toll SQL files pass |
-| S2a | Cursor | **Done** (reviewed + 9 fixes by Claude, 18 Nov). `20261118122837_toll_matcher_disputes.sql` + `supabase/tests/toll_matcher_disputes_test.sql`, engine `toll-matcher-v2`. Matcher: dispute first, plaza rates in scoring, refund candidates (`dispute_refund` suggestions), opens a dispute by itself on a clear trip-payback match that leaves a remainder, settles a clear refund by itself, a person's link also opens the dispute, undo cascade, `mark_dispute_sent` re-queues, `reverse_payback` on a disputed payback (R7). Prompt written 18 Nov | — |
-| S2b | Cursor | **Done** (reviewed + 4 fixes by Claude, 18 Nov). `20261118133523_toll_sweep_alert_logged_trips.sql` + `supabase/tests/toll_sweep_logged_trips_test.sql`, runbook `docs/runbooks/toll-uber-report-late.md`. Nightly sweep: `dispute_expire`, auto-close when both refund periods are in (coverage from `fleet.import_batches`, `uber_bundle`), the 23-day `no_report` fallback; run after each matcher drain and nightly. "Uber report late" alert (P0) + runbook. Logged-trips adapter (`fleet.trips` app-logged rows → `toll.platform_trips`). `rider_pays_driver` (InDrive) suggestions | — |
-| **S3** | Cursor | **NEXT: Claude writes the S3 prompt.** Screen reads: the step-3 payload in six parts; disputes company-wide with a "From week of" chip; Results this week; blockers with `part`; driver-app dispute read + `mark_dispute_sent` route | — |
+| D1, D2 | Cursor | Data: switches, settings, `plaza_rates`, `dispute_policy`, templates, `disputes`, `dispute_links`; the database refuses money changes in a sealed week | **Done** (97bec27e, beec4537) |
+| S1 | Cursor | Dispute commands and money (open, sent, settle, lost, expire, undo), seal blockers with `part`, `disputedMinor`, P21–P24 | **Done** (3a3dfbb6, a7be5937) |
+| S1b | Cursor | Four-eyes approvals, toll settings commands + seed approval, refuse to match without settings, kept money → `toll:other_income` (P25), J$1,200 carve-out. ADR 0024 | **Done** (d66300cd; 5 review fixes) |
+| S2a | Cursor | Matcher v2: dispute first, Uber plaza rates, opens / settles disputes by itself on clear matches, take-back reopens | **Done** (66b62bc9; 9 review fixes) |
+| S2b | Cursor | Nightly / after-upload dispute sweep, "Uber report late" alert + runbook, hand-logged trips → tolls, InDrive "Driver pays" suggestions | **Done** (367b0256; 4 review fixes) |
+| **S3** | Cursor | **NEXT: Claude writes the prompt.** Screen reads: the Week Recon step-3 payload in six parts (C3), disputes company-wide with a "From week of" chip, Results this week, blockers with `part`, the "Late" tile rule, Refund received candidates; driver-app dispute read + a `mark_dispute_sent` route for the driver (own disputes only, L2.3); Driver Settlements Disputes read; Fleet Policy toll settings read. Undone rows (`close_reason = 'undo'`) never show as active | — |
 | UI1 | Claude | Port the six-part Tolls step from `docs/stitch/toll-step-slides/` (C3 Keep / Drop / Fix) + its tests | — |
 | UI2 | Claude | Driver app dispute card, Driver Settlements Disputes tab, Fleet Policy toll settings + tests | — |
-| P | Claude + owner | Proof on the local copy (Part D done-tests, 9 Nov replay); then live, switched off; settings seed (L2.6 step 0); switch on; one real week with screenshots | — |
+| P | Claude + owner | Proof on the local copy (Part D done-tests, 9 Nov replay); then live with every switch off; settings seed and switch-on (L2.6); one real week with screenshots | — |
 
-**Things learned while building (the build follows these, not older text below):**
-- Uber's `payback_mode` is `per_trip` (the design said "trip_line").
-- A provisional platform allocation needs `dispute_id` instead of `payback_id`.
-- The dispute bearers live in `toll.dispute_policy`.
-- Dated plaza rates live in `toll.plaza_rates` (append-only).
-- `toll:other_income` was added in S1b. Its class is `revenue` (the ledger has no "income" class).
-- **S1b choices (18 Nov):** (1) four-eyes, "refuse to match without settings" and the P25 income posting all turn on with the company's `toll_disputes` switch; with it off, every command is as today, so deploying S1b changes nothing live. The two settings commands work with the switch off, because the seed comes first (L2.6 step 0). (2) Approvals live in their own `toll.approval_requests` table (prepare + approve, the Week Recon pattern), because a decision row can't be changed after insert; the executed command gets its own decision row with `approved_by` and `approval_id`. (3) A settings change has no J$ amount, so it **always** needs a second person (B14 said "above J$5,000"). (4) The J$1,200 carve-out is a stored row (`toll.legacy_carve_outs`), recorded once at switch-on by `record_legacy_kept`, not a number in code; after that, undoing a pre-switch keep is refused (`LEGACY_KEEP_FINAL`) so the carve-out stays exact.
-- **S1b review (18 Nov), fixed by Claude:** R1 Cursor had blocked self-approval for `reopen_week`, which would lock a sole-manager owner out of ever reopening a week; now every gated intent follows the same sole-manager rule. R2 "does this keep have a P25 posting" was checked per payback, so a payback with a pre-switch part-keep and a later keep looked fully posted (wrong carve-out, wrong week check, and undo would reverse a P25 that never existed); now checked per keep decision (`unlinked_has_p25(company, decision_id)`). R3 `change_toll_settings` now returns `changes` (before / after per row) on the decision response. R4 once the carve-out is recorded, keeps always post P25 and pre-switch keeps stay final even if the switch is turned off later. R5 undo of a dispute result in a sealed charge week counted as J$0 (its money is in postings, not allocations), so it skipped four-eyes; it now counts the `dispute_result` carried fact. Test sections 6, 9 and 10 cover these.
-- `SETTINGS_MISSING` checks company-wide (every platform, plaza and the policy the company's live records use), not just the claim scope. Stricter than the prompt; kept. A new plaza stops matching until its rule is added (S2 / the report-late alert should surface this).
-- Cursor changed two existing tests (beyond its allow list) and reported it: `toll_v2_postings` rule count 36 → 37 (P25) and the S1 F7 reopen now goes through `request_approval` / `approve_request` with a second manager. Both are correct.
-- **S2a choices (18 Nov):** (1) S2 is split in two rounds, because it was too big for one Cursor round. (2) Until now the matcher never moved money (every suggestion was shadow). From S2a, with `toll_disputes` on, it acts by itself in exactly two cases: it opens a dispute when a trip payback is a **clear** match (the B4 strict test with the platform's `auto_apply` flag ignored) and leaves part of the toll unpaid, and it settles a dispute when a refund is the **only** candidate both ways. Anything less clear stays a suggestion for a person. (3) A person confirming a trip payback that leaves a remainder also opens the dispute at once, because the 9-day window starts at the trip. (4) Uber's plaza rate makes J$370 on a J$390 toll an exact match (score 100), so without a seeded rate nothing opens by itself. The rates are entered with `change_toll_settings` (`plaza_rates_add`) before switch-on. (5) With the switch off, the matcher's bundle and output stay byte-for-byte as today (`engine_version` stays v1). (6) Undoing a link whose dispute is still `to_send` withdraws the dispute too; once sent, it's refused (`DISPUTE_IN_PROGRESS`).
-- **S2a review (18 Nov), fixed by Claude:** R1 a person's link opened the dispute with **no money** ("deferred" provisional), so the charge sat half-decided and the receivable check would fail; Cursor did it to keep the old S1 tests green. Now every dispute opens with its money; a later `open_dispute` on it only answers "already open" (writing money there again would have charged the fleet twice for an opened-late dispute). R2 the engine's switch-off output was not byte-identical (new keys in every suggestion's inputs, an unused `refund_window` config key), which would have re-stored every live suggestion; v1 inputs are now exactly as before (engine test added). R3 the system settled a dispute with a refund outside its refund window if the caller said so; `settle_dispute` (system) now refuses `OUTSIDE_REFUND_WINDOW` (C4.6). R4 a `to_send` dispute could be settled; now refused (Y2). R5 an eligible suggestion that was refused once (say, a version moved) was never retried; unchanged eligible suggestions are acted on again, and a done one replays (same command id) and moves nothing. R6 undoing a link that opened a dispute collided on ledger line numbers and failed. R7 a take-back of a refund on a **sealed** charge week failed (`SEALED_WEEK_LOCKED`): Cursor didn't build the sealed path; now the refund's P22 / P24 legs are reversed in the open week and the dispute reopens without touching the frozen allocations. R8 the reopen after a take-back collided on line numbers. R9 take-backs of links made before S2a now infer the settled-from state (`sent_at` set → sent, else expired). Cursor's own test also had 8 mistakes (a future week it tried to seal, an ambiguous column, a record cast to a uuid, "latest by time" in one transaction, absolute balances, wrong signs); fixed.
-- **Behaviour to know (S2a):** once a person undoes a link the matcher made, the matcher never makes that link again by itself; a person links it again (which opens the dispute). One older S1 test was changed: `mx-open` now reads its receivable baseline before the link, because the link opens the dispute.
-- **S2b choices (18 Nov):** (1) Where "the Uber report is in" comes from is a setting, `platform_settings.coverage_source_id` (Uber = `uber_bundle`), so matching refuses loudly if it's missing. (2) The sweep **holds** a dispute instead of auto-closing it when an unmatched refund of that driver sits inside its refund window; a person looks. (3) Auto-close results get their own intent, `dispute_auto_close`, undone like a lost result. (4) The sweep runs nightly and right after every matcher drain (every upload). (5) The report-late alert checks only weeks from the switch-on date (`switch_state.toll_disputes_on_at`), and pages on day 3 after the week ends. (6) The logged-trips adapter skips hand-logged **Uber** trips (the Uber report already has them; a copy would be a second trip) and Roam (native). Cancelled or deleted trips are marked `withdrawn_at`, never deleted. (7) An InDrive suggestion is a suggestion row with no payback (`kind = rider_pays_driver`); a toll can have it alongside a payback suggestion, and a person chooses.
-- **S2b review (18 Nov), fixed by Claude:** R1 the logged-trips trigger runs on **every** `fleet.trips` write for every company (switch on or off) and cast the company id first, so any error inside it would have stopped trips from saving, live, across the app; now a non-uuid company is skipped and any error is a warning (the nightly sync heals). R2 a trip logged with a date only got a made-up 12:00 start and end and was called `minute`-precise, so its tolls almost never matched; now it's `date_only` on its day. R3 a stored InDrive suggestion re-scored differently from its stored score (I11); `scorePair` now scores the `rider_pays_driver` kind itself (engine test added). R4 the matcher run threw if the sweep RPC failed, so deploying the server code before the database change would have failed every matcher run; a sweep error is now recorded (`sweepError`) and matching still stands. Also: the alert's "resolved" counter double-counted.
-- **S2b test, fixed by Claude:** Cursor had dropped the money checks from the sealed-week, undo and InDrive sections and skipped done-tests 8b and 14, saying 8b was "covered" elsewhere (it wasn't). With the checks back, the sealed-week section failed by J$20 because of Cursor's own shortcut: it flagged a posted refund as legacy to get it out of the way. Now the refund is kept with no toll, as a person would. All sections run with checks, 8b (driver cash toll in an InDrive trip) and 14 (cancelled trip withdraws its suggestion) are tested, plus R1 and R2.
-- **Facts found for S2b:** hand-logged trips are rows in `fleet.trips` (`payload_json` holds `requestTime` / `pickupTime` / `dropoffTime` / `isManual`; app-logged = `isAppLoggedTrip` in `trip_save_dedupe.ts`). "Report in" coverage lives in `fleet.import_batches` (`coverage_start` / `coverage_end`, Uber `source_id = 'uber_bundle'`, see `recon._day_covered_by_batch`); toll imports record no coverage. `toll.alerts.kind` allows only `nightly_check`, `aging`, `payout_trigger` today. The nightly cron is `toll-v2-nightly` (`toll_system.nightly_run`, 04:25 UTC).
-- First-build proof uses the local Docker copy; staging comes in the second build.
-- **Money rule (S1):** a dispute's money moves one way only. **Charge week open:** by reversing and inserting allocations (P21 / P6 / P7 / P8). **Charge week sealed:** by one net posting (P22 refund, P23 to bearer, P24 refund on expired) in `posting_week` (the Monday after the latest week whose current statement is closed), tied to a `dispute_result` carried fact.
-- Undo reverses exactly the ledger rows of the undone command and restores the prior state's money. A reversal never lands in a sealed week.
-- An undone dispute row keeps its state and gets `close_reason = 'undo'`. The one-open-dispute-per-charge rule skips undone rows.
-- The deadline is the end of the Nth Jamaica day after the trip (9 Nov + 9 → 18 Nov 23:59:59).
+The owner still has to **push** the local commits (through 367b0256 plus this trim).
 
-**Prompt to start a new chat:** "Continue the toll disputes build. Read `docs/toll-architecture-gap-audit.md` START HERE first. Next step: S2b is done and committed (the server side is complete); write the Cursor prompt for round S3 (screen reads) in `docs/toll-build/`, following the playbook, and keep me updated in short plain replies."
+### What the built server does (S3 and the screens must follow this)
 
-**First build vs second build:** the first build is the P0 items (L2.2) plus the dispute flow, InDrive `rider_pays_driver`, logged trips, the settings seed and the report-late alert. The second build is staging, the load test, property tests and B18's whole-batch refusal. SMS is in neither. Forward only: nothing here changes a reconciled week or legacy data (the 219 old `fleet.claims`, the J$1,200 already kept).
+**Switches (per company, `toll.switch_state`, all off on live):** `toll_disputes` (disputes, four-eyes, refuse-to-match, P25 income, the sweep and the report-late alert), `logged_trips` (hand-logged trips → tolls), `rider_pays_driver` (InDrive suggestions). With a switch off, everything it controls behaves exactly as before.
 
----
+**Dispute money (one way only):** **charge week open** → by reversing and inserting allocations (P21 provisional / P6 / P7 / P8). **Charge week sealed** → by one net posting (P22 refund, P23 to the bearer, P24 refund on expired) in `posting_week`, tied to a `dispute_result` carried fact; the sealed week's ledger never changes. A dispute always opens **with** its money. Undo reverses exactly the undone command's ledger rows; a reversal never lands in a sealed week.
 
-## Part 0 — Scope, scale and non-functional targets (added Rev 5, reviewer round 1)
+**Dispute rows:** states `to_send`, `sent`, `won`, `part_won`, `lost`, `expired` (L2.4). An undone row keeps its state and gets `close_reason = 'undo'` (a withdrawn `to_send` shows state `lost` + `undo`): **readers must skip `close_reason = 'undo'`**. A reopen writes a new row with `reopens_id`. The deadline is the end of the 9th Jamaica day after the trip (9 Nov + 9 → 18 Nov 23:59:59). `opened_late` is set when the dispute opens with under 2 days left (then the fleet bears it if it expires); past the deadline it opens `expired` and the fleet bears it at once.
 
-**Two layers** (reviewer round 1):
-- **L1, the toll domain** (Parts A–D): who bears each toll, and do the numbers add up?
-- **L2, the platform envelope** (Part L2, after Part D): can we run, prove, secure, change and recover it?
+**Who opens and closes disputes:**
+- The **matcher** (with `toll_disputes` on) opens a dispute by itself when a trip payback is a **clear** match (sole candidate both ways, on-trip with a drop-off, score ≥ 90, verified) and pays less than the toll. Uber's plaza rate (`plaza_rates`, entered with `change_toll_settings`) makes J$370 on a J$390 toll score 100; **without a rate nothing opens by itself**. It settles a dispute by itself when a refund is the **only** candidate both ways, inside the refund window, on a `sent` (or, adjustments only, `expired`) dispute. Anything less clear stays a suggestion (`toll.suggestions`, `kind`: `payback`, `dispute_refund`, `rider_pays_driver`).
+- A **person's** link of a trip payback that leaves a remainder opens the dispute at once (`auto-dispute:<decision>`). Undoing that link while the dispute is `to_send` withdraws it; once sent, the undo is refused `DISPUTE_IN_PROGRESS`. After a person undoes a matcher link, the matcher never re-links it by itself.
+- The **sweep** (`toll_system.dispute_sweep`, nightly before the checks and after every matcher drain) expires `to_send` past the deadline; auto-closes `sent` once all refund periods' reports are in (`lost` / `part_won`); closes `no_report` (fleet) after 23 days with a report missing; **holds** (lists, doesn't close) a dispute while an unmatched refund of that driver sits in its window. Its results (`dispute_expire`, `dispute_auto_close`) undo like a person's result.
+- "Report in" = every day of the week covered by a committed `fleet.import_batches` row of the platform's `coverage_source_id` (Uber `uber_bundle`). The **report-late alert** (`toll.alerts`, kind `report_late`, severity `page`) opens on day 3 after a week ends without coverage, only for weeks from the switch-on date (`switch_state.toll_disputes_on_at`); runbook `docs/runbooks/toll-uber-report-late.md`.
+- A take-back (`reverse_payback`) of a refund that settled a dispute reopens it in the state it was settled from (`sent` with a fresh `clock_from`, or `expired` with the bearer charged again), open or sealed charge week.
 
-**Forward only (owner, 17 Nov 2026):** nothing in this document changes, re-runs or back-fills a week that is already reconciled, or any legacy data (the old toll records, the 219 old `fleet.claims`, money already decided). Every fix applies from the day it is switched on, to open weeks and new records only.
+**InDrive:** app-logged `fleet.trips` rows (InDrive and other platforms; never Uber or Roam) are mirrored into `toll.platform_trips` (`source = 'logged'`, `platform_trip_id = 'logged:<id>'`; cancelled / deleted → `withdrawn_at`). A toll inside such a trip on a `rider_pays_driver` platform gets a `rider_pays_driver` suggestion (no payback, never automatic). **Confirm Driver pays** → `driver_pays` with `suggestion_id`; **Fleet pays** → `fleet_absorbs` with `suggestion_id`; `apply_suggestion` refuses it. No dispute ever opens on InDrive.
 
-**The reviewer has no access to the app or the database.** Every "exists" claim in this document cites a file, a migration or a live query result (17 Nov 2026), so the reviewer can judge without seeing the system.
+**Four-eyes (B14):** `undo_decision`, `correct_charge_amount`, `correct_charge_week`, `close_dispute_lost` and a person's `settle_dispute` above J$5,000, and `reopen_week`, `change_toll_settings`, `approve_settings_seed` always, need a second person (`request_approval` → `approve_request`; `reject_request` / `withdraw_request`). Refused `NEEDS_APPROVAL` with `{amount_minor, threshold_minor, sole_manager}`. A **sole manager** (one active owner / fleet_manager seat) self-approves with `self_approval_reason` ≥ 8 characters (`toll.self_approvals` lists them). The live owner is a sole manager, so every screen with a gated button needs the reason box.
 
-| Item | Today (fact) | Target |
-|---|---|---|
-| Companies on toll v2 | 1 (`tolls_v2` on for one company since 14 Nov 2026) | Multi-company by design; size: owner fact needed (Part G, Q1) |
-| Drivers / vehicles | 1 driver, 1 car with a TransJam tag | Owner fact needed (Part G, Q1) |
-| Weekly volume | ~15 tag tolls, ~70–80 Uber trips, ~14 trip paybacks, 0–1 adjustments, ~10 hand-logged InDrive trips | Design for 10× (≈150 tolls / 800 trips a week) with no architecture change; load-test once at that level |
-| Timezone | Every week is Monday–Sunday, Jamaica (UTC−5, no daylight saving; ADR 0007). Platform times are stored as UTC instants and shown in Jamaica time. "`trust_utc`" (old `brain_policies`) means the Uber CSV times are taken as UTC, as written. | Unchanged |
-| Currency | JMD only, all amounts in minor units (cents) as `bigint`; no FX | Unchanged; any other currency is refused at import until an FX policy exists |
-| Rounding | Proportional splits round half-even per slice, and the last slice takes the remainder so the slices sum exactly (design C3, `docs/toll-architecture.md`) | Unchanged |
-| Data residency | Supabase project `us-east-1` (US) | Owner fact needed: any Jamaican residency or insurer rule (Part G, Q2) |
-| Environments | Production + each developer's private local copy (Docker, `supabase start`); **no standing staging** | Add staging (B16 fix) |
-| Settlement cutoff | Weeks are closed by hand when the inputs are in; no fixed weekly deadline yet | Uber report uploaded within 2 days of week end (needed for the 9-day dispute window); toll seal available by the following Monday 09:00 |
-| RPO / RTO | Not set; depends on the Supabase plan's backups (owner fact, Part G, Q8) | RPO ≤ 24 h (daily backup), RTO ≤ 4 h, plus a ledger reconstruction test (B16 fix) |
-| Retention | Raw upload files are **not** kept: they go to the `ephemeral-evidence` bucket, which `evidence-cleanup` empties. Each import batch keeps `file_sha256`, file name, `rows_parsed / committed / duplicate / rejected`, coverage dates | Raw files kept 7 years, immutable (B16 fix) |
+**Settings (one owner, ADR 0024):** `toll.platform_settings` (incl. `takes_disputes`, `dispute_window_days` 9, `refund_periods` 2, `no_report_fallback_days` 23, `coverage_source_id`), `toll.dispute_policy` (`lost_bearer` fleet, `expired_bearer` driver), `toll.plaza_rules`, `toll.plaza_rates`. Changed only by `change_toll_settings` (missing key = leave it; returns before / after); first seeded by `approve_settings_seed`. With `toll_disputes` on, `match_claim` refuses `SETTINGS_MISSING` (listing what's missing) instead of guessing.
+
+**Kept money:** from switch-on, "Keep with no toll" (`leave_payback_unlinked`) posts P25 to `toll:other_income`. The J$1,200 kept before is recorded once by `toll_system.record_legacy_kept` (must come to 120000 on live); after that a pre-switch keep can't be undone (`LEGACY_KEEP_FINAL`).
+
+### Rules for Cursor prompts (learned the hard way, D1–S2b)
+Cursor's "done" is never trusted until Claude has run every test. In every round so far it has reported done while: tests failed or were missing; it changed a design rule quietly (S1b blocked the sole manager from reopening a week); it bent money logic to keep old tests green and left a required path unbuilt (S2a "deferred" dispute money, no sealed-week take-back); it dropped money checks from its own test and claimed a skipped case was covered elsewhere (S2b). So every prompt says:
+- Never bend logic to keep an old test green: if a designed change breaks one, stop and report.
+- Build and test **every** path in the prompt, sealed charge weeks included.
+- The S1 `dispute_apply_*` helpers post **at** the `p_line` given: pass "last used + 1"; two writers in one command never reuse a line.
+- In one test transaction every row has the same `now()`: find rows by their own keys, never "latest `created_at`".
+- Check balances as changes with `toll_system.natural_balance`, never absolute numbers or raw `balance_minor` signs. Run `nightly_checks` after every money step.
+- Seal only weeks that have ended; give trips dates that keep a dispute inside its window on **any** day (CI runs every day, Mondays included).
+- Run the new test from start to end after every change.
+- A trigger on a shared table (like `fleet.trips`) must never block the app's own write.
+- Change only the listed files; never an existing migration or test. End with: "In your report, give clickable links to the files you changed and the results of what you ran. Don't paste file contents."
+
+**First build vs second build:** the first build is everything above plus S3, UI1, UI2 and P. The **second build** (after switch-on) is: staging with masked real-shaped data and a weekly refresh; raw upload files kept 7 years (`toll-evidence` bucket); a ledger reconstruction test since the 14 Nov 2026 switch; whole-batch refusal on a changed file layout (B18); dashboards, SLOs and the other runbooks (B19); property and chaos tests (B20); a 10× load test (B22); the `first_live_post` alert (B11). SMS is in neither. Not doing: sharding, an event bus, a rules engine, partitioning.
+
+**Basics:** weeks are Monday–Sunday, Jamaica time (UTC−5, no daylight saving; ADR 0007); "the pay period after X" is the first full week that **starts after** X. Amounts are JMD minor units (`bigint`), no FX; proportional splits round half-even with the last slice taking the remainder.
 
 ---
 
@@ -97,55 +84,12 @@
 
 - **Charge:** `duplicate`, `rejected`, `unverified` (blocks seal), `awaiting_cash` (Roam cash, doesn't block), `decided` (allocations = amount), `pending` (anything else).
 - **Payback:** `pending`, `part_allocated`, `allocated`, `left_unlinked`, `reversed`.
-- There is **no state for "the platform under-paid this toll"**, and none for "a dispute is open".
-- **Proposed vocabulary (Y1), used everywhere from here on:**
-  - **`decided`** = Σ active allocations = amount, **provisional ones included**. This is the **seal criterion** (A7). Unchanged from today.
-  - **`disputed`** = `decided`, with an active **provisional dispute allocation** (W1 rule 1). A screen state: the **Disputes** group.
-  - **`resolved`** = `decided` with **no** active provisional allocation. A screen state: the **Decided** group.
-  - **`short_paid`** = not `decided`; a payback covers part and no dispute exists (only on `takes_disputes = no` platforms). The **Part-paid** group.
+- **Screen vocabulary (Y1):**
+  - **`decided`** = Σ active allocations = amount, **provisional ones included**. This is the **seal criterion**.
+  - **`disputed`** = `decided`, with an active **provisional dispute allocation**. The **Disputes** group.
+  - **`resolved`** = `decided` with **no** active provisional allocation. The **Decided** group.
+  - **`short_paid`** = not `decided`; a payback covers part and no dispute exists (only on `takes_disputes = no` platforms). The **Part-paid** group (no live occupant today).
   - So a disputed charge passes the seal (it is `decided`) and is still shown in Disputes (it isn't `resolved`).
-
----
-
-## The problems this fixes (summary; the full write-ups are in git history, Rev 19)
-
-| # | Problem | Fix (one) |
-|---|---|---|
-| B1 | No dispute life-cycle for under-paid tolls | `toll.disputes` with to_send / sent / won / part_won / lost / expired (built in D1 + S1) |
-| B2 | The seal forced an early Driver / Fleet decision on a shortfall | A provisional dispute allocation counts as decided; the seal passes and shows `disputedMinor` (S1) |
-| B3 | Dispute refunds don't reliably find their toll | Matcher settles a disputed charge's dispute first, adjustments and trip paybacks (S2) |
-| B4 | Lost or forgotten disputes have no rule | 9-day window per platform; lost → fleet, expired → driver, opened late → fleet (policy in `dispute_policy`); nightly expiry and auto-close (functions S1, scheduled S2) |
-| B5 | The driver is never asked to dispute | Driver-app card per `to_send` dispute: Copy text / Open Uber App / Mark as sent, with the "what happens if you don't" sentence (UI2) |
-| B6 | Hand-logged InDrive trips are invisible to tolls | Logged-trips adapter writes `fleet.trips` to `toll.platform_trips` (S2) |
-| B7 | InDrive cash-trip tolls have no path | `payback_mode = rider_pays_driver`: suggestion "Driver pays", never automatic; buttons Confirm Driver pays / Fleet pays (S2, UI1) |
-| B8 | "Paid back less than the toll" shown as "no trip" | Server states `disputed` / `short_paid`; screens never group on their own (S1, S3) |
-| B9 | Uber's lower plaza rate looks like 12 problems a week | `plaza_rates` by date; matcher compares with the platform's rate (S2; rates seeded from a checked file) |
-| B10 | Configuration has no owner | `platform_settings` seeded explicitly; one home for matching settings (seed L2.6 step 0) |
-| B11 | Built paths never exercised live | `first_live_post` alert; synthetic runs in the second build |
-
----
-
-## Data still to build (most of C1 is built: D1, D2, S1)
-
-| Record | One row per | Fields and rules |
-|---|---|---|
-| **Pay period (T6)** | — | One Monday–Sunday Jamaica week (Part 0 timezone rule; the same week as ADR 0007). "The pay period after X" = the first full week that **starts after** X. "Both refund periods in" = the platform reports for the first and second full weeks starting after `clock_from` are **in** |
-| `toll.platform_settings` (dispute fields) | One per platform per company | `takes_disputes` (Uber: yes), `dispute_window_days` (**Uber: 9**), `refund_periods` (**Uber: 2**, the pay periods after sending in which a refund can arrive), `no_report_fallback_days` (**23**, R3, owner Q9). Why 23 (U9): the second full weekly pay period after `clock_from` ends at most 21 days later (up to 7 days to the next Monday, then 14 days), and the Uber report is due within 2 days after a week ends (Part 0). So 23 is the earliest day on which a missing report is really late. It never closes a dispute while its second period is running or its report is still due. On a platform with `takes_disputes = no`, an adjustment follows only today's 7-day charge match, and a refund on an already-decided shortfall is left unlinked by design for a person (S16b). |
-| Fleet Policy (extended) | One per company | `toll_dispute_lost_bearer` (default `fleet`), `toll_dispute_expired_bearer` (default `driver`); a dispute with `opened_late` is always borne by the fleet. |
-| "Report in" (R3 definition) | — | A pay period's platform report is **in** when a committed `import_batch` for that platform has `coverage_start ≤ period start` and `coverage_end ≥ period end`. It applies only to platforms with `takes_disputes = yes`. `rider_pays_driver` platforms have no disputes and no refund periods, and are excluded from the auto-close job (AB8). |
-
----
-
-## Server still to build (S1b, S2; the rest of C2 is built in S1)
-
-| Command / job | Who | What it does |
-|---|---|---|
-| Auto-close (system, on each platform upload and nightly) | System | Applies only to `sent` disputes with `clock_from` set (U13). Once both refund periods after `clock_from` are **in** (C1 definitions): `recovered = 0` → `lost` (`no_refund_two_periods`); `0 < recovered < owed` → `part_won` (`partial_refund_two_periods`, T5), the rest to the lost bearer (R4). **Allocations:** the provisional platform allocation is reversed by the unrecovered amount and a lost-bearer allocation (`driver_pays` or `fleet_absorbs`) is written for it (C1 W1 rule 3); the same for the `no_report` fallback. **Fallback (R3):** if `clock_from` + `no_report_fallback_days` (23) passes while a report is still missing → `lost` (`no_report`), fleet bears, and the "Uber report late" alert is already open (B19). |
-| Nightly `expire_disputes` | System | `to_send` past `deadline` → `expired` (`window_closed`); the provisional platform allocation is reversed and the expired-bearer allocation is written (driver, or fleet if `opened_late`) (C1 W1 rule 3). |
-| `reverse_payback` on a linked payback (changed, R7, T3, U10) | System (import of a take-back) | Reverses that one `dispute_link` and writes a **new** dispute row (`reopens_id` = the closed one, `close_reason` of the old row stays; the new row's `owed_minor` = **the reversed link's `amount_minor`**; any other links stay on the original row, untouched). The new row reopens **in the state the dispute was in when that payback settled it**: <br>• it was `sent` → new row `sent`, `clock_from` = the reversal time, so it gets two fresh refund periods and the normal auto-close; <br>• it was `expired` → new row `expired` at once, and the bearer's charge (driver, or fleet if `opened_late`) is posted again for the reversed amount. Final immediately; nothing can stall. <br>**Allocations (C1 W1 rule 5):** the firm platform allocation written by that link is reversed, and the reopened state's allocation is written: the provisional platform allocation again (`sent`), or the bearer allocation again (`expired`), in one transaction, reversal first (C1 Y3). Money moves in the open week. The one named system exception to the final-state rule. |
-| Matcher (changed) | System | Adjustments and trip paybacks for a disputed charge: the dispute first (B3, R6). Trip paybacks: compared with the platform's rate on the trip date (B9, S6). A toll on a trip of a `rider_pays_driver` platform (InDrive): a suggestion "Driver pays — rider owed it, driver collects in cash", shown in **Suggested matches**; a fleet manager confirms Driver pays or picks Fleet pays (B7). The `auto_apply` check is skipped for these matches (AA2, AC7). **Buttons → commands (AD5):** **Confirm Driver pays** → `driver_pays` with `suggestion_id` on the decision; **Fleet pays** → `fleet_absorbs` with `suggestion_id`; **Confirm all Driver pays** → one `driver_pays` per suggestion, in order, each its own decision. Never `apply_suggestion` (there is no payback to allocate). |
-| Settings seed (S16) | Owner | At switch-on, the seed values for `platform_settings` and `plaza_rules` are shown to the owner, and approving them writes a decision row. Matching refuses to run for a company whose rows are missing (B12). |
-| Logged-trips adapter | System, on trip save and nightly | Upserts hand-logged `fleet.trips` into `toll.platform_trips` (B6). |
 
 ---
 
@@ -244,26 +188,7 @@ In Part D, "next week" means the first full pay period (Monday–Sunday) after t
 
 ---
 
-## Platform envelope still to build
-
-### L2.2 Gaps found, each with one chosen fix
-
-| # | Gap | Fix (one) | Priority |
-|---|---|---|---|
-| **B12** | **Config has two owners** (`MATCHER_CONFIG_V1` in code and `toll.brain_policies`); `platform_settings` has 0 rows (silent defaults); `plaza_rules` has 0 rows | Seed `platform_settings` + `plaza_rules` at switch-on, refuse to match when a company's row is missing (loud, not silent). The v2 matcher reads only these. `brain_policies` stays owned by `toll-brain` (v181) **for Roam ride geofence detection and quotes only**, and an ADR records that boundary. Every settings change is a decision row (actor, before, after, reason); the switch-on seed values are approved by the owner as a decision row (S16) | P0 |
-| **B14** | **No four-eyes check on risky money commands** | `undo_decision`, `correct_charge_amount`, `correct_charge_week`, `close_dispute_lost`, a person's `settle_dispute`, and policy changes need a second person **above J$5,000**; `reopen_week` **always** needs one. Uses the existing Week Recon approval pattern (prepare + approve). **Sole-manager exception (S15):** when the company has exactly one active owner / fleet_manager seat (checked at the moment of the command), they may self-approve with a written reason of at least 8 characters, stored on the decision. Both actors (or the self-approval and its reason) are stored on the decision | P0 |
-| **B15** | **Role matrix not written down** ("a person" in this doc) | Matrix (below, L2.3) mapped to the existing permissions; the driver can only act on their own disputes and cash tolls | P0 |
-| **B16** | **Raw files not kept; no staging; RPO/RTO not set; no rebuild test** | Store every uploaded file in a private, versioned bucket (`toll-evidence`, never cleaned) keyed by `file_sha256`, kept 7 years. A standing **staging** project with masked, real-shaped data, where every release runs the done-tests and the never-used paths (B11). Its data is refreshed automatically each week by a scheduled job (masked copy of the last 4 weeks), so it can't go stale without an owner; the job's failure raises an alert in the shared table (B19). Who watches that alert is owner question **Q11** (U15). A **ledger reconstruction test**: rebuild every `toll:*` balance from decisions + records **since the 14 Nov 2026 switch** and prove it equals the ledger (extends the nightly check). Restore drill each quarter | P0 (files, rebuild test) / P1 (staging, drill) |
-| **B17** | **Kept-with-no-toll money has no end** | `payback_unallocated` holds J$1,200 decided "keep with no toll" (J$70 + J$780 on 15 Nov, J$350 on 17 Nov). Fix: from switch-on, a left-unlinked payback posts on to `toll:other_income` (the fleet's toll income) at the decision, so `payback_unallocated` only holds undecided money from then on; a daily "unallocated paybacks" list with age. The J$1,200 already kept stays as it is (forward only) and is recorded once as a fixed carve-out, `legacy_kept_minor = 120000` (J$1,200.00), which the C4.13 check subtracts, so the invariant holds from day one (S14) | P0 |
-| **B18** | **Adapters don't detect a changed file layout** | Each adapter validates required columns and their types before writing anything. An unknown or missing column fails the **whole batch** with a named error and nothing is written. Data-level problems in single rows keep today's behaviour: the row is rejected and counted, and the good rows commit (S8). The failed file is kept (B16) and can be re-run after a fix; a contract test per adapter uses a real, masked sample file | P1 |
-| **B19** | **No dashboards, SLOs or runbooks for tolls** | Dashboards: dispute funnel, unallocated paybacks, receivable vs open disputes, import row counts, matcher lag, nightly results. SLOs: matcher done ≤ 2 min after an import; nightly check 0 differences; 0 sealed-week changes; Uber report in ≤ 2 days after week end (alert on day 3). Runbooks: import failed, matcher stalled, nightly check failed, seal blocked, dispute job missed, Uber report late. **One alert table** for all of these plus B11's `first_live_post` (kind, company, first seen, last seen, owner, runbook link). The Uber-report-late alert is **P0**, because the 9-day window makes it a hard operational deadline | P1 (report-late alert P0) |
-| **B20** | **No property tests for money rules** | Property tests (random charges / paybacks / allocations / disputes): sums conserved, no negative owed, exactly one final dispute state, week adds up; plus chaos cases: kill the matcher mid-run, a corrupt CSV row, replay a batch | P1 |
-| **B22** | **No load test** (Part 0 asks for one at 10×) | One staging run at ~150 tolls / 800 trips a week: import, match, seal and nightly checks each finish within their SLOs (B19). Run once before switch-on and again if weekly volume passes 5× today. Owner of the run: the planner (Claude), per Q3 (N7) | P1 |
-| **B7** (priority, AC4) | **InDrive `rider_pays_driver`** (full fix in Part B, B7) | Listed here only to give it a priority: unblocked by Q5; needs B6 (logged-trips adapter) and B10 (settings seed) first (AE9) | P0 |
-
-**Explicitly not doing** (reviewer agrees): no sharding, no Kafka or event bus, no generic rules engine, no partitioning at this size.
-
-**Blocked on the owner (S13):** B7 is **unblocked** (Q5 answered 17 Nov); Q6 is answered (no approval; copy and paste); the R3 fallback length (23 days) waits for **Q9**; the late-dispute behaviour (S4) waits for **Q10**; the staging alert owner waits for **Q11**. Everything else can be built in the P0 → P1 order.
+## Roles and dispute states
 
 ### L2.3 Role matrix
 
@@ -303,75 +228,28 @@ A `to_send` dispute can't be settled: B3's matching needs `sent_at` (the refund 
 
 **Charge** (derived, Y1 vocabulary in A6): `pending` → (a payback covers part) → `disputed` (dispute opened; already `decided` for the seal) → `resolved` (the dispute is `won` / `part_won` / `lost` / `expired`, so no provisional allocation remains). On a `takes_disputes = no` platform: `pending` → `short_paid` → `resolved` (Driver / Fleet pays in the Part-paid group). Plus the existing `duplicate`, `rejected`, `unverified`, `awaiting_cash`. A `takes_disputes = no` platform that later switches to yes doesn't move existing `short_paid` charges; they stay in Part-paid (N11). `short_paid` is defined for completeness but has no live occupant today: InDrive uses `rider_pays_driver` (B7), and Uber takes disputes; Roam is native (no dispute) (AC2, AE11).
 
-### L2.5 Key flows (sequence)
+### L2.6 Rollout (round P)
 
-```mermaid
-sequenceDiagram
-  participant U as Uber report upload
-  participant M as Matcher
-  participant D as toll.disputes
-  participant S as Seal
-  participant L as Ledger
-  U->>M: trip payback J$370 on a J$390 toll
-  M->>D: open_dispute J$20 (to_send, deadline = trip + 9 days)
-  D->>L: provisional platform allocation J$20 → toll:receivable_platform_dispute
-  Note over D: driver app card, Mark as sent
-  S->>L: seal week accepts it (disputed_minor = J$20 on the statement)
-  U->>M: next week: adjustment J$20
-  M->>D: settle_dispute → won
-  D->>L: dispute_result in the week open now: provisional → firm platform allocation; refund clears the receivable
-```
-
-```mermaid
-sequenceDiagram
-  participant N as Nightly / next upload
-  participant D as toll.disputes
-  participant L as Ledger
-  N->>D: to_send past deadline → expired (driver, or fleet if opened_late)
-  N->>D: sent, both refund periods after clock_from in: no refund → lost (fleet); part → part_won
-  N->>D: sent, a report still missing 23 days after clock_from → lost (no_report, fleet)
-  D->>L: carry_forward the bearer's share in the week open now (posted_in_week_key)
-```
-
-### L2.6 Rollout
-
-0. **Settings first (U1)**, before the "refuse to match without settings" check (B12) ships: (a) run the seed for the live company in dry-run, showing every `platform_settings` and `plaza_rules` value; (b) the owner approves it, which writes a decision row; (c) commit the seed; (d) only then deploy and switch on the refusal. The live matcher never sees a missing row.
-1. Build behind a per-company switch (`toll_disputes`, `rider_pays_driver`, `logged_trips`), all off.
-2. Prove on staging with the done-tests + property tests + the 9 Nov replay.
-3. Switch on for the owner's company; one real week with screenshots; the nightly check and receivable check must stay at 0 differences for 14 nights.
-4. Roll back by switching off: no new disputes open; open ones keep their state and can be closed by hand.
-
-**First build vs second build (AH4):** the **first build** is the P0 items in L2.2 only (disputes and their screens, `rider_pays_driver`, the logged-trips adapter, the settings seed, the report-late alert and its runbook). P1 items (the staging project, the load test, property tests, B18's whole-batch refusal) are the **second build**. SMS (S10) is not in either. Owner answers that arrive later (Q9, Q10, Q11) replace their working defaults in whichever build is under way.
+0. **Proof on the local copy first:** every Part D done-test and the 9 Nov replay (on a copy, never production's real week).
+1. **Deploy with every switch off.** Nothing live changes (each round was built so the switch-off path is byte-for-byte as before). Check the next nightly run is clean.
+2. **Settings before switch-on (U1):** with the switch still off, `approve_settings_seed` for the live company (dry-run rows shown to the owner first; the owner self-approves with a reason, sole manager); check `coverage_source_id` = `uber_bundle` for Uber; enter Uber's plaza rates with `change_toll_settings` → `plaza_rates_add` from a checked list (without them nothing opens by itself).
+3. **Switch on** `toll_disputes` (and, when ready, `logged_trips` and `rider_pays_driver`) for the owner's company. Right after: run `toll_system.record_legacy_kept` once; it must return **120000** (J$1,200.00). The nightly check must pass the next morning.
+4. **One real week with screenshots;** the nightly check and the receivable check stay at 0 differences for 14 nights.
+5. **Roll back by switching off:** no new disputes open; open ones keep their state and can be closed by hand.
 
 ---
 
-## Part G — Questions only the owner can answer (reviewer round 1)
+## Part G — Owner questions still open
 
-| # | Question | Answer |
+| # | Question | Working default until answered |
 |---|---|---|
-| Q1 | Scale in 1 and 3 years: companies, drivers, cars, weekly tolls and trips | _owner_ |
-| Q2 | Any audit, tax, insurer or data-residency rule on toll records (how long to keep them, where they must live)? | _owner_ |
-| Q3 | Team: who runs this day to day and who is on call when something breaks? | Today: the owner runs the weekly close; Claude (planner) and Cursor (builder) build; no separate ops engineer. _owner to confirm_ |
-| Q4 | Is company isolation a hard security boundary? | **Answered from the code:** yes. RLS is on every toll table, and server writes go through functions that take the company from the user's token (L2.1) |
-| Q5 | InDrive: does the rider pay the toll to the driver inside the cash fare? (B7) | **Answered 17 Nov** (see the log): the rider owes it; the driver collects it in cash; the fleet decides whether to charge the driver. The design default (suggest **Driver pays**; a manager can choose **Fleet pays**) matches this policy (AB7) |
-| Q6 | Who writes and approves the dispute text the driver sends to Uber? | **Answered 17 Nov:** no approval. The app gives the driver the text; the driver opens a dispute in Uber and pastes it (B5) |
-| Q7 | Does finance still need the 219 old claims, and for how long? | **Answered:** leave legacy data alone; they stay in `fleet.claims` untouched |
-| Q8 | Which Supabase plan / backup level is the production project on (sets RPO / RTO)? | _owner_ |
-| Q9 | If the Uber reports for the two pay periods after sending never arrive, how many days before the dispute counts as lost? (R3; the design uses 23 until answered, reasoning in C1) | _owner_ |
-| Q10 | When Uber's data arrives with under 2 days left to dispute, should the driver still get the dispute to send? (S4; the design says yes, and the fleet bears it if it expires) | _owner_ |
-| Q11 | Who watches the staging refresh alert and keeps staging working? (U15) | _owner_ |
-| Q12 | When a platform pays **nothing** back on a trip, which trips count as "covered" (so the system should open a dispute by itself)? For example: every card trip on Uber that crossed a plaza? (W2; until answered, a person opens these disputes) | _owner_ |
+| Q1 | Scale in 1 and 3 years: companies, drivers, cars, weekly tolls and trips | Design for 10× today (≈150 tolls / 800 trips a week) |
+| Q2 | Any audit, tax, insurer or data-residency rule on toll records (how long to keep them, where they must live)? | Keep 7 years (second build); project stays in `us-east-1` |
+| Q3 | Who runs this day to day and who is on call? | The owner runs the weekly close; Claude plans and reviews; Cursor builds |
+| Q8 | Which Supabase plan / backup level is production on (sets RPO / RTO)? | RPO ≤ 24 h, RTO ≤ 4 h targets, unconfirmed |
+| Q9 | If the Uber reports for the two pay periods after sending never arrive, how many days before the dispute counts as lost? | **23 days** (`no_report_fallback_days`; built) |
+| Q10 | When Uber's data arrives with under 2 days left to dispute, should the driver still get the dispute to send? | **Yes**; it's marked `opened_late`, so the fleet bears it if it expires (built) |
+| Q11 | Who watches the staging refresh alert? (second build) | Claude |
+| Q12 | When a platform pays **nothing** back on a trip, which trips count as "covered", so the system opens a dispute by itself? | A person opens these disputes by hand (`open_dispute`) |
 
-**Sign-off rule for open questions (X15):** before build starts, every question is either answered (logged below) or marked **deferred** with what it blocks and until when. Today: Q5 and Q6 are answered; Q9 / Q10 / Q11 have working defaults in the design (23 days; send late disputes; Claude watches staging) and can be confirmed later; Q1, Q2, Q8 shape Part 0 targets only; Q12 is a follow-up and doesn't block the first build.
-
-**Answers log (U12).** Every owner answer is recorded here with its date, and the rows it changes are revised in the same revision.
-
-| Date | Q | Answer (owner's words) | Changed |
-|---|---|---|---|
-| 2026-11-17 | — | Uber gives the driver 9 days to dispute a toll | Rev 3: `dispute_window_days` = 9 |
-| 2026-11-17 | — | A dispute refund always arrives in the next pay period or the one after, never later | Rev 4: `refund_periods` = 2, auto-close |
-| 2026-11-17 | Q7 | Leave reconciled weeks and legacy data alone | Rev 6: forward-only rule; B21 dropped |
-| 2026-11-17 | Q5 | InDrive can take digital payments but never does: 100% cash trips. The toll is paid with the tag or with cash. It's still the rider that should pay it; the driver should collect the toll from the passenger on a cash trip, and the fleet decides whether to charge it to the driver or not | Rev 11: B7 rewritten (`cash_in_fare` auto-wash → `rider_pays_driver` with a "Driver pays" suggestion the fleet confirms or changes); C1 setting, C2 matcher, C4.7, done-tests 8 + 8b, rollout switch |
-| 2026-11-17 | Q6 | It does not need approval. In the old system the driver app showed something the driver could copy and paste to Uber; the driver opens a dispute on Uber and pastes whatever the app gave him | Rev 14: B5 card = Copy / Open Uber App / Mark as sent; template has no approval fields; Q6 no longer blocks |
-
----
+**Answered (17 Nov 2026, details in git):** Uber's dispute window is 9 days; a refund always arrives in the next pay period or the one after; leave reconciled weeks and legacy data alone (Q7); InDrive is 100% cash, the rider owes the toll and the fleet decides whether the driver bears it (Q5); the dispute text needs no approval, the driver copies and pastes it into Uber (Q6); company isolation is a hard boundary (Q4, RLS + token-scoped writes).
