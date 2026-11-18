@@ -3,8 +3,22 @@
 BEGIN;
 
 INSERT INTO auth.users (id, email)
-SELECT 'f0111111-1111-4111-8111-111111111111'::uuid, 'toll-s1-cmd@example.com'
-WHERE NOT EXISTS (SELECT 1 FROM auth.users u WHERE u.id = 'f0111111-1111-4111-8111-111111111111'::uuid);
+SELECT u.id, u.email
+FROM (VALUES
+  ('f0111111-1111-4111-8111-111111111111'::uuid, 'toll-s1-cmd@example.com'),
+  ('f0121111-1111-4111-8111-111111111112'::uuid, 'toll-s1-mgr2@example.com')
+) AS u(id, email)
+WHERE NOT EXISTS (SELECT 1 FROM auth.users x WHERE x.id = u.id);
+
+INSERT INTO platform.roles (name, display_name, description, level, product_key, is_system)
+VALUES ('fleet_manager', 'Fleet Manager', 'S1 disputes second seat', 50, 'fleet', true)
+ON CONFLICT (name) DO NOTHING;
+
+INSERT INTO platform.user_roles (user_id, role_id, scope_type, scope_id, status)
+SELECT 'f0121111-1111-4111-8111-111111111112'::uuid, r.id, 'organization',
+       'f1111111-1111-4111-8111-111111111101'::uuid, 'active'
+FROM platform.roles r WHERE r.name = 'fleet_manager'
+ON CONFLICT DO NOTHING;
 
 INSERT INTO public.organizations (id, owner_id, name, slug, product_line, status)
 VALUES (
@@ -44,6 +58,17 @@ BEGIN
   RETURN r;
 END;
 $c$;
+
+CREATE OR REPLACE FUNCTION pg_temp._s1_cmd_as(p_user uuid, p_intent text, p_body jsonb) RETURNS jsonb
+LANGUAGE plpgsql AS $ca$
+DECLARE r jsonb;
+BEGIN
+  PERFORM pg_temp._s1_as(p_user, 'f1111111-1111-4111-8111-111111111101'::uuid);
+  r := public.toll_v2_command(p_intent, p_body);
+  RESET ROLE;
+  RETURN r;
+END;
+$ca$;
 
 CREATE OR REPLACE FUNCTION pg_temp._s1_refused(p_intent text, p_body jsonb, p_code text) RETURNS void
 LANGUAGE plpgsql AS $r$
@@ -333,10 +358,15 @@ BEGIN
   END IF;
   PERFORM pg_temp._s1_assert_nightly();
 
-  -- F7: reopen sealed week A — posting_week must not be A+7 while A is draft again
-  v_r := pg_temp._s1_cmd('reopen_week', jsonb_build_object(
-    'command_id', 's1-reopen-a', 'week_key', v_week, 'expected_week_version', 1,
-    'reason', 's1 F7 posting_week after reopen'));
+  -- F7: reopen sealed week A — posting_week must not be A+7 while A is draft again (four-eyes)
+  v_r := pg_temp._s1_cmd('request_approval', jsonb_build_object(
+    'command_id', 's1-reopen-req', 'intent', 'reopen_week',
+    'body', jsonb_build_object(
+      'command_id', 's1-reopen-a', 'week_key', v_week, 'expected_week_version', 1,
+      'reason', 's1 F7 posting_week after reopen'),
+    'note', 'F7 reopen'));
+  v_r := pg_temp._s1_cmd_as('f0121111-1111-4111-8111-111111111112'::uuid, 'approve_request', jsonb_build_object(
+    'command_id', 's1-reopen-appr', 'request_id', (v_r ->> 'request_id')::uuid));
   v_pw := toll_system.posting_week(v_org);
   IF v_pw = v_week + 7 OR toll_system.week_is_sealed(v_org, v_week) THEN
     RAISE EXCEPTION 'F7 posting_week % week %', v_pw, v_week;

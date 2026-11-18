@@ -69,6 +69,8 @@ on:
       - 'supabase/migrations/20261118000711_toll_sealed_week_guard.sql'
       - 'supabase/tests/toll_dispute_commands_test.sql'
       - 'supabase/migrations/20261118001833_toll_dispute_commands.sql'
+      - 'supabase/tests/toll_four_eyes_settings_income_test.sql'
+      - 'supabase/migrations/20261118060401_toll_four_eyes_settings_income.sql'
       - 'packages/toll-core/src/v2/weekRuleCases.json'
       - '.github/workflows/parts-sql-checks.yml'
   push:
@@ -136,6 +138,8 @@ on:
       - 'supabase/migrations/20261118000711_toll_sealed_week_guard.sql'
       - 'supabase/tests/toll_dispute_commands_test.sql'
       - 'supabase/migrations/20261118001833_toll_dispute_commands.sql'
+      - 'supabase/tests/toll_four_eyes_settings_income_test.sql'
+      - 'supabase/migrations/20261118060401_toll_four_eyes_settings_income.sql'
       - 'packages/toll-core/src/v2/weekRuleCases.json'
       - '.github/workflows/parts-sql-checks.yml'
   workflow_dispatch:
@@ -278,3 +282,5 @@ jobs:
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_sealed_week_guard_test.sql
           docker cp supabase/tests/toll_dispute_commands_test.sql "$db_container":/tmp/toll_dispute_commands_test.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_dispute_commands_test.sql
+          docker cp supabase/tests/toll_four_eyes_settings_income_test.sql "$db_container":/tmp/toll_four_eyes_settings_income_test.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_four_eyes_settings_income_test.sql

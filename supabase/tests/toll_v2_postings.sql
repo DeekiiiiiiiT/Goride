@@ -314,8 +314,8 @@ BEGIN
     END IF;
   END LOOP;
 
-  IF (SELECT count(*) FROM toll.posting_rules) <> 36 THEN
-    RAISE EXCEPTION 'expected 36 posting rules, got %', (SELECT count(*) FROM toll.posting_rules);
+  IF (SELECT count(*) FROM toll.posting_rules) <> 37 THEN
+    RAISE EXCEPTION 'expected 37 posting rules, got %', (SELECT count(*) FROM toll.posting_rules);
   END IF;
 
   -- 2. Reversal
