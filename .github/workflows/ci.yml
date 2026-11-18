@@ -330,6 +330,7 @@ jobs:
           deno test --allow-read --allow-env --no-check
           supabase/functions/_fleet-server/toll_route_auth.test.ts
           supabase/functions/_fleet-server/toll_v2_command_errors.test.ts
+          supabase/functions/_fleet-server/toll_v2_driver_disputes_controller.test.ts
           supabase/functions/_fleet-server/period_projector.test.ts
           supabase/functions/rides/tolls/nativeTollPayload.test.ts
           supabase/functions/rides/tolls/nativeTollSync.test.ts

@@ -1,7 +1,7 @@
 {
   "slug": "fleet-toll",
-  "generatedAt": "2026-11-15T22:27:03.545Z",
-  "routeCount": 24,
+  "generatedAt": "2026-11-18T18:52:36.424Z",
+  "routeCount": 26,
   "routes": [
     "DELETE /toll-plazas/:id",
     "DELETE /toll-tags/:id",
@@ -15,6 +15,7 @@
     "GET /toll-tags",
     "GET /toll-tags/:id",
     "GET /toll-tags/low-balance",
+    "GET /toll/v2/driver/disputes",
     "PATCH /toll-tags/:id",
     "POST /internal/toll-matcher-sweep",
     "POST /toll-info",
@@ -26,6 +27,7 @@
     "POST /toll-tags/unassign",
     "POST /toll/v2/commands/:intent",
     "POST /toll/v2/driver-cash",
+    "POST /toll/v2/driver/disputes/:id/sent",
     "POST /toll/v2/import"
   ]
 }

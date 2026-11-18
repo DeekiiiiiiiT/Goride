@@ -75,6 +75,8 @@ on:
       - 'supabase/migrations/20261118122837_toll_matcher_disputes.sql'
       - 'supabase/tests/toll_sweep_logged_trips_test.sql'
       - 'supabase/migrations/20261118133523_toll_sweep_alert_logged_trips.sql'
+      - 'supabase/tests/toll_screen_reads_disputes_test.sql'
+      - 'supabase/migrations/20261118182336_toll_screen_reads_disputes.sql'
       - 'packages/toll-core/src/v2/weekRuleCases.json'
       - '.github/workflows/parts-sql-checks.yml'
   push:
@@ -148,6 +150,8 @@ on:
       - 'supabase/migrations/20261118122837_toll_matcher_disputes.sql'
       - 'supabase/tests/toll_sweep_logged_trips_test.sql'
       - 'supabase/migrations/20261118133523_toll_sweep_alert_logged_trips.sql'
+      - 'supabase/tests/toll_screen_reads_disputes_test.sql'
+      - 'supabase/migrations/20261118182336_toll_screen_reads_disputes.sql'
       - 'packages/toll-core/src/v2/weekRuleCases.json'
       - '.github/workflows/parts-sql-checks.yml'
   workflow_dispatch:
@@ -296,3 +300,5 @@ jobs:
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_matcher_disputes_test.sql
           docker cp supabase/tests/toll_sweep_logged_trips_test.sql "$db_container":/tmp/toll_sweep_logged_trips_test.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_sweep_logged_trips_test.sql
+          docker cp supabase/tests/toll_screen_reads_disputes_test.sql "$db_container":/tmp/toll_screen_reads_disputes_test.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_screen_reads_disputes_test.sql

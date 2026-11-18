@@ -7,6 +7,7 @@ import { reconWeekVersionGuard } from "../../_fleet-server/recon_week_version_gu
 import { createFleetFunction } from "../../_shared/edgeKernel.ts";
 import tollInventoryApp from "../../_fleet-server/toll_inventory_controller.tsx";
 import tollV2CommandApp from "../../_fleet-server/toll_v2_command_controller.ts";
+import tollV2DriverDisputesApp from "../../_fleet-server/toll_v2_driver_disputes_controller.ts";
 import tollV2ImportApp, { handleMatcherSweep } from "../../_fleet-server/toll_v2_import_controller.ts";
 import { createServiceRpcFromModule } from "../../_fleet-server/toll_v2_import_lookups.ts";
 
@@ -34,6 +35,7 @@ const app = createFleetFunction({
 
     parent.route("/", tollV2ImportApp);
     parent.route("/", tollV2CommandApp);
+    parent.route("/", tollV2DriverDisputesApp);
   },
 });
 
