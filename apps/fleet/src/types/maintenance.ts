@@ -90,6 +90,8 @@ export interface MaintenanceServiceCategory {
   default_action?: MaintenanceLineAction | null;
   /** Plain-English "what is this for" text; shown as the card tooltip in Log service. */
   description?: string | null;
+  /** When true, log service can record jobs the inspection found (not done yet). */
+  recordsFindings?: boolean;
   /** When true, Fleet tracks LF/RF/LR/RR separately for outstanding work. */
   position_aware?: boolean;
   /** Powertrain job fit: the job touches the high-voltage system (amber "High-voltage" chip). */
@@ -212,7 +214,46 @@ export interface MaintenanceLogLine {
   fitAtLog?: "yes" | "no" | "unknown" | null;
   /** Read only: the line's job is high-voltage work. */
   isHighVoltage?: boolean;
+  fromFoundLineId?: string | null;
+  closedAt?: string | null;
+  closedReason?: string | null;
+  closedBy?: string | null;
+  /** Read only on completed inspection services — follow-up state for found (not done yet) jobs. */
+  found?: MaintenanceFoundLineStatus;
 }
+
+export type MaintenanceFoundLineStatus = {
+  status: "waiting" | "done" | "not_needed" | "service_deleted";
+  doneWorkOrderId: string | null;
+  doneDate: string | null;
+  doneSameDay: boolean;
+  closedAt: string | null;
+  closedByName: string | null;
+};
+
+/** One open found job from GET /maintenance-found-work (database RPC keys). */
+export type FoundWorkItem = {
+  lineId: string;
+  workOrderId: string;
+  vehicleId: string;
+  jobId: string;
+  jobName: string;
+  systemName: string | null;
+  note: string | null;
+  foundDate: string;
+  daysWaiting: number;
+  garage: string | null;
+  inspectionJobName: string | null;
+};
+
+export type FoundWorkCounts = {
+  total: number;
+  cars: number;
+  oldestDays: number | null;
+  /** The car whose found job has waited longest (IF-26). */
+  oldestVehicleId?: string | null;
+  byVehicle: Record<string, number>;
+};
 
 /**
  * One item used on a job. Sent as-is to the server (it reads the LineItemInput keys);
@@ -438,7 +479,8 @@ export function sumMaintenanceLogLines(lines: MaintenanceLogLine[] | undefined |
   if (!lines?.length) return 0;
   let total = 0;
   for (const line of lines) {
-    if (line.declined) continue;
+    // Declined and found ("not done yet") jobs are never charged.
+    if (line.declined || line.recommended) continue;
     const qty = Number(line.qty ?? line.values?.qty ?? 0) || 0;
     const unit = Number(line.unitPrice ?? line.values?.unit_price ?? 0) || 0;
     const material = Number(line.material ?? line.values?.material ?? 0) || 0;

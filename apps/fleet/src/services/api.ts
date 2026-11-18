@@ -34,6 +34,8 @@ import type {
   MaintenanceServiceLedgerEntry,
   MaintenanceWorkOrder,
   MaintenanceWorkOrderStatus,
+  FoundWorkCounts,
+  FoundWorkItem,
 } from '../types/maintenance';
 import { compressImage, OCR_COMPRESS_OPTS } from '../utils/compressImage';
 import { isTollCategory } from '../utils/tollCategoryHelper';
@@ -3097,6 +3099,42 @@ export const api = {
         ledgerWarning?: string;
         error?: string;
       }>;
+  },
+
+  async listFoundWork(vehicleId?: string) {
+    const qs = vehicleId ? `?vehicleId=${encodeURIComponent(vehicleId)}` : "";
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetOps}/maintenance-found-work${qs}`,
+      { headers: await getHeaders(null) },
+    );
+    // A 404 (switch off: code inspection_findings_off) keeps its status and code; the body is read once (IF-23).
+    if (!response.ok) throw await maintenanceSaveErrorFrom(response, "Failed to load found work");
+    const json = await response.json() as { items?: FoundWorkItem[] };
+    return { items: Array.isArray(json.items) ? json.items : [] };
+  },
+
+  async foundWorkCounts() {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetOps}/maintenance-found-work/counts`,
+      { headers: await getHeaders(null) },
+    );
+    // A 404 (switch off: code inspection_findings_off) keeps its status and code; the body is read once (IF-23).
+    if (!response.ok) throw await maintenanceSaveErrorFrom(response, "Failed to load found work counts");
+    return (await response.json()) as FoundWorkCounts;
+  },
+
+  async markFoundWorkNotNeeded(lineId: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetOps}/maintenance-found-work/${encodeURIComponent(lineId)}/not-needed`,
+      { method: "POST", headers: await getHeaders() },
+    );
+    if (!response.ok) throw await maintenanceSaveErrorFrom(response, "Failed to mark found work not needed");
+    return response.json() as Promise<{
+      lineId?: string;
+      workOrderId?: string;
+      vehicleId?: string;
+      closedAt?: string;
+    }>;
   },
 
   async listInspectionTemplates() {

@@ -15,6 +15,8 @@ import { MmCustomScheduleDialog } from "./MmCustomScheduleDialog";
 import { MmHardUseDialog } from "./MmHardUseDialog";
 import { MmWhySchedulePopover } from "./MmWhySchedulePopover";
 import { formatMaintenanceDisplayDate } from "../../../utils/maintenanceDisplayFormat";
+import type { FoundWorkItem } from "../../../types/maintenance";
+import { FoundByInspectionSection } from "./FoundByInspection";
 
 function vehicleLabel(row: {
   make?: string;
@@ -36,7 +38,13 @@ export function MaintenanceDueItemsDrawer({
   onLogOdometer,
   mobileCompact,
   canEditMaintenance = true,
+  onLogFoundWork,
+  onFoundChanged,
 }: {
+  /** Inspection findings: "Log it now" on a found job (opens Log service for that job). */
+  onLogFoundWork?: (item: FoundWorkItem) => void;
+  /** A found job was closed here (Not needed) — the fleet page refreshes its counts. */
+  onFoundChanged?: () => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   vehicle: {
@@ -236,15 +244,26 @@ export function MaintenanceDueItemsDrawer({
             </div>
           ) : null}
 
+          <div
+            className="flex-1 overflow-y-auto px-6 py-4 space-y-6 min-h-0"
+            data-testid={loading ? undefined : "mm-due-drawer-loaded"}
+          >
+            {/* Inspection findings (Stitch screen 7): first, above the schedule's Overdue / Due soon.
+                Loads on its own, so the schedule's spinner never hides it. */}
+            <FoundByInspectionSection
+              key={vehicle.vehicleId}
+              vehicleId={vehicle.vehicleId}
+              canEdit={canEditMaintenance}
+              onLogItNow={onLogFoundWork}
+              onChanged={onFoundChanged}
+              phone={mobileCompact}
+            />
           {loading ? (
             <div className="flex justify-center py-16">
               <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
             </div>
           ) : (
-            <div
-              className="flex-1 overflow-y-auto px-6 py-4 space-y-6 min-h-0"
-              data-testid={loading ? undefined : "mm-due-drawer-loaded"}
-            >
+            <>
               {overdue.length ? (
                 <section>
                   <h3 className="text-sm font-semibold text-red-800 mb-2">Overdue</h3>
@@ -263,8 +282,9 @@ export function MaintenanceDueItemsDrawer({
                   <ul className="space-y-3">{ok.map(renderLine)}</ul>
                 </section>
               ) : null}
-            </div>
+            </>
           )}
+          </div>
 
           <div
             className={`shrink-0 p-4 border-t flex flex-col gap-2 bg-slate-50 ${

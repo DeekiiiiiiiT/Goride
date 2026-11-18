@@ -88,8 +88,17 @@ import {
   mapApiLineToDb,
   prepareWorkOrderLines,
   buildClientPayloadLines,
+  inspectInspectionFindingsOffPayload,
 } from "./service_items_save.ts";
 import { mapJobItemRowToApi } from "./maintenance_jobs_admin_helpers.ts";
+import {
+  buildFoundStatusForLine,
+  childWorkOrderClosesFoundLine,
+  enrichSectionsRecordsFindings,
+  mapFoundWorkCloseError,
+  type DoneByFoundLine,
+} from "./inspection_findings_helpers.ts";
+import { displayNamesFor } from "./recon_desk_reads.ts";
 
 const assertVehicleCatalogPlatformAccess = assertPlatformStaffResponse;
 
@@ -126,6 +135,98 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 
 function isUuid(s: string): boolean {
   return UUID_RE.test(s.trim());
+}
+
+async function enrichApiLinesWithFound(
+  supabase: SupabaseClient,
+  orgId: string,
+  currentWorkOrderId: string,
+  apiLines: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  const foundLineIds = apiLines
+    .filter((l) => l.recommended === true && l.id != null)
+    .map((l) => String(l.id));
+  if (!foundLineIds.length) return apiLines;
+
+  const { data: childRows, error: childErr } = await supabase
+    .from("maintenance_work_order_lines")
+    .select("id, from_found_line_id, work_order_id")
+    .in("from_found_line_id", foundLineIds)
+    .is("voided_at", null);
+  if (childErr) throw childErr;
+
+  const childList = (childRows || []) as Record<string, unknown>[];
+  const woIds = [...new Set(childList.map((r) => String(r.work_order_id ?? "")).filter((id) => isUuid(id)))];
+  const woById = new Map<string, Record<string, unknown>>();
+  if (woIds.length) {
+    const { data: wos, error: woErr } = await supabase
+      .from("maintenance_work_orders")
+      .select("id, performed_at_date, voided_at, organization_id, status")
+      .in("id", woIds)
+      .eq("organization_id", orgId)
+      .is("voided_at", null);
+    if (woErr) throw woErr;
+    for (const wo of wos || []) {
+      woById.set(String((wo as { id: string }).id), wo as Record<string, unknown>);
+    }
+  }
+
+  const doneByFoundId = new Map<string, DoneByFoundLine>();
+  for (const row of childList) {
+    const fromId = row.from_found_line_id != null ? String(row.from_found_line_id) : "";
+    const woId = row.work_order_id != null ? String(row.work_order_id) : "";
+    if (!fromId || !woId || !woById.has(woId)) continue;
+    if (doneByFoundId.has(fromId)) continue;
+    const wo = woById.get(woId)!;
+    if (!childWorkOrderClosesFoundLine(wo)) continue;
+    const performed = wo.performed_at_date != null ? String(wo.performed_at_date).slice(0, 10) : null;
+    doneByFoundId.set(fromId, {
+      workOrderId: woId,
+      performedAtDate: performed,
+      sameWorkOrder: woId === currentWorkOrderId,
+    });
+  }
+
+  const closedByIds: string[] = [];
+  for (const line of apiLines) {
+    if (line.recommended !== true) continue;
+    const cb = line.closedBy;
+    if (cb != null && isUuid(String(cb))) closedByIds.push(String(cb));
+  }
+  const closedByNames = await displayNamesFor(closedByIds);
+
+  return apiLines.map((line) => {
+    if (line.recommended !== true || line.id == null) return line;
+    const lineId = String(line.id);
+    const found = buildFoundStatusForLine({
+      lineId,
+      currentWorkOrderId,
+      closedReason: line.closedReason != null ? String(line.closedReason) : null,
+      closedAt: line.closedAt != null ? String(line.closedAt) : null,
+      closedBy: line.closedBy != null ? String(line.closedBy) : null,
+      doneByFoundId,
+      closedByNames,
+    });
+    return { ...line, found };
+  });
+}
+
+async function inspectionFindingsOffResponse(
+  c: Context,
+  orgId: string,
+  rawLines: unknown[],
+  inspectionFindingsEnabled?: boolean,
+): Promise<Response | null> {
+  if (!rawLines.length) return null;
+  const enabled = inspectionFindingsEnabled !== undefined
+    ? inspectionFindingsEnabled
+    : await isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId);
+  if (enabled) return null;
+  if (!inspectInspectionFindingsOffPayload(rawLines)) return null;
+  return c.json(
+    { code: "inspection_findings_off", error: "Inspection findings are not enabled for this fleet." },
+    400,
+  );
 }
 
 type JobFitAnswer = "yes" | "no" | "unknown";
@@ -428,6 +529,10 @@ function mapDbLineToApi(row: Record<string, unknown>): Record<string, unknown> {
     notes: row.notes,
     recommended: row.recommended === true,
     declined: row.declined === true,
+    fromFoundLineId: row.from_found_line_id ?? null,
+    closedAt: row.closed_at ?? null,
+    closedReason: row.closed_reason ?? null,
+    closedBy: row.closed_by ?? null,
     values: row.values_json,
     lineTotal: row.line_total != null ? Number(row.line_total) : undefined,
     itemsAmount: row.items_amount != null ? Number(row.items_amount) : 0,
@@ -1694,19 +1799,23 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           allJobsById,
         );
         const withItems = await attachFleetJobItemsToSections(supabase, payload);
-        const serviceItemsEnabled = orgId
-          ? await isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId)
-          : false;
+        const [serviceItemsEnabled, inspectionFindingsEnabled] = orgId
+          ? await Promise.all([
+            isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId),
+            isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId),
+          ])
+          : [false, false];
+        const withRecords = enrichSectionsRecordsFindings(withItems, inspectionFindingsEnabled);
         const fitCtx = orgId ? await loadJobFitContext(c, supabase, orgId) : { mode: "off" as const };
         if (fitCtx instanceof Response) return fitCtx;
         if (fitCtx.mode === "off") {
-          return c.json({ ...withItems, serviceItemsEnabled });
+          return c.json({ ...withRecords, serviceItemsEnabled, inspectionFindingsEnabled });
         }
         if (fitCtx.mode === "error") {
-          return c.json({ ...withItems, serviceItemsEnabled, jobFit: fitCtx.jobFit });
+          return c.json({ ...withRecords, serviceItemsEnabled, inspectionFindingsEnabled, jobFit: fitCtx.jobFit });
         }
-        const enriched = enrichSectionsWithFit(withItems, fitCtx.fitMap);
-        return c.json({ ...enriched, serviceItemsEnabled, jobFit: fitCtx.jobFit });
+        const enriched = enrichSectionsWithFit(withRecords, fitCtx.fitMap);
+        return c.json({ ...enriched, serviceItemsEnabled, inspectionFindingsEnabled, jobFit: fitCtx.jobFit });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
@@ -2255,7 +2364,17 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
 
         const actorId = rbacUserId(c);
         if (!actorId) return c.json({ code: "actor_required", error: "Actor required" }, 401);
-        const itemsEnabled = await isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId);
+        const [inspectionFindingsEnabled, itemsEnabled] = await Promise.all([
+          isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId),
+          isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId),
+        ]);
+        const findingsBlocked = await inspectionFindingsOffResponse(
+          c,
+          orgId,
+          rawLines,
+          inspectionFindingsEnabled,
+        );
+        if (findingsBlocked) return findingsBlocked;
         const woId = crypto.randomUUID();
         const prepared = await prepareWorkOrderLines(supabase, {
           orgId,
@@ -2529,7 +2648,17 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           const actorId = rbacUserId(c);
           if (!actorId) return c.json({ code: "actor_required", error: "Actor required" }, 401);
 
-          const itemsEnabled = await isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId);
+          const [inspectionFindingsEnabled, itemsEnabled] = await Promise.all([
+            isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId),
+            isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId),
+          ]);
+          const findingsBlocked = await inspectionFindingsOffResponse(
+            c,
+            orgId,
+            rawEditLines,
+            inspectionFindingsEnabled,
+          );
+          if (findingsBlocked) return findingsBlocked;
           let workOrderId = editWorkOrderId;
           if (!isUuid(workOrderId) && rawEditLines.length) {
             workOrderId = crypto.randomUUID();
@@ -3582,6 +3711,96 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   // -------------------------------------------------------------------------
+  // Tenant — found work from inspections
+  // -------------------------------------------------------------------------
+  route.get(
+    "/maintenance-found-work",
+    requireAuth(),
+    requirePermission("vehicles.view"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const enabled = await isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId);
+        if (!enabled) return c.json({ code: "inspection_findings_off" }, 404);
+        const vehicleId = String(c.req.query("vehicleId") || "").trim() || null;
+        const { data, error } = await supabase.rpc("fleet_open_found_work", {
+          p_organization_id: orgId,
+          p_vehicle_id: vehicleId,
+        });
+        if (error) throw error;
+        const items = Array.isArray(data) ? data : (data ?? []);
+        return c.json({ items });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.get(
+    "/maintenance-found-work/counts",
+    requireAuth(),
+    requirePermission("vehicles.view"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const enabled = await isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId);
+        if (!enabled) return c.json({ code: "inspection_findings_off" }, 404);
+        const { data, error } = await supabase.rpc("fleet_found_work_counts", {
+          p_organization_id: orgId,
+        });
+        if (error) throw error;
+        return c.json(data ?? {
+          total: 0,
+          cars: 0,
+          oldestDays: null,
+          byVehicle: {},
+          oldestVehicleId: null,
+        });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.post(
+    "/maintenance-found-work/:lineId/not-needed",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const enabled = await isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId);
+        if (!enabled) return c.json({ code: "inspection_findings_off" }, 404);
+        const lineId = c.req.param("lineId");
+        if (!isUuid(lineId)) return c.json({ error: "Invalid id" }, 400);
+        const actorId = rbacUserId(c);
+        if (!actorId) return c.json({ code: "actor_required", error: "Sign in again." }, 401);
+        const { data, error } = await supabase.rpc("fleet_close_found_work", {
+          p_organization_id: orgId,
+          p_actor_id: actorId,
+          p_line_id: lineId,
+        });
+        if (error) {
+          const mapped = mapFoundWorkCloseError(error.message || "");
+          if (mapped) {
+            return c.json({ code: mapped.code, error: mapped.error }, mapped.status);
+          }
+          throw error;
+        }
+        return c.json(data ?? {});
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
   // Tenant — work orders (job cards)
   // -------------------------------------------------------------------------
   route.get(
@@ -3645,10 +3864,11 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           id,
           (lines || []) as Record<string, unknown>[],
         );
+        const withFound = await enrichApiLinesWithFound(supabase, orgId, id, enrichedLines);
         return c.json({
           item: mapDbWorkOrderToApi(
             wo as Record<string, unknown>,
-            enrichedLines,
+            withFound,
           ),
         });
       } catch (e: unknown) {
@@ -3746,8 +3966,18 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const currencyRaw = body.currency != null ? String(body.currency).trim().toUpperCase() : "JMD";
         const currency = currencyRaw || "JMD";
         const woId = crypto.randomUUID();
-        const itemsEnabled = await isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId);
         const rawLines = Array.isArray(body.lines) ? body.lines : [];
+        const [inspectionFindingsEnabled, itemsEnabled] = await Promise.all([
+          isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId),
+          isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId),
+        ]);
+        const findingsBlocked = await inspectionFindingsOffResponse(
+          c,
+          orgId,
+          rawLines,
+          inspectionFindingsEnabled,
+        );
+        if (findingsBlocked) return findingsBlocked;
         const prepared = await prepareWorkOrderLines(supabase, {
           orgId,
           vehicleId,
@@ -3923,10 +4153,20 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
               return c.json({ code: "status_invalid", error: "Invalid service status." }, 400);
             }
           }
-          const itemsEnabled = await isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId);
+          const [inspectionFindingsEnabled, itemsEnabled] = await Promise.all([
+            isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId),
+            isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId),
+          ]);
           const vehicleId = String(existing.vehicle_id ?? "");
           let linesForSave: Record<string, unknown>[];
           if (Array.isArray(body.lines)) {
+            const findingsBlocked = await inspectionFindingsOffResponse(
+              c,
+              orgId,
+              body.lines,
+              inspectionFindingsEnabled,
+            );
+            if (findingsBlocked) return findingsBlocked;
             const prepared = await prepareWorkOrderLines(supabase, {
               orgId,
               vehicleId,

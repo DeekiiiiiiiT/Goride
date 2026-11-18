@@ -201,6 +201,7 @@ export type LedgerLineInput = {
   notes?: string | null;
   workOrderLineId?: string | null;
   declined?: boolean;
+  recommended?: boolean;
 };
 
 /**
@@ -223,7 +224,7 @@ export async function recordCompletedServiceLines(args: {
   const categoriesAdvanced = new Set<string>();
 
   for (const line of args.lines) {
-    if (line.declined) continue;
+    if (line.declined || line.recommended) continue;
     const categoryId = line.categoryId ? String(line.categoryId) : null;
     if (!categoryId) continue;
 
@@ -696,6 +697,7 @@ export async function backfillServiceLedgerForOrg(args: {
         positions: raw.positions,
         notes: raw.notes != null ? String(raw.notes) : null,
         declined: raw.declined === true,
+        recommended: raw.recommended === true,
       }));
     }
 
@@ -721,6 +723,7 @@ export async function backfillServiceLedgerForOrg(args: {
           notes: r.notes != null ? String(r.notes) : null,
           workOrderLineId: String(r.id),
           declined: r.declined === true,
+          recommended: r.recommended === true,
         }));
       }
     }

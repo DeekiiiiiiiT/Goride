@@ -106,6 +106,8 @@ export const FEATURE_FLAGS = {
   TOLL_SEAL_BEFORE_PAY: "toll_seal_before_pay",
   /** Fleet Log service line items (May need used on save). Default off per org. */
   SERVICE_ITEMS: "service_items",
+  /** Log service: what an inspection found + Found by inspection list. Default off. */
+  INSPECTION_FINDINGS: "inspection_findings",
   /** Log service shows jobs that fit the car's powertrain. Default off. */
   JOB_FIT_FILTER: "job_fit_filter",
   /** Tiered parts search (OEM / sister / engine / aftermarket). Default off. */

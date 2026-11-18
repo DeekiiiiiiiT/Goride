@@ -20,6 +20,8 @@ import { formatMaintenanceLineLabel, lineItemsAmount } from "../../../../types/m
 import { formatMaintenanceServiceDateLabel } from "../../../../utils/maintenanceDisplayFormat";
 import { costRecorded, itemAmount, money, qtyWithUnit } from "./itemsUsed";
 import { actionLabel } from "./systemSections";
+import { FOUND_COPY, isFoundLine, isFoundToday } from "./foundWork";
+import { FromInspectionChip, ReviewFoundGroup } from "./FoundWorkSection";
 
 export type LogServiceReviewStepProps = {
   baySessionLabel: string;
@@ -60,6 +62,8 @@ export type LogServiceReviewStepProps = {
   /** Show item lines and the Labor / Parts split (service items on, or lines already carry items). */
   itemsEnabled?: boolean;
   vehicleLabel?: string;
+  /** Inspection findings: remove a "Found, not done yet" job (with Undo in the dialog). */
+  onRemoveFoundLine?: (line: MaintenanceLogLine) => void;
 };
 
 function moneyLabel(currency: string, n: number): string {
@@ -101,12 +105,17 @@ export function LogServiceReviewStep({
   itemsEnabled = false,
   vehicleLabel,
   lineFit,
+  onRemoveFoundLine,
 }: LogServiceReviewStepProps) {
   void vehicleLabel; // the car is in the top car card (Stitch 07)
   const discountInputRef = useRef<HTMLInputElement>(null);
   const showDiscountRow = discountRowOpen || discountAmount > 0;
   const showSubtotalBreakdown = discountAmount > 0;
-  const doneLines = lines.filter((l) => !l.declined);
+  // Found ("not done yet") jobs get their own amber group (Stitch inspection findings 5), never the job list.
+  // A declined recommendation (older inspection screen) keeps today's "Declined" row in the list.
+  const foundLines = lines.filter((l) => isFoundLine(l) && !l.declined);
+  const listLines = lines.filter((l) => !(isFoundLine(l) && !l.declined));
+  const doneLines = listLines.filter((l) => !l.declined);
   const itemsTotal = doneLines.reduce((s, l) => s + lineItemsAmount(l), 0);
   const jobsTotal = Math.round((subtotal - itemsTotal) * 100) / 100;
   const cur = currency || "JMD";
@@ -148,6 +157,11 @@ export function LogServiceReviewStep({
           <span className={`${LT.headlineMd} font-bold tracking-tight tabular-nums ${LS.text}`}>
             {moneyLabel(cur, showSubtotalBreakdown ? netTotal : subtotal)}
           </span>
+          {foundLines.length ? (
+            <span className={`${LT.bodySm} ${LS.muted}`} data-testid="review-found-not-charged">
+              {FOUND_COPY.reviewNotCharged(foundLines.length)} ({moneyLabel(cur, 0)})
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -157,7 +171,7 @@ export function LogServiceReviewStep({
           <span className={`${LT.labelSm} ${LS.muted}`}>Parts &amp; labour included</span>
         </div>
         <div className="flex flex-col gap-2" data-testid="log-service-review-jobs">
-          {lines.map((line, idx) => {
+          {listLines.map((line, idx) => {
             const declined = Boolean(line.declined);
             const total = lineTotalPreview(line);
             const items = line.items ?? [];
@@ -183,9 +197,7 @@ export function LogServiceReviewStep({
                     ) : pill ? (
                       <span className={`px-2 py-0.5 rounded-full ${LT.labelSm} font-medium ${LS.highest} ${LS.text}`}>{pill}</span>
                     ) : null}
-                    {line.recommended && !declined ? (
-                      <span className="text-[11px] text-on-surface-variant">Recommended</span>
-                    ) : null}
+                    {isFoundToday(line) ? <FromInspectionChip /> : null}
                     {fit.notUsual ? <NotUsualChip /> : null}
                     {fit.highVoltage ? <HighVoltageChip /> : null}
                   </div>
@@ -266,6 +278,7 @@ export function LogServiceReviewStep({
             );
           })}
         </div>
+        <ReviewFoundGroup lines={foundLines} currency={cur} onRemove={(l) => onRemoveFoundLine?.(l)} />
         <div className="border border-outline-variant/40 rounded-lg divide-y bg-surface-container-lowest empty:hidden">
           {showDiscountRow ? (
             <div className="flex items-center justify-between px-4 py-3 gap-3">

@@ -71,6 +71,25 @@ import {
 } from "./maintenance-logging/log-service/jobFit";
 import { draftFromSavedItem, linesHaveItemErrors, money } from "./maintenance-logging/log-service/itemsUsed";
 import {
+  AddFoundJobDialog,
+  FoundCollapsedInspectionRow,
+  FoundFromInspectionBanner,
+  FoundWorkSection,
+  FromInspectionChip,
+} from "./maintenance-logging/log-service/FoundWorkSection";
+import {
+  FOUND_COPY,
+  applyFoundDrafts,
+  draftsFromLines,
+  foundBannerText,
+  foundByJob,
+  foundLineFromDraft,
+  openFoundCountFor,
+  searchFoundJobs,
+  type FoundDraft,
+  type FoundMode,
+} from "./maintenance-logging/log-service/foundWork";
+import {
   NotFinishedBanner,
   SaveFailedBanner,
   ServiceChangedDialog,
@@ -79,6 +98,7 @@ import {
 import { finishFailureText, MaintenanceSaveError } from "../../services/maintenanceSaveError";
 import type {
   CatalogMaintenanceTaskOption,
+  FoundWorkItem,
   LineItemDraft,
   MaintenanceCategoryFieldDef,
   MaintenanceLineAction,
@@ -141,6 +161,11 @@ export interface LogMaintenanceServiceDialogProps {
   onSaved?: () => void;
   /** Powertrain job fit: "Link this car" opens the car's page (only where the host can). */
   onLinkCar?: () => void;
+  /**
+   * Opened from "Log it now" on a found job (inspection findings): after Date & mileage the dialog goes
+   * straight to that job's details, shows the "From inspection" banner and saves with fromFoundLineId.
+   */
+  fromFoundWork?: FoundWorkItem | null;
 }
 
 function stripEverySuffix(label: string): string {
@@ -249,11 +274,17 @@ type LineExtras = {
   system: MaintenanceServiceCategory | null;
   /** Items used on this job (never pre-ticked). */
   items: LineItemDraft[];
+  /** "Done today" job: the inspection job it came from (saved as values.found_today + found_by_job). */
+  foundToday: string | null;
+  /** Opened from "Log it now": the found job this line closes. */
+  fromFoundLineId: string | null;
 };
 
 function defaultExtras(system: MaintenanceServiceCategory | null = null): LineExtras {
   return {
     items: [],
+    foundToday: null,
+    fromFoundLineId: null,
     action: "replace",
     laborHours: null,
     laborRate: null,
@@ -291,8 +322,10 @@ function lineFromCategoryValues(
       values: {
         cost_mode: values.cost_mode === "per_wheel" ? "per_wheel" : "total",
         service_amount: serviceJobAmount(values),
+        ...(extras.foundToday ? { found_today: true, found_by_job: extras.foundToday } : {}),
       },
       items: extras.items.length ? extras.items.map((i) => ({ ...i })) : undefined,
+      ...(extras.fromFoundLineId ? { fromFoundLineId: extras.fromFoundLineId } : {}),
     };
   }
   const conditionRaw = values.condition;
@@ -331,8 +364,9 @@ function lineFromCategoryValues(
     supplierPartOfferId: extras.supplierPartOfferId || undefined,
     partConfirmedFit: extras.partId ? extras.partConfirmedFit : undefined,
     notes: typeof values.notes === "string" ? values.notes : undefined,
-    values: { ...values },
+    values: extras.foundToday ? { ...values, found_today: true, found_by_job: extras.foundToday } : { ...values },
     items: extras.items.length ? extras.items.map((i) => ({ ...i })) : undefined,
+    ...(extras.fromFoundLineId ? { fromFoundLineId: extras.fromFoundLineId } : {}),
   };
 }
 
@@ -393,6 +427,7 @@ export function LogMaintenanceServiceDialog({
   draftUserId,
   onSaved,
   onLinkCar,
+  fromFoundWork = null,
 }: LogMaintenanceServiceDialogProps) {
   // Powertrain job fit (audit PT-1 / PT-7): one answer per open; "off" until the server says otherwise.
   const [jobFit, setJobFit] = useState<JobFitState>({ status: "off" });
@@ -477,6 +512,20 @@ export function LogMaintenanceServiceDialog({
   /** May-need items per job + the fleet's service-items switch. */
   const jobItems = useJobItems();
   const itemsEnabled = jobItems.enabled === true;
+  /** Inspection findings (audit section 5): only on inspection jobs, only with the fleet's switch on. */
+  const isInspectionJob = useCallback(
+    (jobId: string | null | undefined) =>
+      Boolean(jobId) && jobItems.findingsEnabled && jobItems.findingsJobIds.has(String(jobId)),
+    [jobItems.findingsEnabled, jobItems.findingsJobIds],
+  );
+  /** "What the inspection found" on the open inspection job; written into `lines` on Save line. */
+  const [foundDrafts, setFoundDrafts] = useState<FoundDraft[]>([]);
+  const [foundPickerOpen, setFoundPickerOpen] = useState(false);
+  /** "Done today" jobs waiting for their own card (so their form opens with the From inspection chip). */
+  /** Done-today job id → the inspection job it came from. */
+  const foundTodayIdsRef = useRef<Map<string, string>>(new Map());
+  /** Which open job the found list was loaded for (the inspection flag can arrive after the form opens). */
+  const foundDraftsForRef = useRef<string | null>(null);
   /** The ticked part item whose "Pick a part" dialog is open. */
   const [pickingItem, setPickingItem] = useState<LineItemDraft | null>(null);
   /** Version of the service being edited (edits send it back; a mismatch → "This service was changed"). */
@@ -715,10 +764,14 @@ export function LogMaintenanceServiceDialog({
     setPickingItem(null);
     setSaveProblem(null);
     setChangedOpen(false);
+    setFoundDrafts([]);
+    setFoundPickerOpen(false);
+    foundTodayIdsRef.current = new Map();
     setEditVersion(typeof initialLog?.version === "number" ? initialLog.version : null);
 
+    // "Log it now" always starts fresh on step 1 for that job; an unrelated saved draft is left alone.
     const savedDraft =
-      draftUserId && !initialLog?.id ? readLogServiceDraft(draftUserId, vehicleId) : null;
+      draftUserId && !initialLog?.id && !fromFoundWork ? readLogServiceDraft(draftUserId, vehicleId) : null;
     // Only a draft with jobs in it is worth keeping. It reopens on Review (jobs listed,
     // "Add another job" / "Discard draft" there). A draft with no jobs is dropped so the
     // window always opens fresh on step 1 — never stranded half-way.
@@ -847,7 +900,7 @@ export function LogMaintenanceServiceDialog({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset when dialog opens
-  }, [open, vehicleId, defaultOdo, catalogTemplates, initialLog]);
+  }, [open, vehicleId, defaultOdo, catalogTemplates, initialLog, fromFoundWork]);
 
   // Load compatible parts when editing a component form
   useEffect(() => {
@@ -916,10 +969,96 @@ export function LogMaintenanceServiceDialog({
       partConfirmedFit: existing?.partConfirmedFit === true,
       system,
       items: existing?.items ? existing.items.map((i) => draftFromSavedItem(i)) : [],
+      foundToday:
+        (existing?.values as Record<string, unknown> | undefined)?.found_today === true
+          ? (existing ? foundByJob(existing) : null) ?? foundTodayIdsRef.current.get(cat.id) ?? null
+          : (foundTodayIdsRef.current.get(cat.id) ?? null),
+      fromFoundLineId:
+        existing?.fromFoundLineId ??
+        (fromFoundWork && fromFoundWork.jobId === cat.id ? fromFoundWork.lineId : null),
     });
+    // The found list is (re)loaded from the lines by the effect below once this job is known to be an inspection.
+    foundDraftsForRef.current = null;
+    setFoundDrafts([]);
+    setFoundPickerOpen(false);
     void jobItems.ensure(cat.parent_id);
     setStep("lineDetails");
   };
+
+  // ---- Inspection findings: "What the inspection found" on the inspection job ----
+  // Load the found list from the saved lines once the open job is known to be an inspection. Opening a
+  // saved inspection before its group's answer arrives must not start with an empty list (Save line would
+  // otherwise drop its found jobs).
+  useEffect(() => {
+    if (!activeCategory || !isInspectionJob(activeCategory.id)) return;
+    if (foundDraftsForRef.current === activeCategory.id) return;
+    foundDraftsForRef.current = activeCategory.id;
+    setFoundDrafts(draftsFromLines(lines, activeCategory.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per opened inspection, not on every line edit
+  }, [activeCategory, isInspectionJob]);
+  const setFoundMode = (jobId: string, mode: FoundMode) =>
+    setFoundDrafts((prev) => prev.map((d) => (d.jobId === jobId ? { ...d, mode } : d)));
+  const setFoundNote = (jobId: string, note: string) =>
+    setFoundDrafts((prev) => prev.map((d) => (d.jobId === jobId ? { ...d, note } : d)));
+  const removeFoundDraft = (jobId: string) => {
+    let removed: { draft: FoundDraft; index: number } | null = null;
+    setFoundDrafts((prev) => {
+      const index = prev.findIndex((d) => d.jobId === jobId);
+      if (index < 0) return prev;
+      removed = { draft: prev[index], index };
+      return prev.filter((d) => d.jobId !== jobId);
+    });
+    const name = foundDrafts.find((d) => d.jobId === jobId)?.name ?? "Job";
+    toast(FOUND_COPY.removedToast(name), {
+      action: {
+        label: FOUND_COPY.undo,
+        onClick: () => {
+          const r = removed as { draft: FoundDraft; index: number } | null;
+          if (!r) return;
+          setFoundDrafts((prev) => {
+            if (prev.some((d) => d.jobId === r.draft.jobId)) return prev;
+            const next = [...prev];
+            next.splice(Math.min(r.index, next.length), 0, r.draft);
+            return next;
+          });
+        },
+      },
+    });
+  };
+  const addFoundJob = (job: MaintenanceServiceCategory) => {
+    setFoundDrafts((prev) =>
+      prev.some((d) => d.jobId === job.id) ? prev : [...prev, { jobId: job.id, name: job.name, mode: "later", note: "" }],
+    );
+    setFoundPickerOpen(false);
+  };
+  const searchFoundPicker = useCallback(
+    (query: string) =>
+      searchFoundJobs({
+        query,
+        jobs: allComponents,
+        groupName: (job) => (job.parent_id ? catalogById.get(job.parent_id)?.name ?? "" : ""),
+        jobFit,
+        isInspectionJob: (id) => isInspectionJob(id),
+      }),
+    [allComponents, catalogById, jobFit, isInspectionJob],
+  );
+  const foundSlotFor = (cat: MaintenanceServiceCategory) =>
+    isInspectionJob(cat.id) ? (
+      <FoundWorkSection
+        drafts={foundDrafts}
+        currency={formMeta.currency || "JMD"}
+        onAdd={() => setFoundPickerOpen(true)}
+        onModeChange={setFoundMode}
+        onNoteChange={setFoundNote}
+        onRemove={removeFoundDraft}
+      />
+    ) : undefined;
+  const fromInspectionChipFor = (cat: MaintenanceServiceCategory) =>
+    activeCategory?.id === cat.id && (lineExtras.foundToday || lineExtras.fromFoundLineId) ? (
+      <FromInspectionChip />
+    ) : undefined;
+  /** Open found jobs on this service (not declined) — the collapsed row's amber chip. */
+  const openFoundCountFor_ = (inspectionJobId: string) => openFoundCountFor(lines, inspectionJobId);
 
   /** Where this job's May-need list stands: its own group's load, or "none" for preset jobs. */
   const jobItemsStatusFor = (cat: MaintenanceServiceCategory) => {
@@ -940,6 +1079,7 @@ export function LogMaintenanceServiceDialog({
         currency={formMeta.currency || "JMD"}
         jobCharge={Math.round(charge * 100) / 100}
         onPickPart={(item) => setPickingItem(item)}
+        beforeTotal={foundSlotFor(cat)}
       />
     );
   };
@@ -1083,16 +1223,52 @@ export function LogMaintenanceServiceDialog({
       toast.error("Fix the items marked in red first");
       return;
     }
-    const newLines = (() => {
+    let newLines = (() => {
       const without = lines.filter((l) => !categoryMatchLine(activeCategory, l));
       return [...without, line];
     })();
+    let detailCats = lineDetailCategories;
+    if (isInspectionJob(activeCategory.id) && foundDraftsForRef.current === activeCategory.id) {
+      // "Not done yet" → found lines (J$ 0, note). "Done today" → its own job card after this one.
+      const foundLines = foundDrafts
+        .filter((d) => d.mode === "later")
+        .map((d) => {
+          const cat = catalogById.get(d.jobId);
+          return foundLineFromDraft(d, cat, cat ? resolveSystemForComponent(cat) : null, activeCategory.id);
+        });
+      newLines = applyFoundDrafts(newLines, foundDrafts, foundLines, activeCategory.id);
+      const todayIds = new Set(foundDrafts.filter((d) => d.mode === "today").map((d) => d.jobId));
+      const prevTodayIds = foundTodayIdsRef.current;
+      // Other inspection jobs keep their Done-today jobs; this one's are replaced.
+      const nextToday = new Map([...prevTodayIds].filter(([, insp]) => insp !== activeCategory.id));
+      for (const id of todayIds) nextToday.set(id, activeCategory.id);
+      foundTodayIdsRef.current = nextToday;
+      const todayCats = [...todayIds]
+        .map((id) => catalogById.get(id))
+        .filter((c): c is MaintenanceServiceCategory => Boolean(c));
+      const base = detailCats.length ? detailCats : [activeCategory];
+      // Drop the card of a job switched back to "Not done yet" (or removed) when it was only there as "Done today".
+      const cameFromInspection = (c: MaintenanceServiceCategory) =>
+        prevTodayIds.get(c.id) === activeCategory.id ||
+        lines.some(
+          (l) =>
+            categoryMatchLine(c, l) &&
+            (l.values as Record<string, unknown> | undefined)?.found_today === true &&
+            foundByJob(l) === activeCategory.id,
+        );
+      const keptBase = base.filter(
+        (c) => c.id === activeCategory.id || todayIds.has(c.id) || !cameFromInspection(c),
+      );
+      detailCats = [...keptBase, ...todayCats.filter((c) => !keptBase.some((b) => b.id === c.id))];
+      setLineDetailCategories(detailCats);
+      setFoundPickerOpen(false);
+    }
     setLines(newLines);
     setSelectedCategoryIds((prev) =>
       prev.includes(activeCategory.id) ? prev : [...prev, activeCategory.id],
     );
-    if (lineDetailCategories.length > 0) {
-      const next = lineDetailCategories.find(
+    if (detailCats.length > 0) {
+      const next = detailCats.find(
         (c) =>
           c.id !== activeCategory.id &&
           !newLines.some((l) => categoryMatchLine(c, l)),
@@ -1233,7 +1409,8 @@ export function LogMaintenanceServiceDialog({
       logMode: advanceSchedule ? ("package" as const) : ("quick_job" as const),
       ...(advanceSchedule && templateId ? { templateId } : {}),
       type: typeLabel,
-      checklist: lines.filter((l) => !l.declined).map((l) => formatMaintenanceLineLabel(l)),
+      // Found ("not done yet") jobs were not done, so they are not on the checklist.
+      checklist: lines.filter((l) => !l.declined && !l.recommended).map((l) => formatMaintenanceLineLabel(l)),
       packageComplete: advanceSchedule,
     };
   };
@@ -1321,10 +1498,12 @@ export function LogMaintenanceServiceDialog({
           ledgerWarning: woRes.ledgerWarning,
         };
         const woId = woRes.item?.id;
+        // IF-12 / IF-21: an inspection job's found jobs (tagged found_by_job) are already saved as lines,
+        // so the old DVI route skips them. Lines from the old Digital inspection step still get their record.
         if (woId) {
           try {
             const findings = lines
-              .filter((l) => l.recommended)
+              .filter((l) => l.recommended && !foundByJob(l))
               .map((l) => ({
                 itemId: null as string | null,
                 systemId: l.systemId || null,
@@ -1731,7 +1910,20 @@ export function LogMaintenanceServiceDialog({
                     disabled={!canContinueDateStep}
                     onClick={() => {
                       setOdoTouched(true);
-                      if (canContinueDateStep) setStep("whatWasDone");
+                      if (!canContinueDateStep) return;
+                      // "Log it now": straight to that job's details (Stitch screen 10).
+                      const foundCat = fromFoundWork ? catalogById.get(fromFoundWork.jobId) : undefined;
+                      if (fromFoundWork && foundCat && lines.length === 0) {
+                        setLogMode("quick_job");
+                        setSelectedPackage(null);
+                        const parent = resolveSystemForComponent(foundCat);
+                        setSelectedSystem(parent);
+                        setSelectedCategoryIds([foundCat.id]);
+                        setFormMeta((prev) => ({ ...prev, type: foundCat.name }));
+                        enterLineDetailsForCategories([foundCat], parent);
+                        return;
+                      }
+                      setStep("whatWasDone");
                     }}
                   />
                 ) : null}
@@ -1925,6 +2117,11 @@ export function LogMaintenanceServiceDialog({
 
           {step === "lineDetails" && lineDetailCategories.length > 0 && (
             <LogServiceLineDetailsMultiStep
+              banner={
+                fromFoundWork ? (
+                  <FoundFromInspectionBanner text={foundBannerText(fromFoundWork)} note={fromFoundWork.note} />
+                ) : undefined
+              }
               packageLabel={selectedPackage?.shortLabel ?? null}
               componentCount={lineDetailCategories.length}
               baySessionLabel={idempotencyKey.slice(0, 8).toUpperCase()}
@@ -1934,6 +2131,21 @@ export function LogMaintenanceServiceDialog({
               homeBase={vehicleStrip?.homeBase}
               mechanicNote={formMeta.notes}
               onMechanicNoteChange={(notes) => setFormMeta((p) => ({ ...p, notes }))}
+              onAddAnotherJob={
+                !initialLog?.id
+                  ? () => {
+                      setActiveCategory(null);
+                      setLineDetailCategories([]);
+                      setStep("whatWasDone");
+                    }
+                  : undefined
+              }
+              addAnotherDisabledReason={
+                !initialLog?.id &&
+                (activeCategory != null || lineDetailCategories.some((c) => !categoryHasLine(c)))
+                  ? LOG_SERVICE_COPY.addAnotherJobSaveFirst
+                  : null
+              }
             >
               {lineDetailCategories.map((cat) => (
                 <div
@@ -1992,9 +2204,23 @@ export function LogMaintenanceServiceDialog({
                       lineTotal={draftLineTotal}
                       serviceForm={serviceFormFor(cat)}
                       itemsSlot={itemsSlotFor(cat)}
+                      foundSlot={itemsEnabled ? undefined : foundSlotFor(cat)}
+                      headerChip={fromInspectionChipFor(cat)}
                     />
                   )}
-                  {activeCategory?.id !== cat.id && (
+                  {activeCategory?.id !== cat.id && isInspectionJob(cat.id) && categoryHasLine(cat) ? (
+                    // Stitch screen 4: the saved inspection collapses to one row with its found count.
+                    <FoundCollapsedInspectionRow
+                      name={cat.name}
+                      amountLabel={money(
+                        formMeta.currency || "JMD",
+                        lineTotalPreview(lines.find((l) => categoryMatchLine(cat, l)) as MaintenanceLogLine),
+                      )}
+                      foundCount={openFoundCountFor_(cat.id)}
+                      onEdit={() => openCategoryForm(cat)}
+                    />
+                  ) : null}
+                  {activeCategory?.id !== cat.id && !(isInspectionJob(cat.id) && categoryHasLine(cat)) && (
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className={`${LT.titleMd} ${LS.text}`}>{cat.name}</p>
@@ -2067,8 +2293,18 @@ export function LogMaintenanceServiceDialog({
               lineTotal={draftLineTotal}
               serviceForm={serviceFormFor(activeCategory)}
               itemsSlot={itemsSlotFor(activeCategory)}
+              foundSlot={itemsEnabled ? undefined : foundSlotFor(activeCategory)}
+              headerChip={fromInspectionChipFor(activeCategory)}
             />
           )}
+
+          <AddFoundJobDialog
+            open={foundPickerOpen}
+            onOpenChange={setFoundPickerOpen}
+            search={searchFoundPicker}
+            addedIds={new Set(foundDrafts.map((d) => d.jobId))}
+            onAdd={addFoundJob}
+          />
 
           {step === "inspect" && (
             <MaintenanceInspectionPanel
@@ -2146,6 +2382,23 @@ export function LogMaintenanceServiceDialog({
                 if (parsed === null) return;
                 setDiscountInput(raw);
                 setDiscountAmount(parsed);
+              }}
+              onRemoveFoundLine={(line) => {
+                const index = lines.indexOf(line);
+                if (index < 0) return;
+                setLines((prev) => prev.filter((l) => l !== line));
+                toast(FOUND_COPY.removedToast(line.categoryName || "Job"), {
+                  action: {
+                    label: FOUND_COPY.undo,
+                    onClick: () =>
+                      setLines((prev) => {
+                        if (prev.includes(line)) return prev;
+                        const next = [...prev];
+                        next.splice(Math.min(index, next.length), 0, line);
+                        return next;
+                      }),
+                  },
+                });
               }}
               onEditLine={(line) => {
                 const pkgCat = selectedPackage?.categories.find(

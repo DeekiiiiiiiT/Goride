@@ -73,6 +73,10 @@ export type LogServiceLineDetailsStepProps = {
   hideHeading?: boolean;
   /** Powertrain job fit: picked from "Show all jobs" (doesn't fit this car). Saved as normal. */
   notUsual?: boolean;
+  /** Extra chip after the job name (inspection findings: "From inspection"). */
+  headerChip?: React.ReactNode;
+  /** "What the inspection found" when there is no Items used block to hold it (items switch off). */
+  foundSlot?: React.ReactNode;
 };
 
 function PositionButtons({
@@ -268,6 +272,8 @@ function ServiceJobForm(props: LogServiceLineDetailsStepProps & { serviceForm: N
         </Label>
       </div>
 
+      {props.foundSlot ?? null}
+
       <div className={`rounded-lg px-4 py-3 flex justify-between items-center ${LS.low}`}>
         <span className="text-sm text-stitch-secondary">{lineTotalLabel}</span>
         <span className="font-semibold text-on-surface">
@@ -329,6 +335,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
           {/* Stitch powertrain 06: the chips sit right after the name, before the action pill. */}
           {props.notUsual ? <NotUsualChip /> : null}
           {category.is_high_voltage ? <HighVoltageChip /> : null}
+          {props.headerChip ?? null}
           {actionPill ? (
             <span className={`px-2.5 py-0.5 rounded-full ${LT.labelMd} ${LS.high} ${LS.muted}`}>
               {actionPill}
@@ -521,6 +528,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
         )}
       </div>
 
+      {props.itemsSlot ? null : props.foundSlot ?? null}
       {props.itemsSlot ?? (
         <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low px-4 py-3 flex justify-between items-center">
           <span className="text-sm text-stitch-secondary">{lineTotalLabel}</span>

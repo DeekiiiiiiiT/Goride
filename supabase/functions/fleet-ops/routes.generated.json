@@ -1,7 +1,7 @@
 {
   "slug": "fleet-ops",
-  "generatedAt": "2026-11-15T22:27:03.559Z",
-  "routeCount": 155,
+  "generatedAt": "2026-11-18T11:44:40.987Z",
+  "routeCount": 158,
   "routes": [
     "DELETE ${ADMIN_CAT}/:id",
     "DELETE ${ADMIN}/:id",
@@ -53,6 +53,8 @@
     "GET /maintenance-driver-notifications",
     "GET /maintenance-due/:vehicleId",
     "GET /maintenance-fleet-summary",
+    "GET /maintenance-found-work",
+    "GET /maintenance-found-work/counts",
     "GET /maintenance-inspection-templates",
     "GET /maintenance-integrity-report",
     "GET /maintenance-job-runs/latest",
@@ -133,6 +135,7 @@
     "POST /admin/maintenance/supplies/:id/retire",
     "POST /admin/migrate-maintenance-from-kv",
     "POST /admin/vehicle-catalog/:catalogId/maintenance-templates",
+    "POST /maintenance-found-work/:lineId/not-needed",
     "POST /maintenance-inspection-findings",
     "POST /maintenance-log-number/reserve",
     "POST /maintenance-logs",

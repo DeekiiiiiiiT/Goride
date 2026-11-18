@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { formatMaintenanceScheduledDate } from "../../../utils/maintenanceDisplayFormat";
+import { FoundByInspectionKpiCard } from "./FoundByInspection";
 
 export type MaintenanceHubKpiProps = {
   overdueCount: number;
@@ -10,6 +11,10 @@ export type MaintenanceHubKpiProps = {
   partsRequisition?: { status: string; detail: string } | null;
   costPerKmApprox?: number;
   pmOnTimePct?: number;
+  /** Inspection findings counts; null/undefined = switch off (no card). */
+  foundByInspection?: { total: number; cars: number; oldestDays: number | null } | null;
+  /** Opens the car with the oldest waiting found job. */
+  onOpenFound?: () => void;
 };
 
 function progressPct(value: number, total: number): number {
@@ -38,6 +43,8 @@ export function MaintenanceHubKpiCards({
   partsRequisition,
   costPerKmApprox,
   pmOnTimePct,
+  foundByInspection,
+  onOpenFound,
 }: MaintenanceHubKpiProps) {
   // Removed by the owner 16 Nov: cost / km, PM on-time % and parts requisition cards.
   void partsRequisition;
@@ -56,7 +63,9 @@ export function MaintenanceHubKpiCards({
 
   return (
     <div className="space-y-3 mb-6">
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-0 max-[390px]:grid-cols-1 max-[390px]:gap-2">
+    <div
+      className={`grid grid-cols-1 ${foundByInspection ? "md:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-3"} gap-3 mb-0 max-[390px]:grid-cols-1 max-[390px]:gap-2`}
+    >
       <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm flex flex-col justify-between">
         <div className="flex items-center justify-between text-stitch-secondary mb-2">
           <span className="text-[11px] uppercase tracking-wider font-semibold">Overdue Service</span>
@@ -99,6 +108,15 @@ export function MaintenanceHubKpiCards({
         </div>
         <KpiProgressBar pct={nextScheduledWindow ? 75 : 0} barClass="bg-stitch-secondary" />
       </div>
+
+      {foundByInspection ? (
+        <FoundByInspectionKpiCard
+          total={foundByInspection.total}
+          cars={foundByInspection.cars}
+          oldestDays={foundByInspection.oldestDays}
+          onOpen={onOpenFound}
+        />
+      ) : null}
     </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { api } from "../../../../services/api";
-import { jobItemsFromSections, type SystemSections } from "./systemSections";
+import { findingsJobsFromSections, jobItemsFromSections, type SystemSections } from "./systemSections";
 import type { JobItem } from "./itemsUsed";
 
 export type JobItemsStatus = "loading" | "error" | "ok";
@@ -14,6 +14,10 @@ export function useJobItems() {
   const [itemsByJob, setItemsByJob] = useState<Map<string, JobItem[]>>(new Map());
   /** null until a group answers; then the fleet's switch. */
   const [enabled, setEnabled] = useState<boolean | null>(null);
+  /** Inspection findings switch (same answer as the items switch); false until a group says true. */
+  const [findingsEnabled, setFindingsEnabled] = useState(false);
+  /** Jobs that are inspections (records_findings): Log service shows "What the inspection found" on them. */
+  const [findingsJobIds, setFindingsJobIds] = useState<Set<string>>(new Set());
   const inFlight = useRef(new Set<string>());
 
   const ingest = useCallback((systemId: string, s: SystemSections) => {
@@ -25,6 +29,15 @@ export function useJobItems() {
     });
     setStatusBySystem((prev) => new Map(prev).set(systemId, "ok"));
     if (typeof s.serviceItemsEnabled === "boolean") setEnabled(s.serviceItemsEnabled);
+    if (typeof s.inspectionFindingsEnabled === "boolean") setFindingsEnabled(s.inspectionFindingsEnabled);
+    const inspections = findingsJobsFromSections(s);
+    if (inspections.length) {
+      setFindingsJobIds((prev) => {
+        const next = new Set(prev);
+        for (const id of inspections) next.add(id);
+        return next;
+      });
+    }
   }, []);
 
   const fail = useCallback((systemId: string) => {
@@ -54,7 +67,9 @@ export function useJobItems() {
     setStatusBySystem(new Map());
     setItemsByJob(new Map());
     setEnabled(null);
+    setFindingsEnabled(false);
+    setFindingsJobIds(new Set());
   }, []);
 
-  return { statusBySystem, itemsByJob, enabled, ingest, fail, ensure, reset };
+  return { statusBySystem, itemsByJob, enabled, findingsEnabled, findingsJobIds, ingest, fail, ensure, reset };
 }

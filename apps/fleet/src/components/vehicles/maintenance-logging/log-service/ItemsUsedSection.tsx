@@ -75,6 +75,8 @@ type Props = {
   /** The job's own charge (no items), for the total pill. */
   jobCharge: number;
   onPickPart: (item: LineItemDraft) => void;
+  /** Shown between the items and the total pill (inspection jobs: "What the inspection found"). */
+  beforeTotal?: React.ReactNode;
 };
 
 const labelSm = "text-[11px] leading-[14px] tracking-[0.02em] font-semibold";
@@ -374,7 +376,7 @@ function Skeleton() {
   );
 }
 
-export function ItemsUsedSection({ jobItems, status, onRetry, items, onChange, currency, jobCharge, onPickPart }: Props) {
+export function ItemsUsedSection({ jobItems, status, onRetry, items, onChange, currency, jobCharge, onPickPart, beforeTotal }: Props) {
   const { usually, sometimes } = groupJobItems(jobItems);
   const itemsTotal = items.reduce((s, i) => s + itemAmount(i), 0);
   const others = items.map((it, idx) => ({ it, idx })).filter(({ it }) => it.source === "other");
@@ -497,6 +499,8 @@ export function ItemsUsedSection({ jobItems, status, onRetry, items, onChange, c
           <span className={`${bodySm} text-outline italic`}>{ITEMS_COPY.blankCostHelper}</span>
         </div>
       )}
+
+      {beforeTotal}
 
       <div
         className="self-end mt-1 bg-surface-container-low text-on-surface px-4 py-2 rounded-full text-sm font-semibold tabular-nums shadow-xs hidden sm:flex items-center gap-2"

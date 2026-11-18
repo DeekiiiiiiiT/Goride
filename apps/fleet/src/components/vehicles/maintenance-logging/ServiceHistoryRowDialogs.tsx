@@ -17,6 +17,9 @@ import {
 import type { MaintenanceLogLine, MaintenanceWorkOrder } from "../../../types/maintenance";
 import { formatMaintenanceServiceDateLabel } from "../../../utils/maintenanceDisplayFormat";
 import { itemsUsedText } from "./serviceHistoryItems";
+import { FoundHistorySection } from "./FoundByInspection";
+import { FromInspectionChip } from "./log-service/FoundWorkSection";
+import { isFoundToday } from "./log-service/foundWork";
 
 type ApiLine = MaintenanceLogLine;
 
@@ -70,7 +73,10 @@ export function ServiceHistoryViewDialog({
   vehicleLabel: string;
   onClose: () => void;
 }) {
-  const { wo, loading, error } = useWorkOrder(workOrderId);
+  // "Open that service" (inspection findings) shows the service that did a found job in this same window.
+  const [shownId, setShownId] = useState<string | null>(workOrderId);
+  useEffect(() => setShownId(workOrderId), [workOrderId]);
+  const { wo, loading, error } = useWorkOrder(shownId);
   const lines = ((wo?.lines || []) as ApiLine[]).filter((l) => !l.recommended && !l.voidedAt);
   /** Deleted jobs keep their items, read-only (plan rule 6). */
   const voided = ((wo?.lines || []) as ApiLine[]).filter((l) => !l.recommended && l.voidedAt);
@@ -124,10 +130,11 @@ export function ServiceHistoryViewDialog({
                     <div className="min-w-0">
                       <p className="font-medium">{l.categoryName || "—"}</p>
                       {/* Stitch powertrain 08: the chips sit on their own line under the job name. */}
-                      {l.fitAtLog === "no" || l.isHighVoltage ? (
+                      {l.fitAtLog === "no" || l.isHighVoltage || isFoundToday(l) ? (
                         <span className="mt-1 flex flex-wrap gap-1">
                           {l.fitAtLog === "no" ? <NotUsualChip /> : null}
                           {l.isHighVoltage ? <HighVoltageChip /> : null}
+                          {isFoundToday(l) ? <FromInspectionChip /> : null}
                         </span>
                       ) : null}
                       <p className="text-xs text-stitch-secondary">
@@ -149,6 +156,8 @@ export function ServiceHistoryViewDialog({
                 ))}
               </ul>
             </div>
+
+            <FoundHistorySection lines={(wo.lines || []) as ApiLine[]} onOpenService={(id) => setShownId(id)} />
 
             {voided.length ? (
               <div className="space-y-2" data-testid="service-details-voided">

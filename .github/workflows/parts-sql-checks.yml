@@ -26,6 +26,8 @@ on:
       - 'supabase/tests/service_items_checks.sql'
       - 'supabase/tests/service_items_db_test.sql'
       - 'supabase/tests/service_items_save_db_test.sql'
+      - 'supabase/tests/inspection_findings_checks.sql'
+      - 'supabase/tests/inspection_findings_db_test.sql'
       - 'supabase/tests/service_items_completion_db_test.sql'
       - 'supabase/tests/powertrain_checks.sql'
       - 'supabase/tests/powertrain_db_test.sql'
@@ -84,6 +86,8 @@ on:
       - 'supabase/tests/service_items_checks.sql'
       - 'supabase/tests/service_items_db_test.sql'
       - 'supabase/tests/service_items_save_db_test.sql'
+      - 'supabase/tests/inspection_findings_checks.sql'
+      - 'supabase/tests/inspection_findings_db_test.sql'
       - 'supabase/tests/service_items_completion_db_test.sql'
       - 'supabase/tests/powertrain_checks.sql'
       - 'supabase/tests/powertrain_db_test.sql'
@@ -200,6 +204,10 @@ jobs:
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/service_items_db_test.sql
           docker cp supabase/tests/service_items_save_db_test.sql "$db_container":/tmp/service_items_save_db_test.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/service_items_save_db_test.sql
+          docker cp supabase/tests/inspection_findings_checks.sql "$db_container":/tmp/inspection_findings_checks.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/inspection_findings_checks.sql
+          docker cp supabase/tests/inspection_findings_db_test.sql "$db_container":/tmp/inspection_findings_db_test.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/inspection_findings_db_test.sql
           docker cp supabase/tests/service_items_completion_db_test.sql "$db_container":/tmp/service_items_completion_db_test.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/service_items_completion_db_test.sql
           docker cp supabase/tests/powertrain_checks.sql "$db_container":/tmp/powertrain_checks.sql

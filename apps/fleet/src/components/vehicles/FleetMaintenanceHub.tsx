@@ -32,6 +32,8 @@ import {
 import { catalogOptionsFromScheduleRows } from "../../utils/maintenanceCatalogOptions";
 import type {
   CatalogMaintenanceTaskOption,
+  FoundWorkCounts,
+  FoundWorkItem,
   MaintenanceLog,
   VehicleMaintenanceScheduleRowApi,
 } from "../../types/maintenance";
@@ -164,6 +166,9 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const [catalogForLog, setCatalogForLog] = useState<CatalogMaintenanceTaskOption[]>([]);
   const [defaultOdoForLog, setDefaultOdoForLog] = useState<number | undefined>(undefined);
   const [initialLogForComplete, setInitialLogForComplete] = useState<Partial<MaintenanceLog> | null>(null);
+  /** Inspection findings: open found-job counts (null = switch off or not loaded) and the job "Log it now" opened. */
+  const [foundCounts, setFoundCounts] = useState<FoundWorkCounts | null>(null);
+  const [fromFoundWork, setFromFoundWork] = useState<FoundWorkItem | null>(null);
 
   const [driverRequests, setDriverRequests] = useState<DriverRequestRow[]>([]);
   const [requestsLoading, setRequestsLoading] = useState(false);
@@ -211,9 +216,19 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
     }
   }, []);
 
+  /** Found-job counts load on their own: a failure (or the switch off) only hides the card and chips. */
+  const loadFoundCounts = useCallback(async () => {
+    try {
+      setFoundCounts(await api.foundWorkCounts());
+    } catch {
+      setFoundCounts(null);
+    }
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    void loadFoundCounts();
     try {
       const res = await api.getMaintenanceFleetSummary();
       setNightlyRun((res as { nightlyRun?: Record<string, unknown> }).nightlyRun ?? null);
@@ -262,14 +277,14 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
     } finally {
       setLoading(false);
     }
-  }, [loadRequests]);
+  }, [loadRequests, loadFoundCounts]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   const prepareLogForVehicle = useCallback(
-    async (vehicleId: string, initial?: Partial<MaintenanceLog> | null) => {
+    async (vehicleId: string, initial?: Partial<MaintenanceLog> | null, fromFound?: FoundWorkItem | null) => {
       if (!vehicleId) return;
       setScheduleLoading(true);
       try {
@@ -281,6 +296,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
         const odo = items.find((i) => i.vehicleId === vehicleId)?.odometer;
         setDefaultOdoForLog(initial?.odo ?? (Number.isFinite(odo) ? odo : undefined));
         setInitialLogForComplete(initial ?? null);
+        setFromFoundWork(fromFound ?? null);
         setLogVehicleId(vehicleId);
         setLogDialogOpen(true);
       } catch (e: unknown) {
@@ -360,6 +376,22 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const handleLogSaved = useCallback(() => {
     void load();
   }, [load]);
+
+  /** The "Found by inspection" card opens the car whose found job has waited longest (Stitch 6 interactions). */
+  const openOldestFoundCar = useCallback(async () => {
+    try {
+      // The counts already name the oldest car (IF-26); an older server doesn't, so ask for the list then.
+      let vehicleId = foundCounts?.oldestVehicleId ?? null;
+      if (!vehicleId) {
+        const { items: found } = await api.listFoundWork();
+        vehicleId = [...found].sort((a, b) => b.daysWaiting - a.daysWaiting)[0]?.vehicleId ?? null;
+      }
+      const row = vehicleId ? items.find((i) => i.vehicleId === vehicleId) : undefined;
+      if (row) setServicesDueView(row);
+    } catch {
+      toast.error("Couldn't load found jobs. Try again.");
+    }
+  }, [items, foundCounts]);
 
   const findPartsActive = hubTab === "find-parts";
 
@@ -453,6 +485,8 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           partsRequisition={partsRequisition}
           costPerKmApprox={kpiMonth?.costPerKmApprox}
           pmOnTimePct={kpiMonth?.pmOnTimePct}
+          foundByInspection={foundCounts}
+          onOpenFound={() => void openOldestFoundCar()}
         />
       ) : null}
 
@@ -589,6 +623,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
               }}
               onGoToVehicles={onNavigate ? () => onNavigate("vehicles") : undefined}
               canClearDoNotDrive={canClearDoNotDrive}
+              foundByVehicle={foundCounts?.byVehicle ?? null}
               onClearDoNotDrive={async (vehicleId, reason) => {
                 try {
                   await api.clearVehicleDoNotDrive(vehicleId, reason);
@@ -624,6 +659,11 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
         }}
         mobileCompact={mobileCompact}
         canEditMaintenance={canEditMaintenance}
+        onLogFoundWork={(item) => {
+          setServicesDueView(null);
+          void prepareLogForVehicle(item.vehicleId, null, item);
+        }}
+        onFoundChanged={() => void loadFoundCounts()}
       />
 
       <OdometerHistoryDrawer
@@ -664,6 +704,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
             if (!o) {
               setLogVehicleId("");
               setInitialLogForComplete(null);
+              setFromFoundWork(null);
             }
           }}
           vehicleId={logVehicleId}
@@ -673,6 +714,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           initialLog={initialLogForComplete}
           draftUserId={user?.id}
           onSaved={handleLogSaved}
+          fromFoundWork={fromFoundWork}
         />
       ) : null}
     </div>

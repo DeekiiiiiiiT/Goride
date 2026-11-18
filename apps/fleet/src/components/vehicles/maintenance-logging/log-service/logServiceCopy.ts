@@ -73,6 +73,7 @@ export const LOG_SERVICE_COPY = {
   jobAddedBadge: "Added",
   continueWithJobs: (n: number) => `Continue with ${n} job${n === 1 ? "" : "s"}`,
   addAnotherJob: "Add another job",
+  addAnotherJobSaveFirst: "Save this job first, then add another.",
   backToReview: (n: number) => `Back to review (${n} job${n === 1 ? "" : "s"})`,
   fixReadingLabel: "Type it myself",
   keepReadingLabel: (typed: number) => `Keep ${typed.toLocaleString()} km anyway`,

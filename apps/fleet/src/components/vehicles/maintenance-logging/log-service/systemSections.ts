@@ -22,6 +22,8 @@ export type SystemSections = {
   otherJobs: SectionJob[];
   /** The fleet's "service items" switch. False → no Items used block. */
   serviceItemsEnabled?: boolean;
+  /** The fleet's inspection-findings switch. False → no "what the inspection found" block. */
+  inspectionFindingsEnabled?: boolean;
 };
 
 /** Job id → its May-need items, from every job in a group's response (sections and other jobs). */
@@ -31,6 +33,13 @@ export function jobItemsFromSections(s: SystemSections | null | undefined): Map<
   const all = [...(s.groups ?? []).flatMap((g) => g.sections.flatMap((sec) => sec.jobs)), ...(s.otherJobs ?? [])];
   for (const j of all) if (!out.has(j.id)) out.set(j.id, j.items ?? []);
   return out;
+}
+
+/** Ids of the inspection jobs in a group's response (server sends recordsFindings false when the switch is off). */
+export function findingsJobsFromSections(s: SystemSections | null | undefined): string[] {
+  if (!s) return [];
+  const all = [...(s.groups ?? []).flatMap((g) => g.sections.flatMap((sec) => sec.jobs)), ...(s.otherJobs ?? [])];
+  return [...new Set(all.filter((j) => j.recordsFindings === true).map((j) => j.id))];
 }
 
 const isActive = (j: SectionJob): boolean => (j as unknown as { status?: string }).status !== "retired";

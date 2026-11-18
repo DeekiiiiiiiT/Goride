@@ -36,8 +36,9 @@ export function maintenanceRecordAcceptsClientHint(
   return true;
 }
 
-function lineNeedsPartsUsage(row: Record<string, unknown>): boolean {
+export function lineNeedsPartsUsage(row: Record<string, unknown>): boolean {
   if (row.declined === true) return false;
+  if (row.recommended === true) return false;
   if (row.part_id && isUuid(String(row.part_id))) return true;
   const num = row.part_number != null ? String(row.part_number).trim() : "";
   return num.length > 0;
@@ -53,7 +54,7 @@ function usageFromCommit(usageResult: Record<string, unknown>): {
   };
 }
 
-function dbLinesToLedgerInputs(lines: Record<string, unknown>[]): LedgerLineInput[] {
+export function dbLinesToLedgerInputs(lines: Record<string, unknown>[]): LedgerLineInput[] {
   return lines.map((r) => ({
     categoryId: r.component_id != null ? String(r.component_id) : null,
     categoryCode: r.component_code != null ? String(r.component_code) : null,
@@ -63,6 +64,7 @@ function dbLinesToLedgerInputs(lines: Record<string, unknown>[]): LedgerLineInpu
     notes: r.notes != null ? String(r.notes) : null,
     workOrderLineId: r.id != null ? String(r.id) : null,
     declined: r.declined === true,
+    recommended: r.recommended === true,
   }));
 }
 
@@ -79,7 +81,11 @@ function mapDbLineToApi(row: Record<string, unknown>): Record<string, unknown> {
     partNumber: row.part_number,
     partId: row.part_id,
     notes: row.notes,
+    recommended: row.recommended === true,
     declined: row.declined === true,
+    fromFoundLineId: row.from_found_line_id ?? null,
+    closedAt: row.closed_at ?? null,
+    closedReason: row.closed_reason ?? null,
     lineTotal: row.line_total != null ? Number(row.line_total) : undefined,
   };
 }

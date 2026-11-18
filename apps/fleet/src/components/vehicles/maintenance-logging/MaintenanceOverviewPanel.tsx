@@ -21,6 +21,7 @@ import {
   formatMaintenanceDisplayDate,
   formatOdometerMetaSubline,
 } from "../../../utils/maintenanceDisplayFormat";
+import { FoundToDoChip } from "./FoundByInspection";
 
 export { MaintenanceHubKpiCards } from "./MaintenanceHubKpiCards";
 export type { MaintenanceHubKpiProps } from "./MaintenanceHubKpiCards";
@@ -138,7 +139,10 @@ export function MaintenanceOverviewPanel({
   onGoToVehicles,
   canClearDoNotDrive = false,
   onClearDoNotDrive,
+  foundByVehicle,
 }: {
+  /** Inspection findings: open found jobs per car ("N to do" chip). Absent = switch off. */
+  foundByVehicle?: Record<string, number> | null;
   items: MaintenanceOverviewVehicleRow[];
   orgName?: string;
   onLogService: (vehicleId: string) => void;
@@ -348,7 +352,11 @@ export function MaintenanceOverviewPanel({
                               {row.dueCounts?.dueSoon} due soon
                             </button>
                           ) : null}
-                          {!row.dueCounts?.overdue && !row.dueCounts?.dueSoon ? (
+                          <FoundToDoChip
+                            count={foundByVehicle?.[row.vehicleId] ?? 0}
+                            onClick={() => onOpenDueDrawer(row.vehicleId)}
+                          />
+                          {!row.dueCounts?.overdue && !row.dueCounts?.dueSoon && !(foundByVehicle?.[row.vehicleId] ?? 0) ? (
                             <span className="font-mono text-[11px] text-stitch-secondary">—</span>
                           ) : null}
                         </div>

@@ -97,8 +97,10 @@ export function mapApiLineToDb(
   );
   const systemParsed = parseOptionalUuidField(raw.systemId ?? raw.system_id);
   const partParsed = parseOptionalUuidField(raw.partId ?? raw.part_id);
+  const fromFoundParsed = parseOptionalUuidField(raw.fromFoundLineId ?? raw.from_found_line_id);
   let action = String(raw.action ?? "replace").trim();
   if (!WO_LINE_ACTIONS.has(action)) action = "other";
+  const recommended = raw.recommended === true;
 
   const row: Record<string, unknown> = {
     sort_order: raw.sortOrder != null ? Number(raw.sortOrder) : (raw.sort_order != null ? Number(raw.sort_order) : sortOrder),
@@ -141,16 +143,48 @@ export function mapApiLineToDb(
       return offerParsed.ok ? offerParsed.value : null;
     })(),
     notes: raw.notes != null ? String(raw.notes) : null,
-    recommended: raw.recommended === true,
+    recommended,
     declined: raw.declined === true,
+    from_found_line_id: fromFoundParsed.ok ? fromFoundParsed.value : null,
     values_json: values,
   };
   const itemsAmt = itemsAmount ?? raw.itemsAmount ?? raw.items_amount ?? 0;
   row.items_amount = Number(itemsAmt) || 0;
   row.line_total = computeWoLineTotal(row);
+  if (recommended) {
+    row.part_number = null;
+    row.part_id = null;
+    row.brand = null;
+    row.supplier_part_offer_id = null;
+    row.unit_price = null;
+    row.material = null;
+    row.labor_amount = null;
+    row.labor_rate = null;
+    row.items_amount = 0;
+    row.line_total = 0;
+  }
   if (workOrderId) row.work_order_id = workOrderId;
   if (raw.id != null && isUuid(String(raw.id))) row.id = String(raw.id);
   return row;
+}
+
+export function inspectInspectionFindingsOffPayload(rawLines: unknown[]): boolean {
+  for (const raw of rawLines) {
+    if (!raw || typeof raw !== "object") continue;
+    const r = raw as Record<string, unknown>;
+    const fromRaw = r.fromFoundLineId ?? r.from_found_line_id;
+    if (fromRaw !== undefined && fromRaw !== null && String(fromRaw).trim() !== "") return true;
+    const valuesRaw = r.values ?? r.values_json;
+    if (valuesRaw && typeof valuesRaw === "object" && !Array.isArray(valuesRaw)) {
+      const v = valuesRaw as Record<string, unknown>;
+      const foundByJob = v.found_by_job;
+      if (foundByJob !== undefined && foundByJob !== null && String(foundByJob).trim() !== "") {
+        return true;
+      }
+      if (v.found_today === true) return true;
+    }
+  }
+  return false;
 }
 
 export function mapDbLineItemToApi(row: Record<string, unknown>): Record<string, unknown> {
@@ -212,6 +246,13 @@ const SAVE_ERROR_MESSAGES: Record<string, { status: number; error: string }> = {
   immutable: { status: 409, error: "Completed services can't be changed — void it and log again." },
   line_work_order_mismatch: { status: 400, error: "That line belongs to another service." },
   line_items_on_declined: { status: 400, error: "Declined jobs cannot include items." },
+  line_items_on_found_job: { status: 400, error: "Jobs not done yet cannot include items." },
+  found_line_not_open: {
+    status: 409,
+    error: "This found job is already closed. The list has been refreshed.",
+  },
+  found_line_wrong_car: { status: 400, error: "That found job belongs to a different car." },
+  invalid_found_line_id: { status: 400, error: "Invalid found line id." },
   status_invalid: { status: 400, error: "Invalid service status." },
   work_order_id_taken: { status: 409, error: "That service id is already in use." },
   actor_required: { status: 401, error: "Sign in again." },
@@ -379,12 +420,44 @@ export async function prepareWorkOrderLines(
     }
     const r = raw as Record<string, unknown>;
     const declined = r.declined === true;
+    const recommended = r.recommended === true;
     const itemsRaw = Array.isArray(r.items) ? r.items : [];
+
+    const fromFoundRaw = r.fromFoundLineId ?? r.from_found_line_id;
+    const hasFromFound = fromFoundRaw !== undefined && fromFoundRaw !== null && String(fromFoundRaw).trim() !== "";
+    if (hasFromFound) {
+      const fp = parseOptionalUuidField(fromFoundRaw);
+      if (!fp.ok) {
+        return {
+          ok: false,
+          status: 400,
+          code: "invalid_found_line_id",
+          error: "Invalid found line id.",
+        };
+      }
+    }
+    if (recommended && hasFromFound) {
+      return {
+        ok: false,
+        status: 400,
+        code: "found_line_invalid",
+        error: "A job not done yet can't also close a found job.",
+      };
+    }
 
     const lineIdErr = checkClientLineId(args.workOrderId, r.id, knownIds, lineWoById);
     if (lineIdErr) return lineIdErr;
 
-  const parsed = parseLineItems(itemsRaw, { declined });
+    if (recommended && itemsRaw.length > 0) {
+      return {
+        ok: false,
+        status: 400,
+        code: "line_items_on_found_job",
+        error: "Jobs not done yet cannot include items.",
+      };
+    }
+
+    const parsed = parseLineItems(itemsRaw, { declined });
     if (!parsed.ok) {
       return {
         ok: false,
@@ -655,9 +728,15 @@ export async function prepareWorkOrderLines(
       delete row.id;
     }
 
-    row.items = dbItems;
-    row.items_amount = Number(itemsAmount) || 0;
-    row.line_total = computeWoLineTotal(row);
+    if (row.recommended === true) {
+      row.items = [];
+      row.items_amount = 0;
+      row.line_total = 0;
+    } else {
+      row.items = dbItems;
+      row.items_amount = Number(itemsAmount) || 0;
+      row.line_total = computeWoLineTotal(row);
+    }
     outLines.push(row);
   }
 
@@ -822,6 +901,10 @@ function mapDbLineToApiShim(row: Record<string, unknown>): Record<string, unknow
     notes: row.notes,
     recommended: row.recommended === true,
     declined: row.declined === true,
+    fromFoundLineId: row.from_found_line_id ?? null,
+    closedAt: row.closed_at ?? null,
+    closedReason: row.closed_reason ?? null,
+    closedBy: row.closed_by ?? null,
     values: row.values_json,
     lineTotal: row.line_total != null ? Number(row.line_total) : undefined,
     itemsAmount: row.items_amount != null ? Number(row.items_amount) : 0,
