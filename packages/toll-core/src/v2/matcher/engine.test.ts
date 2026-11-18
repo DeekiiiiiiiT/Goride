@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ENGINE_VERSION, matchTolls, scorePair } from './engine.ts';
+import { ENGINE_VERSION, ENGINE_VERSION_V2, matchTolls, scorePair } from './engine.ts';
 import type { MatchBundle, MatchCharge, MatchPayback, MatchTrip } from './types.ts';
 
 // Claude's smoke cases for P2-R3. Cursor's golden suite (matcher_golden_*) adds the full set.
@@ -142,6 +142,56 @@ describe('matcher disputes (v2)', () => {
         ['auto_apply_setting', 'charge', 'competitors', 'config', 'engine_version', 'payback', 'trip'].sort(),
       );
       expect(Object.keys(c.inputs.config.points)).not.toContain('refund_window');
+    }
+  });
+
+  it('rider_trips present without rates/disputes still uses v2', () => {
+    const r = matchTolls({
+      ...bundle(),
+      rider_trips: [
+        {
+          platform: 'indrive',
+          platform_trip_id: 'logged:x',
+          vehicle_id: 'v1',
+          driver_id: 'd1',
+          request_at: '2026-11-10T14:00:00-05:00',
+          pickup_at: '2026-11-10T14:05:00-05:00',
+          dropoff_at: '2026-11-10T14:50:00-05:00',
+          time_precision: 'minute',
+          payment_method: 'cash',
+          is_legacy: false,
+        },
+      ],
+    });
+    expect(r.engine_version).toBe(ENGINE_VERSION_V2);
+  });
+
+  it('a stored rider suggestion re-scores to its stored answer (I11)', () => {
+    const b = bundle();
+    const r = matchTolls({
+      ...b,
+      rider_trips: [
+        {
+          platform: 'indrive',
+          platform_trip_id: 'logged:i11',
+          vehicle_id: b.charges[0].vehicle_id,
+          driver_id: b.charges[0].driver_id,
+          request_at: new Date(Date.parse(b.charges[0].occurred_at) - 10 * 60_000).toISOString(),
+          pickup_at: null,
+          dropoff_at: new Date(Date.parse(b.charges[0].occurred_at) + 30 * 60_000).toISOString(),
+          time_precision: 'minute',
+          payment_method: 'cash',
+          is_legacy: false,
+        },
+      ],
+    });
+    const riders = r.candidates.filter((c) => c.kind === 'rider_pays_driver');
+    expect(riders.length).toBeGreaterThan(0);
+    for (const c of riders) {
+      const again = scorePair(JSON.parse(JSON.stringify(c.inputs)));
+      expect(again.score).toBe(c.score);
+      expect(again.rules_fired).toEqual(c.rules_fired);
+      expect(again.auto_apply).toBe(false);
     }
   });
 });

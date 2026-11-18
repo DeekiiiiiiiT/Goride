@@ -162,13 +162,27 @@ export function scorePair(inputs: PairInputs): Scored {
   if (inputs.kind === 'dispute_refund') {
     return scoreRefundPair(inputs);
   }
+  // Review S2b-R3 (I11): a stored rider suggestion re-scores to its stored answer (it has no payback,
+  // so the payback path would score the stub's amount). competitors.payback_candidates holds the
+  // trip's candidate count for this kind.
+  if (inputs.kind === 'rider_pays_driver') {
+    if (!inputs.trip) throw new Error('scorePair: rider_pays_driver inputs need a trip');
+    return scoreRiderPair(
+      inputs.charge,
+      inputs.trip,
+      { charge_candidates: inputs.competitors.charge_candidates, trip_candidates: inputs.competitors.payback_candidates },
+      inputs.config,
+      inputs.engine_version,
+    );
+  }
 
   const cfg = inputs.config;
   const w = windowFor(inputs.charge, inputs.payback, inputs.trip, cfg);
   if (!w) throw new Error('scorePair: inputs are not a candidate pair');
 
   const rules: string[] = [w.hit];
-  const windowPts = cfg.points[w.hit];
+  const windowPts =
+    w.hit === 'refund_window' ? cfg.points.same_day : cfg.points[w.hit as keyof typeof cfg.points];
 
   const want = inputs.charge.remaining_minor;
   const have = inputs.payback.remaining_minor;
@@ -271,7 +285,60 @@ function scoreRefundPair(inputs: PairInputs): Scored {
 }
 
 function bundleUsesV2(bundle: MatchBundle): boolean {
-  return bundle.rates !== undefined || bundle.disputes !== undefined;
+  return bundle.rates !== undefined || bundle.disputes !== undefined || bundle.rider_trips !== undefined;
+}
+
+/** Payback stub for window tests on rider-only trips (no platform payback). */
+const RIDER_STUB_PAYBACK: PairInputs['payback'] = {
+  id: '_rider_stub_',
+  platform: 'indrive',
+  kind: 'trip_line',
+  platform_trip_id: null,
+  driver_id: null,
+  paid_on: '1970-01-01',
+  amount_minor: 0,
+  remaining_minor: 0,
+  received_by: 'fleet',
+};
+
+function scoreRiderPair(
+  charge: PairInputs['charge'],
+  trip: NonNullable<PairInputs['trip']>,
+  competitors: { charge_candidates: number; trip_candidates: number },
+  cfg: MatcherConfig,
+  engineVersion: string,
+): Scored {
+  const w = windowFor(charge, RIDER_STUB_PAYBACK, trip, cfg);
+  if (!w) throw new Error('scoreRiderPair: not a candidate');
+  const rules: string[] = [w.hit, 'rider_pays_driver', 'rider_owed_driver_collects'];
+  const windowPts =
+    w.hit === 'adjustment_same_day' || w.hit === 'adjustment_within_lookback' || w.hit === 'refund_window'
+      ? cfg.points.same_day
+      : cfg.points[w.hit];
+  const sole = competitors.charge_candidates === 1 && competitors.trip_candidates === 1;
+  const solePts = sole ? cfg.points.sole_candidate : 0;
+  if (sole) rules.push('sole_candidate');
+  else rules.push('competing_candidates');
+  if (w.dateOnly) rules.push('date_only');
+  if (w.noDropoff) rules.push('no_dropoff');
+  rules.push('auto_apply_blocked');
+  const total = windowPts + solePts;
+  return {
+    score: total,
+    score_parts: {
+      window: windowPts,
+      amount: 0,
+      sole_candidate: solePts,
+      total,
+      window_hit: w.hit,
+      amount_diff_minor: 0,
+      minutes_outside_trip: w.minutesOutside,
+      dispute_open_eligible: false,
+      dispute_settle_eligible: false,
+    },
+    rules_fired: rules,
+    auto_apply: false,
+  };
 }
 
 function activeDisputedCharges(disputes: MatchDispute[] | undefined): Set<string> {
@@ -390,6 +457,10 @@ function byId(a: { id: string }, b: { id: string }): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
+function coalesceId(id: string | null | undefined): string {
+  return id ?? '';
+}
+
 /** Run the matcher over one claimed bundle. */
 export function matchTolls(bundle: MatchBundle, cfg: MatcherConfig = MATCHER_CONFIG_V1): MatchResult {
   if (!bundleUsesV2(bundle)) {
@@ -492,6 +563,64 @@ function matchTollsCore(bundle: MatchBundle, cfg: MatcherConfig, engineVersion: 
     candidates.push(cand);
   }
 
+  if (engineVersion === ENGINE_VERSION_V2 && bundle.rider_trips !== undefined) {
+    const riderTrips = [...(bundle.rider_trips ?? [])].filter((t) => !t.is_legacy).sort((a, b) =>
+      a.platform_trip_id < b.platform_trip_id ? -1 : a.platform_trip_id > b.platform_trip_id ? 1 : 0,
+    );
+    type RiderRaw = { c: MatchCharge; t: MatchTrip };
+    const riderRaw: RiderRaw[] = [];
+    for (const c of charges) {
+      if (disputed.has(c.id)) continue;
+      const cIn = pickCharge(c);
+      for (const t of riderTrips) {
+        if (!c.vehicle_id || c.vehicle_id !== t.vehicle_id) continue;
+        if (windowFor(cIn, RIDER_STUB_PAYBACK, pickTrip(t), cfg)) riderRaw.push({ c, t });
+      }
+    }
+    const perChargeRider = new Map<string, number>();
+    const perTripRider = new Map<string, number>();
+    for (const r of riderRaw) {
+      perChargeRider.set(r.c.id, (perChargeRider.get(r.c.id) ?? 0) + 1);
+      const tk = tripKey(r.t.platform, r.t.platform_trip_id);
+      perTripRider.set(tk, (perTripRider.get(tk) ?? 0) + 1);
+    }
+    for (const r of riderRaw) {
+      if (!focalC.has(r.c.id)) continue;
+      const tripIn = pickTrip(r.t);
+      const inputs: PairInputs = {
+        engine_version: engineVersion,
+        config: cfg,
+        kind: 'rider_pays_driver',
+        charge: pickCharge(r.c),
+        payback: RIDER_STUB_PAYBACK,
+        trip: tripIn,
+        competitors: {
+          charge_candidates: perChargeRider.get(r.c.id) ?? 0,
+          payback_candidates: perTripRider.get(tripKey(r.t.platform, r.t.platform_trip_id)) ?? 0,
+        },
+        auto_apply_setting: false,
+      };
+      const scored = scoreRiderPair(
+        inputs.charge,
+        tripIn,
+        { charge_candidates: inputs.competitors.charge_candidates, trip_candidates: inputs.competitors.payback_candidates },
+        cfg,
+        engineVersion,
+      );
+      candidates.push({
+        kind: 'rider_pays_driver',
+        charge_id: r.c.id,
+        payback_id: null,
+        trip_platform: r.t.platform,
+        trip_id: r.t.platform_trip_id,
+        inputs,
+        ...scored,
+        dispute_open_eligible: false,
+        dispute_settle_eligible: false,
+      });
+    }
+  }
+
   if (engineVersion === ENGINE_VERSION_V2 && (bundle.disputes?.length ?? 0) > 0) {
     const disputes = (bundle.disputes ?? []).filter((d) => d.state === 'sent' || d.state === 'expired');
     const chargesById = new Map(bundle.charges.map((c) => [c.id, c]));
@@ -559,7 +688,15 @@ function matchTollsCore(bundle: MatchBundle, cfg: MatcherConfig, engineVersion: 
       ? (a.charge_id < b.charge_id ? -1 : 1)
       : b.score !== a.score
         ? b.score - a.score
-        : a.payback_id < b.payback_id ? -1 : a.payback_id > b.payback_id ? 1 : 0,
+        : coalesceId(a.payback_id) < coalesceId(b.payback_id)
+          ? -1
+          : coalesceId(a.payback_id) > coalesceId(b.payback_id)
+            ? 1
+            : coalesceId(a.trip_id) < coalesceId(b.trip_id)
+              ? -1
+              : coalesceId(a.trip_id) > coalesceId(b.trip_id)
+                ? 1
+                : 0,
   );
 
   return { engine_version: engineVersion, candidates, excluded: { charges: excludedC, paybacks: excludedP } };

@@ -19,10 +19,25 @@ function mockRpc(steps: Array<{ fn: string; data?: unknown; error?: { message: s
 }
 
 Deno.test("matcher run: empty claim stops immediately", async () => {
-  const rpc = mockRpc([{ fn: "toll_sys_match_claim", data: { claim_id: null } }]);
+  const rpc = mockRpc([
+    { fn: "toll_sys_match_claim", data: { claim_id: null } },
+    { fn: "toll_sys_dispute_sweep", data: { expired: 0, closed: 0, no_report: 0, held: [] } },
+  ]);
   const report = await runTollMatcher(rpc, "org-a");
   assertEquals(report.rounds, 0);
   assertEquals(report.queueLeft, false);
+  assertEquals(report.sweep?.expired, 0);
+});
+
+Deno.test("matcher run: a failed sweep is recorded and never fails the run (review S2b-R4)", async () => {
+  const rpc = mockRpc([
+    { fn: "toll_sys_match_claim", data: { claim_id: null } },
+    { fn: "toll_sys_dispute_sweep", error: { message: "function does not exist" } },
+  ]);
+  const report = await runTollMatcher(rpc, "org-a");
+  assertEquals(report.queueLeft, false);
+  assertEquals(report.sweep, undefined);
+  assertEquals(report.sweepError, "toll_sys_dispute_sweep: function does not exist");
 });
 
 Deno.test("matcher run: two rounds then empty", async () => {
@@ -52,6 +67,7 @@ Deno.test("matcher run: two rounds then empty", async () => {
     },
     { fn: "toll_sys_match_store", data: { status: "stored", new: 0, unchanged: 1, replaced: 0, withdrawn: 0, skipped: 0 } },
     { fn: "toll_sys_match_claim", data: { claim_id: null } },
+    { fn: "toll_sys_dispute_sweep", data: { expired: 1, closed: 0 } },
   ]);
   const report = await runTollMatcher(rpc, "org-a");
   assertEquals(report.rounds, 2);
@@ -64,6 +80,7 @@ Deno.test("matcher run: claim_gone counted and loop continues", async () => {
     { fn: "toll_sys_match_claim", data: { claim_id: "claim-1", focal: { charge_ids: [], payback_ids: [] }, charges: [], paybacks: [], trips: [], settings: [] } },
     { fn: "toll_sys_match_store", data: { status: "claim_gone", claim_id: "claim-1" } },
     { fn: "toll_sys_match_claim", data: { claim_id: null } },
+    { fn: "toll_sys_dispute_sweep", data: {} },
   ]);
   const report = await runTollMatcher(rpc, "org-a");
   assertEquals(report.claimGone, 1);
@@ -117,6 +134,9 @@ Deno.test("matcher sweep: one company failure does not stop others", async () =>
         data: { status: "stored", new: 0, unchanged: 0, replaced: 0, withdrawn: 0, skipped: 0 },
         error: null,
       };
+    }
+    if (fn === "toll_sys_dispute_sweep") {
+      return { data: { expired: 0, closed: 0, no_report: 0, held: [], skipped: [] }, error: null };
     }
     throw new Error(`unexpected ${fn}`);
   };

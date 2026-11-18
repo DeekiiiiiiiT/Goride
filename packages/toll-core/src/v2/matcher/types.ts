@@ -89,7 +89,7 @@ export interface MatchDispute {
   refund_to: string;
 }
 
-export type SuggestionKind = 'payback' | 'dispute_refund';
+export type SuggestionKind = 'payback' | 'dispute_refund' | 'rider_pays_driver';
 
 /** What the database hands the engine (`toll_sys_match_claim`). */
 export interface MatchBundle {
@@ -98,6 +98,8 @@ export interface MatchBundle {
   charges: MatchCharge[];
   paybacks: MatchPayback[];
   trips: MatchTrip[];
+  /** Hand-logged rider-collect trips (`rider_pays_driver` switch on). */
+  rider_trips?: MatchTrip[];
   settings: MatchPlatformSetting[];
   rates?: MatchPlazaRate[];
   disputes?: MatchDispute[];
@@ -189,7 +191,9 @@ export interface Candidate extends Scored {
   kind?: SuggestionKind;
   dispute_id?: string;
   charge_id: string;
-  payback_id: string;
+  payback_id: string | null;
+  trip_platform?: string;
+  trip_id?: string;
   inputs: PairInputs;
   dispute_open_eligible?: boolean;
   dispute_settle_eligible?: boolean;

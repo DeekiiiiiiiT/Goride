@@ -20,6 +20,14 @@ export interface MatcherRunReport {
   actions: { opened: number; settled: number; skipped: number };
   claimGone: number;
   queueLeft: boolean;
+  sweep?: {
+    expired?: number;
+    closed?: number;
+    no_report?: number;
+    held?: unknown[];
+    report_late?: unknown;
+  };
+  sweepError?: string;
 }
 
 export interface MatcherRunSweepError {
@@ -53,7 +61,17 @@ export async function runTollMatcher(
     const claim = await rpc("toll_sys_match_claim", { p_company: organizationId, p_limit: opts.limit ?? 500 });
     if (claim.error) throw new Error(`toll_sys_match_claim: ${claim.error.message}`);
     const bundle = claim.data as MatchBundle & { claim_id: string | null };
-    if (!bundle?.claim_id) return report;
+    if (!bundle?.claim_id) {
+      const sweep = await rpc("toll_sys_dispute_sweep", { p_company: organizationId });
+      // Review S2b-R4: the sweep never fails the matcher run (matching is already stored; and if this server
+      // code goes live before the database change, the function does not exist yet). Record the error.
+      if (sweep.error) {
+        report.sweepError = `toll_sys_dispute_sweep: ${sweep.error.message}`;
+        return report;
+      }
+      report.sweep = (sweep.data ?? {}) as MatcherRunReport["sweep"];
+      return report;
+    }
 
     const result = matchTolls(bundle);
     const stored = await rpc("toll_sys_match_store", {
