@@ -29,7 +29,7 @@ BEGIN
   FROM (
     SELECT d.organization_id, d.charge_id, count(*) AS c
     FROM toll.disputes d
-    WHERE d.state NOT IN ('won', 'part_won', 'lost')
+    WHERE d.state NOT IN ('won', 'part_won', 'lost') AND d.close_reason IS DISTINCT FROM 'undo'
     GROUP BY d.organization_id, d.charge_id
     HAVING count(*) > 1
   ) x;

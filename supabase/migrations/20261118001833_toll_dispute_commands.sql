@@ -1060,7 +1060,9 @@ BEGIN
   v_recovered := greatest(d_old.recovered_minor - v_link_amt, 0);
   v_sealed := toll_system.week_is_sealed(p_company, d_old.charge_week_key);
 
-  IF d_dec.intent = 'close_dispute_lost' THEN
+  IF d_dec.intent = 'dispute_expire' THEN
+    v_prior := 'to_send';
+  ELSIF d_dec.intent = 'close_dispute_lost' THEN
     v_prior := 'sent';
   ELSIF d_dec.intent = 'settle_dispute' AND d_old.sent_at IS NULL AND d_old.state IN ('won', 'part_won', 'expired') THEN
     v_prior := 'expired';
@@ -1103,7 +1105,8 @@ BEGIN
     UPDATE toll.dispute_links SET reversed_by = p_undo_decision WHERE organization_id = p_company AND id = r.id;
   END LOOP;
 
-  UPDATE toll.disputes SET close_reason = 'undo' WHERE organization_id = p_company AND id = d_old.id;
+  UPDATE toll.disputes SET close_reason = 'undo'  -- state kept as it was (history is never relabelled)
+  WHERE organization_id = p_company AND id = d_old.id;
 
   INSERT INTO toll.disputes (
     organization_id, charge_id, charge_week_key, platform, platform_trip_id, driver_id,
@@ -1356,7 +1359,7 @@ BEGIN
     PERFORM toll_write.refuse('NOT_FOUND', jsonb_build_object('decision_id', v_target));
   END IF;
 
-  IF d.intent IN ('settle_dispute', 'close_dispute_lost') THEN
+  IF d.intent IN ('settle_dispute', 'close_dispute_lost', 'dispute_expire') THEN
     v_dispute := toll_write.intent_undo_dispute_result(p_company, v_target, p_decision, p_cmd);
     RETURN v_dispute || jsonb_build_object('undone_decision_id', v_target);
   END IF;
@@ -1775,6 +1778,8 @@ BEGIN
   JOIN toll.charges c ON c.organization_id = a.organization_id AND c.id = a.charge_id
   WHERE a.organization_id = p_company AND a.bearer = 'fleet' AND a.reversed_by IS NULL AND NOT c.is_legacy;
   v_expected := v_expected + toll_system.rule_net(p_company, 'P18b\_fleet\_%')
+              + toll_system.rule_net(p_company, 'P23\_dispute\_to\_fleet%')
+              - toll_system.rule_net(p_company, 'P24\_expired\_refund\_fleet%')  -- P24 fleet credits expense
               - toll_system.rule_net(p_company, 'P19\_%\_fleet') - toll_system.rule_net(p_company, 'P20\_%');
   v_actual := toll_system.natural_balance(p_company, 'toll:expense');
   check_no := 1; name := 'account:toll:expense'; ok := v_actual = v_expected;
@@ -1786,6 +1791,8 @@ BEGIN
   JOIN toll.charges c ON c.organization_id = a.organization_id AND c.id = a.charge_id
   WHERE a.organization_id = p_company AND a.bearer = 'driver' AND a.reversed_by IS NULL AND NOT c.is_legacy;
   v_expected := v_expected + toll_system.rule_net(p_company, 'P18b\_driver\_%')
+              + toll_system.rule_net(p_company, 'P23\_dispute\_to\_driver%')
+              - toll_system.rule_net(p_company, 'P24\_expired\_refund\_driver%')
               + toll_system.rule_net(p_company, 'P19\_cash\_%') - toll_system.rule_net(p_company, 'P14\_%');
   v_actual := toll_system.natural_balance(p_company, 'toll:receivable_driver');
   check_no := 1; name := 'account:toll:receivable_driver'; ok := v_actual = v_expected;
@@ -2139,5 +2146,37 @@ REVOKE ALL ON FUNCTION toll_write.intent_undo_dispute_result(uuid, uuid, uuid, t
 REVOKE ALL ON FUNCTION toll_write.withdraw_suggestion(uuid, uuid, uuid) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION toll_system.seal_pending_part(uuid, uuid) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION toll_system.seal_blockers(uuid, date) FROM PUBLIC, anon, authenticated, service_role;
+
+-- An undone dispute row (close_reason = 'undo') is replaced by its reopens_id row, so it no longer
+-- counts as "the open dispute" of its charge. Its state is never relabelled (an undone expiry stays
+-- 'expired' in history).
+DROP INDEX toll.toll_disputes_one_non_final_per_charge_idx;
+CREATE UNIQUE INDEX toll_disputes_one_non_final_per_charge_idx
+  ON toll.disputes (organization_id, charge_id)
+  WHERE state NOT IN ('won', 'part_won', 'lost') AND close_reason IS DISTINCT FROM 'undo';
+
+CREATE OR REPLACE FUNCTION toll.tg_disputes_one_non_final()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  IF NEW.state IN ('won', 'part_won', 'lost') OR NEW.close_reason IS NOT DISTINCT FROM 'undo' THEN
+    RETURN NEW;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM toll.disputes d
+    WHERE d.organization_id = NEW.organization_id
+      AND d.charge_id = NEW.charge_id
+      AND d.id IS DISTINCT FROM NEW.id
+      AND d.state NOT IN ('won', 'part_won', 'lost')
+      AND d.close_reason IS DISTINCT FROM 'undo'
+  ) THEN
+    RAISE EXCEPTION USING MESSAGE = 'DISPUTE_SECOND_OPEN', ERRCODE = 'P0001',
+      DETAIL = jsonb_build_object('charge_id', NEW.charge_id)::text;
+  END IF;
+  RETURN NEW;
+END;
+$$;
 
 NOTIFY pgrst, 'reload schema';

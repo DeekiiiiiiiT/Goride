@@ -184,6 +184,35 @@ BEGIN
 END;
 $as$;
 
+CREATE OR REPLACE FUNCTION pg_temp._s1_alloc_sum(p_charge uuid) RETURNS bigint
+LANGUAGE sql AS $as$
+  SELECT coalesce(sum(a.amount_minor), 0) FROM toll.allocations a
+  WHERE a.organization_id = pg_temp._s1_org() AND a.charge_id = p_charge AND a.reversed_by IS NULL;
+$as$;
+
+CREATE OR REPLACE FUNCTION pg_temp._s1_assert_delta(
+  p_before jsonb, p_label text,
+  p_rpd bigint, p_payback bigint, p_driver bigint, p_expense bigint, p_suspense bigint
+) RETURNS void
+LANGUAGE plpgsql AS $ad$
+DECLARE
+  keys text[] := ARRAY[
+    'receivable_platform_dispute', 'payback_unallocated', 'receivable_driver', 'expense', 'suspense'];
+  exp    bigint[] := ARRAY[p_rpd, p_payback, p_driver, p_expense, p_suspense];
+  i      int;
+  got    bigint;
+  bef    bigint;
+BEGIN
+  FOR i IN 1..5 LOOP
+    got := pg_temp._s1_bal(keys[i]);
+    bef := (p_before ->> keys[i])::bigint;
+    IF got - bef IS DISTINCT FROM exp[i] THEN
+      RAISE EXCEPTION '% delta % got % expected %', p_label, keys[i], got - bef, exp[i];
+    END IF;
+  END LOOP;
+END;
+$ad$;
+
 DO $$
 DECLARE
   v_org       uuid := 'f1111111-1111-4111-8111-111111111101';
@@ -603,6 +632,524 @@ BEGIN
     'command_id', 's1-mx-open-undo', 'decision_id', v_settle,
     'expected_versions', jsonb_build_object(c.id::text, c.version, p.id::text, p.version)));
   PERFORM pg_temp._s1_assert_snap(v_snap, 'undo-won-open');
+  PERFORM pg_temp._s1_assert_nightly();
+END;
+$$;
+
+-- mx-a-open: part refund then lost (open charge week)
+DO $$
+DECLARE
+  v_org uuid := pg_temp._s1_org(); v_owner uuid := 'f0111111-1111-4111-8111-111111111111'::uuid;
+  v_charge uuid; v_pb uuid; v_week date;
+  c toll.charges; p toll.paybacks; d toll.disputes;
+  v_dispute uuid; v_r jsonb; v_base jsonb;
+BEGIN
+  SELECT * INTO v_charge, v_pb, v_week FROM pg_temp._s1_setup390('mx-a-open', 84);
+  c := pg_temp._s1_ch('s1-ch-mx-a-open'); p := pg_temp._s1_pb('trip:s1-trip-mx-a-open');
+  v_r := pg_temp._s1_cmd('open_dispute', jsonb_build_object(
+    'command_id', 's1-mx-a-open', 'charge_id', c.id, 'payback_id', p.id,
+    'expected_charge_version', c.version, 'expected_payback_version', p.version));
+  v_dispute := (v_r ->> 'dispute_id')::uuid;
+  v_base := pg_temp._s1_snap_bals();
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  PERFORM pg_temp._s1_cmd('mark_dispute_sent', jsonb_build_object(
+    'command_id', 's1-mx-a-open-sent', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
+  PERFORM public.toll_sys_import(v_org, 'uber', format(
+    '[{"row_type":"adjustment","reference":"s1-adj-mx-a-open","driver_id":"s1-d1","paid_on":"%s","amount_minor":1000}]',
+    (now() AT TIME ZONE 'America/Jamaica')::date)::jsonb, 's1-adj-mx-a-open', 'smoke');
+  p := pg_temp._s1_pb('s1-adj-mx-a-open');
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  PERFORM pg_temp._s1_cmd('settle_dispute', jsonb_build_object(
+    'command_id', 's1-mx-a-open-st10', 'dispute_id', v_dispute, 'payback_id', p.id,
+    'expected_dispute_version', d.version, 'expected_payback_version', p.version, 'amount_minor', 1000));
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  PERFORM pg_temp._s1_cmd('close_dispute_lost', jsonb_build_object(
+    'command_id', 's1-mx-a-open-lost', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
+  PERFORM pg_temp._s1_assert_delta(v_base, 'mx-a-open', 2000, 0, 0, -1000, 0);
+  PERFORM pg_temp._s1_alloc_ok(v_charge);
+  PERFORM pg_temp._s1_assert_nightly();
+END;
+$$;
+
+-- mx-a-seal: part refund then lost (sealed charge week)
+DO $$
+DECLARE
+  v_org uuid := pg_temp._s1_org();
+  v_charge uuid; v_pb uuid; v_week date;
+  c toll.charges; p toll.paybacks; d toll.disputes;
+  v_dispute uuid; v_r jsonb; v_base jsonb;
+BEGIN
+  SELECT * INTO v_charge, v_pb, v_week FROM pg_temp._s1_setup390('mx-a-seal', 98);
+  c := pg_temp._s1_ch('s1-ch-mx-a-seal'); p := pg_temp._s1_pb('trip:s1-trip-mx-a-seal');
+  v_r := pg_temp._s1_cmd('open_dispute', jsonb_build_object(
+    'command_id', 's1-mx-a-seal', 'charge_id', c.id, 'payback_id', p.id,
+    'expected_charge_version', c.version, 'expected_payback_version', p.version));
+  v_dispute := (v_r ->> 'dispute_id')::uuid;
+  v_base := pg_temp._s1_snap_bals();
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  PERFORM pg_temp._s1_cmd('mark_dispute_sent', jsonb_build_object(
+    'command_id', 's1-mx-a-seal-sent', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
+  v_r := pg_temp._s1_cmd('seal_week', jsonb_build_object(
+    'command_id', 's1-mx-a-seal-wk', 'week_key', v_week, 'expected_week_version',
+    toll_system.week_version(v_org, v_week)));
+  PERFORM public.toll_sys_import(v_org, 'uber', format(
+    '[{"row_type":"adjustment","reference":"s1-adj-mx-a-seal","driver_id":"s1-d1","paid_on":"%s","amount_minor":1000}]',
+    (now() AT TIME ZONE 'America/Jamaica')::date)::jsonb, 's1-adj-mx-a-seal', 'smoke');
+  p := pg_temp._s1_pb('s1-adj-mx-a-seal');
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  PERFORM pg_temp._s1_cmd('settle_dispute', jsonb_build_object(
+    'command_id', 's1-mx-a-seal-st10', 'dispute_id', v_dispute, 'payback_id', p.id,
+    'expected_dispute_version', d.version, 'expected_payback_version', p.version, 'amount_minor', 1000));
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  PERFORM pg_temp._s1_cmd('close_dispute_lost', jsonb_build_object(
+    'command_id', 's1-mx-a-seal-lost', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
+  PERFORM pg_temp._s1_assert_delta(v_base, 'mx-a-seal', 2000, 0, 0, -1000, 0);
+  PERFORM pg_temp._s1_alloc_ok(v_charge);
+  PERFORM pg_temp._s1_assert_nightly();
+END;
+$$;
+
+-- mx-b-open: lost without refund (open week)
+DO $$
+DECLARE
+  v_org uuid := pg_temp._s1_org();
+  v_charge uuid; v_pb uuid; v_week date;
+  c toll.charges; p toll.paybacks; d toll.disputes;
+  v_dispute uuid; v_r jsonb; v_base jsonb;
+BEGIN
+  SELECT * INTO v_charge, v_pb, v_week FROM pg_temp._s1_setup390('mx-b-open', 112);
+  c := pg_temp._s1_ch('s1-ch-mx-b-open'); p := pg_temp._s1_pb('trip:s1-trip-mx-b-open');
+  v_r := pg_temp._s1_cmd('open_dispute', jsonb_build_object(
+    'command_id', 's1-mx-b-open', 'charge_id', c.id, 'payback_id', p.id,
+    'expected_charge_version', c.version, 'expected_payback_version', p.version));
+  v_dispute := (v_r ->> 'dispute_id')::uuid;
+  v_base := pg_temp._s1_snap_bals();
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  PERFORM pg_temp._s1_cmd('mark_dispute_sent', jsonb_build_object(
+    'command_id', 's1-mx-b-open-sent', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  PERFORM pg_temp._s1_cmd('close_dispute_lost', jsonb_build_object(
+    'command_id', 's1-mx-b-open-lost', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
+  PERFORM pg_temp._s1_assert_delta(v_base, 'mx-b-open', 2000, 0, 0, -2000, 0);
+  PERFORM pg_temp._s1_alloc_ok(v_charge);
+  PERFORM pg_temp._s1_assert_nightly();
+END;
+$$;
+
+-- mx-b-seal: lost without refund (sealed week)
+DO $$
+DECLARE
+  v_org uuid := pg_temp._s1_org();
+  v_charge uuid; v_pb uuid; v_week date;
+  c toll.charges; p toll.paybacks; d toll.disputes;
+  v_dispute uuid; v_r jsonb; v_base jsonb;
+BEGIN
+  SELECT * INTO v_charge, v_pb, v_week FROM pg_temp._s1_setup390('mx-b-seal', 126);
+  c := pg_temp._s1_ch('s1-ch-mx-b-seal'); p := pg_temp._s1_pb('trip:s1-trip-mx-b-seal');
+  v_r := pg_temp._s1_cmd('open_dispute', jsonb_build_object(
+    'command_id', 's1-mx-b-seal', 'charge_id', c.id, 'payback_id', p.id,
+    'expected_charge_version', c.version, 'expected_payback_version', p.version));
+  v_dispute := (v_r ->> 'dispute_id')::uuid;
+  v_base := pg_temp._s1_snap_bals();
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  PERFORM pg_temp._s1_cmd('mark_dispute_sent', jsonb_build_object(
+    'command_id', 's1-mx-b-seal-sent', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
+  PERFORM pg_temp._s1_cmd('seal_week', jsonb_build_object(
+    'command_id', 's1-mx-b-seal-wk', 'week_key', v_week, 'expected_week_version',
+    toll_system.week_version(v_org, v_week)));
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  PERFORM pg_temp._s1_cmd('close_dispute_lost', jsonb_build_object(
+    'command_id', 's1-mx-b-seal-lost', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
+  PERFORM pg_temp._s1_assert_delta(v_base, 'mx-b-seal', 2000, 0, 0, -2000, 0);
+  PERFORM pg_temp._s1_alloc_ok(v_charge);
+  PERFORM pg_temp._s1_assert_nightly();
+END;
+$$;
+
+-- mx-c-open: expire then full refund (open week)
+DO $$
+DECLARE
+  v_org uuid := pg_temp._s1_org(); v_owner uuid := 'f0111111-1111-4111-8111-111111111111'::uuid;
+  v_charge uuid; v_pb uuid; v_week date;
+  c toll.charges; p toll.paybacks; d toll.disputes;
+  v_dispute uuid; v_r jsonb; v_base jsonb; v_dec uuid;
+BEGIN
+  SELECT * INTO v_charge, v_pb, v_week FROM pg_temp._s1_setup390('mx-c-open', 140);
+  c := pg_temp._s1_ch('s1-ch-mx-c-open'); p := pg_temp._s1_pb('trip:s1-trip-mx-c-open');
+  v_r := pg_temp._s1_cmd('open_dispute', jsonb_build_object(
+    'command_id', 's1-mx-c-open', 'charge_id', c.id, 'payback_id', p.id,
+    'expected_charge_version', c.version, 'expected_payback_version', p.version));
+  v_dispute := (v_r ->> 'dispute_id')::uuid;
+  v_base := pg_temp._s1_snap_bals();
+  ALTER TABLE toll.disputes DISABLE TRIGGER USER;
+  UPDATE toll.disputes SET deadline = now() - interval '2 hours'
+  WHERE organization_id = v_org AND id = v_dispute;
+  ALTER TABLE toll.disputes ENABLE TRIGGER USER;
+  INSERT INTO toll.decisions (organization_id, command_id, intent, actor, actor_user_id)
+  VALUES (v_org, 's1-mx-c-open-exp', 'dispute_expire', 'user', v_owner) RETURNING id INTO v_dec;
+  PERFORM toll_system.dispute_expire(v_org, v_dispute, v_dec, 's1-mx-c-open-exp-cmd');
+  PERFORM pg_temp._s1_assert_delta(v_base, 'mx-c-open-after-expire', 2000, 0, -2000, 0, 0);
+  PERFORM public.toll_sys_import(v_org, 'uber', format(
+    '[{"row_type":"adjustment","reference":"s1-adj-mx-c-open","driver_id":"s1-d1","paid_on":"%s","amount_minor":2000}]',
+    (now() AT TIME ZONE 'America/Jamaica')::date)::jsonb, 's1-adj-mx-c-open', 'smoke');
+  p := pg_temp._s1_pb('s1-adj-mx-c-open');
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  INSERT INTO toll.decisions (organization_id, command_id, intent, actor, actor_user_id)
+  VALUES (v_org, 's1-mx-c-open-settle', 'settle_dispute', 'user', v_owner) RETURNING id INTO v_dec;
+  PERFORM toll_write.intent_settle_dispute(v_org, v_dec, 's1-mx-c-open-settle-cmd', jsonb_build_object(
+    'dispute_id', v_dispute, 'payback_id', p.id, 'expected_dispute_version', d.version,
+    'expected_payback_version', p.version), true);
+  PERFORM pg_temp._s1_assert_delta(v_base, 'mx-c-open-after-refund', 2000, 0, 0, 0, 0);
+  PERFORM pg_temp._s1_alloc_ok(v_charge);
+  PERFORM pg_temp._s1_assert_nightly();
+END;
+$$;
+
+-- mx-c-seal: expire then full refund (sealed week)
+DO $$
+DECLARE
+  v_org uuid := pg_temp._s1_org(); v_owner uuid := 'f0111111-1111-4111-8111-111111111111'::uuid;
+  v_charge uuid; v_pb uuid; v_week date;
+  c toll.charges; p toll.paybacks; d toll.disputes;
+  v_dispute uuid; v_r jsonb; v_base jsonb; v_dec uuid;
+BEGIN
+  SELECT * INTO v_charge, v_pb, v_week FROM pg_temp._s1_setup390('mx-c-seal', 154);
+  c := pg_temp._s1_ch('s1-ch-mx-c-seal'); p := pg_temp._s1_pb('trip:s1-trip-mx-c-seal');
+  v_r := pg_temp._s1_cmd('open_dispute', jsonb_build_object(
+    'command_id', 's1-mx-c-seal', 'charge_id', c.id, 'payback_id', p.id,
+    'expected_charge_version', c.version, 'expected_payback_version', p.version));
+  v_dispute := (v_r ->> 'dispute_id')::uuid;
+  v_base := pg_temp._s1_snap_bals();
+  PERFORM pg_temp._s1_cmd('seal_week', jsonb_build_object(
+    'command_id', 's1-mx-c-seal-wk', 'week_key', v_week, 'expected_week_version',
+    toll_system.week_version(v_org, v_week)));
+  ALTER TABLE toll.disputes DISABLE TRIGGER USER;
+  UPDATE toll.disputes SET deadline = now() - interval '2 hours'
+  WHERE organization_id = v_org AND id = v_dispute;
+  ALTER TABLE toll.disputes ENABLE TRIGGER USER;
+  INSERT INTO toll.decisions (organization_id, command_id, intent, actor, actor_user_id)
+  VALUES (v_org, 's1-mx-c-seal-exp', 'dispute_expire', 'user', v_owner) RETURNING id INTO v_dec;
+  PERFORM toll_system.dispute_expire(v_org, v_dispute, v_dec, 's1-mx-c-seal-exp-cmd');
+  PERFORM pg_temp._s1_assert_delta(v_base, 'mx-c-seal-after-expire', 2000, 0, -2000, 0, 0);
+  PERFORM public.toll_sys_import(v_org, 'uber', format(
+    '[{"row_type":"adjustment","reference":"s1-adj-mx-c-seal","driver_id":"s1-d1","paid_on":"%s","amount_minor":2000}]',
+    (now() AT TIME ZONE 'America/Jamaica')::date)::jsonb, 's1-adj-mx-c-seal', 'smoke');
+  p := pg_temp._s1_pb('s1-adj-mx-c-seal');
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  INSERT INTO toll.decisions (organization_id, command_id, intent, actor, actor_user_id)
+  VALUES (v_org, 's1-mx-c-seal-settle', 'settle_dispute', 'user', v_owner) RETURNING id INTO v_dec;
+  PERFORM toll_write.intent_settle_dispute(v_org, v_dec, 's1-mx-c-seal-settle-cmd', jsonb_build_object(
+    'dispute_id', v_dispute, 'payback_id', p.id, 'expected_dispute_version', d.version,
+    'expected_payback_version', p.version), true);
+  PERFORM pg_temp._s1_assert_delta(v_base, 'mx-c-seal-after-refund', 2000, 0, 0, 0, 0);
+  PERFORM pg_temp._s1_alloc_ok(v_charge);
+  PERFORM pg_temp._s1_assert_nightly();
+END;
+$$;
+
+-- mx-undo-pw-open: undo part_won restores balances and allocation sum
+DO $$
+DECLARE
+  v_org uuid := pg_temp._s1_org();
+  v_charge uuid; v_pb uuid; v_week date;
+  c toll.charges; p toll.paybacks; d toll.disputes;
+  v_dispute uuid; v_r jsonb; v_snap jsonb; v_alloc bigint; v_result uuid;
+BEGIN
+  SELECT * INTO v_charge, v_pb, v_week FROM pg_temp._s1_setup390('mx-upo', 168);
+  c := pg_temp._s1_ch('s1-ch-mx-upo'); p := pg_temp._s1_pb('trip:s1-trip-mx-upo');
+  v_r := pg_temp._s1_cmd('open_dispute', jsonb_build_object(
+    'command_id', 's1-mx-upo', 'charge_id', c.id, 'payback_id', p.id,
+    'expected_charge_version', c.version, 'expected_payback_version', p.version));
+  v_dispute := (v_r ->> 'dispute_id')::uuid;
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  PERFORM pg_temp._s1_cmd('mark_dispute_sent', jsonb_build_object(
+    'command_id', 's1-mx-upo-sent', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
+  PERFORM public.toll_sys_import(v_org, 'uber', format(
+    '[{"row_type":"adjustment","reference":"s1-adj-mx-upo","driver_id":"s1-d1","paid_on":"%s","amount_minor":1000}]',
+    (now() AT TIME ZONE 'America/Jamaica')::date)::jsonb, 's1-adj-mx-upo', 'smoke');
+  p := pg_temp._s1_pb('s1-adj-mx-upo');
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  v_r := pg_temp._s1_cmd('settle_dispute', jsonb_build_object(
+    'command_id', 's1-mx-upo-st10', 'dispute_id', v_dispute, 'payback_id', p.id,
+    'expected_dispute_version', d.version, 'expected_payback_version', p.version, 'amount_minor', 1000));
+  v_snap := pg_temp._s1_snap_bals();
+  v_alloc := pg_temp._s1_alloc_sum(v_charge);
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  v_r := pg_temp._s1_cmd('close_dispute_lost', jsonb_build_object(
+    'command_id', 's1-mx-upo-lost', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
+  v_result := (v_r ->> 'decision_id')::uuid;
+  c := pg_temp._s1_ch('s1-ch-mx-upo');
+  p := pg_temp._s1_pb('s1-adj-mx-upo');
+  PERFORM pg_temp._s1_cmd('undo_decision', jsonb_build_object(
+    'command_id', 's1-mx-upo-undo', 'decision_id', v_result,
+    'expected_versions', jsonb_build_object(c.id::text, c.version, p.id::text, p.version)));
+  PERFORM pg_temp._s1_assert_snap(v_snap, 'mx-undo-pw-open');
+  IF pg_temp._s1_alloc_sum(v_charge) IS DISTINCT FROM v_alloc THEN
+    RAISE EXCEPTION 'mx-undo-pw-open alloc sum';
+  END IF;
+  PERFORM pg_temp._s1_assert_nightly();
+END;
+$$;
+
+-- mx-undo-pw-seal: undo part_won, sealed charge week ledger unchanged
+DO $$
+DECLARE
+  v_org uuid := pg_temp._s1_org();
+  v_charge uuid; v_pb uuid; v_week date;
+  c toll.charges; p toll.paybacks; d toll.disputes;
+  v_dispute uuid; v_r jsonb; v_snap jsonb; v_alloc bigint; v_result uuid;
+  v_hash_pre text; v_hash_post text;
+BEGIN
+  SELECT * INTO v_charge, v_pb, v_week FROM pg_temp._s1_setup390('mx-ups', 182);
+  c := pg_temp._s1_ch('s1-ch-mx-ups'); p := pg_temp._s1_pb('trip:s1-trip-mx-ups');
+  v_r := pg_temp._s1_cmd('open_dispute', jsonb_build_object(
+    'command_id', 's1-mx-ups', 'charge_id', c.id, 'payback_id', p.id,
+    'expected_charge_version', c.version, 'expected_payback_version', p.version));
+  v_dispute := (v_r ->> 'dispute_id')::uuid;
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  PERFORM pg_temp._s1_cmd('mark_dispute_sent', jsonb_build_object(
+    'command_id', 's1-mx-ups-sent', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
+  PERFORM pg_temp._s1_cmd('seal_week', jsonb_build_object(
+    'command_id', 's1-mx-ups-wk', 'week_key', v_week, 'expected_week_version',
+    toll_system.week_version(v_org, v_week)));
+  v_hash_pre := pg_temp._s1_week_ledger_hash(v_week);
+  PERFORM public.toll_sys_import(v_org, 'uber', format(
+    '[{"row_type":"adjustment","reference":"s1-adj-mx-ups","driver_id":"s1-d1","paid_on":"%s","amount_minor":1000}]',
+    (now() AT TIME ZONE 'America/Jamaica')::date)::jsonb, 's1-adj-mx-ups', 'smoke');
+  p := pg_temp._s1_pb('s1-adj-mx-ups');
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  v_r := pg_temp._s1_cmd('settle_dispute', jsonb_build_object(
+    'command_id', 's1-mx-ups-st10', 'dispute_id', v_dispute, 'payback_id', p.id,
+    'expected_dispute_version', d.version, 'expected_payback_version', p.version, 'amount_minor', 1000));
+  v_snap := pg_temp._s1_snap_bals();
+  v_alloc := pg_temp._s1_alloc_sum(v_charge);
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  v_r := pg_temp._s1_cmd('close_dispute_lost', jsonb_build_object(
+    'command_id', 's1-mx-ups-lost', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
+  v_result := (v_r ->> 'decision_id')::uuid;
+  c := pg_temp._s1_ch('s1-ch-mx-ups');
+  p := pg_temp._s1_pb('s1-adj-mx-ups');
+  PERFORM pg_temp._s1_cmd('undo_decision', jsonb_build_object(
+    'command_id', 's1-mx-ups-undo', 'decision_id', v_result,
+    'expected_versions', jsonb_build_object(c.id::text, c.version, p.id::text, p.version)));
+  PERFORM pg_temp._s1_assert_snap(v_snap, 'mx-undo-pw-seal');
+  IF pg_temp._s1_alloc_sum(v_charge) IS DISTINCT FROM v_alloc THEN
+    RAISE EXCEPTION 'mx-undo-pw-seal alloc sum';
+  END IF;
+  v_hash_post := pg_temp._s1_week_ledger_hash(v_week);
+  IF v_hash_pre IS DISTINCT FROM v_hash_post THEN RAISE EXCEPTION 'mx-undo-pw-seal ledger hash'; END IF;
+  PERFORM pg_temp._s1_assert_nightly();
+END;
+$$;
+
+-- mx-undo-lost-open
+DO $$
+DECLARE
+  v_org uuid := pg_temp._s1_org();
+  v_charge uuid; v_pb uuid; v_week date;
+  c toll.charges; p toll.paybacks; d toll.disputes;
+  v_dispute uuid; v_r jsonb; v_snap jsonb; v_alloc bigint; v_result uuid;
+BEGIN
+  SELECT * INTO v_charge, v_pb, v_week FROM pg_temp._s1_setup390('mx-ulo', 196);
+  c := pg_temp._s1_ch('s1-ch-mx-ulo'); p := pg_temp._s1_pb('trip:s1-trip-mx-ulo');
+  v_r := pg_temp._s1_cmd('open_dispute', jsonb_build_object(
+    'command_id', 's1-mx-ulo', 'charge_id', c.id, 'payback_id', p.id,
+    'expected_charge_version', c.version, 'expected_payback_version', p.version));
+  v_dispute := (v_r ->> 'dispute_id')::uuid;
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  PERFORM pg_temp._s1_cmd('mark_dispute_sent', jsonb_build_object(
+    'command_id', 's1-mx-ulo-sent', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
+  v_snap := pg_temp._s1_snap_bals();
+  v_alloc := pg_temp._s1_alloc_sum(v_charge);
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  v_r := pg_temp._s1_cmd('close_dispute_lost', jsonb_build_object(
+    'command_id', 's1-mx-ulo-lost', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
+  v_result := (v_r ->> 'decision_id')::uuid;
+  c := pg_temp._s1_ch('s1-ch-mx-ulo');
+  p := pg_temp._s1_pb('trip:s1-trip-mx-ulo');
+  PERFORM pg_temp._s1_cmd('undo_decision', jsonb_build_object(
+    'command_id', 's1-mx-ulo-undo', 'decision_id', v_result,
+    'expected_versions', jsonb_build_object(c.id::text, c.version, p.id::text, p.version)));
+  PERFORM pg_temp._s1_assert_snap(v_snap, 'mx-undo-lost-open');
+  IF pg_temp._s1_alloc_sum(v_charge) IS DISTINCT FROM v_alloc THEN
+    RAISE EXCEPTION 'mx-undo-lost-open alloc sum';
+  END IF;
+  PERFORM pg_temp._s1_assert_nightly();
+END;
+$$;
+
+-- mx-undo-lost-seal
+DO $$
+DECLARE
+  v_org uuid := pg_temp._s1_org();
+  v_charge uuid; v_pb uuid; v_week date;
+  c toll.charges; p toll.paybacks; d toll.disputes;
+  v_dispute uuid; v_r jsonb; v_snap jsonb; v_alloc bigint; v_result uuid;
+  v_hash_pre text; v_hash_post text;
+BEGIN
+  SELECT * INTO v_charge, v_pb, v_week FROM pg_temp._s1_setup390('mx-uls', 210);
+  c := pg_temp._s1_ch('s1-ch-mx-uls'); p := pg_temp._s1_pb('trip:s1-trip-mx-uls');
+  v_r := pg_temp._s1_cmd('open_dispute', jsonb_build_object(
+    'command_id', 's1-mx-uls', 'charge_id', c.id, 'payback_id', p.id,
+    'expected_charge_version', c.version, 'expected_payback_version', p.version));
+  v_dispute := (v_r ->> 'dispute_id')::uuid;
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  PERFORM pg_temp._s1_cmd('mark_dispute_sent', jsonb_build_object(
+    'command_id', 's1-mx-uls-sent', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
+  PERFORM pg_temp._s1_cmd('seal_week', jsonb_build_object(
+    'command_id', 's1-mx-uls-wk', 'week_key', v_week, 'expected_week_version',
+    toll_system.week_version(v_org, v_week)));
+  v_hash_pre := pg_temp._s1_week_ledger_hash(v_week);
+  v_snap := pg_temp._s1_snap_bals();
+  v_alloc := pg_temp._s1_alloc_sum(v_charge);
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  v_r := pg_temp._s1_cmd('close_dispute_lost', jsonb_build_object(
+    'command_id', 's1-mx-uls-lost', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
+  v_result := (v_r ->> 'decision_id')::uuid;
+  c := pg_temp._s1_ch('s1-ch-mx-uls');
+  p := pg_temp._s1_pb('trip:s1-trip-mx-uls');
+  PERFORM pg_temp._s1_cmd('undo_decision', jsonb_build_object(
+    'command_id', 's1-mx-uls-undo', 'decision_id', v_result,
+    'expected_versions', jsonb_build_object(c.id::text, c.version, p.id::text, p.version)));
+  PERFORM pg_temp._s1_assert_snap(v_snap, 'mx-undo-lost-seal');
+  IF pg_temp._s1_alloc_sum(v_charge) IS DISTINCT FROM v_alloc THEN
+    RAISE EXCEPTION 'mx-undo-lost-seal alloc sum';
+  END IF;
+  v_hash_post := pg_temp._s1_week_ledger_hash(v_week);
+  IF v_hash_pre IS DISTINCT FROM v_hash_post THEN RAISE EXCEPTION 'mx-undo-lost-seal ledger hash'; END IF;
+  PERFORM pg_temp._s1_assert_nightly();
+END;
+$$;
+
+-- mx-undo-exp-open: undo dispute_expire
+DO $$
+DECLARE
+  v_org uuid := pg_temp._s1_org(); v_owner uuid := 'f0111111-1111-4111-8111-111111111111'::uuid;
+  v_charge uuid; v_pb uuid; v_week date;
+  c toll.charges; p toll.paybacks; d toll.disputes;
+  v_dispute uuid; v_r jsonb; v_snap jsonb; v_alloc bigint; v_expire uuid;
+BEGIN
+  SELECT * INTO v_charge, v_pb, v_week FROM pg_temp._s1_setup390('mx-ueo', 224);
+  c := pg_temp._s1_ch('s1-ch-mx-ueo'); p := pg_temp._s1_pb('trip:s1-trip-mx-ueo');
+  v_r := pg_temp._s1_cmd('open_dispute', jsonb_build_object(
+    'command_id', 's1-mx-ueo', 'charge_id', c.id, 'payback_id', p.id,
+    'expected_charge_version', c.version, 'expected_payback_version', p.version));
+  v_dispute := (v_r ->> 'dispute_id')::uuid;
+  v_snap := pg_temp._s1_snap_bals();
+  v_alloc := pg_temp._s1_alloc_sum(v_charge);
+  ALTER TABLE toll.disputes DISABLE TRIGGER USER;
+  UPDATE toll.disputes SET deadline = now() - interval '2 hours'
+  WHERE organization_id = v_org AND id = v_dispute;
+  ALTER TABLE toll.disputes ENABLE TRIGGER USER;
+  INSERT INTO toll.decisions (organization_id, command_id, intent, actor, actor_user_id)
+  VALUES (v_org, 's1-mx-ueo-exp', 'dispute_expire', 'user', v_owner) RETURNING id INTO v_expire;
+  PERFORM toll_system.dispute_expire(v_org, v_dispute, v_expire, 's1-mx-ueo-exp');
+  c := pg_temp._s1_ch('s1-ch-mx-ueo');
+  p := pg_temp._s1_pb('trip:s1-trip-mx-ueo');
+  PERFORM pg_temp._s1_cmd('undo_decision', jsonb_build_object(
+    'command_id', 's1-mx-ueo-undo', 'decision_id', v_expire,
+    'expected_versions', jsonb_build_object(c.id::text, c.version, p.id::text, p.version)));
+  PERFORM pg_temp._s1_assert_snap(v_snap, 'mx-undo-exp-open');
+  IF pg_temp._s1_alloc_sum(v_charge) IS DISTINCT FROM v_alloc THEN
+    RAISE EXCEPTION 'mx-undo-exp-open alloc sum';
+  END IF;
+  PERFORM pg_temp._s1_assert_nightly();
+END;
+$$;
+
+-- mx-undo-exp-seal
+DO $$
+DECLARE
+  v_org uuid := pg_temp._s1_org(); v_owner uuid := 'f0111111-1111-4111-8111-111111111111'::uuid;
+  v_charge uuid; v_pb uuid; v_week date;
+  c toll.charges; p toll.paybacks; d toll.disputes;
+  v_dispute uuid; v_r jsonb; v_snap jsonb; v_alloc bigint; v_expire uuid;
+  v_hash_pre text; v_hash_post text;
+BEGIN
+  SELECT * INTO v_charge, v_pb, v_week FROM pg_temp._s1_setup390('mx-ues', 238);
+  c := pg_temp._s1_ch('s1-ch-mx-ues'); p := pg_temp._s1_pb('trip:s1-trip-mx-ues');
+  v_r := pg_temp._s1_cmd('open_dispute', jsonb_build_object(
+    'command_id', 's1-mx-ues', 'charge_id', c.id, 'payback_id', p.id,
+    'expected_charge_version', c.version, 'expected_payback_version', p.version));
+  v_dispute := (v_r ->> 'dispute_id')::uuid;
+  PERFORM pg_temp._s1_cmd('seal_week', jsonb_build_object(
+    'command_id', 's1-mx-ues-wk', 'week_key', v_week, 'expected_week_version',
+    toll_system.week_version(v_org, v_week)));
+  v_hash_pre := pg_temp._s1_week_ledger_hash(v_week);
+  v_snap := pg_temp._s1_snap_bals();
+  v_alloc := pg_temp._s1_alloc_sum(v_charge);
+  ALTER TABLE toll.disputes DISABLE TRIGGER USER;
+  UPDATE toll.disputes SET deadline = now() - interval '2 hours'
+  WHERE organization_id = v_org AND id = v_dispute;
+  ALTER TABLE toll.disputes ENABLE TRIGGER USER;
+  INSERT INTO toll.decisions (organization_id, command_id, intent, actor, actor_user_id)
+  VALUES (v_org, 's1-mx-ues-exp', 'dispute_expire', 'user', v_owner) RETURNING id INTO v_expire;
+  PERFORM toll_system.dispute_expire(v_org, v_dispute, v_expire, 's1-mx-ues-exp');
+  c := pg_temp._s1_ch('s1-ch-mx-ues');
+  p := pg_temp._s1_pb('trip:s1-trip-mx-ues');
+  PERFORM pg_temp._s1_cmd('undo_decision', jsonb_build_object(
+    'command_id', 's1-mx-ues-undo', 'decision_id', v_expire,
+    'expected_versions', jsonb_build_object(c.id::text, c.version, p.id::text, p.version)));
+  PERFORM pg_temp._s1_assert_snap(v_snap, 'mx-undo-exp-seal');
+  IF pg_temp._s1_alloc_sum(v_charge) IS DISTINCT FROM v_alloc THEN
+    RAISE EXCEPTION 'mx-undo-exp-seal alloc sum';
+  END IF;
+  v_hash_post := pg_temp._s1_week_ledger_hash(v_week);
+  IF v_hash_pre IS DISTINCT FROM v_hash_post THEN RAISE EXCEPTION 'mx-undo-exp-seal ledger hash'; END IF;
+  PERFORM pg_temp._s1_assert_nightly();
+END;
+$$;
+
+-- mx-undo-weekb: undo after posting week B sealed — reversal lands in current posting_week
+DO $$
+DECLARE
+  v_org uuid := pg_temp._s1_org();
+  v_charge uuid; v_pb uuid; v_week_a date; v_week_b date;
+  c toll.charges; p toll.paybacks; d toll.disputes;
+  v_dispute uuid; v_r jsonb; v_snap jsonb; v_settle uuid;
+  v_hash_b_pre text; v_hash_b_post text; v_rev_cnt int; v_post_wk date;
+BEGIN
+  SELECT * INTO v_charge, v_pb, v_week_a FROM pg_temp._s1_setup390('mx-uwb', 252);
+  c := pg_temp._s1_ch('s1-ch-mx-uwb'); p := pg_temp._s1_pb('trip:s1-trip-mx-uwb');
+  v_r := pg_temp._s1_cmd('open_dispute', jsonb_build_object(
+    'command_id', 's1-mx-uwb', 'charge_id', c.id, 'payback_id', p.id,
+    'expected_charge_version', c.version, 'expected_payback_version', p.version));
+  v_dispute := (v_r ->> 'dispute_id')::uuid;
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  PERFORM pg_temp._s1_cmd('mark_dispute_sent', jsonb_build_object(
+    'command_id', 's1-mx-uwb-sent', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
+  PERFORM pg_temp._s1_cmd('seal_week', jsonb_build_object(
+    'command_id', 's1-mx-uwb-seal-a', 'week_key', v_week_a, 'expected_week_version',
+    toll_system.week_version(v_org, v_week_a)));
+  PERFORM public.toll_sys_import(v_org, 'uber', format(
+    '[{"row_type":"adjustment","reference":"s1-adj-mx-uwb","driver_id":"s1-d1","paid_on":"%s","amount_minor":2000}]',
+    (now() AT TIME ZONE 'America/Jamaica')::date)::jsonb, 's1-adj-mx-uwb', 'smoke');
+  p := pg_temp._s1_pb('s1-adj-mx-uwb');
+  v_week_b := toll_system.posting_week(v_org);
+  v_snap := pg_temp._s1_snap_bals();
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  v_r := pg_temp._s1_cmd('settle_dispute', jsonb_build_object(
+    'command_id', 's1-mx-uwb-settle', 'dispute_id', v_dispute, 'payback_id', p.id,
+    'expected_dispute_version', d.version, 'expected_payback_version', p.version));
+  v_settle := (v_r ->> 'decision_id')::uuid;
+  PERFORM pg_temp._s1_cmd('seal_week', jsonb_build_object(
+    'command_id', 's1-mx-uwb-seal-b', 'week_key', v_week_b, 'expected_week_version',
+    toll_system.week_version(v_org, v_week_b)));
+  v_hash_b_pre := pg_temp._s1_week_ledger_hash(v_week_b);
+  v_post_wk := toll_system.posting_week(v_org);
+  c := pg_temp._s1_ch('s1-ch-mx-uwb');
+  p := pg_temp._s1_pb('s1-adj-mx-uwb');
+  PERFORM pg_temp._s1_cmd('undo_decision', jsonb_build_object(
+    'command_id', 's1-mx-uwb-undo', 'decision_id', v_settle,
+    'expected_versions', jsonb_build_object(c.id::text, c.version, p.id::text, p.version)));
+  PERFORM pg_temp._s1_assert_snap(v_snap, 'mx-undo-weekb-bal');
+  v_hash_b_post := pg_temp._s1_week_ledger_hash(v_week_b);
+  IF v_hash_b_pre IS DISTINCT FROM v_hash_b_post THEN RAISE EXCEPTION 'mx-undo-weekb hash B'; END IF;
+  SELECT count(*)::int INTO v_rev_cnt FROM ledger.entries e
+  WHERE e.organization_id = v_org AND e.reference_type = 'toll'
+    AND coalesce((e.metadata ->> 'reverse')::boolean, false) = true
+    AND (e.metadata ->> 'toll_week')::date = v_post_wk;
+  IF v_rev_cnt < 1 THEN RAISE EXCEPTION 'mx-undo-weekb no reversal in posting week %', v_post_wk; END IF;
   PERFORM pg_temp._s1_assert_nightly();
 END;
 $$;
