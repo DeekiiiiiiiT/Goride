@@ -491,6 +491,30 @@ BEGIN
     'tag', 'manual', 'toll-nightly-as-bad', 'verified', true, 'driver-nightly-1'
   ) RETURNING id INTO v_charge;
   PERFORM set_config('toll.writer', 'on', true);
+  -- D2 (B13): the database now refuses a toll posting into a sealed week ...
+  BEGIN
+    PERFORM ledger.post_entry(
+      p_idempotency_key := 'toll-nightly-as-direct-refused',
+      p_entry_type := 'toll_v2:test',
+      p_debit_account_key := 'org:' || v_org_a::text || ':toll:suspense',
+      p_credit_account_key := 'org:' || v_org_a::text || ':toll:tag_prepaid',
+      p_amount_minor := v_amount,
+      p_currency := 'JMD',
+      p_request_hash := md5('toll-nightly-as-direct-refused'),
+      p_organization_id := v_org_a,
+      p_product := 'roam_fleet',
+      p_effective_at := v_ev,
+      p_reference_type := 'toll',
+      p_reference_id := v_charge::text,
+      p_metadata := jsonb_build_object('toll_rule', 'P2_tag_crossing', 'charge_id', v_charge::text, 'reverse', false)
+    );
+    RAISE EXCEPTION 'test5: posting into a sealed week should be refused (SEALED_WEEK_LOCKED)';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'SEALED_WEEK_LOCKED' THEN RAISE; END IF;
+  END;
+  -- ... so to keep proving that nightly check 5 still catches one, force it past the triggers
+  -- (only a superuser can do this; it stands in for tampering outside the app).
+  SET LOCAL session_replication_role = replica;
   PERFORM ledger.post_entry(
     p_idempotency_key := 'toll-nightly-as-direct',
     p_entry_type := 'toll_v2:test',
@@ -506,6 +530,7 @@ BEGIN
     p_reference_id := v_charge::text,
     p_metadata := jsonb_build_object('toll_rule', 'P2_tag_crossing', 'charge_id', v_charge::text, 'reverse', false)
   );
+  SET LOCAL session_replication_role = origin;
   PERFORM set_config('toll.writer', 'off', true);
   PERFORM pg_temp._nightly_expect_fail(v_org_a, 5, 'after_seal:' || v_week::text, false);
 
