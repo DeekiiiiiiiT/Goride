@@ -126,3 +126,22 @@ describe('toll matcher v1 (smoke)', () => {
     expect(matchTolls(bundle({ focal: { charge_ids: [], payback_ids: [] } })).candidates).toHaveLength(0);
   });
 });
+
+describe('matcher disputes (v2)', () => {
+  it('empty disputes/rates keys keeps v1 engine version', () => {
+    const r = matchTolls(bundle());
+    expect(r.engine_version).toBe(ENGINE_VERSION);
+  });
+
+  it('switch off: v1 inputs carry no v2 keys (same inputs_hash as before S2a)', () => {
+    const r = matchTolls(bundle());
+    expect(r.candidates.length).toBeGreaterThan(0);
+    for (const c of r.candidates) {
+      const keys = Object.keys(c.inputs).sort();
+      expect(keys).toEqual(
+        ['auto_apply_setting', 'charge', 'competitors', 'config', 'engine_version', 'payback', 'trip'].sort(),
+      );
+      expect(Object.keys(c.inputs.config.points)).not.toContain('refund_window');
+    }
+  });
+});

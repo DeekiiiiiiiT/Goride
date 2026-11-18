@@ -64,7 +64,32 @@ export interface MatchPlatformSetting {
   platform: string;
   auto_apply: boolean;
   payback_mode: string;
+  takes_disputes?: boolean;
 }
+
+export interface MatchPlazaRate {
+  plaza_id: string;
+  platform: string;
+  amount_minor: number;
+  valid_from: string; // YYYY-MM-DD Jamaica
+}
+
+export interface MatchDispute {
+  id: string;
+  charge_id: string;
+  state: 'to_send' | 'sent' | 'expired' | 'won' | 'part_won' | 'lost';
+  platform: string;
+  platform_trip_id: string;
+  driver_id: string;
+  owed_minor: number;
+  recovered_minor: number;
+  opened_late: boolean;
+  version: number;
+  refund_from: string; // YYYY-MM-DD
+  refund_to: string;
+}
+
+export type SuggestionKind = 'payback' | 'dispute_refund';
 
 /** What the database hands the engine (`toll_sys_match_claim`). */
 export interface MatchBundle {
@@ -74,6 +99,8 @@ export interface MatchBundle {
   paybacks: MatchPayback[];
   trips: MatchTrip[];
   settings: MatchPlatformSetting[];
+  rates?: MatchPlazaRate[];
+  disputes?: MatchDispute[];
 }
 
 export interface MatcherConfig {
@@ -103,7 +130,8 @@ export type WindowHit =
   | 'post_trip'
   | 'same_day'
   | 'adjustment_same_day'
-  | 'adjustment_within_lookback';
+  | 'adjustment_within_lookback'
+  | 'refund_window';
 
 /**
  * Everything one suggestion's score depends on. Stored as `toll.suggestions.inputs`;
@@ -112,6 +140,8 @@ export type WindowHit =
 export interface PairInputs {
   engine_version: string;
   config: MatcherConfig;
+  kind?: SuggestionKind;
+  dispute_id?: string;
   charge: Pick<
     MatchCharge,
     'id' | 'source' | 'vehicle_id' | 'driver_id' | 'plaza_id' | 'occurred_at' | 'time_precision' |
@@ -129,6 +159,10 @@ export interface PairInputs {
   /** How many eligible pairs each side has in total (itself included). */
   competitors: { charge_candidates: number; payback_candidates: number };
   auto_apply_setting: boolean;
+  /** B9: effective trip payback amount when a platform plaza rate applies. */
+  platform_rate_minor?: number;
+  takes_disputes_setting?: boolean;
+  dispute?: Pick<MatchDispute, 'id' | 'state' | 'owed_minor' | 'recovered_minor' | 'platform_trip_id' | 'platform'>;
 }
 
 export interface ScoreParts {
@@ -139,6 +173,8 @@ export interface ScoreParts {
   window_hit: WindowHit;
   amount_diff_minor: number;
   minutes_outside_trip: number;
+  dispute_open_eligible?: boolean;
+  dispute_settle_eligible?: boolean;
 }
 
 export interface Scored {
@@ -150,9 +186,13 @@ export interface Scored {
 }
 
 export interface Candidate extends Scored {
+  kind?: SuggestionKind;
+  dispute_id?: string;
   charge_id: string;
   payback_id: string;
   inputs: PairInputs;
+  dispute_open_eligible?: boolean;
+  dispute_settle_eligible?: boolean;
 }
 
 export interface Excluded {

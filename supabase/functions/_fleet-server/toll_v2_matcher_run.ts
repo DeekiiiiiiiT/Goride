@@ -2,7 +2,8 @@
  * Toll v2 matcher runner (Part F P2-R3). Claim → pure engine → store, until the company's queue is empty.
  * The database queues records itself (triggers) whenever data arrives; this only drains the queue.
  * Called after an import (P2-R5 wires the route) and by the sweep. Service key only.
- * Nothing is applied here: suggestions are stored in shadow (auto_apply is a flag, P2-R4 acts on it).
+ * With `toll_disputes` off, nothing is applied (shadow suggestions only). With it on, the database may
+ * link and open disputes or settle refunds when the engine marks a candidate eligible.
  */
 import { matchTolls } from "../../../packages/toll-core/src/v2/matcher/index.ts";
 import type { MatchBundle } from "../../../packages/toll-core/src/v2/matcher/index.ts";
@@ -16,6 +17,7 @@ export interface MatcherRunReport {
   organizationId: string;
   rounds: number;
   stored: Record<string, number>;
+  actions: { opened: number; settled: number; skipped: number };
   claimGone: number;
   queueLeft: boolean;
 }
@@ -43,6 +45,7 @@ export async function runTollMatcher(
     organizationId,
     rounds: 0,
     stored: Object.fromEntries(COUNT_KEYS.map((k) => [k, 0])),
+    actions: { opened: 0, settled: 0, skipped: 0 },
     claimGone: 0,
     queueLeft: false,
   };
@@ -66,6 +69,12 @@ export async function runTollMatcher(
       continue;
     }
     for (const k of COUNT_KEYS) report.stored[k] += Number(s[k] ?? 0);
+    const act = s.actions as { opened?: number; settled?: number; skipped?: unknown[] } | undefined;
+    if (act && typeof act === "object") {
+      report.actions.opened += Number(act.opened ?? 0);
+      report.actions.settled += Number(act.settled ?? 0);
+      if (Array.isArray(act.skipped)) report.actions.skipped += act.skipped.length;
+    }
   }
   report.queueLeft = true;
   return report;

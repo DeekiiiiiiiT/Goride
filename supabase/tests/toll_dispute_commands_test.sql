@@ -630,8 +630,10 @@ DECLARE
   c toll.charges; p toll.paybacks; d toll.disputes;
   v_dispute uuid; v_r jsonb; v_snap jsonb; v_settle uuid; v_rpd0 bigint;
 BEGIN
-  SELECT * INTO v_charge, v_pb, v_week FROM pg_temp._s1_setup390('mx-open', 70);
+  -- Baseline before the link: since S2a a person's link that leaves a remainder opens the dispute
+  -- itself, so the receivable must be read before setup390's link_payback.
   v_rpd0 := pg_temp._s1_bal('receivable_platform_dispute');
+  SELECT * INTO v_charge, v_pb, v_week FROM pg_temp._s1_setup390('mx-open', 70);
   c := pg_temp._s1_ch('s1-ch-mx-open');
   p := pg_temp._s1_pb('trip:s1-trip-mx-open');
   v_r := pg_temp._s1_cmd('open_dispute', jsonb_build_object(

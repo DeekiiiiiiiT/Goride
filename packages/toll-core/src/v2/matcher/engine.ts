@@ -24,17 +24,21 @@ import type {
   Excluded,
   MatchBundle,
   MatchCharge,
+  MatchDispute,
   MatchPayback,
+  MatchPlazaRate,
   MatchResult,
   MatchTrip,
   MatcherConfig,
   PairInputs,
   Scored,
+  SuggestionKind,
   TimePrecision,
   WindowHit,
 } from './types.ts';
 
 export const ENGINE_VERSION = 'toll-matcher-v1';
+export const ENGINE_VERSION_V2 = 'toll-matcher-v2';
 
 export const MATCHER_CONFIG_V1: MatcherConfig = Object.freeze({
   approach_minutes: 45,
@@ -146,8 +150,19 @@ export function windowFor(
   return null;
 }
 
+function paybackAmountForScore(inputs: PairInputs): number {
+  if (inputs.engine_version === ENGINE_VERSION_V2 && inputs.platform_rate_minor != null) {
+    return inputs.platform_rate_minor;
+  }
+  return inputs.payback.remaining_minor;
+}
+
 /** Score one pair from its stored inputs. Throws if the inputs are not a candidate at all. */
 export function scorePair(inputs: PairInputs): Scored {
+  if (inputs.kind === 'dispute_refund') {
+    return scoreRefundPair(inputs);
+  }
+
   const cfg = inputs.config;
   const w = windowFor(inputs.charge, inputs.payback, inputs.trip, cfg);
   if (!w) throw new Error('scorePair: inputs are not a candidate pair');
@@ -159,7 +174,14 @@ export function scorePair(inputs: PairInputs): Scored {
   const have = inputs.payback.remaining_minor;
   const diff = have - want;
   let amountPts = 0;
-  if (diff === 0) {
+  if (
+    inputs.platform_rate_minor != null &&
+    have === inputs.platform_rate_minor &&
+    inputs.charge.remaining_minor === inputs.charge.amount_minor
+  ) {
+    amountPts = cfg.points.amount_exact;
+    rules.push('amount_platform_rate', 'amount_exact');
+  } else if (diff === 0) {
     amountPts = cfg.points.amount_exact;
     rules.push('amount_exact');
   } else if (Math.abs(diff) <= Math.floor(want * cfg.amount_close_ratio)) {
@@ -208,6 +230,135 @@ export function scorePair(inputs: PairInputs): Scored {
   };
 }
 
+function scoreRefundPair(inputs: PairInputs): Scored {
+  const cfg = inputs.config;
+  const d = inputs.dispute;
+  if (!d) throw new Error('scoreRefundPair: dispute required');
+  const owed = d.owed_minor - d.recovered_minor;
+  const have = inputs.payback.remaining_minor;
+  const rules: string[] = ['refund_window', 'dispute_refund'];
+  const windowPts = cfg.points.same_day;
+
+  let amountPts = 0;
+  let diff = have - owed;
+  if (diff === 0) {
+    amountPts = cfg.points.amount_exact;
+    rules.push('amount_exact');
+  } else {
+    rules.push(diff > 0 ? 'payback_larger' : 'payback_smaller');
+  }
+
+  const sole = inputs.competitors.charge_candidates === 1 && inputs.competitors.payback_candidates === 1;
+  const solePts = sole ? cfg.points.sole_candidate : 0;
+  rules.push(sole ? 'sole_candidate' : 'competing_candidates');
+
+  const total = windowPts + amountPts + solePts;
+
+  return {
+    score: total,
+    score_parts: {
+      window: windowPts,
+      amount: amountPts,
+      sole_candidate: solePts,
+      total,
+      window_hit: 'refund_window',
+      amount_diff_minor: diff,
+      minutes_outside_trip: 0,
+    },
+    rules_fired: rules,
+    auto_apply: false,
+  };
+}
+
+function bundleUsesV2(bundle: MatchBundle): boolean {
+  return bundle.rates !== undefined || bundle.disputes !== undefined;
+}
+
+function activeDisputedCharges(disputes: MatchDispute[] | undefined): Set<string> {
+  const s = new Set<string>();
+  for (const d of disputes ?? []) {
+    if (d.state === 'to_send' || d.state === 'sent' || d.state === 'expired') s.add(d.charge_id);
+  }
+  return s;
+}
+
+function tripJamaicaDate(trip: MatchTrip | null, payback: MatchPayback): string | null {
+  if (trip) {
+    const anchor = trip.pickup_at ?? trip.request_at ?? trip.dropoff_at;
+    if (anchor) {
+      const m = Date.parse(anchor);
+      if (!Number.isNaN(m)) {
+        const j = new Date(m - JAMAICA_OFFSET_MS);
+        const y = j.getUTCFullYear();
+        const mo = String(j.getUTCMonth() + 1).padStart(2, '0');
+        const da = String(j.getUTCDate()).padStart(2, '0');
+        return `${y}-${mo}-${da}`;
+      }
+    }
+  }
+  return payback.paid_on;
+}
+
+function platformRateMinor(
+  charge: MatchCharge,
+  payback: MatchPayback,
+  trip: MatchTrip | null,
+  rates: MatchPlazaRate[] | undefined,
+): number | undefined {
+  if (!rates?.length || !charge.plaza_id) return undefined;
+  if (charge.remaining_minor !== charge.amount_minor) return undefined;
+  const tripDay = tripJamaicaDate(trip, payback);
+  if (!tripDay) return undefined;
+  const tripDayNo = ymdDayNo(tripDay);
+  if (tripDayNo === null) return undefined;
+  let best: MatchPlazaRate | undefined;
+  for (const r of rates) {
+    if (r.plaza_id !== charge.plaza_id || r.platform !== payback.platform) continue;
+    const fromNo = ymdDayNo(r.valid_from);
+    if (fromNo === null || fromNo > tripDayNo) continue;
+    if (!best || fromNo > ymdDayNo(best.valid_from)!) best = r;
+  }
+  return best?.amount_minor;
+}
+
+function paybackInRefundWindow(p: MatchPayback, d: MatchDispute): boolean {
+  const paid = ymdDayNo(p.paid_on);
+  const from = ymdDayNo(d.refund_from);
+  const to = ymdDayNo(d.refund_to);
+  if (paid === null || from === null || to === null) return false;
+  return paid >= from && paid <= to;
+}
+
+function refundPaybackEligible(p: MatchPayback, d: MatchDispute): boolean {
+  if (d.state === 'to_send') return false;
+  if (p.platform !== d.platform || p.driver_id !== d.driver_id) return false;
+  if (!paybackInRefundWindow(p, d)) return false;
+  if (d.state === 'expired') return p.kind === 'adjustment';
+  if (d.state === 'sent') {
+    if (p.kind === 'adjustment') return true;
+    return p.kind === 'trip_line' && p.platform_trip_id === d.platform_trip_id;
+  }
+  return false;
+}
+
+function disputeOpenEligible(inputs: PairInputs, scored: Scored): boolean {
+  if (inputs.engine_version !== ENGINE_VERSION_V2) return false;
+  if (!inputs.takes_disputes_setting) return false;
+  if (inputs.payback.kind !== 'trip_line') return false;
+  if (inputs.payback.remaining_minor >= inputs.charge.remaining_minor) return false;
+  const w = windowFor(inputs.charge, inputs.payback, inputs.trip, inputs.config);
+  if (!w) return false;
+  const sole = inputs.competitors.charge_candidates === 1 && inputs.competitors.payback_candidates === 1;
+  const tight = w.hit === 'on_trip' && !w.noDropoff;
+  return (
+    sole &&
+    tight &&
+    scored.score >= inputs.config.auto_apply_min_score &&
+    !w.dateOnly &&
+    inputs.charge.evidence_status === 'verified'
+  );
+}
+
 function chargeExclusion(c: MatchCharge): string | null {
   if (c.source === 'roam_ride') return 'roam_native';
   if (c.is_legacy) return 'legacy';
@@ -241,8 +392,16 @@ function byId(a: { id: string }, b: { id: string }): number {
 
 /** Run the matcher over one claimed bundle. */
 export function matchTolls(bundle: MatchBundle, cfg: MatcherConfig = MATCHER_CONFIG_V1): MatchResult {
+  if (!bundleUsesV2(bundle)) {
+    return matchTollsCore(bundle, cfg, ENGINE_VERSION);
+  }
+  return matchTollsCore(bundle, cfg, ENGINE_VERSION_V2);
+}
+
+function matchTollsCore(bundle: MatchBundle, cfg: MatcherConfig, engineVersion: string): MatchResult {
   const focalC = new Set(bundle.focal?.charge_ids ?? []);
   const focalP = new Set(bundle.focal?.payback_ids ?? []);
+  const disputed = engineVersion === ENGINE_VERSION_V2 ? activeDisputedCharges(bundle.disputes) : new Set<string>();
 
   const trips = new Map<string, MatchTrip>();
   for (const t of bundle.trips ?? []) {
@@ -256,8 +415,12 @@ export function matchTolls(bundle: MatchBundle, cfg: MatcherConfig = MATCHER_CON
   const charges: MatchCharge[] = [];
   const paybacks: { p: MatchPayback; trip: MatchTrip | null }[] = [];
 
+  const takesBy = new Map<string, boolean>();
+  for (const s of bundle.settings ?? []) takesBy.set(s.platform, !!s.takes_disputes);
+
   for (const c of [...(bundle.charges ?? [])].sort(byId)) {
-    const why = chargeExclusion(c);
+    const why =
+      chargeExclusion(c) ?? (disputed.has(c.id) ? 'disputed' : null);
     if (why) {
       if (focalC.has(c.id)) excludedC.push({ id: c.id, reason: why });
     } else charges.push(c);
@@ -277,6 +440,7 @@ export function matchTolls(bundle: MatchBundle, cfg: MatcherConfig = MATCHER_CON
   for (const c of charges) {
     const cIn = pickCharge(c);
     for (const { p, trip } of paybacks) {
+      if (disputed.has(c.id)) continue;
       if (windowFor(cIn, pickPayback(p), trip ? pickTrip(trip) : null, cfg)) raw.push({ c, p, trip });
     }
   }
@@ -291,8 +455,12 @@ export function matchTolls(bundle: MatchBundle, cfg: MatcherConfig = MATCHER_CON
   const candidates: Candidate[] = [];
   for (const r of raw) {
     if (!focalC.has(r.c.id) && !focalP.has(r.p.id)) continue;
+    const rateMinor =
+      engineVersion === ENGINE_VERSION_V2
+        ? platformRateMinor(r.c, r.p, r.trip, bundle.rates)
+        : undefined;
     const inputs: PairInputs = {
-      engine_version: ENGINE_VERSION,
+      engine_version: engineVersion,
       config: cfg,
       charge: pickCharge(r.c),
       payback: pickPayback(r.p),
@@ -303,8 +471,89 @@ export function matchTolls(bundle: MatchBundle, cfg: MatcherConfig = MATCHER_CON
       },
       auto_apply_setting: autoBy.get(r.p.platform) ?? false,
     };
-    candidates.push({ charge_id: r.c.id, payback_id: r.p.id, inputs, ...scorePair(inputs) });
+    // v1 inputs stay byte-identical to before S2a (same inputs_hash, no live churn while the switch is off);
+    // the v2 keys are written only when the bundle carries dispute data.
+    if (engineVersion === ENGINE_VERSION_V2) {
+      inputs.kind = 'payback';
+      if (rateMinor !== undefined) inputs.platform_rate_minor = rateMinor;
+      inputs.takes_disputes_setting = takesBy.get(r.p.platform) ?? false;
+    }
+    const scored = scorePair(inputs);
+    const openEl = disputeOpenEligible(inputs, scored);
+    const cand: Candidate = {
+      kind: 'payback',
+      charge_id: r.c.id,
+      payback_id: r.p.id,
+      inputs,
+      ...scored,
+      dispute_open_eligible: openEl,
+    };
+    if (openEl) cand.rules_fired = [...cand.rules_fired, 'dispute_open_eligible'];
+    candidates.push(cand);
   }
+
+  if (engineVersion === ENGINE_VERSION_V2 && (bundle.disputes?.length ?? 0) > 0) {
+    const disputes = (bundle.disputes ?? []).filter((d) => d.state === 'sent' || d.state === 'expired');
+    const chargesById = new Map(bundle.charges.map((c) => [c.id, c]));
+  type RefundRaw = { d: MatchDispute; p: MatchPayback; c: MatchCharge };
+  const refundRaw: RefundRaw[] = [];
+    for (const d of disputes) {
+      const c = chargesById.get(d.charge_id);
+      if (!c) continue;
+      for (const { p } of paybacks) {
+        if (refundPaybackEligible(p, d)) refundRaw.push({ d, p, c });
+      }
+    }
+    const perDispute = new Map<string, number>();
+    const perPaybackRefund = new Map<string, number>();
+    for (const r of refundRaw) {
+      perDispute.set(r.d.id, (perDispute.get(r.d.id) ?? 0) + 1);
+      perPaybackRefund.set(r.p.id, (perPaybackRefund.get(r.p.id) ?? 0) + 1);
+    }
+    for (const r of refundRaw) {
+      if (!focalC.has(r.c.id) && !focalP.has(r.p.id)) continue;
+      const inputs: PairInputs = {
+        engine_version: engineVersion,
+        config: cfg,
+        kind: 'dispute_refund',
+        dispute_id: r.d.id,
+        charge: pickCharge(r.c),
+        payback: pickPayback(r.p),
+        trip: null,
+        competitors: {
+          charge_candidates: perDispute.get(r.d.id) ?? 0,
+          payback_candidates: perPaybackRefund.get(r.p.id) ?? 0,
+        },
+        auto_apply_setting: false,
+        dispute: {
+          id: r.d.id,
+          state: r.d.state,
+          owed_minor: r.d.owed_minor,
+          recovered_minor: r.d.recovered_minor,
+          platform_trip_id: r.d.platform_trip_id,
+          platform: r.d.platform,
+        },
+      };
+      const scored = scorePair(inputs);
+      const owedLeft = r.d.owed_minor - r.d.recovered_minor;
+      const settleEl =
+        inputs.competitors.charge_candidates === 1 &&
+        inputs.competitors.payback_candidates === 1 &&
+        r.p.remaining_minor <= owedLeft;
+      const cand: Candidate = {
+        kind: 'dispute_refund',
+        dispute_id: r.d.id,
+        charge_id: r.c.id,
+        payback_id: r.p.id,
+        inputs,
+        ...scored,
+        dispute_settle_eligible: settleEl,
+      };
+      if (settleEl) cand.rules_fired = [...cand.rules_fired, 'dispute_settle_eligible'];
+      candidates.push(cand);
+    }
+  }
+
   candidates.sort((a, b) =>
     a.charge_id !== b.charge_id
       ? (a.charge_id < b.charge_id ? -1 : 1)
@@ -313,7 +562,7 @@ export function matchTolls(bundle: MatchBundle, cfg: MatcherConfig = MATCHER_CON
         : a.payback_id < b.payback_id ? -1 : a.payback_id > b.payback_id ? 1 : 0,
   );
 
-  return { engine_version: ENGINE_VERSION, candidates, excluded: { charges: excludedC, paybacks: excludedP } };
+  return { engine_version: engineVersion, candidates, excluded: { charges: excludedC, paybacks: excludedP } };
 }
 
 function pickCharge(c: MatchCharge): PairInputs['charge'] {
