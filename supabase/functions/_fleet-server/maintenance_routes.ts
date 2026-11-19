@@ -3890,7 +3890,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         }
 
         const note = body.note != null ? String(body.note) : null;
-        const idempotencyKey = body.idempotencyKey ?? body.idempotency_key;
+        const idempotencyKey = body.idempotencyKey ?? body.idempotency_key; // gitleaks:allow (reads the request's idempotency key, not a secret)
         const key = idempotencyKey != null ? String(idempotencyKey).trim() : "";
 
         const { data, error } = await supabase.rpc("fleet_plan_job", {

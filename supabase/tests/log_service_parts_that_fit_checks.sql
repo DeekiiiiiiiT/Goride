@@ -78,9 +78,18 @@ BEGIN
     oem_part_number = EXCLUDED.oem_part_number,
     manufacturer = EXCLUDED.manufacturer;
 
+  -- A fresh CI database has no platform / engine rows: make its own (rolled back with the rest of this check).
   SELECT id INTO v_plat FROM public.vehicle_platform LIMIT 1;
+  IF v_plat IS NULL THEN
+    v_plat := 'e2a5000c-0000-4000-8000-0000000000f1'::uuid;
+    INSERT INTO public.vehicle_platform (id, code, maker, label)
+    VALUES (v_plat, 'LSPTF-PLAT', 'LSPTF', 'LSPTF platform') ON CONFLICT DO NOTHING;
+  END IF;
   SELECT id INTO v_eng FROM public.engine_family LIMIT 1;
-  IF v_plat IS NULL OR v_eng IS NULL THEN RAISE EXCEPTION 'platform/engine fixture required'; END IF;
+  IF v_eng IS NULL THEN
+    v_eng := 'e2a5000c-0000-4000-8000-0000000000f2'::uuid;
+    INSERT INTO public.engine_family (id, code) VALUES (v_eng, 'LSPTF-ENG') ON CONFLICT DO NOTHING;
+  END IF;
 
   INSERT INTO public.vehicle_catalog (
     id, make, model, production_start_year, production_end_year,
@@ -125,7 +134,7 @@ BEGIN
   IF (SELECT status FROM public.maintenance_work_orders WHERE id = v_wo) <> 'planned' THEN
     RAISE EXCEPTION 'proof 2: wo status';
   END IF;
-  IF (SELECT count(*) FROM public.maintenance_work_orders WHERE organization_id = v_org_a AND idempotency_key = 'lsptf-idem-key-1') <> 1 THEN
+  IF (SELECT count(*) FROM public.maintenance_work_orders WHERE organization_id = v_org_a AND idempotency_key = 'lsptf-idem-key-1') <> 1 THEN -- gitleaks:allow (made-up test idempotency key, not a secret)
     RAISE EXCEPTION 'proof 2: one wo';
   END IF;
   IF (SELECT count(*) FROM public.maintenance_work_order_lines WHERE work_order_id = v_wo) <> 1 THEN
