@@ -36,6 +36,7 @@ import type {
   MaintenanceWorkOrderStatus,
   FoundWorkCounts,
   FoundWorkItem,
+  PartsNotice,
 } from '../types/maintenance';
 import { compressImage, OCR_COMPRESS_OPTS } from '../utils/compressImage';
 import { isTollCategory } from '../utils/tollCategoryHelper';
@@ -3524,6 +3525,44 @@ export const api = {
       });
       if (!response.ok) throw new Error((await response.json().catch(() => ({})) as { error?: string }).error || "Could not send the request");
       return response.json();
+  },
+
+  /** Slice C: "Plan it — I'll buy it first" (fleet-ops). 404 log_service_parts_gaps_off when the switch is off. */
+  async planMaintenanceJob(body: {
+    vehicleId: string;
+    jobId: string;
+    places: string[];
+    partId: string | null;
+    note: string | null;
+    idempotencyKey: string;
+  }) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance-planned-jobs`, {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) throw await maintenanceSaveErrorFrom(response, "Could not plan this job");
+      return response.json() as Promise<{ workOrderId?: string; lineId?: string; created?: boolean; alreadyListed?: boolean }>;
+  },
+
+  /** Slice C: "Part on file" messages for the maintenance bell. 404 when the switch is off. */
+  async partsNotices() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/notices`, { headers: await getHeaders(null) });
+      if (response.status === 404) return { items: [], unreadCount: 0, off: true as const };
+      if (!response.ok) throw new Error("Could not load parts messages");
+      const json = await response.json() as { items?: PartsNotice[]; unreadCount?: number };
+      return { items: Array.isArray(json.items) ? json.items : [], unreadCount: Number(json.unreadCount ?? 0), off: false as const };
+  },
+
+  async markPartsNoticesRead(ids: string[]) {
+      if (!ids.length) return { marked: 0 };
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/notices/read`, {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify({ ids }),
+      });
+      if (!response.ok) throw new Error("Could not mark messages read");
+      return response.json() as Promise<{ marked: number }>;
   },
 
   async partsMyVehicles() {

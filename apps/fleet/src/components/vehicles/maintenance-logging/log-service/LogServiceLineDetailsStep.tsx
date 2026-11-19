@@ -79,7 +79,29 @@ export type LogServiceLineDetailsStepProps = {
   foundSlot?: React.ReactNode;
   /** "Where on the car" chips, right under the job name (Stitch F1). */
   whereSlot?: React.ReactNode;
+  /**
+   * Slice C "Parts that fit this car" (parts gaps switch on, part jobs). Replaces the Brand / Part number boxes and
+   * the "Link part" list; labour and the rest stay (LC-01).
+   */
+  partsPanel?: React.ReactNode;
+  /** Log it now on a planned job (LC-05, Stitch 7): the two cost hints. */
+  plannedHints?: boolean;
 };
+
+export const PLANNED_HINTS = {
+  fitting: "What did the garage charge for fitting it?",
+  part: "What you paid for the part",
+  partWhere: "What you paid for the part: add it under Items used below.",
+} as const;
+
+function PlannedHint({ text, testId }: { text: string; testId: string }) {
+  return (
+    <p className={`flex items-center gap-1 ${LT.bodySm} ${LS.muted}`} data-testid={testId}>
+      <span className="material-symbols-outlined text-[15px] text-[#4b41e1] dark:text-[#c3c0ff]" aria-hidden>info</span>
+      {text}
+    </p>
+  );
+}
 
 function PositionButtons({
   positions,
@@ -411,7 +433,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
           />
         </div>
         ) : null}
-        {!props.hiddenFields?.includes("brand") ? (
+        {!props.partsPanel && !props.hiddenFields?.includes("brand") ? (
         <div className="space-y-2">
           <Label htmlFor="brand" className={`${LT.labelMd} ${LS.muted}`}>Brand</Label>
           <Input
@@ -422,7 +444,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
           />
         </div>
         ) : null}
-        {!props.hiddenFields?.includes("part_number") ? (
+        {!props.partsPanel && !props.hiddenFields?.includes("part_number") ? (
         <div className="space-y-2">
           <Label htmlFor="part-number" className={`${LT.labelMd} ${LS.muted}`}>Part number</Label>
           <Input
@@ -434,6 +456,11 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
         </div>
         ) : null}
       </div>
+      {props.plannedHints && !props.hiddenFields?.includes("labor_rate") ? (
+        <div className="-mt-2">
+          <PlannedHint text={PLANNED_HINTS.fitting} testId="planned-hint-fitting" />
+        </div>
+      ) : null}
 
       {showPositions ? (
         <div className="space-y-2">
@@ -488,6 +515,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
         </div>
       </div>
 
+      {props.partsPanel ? props.partsPanel : (
       <div className="space-y-2">
         <Label className={`${LT.labelMd} ${LS.muted}`}>Link part (optional)</Label>
         {partsLoading ? (
@@ -530,8 +558,10 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
           </Select>
         )}
       </div>
+      )}
 
       {props.itemsSlot ? null : props.foundSlot ?? null}
+      {props.plannedHints && props.itemsSlot ? <PlannedHint text={PLANNED_HINTS.partWhere} testId="planned-hint-part" /> : null}
       {props.itemsSlot ?? (
         <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low px-4 py-3 flex justify-between items-center">
           <span className="text-sm text-stitch-secondary">{lineTotalLabel}</span>

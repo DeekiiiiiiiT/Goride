@@ -301,3 +301,51 @@ describe("What the inspection found in history (Stitch screen 11)", () => {
     expect(container).toBeEmptyDOMElement();
   });
 });
+
+describe("Planned jobs on Not done yet (Slice C, Stitch screen 6)", () => {
+  const planned: FoundWorkItem = {
+    ...rotor,
+    lineId: "line-o2",
+    jobId: "o2",
+    jobName: "Oxygen sensor",
+    note: "buy at Northside Auto on Friday",
+    foundDate: "2026-11-18",
+    inspectionJobName: null,
+    garage: null,
+    positions: ["after_cat"],
+    positionScheme: "catalyst",
+    source: "planned",
+    partId: "p1",
+    partName: "Rear oxygen sensor",
+    partBrand: "Toyota (genuine)",
+    partNumber: "89465-B1120",
+  };
+
+  it("a planned card shows the place, Planned date, the part number and both buttons", async () => {
+    apiMock.listFoundWork.mockResolvedValue({ items: [planned, rotor] });
+    const onLogItNow = vi.fn();
+    render(<FoundByInspectionSection vehicleId="car-1" canEdit onLogItNow={onLogItNow} />);
+    const cards = await screen.findAllByTestId("found-card");
+    expect(screen.getByRole("heading", { level: 3 })).toHaveTextContent(FOUND_UI_COPY.plannedTitle);
+    const card = cards[0];
+    expect(card).toHaveAttribute("data-source", "planned");
+    expect(within(card).getByRole("heading", { level: 4 }).textContent).toMatch(/^Oxygen sensor · /);
+    expect(within(card).getByTestId("found-card-line")).toHaveTextContent("Planned 18 Nov 2026");
+    expect(within(card).getByTestId("planned-part")).toHaveTextContent("89465-B1120");
+    expect(within(card).getByText("“buy at Northside Auto on Friday”")).toBeInTheDocument();
+    // No prices, stock or invented Stitch text.
+    expect(screen.queryByText(/OEM Direct Match|In stock|J\$ 28/i)).toBeNull();
+    fireEvent.click(within(card).getByTestId("found-log-it-now"));
+    expect(onLogItNow).toHaveBeenCalledWith(planned);
+    fireEvent.click(within(card).getByTestId("found-not-needed"));
+    expect(await screen.findByTestId("found-not-needed-dialog")).toHaveTextContent(FOUND_UI_COPY.confirmBodyPlanned);
+  });
+
+  it("no planned job: today's title stays", async () => {
+    apiMock.listFoundWork.mockResolvedValue({ items: [rotor] });
+    render(<FoundByInspectionSection vehicleId="car-1" canEdit />);
+    await screen.findAllByTestId("found-card");
+    expect(screen.getByText(FOUND_UI_COPY.title)).toBeInTheDocument();
+    expect(screen.queryByText(FOUND_UI_COPY.plannedTitle)).toBeNull();
+  });
+});

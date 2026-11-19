@@ -29,6 +29,7 @@ import {
   LogServiceWhatWasDoneStep,
   JobSearchBox,
   LogServiceLineDetailsStep,
+  PLANNED_HINTS,
   LogServiceLineDetailsMultiStep,
   LogServiceReviewStep,
   LogServiceSystemPicker,
@@ -37,7 +38,7 @@ import {
   LogServiceWizardContinueButton,
   LOG_SERVICE_COPY,
 } from "./maintenance-logging/log-service";
-import { LS, LT } from "./maintenance-logging/log-service/logServiceStitch";
+import { LS, LT, splitPlate } from "./maintenance-logging/log-service/logServiceStitch";
 import type { OdometerCheckResult } from "./maintenance-logging/log-service/LogServiceDateMileageStep";
 import type { LogServiceSuggestedOp } from "./maintenance-logging/log-service/LogServiceWhatWasDoneStep";
 import {
@@ -71,6 +72,9 @@ import {
   togglePositionCode,
 } from "./maintenance-logging/log-service/positionChips";
 import { SaveLineHint, WhereOnCarChips } from "./maintenance-logging/log-service/WhereOnCarChips";
+import { PartsThatFitPanel } from "./maintenance-logging/log-service/PartsThatFitPanel";
+import { PLAN_COPY, PlanJobDialog } from "./maintenance-logging/log-service/PlanJobDialog";
+import { jobWithPlaces, shortDate, type FitPart } from "./maintenance-logging/log-service/partsThatFit";
 import {
   isNotUsual,
   jobFitFromResponse,
@@ -539,6 +543,10 @@ export function LogMaintenanceServiceDialog({
   const foundDraftsForRef = useRef<string | null>(null);
   /** The ticked part item whose "Pick a part" dialog is open. */
   const [pickingItem, setPickingItem] = useState<LineItemDraft | null>(null);
+  /** Slice C "Plan it" overlay: the job (and part) being planned. */
+  const [planTarget, setPlanTarget] = useState<{ cat: MaintenanceServiceCategory; part: FitPart | null } | null>(null);
+  const [planBusy, setPlanBusy] = useState(false);
+  const planKeyRef = useRef<string>(crypto.randomUUID());
   /** Version of the service being edited (edits send it back; a mismatch → "This service was changed"). */
   const [editVersion, setEditVersion] = useState<number | null>(null);
   const [saveProblem, setSaveProblem] = useState<
@@ -991,6 +999,14 @@ export function LogMaintenanceServiceDialog({
       partId: existing?.partId || null,
       supplierPartOfferId: existing?.supplierPartOfferId ?? null,
       partConfirmedFit: existing?.partConfirmedFit === true,
+      // "Log it now" on a planned job (LC-05): opens with the part picked when it was planned.
+      ...(!existing && fromFoundWork && fromFoundWork.jobId === cat.id && fromFoundWork.partId
+        ? {
+            partId: fromFoundWork.partId,
+            brand: fromFoundWork.partBrand ?? "",
+            partNumber: fromFoundWork.partNumber ?? "",
+          }
+        : {}),
       system,
       items: existing?.items ? existing.items.map((i) => draftFromSavedItem(i)) : [],
       foundToday:
@@ -1743,6 +1759,110 @@ export function LogMaintenanceServiceDialog({
       />
     );
   };
+  // ---- Slice C "Parts that fit this car" + "Plan it" (LC-01, LC-02, LC-05) ----
+  /** Places in words: chip labels, or the wheel / side buttons' own labels. */
+  const placeLabelsFor = (cat: MaintenanceServiceCategory, codes: string[]): string[] => {
+    const ui = positionUi(cat);
+    if (ui.kind === "chips") return codes.map((c) => ui.options.find((o) => o.code === c)?.label ?? c);
+    const sides = sidePositionsFor(cat);
+    return codes.map((c) => sides?.find((s) => s.value === c)?.label ?? c);
+  };
+  const pickFitPart = (part: FitPart | null) =>
+    setLineExtras((prev) => {
+      if (!part) {
+        // Only a part picked from the panel is cleared; an old typed brand / number re-saves unchanged (rule 7).
+        if (!prev.partId) return prev;
+        return { ...prev, partId: null, supplierPartOfferId: null, partConfirmedFit: false, brand: "", partNumber: "" };
+      }
+      return {
+        ...prev,
+        partId: part.partId,
+        supplierPartOfferId: null,
+        partConfirmedFit: part.verified,
+        brand: part.brand,
+        partNumber: part.number,
+      };
+    });
+  // A planned job lives on the Not done yet list, which needs the inspection findings switch (code review #2).
+  const canPlanJobs = !initialLog?.id && !fromFoundWork && jobItems.findingsEnabled;
+  const partsPanelFor = (cat: MaintenanceServiceCategory) => {
+    if (!jobItems.gapsEnabled || isServiceJob(cat) || cat.id.startsWith("synthetic-") || !vehicleId) return undefined;
+    const ui = positionUi(cat);
+    return (
+      <PartsThatFitPanel
+        key={cat.id}
+        vehicleId={vehicleId}
+        jobId={cat.id}
+        jobName={(cat.name || "part").toLowerCase()}
+        places={lineExtras.positions}
+        placeLabels={placeLabelsFor(cat, lineExtras.positions)}
+        needsPlace={ui.kind !== "none" && lineExtras.positions.length === 0}
+        partId={lineExtras.partId}
+        chosenInfo={
+          lineExtras.partId
+            ? { name: cat.name, brand: lineExtras.brand, number: lineExtras.partNumber }
+            : null
+        }
+        onPick={pickFitPart}
+        onPlanIt={canPlanJobs ? (part) => setPlanTarget({ cat, part }) : undefined}
+      />
+    );
+  };
+  /** The planned job leaves this service: drop its card / line; close when nothing else is left. */
+  const afterJobPlanned = (cat: MaintenanceServiceCategory) => {
+    const otherLines = lines.filter((l) => !categoryMatchLine(cat, l));
+    const remaining = lineDetailCategories.filter((c) => c.id !== cat.id);
+    setLines(otherLines);
+    setSelectedCategoryIds((prev) => prev.filter((id) => id !== cat.id));
+    setLineDetailCategories(remaining);
+    if (otherLines.length === 0 && remaining.length === 0) {
+      onSaved?.();
+      onOpenChange(false);
+      return;
+    }
+    onSaved?.();
+    const next = remaining.find((c) => !otherLines.some((l) => categoryMatchLine(c, l)));
+    if (next) {
+      openCategoryForm(next);
+      return;
+    }
+    setActiveCategory(null);
+    setStep("review");
+  };
+  const confirmPlan = async (note: string | null) => {
+    if (!planTarget) return;
+    const { cat, part } = planTarget;
+    setPlanBusy(true);
+    try {
+      const res = await api.planMaintenanceJob({
+        vehicleId,
+        jobId: cat.id,
+        places: lineExtras.positions,
+        partId: part?.partId ?? null,
+        note,
+        idempotencyKey: planKeyRef.current,
+      });
+      planKeyRef.current = crypto.randomUUID();
+      const label = jobWithPlaces(cat.name, placeLabelsFor(cat, lineExtras.positions));
+      toast.success(res.alreadyListed ? PLAN_COPY.alreadyListed(label) : PLAN_COPY.added(label));
+      setPlanTarget(null);
+      afterJobPlanned(cat);
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : "Could not plan this job. Try again.");
+    } finally {
+      setPlanBusy(false);
+    }
+  };
+  /** Log it now on a planned job: the two cost hints under the price boxes (Stitch screen 7). */
+  const plannedHintsOn = (cat: MaintenanceServiceCategory) =>
+    fromFoundWork?.source === "planned" && cat.id === fromFoundWork.jobId;
+  /** Jobs with their own Parts box get that hint under it (the fitting hint sits under the labour row). */
+  const plannedCostHint = (key: string): string | null => {
+    if (!activeCategory || !plannedHintsOn(activeCategory)) return null;
+    if (key === "material" || key === "unit_price") return PLANNED_HINTS.part;
+    return null;
+  };
+
   /** Found "Not done yet" rows that still need a chip (same rule as the job itself, LS-06). */
   const foundRowsMissingPosition = (cat: MaintenanceServiceCategory) =>
     isInspectionJob(cat.id) &&
@@ -1859,6 +1979,12 @@ export function LogMaintenanceServiceDialog({
               setFieldValue(field.key, v === "" ? null : Number(v));
             }}
           />
+          {plannedCostHint(field.key) ? (
+            <p className="flex items-center gap-1 text-[13px] text-on-surface-variant" data-testid="planned-cost-hint">
+              <span className="material-symbols-outlined text-[15px] text-[#4b41e1] dark:text-[#c3c0ff]" aria-hidden>info</span>
+              {plannedCostHint(field.key)}
+            </p>
+          ) : null}
         </div>
       );
     }
@@ -2205,7 +2331,14 @@ export function LogMaintenanceServiceDialog({
             <LogServiceLineDetailsMultiStep
               banner={
                 fromFoundWork ? (
-                  <FoundFromInspectionBanner text={foundBannerText(fromFoundWork)} note={fromFoundWork.note} />
+                  <FoundFromInspectionBanner
+                    text={
+                      fromFoundWork.source === "planned"
+                        ? `From your Not done yet list (planned ${shortDate(fromFoundWork.foundDate)})`
+                        : foundBannerText(fromFoundWork)
+                    }
+                    note={fromFoundWork.note}
+                  />
                 ) : undefined
               }
               packageLabel={selectedPackage?.shortLabel ?? null}
@@ -2264,6 +2397,8 @@ export function LogMaintenanceServiceDialog({
                       onPartNumberChange={(partNumber) => setLineExtras((prev) => ({ ...prev, partNumber }))}
                       showPositions={positionUi(cat).kind === "wheels"}
                       whereSlot={whereSlotFor(cat)}
+                      partsPanel={partsPanelFor(cat)}
+                      plannedHints={plannedHintsOn(cat)}
                       sideOptions={sidePositionsFor(cat)}
                       positions={lineExtras.positions}
                       onTogglePosition={togglePosition}
@@ -2356,6 +2491,8 @@ export function LogMaintenanceServiceDialog({
               onPartNumberChange={(partNumber) => setLineExtras((prev) => ({ ...prev, partNumber }))}
               showPositions={positionUi(activeCategory).kind === "wheels"}
               whereSlot={whereSlotFor(activeCategory)}
+              partsPanel={partsPanelFor(activeCategory)}
+              plannedHints={plannedHintsOn(activeCategory)}
               sideOptions={sidePositionsFor(activeCategory)}
               positions={lineExtras.positions}
               onTogglePosition={togglePosition}
@@ -2387,6 +2524,18 @@ export function LogMaintenanceServiceDialog({
               headerChip={fromInspectionChipFor(activeCategory)}
             />
           )}
+
+          <PlanJobDialog
+            open={Boolean(planTarget)}
+            carName={splitPlate(strip.vehicleLabel).name.replace(/\s*\(\d{4}\)\s*$/, "") || "car"}
+            jobLine={
+              planTarget ? jobWithPlaces(planTarget.cat.name, placeLabelsFor(planTarget.cat, lineExtras.positions)) : ""
+            }
+            part={planTarget?.part ?? null}
+            busy={planBusy}
+            onCancel={() => setPlanTarget(null)}
+            onConfirm={(note) => void confirmPlan(note)}
+          />
 
           <AddFoundJobDialog
             open={foundPickerOpen}

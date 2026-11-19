@@ -13,6 +13,10 @@ export type PartsSourcingDrainSummary = {
   notCompleted: number;
   dailyLimit: number;
   carNotLinked: number;
+  /** A row already closed as not sent (the send returns its final state). */
+  notSent: number;
+  /** Any other answer from the send (a state added later): counted so claimed always adds up (code review #6). */
+  other: number;
   errors: number;
   /** Claimed rows handed back unprocessed when the run ran out of time. */
   released: number;
@@ -59,6 +63,8 @@ export async function runPartsSourcingDrain(
     notCompleted: 0,
     dailyLimit: 0,
     carNotLinked: 0,
+    notSent: 0,
+    other: 0,
     errors: 0,
     released: 0,
   };
@@ -198,6 +204,11 @@ export async function runPartsSourcingDrain(
       else if (result === "not_completed") summary.notCompleted += 1;
       else if (result === "daily_limit") summary.dailyLimit += 1;
       else if (result === "car_not_linked") summary.carNotLinked += 1;
+      else if (result === "not_sent") summary.notSent += 1;
+      else {
+        summary.other += 1;
+        console.warn("[parts_sourcing_drain] unexpected send result:", outboxId, result);
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error("[parts_sourcing_drain] row failed:", outboxId, msg);
@@ -216,4 +227,4 @@ export async function runPartsSourcingDrain(
   }
 
   return summary;
-}
+}

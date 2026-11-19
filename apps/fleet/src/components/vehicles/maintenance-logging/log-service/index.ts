@@ -3,7 +3,7 @@ export { LogServiceWhichCarDialog } from "./LogServiceWhichCarDialog";
 export type { LogServiceVehicleOption } from "./LogServiceWhichCarDialog";
 export { LogServiceDateMileageStep } from "./LogServiceDateMileageStep";
 export { LogServiceWhatWasDoneStep, JobSearchBox } from "./LogServiceWhatWasDoneStep";
-export { LogServiceLineDetailsStep } from "./LogServiceLineDetailsStep";
+export { LogServiceLineDetailsStep, PLANNED_HINTS } from "./LogServiceLineDetailsStep";
 export { LogServiceReviewStep } from "./LogServiceReviewStep";
 export {
   LogServiceWizardChrome,

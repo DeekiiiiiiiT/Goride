@@ -10,6 +10,7 @@ import { applyPendingPartsGroupFilter, groupIdForRow } from "./pending_parts_gro
 import { getCatalogParts } from "./catalog_api.ts";
 import { mapPendingOnFileParts } from "./pending_parts_on_file.ts";
 import { notifyFleetsRequestOutcome } from "./catalog_research_notify.ts";
+import { findParts, fitLabelForPart, splitPlacesForFind } from "./parts_finder.ts";
 
 const PREFIX = "/make-server-37f42386/admin/pending-catalog/parts-queue";
 const FORBIDDEN_RESPONSE_KEYS = new Set([
@@ -206,6 +207,52 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
     }
   });
 
+  app.get(`${PREFIX}/:groupId/candidates`, async (c: Context) => {
+    const denied = guard(c);
+    if (denied) return denied;
+    try {
+      const groupId = c.req.param("groupId");
+      if (groupId.startsWith("legacy:")) return c.json({ items: [] });
+      let query = supabase
+        .from("parts_sourcing_requests")
+        .select(
+          "vehicle_catalog_id, maintenance_component_id, position_scheme, position_codes",
+        )
+        .eq("kind", "add_part_info")
+        .limit(1);
+      applyPendingPartsGroupFilter(query, groupId);
+      const { data, error } = await query;
+      if (error) throw error;
+      const first = (data?.[0] ?? null) as {
+        vehicle_catalog_id?: string | null;
+        maintenance_component_id?: string | null;
+        position_codes?: string[] | null;
+      } | null;
+      if (!first?.vehicle_catalog_id || !first.maintenance_component_id) {
+        return c.json({ items: [] });
+      }
+      const split = splitPlacesForFind(Array.isArray(first.position_codes) ? first.position_codes.map(String) : []);
+      const found = await findParts(supabase, {
+        variantId: String(first.vehicle_catalog_id),
+        componentId: String(first.maintenance_component_id),
+        fitPairs: split.wheelPairs.length ? split.wheelPairs : null,
+        placeCodes: split.placeCodes,
+        attachFitLabels: true,
+      });
+      const items = found.plainSections.flatMap((section) => section.items).map((item) => stripPii({
+        partId: item.partId,
+        name: item.name,
+        brand: item.brand,
+        number: item.number,
+        place: item.listingPlace ?? item.position,
+        fitLabel: item.fitLabel ?? fitLabelForPart(item),
+      }));
+      return c.json({ items });
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+    }
+  });
+
   app.get(`${PREFIX}/:groupId`, async (c: Context) => {
     const denied = guard(c);
     if (denied) return denied;
@@ -296,7 +343,8 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
       const body = await c.req.json() as Record<string, unknown>;
       const action = String(body.action || "");
       const now = new Date().toISOString();
-      const user = c.get("rbacUser") as { id?: string } | undefined;
+      const user = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+      const actorId = user?.userId ?? user?.id ?? null;
 
       const applyUpdate = async (patch: Record<string, unknown>) => {
         let query = supabase.from("parts_sourcing_requests").update(patch).eq("kind", "add_part_info");
@@ -310,7 +358,7 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
           status: "in_progress",
           looking_at: now,
           looking_note: String(body.note || "").slice(0, 2000) || null,
-          assigned_to: user?.id ?? null,
+          assigned_to: actorId,
         });
       } else if (action === "cant_find") {
         await applyUpdate({
@@ -320,7 +368,29 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
         });
         await notifyFleetsRequestOutcome(supabase, groupId, "not_found");
       } else if (action === "added") {
-        return c.json({ error: "Use promote proposal instead of Mark added" }, 400);
+        if (groupId.startsWith("legacy:")) {
+          return c.json({ code: "legacy_group", error: "Legacy group cannot be resolved this way." }, 400);
+        }
+        const partId = String(body.partId ?? body.part_id ?? "").trim();
+        if (!partId) return c.json({ error: "partId is required" }, 400);
+        const { data, error } = await supabase.rpc("catalog_resolve_request_group", {
+          p_group_key: groupId,
+          p_part_id: partId,
+          p_actor_id: actorId,
+        });
+        if (error) {
+          const msg = error.message ?? String(error);
+          if (msg.includes("part_not_found")) {
+            return c.json({ error: "Part not found" }, 404);
+          }
+          throw error;
+        }
+        const row = (data ?? {}) as Record<string, unknown>;
+        return c.json({
+          ok: true,
+          resolved: Number(row.resolved ?? 0),
+          companies: Number(row.companies ?? 0),
+        });
       } else {
         return c.json({ error: "Unknown action" }, 400);
       }

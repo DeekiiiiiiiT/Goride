@@ -10,11 +10,19 @@ import { assembleMatchSections, enrichFleetParts, getCatalogParts } from "./cata
 import { assertNoCustomerIdentity } from "./catalog_parts_shape.ts";
 import { groupFindSections } from "./parts_finder_group.ts";
 import type { PartsFitPair } from "../../../packages/types/src/partsFitParam.ts";
+import {
+  isKnownPositionListingCode,
+  NOT_SURE,
+  WHEEL_CODES,
+  wheelCodesToFitPairs,
+} from "../../../packages/types/src/partPositions.ts";
 
 const CANDIDATE_CAP = 6;
 
 export type PartPosition = "front" | "rear" | "both" | null;
 export type PartSide = "left" | "right" | "both" | null;
+
+export type FitLabel = "check_before_buying" | "made_for_car" | "also_fits";
 
 export type FoundPart = {
   partId: string;
@@ -25,8 +33,11 @@ export type FoundPart = {
   tier: number;
   reason: string;
   position: PartPosition;
+  /** Raw listing place when it is a known job/listing code (e.g. before_cat, LF). */
+  listingPlace: string | null;
   side: PartSide;
   status: "verified" | "needs_checking";
+  fitLabel?: FitLabel;
   fitsVariantIds: string[];
   evidenceUrl: string | null;
   alsoKnownAs: string[];
@@ -73,6 +84,60 @@ type LoosePart = {
 function axis(value: string | null | undefined): PartPosition {
   if (value === "front" || value === "rear" || value === "both") return value;
   return null;
+}
+
+/** Preserve catalyst and other scheme codes; front/rear/both still use `position` for wheel filtering. */
+export function listingPlaceOf(value: string | null | undefined): string | null {
+  const v = String(value ?? "").trim();
+  if (!v) return null;
+  if (v === "front" || v === "rear" || v === "both") return v;
+  if (isKnownPositionListingCode(v)) return v;
+  return null;
+}
+
+/** Places from Log service: wheel codes become the wheel filter (fit pairs); the rest are place codes (LC-07). */
+export function splitPlacesForFind(places: string[]): { wheelPairs: ReturnType<typeof wheelCodesToFitPairs>; placeCodes: string[] | null } {
+  const wheelPairs = wheelCodesToFitPairs(places);
+  const rest = places.filter((p) => !(WHEEL_CODES as readonly string[]).includes(p));
+  return { wheelPairs, placeCodes: rest.length ? rest : null };
+}
+
+export function placeCodesFilterActive(placeCodes: string[] | null | undefined): boolean {
+  if (!placeCodes?.length) return false;
+  const distinct = [...new Set(placeCodes.map(String))];
+  return !(distinct.length === 1 && distinct[0] === NOT_SURE);
+}
+
+/** Job place filter for oxygen-style listings (after keepForPosition / fitPairs). */
+export function keepForPlaceCodes<T extends { listingPlace?: string | null }>(
+  items: T[],
+  placeCodes: string[] | null | undefined,
+): T[] {
+  if (!placeCodesFilterActive(placeCodes)) return items;
+  const wanted = new Set(placeCodes!.map(String));
+  return items.filter((item) => {
+    const place = item.listingPlace ?? null;
+    if (!place || place === "both") return true;
+    return wanted.has(place);
+  });
+}
+
+export function fitLabelForPart(item: { status: string; tier: number }): FitLabel {
+  if (item.status === "needs_checking") return "check_before_buying";
+  if (item.tier === 1) return "made_for_car";
+  return "also_fits";
+}
+
+export function attachFitLabelsToSections(
+  sections: Array<{ items: FoundPart[] }>,
+): Array<{ items: FoundPart[] }> {
+  return sections.map((section) => ({
+    ...section,
+    items: section.items.map((item) => ({
+      ...item,
+      fitLabel: fitLabelForPart(item),
+    })),
+  }));
 }
 
 function sideOf(value: string | null | undefined): PartSide {
@@ -149,6 +214,7 @@ export function universalsToFound(universal: unknown, variantId: string): FoundP
         tier: 5,
         reason,
         position: null,
+        listingPlace: null,
         side: null,
         status: "verified",
         fitsVariantIds: variantId ? [variantId] : [],
@@ -167,6 +233,7 @@ export function universalsToFound(universal: unknown, variantId: string): FoundP
         tier: 5,
         reason,
         position: null,
+        listingPlace: null,
         side: null,
         status: "verified",
         fitsVariantIds: variantId ? [variantId] : [],
@@ -198,6 +265,7 @@ function toFound(item: LoosePart, variantId: string): FoundPart {
       oem: item.referenceOem ?? undefined,
     }),
     position: axis(item.position),
+    listingPlace: listingPlaceOf(item.position),
     side: sideOf(item.side),
     catalogueNumber:
       item.catalogueNumber != null && Number.isFinite(Number(item.catalogueNumber))
@@ -282,6 +350,8 @@ export async function findParts(
     position?: string | null;
     side?: string | null;
     fitPairs?: PartsFitPair[] | null;
+    placeCodes?: string[] | null;
+    attachFitLabels?: boolean;
     orgId?: string | null;
     downtimePerDay?: number;
   },
@@ -340,7 +410,13 @@ export async function findParts(
   } else {
     merged = keepForPosition(merged, input.position, input.side);
   }
+  if (placeCodesFilterActive(input.placeCodes)) {
+    merged = keepForPlaceCodes(merged, input.placeCodes);
+  }
   const built = plainSections(merged, mode === "legacy");
+  if (input.attachFitLabels) {
+    built.sections = attachFitLabelsToSections(built.sections) as typeof built.sections;
+  }
   const bestPool: BestPickItem[] = merged.map((item) => ({
     id: item.partId,
     tier: mode === "legacy" ? 1 : item.tier,
@@ -354,10 +430,16 @@ export async function findParts(
   const pickedId = picked ? String(picked.id ?? "") : "";
   const mergedIds = new Set(merged.map((item) => item.partId).filter(Boolean));
   const catalogItems = loaded.flatMap((row) => (row.parts.items as LoosePart[]) || []);
-  const filteredCatalogItems = (input.fitPairs?.length
+  let positionFilteredCatalog = input.fitPairs?.length
     ? keepForFitPairs(catalogItems, input.fitPairs)
-    : keepForPosition(catalogItems, input.position, input.side)
-  ).filter((item) => {
+    : keepForPosition(catalogItems, input.position, input.side);
+  if (placeCodesFilterActive(input.placeCodes)) {
+    positionFilteredCatalog = keepForPlaceCodes(
+      positionFilteredCatalog.map((item) => ({ ...item, listingPlace: listingPlaceOf(item.position) })),
+      input.placeCodes,
+    );
+  }
+  const filteredCatalogItems = positionFilteredCatalog.filter((item) => {
     const id = String(item.part?.id ?? item.fitmentId ?? "");
     return id && mergedIds.has(id);
   });
@@ -409,7 +491,13 @@ export async function findParts(
     sections,
     plainSections: built.sections,
     emptyTiers: built.emptyTiers,
-    bestPick: best ? merged.find((item) => item.partId === best.id) ?? null : null,
+    bestPick: best
+      ? (() => {
+        const hit = merged.find((item) => item.partId === best.id) ?? null;
+        if (!hit) return null;
+        return input.attachFitLabels ? { ...hit, fitLabel: fitLabelForPart(hit) } : hit;
+      })()
+      : null,
     ready: loaded[0]?.parts.ready ?? false,
     coverage,
     databaseNodeGroups,

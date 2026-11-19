@@ -397,7 +397,7 @@ test.describe("Log service — unknown parts reach Dominion (Slice B)", () => {
     if (hits.length) throw new Error(`Must not call live Supabase:\n${hits.slice(0, 10).join("\n")}`);
   });
 
-  test("done-test 8 — Other item with a number, Front: the cron sends it within 2 minutes; Dominion + history", async ({ page, browser }) => {
+  test("done-test 8 — Other item (no number asked, LC-04), Front: the cron sends it within 2 minutes; Dominion + history", async ({ page, browser }) => {
     await openO2FromDraft(page);
     await pickFront(page);
     await fillJobAmount(page, "4000");
@@ -406,18 +406,15 @@ test.describe("Log service — unknown parts reach Dominion (Slice B)", () => {
     await other.getByLabel("What was it?").fill("Front oxygen sensor");
     await other.getByLabel(/^Cost each — other item/).fill("9500");
     await other.getByPlaceholder("e.g. CRC").fill("Denso");
-    await expect(other).toContainText("Part number (optional)");
-    await expect(other).toContainText("From the box or the receipt, if there is one.");
-    // The box keeps only what the server keeps.
-    await other.getByTestId("other-item-part-number").fill("89467 TEST1!");
-    await expect(other.getByTestId("other-item-part-number")).toHaveValue("89467TEST1");
-    await other.getByTestId("other-item-part-number").fill("89467-TEST1");
+    // Slice C (LC-04): no Part number box — Roam looks the item up by its name.
+    await expect(other.getByTestId("other-item-part-number")).toHaveCount(0);
+    await expect(other).not.toContainText("Part number");
     await expect(other.getByTestId("roam-looks-it-up")).toContainText("Roam will look this part up and add it to the parts list.");
     await shot(page, "F2-other-item", other);
     await saveLine(page).click();
 
     const job = page.getByTestId("log-service-review-job").filter({ hasText: o2.name });
-    await expect(job).toContainText("Front oxygen sensor · 89467-TEST1 · Denso · 1 piece", { timeout: 30_000 });
+    await expect(job).toContainText("Front oxygen sensor · Denso · 1 piece", { timeout: 30_000 });
     await expect(job.getByTestId("roam-looks-it-up")).toBeVisible();
     await shot(page, "F7-review", job);
     await logIt(page);
@@ -426,7 +423,8 @@ test.describe("Log service — unknown parts reach Dominion (Slice B)", () => {
                       ORDER BY created_at DESC LIMIT 1`);
     expect(outbox(woId).map((o) => o.state)).toEqual(["pending"]);
     // Gate 1: the finish step talked to nothing outside the database — the request only appears once the drain runs.
-    expect(requestsFor("89467-TEST1")).toBe(0);
+    expect(Number(sql(`SELECT count(*) FROM public.parts_sourcing_requests WHERE organization_id = '${MD_DISC_ORG}'
+                       AND vehicle_catalog_id = '${CAT}' AND kind = 'add_part_info'`))).toBe(0);
 
     // The real cron: give the local database the drain's address and secret, then wait for the minute tick.
     sql(`INSERT INTO private.fleet_ops_secrets (name, value) VALUES
@@ -439,15 +437,15 @@ test.describe("Log service — unknown parts reach Dominion (Slice B)", () => {
       sql(`DELETE FROM private.fleet_ops_secrets WHERE name IN ('parts_sourcing_drain_secret', 'functions_base_url')`);
     }
     firstRequestA = outbox(woId)[0].requestId;
-    expect(sql(`SELECT origin || '|' || old_part_number || '|' || position_scheme || '|' || array_to_string(position_codes, ',') || '|' || vehicle_catalog_id
+    expect(sql(`SELECT origin || '|' || coalesce(old_part_number, '') || '|' || position_scheme || '|' || array_to_string(position_codes, ',') || '|' || vehicle_catalog_id
                 FROM public.parts_sourcing_requests WHERE id = '${firstRequestA}'`))
-      .toBe(`service_log|89467-TEST1|before_after_catalyst|before_cat|${CAT}`);
+      .toBe(`service_log||before_after_catalyst|before_cat|${CAT}`);
 
-    // One Dominion row: Roomy, the name, the number, the position, "Service log".
+    // One Dominion row: Roomy, the name, the position, "Service log" (no number was asked).
     const groups = await groupsWithRequest(firstRequestA);
     expect(groups).toHaveLength(1);
     expect(groups[0].requestedName).toBe("Front oxygen sensor");
-    expect(groups[0].requestedPartNumber).toBe("89467-TEST1");
+    expect(groups[0].requestedPartNumber ?? null).toBeNull();
     expect(groups[0].positionCodes).toEqual(["before_cat"]);
     expect(groups[0].origins).toEqual(["service_log"]);
 
@@ -456,25 +454,25 @@ test.describe("Log service — unknown parts reach Dominion (Slice B)", () => {
       const row = dpage.getByRole("row").filter({ hasText: "Front oxygen sensor" });
       await expect(row).toHaveCount(1, { timeout: 60_000 });
       await expect(row).toContainText("Toyota Roomy");
-      await expect(row.getByTestId("pending-part-detail-line")).toHaveText("89467-TEST1 · Front (before converter)");
+      await expect(row.getByTestId("pending-part-detail-line")).toHaveText("Front (before converter)");
       await expect(row.getByTestId("pending-part-source")).toHaveText("Service log");
       await shot(dpage, "D1-table");
       await row.click();
       const details = dpage.getByTestId("pending-part-details");
       await expect(details).toBeVisible({ timeout: 30_000 });
-      for (const t of ["89467-TEST1", "Front (before converter)", "Service log"]) await expect(details).toContainText(t);
+      for (const t of ["Front (before converter)", "Service log"]) await expect(details).toContainText(t);
       await shot(dpage, "D2-drawer");
     } finally {
       await ctx.close();
     }
 
     const part = await openServiceDetails(page, woId);
-    await expect(part).toContainText("Front oxygen sensor · 89467-TEST1");
+    await expect(part).toContainText("Front oxygen sensor");
     await expect(part.getByTestId("sourcing-line")).toHaveText(/Sent to Roam to add to the parts list/);
     await shot(page, "F8-history", page.getByRole("dialog"));
   });
 
-  test("done-test 9 — a typed-in part: one row titled with the part type, showing 11111-TEST1", async ({ page }) => {
+  test("done-test 9 — a typed-in part (brand only, LC-04): one row titled with the part type", async ({ page }) => {
     // The Oxygen sensor job "may need" one part type (made for this test, deleted after the run).
     const [ptId, ptName] = sql(`SELECT id || '|' || name FROM public.maintenance_service_categories
       WHERE kind = 'component' AND is_part IS TRUE AND coalesce(status, 'active') = 'active' AND id <> '${o2.id}'
@@ -493,13 +491,13 @@ test.describe("Log service — unknown parts reach Dominion (Slice B)", () => {
       const picker = page.getByTestId("pick-part-dialog");
       await picker.getByRole("button", { name: /Type it in instead/ }).click({ timeout: 30_000 });
       await picker.getByLabel("Brand").fill("NGK");
-      await picker.getByLabel(/Part number/).fill("11111-TEST1");
+      await expect(picker.getByLabel(/Part number/)).toHaveCount(0);
       await expect(picker.getByTestId("roam-looks-it-up")).toBeVisible();
       await shot(page, "F3-pick-a-part-typed", picker);
       await picker.getByRole("button", { name: /Use this part/ }).click();
       await expect(row.getByTestId("roam-looks-it-up")).toBeVisible();
       await saveLine(page).click();
-      await expect(page.getByTestId("log-service-review-job").filter({ hasText: o2.name })).toContainText("11111-TEST1", { timeout: 30_000 });
+      await expect(page.getByTestId("log-service-review-job").filter({ hasText: o2.name })).toContainText("NGK", { timeout: 30_000 });
       await logIt(page);
     } finally {
       sql(`UPDATE public.maintenance_job_item SET removed_at = now() WHERE id = '${link}'`);
@@ -514,8 +512,8 @@ test.describe("Log service — unknown parts reach Dominion (Slice B)", () => {
     expect(groups).toHaveLength(1);
     expect(groups[0].componentId).toBe(ptId);
     expect(groups[0].requestedName).toBe(ptName);
-    expect(groups[0].requestedPartNumber).toBe("11111-TEST1");
-    expect(requestsFor("11111-TEST1")).toBe(1);
+    expect(groups[0].requestedPartNumber ?? null).toBeNull();
+    expect(groups[0].requestIds).toEqual([ob.requestId]);
   });
 
   test("done-test 10 — finishing the same service again: no second outbox row, no second Dominion row", async () => {
@@ -535,8 +533,8 @@ test.describe("Log service — unknown parts reach Dominion (Slice B)", () => {
     expect(requestsFor("10101-TEST1")).toBe(1);
   });
 
-  test("done-test 11 — a second company, same number, same car model: still one Dominion row", async () => {
-    const woB = await finishService(fleetB, B_VEHICLE_ID, [otherItem({ partNumber: "89467-TEST1" })]);
+  test("done-test 11 — a second company, same part name, same car model: still one Dominion row", async () => {
+    const woB = await finishService(fleetB, B_VEHICLE_ID, [otherItem({ partNumber: null })]);
     await drain();
     const [ob] = outbox(woB);
     expect(ob.state).toBe("sent");
@@ -766,9 +764,14 @@ test.describe("Log service — unknown parts reach Dominion (Slice B)", () => {
     const narrow = await openDominionPendingParts(browser, 390);
     try {
       // Stitch D4: phone cards carry the number · where, the Source chip, the status and Open.
-      const card = narrow.dpage.getByTestId("pending-part-card").filter({ hasText: "89467-TEST1" });
+      // done-test 8's row (no number since Slice C): name, place only, Service log.
+      const card = narrow.dpage
+        .getByTestId("pending-part-card")
+        .filter({ hasText: "Front oxygen sensor" })
+        .filter({ has: narrow.dpage.getByTestId("pending-part-source").filter({ hasText: "Service log" }) })
+        .filter({ has: narrow.dpage.getByText("Front (before converter)", { exact: true }) })
+        .first();
       await expect(card).toBeVisible({ timeout: 60_000 });
-      await expect(card).toContainText("89467-TEST1 · Front (before converter)");
       await expect(card.getByTestId("pending-part-source")).toHaveText("Service log");
       await expect(card.getByRole("button", { name: "Open" })).toBeVisible();
       await shot(narrow.dpage, "D4-narrow");

@@ -90,7 +90,7 @@ export default defineConfig({
     },
     {
       name: 'fleet',
-      testMatch: /fleet-rush-integration\.spec\.ts|fuel-recon-wizard\.spec\.ts|fuel-recon-shadow-soak\.spec\.ts|driver-settlements-desk\.spec\.ts|driver-detail-smoke\.spec\.ts|fleet-find-parts-visual\.spec\.ts|parts-import-stitch\.spec\.ts|parts-auto-match-stitch\.spec\.ts|fleet-maintenance-master\.spec\.ts|fleet-maintenance-log-service\.spec\.ts|fleet-service-items\.spec\.ts|fleet-inspection-findings\.spec\.ts|fleet-log-service-positions\.spec\.ts|fleet-log-service-unknown-parts\.spec\.ts|fleet-vehicle-documents-overlay\.spec\.ts/,
+      testMatch: /fleet-rush-integration\.spec\.ts|fuel-recon-wizard\.spec\.ts|fuel-recon-shadow-soak\.spec\.ts|driver-settlements-desk\.spec\.ts|driver-detail-smoke\.spec\.ts|fleet-find-parts-visual\.spec\.ts|parts-import-stitch\.spec\.ts|parts-auto-match-stitch\.spec\.ts|fleet-maintenance-master\.spec\.ts|fleet-maintenance-log-service\.spec\.ts|fleet-service-items\.spec\.ts|fleet-inspection-findings\.spec\.ts|fleet-log-service-positions\.spec\.ts|fleet-log-service-unknown-parts\.spec\.ts|fleet-log-service-parts-that-fit\.spec\.ts|fleet-vehicle-documents-overlay\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         baseURL: fleetBaseUrl || 'http://127.0.0.1:5181',

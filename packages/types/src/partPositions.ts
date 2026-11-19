@@ -208,3 +208,25 @@ export function wheelCodesToFitPairs(codes: string[]): FitPair[] {
 
   return pairs;
 }
+
+/** Listing-side position values (import this set in the server; do not duplicate codes). */
+export function listingPlaceCodesFromPartPositions(): readonly string[] {
+  const codes = new Set<string>([
+    ...WHEEL_CODES,
+    NOT_SURE,
+    "front",
+    "rear",
+    "both",
+    ...CATALYST_POSITIONS.map((p) => p.id),
+    ...DRIVER_PASSENGER_REAR.map((p) => p.id),
+    ...LOW_HIGH_BEAM.map((p) => p.id),
+    ...FRONT_REAR_SIDE.map((p) => p.id),
+  ]);
+  return [...codes];
+}
+
+const LISTING_PLACE_CODE_SET = new Set(listingPlaceCodesFromPartPositions());
+
+export function isKnownPositionListingCode(code: string): boolean {
+  return LISTING_PLACE_CODE_SET.has(String(code ?? "").trim());
+}

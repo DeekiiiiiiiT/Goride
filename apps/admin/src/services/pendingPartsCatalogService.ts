@@ -133,6 +133,44 @@ export async function patchPendingPartsGroup(
   if (!res.ok) throw new Error(await readError(res));
 }
 
+/** Slice C (LC-09): parts on file for this group's car model + job + place, to answer the asks with. */
+export type PendingPartsCandidate = {
+  partId: string;
+  name: string;
+  brand: string;
+  number: string;
+  place: string | null;
+  fitLabel: "made_for_car" | "also_fits" | "check_before_buying";
+};
+
+export async function fetchPendingPartsCandidates(
+  accessToken: string,
+  groupId: string,
+): Promise<PendingPartsCandidate[]> {
+  const res = await fetch(`${PARTS_QUEUE_BASE}/${encodeURIComponent(groupId)}/candidates`, {
+    headers: edgeHeaders(accessToken),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  const data = (await res.json()) as { items?: PendingPartsCandidate[] };
+  return Array.isArray(data.items) ? data.items.filter((i) => i && i.partId) : [];
+}
+
+/** "Added — pick the part": answers every open ask in the group; each company gets "Part on file". */
+export async function resolvePendingPartsGroupAdded(
+  accessToken: string,
+  groupId: string,
+  partId: string,
+): Promise<{ resolved: number; companies: number }> {
+  const res = await fetch(`${PARTS_QUEUE_BASE}/${encodeURIComponent(groupId)}`, {
+    method: "PATCH",
+    headers: edgeHeaders(accessToken, "application/json"),
+    body: JSON.stringify({ action: "added", partId }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  const data = (await res.json()) as { resolved?: number; companies?: number };
+  return { resolved: Number(data.resolved ?? 0), companies: Number(data.companies ?? 0) };
+}
+
 export async function fetchVehicleCatalogBriefs(
   accessToken: string,
   ids: string[],

@@ -13,6 +13,8 @@ import { MaintenanceSaveError } from "../../../services/maintenanceSaveError";
 import type { FoundWorkItem, MaintenanceLogLine } from "../../../types/maintenance";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../ui/dialog";
 import { foundDateLabel, isFoundLine, isFoundToday } from "./log-service/foundWork";
+import { linePositionsText } from "./log-service/positionChips";
+import { CopyNumberButton, MakerTile } from "./log-service/PartsThatFitPanel";
 
 function Sym({ name, size, className = "" }: { name: string; size: number; className?: string }) {
   return (
@@ -44,6 +46,12 @@ export const FOUND_UI_COPY = {
   confirmTitle: (job: string) => `Mark ${job} as not needed?`,
   confirmBody: (date: string) =>
     `It leaves the car's list. It stays in the history of the ${date} inspection as Not needed.`,
+  confirmBodyPlanned: "It leaves the car's Not done yet list. Nothing was charged.",
+  plannedTitle: "Not done yet",
+  plannedHelper: "Jobs to do on this car.",
+  notDoneYet: "Not done yet",
+  plannedLine: (date: string) => `Planned ${date}`,
+  plannedOn: (date: string) => `Planned ${date}`,
   cancel: "Cancel",
   markNotNeeded: "Mark not needed",
   markedToast: (job: string) => `${job} marked not needed`,
@@ -101,7 +109,9 @@ export function NotNeededDialog({
                   {FOUND_UI_COPY.confirmTitle(item.jobName)}
                 </DialogTitle>
                 <DialogDescription className="mt-3 text-[15px] leading-6 text-[#47464c] dark:text-[#c9c5cd]">
-                  {FOUND_UI_COPY.confirmBody(foundDateLabel(item.foundDate))}
+                  {item.source === "planned"
+                    ? FOUND_UI_COPY.confirmBodyPlanned
+                    : FOUND_UI_COPY.confirmBody(foundDateLabel(item.foundDate))}
                 </DialogDescription>
               </div>
               <button
@@ -116,7 +126,16 @@ export function NotNeededDialog({
             </div>
             <div className="ml-[60px] rounded-lg bg-[#f4f2fd] dark:bg-[#1c1d26] px-4 py-3 flex items-center gap-2 text-[14px] text-[#47464c] dark:text-[#c9c5cd]">
               <Sym name="schedule" size={18} />
-              <span>{[`Found ${foundDateLabel(item.foundDate)}`, item.note].filter(Boolean).join(" · ")}</span>
+              <span>
+                {[
+                  item.source === "planned"
+                    ? FOUND_UI_COPY.plannedOn(foundDateLabel(item.foundDate))
+                    : `Found ${foundDateLabel(item.foundDate)}`,
+                  item.note,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
             </div>
             <div className="flex justify-end gap-2">
               <button type="button" onClick={onCancel} disabled={busy} className={`h-10 px-4 rounded-lg text-[14px] font-semibold ${BTN_SECONDARY}`}>
@@ -208,13 +227,17 @@ export function FoundByInspectionSection({
   };
 
   const items = state.kind === "ok" ? state.items : [];
+  // Slice C: once a job was planned the list holds more than inspection finds (Stitch screen 6).
+  const hasPlanned = items.some((i) => i.source === "planned");
 
   return (
     <section className="space-y-3" data-testid="found-by-inspection">
       <div>
         <div className="flex items-center gap-2">
           <Sym name="schedule" size={20} className="text-[#47464c] dark:text-[#c9c5cd]" />
-          <h3 className="text-[15px] font-semibold text-[#1a1b22] dark:text-[#e4e1ec]">{FOUND_UI_COPY.title}</h3>
+          <h3 className="text-[15px] font-semibold text-[#1a1b22] dark:text-[#e4e1ec]">
+            {hasPlanned ? FOUND_UI_COPY.plannedTitle : FOUND_UI_COPY.title}
+          </h3>
           {state.kind === "ok" ? (
             <span
               className="inline-flex items-center justify-center bg-[#dfdef1] text-[#616172] dark:bg-[#2a2b36] dark:text-[#c9c5cd] text-[11px] font-bold px-2 py-0.5 rounded-full"
@@ -224,7 +247,9 @@ export function FoundByInspectionSection({
             </span>
           ) : null}
         </div>
-        <p className="text-[13px] text-[#47464c] dark:text-[#c9c5cd] mt-0.5">{FOUND_UI_COPY.helper}</p>
+        <p className="text-[13px] text-[#47464c] dark:text-[#c9c5cd] mt-0.5">
+          {hasPlanned ? FOUND_UI_COPY.plannedHelper : FOUND_UI_COPY.helper}
+        </p>
       </div>
 
       {conflict ? (
@@ -288,7 +313,17 @@ export function FoundByInspectionSection({
         </div>
       ) : (
         <ul className="space-y-3">
-          {items.map((item) => (
+          {items.map((item) =>
+            item.source === "planned" ? (
+              <PlannedJobCard
+                key={item.lineId}
+                item={item}
+                canEdit={canEdit}
+                phone={phone}
+                onLogItNow={onLogItNow}
+                onNotNeeded={() => setConfirm(item)}
+              />
+            ) : (
             <li
               key={item.lineId}
               className="rounded-xl bg-white dark:bg-[#15161d] p-4 shadow-sm flex flex-col gap-2 transition-shadow hover:shadow-md"
@@ -338,12 +373,104 @@ export function FoundByInspectionSection({
                 </div>
               ) : null}
             </li>
-          ))}
+            ),
+          )}
         </ul>
       )}
 
       <NotNeededDialog item={confirm} busy={busy} onCancel={() => setConfirm(null)} onConfirm={() => void markNotNeeded()} />
     </section>
+  );
+}
+
+/**
+ * A job planned with "Plan it — I'll buy it first" (Slice C, Stitch screen 6): job + place, "Planned <date>",
+ * the part with its number for the parts store, the note, then Not needed / Log it now. J$ 0, never in history.
+ */
+function PlannedJobCard({
+  item,
+  canEdit,
+  phone,
+  onLogItNow,
+  onNotNeeded,
+}: {
+  item: FoundWorkItem;
+  canEdit: boolean;
+  phone: boolean;
+  onLogItNow?: (item: FoundWorkItem) => void;
+  onNotNeeded: () => void;
+}) {
+  const places = linePositionsText({
+    categoryCode: "",
+    positionScheme: item.positionScheme ?? null,
+    positionAware: item.positionAware ?? null,
+    positions: item.positions ?? [],
+  });
+  const title = [item.jobName, places].filter(Boolean).join(" · ");
+  return (
+    <li
+      className="rounded-xl bg-white dark:bg-[#15161d] p-4 shadow-md flex flex-col gap-3.5 transition-shadow hover:shadow-lg"
+      data-testid="found-card"
+      data-source="planned"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="space-y-0.5 min-w-0">
+          <h4 className="text-[16px] leading-[22px] font-semibold text-[#1a1b22] dark:text-[#e4e1ec]">{title}</h4>
+          <div className="flex items-center gap-1.5 text-[12px] text-[#47464c] dark:text-[#c9c5cd]">
+            <Sym name="event" size={15} />
+            <span data-testid="found-card-line">{FOUND_UI_COPY.plannedLine(foundDateLabel(item.foundDate))}</span>
+          </div>
+        </div>
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#e8e7f1] dark:bg-[#2a2b36] text-[#1a1b22] dark:text-[#e4e1ec] text-[11px] font-medium shrink-0">
+          <Sym name="schedule" size={14} />
+          {FOUND_UI_COPY.notDoneYet}
+        </span>
+      </div>
+      {item.partId ? (
+        <div className="p-2.5 bg-[#f4f2fd] dark:bg-[#1c1d26] rounded-lg flex items-center justify-between gap-2 flex-wrap" data-testid="planned-part">
+          <div className="flex items-center gap-2 min-w-0">
+            <MakerTile brand={item.partBrand ?? ""} size="sm" />
+            <span className="text-[13px] text-[#1a1b22] dark:text-[#e4e1ec]">{item.partBrand || item.partName}</span>
+            {item.partNumber ? (
+              <>
+                <span className="text-[#47464c] dark:text-[#c9c5cd]">·</span>
+                <span className="font-mono text-[13px] font-bold tracking-tight text-[#1a1b22] dark:text-[#e4e1ec]">{item.partNumber}</span>
+              </>
+            ) : null}
+          </div>
+          {item.partNumber ? <CopyNumberButton number={item.partNumber} /> : null}
+        </div>
+      ) : null}
+      {item.note ? (
+        <div className="p-2.5 bg-[#e8e7f1] dark:bg-[#2a2b36] rounded-lg flex items-start gap-2 text-[#1a1b22] dark:text-[#e4e1ec]">
+          <Sym name="edit_note" size={17} className="text-[#47464c] dark:text-[#c9c5cd] mt-0.5 shrink-0" />
+          <p className="text-[14px] italic">“{item.note}”</p>
+        </div>
+      ) : null}
+      {canEdit ? (
+        <div className={`flex gap-2 pt-1 ${phone ? "flex-col-reverse" : "items-center justify-end"}`}>
+          <button
+            type="button"
+            data-testid="found-not-needed"
+            onClick={onNotNeeded}
+            className={`px-3.5 py-2 rounded-lg text-[12px] font-medium inline-flex items-center justify-center gap-1.5 ${phone ? "w-full h-12 text-[15px]" : ""} ${BTN_SECONDARY}`}
+          >
+            {FOUND_UI_COPY.notNeeded}
+          </button>
+          {onLogItNow ? (
+            <button
+              type="button"
+              data-testid="found-log-it-now"
+              onClick={() => onLogItNow(item)}
+              className={`px-4 py-2 rounded-lg text-[12px] font-medium inline-flex items-center justify-center gap-1.5 ${phone ? "w-full h-12 text-[15px]" : ""} ${BTN_PRIMARY}`}
+            >
+              <Sym name="build" size={16} />
+              {FOUND_UI_COPY.logItNow}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </li>
   );
 }
 

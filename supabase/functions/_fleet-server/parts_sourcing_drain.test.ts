@@ -262,3 +262,13 @@ Deno.test("code review #6: out of time → the rows not reached are handed back 
   assertEquals(summary.released, 2);
   assertEquals(released, [[second, third]]);
 });
+
+Deno.test("drain counts not_sent and unknown send results, so claimed always adds up (code review #6)", async () => {
+  for (const [result, key] of [["not_sent", "notSent"], ["something_new", "other"]] as const) {
+    const { client } = drainClient([{ id: outboxId, line_item_id: lineItemId }], { onSend: () => ({ result }) });
+    const summary = await runPartsSourcingDrain(client as never, { catalogIdForVehicle: async () => "cat-1" });
+    assertEquals(summary.claimed, 1);
+    assertEquals(summary[key], 1);
+    assertEquals(summary.sent + summary.errors, 0);
+  }
+});

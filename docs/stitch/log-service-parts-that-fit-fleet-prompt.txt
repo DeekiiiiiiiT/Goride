@@ -1,0 +1,177 @@
+ROAM FLEET — LOG SERVICE · PARTS THAT FIT THIS CAR — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Log service · Parts that fit this car (Desktop Web App with a phone layout, for fleet owners, fleet managers and their staff):
+
+Design a new "Parts that fit this car" panel inside the existing "Log service" dialog of Fleet maintenance. The person using it is a normal fleet owner, not a mechanic: they never know a part number and never type one. When they pick a job that is a part (for example "Oxygen sensor") and say where on the car it is ("Front (before converter)"), Roam shows them the parts that fit their car, as simple cards: the maker's logo, the part's plain name, one number to show at the parts store, and a badge saying whether it is the part made for their car or another part that also fits. They tap one card to choose it. If Roam doesn't have that part for their car yet, the panel says so in plain words and offers one button, "Ask Roam to find it"; after the tap it says "Roam is looking for it. We'll tell you when it's added." and Roam later sends a notification "Roam added …". Because people usually buy the part first and fit it later, the panel also offers "Plan it": the job goes on the car's "Not done yet" list with the chosen part, and "Log it now" later opens the job with that part already chosen, so they only add the price and the labour. The old boxes on part jobs ("Brand", "Part number", "Link part (optional)") are gone. Nothing about parts is for sale: no prices, no shop links. The dialog keeps its four steps: 1 Date & mileage, 2 Work done, 3 Details, 4 Review. The design must feel modern, calm and effortless, like the best consumer banking and shopping apps: generous spacing, soft 12–16px rounded cards, soft shadows, larger friendly type, clear hierarchy, very few numbers on screen. Draw each screen tall enough that every element is visible, with no inner scrolling and nothing cut off.
+
+
+BRAND IDENTITY:
+- Match the existing Roam Fleet web app and the existing Log service dialog exactly (do not redesign them):
+  - Top: a white nav row with the black "Roam Fleet" app tile, then: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations (active, underlined), Delivery Operations, Analytics, Reports, Business Finance, a bell with a red count, the avatar.
+  - Dark navy sub-bar below it: "Switch vehicle or search hub…" on the left; "07:48:21 AM EST · America/Jamaica · JM (JMD)" and an org chip "DE · Deeki T · platform_owner" on the right.
+  - Page "Fleet maintenance" with the orange wrench icon, a secondary "Refresh" button and a black primary "+ Log service" button on the right.
+  - Log service dialog: white, 720px wide, title "Log service" with a wrench icon in a round grey tile, subtitle "Vehicle maintenance & repair ledger entry", and a close X. Under the title, a black car bar: car icon, "Toyota Roomy (2019)", a grey plate chip "5179KZ", a green chip "Petrol"; on the right "198,973 km · 18 Nov 2026".
+  - Step bar on a pale lavender strip: "✓ Date & mileage · ✓ Work done · 3 Details · 4 Review", done steps with green round checks, the current step with a black round number.
+  - The job card: job icon, "Oxygen sensor", a grey pill "Replace"; under it today's "Where on the car" chips ("Front (before converter)", "Rear (after converter)", "Not sure"), then the new panel, then today's "Service charge" row and "Items used" list.
+  - Footer: a red "Cancel" button on the left; on the right a grey "← Back" and the black primary button.
+- LIGHT MODE (default):
+  - Primary: near-black #030213 — primary buttons, the current step, a picked chip, a chosen part card's border
+  - Background: white #FFFFFF; page wash: #f8fafc; pale lavender panels: #f4f3fb
+  - Cards: white, 1px border rgba(0,0,0,0.1), 16px corners, soft shadow
+  - Text: #0a0a0a; muted text: #717182
+  - "Made for your car" / Verified / Added: emerald #059669 on a soft green #ecfdf5
+  - "Also fits": blue #2563eb on #eff6ff
+  - "Check before buying": amber #b45309 on #fffbeb
+  - Roam is looking / Ask Roam: indigo #4f46e5 on #eef2ff
+  - Not done yet: amber #b45309 on #fffbeb
+  - Error: red #d4183d on #fff1f2
+- DARK MODE:
+  - Background #252525; surface #2e2e2e; border #444444
+  - Text #fafafa; muted #b4b4b4; primary buttons light #fafafa with dark text
+  - Green #34d399 on #064e3b; blue #93c5fd on #172554; amber #fbbf24 on #451a03; indigo #a5b4fc on #1e1b4b; red #f87171 on #450a0a
+- Part card (the heart of the panel):
+  - 16px corners, white, soft shadow, 16px padding, a 40px round maker logo on the left (Toyota, Denso, NGK).
+  - Line 1: the part's plain name, 15px semibold — "Front oxygen sensor".
+  - Line 2: the maker in muted text — "Toyota (genuine)" / "Denso" / "NGK".
+  - Line 3: one small "For the parts store" label and the number in a large, easy-to-read mono font — "89467-B1040" — with a secondary "Copy" button.
+  - A badge top-right, words plus a small icon, never colour alone: "Made for your car" (green, shield-check), "Also fits" (blue, link), "Check before buying" (amber, alert).
+  - Chosen card: a 2px near-black border, a filled round check top-left, and the words "Chosen".
+- Money is Jamaican dollars with tabular figures: "J$ 4,000"; kilometres "198,973 km"; dates "18 Nov 2026". Never codes, ids, chassis or engine codes, or words like "OEM", "catalogue", "interchange", "scheme", "catalyst", "position code", "line" or "request".
+- Typography: Inter. Dialog title 20px semibold, panel title 17px semibold, card name 15px semibold, body 14px, helper 13px. Plates, km, money and the parts-store number in a mono font with tabular figures.
+- Icons: Lucide line icons, 20px. No gradients, glass or 3D. No AI badges, no sparkles, no percentages, no scores.
+- Buttons always look like buttons:
+  - Primary = solid near-black with white text. One primary per screen.
+  - Secondary = white with a visible #cbd5e1 border and dark text.
+  - "Ask Roam to find it" = solid indigo #4f46e5 with white text and a search icon (it is the panel's main action when the panel is empty).
+  - Danger (Cancel, Remove) = red outline and red text; the dialog's "Cancel" stays as it is today.
+  - A disabled button is a pale grey fill with grey text and a muted reason line next to it.
+  - Never underlined text links, never grey text-only buttons. Every confirm is an in-app overlay, never a browser pop-up.
+- Sample data (design samples only):
+  - Car: Toyota Roomy (2019) · 5179KZ · Petrol · 198,973 km. Service on 18 Nov 2026 at "Northside Auto, Spanish Town".
+  - Job: "Oxygen sensor" · Replace. Where on the car: "Front (before converter)" or "Rear (after converter)".
+  - Front options: "Front oxygen sensor · Toyota (genuine) · 89467-B1040 · Made for your car"; "Front oxygen sensor · Denso · 234-9119 · Also fits"; "Front oxygen sensor · NGK · 24341 · Check before buying".
+  - Rear: Roam has nothing yet.
+  - Service charge "J$ 4,000". The person: "Deeki T".
+
+
+DESIGN PRINCIPLES:
+- Roam does the knowing. The person only picks the job and where it is; Roam shows what fits. Nothing on any screen asks for a part number.
+- One clear next step per state: choose a part, or ask Roam, or plan it. Never two primary buttons.
+- Plain words a non-mechanic understands: "Made for your car", "Also fits", "Check before buying", "Roam is looking for it", "Plan it", "Log it now".
+- The panel sits right under "Where on the car", because the parts depend on it. Until a place is picked, the panel says "Pick where on the car to see the parts that fit."
+- Information only: no prices, no stock, no shop names, no "buy" buttons.
+- Saving is never blocked by parts: a job can always be saved with no part chosen ("Skip — I don't know the part").
+- Everything else in the dialog stays exactly as it is today.
+
+
+SCREEN 1: LOG SERVICE · DETAILS — PARTS THAT FIT, NONE CHOSEN YET
+- The Log service dialog on step 3 Details, Toyota Roomy car bar, job card "Oxygen sensor · Replace".
+- "Where on the car": "Front (before converter)" picked (filled near-black chip with check), "Rear (after converter)" and "Not sure" not picked.
+- Directly under it, the panel: title "Parts that fit your Toyota Roomy" with a small car icon; helper "Show one of these at the parts store. Tap the one you're using."
+- Three part cards stacked (full width): Toyota (genuine) "Made for your car" first, then Denso "Also fits", then NGK "Check before buying"; each with logo, name, maker, "For the parts store 89467-B1040" in large mono, a "Copy" button and its badge.
+- Under the cards: a secondary button "Plan it — I'll buy it first" with a calendar icon, and a muted line "Adds this job to the car's Not done yet list."
+- Then today's "Service charge" row with "J$ 4,000" and the "No charge (free)" checkbox, and today's "Items used" (supplies only, nothing ticked, "+ Other item").
+- Running total pill "Job J$ 4,000 + items J$ 0 = J$ 4,000", the black "Save line →" button.
+- Footer: Cancel, ← Back, "Continue to review →".
+
+SCREEN 2: LOG SERVICE · DETAILS — A PART CHOSEN
+- Same as Screen 1, but the Toyota (genuine) card is chosen: 2px near-black border, filled round check, the word "Chosen".
+- A small green line under the cards: "Using Toyota (genuine) front oxygen sensor" with a check icon, and a secondary "Change" button.
+- The other two cards are a little lighter (not hidden).
+- "Plan it — I'll buy it first" still available as a secondary button.
+- "Save line →" enabled.
+
+SCREEN 3: LOG SERVICE · DETAILS — ROAM DOESN'T HAVE THIS PART YET
+- Same dialog; "Where on the car": "Rear (after converter)" picked.
+- The panel shows one friendly empty card on the pale indigo #eef2ff wash with a large search illustration-icon: title "Roam doesn't have this part for your Toyota Roomy yet", body "Tap below and Roam's team will find the right rear oxygen sensor for your car. We'll tell you when it's added — usually within a few days."
+- The indigo primary button "Ask Roam to find it" with a search icon.
+- Under it, a muted line: "You can still save this job now and add the part later." and a secondary button "Skip — I don't know the part".
+- "Save line →" is a normal (secondary-style) action here because the panel's main action is Ask Roam; it stays enabled.
+
+SCREEN 4: LOG SERVICE · DETAILS — ROAM IS LOOKING
+- Same as Screen 3 after the tap.
+- The empty card changes to: indigo clock icon, title "Roam is looking for it", body "We'll send you a notification when the rear oxygen sensor for your Toyota Roomy is added." and a small green check line "Asked on 18 Nov 2026".
+- The "Ask Roam to find it" button is gone (asking twice does nothing).
+- Below: the secondary "Plan it — I'll buy it later" button and "Skip — I don't know the part".
+- "Save line →" enabled.
+
+SCREEN 5: PLAN IT — IN-APP OVERLAY
+- A centred white overlay card on top of the dimmed Log service dialog (in-app, not a browser pop-up), 480px wide, 16px corners.
+- Title "Plan this job for later", body "We'll add it to your Toyota Roomy's Not done yet list. When the part is fitted, open it and tap Log it now to add the price and labour."
+- A summary card: "Oxygen sensor · Front (before converter)", the chosen part "Toyota (genuine) · 89467-B1040" with its green "Made for your car" badge, and "J$ 0 · not charged yet".
+- An optional note field "Note (optional)" with placeholder "e.g. buy at Northside Auto on Friday".
+- Buttons: secondary "Cancel", primary "Add to Not done yet".
+
+SCREEN 6: NOT DONE YET LIST — THE PLANNED JOB
+- Fleet maintenance page, the existing "Found by inspection / Not done yet" drawer for Toyota Roomy 5179KZ (match today's drawer style).
+- Drawer title "Not done yet · Toyota Roomy (2019) 5179KZ", subtitle "Jobs to do on this car".
+- A card: "Oxygen sensor · Front (before converter)", a small amber chip "Not done yet", "Planned 18 Nov 2026 by Deeki T", the part line with Toyota logo "Toyota (genuine) · 89467-B1040" and its "Copy" button, the note "buy at Northside Auto on Friday".
+- Buttons on the card: primary "Log it now", secondary "Not needed".
+- A second card below from an inspection, to show both kinds live in one list: "Wiper Blades · Driver" "Found 12 Oct 2026 by inspection", no part.
+
+SCREEN 7: LOG IT NOW — PART ALREADY CHOSEN
+- Log service dialog opened from "Log it now", step 3 Details, job "Oxygen sensor · Replace".
+- "Front (before converter)" already picked; the Toyota (genuine) card already "Chosen", with a small blue line "From your Not done yet list (planned 18 Nov 2026)".
+- The Service charge field is focused and empty with the hint "What did the garage charge for fitting it?"; the "Items used" list shows the chosen part as a ticked item "Front oxygen sensor · Toyota (genuine)" with qty 1 and an empty "Cost each" box hinted "What you paid for the part".
+- Total pill and "Save line →".
+
+SCREEN 8: "ROAM ADDED" NOTIFICATION
+- Fleet maintenance page with the bell open (match today's notification dropdown).
+- Top item, unread dot: green check icon, title "Roam added the rear oxygen sensor for your Toyota Roomy", body "Tap to see the parts that fit.", time "2 min ago".
+- Below it two older read notifications in today's style.
+- Behind the dropdown, nothing else changes.
+
+SCREEN 9: PARTS PANEL — STATES
+- One tall screen showing, stacked as separate cards with a small grey label above each:
+  - "Pick a place first": the panel with a muted car-outline icon and "Pick where on the car to see the parts that fit."
+  - "Loading": three soft grey skeleton part cards.
+  - "Couldn't load": a red-tinted card "We couldn't load the parts. Check your connection." with a secondary "Try again" button.
+  - "Car not linked": a slate card "This car isn't matched to a Roam car yet, so we can't show parts." with a secondary "Match my car" button.
+  - "Not sure where": "Not sure" picked; the panel shows parts for both places, grouped under small headings "Front (before converter)" and "Rear (after converter)".
+
+SCREEN 10: PHONE 390PX — PARTS THAT FIT
+- The Log service dialog as a full-screen sheet on a 390px phone, step 3 Details.
+- Compact header with "Step 3 of 4 · Details", the job card "Oxygen sensor", the "Where on the car" chips wrapping onto two lines with Front picked.
+- The panel with the three part cards stacked full width; the parts-store number still large and readable; "Copy" buttons 40px tall.
+- "Plan it — I'll buy it first" full width.
+- A sticky bottom bar: total "J$ 4,000" on the left, black "Save line →" on the right.
+
+
+ADDITIONAL UI COMPONENTS:
+- Parts that fit panel: title row (car icon + "Parts that fit your <car>"), helper line, stacked part cards, then the Plan it button. 16px gap between cards.
+- Part card: logo, name, maker, "For the parts store" + number + Copy, badge; chosen state with border, check and "Chosen".
+- Badges (words + icon, 24px tall, fully rounded): "Made for your car" green, "Also fits" blue, "Check before buying" amber.
+- Empty card (Roam doesn't have it): indigo wash, large icon, title, body, indigo "Ask Roam to find it" button, muted "save now" line, "Skip — I don't know the part" secondary.
+- Roam is looking card: indigo clock icon, title, body, green "Asked on …" line.
+- Plan it overlay: title, body, summary card, optional note, Cancel + "Add to Not done yet".
+- "Copy" button: secondary, 32px, copy icon + "Copy"; after a tap it shows "Copied" with a check for two seconds.
+- Notification row: icon, title, body, time, unread dot.
+
+
+INTERACTIONS:
+- The panel appears only on part jobs (jobs that are a part, like Oxygen sensor, Brake pads, Battery). Service-only jobs (oil change labour, inspection) look exactly as today.
+- Picking or changing "Where on the car" reloads the cards for that place. If the chosen card no longer fits the new place, it is un-chosen.
+- Tapping a card chooses it; tapping the chosen card again un-chooses it. Only one card can be chosen per job.
+- The chosen part is saved with the job; the person never types its name or number.
+- "Ask Roam to find it" sends the car, the job and the place to Roam's team in one tap, then shows "Roam is looking for it". If someone else already asked for the same part on the same car model, the person sees the same "Roam is looking" state. Asking never blocks saving.
+- When Roam adds the part, everyone who asked gets the "Roam added …" notification; tapping it opens this car's parts for that job.
+- "Plan it" opens the overlay; "Add to Not done yet" closes the dialog's job (J$ 0, nothing charged) and shows a green toast "Added to Not done yet for Toyota Roomy". "Log it now" later opens the job with the part already chosen.
+- "Skip — I don't know the part" collapses the panel to one muted line "No part chosen" with a secondary "Show parts" button.
+- On the phone, cards stack full width, chips wrap, and the bottom bar is sticky.
+
+
+Spec screens / Area
+| Screen | Area |
+| 1 | Log service · Details — Parts that fit, none chosen |
+| 2 | Log service · Details — a part chosen |
+| 3 | Log service · Details — Roam doesn't have this part yet, Ask Roam to find it |
+| 4 | Log service · Details — Roam is looking |
+| 5 | Plan it — in-app overlay |
+| 6 | Not done yet list — the planned job |
+| 7 | Log it now — part already chosen |
+| 8 | "Roam added" notification |
+| 9 | Parts panel — states |
+| 10 | Phone 390px — Parts that fit |

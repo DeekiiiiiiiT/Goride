@@ -13,6 +13,7 @@ import {
   fetchCatalogResearchJob,
   partPlainName,
   postCatalogResearchJobAction,
+  uiStatusBucket,
 } from "../../../../services/pendingPartsCatalogService";
 import { buildPartSearchText } from "./buildPartSearchText";
 import {
@@ -25,6 +26,7 @@ import {
   type PartDrawerVariant,
 } from "./pendingCatalogViewModels";
 import { PendingResearchJobPanel } from "./PendingResearchJobPanel";
+import { AddedPickPartPanel } from "./AddedPickPartPanel";
 
 export type PendingPartDrawerDisplay = {
   partTitle: string;
@@ -74,6 +76,11 @@ export function PendingPartRequestDrawer({
   const [researchBusy, setResearchBusy] = useState(false);
   const [jobDetail, setJobDetail] = useState<Awaited<ReturnType<typeof fetchCatalogResearchJob>> | null>(null);
   const [jobLoading, setJobLoading] = useState(false);
+  /** Slice C (LC-09): the "Added — pick the part" list is open. */
+  const [pickingAdded, setPickingAdded] = useState(false);
+  useEffect(() => {
+    setPickingAdded(false);
+  }, [group?.groupId, open]);
 
   const jobId = detail?.researchJobId || job?.jobId || null;
   const variant: PartDrawerVariant = partDrawerVariantFromJobState(job?.state ?? jobDetail?.job?.state as string);
@@ -520,8 +527,30 @@ export function PendingPartRequestDrawer({
                 Looks right
               </button>
             </div>
+          ) : pickingAdded && group ? (
+            <AddedPickPartPanel
+              accessToken={accessToken}
+              groupId={group.groupId}
+              onCancel={() => setPickingAdded(false)}
+              onDone={() => {
+                setPickingAdded(false);
+                void onReload();
+                onClose();
+              }}
+            />
           ) : (
             <div className="grid grid-cols-12 gap-2">
+              {group && !group.groupId.startsWith("legacy:") && uiStatusBucket(group.status) !== "added" ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  data-testid="added-pick-part-open"
+                  className="col-span-12 h-10 rounded-xl border border-[#1b192e]/30 dark:border-[#e4e1ec]/30 bg-white dark:bg-[#15161d] text-[13px] font-semibold text-[#1b192e] dark:text-[#e4e1ec] hover:bg-[#f4f2fd] dark:hover:bg-[#23242e]"
+                  onClick={() => setPickingAdded(true)}
+                >
+                  Added — pick the part
+                </button>
+              ) : null}
               <button
                 type="button"
                 disabled={busy}

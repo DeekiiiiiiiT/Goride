@@ -255,6 +255,13 @@ jobs:
           supabase/functions/_fleet-server/canonical_from_ops_maintenance.test.ts
           supabase/functions/_fleet-server/maintenance_routes_policy.test.ts
           supabase/functions/_fleet-server/log_service_positions.test.ts
+          supabase/functions/_fleet-server/inspection_findings.test.ts
+          supabase/functions/_fleet-server/log_service_find_ask.test.ts
+          supabase/functions/_fleet-server/log_service_part_fit.test.ts
+          supabase/functions/_fleet-server/log_service_parts_notices.test.ts
+          supabase/functions/_fleet-server/log_service_planned_guard.test.ts
+          supabase/functions/_fleet-server/parts_finder_places.test.ts
+          supabase/functions/_fleet-server/parts_finder_group.test.ts
 
       - name: Deno test platform MFA gate
         run: deno test --no-check supabase/functions/_fleet-server/platform_mfa_gate.test.ts

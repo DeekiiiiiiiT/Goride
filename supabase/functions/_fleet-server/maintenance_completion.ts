@@ -19,6 +19,7 @@ import {
 import { projectFromMaintenanceLog } from "./odometer_ledger.ts";
 import { commitPartsUsage } from "./parts_match.ts";
 import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
+import { PLANNED_JOB_CONFLICT, isPlannedWorkOrder } from "./log_service_planned_guard.ts";
 import { mapDbLineToApi } from "./service_items_save.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -441,6 +442,10 @@ export async function runCompletion(
   hooks?: RunCompletionHooks,
 ): Promise<CompletionHttpResult> {
   const { orgId, workOrderId, actorId, wo, lineRows, enrichLines, mapCompletedItem } = input;
+
+  if (isPlannedWorkOrder(wo)) {
+    return { status: PLANNED_JOB_CONFLICT.status, body: { ...PLANNED_JOB_CONFLICT.body } };
+  }
 
   const { data: claimRaw, error: claimErr } = await supabase.rpc("fleet_claim_completion", {
     p_organization_id: orgId,

@@ -39,6 +39,7 @@ Deno.test("legacy mode lists the parts in the first type only", () => {
     tier: 4,
     reason: "old",
     position: null,
+    listingPlace: null,
     side: null,
     status: "verified",
     fitsVariantIds: ["car"],

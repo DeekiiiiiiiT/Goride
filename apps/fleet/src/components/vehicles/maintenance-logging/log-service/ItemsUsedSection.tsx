@@ -20,7 +20,7 @@ import {
   type JobItem,
 } from "./itemsUsed";
 import type { JobItemsStatus } from "./useJobItems";
-import { cleanPartNumberInput, isUnknownPart, RoamLooksItUpLine, UNKNOWN_PART_COPY } from "./unknownParts";
+import { isUnknownPart, RoamLooksItUpLine } from "./unknownParts";
 
 /** Stitch accents (service-items-fleet tailwind config). */
 export const ACCENT = {
@@ -353,20 +353,7 @@ function OtherItemBlock({
           />
         </label>
       </div>
-      {gapsEnabled ? (
-        // Stitch F2: Part number (optional) + its helper, under the other fields.
-        <label className="flex flex-col gap-1 md:max-w-[50%]">
-          <span className={`${labelMd} text-on-surface-variant`}>{UNKNOWN_PART_COPY.partNumber}</span>
-          <input
-            className={`${field} font-mono font-semibold tracking-wide`}
-            data-testid="other-item-part-number"
-            value={item.partNumber ?? ""}
-            maxLength={80}
-            onChange={(e) => onUpdate({ partNumber: cleanPartNumberInput(e.target.value) || null })}
-          />
-          <span className={`${labelMd} text-on-surface-variant`}>{UNKNOWN_PART_COPY.partNumberHelper}</span>
-        </label>
-      ) : null}
+      {/* Slice C (LC-04): no Part number box — Roam looks the item up by its name. An old saved number is kept. */}
       {gapsEnabled ? <RoamLooksItUpLine /> : null}
       <div className="flex items-center justify-between gap-2">
         {err ? <p className={`${labelMd} text-error`}>{err}</p> : <span />}

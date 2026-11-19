@@ -1,7 +1,7 @@
 {
   "slug": "fleet-ops",
-  "generatedAt": "2026-11-18T11:44:40.987Z",
-  "routeCount": 158,
+  "generatedAt": "2026-11-19T12:39:14.868Z",
+  "routeCount": 159,
   "routes": [
     "DELETE ${ADMIN_CAT}/:id",
     "DELETE ${ADMIN}/:id",
@@ -139,6 +139,7 @@
     "POST /maintenance-inspection-findings",
     "POST /maintenance-log-number/reserve",
     "POST /maintenance-logs",
+    "POST /maintenance-planned-jobs",
     "POST /maintenance-requests",
     "POST /maintenance-schedule/:vehicleId/bootstrap",
     "POST /maintenance-service-ledger/backfill",

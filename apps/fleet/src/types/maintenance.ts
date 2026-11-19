@@ -258,6 +258,29 @@ export type FoundWorkItem = {
   positions?: string[];
   positionScheme?: string | null;
   positionAware?: boolean | null;
+  /** Slice C: "planned" = added with Plan it (bought first, logged later); else found by an inspection. */
+  source?: "planned" | "inspection";
+  /** Slice C: the part picked when it was planned. */
+  partId?: string | null;
+  partName?: string | null;
+  partBrand?: string | null;
+  partNumber?: string | null;
+};
+
+/** Slice C: a "Part on file" message in the maintenance bell (GET /parts/notices). */
+export type PartsNotice = {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  createdAt: string;
+  read: boolean;
+  carLabel: string | null;
+  /** One of the fleet's cars of that model (opens Find parts for it). */
+  vehicleId?: string | null;
+  jobId: string | null;
+  jobName: string | null;
+  places: string[] | null;
 };
 
 export type FoundWorkCounts = {

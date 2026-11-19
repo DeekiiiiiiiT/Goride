@@ -105,6 +105,19 @@ import {
   type DoneByFoundLine,
 } from "./inspection_findings_helpers.ts";
 import { displayNamesFor } from "./recon_desk_reads.ts";
+import { verifiedCarForVehicle } from "./fleet_parts_access.ts";
+import {
+  isPlannedWorkOrder,
+  mapFleetPlanJobError,
+  plannedJobConflictResponse,
+} from "./log_service_planned_guard.ts";
+import {
+  loadExistingLineParts,
+  partFitsVerifiedCar,
+  validateLinePartFitOnSave,
+} from "./log_service_part_fit.ts";
+import { positionCodesProblem } from "../../../packages/types/src/partPositions.ts";
+import { loadJobPositionMeta } from "./job_position_meta.ts";
 
 const assertVehicleCatalogPlatformAccess = assertPlatformStaffResponse;
 
@@ -115,6 +128,30 @@ function todayIso(): string {
 function rbacUserId(c: Context): string | null {
   const id = (c.get("rbacUser") as { userId?: string } | undefined)?.userId;
   return id && isUuid(String(id)) ? String(id) : null;
+}
+
+async function partsGapsLinePartFitGuard(
+  c: Context,
+  supabase: SupabaseClient,
+  orgId: string,
+  vehicleId: string,
+  workOrderId: string | null,
+  rawLines: unknown[],
+): Promise<Response | null> {
+  if (!(await isFeatureEnabled(FEATURE_FLAGS.LOG_SERVICE_PARTS_GAPS, orgId))) return null;
+  const existing = workOrderId ? await loadExistingLineParts(supabase, workOrderId) : undefined;
+  const fit = await validateLinePartFitOnSave(c, supabase, orgId, vehicleId, rawLines, existing);
+  if (!fit.ok) return c.json({ code: fit.code, error: fit.error }, fit.status);
+  return null;
+}
+
+function plannedWorkOrderGuardResponse(
+  c: Context,
+  wo: Record<string, unknown> | null | undefined,
+): Response | null {
+  if (!isPlannedWorkOrder(wo)) return null;
+  const { status, body } = plannedJobConflictResponse();
+  return c.json(body, status);
 }
 
 function aggregateFleetStatus(
@@ -2359,6 +2396,15 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (!prepared.ok) {
           return c.json({ code: prepared.code, error: prepared.error }, prepared.status);
         }
+        const partFitBlocked = await partsGapsLinePartFitGuard(
+          c,
+          supabase,
+          orgId,
+          vehicleId,
+          null,
+          rawLines,
+        );
+        if (partFitBlocked) return partFitBlocked;
         const discount = parseDiscount(log.discount ?? log.discount_amount) ?? 0;
         const logModeDb = logMode === "package" ? "package" : "quick_job";
         const packageComplete = logModeDb === "package" && !!templateId;
@@ -2651,6 +2697,18 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
 
           if (!prepared.ok) {
             return c.json({ code: prepared.code, error: prepared.error }, prepared.status);
+          }
+          // S5: editing a logged service checks a newly chosen part fits the car, like every other save.
+          if (rawEditLines.length) {
+            const partFitBlocked = await partsGapsLinePartFitGuard(
+              c,
+              supabase,
+              orgId,
+              vehicleId,
+              isUuid(editWorkOrderId) ? editWorkOrderId : null,
+              rawEditLines,
+            );
+            if (partFitBlocked) return partFitBlocked;
           }
 
           let storedDiscount = 0;
@@ -3775,6 +3833,95 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
     },
   );
 
+  route.post(
+    "/maintenance-planned-jobs",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        if (!(await isFeatureEnabled(FEATURE_FLAGS.LOG_SERVICE_PARTS_GAPS, orgId))) {
+          return c.json({ code: "log_service_parts_gaps_off" }, 404);
+        }
+        // A planned job lives on the Not done yet list (found work): without that switch nobody could see, close or
+        // log it (code review #2).
+        if (!(await isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId))) {
+          return c.json({ code: "inspection_findings_off" }, 404);
+        }
+        const body = (await c.req.json()) as Record<string, unknown>;
+        const vehicleId = String(body.vehicleId ?? body.vehicle_id ?? "").trim();
+        const jobId = String(body.jobId ?? body.job_id ?? body.componentId ?? body.component_id ?? "").trim();
+        const actorId = rbacUserId(c);
+        if (!actorId) return c.json({ code: "actor_required", error: "Sign in again." }, 401);
+        if (!vehicleId || !jobId || !isUuid(jobId)) {
+          return c.json({ error: "vehicleId and jobId are required" }, 400);
+        }
+
+        const access = await verifiedCarForVehicle(c, supabase, vehicleId);
+        if (access.status === 404) return c.json({ error: "Not found" }, 404);
+        if (access.status === 403) return c.json({ error: "Forbidden" }, 403);
+
+        const partIdRaw = body.partId ?? body.part_id;
+        const partId = partIdRaw != null && String(partIdRaw).trim() !== ""
+          ? String(partIdRaw).trim()
+          : null;
+        if (partId) {
+          // Same rule as every save (partFitsVerifiedCar, code review #4).
+          const fits = await partFitsVerifiedCar(supabase, access.catalogId ?? null, partId);
+          if (!fits) {
+            return c.json({
+              code: "line_part_not_for_car",
+              error: "That part does not fit this car.",
+            }, 400);
+          }
+        }
+
+        const placesRaw = body.places ?? body.positions ?? body.positionCodes ?? body.position_codes;
+        let positions: string[] | null = null;
+        if (Array.isArray(placesRaw)) {
+          positions = placesRaw.map(String).filter(Boolean);
+        }
+        if (positions?.length) {
+          const jobRow = await loadJobPositionMeta(supabase, jobId);
+          if (jobRow && positionCodesProblem(jobRow, positions)) {
+            return c.json({ code: "position_invalid", error: "That position doesn't fit this job. Pick again." }, 400);
+          }
+        }
+
+        const note = body.note != null ? String(body.note) : null;
+        const idempotencyKey = body.idempotencyKey ?? body.idempotency_key;
+        const key = idempotencyKey != null ? String(idempotencyKey).trim() : "";
+
+        const { data, error } = await supabase.rpc("fleet_plan_job", {
+          p_organization_id: orgId,
+          p_actor_id: actorId,
+          p_vehicle_id: vehicleId,
+          p_component_id: jobId,
+          p_positions: positions ?? [],
+          p_part_id: partId,
+          p_note: note,
+          p_idempotency_key: key,
+        });
+        if (error) {
+          const mapped = mapFleetPlanJobError(error.message ?? String(error));
+          if (mapped) return c.json({ code: mapped.code, error: mapped.error }, mapped.status);
+          throw error;
+        }
+        const row = (data ?? {}) as Record<string, unknown>;
+        return c.json({
+          workOrderId: row.workOrderId ?? row.work_order_id,
+          lineId: row.lineId ?? row.line_id,
+          created: row.created === true,
+          alreadyListed: row.alreadyListed === true,
+        });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
   // -------------------------------------------------------------------------
   // Tenant — work orders (job cards)
   // -------------------------------------------------------------------------
@@ -3800,6 +3947,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           if (statuses.length) q = q.in("status", statuses);
         } else if (board) {
           q = q.in("status", [...MAINTENANCE_WO_ACTIVE_STATUSES]);
+        } else {
+          q = q.neq("status", "planned");
         }
         const { data, error } = await q;
         if (error) throw error;
@@ -3969,6 +4118,15 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (!prepared.ok) {
           return c.json({ code: prepared.code, error: prepared.error }, prepared.status);
         }
+        const partFitBlockedCreate = await partsGapsLinePartFitGuard(
+          c,
+          supabase,
+          orgId,
+          vehicleId,
+          null,
+          rawLines,
+        );
+        if (partFitBlockedCreate) return partFitBlockedCreate;
         const lineRows = prepared.lines;
         const discountParsed = parseDiscount(body.discount ?? body.discount_amount);
         const discount = discountParsed ?? 0;
@@ -4100,6 +4258,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .maybeSingle();
         if (fetchErr) throw fetchErr;
         if (!existing) return c.json({ error: "Not found" }, 404);
+        const plannedBlocked = plannedWorkOrderGuardResponse(c, existing as Record<string, unknown>);
+        if (plannedBlocked) return plannedBlocked;
 
         if (isMixedPatchBody(body)) {
           return c.json({ error: "Save the job details and the status separately." }, 400);
@@ -4161,6 +4321,15 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
               return c.json({ code: prepared.code, error: prepared.error }, prepared.status);
             }
             linesForSave = prepared.lines;
+            const partFitBlocked = await partsGapsLinePartFitGuard(
+              c,
+              supabase,
+              orgId,
+              vehicleId,
+              id,
+              body.lines,
+            );
+            if (partFitBlocked) return partFitBlocked;
           } else {
             linesForSave = await loadWorkOrderLinesForRpc(supabase, id);
           }
@@ -4356,6 +4525,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .maybeSingle();
         if (fetchErr) throw fetchErr;
         if (!wo) return c.json({ error: "Not found" }, 404);
+        const plannedBlocked = plannedWorkOrderGuardResponse(c, wo as Record<string, unknown>);
+        if (plannedBlocked) return plannedBlocked;
         if (String(wo.status) === "cancelled") {
           return c.json({ error: "Cannot complete a cancelled work order" }, 400);
         }
@@ -4864,6 +5035,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .maybeSingle();
         if (fetchErr) throw fetchErr;
         if (!wo) return c.json({ error: "Not found" }, 404);
+        const plannedVoidBlocked = plannedWorkOrderGuardResponse(c, wo as Record<string, unknown>);
+        if (plannedVoidBlocked) return plannedVoidBlocked;
         if (String(wo.status) !== "completed") {
           return c.json({ error: "Only completed work orders can be voided" }, 400);
         }

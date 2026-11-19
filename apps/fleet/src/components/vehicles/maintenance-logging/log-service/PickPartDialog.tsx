@@ -259,15 +259,18 @@ export function PickPartDialog({
                   onChange={(e) => setBrand(e.target.value)}
                 />
               </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-on-surface-variant">{COPY.partNumber}</span>
-                <input
-                  className="h-10 px-3 rounded-lg bg-surface-container-low text-sm text-on-surface focus:outline-none"
-                  value={partNumber}
-                  maxLength={60}
-                  onChange={(e) => setPartNumber(e.target.value)}
-                />
-              </label>
+              {/* Slice C (LC-04): with the parts gaps switch on, no part number is asked; an old saved one is kept. */}
+              {!gapsEnabled ? (
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs font-medium text-on-surface-variant">{COPY.partNumber}</span>
+                  <input
+                    className="h-10 px-3 rounded-lg bg-surface-container-low text-sm text-on-surface focus:outline-none"
+                    value={partNumber}
+                    maxLength={60}
+                    onChange={(e) => setPartNumber(e.target.value)}
+                  />
+                </label>
+              ) : null}
               {gapsEnabled ? <RoamLooksItUpLine className="sm:col-span-2" /> : null}
             </div>
           ) : null}
