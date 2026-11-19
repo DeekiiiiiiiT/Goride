@@ -4,6 +4,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { PART_MATCH_TIERS } from "../../../packages/types/src/partsResolution.ts";
 import { formatPartsFitParam, resolvePartsFitPairs } from "../../../packages/types/src/partsFitParam.ts";
+import { wheelCodesToFitPairs } from "../../../packages/types/src/partPositions.ts";
 
 const MATCH_TAGS = new Set(PART_MATCH_TIERS.map((row) => row.tag));
 
@@ -55,6 +56,39 @@ export function fitDescriptorFromBody(body: Record<string, unknown>): {
   };
 }
 
+function bodyHasExplicitFit(body: Record<string, unknown>): boolean {
+  const fitRaw = body.fit ? String(body.fit).trim() : "";
+  const fitDesc = body.fitDescriptor ? String(body.fitDescriptor).trim() : "";
+  const pos = body.position ? String(body.position).trim() : "";
+  const side = body.side ? String(body.side).trim() : "";
+  return !!(fitRaw || fitDesc || pos || side);
+}
+
+export function fitFieldsForPartsRequest(
+  fitBody: Record<string, unknown>,
+  positionCodes: string[] | null | undefined,
+): {
+  fitDescriptor: string | null;
+  install_position: string | null;
+  install_side: string | null;
+} {
+  if (bodyHasExplicitFit(fitBody)) {
+    return fitDescriptorFromBody(fitBody);
+  }
+  const codes = positionCodes?.length ? positionCodes : [];
+  const pairs = wheelCodesToFitPairs(codes);
+  if (!pairs.length) {
+    return { fitDescriptor: null, install_position: null, install_side: null };
+  }
+  const fitDescriptor = formatPartsFitParam(pairs);
+  const primary = pairs[0];
+  return {
+    fitDescriptor: fitDescriptor ? fitDescriptor.slice(0, 120) : null,
+    install_position: primary?.axle ?? null,
+    install_side: primary?.side ?? null,
+  };
+}
+
 export async function buildPartsSourcingInsert(
   supabase: SupabaseClient,
   input: {
@@ -74,10 +108,15 @@ export async function buildPartsSourcingInsert(
     sentAt: string | null;
     replyDueAt: string | null;
     oldPartNumber?: string | null;
+    positionScheme?: string | null;
+    positionCodes?: string[] | null;
   },
 ) {
   const { vehicle_catalog_id, platform_id } = await resolveCatalogAndPlatform(supabase, input.vehicleCatalogId);
-  const fitFields = fitDescriptorFromBody(input.fit);
+  const fitFields = fitFieldsForPartsRequest(input.fit, input.positionCodes);
+  const codes = input.positionCodes?.length ? input.positionCodes.map(String) : [];
+  const scheme = codes.length && input.positionScheme ? String(input.positionScheme) : null;
+  const storedCodes = scheme && codes.length ? codes : null;
   return {
     organization_id: input.orgId,
     vehicle_id: input.vehicleId,
@@ -101,5 +140,7 @@ export async function buildPartsSourcingInsert(
     old_part_number: input.oldPartNumber
       ? String(input.oldPartNumber).replace(/[^A-Za-z0-9-]/g, "").slice(0, 80)
       : null,
+    position_scheme: storedCodes ? scheme : null,
+    position_codes: storedCodes,
   };
 }

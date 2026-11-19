@@ -20,6 +20,8 @@ import { itemsUsedText } from "./serviceHistoryItems";
 import { FoundHistorySection } from "./FoundByInspection";
 import { FromInspectionChip } from "./log-service/FoundWorkSection";
 import { isFoundToday } from "./log-service/foundWork";
+import { linePositionsText } from "./log-service/positionChips";
+import { SourcingLine } from "./log-service/unknownParts";
 
 type ApiLine = MaintenanceLogLine;
 
@@ -128,7 +130,11 @@ export function ServiceHistoryViewDialog({
                   <li key={l.id ?? i} className="px-3 py-2">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-medium">{l.categoryName || "—"}</p>
+                      {/* Stitch F8: "Oxygen sensor · Front (before converter)" (LS-07). */}
+                      <p className="font-medium" data-testid="service-details-job">
+                        {l.categoryName || "—"}
+                        {linePositionsText(l) ? ` · ${linePositionsText(l)}` : ""}
+                      </p>
                       {/* Stitch powertrain 08: the chips sit on their own line under the job name. */}
                       {l.fitAtLog === "no" || l.isHighVoltage || isFoundToday(l) ? (
                         <span className="mt-1 flex flex-wrap gap-1">
@@ -138,7 +144,7 @@ export function ServiceHistoryViewDialog({
                         </span>
                       ) : null}
                       <p className="text-xs text-stitch-secondary">
-                        {[l.systemName, l.positions?.length ? l.positions.join(" ") : null, l.brand, l.partNumber]
+                        {[l.systemName, l.brand, l.partNumber]
                           .filter(Boolean)
                           .join(" · ") || " "}
                       </p>
@@ -152,6 +158,17 @@ export function ServiceHistoryViewDialog({
                       <span className="font-semibold text-on-surface">Items used:</span> {itemsUsedText(l.items, wo.currency)}
                     </p>
                   ) : null}
+                  {/* LS-16 / Stitch F8: what happened to each part Roam didn't have. */}
+                  {(l.items || [])
+                    .filter((it) => it.sourcingState)
+                    .map((it, k) => (
+                      <div key={it.id ?? k} className="mt-1 flex flex-col gap-0.5" data-testid="service-details-unknown-part">
+                        <span className="text-xs text-on-surface">
+                          {it.partNumber ? `${it.itemName} · ${it.partNumber}` : it.itemName}
+                        </span>
+                        <SourcingLine item={it} />
+                      </div>
+                    ))}
                   </li>
                 ))}
               </ul>

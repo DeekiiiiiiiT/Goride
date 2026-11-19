@@ -2,14 +2,29 @@
  * Fleet intake dedupe, daily cap, job enqueue (audit B2).
  */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { pendingPartsGroupKey } from "./pending_parts_group.ts";
+import { researchGroupKeyV2 } from "./pending_parts_group.ts";
 
 export const DAILY_REQUEST_LIMIT = 30;
 export const DAILY_LIMIT_MESSAGE =
   "You've sent 30 requests today. Roam will pick up more tomorrow.";
 
-export function researchGroupKeyFromRow(row: Record<string, unknown>): string {
-  return pendingPartsGroupKey(row);
+export async function researchGroupKeyFromRow(
+  supabase: SupabaseClient,
+  row: Record<string, unknown>,
+): Promise<string> {
+  return researchGroupKeyV2(supabase, {
+    vehicle_catalog_id: row.vehicle_catalog_id ? String(row.vehicle_catalog_id) : null,
+    maintenance_component_id: row.maintenance_component_id ? String(row.maintenance_component_id) : null,
+    fit_descriptor: row.fit_descriptor ? String(row.fit_descriptor) : null,
+    install_side: row.install_side ? String(row.install_side) : null,
+    match_type: row.match_type ? String(row.match_type) : null,
+    position_scheme: row.position_scheme ? String(row.position_scheme) : null,
+    position_codes: Array.isArray(row.position_codes) ? row.position_codes.map(String) : null,
+    old_part_number: row.old_part_number ? String(row.old_part_number) : null,
+    // Find parts never keys by its typed words: the v2 rewrite gave open requests and jobs no name, and "Brake pads" /
+    // "brake pad front" must stay one request (code review #1). Only service-log items without a number use a name.
+    name: "",
+  });
 }
 
 export function jamaicaDayStartUtc(now = new Date()): string {
@@ -63,6 +78,8 @@ export async function findDedupedOpenRequest(
 export async function ensureCatalogResearchJob(
   supabase: SupabaseClient,
   row: {
+    need_text: string;
+    old_part_number?: string | null;
     vehicle_catalog_id: string | null;
     maintenance_component_id: string | null;
     fit_descriptor: string | null;
@@ -71,44 +88,20 @@ export async function ensureCatalogResearchJob(
   },
   groupKey: string,
 ): Promise<string | null> {
-  const { data: existing, error: findErr } = await supabase
-    .from("catalog_research_job")
-    .select("id, fleet_count")
-    .eq("group_key", groupKey)
-    .in("state", ["queued", "researching", "checking", "needs_review", "auto_added"])
-    .maybeSingle();
-  if (findErr) throw findErr;
-  if (existing?.id) {
-    await supabase
-      .from("catalog_research_job")
-      .update({ fleet_count: (existing.fleet_count || 1) + 1, updated_at: new Date().toISOString() })
-      .eq("id", existing.id);
-    return String(existing.id);
-  }
-
-  const { data: created, error: insErr } = await supabase
-    .from("catalog_research_job")
-    .insert({
-      job_type: "part",
-      group_key: groupKey,
-      vehicle_catalog_id: row.vehicle_catalog_id,
-      maintenance_component_id: row.maintenance_component_id,
-      fit_descriptor: row.fit_descriptor,
-      match_type: row.match_type,
-      fleet_count: 1,
-      state: "queued",
-    })
-    .select("id")
-    .single();
-  if (insErr) throw insErr;
-  const jobId = String(created.id);
-  const { error: qErr } = await supabase.rpc("catalog_research_enqueue_job", { p_job_id: jobId });
-  if (qErr) throw qErr;
-  await supabase.rpc("catalog_research_log_event", {
-    p_job_id: jobId,
-    p_step: "enqueue",
-    p_outcome: "queued",
-    p_detail: { groupKey },
+  const cleanedPn = row.old_part_number
+    ? String(row.old_part_number).replace(/[^A-Za-z0-9-]/g, "").slice(0, 80)
+    : null;
+  const { data, error } = await supabase.rpc("catalog_research_join_or_create_job", {
+    p_group_key: groupKey,
+    p_vehicle_catalog_id: row.vehicle_catalog_id,
+    p_component_id: row.maintenance_component_id,
+    p_fit_descriptor: row.fit_descriptor,
+    p_match_type: row.match_type,
+    p_requested_name: row.need_text,
+    p_requested_part_number: cleanedPn || null,
+    p_origin: "find_parts",
   });
-  return jobId;
+  if (error) throw error;
+  const jobId = (data as Record<string, unknown>)?.jobId;
+  return jobId != null ? String(jobId) : null;
 }

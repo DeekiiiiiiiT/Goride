@@ -102,6 +102,7 @@ export function FoundWorkSection({
   onModeChange,
   onNoteChange,
   onRemove,
+  renderWhere,
 }: {
   drafts: FoundDraft[];
   currency: string;
@@ -109,6 +110,8 @@ export function FoundWorkSection({
   onModeChange: (jobId: string, mode: FoundMode) => void;
   onNoteChange: (jobId: string, note: string) => void;
   onRemove: (jobId: string) => void;
+  /** "Where on the car" chips under a "Not done yet" row's name (Stitch F5, LS-06). */
+  renderWhere?: (d: FoundDraft) => React.ReactNode;
 }) {
   const counts = foundCounts(drafts);
   const addButton = (
@@ -171,6 +174,7 @@ export function FoundWorkSection({
                     </button>
                   </div>
                 </div>
+                {d.mode === "later" && renderWhere ? renderWhere(d) : null}
                 {d.mode === "today" ? (
                   <p className={`${LT.bodySm} ${LS.muted}`}>{FOUND_COPY.todayHelper}</p>
                 ) : (

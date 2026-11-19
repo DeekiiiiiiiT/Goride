@@ -115,6 +115,39 @@ Deno.test("parseLineItems part_source validation", () => {
   assertEquals(parseLineItems([partRow({ partSource: "typed", brand: "B" })], { declined: false }).ok, true);
 });
 
+Deno.test("parseLineItems other item part number cleaning", () => {
+  const cleaned = parseLineItems([{
+    source: "other",
+    itemKind: "other",
+    itemName: "Sensor",
+    qty: 1,
+    partNumber: " 89467-test1 ",
+  }], { declined: false });
+  assertEquals(cleaned.ok, true);
+  if (cleaned.ok) assertEquals(cleaned.items[0].part_number, "89467-test1");
+
+  const empty = parseLineItems([{
+    source: "other",
+    itemKind: "other",
+    itemName: "Sensor",
+    qty: 1,
+    partNumber: "!!!",
+  }], { declined: false });
+  assertEquals(empty.ok, true);
+  if (empty.ok) assertEquals(empty.items[0].part_number, null);
+
+  const supplyPn = parseLineItems([{
+    source: "suggested",
+    itemKind: "supply",
+    supplyId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    jobItemId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    qty: 1,
+    partNumber: "X",
+  }], { declined: false });
+  assertEquals(supplyPn.ok, false);
+  if (!supplyPn.ok) assertEquals(supplyPn.code, "part_number_not_allowed");
+});
+
 Deno.test("computeWoLineTotal with items (tests 21–23)", () => {
   assertEquals(
     computeWoLineTotal({ labor_amount: 3000, items_amount: 2000 }),

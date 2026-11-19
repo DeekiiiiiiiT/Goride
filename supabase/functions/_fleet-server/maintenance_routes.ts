@@ -84,11 +84,17 @@ import {
   isContentEditBody,
   isMixedPatchBody,
   loadLineItemsForWorkOrders,
+  loadSourcingByLineItemForWorkOrder,
+  sourcingFieldsFromOutbox,
   loadWorkOrderLinesForRpc,
   mapApiLineToDb,
   prepareWorkOrderLines,
   buildClientPayloadLines,
+  loadJobMetaForLines,
+  mapDbLineToApi,
   inspectInspectionFindingsOffPayload,
+  findingMarks,
+  type FindingMarks,
 } from "./service_items_save.ts";
 import { mapJobItemRowToApi } from "./maintenance_jobs_admin_helpers.ts";
 import {
@@ -216,6 +222,8 @@ async function inspectionFindingsOffResponse(
   orgId: string,
   rawLines: unknown[],
   inspectionFindingsEnabled?: boolean,
+  editWorkOrderId?: string | null,
+  db?: SupabaseClient,
 ): Promise<Response | null> {
   if (!rawLines.length) return null;
   const enabled = inspectionFindingsEnabled !== undefined
@@ -223,6 +231,19 @@ async function inspectionFindingsOffResponse(
     : await isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId);
   if (enabled) return null;
   if (!inspectInspectionFindingsOffPayload(rawLines)) return null;
+  // An edit may send back marks its lines already have; only a new finding is refused (code review #4).
+  if (db && editWorkOrderId && isUuid(editWorkOrderId)) {
+    const { data: storedRows, error: storedErr } = await db
+      .from("maintenance_work_order_lines")
+      .select("id, from_found_line_id, values_json")
+      .eq("work_order_id", editWorkOrderId);
+    if (storedErr) throw storedErr;
+    const storedById = new Map<string, FindingMarks>();
+    for (const row of (storedRows || []) as Record<string, unknown>[]) {
+      storedById.set(String(row.id), findingMarks(row));
+    }
+    if (!inspectInspectionFindingsOffPayload(rawLines, storedById)) return null;
+  }
   return c.json(
     { code: "inspection_findings_off", error: "Inspection findings are not enabled for this fleet." },
     400,
@@ -497,77 +518,27 @@ function internalWorkOrderCompleteRequest(
   );
 }
 
-/** snake_case DB line → camelCase API. */
-function mapDbLineToApi(row: Record<string, unknown>): Record<string, unknown> {
-  return {
-    id: row.id,
-    sortOrder: row.sort_order,
-    systemId: row.system_id,
-    componentId: row.component_id,
-    systemCode: row.system_code,
-    systemName: row.system_name,
-    categoryId: row.component_id,
-    categoryCode: row.component_code,
-    categoryName: row.component_name,
-    componentCode: row.component_code,
-    componentName: row.component_name,
-    action: row.action,
-    qty: row.qty != null ? Number(row.qty) : undefined,
-    unitPrice: row.unit_price != null ? Number(row.unit_price) : undefined,
-    material: row.material != null ? Number(row.material) : undefined,
-    labor: row.labor_amount != null ? Number(row.labor_amount) : undefined,
-    laborAmount: row.labor_amount != null ? Number(row.labor_amount) : undefined,
-    laborHours: row.labor_hours != null ? Number(row.labor_hours) : undefined,
-    laborRate: row.labor_rate != null ? Number(row.labor_rate) : undefined,
-    condition: row.condition,
-    positions: row.positions,
-    brand: row.brand,
-    partNumber: row.part_number,
-    warranty: row.warranty === true,
-    complimentary: row.complimentary === true,
-    partId: row.part_id,
-    notes: row.notes,
-    recommended: row.recommended === true,
-    declined: row.declined === true,
-    fromFoundLineId: row.from_found_line_id ?? null,
-    closedAt: row.closed_at ?? null,
-    closedReason: row.closed_reason ?? null,
-    closedBy: row.closed_by ?? null,
-    values: row.values_json,
-    lineTotal: row.line_total != null ? Number(row.line_total) : undefined,
-    itemsAmount: row.items_amount != null ? Number(row.items_amount) : 0,
-    voidedAt: row.voided_at ?? null,
-    fitAtLog: row.fit_at_log != null ? String(row.fit_at_log) : null,
-    isHighVoltage: row.is_high_voltage === true,
-  };
-}
-
 async function enrichLinesWithItems(
   supabase: SupabaseClient,
   workOrderId: string,
   lines: Record<string, unknown>[],
 ): Promise<Record<string, unknown>[]> {
   const itemsByLine = await loadLineItemsForWorkOrders(supabase, [workOrderId]);
-  const compIds = [
-    ...new Set(
-      lines.map((l) => String(l.component_id ?? "")).filter((id) => isUuid(id)),
-    ),
-  ];
-  const hvByJob = new Map<string, boolean>();
-  if (compIds.length) {
-    const { data: cats } = await supabase
-      .from("maintenance_service_categories")
-      .select("id, is_high_voltage")
-      .in("id", compIds);
-    for (const row of cats || []) {
-      hvByJob.set(String((row as { id: string }).id), (row as { is_high_voltage?: boolean }).is_high_voltage === true);
-    }
+  const sourcingByItem = await loadSourcingByLineItemForWorkOrder(supabase, workOrderId);
+  for (const [lineId, items] of itemsByLine) {
+    itemsByLine.set(
+      lineId,
+      items.map((item) => ({
+        ...item,
+        ...sourcingFieldsFromOutbox(sourcingByItem.get(String(item.id))),
+      })),
+    );
   }
+  // One lookup for each line's job: high voltage and its position kind (code review #9).
+  const jobMeta = await loadJobMetaForLines(supabase, lines.map((l) => l.component_id));
   return lines.map((line) => {
-    const cid = String(line.component_id ?? "");
-    const merged = hvByJob.has(cid)
-      ? { ...line, is_high_voltage: hvByJob.get(cid) }
-      : line;
+    const meta = jobMeta.get(String(line.component_id ?? ""));
+    const merged = meta ? { ...line, ...meta } : line;
     return {
       ...mapDbLineToApi(merged),
       items: itemsByLine.get(String(line.id)) ?? [],
@@ -1799,23 +1770,25 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           allJobsById,
         );
         const withItems = await attachFleetJobItemsToSections(supabase, payload);
-        const [serviceItemsEnabled, inspectionFindingsEnabled] = orgId
+        const [serviceItemsEnabled, inspectionFindingsEnabled, logServicePartsGapsEnabled] = orgId
           ? await Promise.all([
             isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId),
             isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId),
+            isFeatureEnabled(FEATURE_FLAGS.LOG_SERVICE_PARTS_GAPS, orgId),
           ])
-          : [false, false];
+          : [false, false, false];
         const withRecords = enrichSectionsRecordsFindings(withItems, inspectionFindingsEnabled);
         const fitCtx = orgId ? await loadJobFitContext(c, supabase, orgId) : { mode: "off" as const };
+        const flagPayload = { serviceItemsEnabled, inspectionFindingsEnabled, logServicePartsGapsEnabled };
         if (fitCtx instanceof Response) return fitCtx;
         if (fitCtx.mode === "off") {
-          return c.json({ ...withRecords, serviceItemsEnabled, inspectionFindingsEnabled });
+          return c.json({ ...withRecords, ...flagPayload });
         }
         if (fitCtx.mode === "error") {
-          return c.json({ ...withRecords, serviceItemsEnabled, inspectionFindingsEnabled, jobFit: fitCtx.jobFit });
+          return c.json({ ...withRecords, ...flagPayload, jobFit: fitCtx.jobFit });
         }
         const enriched = enrichSectionsWithFit(withRecords, fitCtx.fitMap);
-        return c.json({ ...enriched, serviceItemsEnabled, inspectionFindingsEnabled, jobFit: fitCtx.jobFit });
+        return c.json({ ...enriched, ...flagPayload, jobFit: fitCtx.jobFit });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
@@ -2657,6 +2630,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             orgId,
             rawEditLines,
             inspectionFindingsEnabled,
+            editWorkOrderId,
+            supabase,
           );
           if (findingsBlocked) return findingsBlocked;
           let workOrderId = editWorkOrderId;
@@ -3922,10 +3897,16 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
                 String(existing.id),
                 (lines || []) as Record<string, unknown>[],
               );
+              const withFound = await enrichApiLinesWithFound(
+                supabase,
+                orgId,
+                String(existing.id),
+                enrichedLines,
+              );
               return c.json({
                 item: mapDbWorkOrderToApi(
                   existing as Record<string, unknown>,
-                  enrichedLines,
+                  withFound,
                 ),
                 idempotentReplay: true,
               });
@@ -4165,6 +4146,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
               orgId,
               body.lines,
               inspectionFindingsEnabled,
+              id,
+              supabase,
             );
             if (findingsBlocked) return findingsBlocked;
             const prepared = await prepareWorkOrderLines(supabase, {

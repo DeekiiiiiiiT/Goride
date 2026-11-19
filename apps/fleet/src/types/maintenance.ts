@@ -94,6 +94,8 @@ export interface MaintenanceServiceCategory {
   recordsFindings?: boolean;
   /** When true, Fleet tracks LF/RF/LR/RR separately for outstanding work. */
   position_aware?: boolean;
+  /** Dominion fit scheme for position chips (before_after_catalyst, four_corners, …). */
+  position_scheme?: string | null;
   /** Powertrain job fit: the job touches the high-voltage system (amber "High-voltage" chip). */
   is_high_voltage?: boolean;
   /** Powertrain job fit: only when the list was asked for a car (vehicleId) and the flag is on. */
@@ -220,6 +222,15 @@ export interface MaintenanceLogLine {
   closedBy?: string | null;
   /** Read only on completed inspection services — follow-up state for found (not done yet) jobs. */
   found?: MaintenanceFoundLineStatus;
+  /** Read only: job position scheme from maintenance_service_categories. */
+  positionScheme?: string | null;
+  /** Read only: whether the job is position-aware. */
+  positionAware?: boolean | null;
+  /**
+   * Screen only, never sent: a position chip was tapped on this line. A saved line that was not tapped
+   * goes out with no `positions` key, so the server keeps what it has (LS-05, golden rule 10).
+   */
+  positionsTouched?: boolean;
 }
 
 export type MaintenanceFoundLineStatus = {
@@ -244,6 +255,9 @@ export type FoundWorkItem = {
   daysWaiting: number;
   garage: string | null;
   inspectionJobName: string | null;
+  positions?: string[];
+  positionScheme?: string | null;
+  positionAware?: boolean | null;
 };
 
 export type FoundWorkCounts = {
@@ -284,6 +298,8 @@ export type LineItemDraft = {
   /** Blank = cost not recorded (counts as 0). */
   unitCost?: string | number | null;
   amount?: number;
+  sourcingState?: "pending" | "sent" | "merged" | "not_sent" | "cancelled" | null;
+  sourcingReason?: "car_not_linked" | "daily_limit" | "error" | null;
 };
 
 /** One item's amount in cents (qty × cost, rounded like the server), or null while it isn't valid. */
@@ -332,7 +348,7 @@ export function lineItemForWire(item: LineItemDraft): LineItemInput {
     partSource: partSourceForWire(item),
     itemName: isOther ? item.itemName : null,
     brand: item.brand?.toString().trim() ? item.brand.toString().trim() : null,
-    partNumber: item.itemKind === "part_type" && item.partNumber?.toString().trim()
+    partNumber: (item.itemKind === "part_type" || item.itemKind === "other") && item.partNumber?.toString().trim()
       ? item.partNumber.toString().trim()
       : null,
     qty: String(item.qty ?? "").trim(),

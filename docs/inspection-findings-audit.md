@@ -1,6 +1,8 @@
 # Inspection findings ("found, not done yet") — build plan
 
-**Rev 9 · 18 Nov 2026 — build + code-review fixes DONE; full test set PASSED; next = go live (section 3). New chat: read section 0 first.**
+**Rev 10 · 18 Nov 2026 — CLOSED. Live for every company (commit 33c64f85 on main, switch `inspection_findings` on for all).
+Owner tried it live (inspection + "Not done yet" job). Follow-on gaps found in that run (Other item never reaches Dominion,
+no front/rear on jobs, Roomy oxygen sensors missing) moved to their own audit: `docs/log-service-parts-gaps-audit.md`.**
 
 **Goal:** when an inspection job is logged in Roam Fleet → Log service, the user adds the jobs the inspection found and marks each
 **Done today** or **Not done yet**. Not-done jobs wait on the car's "Found by inspection" list until **Log it now** or **Not needed**.
@@ -53,13 +55,13 @@ checks everything; the owner runs the live database. Owner is not a coder: short
 
 - **Full test set (18 Nov, Claude) — PASS:** Fleet unit tests 2,036 (358 files); `pnpm check` 8/8; CI SQL checks 48/48 in CI
   order on a fresh `db reset --no-seed`; migration fingerprints match prod (125); Deno all server tests 1,791; real-stack e2e Fleet
-  24/24 (inspection findings, Log service discount, service items, maintenance master). Dominion e2e 11/12: the one failure is old
-  and not ours — `dominion-maintenance-master.spec.ts` D5 still expects "Roam Fleet car" in the impact box, which was removed on
-  purpose (Dominion never counts Fleet cars). Note: running every `supabase/tests/*.sql` unordered on a used database gives false
+  24/24 (inspection findings, Log service discount, service items, maintenance master). Dominion e2e 11/12: not caused by this
+  build — `dominion-maintenance-master.spec.ts` D5 still expects "Roam Fleet car" in the impact box, which was removed on
+  purpose (Dominion never counts Fleet cars). Per golden rule 9 the test must be updated; carried as LS-11 in
+  `docs/log-service-parts-gaps-audit.md`. Note: running every `supabase/tests/*.sql` unordered on a used database gives false
   failures (fixtures/data); use CI order on a fresh reset.
 
-**Next steps, in order:**
-1. Go live (section 3): step 1 (migration) DONE 18 Nov; next = step 2 commit + push (switch stays off), then step 3.
+**Next steps:** none — CLOSED 18 Nov.
 
 ---
 
@@ -89,9 +91,11 @@ cut off; use each `code.html`). Stitch decides the look; drop everything it inve
 ## 3. Go live (owner, after step 5)
 1. Run `supabase/migrations/20261118004433_inspection_findings.sql` in the Supabase SQL editor, then
    `INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES ('20261118004433', 'inspection_findings') ON CONFLICT (version) DO NOTHING;`
-2. Commit + push (deploys server bundle `fleet-ops` and app). Switch stays off.
-3. Turn on for the owner's fleet only: key `feature_flag:inspection_findings` in `kv_store_37f42386`
-   (`{"enabled": false, "enabledForOrgs": ["<org id>"]}`), then the real run below with screenshots.
+2. Commit + push (deploys server bundle `fleet-ops` and app). Switch stays off. **DONE 18 Nov:** only the 45 inspection
+   files, on top of main (commit 33c64f85); toll work stays on the branch.
+3. Turn on for EVERYONE (owner rule 18 Nov: no per-fleet step): key `feature_flag:inspection_findings` in
+   `kv_store_37f42386` = `{"enabled": true}`, then the real run below with screenshots. **DONE 18 Nov:** on for everyone
+   (fleet-ops deployed + smoke OK, Vercel OK). Next = the real run (section 4).
 
 ## 4. Done-tests (real run)
 1. Inspection J$8,000 + Wiper Blades Done today + Brake rotor / Shock absorber Not done yet → bill = inspection + wiper only; found jobs not in history.

@@ -130,7 +130,6 @@ export function mapApiLineToDb(
     labor_hours: parseOptionalNumberField(raw.laborHours ?? raw.labor_hours),
     labor_rate: parseOptionalNumberField(raw.laborRate ?? raw.labor_rate),
     condition: raw.condition != null ? String(raw.condition) : null,
-    positions: Array.isArray(raw.positions) ? raw.positions.map(String) : null,
     brand: raw.brand != null ? String(raw.brand) : null,
     part_number: raw.partNumber != null
       ? String(raw.partNumber)
@@ -148,6 +147,12 @@ export function mapApiLineToDb(
     from_found_line_id: fromFoundParsed.ok ? fromFoundParsed.value : null,
     values_json: values,
   };
+  // Sent list → saved; sent null → cleared (code review #5); key left out → the server keeps what it has (LS-05).
+  if (Array.isArray(raw.positions)) {
+    row.positions = raw.positions.map(String);
+  } else if (Object.prototype.hasOwnProperty.call(raw, "positions") && raw.positions === null) {
+    row.positions = null;
+  }
   const itemsAmt = itemsAmount ?? raw.itemsAmount ?? raw.items_amount ?? 0;
   row.items_amount = Number(itemsAmt) || 0;
   row.line_total = computeWoLineTotal(row);
@@ -168,23 +173,86 @@ export function mapApiLineToDb(
   return row;
 }
 
-export function inspectInspectionFindingsOffPayload(rawLines: unknown[]): boolean {
+export type FindingMarks = { fromFound: string; foundByJob: string; foundToday: boolean };
+
+/** The inspection-finding marks on one line (request-shaped or database-shaped). */
+export function findingMarks(raw: Record<string, unknown>): FindingMarks {
+  const fromRaw = raw.fromFoundLineId ?? raw.from_found_line_id;
+  const valuesRaw = raw.values ?? raw.values_json;
+  const v = valuesRaw && typeof valuesRaw === "object" && !Array.isArray(valuesRaw)
+    ? valuesRaw as Record<string, unknown>
+    : {};
+  return {
+    fromFound: fromRaw != null ? String(fromRaw).trim() : "",
+    foundByJob: v.found_by_job != null ? String(v.found_by_job).trim() : "",
+    foundToday: v.found_today === true,
+  };
+}
+
+/**
+ * True when the save adds an inspection finding. A saved line that sends back the marks it already has is not new, so
+ * a service logged while the switch was on can still be edited after it is turned off (code review #4).
+ */
+export function inspectInspectionFindingsOffPayload(
+  rawLines: unknown[],
+  storedById?: Map<string, FindingMarks>,
+): boolean {
   for (const raw of rawLines) {
     if (!raw || typeof raw !== "object") continue;
     const r = raw as Record<string, unknown>;
-    const fromRaw = r.fromFoundLineId ?? r.from_found_line_id;
-    if (fromRaw !== undefined && fromRaw !== null && String(fromRaw).trim() !== "") return true;
-    const valuesRaw = r.values ?? r.values_json;
-    if (valuesRaw && typeof valuesRaw === "object" && !Array.isArray(valuesRaw)) {
-      const v = valuesRaw as Record<string, unknown>;
-      const foundByJob = v.found_by_job;
-      if (foundByJob !== undefined && foundByJob !== null && String(foundByJob).trim() !== "") {
-        return true;
-      }
-      if (v.found_today === true) return true;
+    const m = findingMarks(r);
+    if (!m.fromFound && !m.foundByJob && !m.foundToday) continue;
+    const id = r.id != null ? String(r.id) : "";
+    const stored = id ? storedById?.get(id) : undefined;
+    if (
+      stored
+      && m.fromFound === stored.fromFound
+      && m.foundByJob === stored.foundByJob
+      && (!m.foundToday || stored.foundToday)
+    ) {
+      continue;
     }
+    return true;
   }
   return false;
+}
+
+export type SourcingState = "pending" | "sent" | "merged" | "not_sent" | "cancelled";
+export type SourcingReason = "car_not_linked" | "daily_limit" | "error";
+
+export function sourcingFieldsFromOutbox(
+  row: { state?: string; reason_code?: string | null } | undefined,
+): { sourcingState: SourcingState | null; sourcingReason: SourcingReason | null } {
+  if (!row) return { sourcingState: null, sourcingReason: null };
+  const state = String(row.state ?? "");
+  const states: SourcingState[] = ["pending", "sent", "merged", "not_sent", "cancelled"];
+  const sourcingState = states.includes(state as SourcingState) ? (state as SourcingState) : null;
+  const reason = row.reason_code ? String(row.reason_code) : null;
+  const reasons: SourcingReason[] = ["car_not_linked", "daily_limit", "error"];
+  const sourcingReason = reason && reasons.includes(reason as SourcingReason)
+    ? (reason as SourcingReason)
+    : null;
+  return { sourcingState, sourcingReason };
+}
+
+export async function loadSourcingByLineItemForWorkOrder(
+  supabase: SupabaseClient,
+  workOrderId: string,
+): Promise<Map<string, { state: string; reason_code: string | null }>> {
+  const { data, error } = await supabase
+    .from("parts_sourcing_outbox")
+    .select("line_item_id, state, reason_code")
+    .eq("work_order_id", workOrderId);
+  if (error) throw error;
+  const map = new Map<string, { state: string; reason_code: string | null }>();
+  for (const row of data ?? []) {
+    const r = row as { line_item_id: string; state: string; reason_code?: string | null };
+    map.set(String(r.line_item_id), {
+      state: String(r.state),
+      reason_code: r.reason_code != null ? String(r.reason_code) : null,
+    });
+  }
+  return map;
 }
 
 export function mapDbLineItemToApi(row: Record<string, unknown>): Record<string, unknown> {
@@ -253,6 +321,7 @@ const SAVE_ERROR_MESSAGES: Record<string, { status: number; error: string }> = {
   },
   found_line_wrong_car: { status: 400, error: "That found job belongs to a different car." },
   invalid_found_line_id: { status: 400, error: "Invalid found line id." },
+  position_invalid: { status: 400, error: "That position doesn't fit this job. Pick again." },
   status_invalid: { status: 400, error: "Invalid service status." },
   work_order_id_taken: { status: 409, error: "That service id is already in use." },
   actor_required: { status: 401, error: "Sign in again." },
@@ -836,6 +905,30 @@ export async function loadWorkOrderLinesForRpc(
   });
 }
 
+/** Each line's job facts the line itself doesn't store, in one query: high voltage and position kind. */
+export async function loadJobMetaForLines(
+  supabase: SupabaseClient,
+  componentIds: unknown[],
+): Promise<Map<string, { is_high_voltage: boolean; position_scheme: string | null; position_aware: boolean | null }>> {
+  const ids = [...new Set(componentIds.map((id) => String(id ?? "")).filter((id) => UUID_RE.test(id)))];
+  const out = new Map<string, { is_high_voltage: boolean; position_scheme: string | null; position_aware: boolean | null }>();
+  if (!ids.length) return out;
+  const { data, error } = await supabase
+    .from("maintenance_service_categories")
+    .select("id, is_high_voltage, position_scheme, position_aware")
+    .in("id", ids);
+  if (error) throw error;
+  for (const row of data || []) {
+    const r = row as { id: string; is_high_voltage?: boolean; position_scheme?: string | null; position_aware?: boolean | null };
+    out.set(String(r.id), {
+      is_high_voltage: r.is_high_voltage === true,
+      position_scheme: r.position_scheme != null ? String(r.position_scheme) : null,
+      position_aware: r.position_aware === true ? true : (r.position_aware === false ? false : null),
+    });
+  }
+  return out;
+}
+
 export async function loadLineItemsForWorkOrders(
   supabase: SupabaseClient,
   workOrderIds: string[],
@@ -866,11 +959,16 @@ export function attachItemsToLines(
   return lines.map((line) => {
     const id = line.id != null ? String(line.id) : "";
     const items = id ? (itemsByLineId.get(id) ?? []) : [];
-    return { ...mapDbLineToApiShim(line), items };
+    return { ...mapDbLineToApi(line), items };
   });
 }
 
-function mapDbLineToApiShim(row: Record<string, unknown>): Record<string, unknown> {
+/**
+ * snake_case DB line → camelCase API. The one mapper for every work-order read, save and completion answer
+ * (code review #10). positionScheme / positionAware / isHighVoltage come from the line's job, merged in by
+ * loadJobMetaForLines.
+ */
+export function mapDbLineToApi(row: Record<string, unknown>): Record<string, unknown> {
   return {
     id: row.id,
     sortOrder: row.sort_order,
@@ -909,5 +1007,11 @@ function mapDbLineToApiShim(row: Record<string, unknown>): Record<string, unknow
     lineTotal: row.line_total != null ? Number(row.line_total) : undefined,
     itemsAmount: row.items_amount != null ? Number(row.items_amount) : 0,
     voidedAt: row.voided_at ?? null,
+    fitAtLog: row.fit_at_log != null ? String(row.fit_at_log) : null,
+    isHighVoltage: row.is_high_voltage === true,
+    positionScheme: row.position_scheme ?? null,
+    positionAware: row.position_aware === true
+      ? true
+      : (row.position_aware === false ? false : null),
   };
 }

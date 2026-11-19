@@ -1,0 +1,118 @@
+ROAM DOMINION — PENDING CATALOG · PARTS TO LOOK UP — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Dominion - Vehicle Database · Pending catalog (Desktop Admin, for the owner):
+
+Design the changes to the existing "Pending catalog" page of Roam Dominion, the master parts database that feeds every Roam app. Pending catalog is the owner's to-do list of parts Roam doesn't have yet: each row is one part for one car version that needs to be looked up, checked against a trusted source and added to the database. Until now every row came from the Find parts screen. From now on rows also arrive automatically when a part that isn't in the database is logged in a service, so the page needs to show where a request came from ("Service log" or "Find parts"), the part number when one was given, and where on the car the part sits ("Front (before converter)", "Driver", "Low beam"). At the same time, the page stops showing how many fleets asked: Dominion is a database being built up over time and shows only its own data, never anything about the fleets that use it. Everything else on the page stays as it is today. The design must feel modern, calm and effortless: generous spacing, soft 12–16px rounded cards, soft shadows, larger type and clear hierarchy, like a modern consumer app rather than a technical tool. Draw each screen tall enough that every element is visible, with no inner scrolling and nothing cut off.
+
+
+BRAND IDENTITY:
+- Match the existing Roam Dominion admin exactly (do not redesign it):
+  - Left sidebar: "Dominion · Roam Admin Console" at the top, then Overview, a "Master data" label, Vehicles (active), Places and Maps, Fuel, Tolls, and the rest as today.
+  - Vehicle Database tabs as today, with "Pending catalog" selected.
+  - Page title "Pending catalog", the research header actions on the right, and the research strip under the title, as today.
+- LIGHT MODE (default):
+  - Primary: #0153dc; primary container #dbe1ff
+  - Background #faf8fe; cards white with a 1px #e4e4ec border, 12px corners, soft shadow
+  - Text #30323b; muted text #5b5d68; outline #797a84
+  - Success / Added: #006e31 on #e3f5e8
+  - Waiting / Queued / Researching: #8a5a00 on #fff4d6
+  - Needs review: #0153dc on #dbe1ff
+  - Error / Failed: #a83836 on #fdecea
+  - Source chips: "Service log" = indigo #4338ca on #eef2ff with a wrench icon; "Find parts" = teal #0f766e on #e6f6f4 with a search icon
+- DARK MODE:
+  - Background #0b1220; surface #111a2e; border #1f2a44
+  - Text #e2e8f0; muted #94a3b8; primary #5b8def
+  - Success #4ade80 on #052e16; waiting #fbbf24 on #451a03; needs review #93b4ff on #172554; error #f87171 on #450a0a
+  - Source chips: "Service log" #a5b4fc on #1e1b4b; "Find parts" #5eead4 on #042f2e
+- Chips are fully rounded, icon + word, never colour alone.
+- Part numbers in a mono font with tabular figures ("89467-B1040"). Car versions in plain words with their chassis and engine ("Toyota Roomy · M900A · 1KR-FE"). Dates "18 Nov 2026".
+- Never show fleet names, company names, plates, drivers, prices, service totals or counts of fleets or cars. Never words like "asked by", "fleets", "requests from customers", "organization".
+- Typography: Inter. Page title 24px semibold, section titles 16px semibold, body 14px, muted helper 13px.
+- Icons: Lucide line icons, 20px. No gradients, glass or 3D. No AI badges, no percentages, no scores.
+- Buttons always look like buttons:
+  - Primary = solid #0153dc with white text. One primary per screen.
+  - Secondary = white with a visible #c5c6d0 border and dark text.
+  - Danger (Remove, Reject) = red outline and red text; solid red only for a final confirm.
+  - Icon buttons are 32px with a visible border.
+  - Never underlined text links, never grey text-only buttons. Every confirm is an in-app overlay, never a browser pop-up.
+- Sample data (the Toyota Roomy versions are real ones from the database; the Honda Fit and C-HR rows are examples):
+  - "Toyota Roomy · M900A · 1KR-FE" — "Front oxygen sensor" — part number "89467-B1040" — where "Front (before converter)" — source "Service log" — status "Queued" — first asked 18 Nov 2026.
+  - "Toyota Roomy · M900A · 1KR-FE" — "Oxygen sensor" — where "Rear (after converter)" — source "Service log" — status "Researching" — first asked 18 Nov 2026.
+  - "Toyota Roomy · M910A · 1KR-FE" — "Brake pads" — where "Front" — source "Find parts" — status "Needs review" — first asked 12 Nov 2026.
+  - "Honda Fit · GK3 · L13B" — "Wiper blade" — where "Driver" — source "Find parts" — status "Added" — result "Added 15 Nov 2026".
+  - "Toyota C-HR · NGX10 · 8NR-FTS" — "Cabin air filter" — source "Service log" — status "Couldn't find".
+
+
+DESIGN PRINCIPLES:
+- Dominion shows only the database: the car version, the part, its number, where it sits, and where the request came from. Nothing about who asked.
+- One row = one part to look up for one car version; the same part asked again joins the same row.
+- Show what's known, leave the rest empty: no part number shows as a muted dash, not an empty box.
+- Add to the existing page, never take anything away, except the fleet count.
+- Calm, not alarming: amber for waiting, red only for failures.
+- Desktop-first (1440px), with a narrow layout. 8px spacing grid, soft shadows, skeleton loading.
+- One view per screen.
+
+
+SCREEN 1: PENDING CATALOG — LIST WITH SOURCE AND WHERE ON THE CAR
+- The Dominion admin with the sidebar, the Vehicle Database tabs ("Pending catalog" selected) and the page title "Pending catalog" with the existing research header actions on the right.
+- The existing research strip under the title, as today.
+- Four KPI cards in a row, as today: "Needs review" (caption "Awaiting gate"), "Added automatically this week" ("Catalog verified"), "Added this week" ("Total merged"), "Couldn't find" ("Manual spec needed").
+- A search box "Search car or part…" and the filter chips as today: All, Needs review, Researching, Queued, Added automatically, Added, Failed.
+- The table, with columns: "Car version", "Part", NEW "Source", "Status", "Result", "Actions". The old "Asked by" column is gone.
+- Each "Part" cell shows the part name in semibold, then a muted second line with the part number in mono and where on the car: "89467-B1040 · Front (before converter)". When there is no number, only the place shows; when there is no place either, the second line is empty.
+- "Source" shows the chip "Service log" or "Find parts".
+- Five rows from the sample data, with their status chips; "Actions" keeps today's buttons (secondary "Open").
+- Footer: "Showing 5 of 5".
+
+
+SCREEN 2: REQUEST DRAWER — ONE PART TO LOOK UP
+- A right-side drawer over the dimmed Pending catalog page, 520px wide, with a close X.
+- Header: part title "Front oxygen sensor", the car version "Toyota Roomy · M900A · 1KR-FE" with its muted subline as today, and the status chip "Queued".
+- A details card with label / value rows:
+  - "Part number" — "89467-B1040" in mono
+  - "Where on the car" — "Front (before converter)"
+  - "Source" — the "Service log" chip
+  - "First asked" — "18 Nov 2026"
+  - "Reference" — the existing short id, e.g. "3F9A21C0", in mono
+- A card "What was written" with the text as typed: "Front oxygen sensor · Denso".
+- The drawer's existing research section and actions stay as they are today (for example the research result and the buttons to research next, mark added or reject).
+- No "Asked by" line anywhere.
+
+
+SCREEN 3: STATES
+- One board of three small cards stacked in one column, each a state of the Pending catalog table, with an icon, a title, one muted line and, where shown, one button:
+  - Grey skeleton rows: "Loading parts to look up…"
+  - Green check: "Nothing to look up" — "New parts appear here when they're logged or asked for in Find parts."
+  - Red: "Could not load requests" — "The rest of Dominion still works." — secondary "Try again".
+
+
+SCREEN 4: NARROW 390px — PENDING CATALOG
+- The Screen 1 page on a 390px-wide window. The sidebar collapses behind a menu button.
+- The KPI cards stack two by two; the search box and the filter chips scroll sideways in one row.
+- Each table row becomes a card: car version on top, part name in semibold, the muted "89467-B1040 · Front (before converter)" line, the source chip and the status chip on one row, and a full-width secondary "Open" button.
+
+
+ADDITIONAL UI COMPONENTS:
+- Source chip: "Service log" (indigo, wrench icon) or "Find parts" (teal, search icon), the same size as the status chips.
+- Part cell: name on line one; muted line two "<part number> · <where on the car>", with either part left out when unknown.
+- Where-on-the-car words (plain): "Front (before converter)", "Rear (after converter)", "Driver", "Passenger", "Rear", "Low beam", "High beam", "Front", "Side", "Front left", "Front right", "Rear left", "Rear right", "Not sure".
+- Drawer details card: label on the left in muted 13px, value on the right in 14px.
+
+
+INTERACTIONS:
+- Rows sort as today: the parts asked for most often come first. The number itself is never shown.
+- The search box matches car versions, part names and part numbers.
+- "Open" opens the Screen 2 drawer; all existing actions in the drawer work as today.
+- A new request for a part and car version already on the list joins that row; it never adds a second row.
+- On a narrow window, rows become cards and the drawer becomes a full-screen sheet.
+
+
+Spec screens / Area
+| Screen | Area |
+| 1 | Pending catalog — list with Source and where on the car, no fleet count |
+| 2 | Request drawer — part number, where on the car, source |
+| 3 | States of the Pending catalog table |
+| 4 | Narrow 390px — Pending catalog as cards |

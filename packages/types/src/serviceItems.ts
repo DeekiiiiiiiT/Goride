@@ -186,16 +186,12 @@ export function parseLineItems(
       }
     } else {
       if (partTypeId || supplyId || partId) return { ok: false, code: "item_identity_invalid", index };
-      if (r.partNumber != null && String(r.partNumber).trim() !== ""
-        || r.part_number != null && String(r.part_number).trim() !== "") {
-        return { ok: false, code: "part_number_not_allowed", index };
-      }
     }
 
     if (itemKind !== "part_type") {
       if (partId) return { ok: false, code: "part_id_not_allowed", index };
     }
-    if (itemKind === "supply" || itemKind === "other") {
+    if (itemKind === "supply") {
       const pn = r.partNumber ?? r.part_number;
       if (pn != null && String(pn).trim() !== "") {
         return { ok: false, code: "part_number_not_allowed", index };
@@ -249,6 +245,12 @@ export function parseLineItems(
       if (pnRaw != null && String(pnRaw).trim() !== "") {
         partNumber = String(pnRaw).trim();
         if (partNumber.length > 60) return { ok: false, code: "part_number_too_long", index };
+      }
+    } else if (itemKind === "other") {
+      const pnRaw = r.partNumber ?? r.part_number;
+      if (pnRaw != null && String(pnRaw).trim() !== "") {
+        const cleaned = String(pnRaw).replace(/[^A-Za-z0-9-]/g, "").slice(0, 80);
+        partNumber = cleaned.length > 0 ? cleaned : null;
       }
     }
 

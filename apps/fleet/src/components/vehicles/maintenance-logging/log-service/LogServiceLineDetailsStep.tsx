@@ -77,6 +77,8 @@ export type LogServiceLineDetailsStepProps = {
   headerChip?: React.ReactNode;
   /** "What the inspection found" when there is no Items used block to hold it (items switch off). */
   foundSlot?: React.ReactNode;
+  /** "Where on the car" chips, right under the job name (Stitch F1). */
+  whereSlot?: React.ReactNode;
 };
 
 function PositionButtons({
@@ -355,6 +357,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
           <p className={LT.bodySm}>You picked this from all jobs. It&apos;s saved as normal.</p>
         </div>
       ) : null}
+      {props.whereSlot ?? null}
 
       {props.serviceForm ? (
         <ServiceJobForm {...props} serviceForm={props.serviceForm} />

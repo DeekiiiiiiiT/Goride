@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { defaultActionForCategory, hiddenLineFieldsFor, isServiceJob, serviceJobCost, sidePositionsFor } from "./logServiceJobCost";
+import {
+  defaultActionForCategory,
+  hiddenLineFieldsFor,
+  isServiceJob,
+  serviceJobCost,
+  showsWheelButtons,
+  sidePositionsFor,
+} from "./logServiceJobCost";
 
 describe("service job cost", () => {
   it("total cost is used as-is", () => {
@@ -55,6 +62,34 @@ describe("stabilizer links: Left / Right, short form", () => {
       expect(hiddenLineFieldsFor({ code })).toEqual(["labor_hours", "labor_rate", "brand", "part_number"]);
     }
     expect(hiddenLineFieldsFor({ code: "front_stabilizer_bar" })).toEqual([]);
+  });
+});
+
+describe("showsWheelButtons", () => {
+  it("position-aware Tire Change shows wheels", () => {
+    expect(showsWheelButtons({ code: "tires", position_aware: true, position_scheme: "four_corners" })).toBe(true);
+  });
+
+  it("four_corners Wheel Balancing (not position-aware) shows wheels", () => {
+    expect(showsWheelButtons({ code: "wheel_balancing", position_aware: false, position_scheme: "four_corners" })).toBe(
+      true,
+    );
+  });
+
+  it("Brake Fluid with scheme none does not show wheels", () => {
+    expect(showsWheelButtons({ code: "brake_fluid", position_aware: false, position_scheme: "none" })).toBe(false);
+  });
+
+  it("front stabilizer link shows wheels", () => {
+    expect(showsWheelButtons({ code: "front_stabilizer_link", position_aware: false, position_scheme: "none" })).toBe(
+      true,
+    );
+  });
+
+  it("before_after_catalyst Oxygen sensor does not show wheel buttons", () => {
+    expect(
+      showsWheelButtons({ code: "oxygen_sensor", position_aware: false, position_scheme: "before_after_catalyst" }),
+    ).toBe(false);
   });
 });
 

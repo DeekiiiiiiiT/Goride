@@ -2,7 +2,7 @@
  * Fleet notices when catalog requests resolve (audit C2).
  */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { applyPendingPartsGroupFilters } from "./pending_parts_group.ts";
+import { applyPendingPartsGroupFilter } from "./pending_parts_group.ts";
 
 export async function notifyFleetsRequestOutcome(
   supabase: SupabaseClient,
@@ -14,7 +14,7 @@ export async function notifyFleetsRequestOutcome(
     .select("id, organization_id, need_text, vehicle_catalog_id, maintenance_component_id")
     .eq("kind", "add_part_info")
     .in("status", ["open", "in_progress", "rejected"]);
-  applyPendingPartsGroupFilters(query, groupId);
+  applyPendingPartsGroupFilter(query, groupId);
   const { data: rows, error } = await query;
   if (error) throw error;
   if (!rows?.length) return;

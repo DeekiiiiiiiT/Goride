@@ -16,6 +16,7 @@ import {
 import type { CompatiblePartsResponse } from "../../../../types/partSourcing";
 import type { LineItemDraft } from "../../../../types/maintenance";
 import { ACCENT } from "./ItemsUsedSection";
+import { RoamLooksItUpLine } from "./unknownParts";
 
 export type PickedPart = Pick<LineItemDraft, "partId" | "brand" | "partNumber" | "partLabel" | "partFit">;
 
@@ -94,7 +95,10 @@ export function PickPartDialog({
   partTypeName,
   current,
   onUse,
+  gapsEnabled,
 }: {
+  /** LS-18: "Roam will look this part up…" under the typed-in form (Stitch F3). */
+  gapsEnabled?: boolean;
   open: boolean;
   onClose: () => void;
   vehicleId: string;
@@ -264,6 +268,7 @@ export function PickPartDialog({
                   onChange={(e) => setPartNumber(e.target.value)}
                 />
               </label>
+              {gapsEnabled ? <RoamLooksItUpLine className="sm:col-span-2" /> : null}
             </div>
           ) : null}
         </div>

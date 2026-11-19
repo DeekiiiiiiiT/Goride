@@ -97,7 +97,7 @@ test.describe("Dominion maintenance master (real stack)", () => {
     await expect(page.locator("article.rounded-2xl")).toHaveCount(5, { timeout: 15_000 });
     await expect(page.locator("article .rounded-full").first()).toBeVisible();
     await snap(page, "D2");
-    const edit = page.getByRole("button", { name: /Edit parts/i }).first();
+    const edit = page.getByRole("button", { name: /Edit jobs/i }).first();
     if (await edit.isVisible().catch(() => false)) {
       await clickAndLog(page, "D2", "Edit parts", edit);
       await page.getByRole("button", { name: /^Cancel$/i }).click();
@@ -125,13 +125,18 @@ test.describe("Dominion maintenance master (real stack)", () => {
     await clickAndLog(page, "D5", "Add schedule", page.getByRole("button", { name: /Add schedule/i }).first());
     const drawer = page.locator("aside").filter({ has: page.getByRole("heading", { name: /Add schedule/i }) });
     await drawer.locator("select").first().selectOption({ index: 1 });
-    await drawer.locator('input[type="number"]').first().fill("12000");
-    await drawer.locator('input[type="number"]').nth(1).fill("12");
+    // By label: the drawer now starts with Year from / Year to, so "the first number box" is not the km.
+    await drawer.getByRole("spinbutton", { name: /Every km/i }).fill("12000");
+    await drawer.getByRole("spinbutton", { name: /or every months/i }).fill("12");
     await drawer.getByRole("button", { name: /Make active/i }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible({ timeout: 15_000 });
-    await expect(dialog.getByText(/Roam Fleet car/i)).toBeVisible();
-    await expect(dialog.getByText(/→/)).toBeVisible();
+    // LS-19: the box shows the schedule before → after and when apps pick it up. It never counts Roam Fleet
+    // cars (removed on purpose, Dominion shows master data only).
+    await expect(dialog.getByText(/No previous schedule|whichever first/).first()).toBeVisible();
+    await expect(dialog.getByText(/→ .*whichever first/)).toBeVisible();
+    await expect(dialog.getByText(/Every app picks up the new schedule tonight \(2:00 AM Jamaica time\)/)).toBeVisible();
+    await expect(dialog.getByText(/Roam Fleet car/i)).toHaveCount(0);
     await snap(page, "D5");
     await clickAndLog(page, "D5", "Cancel impact", dialog.getByRole("button", { name: /Cancel/i }));
   });
@@ -139,7 +144,7 @@ test.describe("Dominion maintenance master (real stack)", () => {
   test("D6 package drawer", async ({ page }) => {
     await gotoMaintenance(page);
     await page.getByRole("button", { name: /^Service packages/i }).click();
-    const edit = page.getByRole("button", { name: /Edit parts/i }).first();
+    const edit = page.getByRole("button", { name: /Edit jobs/i }).first();
     await edit.click();
     await expect(page.getByText(/Edit package/i)).toBeVisible();
     await snap(page, "D6");
@@ -246,10 +251,11 @@ test.describe("Dominion maintenance master (real stack)", () => {
     await editDrawer.getByRole("spinbutton", { name: /or every months/i }).fill("11");
     await editDrawer.getByRole("button", { name: /Make active/i }).click();
     const impact = page.getByRole("dialog");
-    await expect(impact.getByText(/Roam Fleet car/)).toBeVisible({ timeout: 15_000 });
-    await impact.getByRole("button", { name: /Save and update cars/i }).click();
+    await expect(impact.getByText(/→ 11,?000 km or 11 months/)).toBeVisible({ timeout: 15_000 });
+    await expect(impact.getByText(/Roam Fleet car/i)).toHaveCount(0);
+    await impact.getByRole("button", { name: /^Save schedule$/i }).click();
     await expect(
-      page.locator("[data-sonner-toast]").filter({ hasText: /Saved · [1-9]\d* Roam Fleet cars updated/i }),
+      page.locator("[data-sonner-toast]").filter({ hasText: "Schedule saved. Apps pick it up tonight." }),
     ).toBeVisible({ timeout: 30_000 });
     await snap(page, "D12");
   });

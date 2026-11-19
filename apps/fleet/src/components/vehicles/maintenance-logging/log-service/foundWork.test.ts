@@ -34,7 +34,7 @@ describe("found work drafts ↔ lines", () => {
     const drafts = draftsFromLines([inspection, wiperToday, rotorFound, { ...rotorFound }], "insp");
     expect(drafts).toEqual([
       { jobId: "wiper", name: "Wiper Blades", mode: "today", note: "" },
-      { jobId: "rotor", name: "Brake rotor", mode: "later", note: "Front rotors worn" },
+      { jobId: "rotor", name: "Brake rotor", mode: "later", note: "Front rotors worn", positions: [], positionsTouched: false },
     ]);
   });
 

@@ -2,41 +2,15 @@
 import { useEffect, useState } from "react";
 import { MaterialIcon } from "../import/MaterialIcon";
 import { PartsButton } from "../PartsButton";
+import {
+  AXLE_POSITIONS,
+  CATALYST_POSITIONS,
+  CORNER_SIDES,
+  DRIVER_PASSENGER_REAR,
+  FRONT_REAR_SIDE,
+  LOW_HIGH_BEAM,
+} from "@roam/types/partPositions";
 import type { AddPartsDraft, PartTypeRow } from "./addPartsTypes";
-
-const AXLE_POSITIONS = [
-  { id: "front", label: "Front Axle", icon: "adjust" as const },
-  { id: "rear", label: "Rear Axle", icon: "radio_button_unchecked" as const },
-];
-
-const CATALYST_POSITIONS = [
-  { id: "before_cat", label: "Before cat" },
-  { id: "after_cat", label: "After cat" },
-];
-
-const CORNER_SIDES = [
-  { pos: "front", side: "left", label: "Front left" },
-  { pos: "front", side: "right", label: "Front right" },
-  { pos: "rear", side: "left", label: "Rear left" },
-  { pos: "rear", side: "right", label: "Rear right" },
-];
-
-const DRIVER_PASSENGER_REAR = [
-  { id: "driver", label: "Driver" },
-  { id: "passenger", label: "Passenger" },
-  { id: "rear", label: "Rear" },
-];
-
-const LOW_HIGH_BEAM = [
-  { id: "low", label: "Low beam" },
-  { id: "high", label: "High beam" },
-];
-
-const FRONT_REAR_SIDE = [
-  { id: "front", label: "Front" },
-  { id: "rear", label: "Rear" },
-  { id: "side", label: "Side" },
-];
 
 export function TriplePositionRow({
   options,

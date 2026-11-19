@@ -1,3 +1,4 @@
+import { isWheelScheme } from "@roam/types/partPositions";
 import type { MaintenanceLineAction, MaintenanceServiceCategory } from "../../../../types/maintenance";
 
 type FieldValues = Record<string, string | number | boolean | null>;
@@ -66,6 +67,16 @@ export function sidePositionsFor(
   if (code === "front_stabilizer_link") return [{ value: "LF", label: "Left" }, { value: "RF", label: "Right" }];
   if (code === "rear_stabilizer_link") return [{ value: "LR", label: "Left" }, { value: "RR", label: "Right" }];
   return null;
+}
+
+/** Wheel LF/RF/LR/RR buttons — scheme or position-aware, not name guessing. */
+export function showsWheelButtons(
+  cat: Pick<MaintenanceServiceCategory, "code" | "position_aware" | "position_scheme"> | null | undefined,
+): boolean {
+  if (!cat) return false;
+  if (sidePositionsFor(cat)) return true;
+  if (cat.position_aware === true) return true;
+  return isWheelScheme(cat.position_scheme);
 }
 
 export function serviceJobAmount(values: FieldValues): number | null {

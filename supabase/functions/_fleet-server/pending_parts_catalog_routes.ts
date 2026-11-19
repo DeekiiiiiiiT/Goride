@@ -6,7 +6,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { assertPlatformStaffResponse } from "./rbac_middleware.ts";
 import { dominionCan } from "../../../packages/auth-client/src/dominionPermissions.ts";
 import { getPlatformSettingsCached } from "./platform_settings.ts";
-import { applyPendingPartsGroupFilters, pendingPartsGroupKey } from "./pending_parts_group.ts";
+import { applyPendingPartsGroupFilter, groupIdForRow } from "./pending_parts_group.ts";
 import { getCatalogParts } from "./catalog_api.ts";
 import { mapPendingOnFileParts } from "./pending_parts_on_file.ts";
 import { notifyFleetsRequestOutcome } from "./catalog_research_notify.ts";
@@ -26,6 +26,8 @@ const FORBIDDEN_RESPONSE_KEYS = new Set([
   "email",
   "created_by",
   "vehicle_id",
+  "fleet_count",
+  "fleetCount",
 ]);
 
 export function stripPii<T extends Record<string, unknown>>(row: T): Record<string, unknown> {
@@ -37,22 +39,39 @@ export function stripPii<T extends Record<string, unknown>>(row: T): Record<stri
   return out;
 }
 
-export function groupPartsRequests(rows: Array<Record<string, unknown>>) {
-  const groups = new Map<string, {
-    groupId: string;
-    vehicleCatalogId: string | null;
-    platformId: string | null;
-    componentId: string | null;
-    side: string | null;
-    fitDescriptor: string | null;
-    matchType: string | null;
-    fleetCount: number;
-    firstAsked: string | null;
-    lastAsked: string | null;
-    photoCount: number;
-    status: string;
-    requestIds: string[];
-  }>();
+function sortOrigins(origins: Iterable<string>): string[] {
+  const distinct = [...new Set(origins)];
+  return distinct.sort((a, b) => {
+    if (a === "service_log") return -1;
+    if (b === "service_log") return 1;
+    return a.localeCompare(b);
+  });
+}
+
+export type PendingPartsQueueGroup = {
+  groupId: string;
+  vehicleCatalogId: string | null;
+  platformId: string | null;
+  componentId: string | null;
+  side: string | null;
+  fitDescriptor: string | null;
+  matchType: string | null;
+  firstAsked: string | null;
+  lastAsked: string | null;
+  photoCount: number;
+  status: string;
+  requestIds: string[];
+  origins: string[];
+  positionScheme: string | null;
+  positionCodes: string[] | null;
+  requestedName: string | null;
+  requestedPartNumber: string | null;
+  researchJobId: string | null;
+  sortFleetCount: number;
+};
+
+export function groupPartsRequests(rows: Array<Record<string, unknown>>): PendingPartsQueueGroup[] {
+  const groups = new Map<string, PendingPartsQueueGroup & { _origins: Set<string> }>();
   for (const row of rows) {
     const vehicleCatalogId = row.vehicle_catalog_id ? String(row.vehicle_catalog_id) : "";
     const platformId = row.platform_id ? String(row.platform_id) : "";
@@ -60,10 +79,14 @@ export function groupPartsRequests(rows: Array<Record<string, unknown>>) {
     const side = row.install_side ? String(row.install_side) : "";
     const fitDescriptor = row.fit_descriptor ? String(row.fit_descriptor) : "";
     const matchType = row.match_type ? String(row.match_type) : "";
-    const groupId = pendingPartsGroupKey(row);
+    const groupId = groupIdForRow(row);
     const created = String(row.created_at || "");
+    const origin = row.origin ? String(row.origin) : "find_parts";
     const existing = groups.get(groupId);
     if (!existing) {
+      const positionCodes = Array.isArray(row.position_codes)
+        ? row.position_codes.map(String)
+        : null;
       groups.set(groupId, {
         groupId,
         vehicleCatalogId: vehicleCatalogId || null,
@@ -72,22 +95,69 @@ export function groupPartsRequests(rows: Array<Record<string, unknown>>) {
         side: side || null,
         fitDescriptor: fitDescriptor || null,
         matchType: matchType || null,
-        fleetCount: 1,
         firstAsked: created || null,
         lastAsked: created || null,
         photoCount: row.photo_url ? 1 : 0,
         status: String(row.status || "open"),
         requestIds: [String(row.id)],
+        origins: [],
+        _origins: new Set([origin]),
+        positionScheme: row.position_scheme ? String(row.position_scheme) : null,
+        positionCodes,
+        requestedName: null,
+        requestedPartNumber: null,
+        researchJobId: row.catalog_research_job_id ? String(row.catalog_research_job_id) : null,
+        sortFleetCount: 0,
       });
       continue;
     }
-    existing.fleetCount += 1;
     existing.requestIds.push(String(row.id));
-    if (created && (!existing.firstAsked || created < existing.firstAsked)) existing.firstAsked = created;
+    existing._origins.add(origin);
+    if (created && (!existing.firstAsked || created < existing.firstAsked)) {
+      existing.firstAsked = created;
+      existing.positionScheme = row.position_scheme ? String(row.position_scheme) : existing.positionScheme;
+      existing.positionCodes = Array.isArray(row.position_codes)
+        ? row.position_codes.map(String)
+        : existing.positionCodes;
+    }
     if (created && (!existing.lastAsked || created > existing.lastAsked)) existing.lastAsked = created;
     if (row.photo_url) existing.photoCount += 1;
+    if (!existing.researchJobId && row.catalog_research_job_id) {
+      existing.researchJobId = String(row.catalog_research_job_id);
+    }
   }
-  return [...groups.values()];
+  return [...groups.values()].map((g) => {
+    const { _origins, ...rest } = g;
+    return { ...rest, origins: sortOrigins(_origins) };
+  });
+}
+
+export async function enrichPendingPartsGroupsWithJobs(
+  supabase: SupabaseClient,
+  groups: PendingPartsQueueGroup[],
+): Promise<PendingPartsQueueGroup[]> {
+  const jobIds = [...new Set(groups.map((g) => g.researchJobId).filter((id): id is string => Boolean(id)))];
+  const jobById = new Map<string, { requested_name?: string | null; requested_part_number?: string | null; fleet_count?: number }>();
+  if (jobIds.length) {
+    const { data, error } = await supabase
+      .from("catalog_research_job")
+      .select("id, requested_name, requested_part_number, fleet_count")
+      .in("id", jobIds);
+    if (error) throw error;
+    for (const row of data ?? []) {
+      const r = row as { id: string; requested_name?: string | null; requested_part_number?: string | null; fleet_count?: number };
+      jobById.set(String(r.id), r);
+    }
+  }
+  return groups.map((g) => {
+    const job = g.researchJobId ? jobById.get(g.researchJobId) : undefined;
+    return {
+      ...g,
+      requestedName: job?.requested_name ?? null,
+      requestedPartNumber: job?.requested_part_number ?? null,
+      sortFleetCount: Number(job?.fleet_count ?? 0),
+    };
+  });
 }
 
 export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: Function }, supabase: SupabaseClient) {
@@ -107,13 +177,24 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
     try {
       const { data, error } = await supabase
         .from("parts_sourcing_requests")
-        .select("id, platform_id, vehicle_catalog_id, maintenance_component_id, install_side, install_position, fit_descriptor, match_type, status, created_at, photo_url, need_text, looking_note, resolution_note, kind")
+        .select(
+          "id, platform_id, vehicle_catalog_id, maintenance_component_id, install_side, install_position, fit_descriptor, match_type, status, created_at, photo_url, need_text, looking_note, resolution_note, kind, research_group_key, origin, old_part_number, position_scheme, position_codes, catalog_research_job_id",
+        )
         .eq("kind", "add_part_info")
         .order("created_at", { ascending: false })
         .limit(500);
       if (error) throw error;
-      const groups = groupPartsRequests((data || []) as Array<Record<string, unknown>>);
-      const safe = groups.map((group) => stripPii(group as unknown as Record<string, unknown>));
+      let groups = groupPartsRequests((data || []) as Array<Record<string, unknown>>);
+      groups = await enrichPendingPartsGroupsWithJobs(supabase, groups);
+      groups.sort((a, b) => {
+        const byCount = b.sortFleetCount - a.sortFleetCount;
+        if (byCount !== 0) return byCount;
+        return String(b.lastAsked ?? "").localeCompare(String(a.lastAsked ?? ""));
+      });
+      const safe = groups.map((group) => {
+        const { sortFleetCount: _sort, ...pub } = group;
+        return stripPii(pub as unknown as Record<string, unknown>);
+      });
       const global = await getPlatformSettingsCached("global");
       const weeklyTarget = Math.max(
         1,
@@ -132,9 +213,11 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
       const groupId = c.req.param("groupId");
       let query = supabase
         .from("parts_sourcing_requests")
-        .select("id, platform_id, vehicle_catalog_id, maintenance_component_id, install_side, install_position, fit_descriptor, match_type, need_text, photo_url, created_at, status, looking_note, resolution_note, kind, catalog_research_job_id")
+        .select(
+          "id, platform_id, vehicle_catalog_id, maintenance_component_id, install_side, install_position, fit_descriptor, match_type, need_text, photo_url, created_at, status, looking_note, resolution_note, kind, catalog_research_job_id, research_group_key, origin, old_part_number, position_scheme, position_codes",
+        )
         .eq("kind", "add_part_info");
-      applyPendingPartsGroupFilters(query, groupId);
+      applyPendingPartsGroupFilter(query, groupId);
       const { data, error } = await query.order("created_at", { ascending: true });
       if (error) throw error;
       const rows = data || [];
@@ -148,6 +231,10 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
       const first = rows[0] as {
         vehicle_catalog_id?: string | null;
         maintenance_component_id?: string | null;
+        origin?: string | null;
+        position_scheme?: string | null;
+        position_codes?: string[] | null;
+        old_part_number?: string | null;
       } | undefined;
       const catalogId = first?.vehicle_catalog_id ? String(first.vehicle_catalog_id) : "";
       const componentId = first?.maintenance_component_id ? String(first.maintenance_component_id) : "";
@@ -165,10 +252,26 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
         onFile = mapPendingOnFileParts(catalog.items);
       }
       const researchJobId = (rows[0] as { catalog_research_job_id?: string | null } | undefined)?.catalog_research_job_id ?? null;
+      let requestedName: string | null = null;
+      let requestedPartNumber: string | null = null;
+      if (researchJobId) {
+        const { data: jobRow } = await supabase
+          .from("catalog_research_job")
+          .select("requested_name, requested_part_number")
+          .eq("id", researchJobId)
+          .maybeSingle();
+        requestedName = (jobRow as { requested_name?: string })?.requested_name ?? null;
+        requestedPartNumber = (jobRow as { requested_part_number?: string })?.requested_part_number ?? null;
+      }
+      const origins = sortOrigins(rows.map((r) => String((r as { origin?: string }).origin || "find_parts")));
       return c.json({
         groupId,
-        fleetCount: notes.length,
         researchJobId,
+        requestedName,
+        requestedPartNumber,
+        positionScheme: first?.position_scheme ?? null,
+        positionCodes: Array.isArray(first?.position_codes) ? first.position_codes.map(String) : null,
+        origins,
         notes,
         photos: rows.filter((row) => (row as { photo_url?: string }).photo_url).map((row) => stripPii({
           url: (row as { photo_url?: string }).photo_url,
@@ -197,7 +300,7 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
 
       const applyUpdate = async (patch: Record<string, unknown>) => {
         let query = supabase.from("parts_sourcing_requests").update(patch).eq("kind", "add_part_info");
-        applyPendingPartsGroupFilters(query, groupId);
+        applyPendingPartsGroupFilter(query, groupId);
         const { error } = await query;
         if (error) throw error;
       };

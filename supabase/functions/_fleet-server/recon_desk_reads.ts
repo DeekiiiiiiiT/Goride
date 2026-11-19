@@ -126,21 +126,37 @@ export function historyItem(row: HistoryRow, names: Map<string, string>): Histor
 }
 
 /** Names for user ids (staff profile name, else email). Unknown ids are left as they are. */
+const NAME_CACHE_MS = 5 * 60_000;
+const nameCache = new Map<string, { name: string; at: number }>();
+
+/** People's display names by user id. Looked up together (not one after another) and kept for 5 minutes (code review #8). */
 export async function displayNamesFor(ids: Array<string | null | undefined>): Promise<Map<string, string>> {
   const names = new Map<string, string>();
-  const unique = [...new Set(ids.map((i) => String(i || "").trim()).filter((i) => i && i !== "system"))].slice(0, 50);
+  const unique = [...new Set(ids.map((i) => String(i || "").trim()).filter((i) => i && i !== "system"))]
+    .filter((id) => /^[0-9a-f-]{36}$/i.test(id))
+    .slice(0, 50);
+  const now = Date.now();
+  const missing: string[] = [];
   for (const id of unique) {
-    if (!/^[0-9a-f-]{36}$/i.test(id)) continue;
+    const hit = nameCache.get(id);
+    if (hit && now - hit.at < NAME_CACHE_MS) {
+      if (hit.name) names.set(id, hit.name);
+    } else {
+      missing.push(id);
+    }
+  }
+  await Promise.all(missing.map(async (id) => {
     try {
       const { data } = await getServiceClient().auth.admin.getUserById(id);
       const u = data?.user;
       const meta = (u?.user_metadata ?? {}) as { full_name?: string; name?: string };
       const name = String(meta.full_name || meta.name || u?.email || "").trim();
+      nameCache.set(id, { name, at: now });
       if (name) names.set(id, name);
     } catch {
-      /* keep the id */
+      /* keep the id; not cached, so the next read tries again */
     }
-  }
+  }));
   return names;
 }
 

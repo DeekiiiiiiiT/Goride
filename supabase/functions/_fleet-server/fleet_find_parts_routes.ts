@@ -25,6 +25,7 @@ import { analyzeMaintenanceScheduleRow } from "../../../packages/finance-core/sr
 import { upsertPendingFromKvVehicle } from "./vehicle_catalog_pending_queries.ts";
 import { loadVehiclePartsContextExtras, vehiclePlateFromKv } from "./vehicle_parts_context.ts";
 import { buildPartsSourcingInsert, normalizeMatchType } from "./parts_sourcing_request_build.ts";
+import { positionCodesProblem } from "../../../packages/types/src/partPositions.ts";
 import {
   countOrgRequestsToday,
   DAILY_LIMIT_MESSAGE,
@@ -273,6 +274,28 @@ export async function loadPartsActivity(supabase: SupabaseClient, orgId: string)
   };
 }
 
+export type RequestPositionJob = {
+  code: string | null;
+  position_aware: boolean | null;
+  position_scheme: string | null;
+};
+
+/**
+ * LS-08: positions on a Find parts request. `job` is the request's job (null when there is no job id or it
+ * wasn't found). The job's own scheme is stored; a scheme in the body is never trusted.
+ */
+export function resolveRequestPositions(
+  raw: unknown,
+  job: RequestPositionJob | null,
+): { ok: true; codes: string[] | null; scheme: string | null } | { ok: false } {
+  if (raw === undefined || raw === null) return { ok: true, codes: null, scheme: null };
+  if (!Array.isArray(raw)) return { ok: false };
+  const codes = raw.map(String);
+  if (!codes.length || !job) return { ok: true, codes: null, scheme: null };
+  if (positionCodesProblem(job, codes)) return { ok: false };
+  return { ok: true, codes, scheme: job.position_scheme != null ? String(job.position_scheme) : null };
+}
+
 export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseClient) {
   const view = [requireAuth(), requirePermission("vehicles.view")];
 
@@ -470,13 +493,34 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
         || [String(body.partName ?? "").trim(), side, position].filter(Boolean).join(" · ")
         || "Part info request";
       const sentAt = isAddPart ? new Date().toISOString() : null;
+
+      const componentId = body.maintenanceComponentId && UUID_RE.test(String(body.maintenanceComponentId))
+        ? String(body.maintenanceComponentId)
+        : (body.componentId && UUID_RE.test(String(body.componentId)) ? String(body.componentId) : null);
+
+      const positionCodesRaw = body.positionCodes;
+      let job: RequestPositionJob | null = null;
+      if (componentId && Array.isArray(positionCodesRaw) && positionCodesRaw.length) {
+        const { data, error: jobErr } = await supabase
+          .from("maintenance_service_categories")
+          .select("code, position_aware, position_scheme")
+          .eq("id", componentId)
+          .maybeSingle();
+        if (jobErr) throw jobErr;
+        job = (data as RequestPositionJob | null) ?? null;
+      }
+      const positionResult = resolveRequestPositions(positionCodesRaw, job);
+      if (!positionResult.ok) {
+        return c.json({ code: "position_invalid", error: "That position doesn't fit this part." }, 400);
+      }
+      const positionCodes = positionResult.codes;
+      const positionScheme = positionResult.scheme;
+
       const insertRow = await buildPartsSourcingInsert(supabase, {
         orgId,
         vehicleId,
         needText: composedNeed,
-        componentId: body.maintenanceComponentId && UUID_RE.test(String(body.maintenanceComponentId))
-          ? String(body.maintenanceComponentId)
-          : (body.componentId && UUID_RE.test(String(body.componentId)) ? String(body.componentId) : null),
+        componentId,
         engineFamilyId: body.engineFamilyId && UUID_RE.test(String(body.engineFamilyId)) ? String(body.engineFamilyId) : null,
         vehicleCatalogId: catalogVariantId,
         matchType: isAddPart ? matchType : null,
@@ -489,10 +533,12 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
         sentAt,
         replyDueAt: urgency ? replyDueAt(urgency) : null,
         oldPartNumber: body.oldPartNumber ?? body.old_part_number ?? null,
+        positionScheme,
+        positionCodes,
       });
 
       if (isAddPart) {
-        const groupKey = researchGroupKeyFromRow(insertRow as Record<string, unknown>);
+        const groupKey = await researchGroupKeyFromRow(supabase, insertRow as Record<string, unknown>);
         const dup = await findDedupedOpenRequest(supabase, orgId, groupKey);
         if (dup) return c.json({ item: dup, deduped: true });
 
@@ -501,16 +547,23 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
           return c.json({ error: DAILY_LIMIT_MESSAGE }, 429);
         }
 
-        const jobId = await ensureCatalogResearchJob(supabase, {
-          vehicle_catalog_id: insertRow.vehicle_catalog_id as string | null,
-          maintenance_component_id: insertRow.maintenance_component_id as string | null,
-          fit_descriptor: insertRow.fit_descriptor as string | null,
-          install_side: insertRow.install_side as string | null,
-          match_type: insertRow.match_type as string | null,
-        }, groupKey);
+        const jobId = await ensureCatalogResearchJob(
+          supabase,
+          {
+            need_text: String(insertRow.need_text ?? ""),
+            old_part_number: insertRow.old_part_number as string | null,
+            vehicle_catalog_id: insertRow.vehicle_catalog_id as string | null,
+            maintenance_component_id: insertRow.maintenance_component_id as string | null,
+            fit_descriptor: insertRow.fit_descriptor as string | null,
+            install_side: insertRow.install_side as string | null,
+            match_type: insertRow.match_type as string | null,
+          },
+          groupKey,
+        );
 
         const rowToInsert = {
           ...insertRow,
+          origin: "find_parts",
           research_group_key: groupKey,
           catalog_research_job_id: jobId,
         };

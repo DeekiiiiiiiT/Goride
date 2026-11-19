@@ -64,6 +64,14 @@ import { ItemsUsedSection } from "./maintenance-logging/log-service/ItemsUsedSec
 import { PickPartDialog } from "./maintenance-logging/log-service/PickPartDialog";
 import { useJobItems } from "./maintenance-logging/log-service/useJobItems";
 import {
+  keepAllowedPositions,
+  positionMissing,
+  positionsForWire,
+  positionUiFor,
+  togglePositionCode,
+} from "./maintenance-logging/log-service/positionChips";
+import { SaveLineHint, WhereOnCarChips } from "./maintenance-logging/log-service/WhereOnCarChips";
+import {
   isNotUsual,
   jobFitFromResponse,
   powertrainPill,
@@ -252,13 +260,6 @@ function numFrom(v: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-function needsPositions(cat: MaintenanceServiceCategory): boolean {
-  if (sidePositionsFor(cat)) return true;
-  if (cat.position_aware === true) return true;
-  const hay = `${cat.code} ${cat.name} ${cat.icon_key}`.toLowerCase();
-  return /tire|brake|wheel/.test(hay);
-}
-
 type LineExtras = {
   action: MaintenanceLineAction;
   laborHours: number | null;
@@ -266,6 +267,8 @@ type LineExtras = {
   brand: string;
   partNumber: string;
   positions: string[];
+  /** A position chip or wheel button was tapped (LS-05: an untouched saved line keeps its positions). */
+  positionsTouched: boolean;
   warranty: boolean;
   complimentary: boolean;
   partId: string | null;
@@ -291,6 +294,7 @@ function defaultExtras(system: MaintenanceServiceCategory | null = null): LineEx
     brand: "",
     partNumber: "",
     positions: [],
+    positionsTouched: false,
     warranty: false,
     complimentary: false,
     partId: null,
@@ -316,7 +320,10 @@ function lineFromCategoryValues(
       systemName: extras.system?.name,
       action: extras.action,
       labor: serviceJobCost(values, extras.positions, extras.complimentary),
-      positions: extras.positions.length ? [...extras.positions] : undefined,
+      positions: [...extras.positions],
+      positionsTouched: extras.positionsTouched,
+      positionScheme: cat.position_scheme ?? null,
+      positionAware: cat.position_aware ?? null,
       complimentary: extras.complimentary || undefined,
       notes: typeof values.notes === "string" ? values.notes : undefined,
       values: {
@@ -355,7 +362,10 @@ function lineFromCategoryValues(
       typeof conditionRaw === "string" && conditionRaw
         ? conditionRaw
         : undefined,
-    positions: extras.positions.length ? [...extras.positions] : undefined,
+    positions: [...extras.positions],
+    positionsTouched: extras.positionsTouched,
+    positionScheme: cat.position_scheme ?? null,
+    positionAware: cat.position_aware ?? null,
     brand: extras.brand.trim() || undefined,
     partNumber: extras.partNumber.trim() || undefined,
     warranty: extras.warranty || undefined,
@@ -376,7 +386,8 @@ function lineFromCategoryValues(
  * this screen silently deleting them.
  */
 function linesForSave(lines: MaintenanceLogLine[], itemsEnabled: boolean | null): MaintenanceLogLine[] {
-  return lines.map((l) => {
+  return lines.map((line) => {
+    const l = positionsForWire(line);
     const { items, itemsAmount: _ia, lineTotal: _lt, voidedAt: _va, ...rest } = l;
     if (l.declined || !items?.length) return rest;
     if (itemsEnabled === false && !items.some((i) => i.id)) return rest;
@@ -961,7 +972,20 @@ export function LogMaintenanceServiceDialog({
       laborRate: existing?.laborRate ?? null,
       brand: existing?.brand || "",
       partNumber: existing?.partNumber || "",
-      positions: existing?.positions ? [...existing.positions] : [],
+      ...(() => {
+        if (existing) {
+          return {
+            positions: existing.positions ? [...existing.positions] : [],
+            positionsTouched: existing.positionsTouched === true,
+          };
+        }
+        // "Log it now" (LS-06): open with the found job's position picked, minus codes the job no longer has.
+        if (fromFoundWork && fromFoundWork.jobId === cat.id) {
+          const kept = keepAllowedPositions(positionUiFor(cat, true), fromFoundWork.positions);
+          return { positions: kept, positionsTouched: kept.length > 0 };
+        }
+        return { positions: [] as string[], positionsTouched: false };
+      })(),
       warranty: Boolean(existing?.warranty),
       complimentary: Boolean(existing?.complimentary),
       partId: existing?.partId || null,
@@ -1051,6 +1075,7 @@ export function LogMaintenanceServiceDialog({
         onModeChange={setFoundMode}
         onNoteChange={setFoundNote}
         onRemove={removeFoundDraft}
+        renderWhere={renderFoundWhere}
       />
     ) : undefined;
   const fromInspectionChipFor = (cat: MaintenanceServiceCategory) =>
@@ -1080,6 +1105,7 @@ export function LogMaintenanceServiceDialog({
         jobCharge={Math.round(charge * 100) / 100}
         onPickPart={(item) => setPickingItem(item)}
         beforeTotal={foundSlotFor(cat)}
+        gapsEnabled={jobItems.gapsEnabled}
       />
     );
   };
@@ -1218,6 +1244,7 @@ export function LogMaintenanceServiceDialog({
 
   const handleSaveCategory = () => {
     if (!activeCategory) return;
+    if (saveLineBlocked(activeCategory)) return;
     const line = lineFromCategoryValues(activeCategory, fieldValues, lineExtras);
     if (linesHaveItemErrors([line])) {
       toast.error("Fix the items marked in red first");
@@ -1689,10 +1716,64 @@ export function LogMaintenanceServiceDialog({
   const togglePosition = (pos: string) => {
     setLineExtras((prev) => ({
       ...prev,
+      positionsTouched: true,
       positions: prev.positions.includes(pos)
         ? prev.positions.filter((p) => p !== pos)
         : [...prev.positions, pos],
     }));
+  };
+
+  // ---- "Where on the car" (LS-01/03/04/06) ----
+  const positionUi = (cat: MaintenanceServiceCategory) => positionUiFor(cat, jobItems.gapsEnabled);
+  const toggleWhere = (code: string) =>
+    setLineExtras((prev) => ({
+      ...prev,
+      positionsTouched: true,
+      positions: togglePositionCode(prev.positions, code),
+    }));
+  const whereSlotFor = (cat: MaintenanceServiceCategory) => {
+    const ui = positionUi(cat);
+    if (ui.kind !== "chips") return undefined;
+    return (
+      <WhereOnCarChips
+        options={ui.options}
+        picked={lineExtras.positions}
+        onToggle={toggleWhere}
+        showHelper={lineExtras.positions.length === 0}
+      />
+    );
+  };
+  /** Found "Not done yet" rows that still need a chip (same rule as the job itself, LS-06). */
+  const foundRowsMissingPosition = (cat: MaintenanceServiceCategory) =>
+    isInspectionJob(cat.id) &&
+    foundDrafts.some((d) => {
+      if (d.mode !== "later") return false;
+      return positionMissing(positionUiFor(catalogById.get(d.jobId), jobItems.gapsEnabled), d.positions ?? []);
+    });
+  /** Save line waits until each "Where on the car" has a pick ("Not sure" counts). Wheel jobs never wait. */
+  const saveLineBlocked = (cat: MaintenanceServiceCategory) =>
+    positionMissing(positionUi(cat), lineExtras.positions) || foundRowsMissingPosition(cat);
+  const toggleFoundWhere = (jobId: string, code: string) =>
+    setFoundDrafts((prev) =>
+      prev.map((d) =>
+        d.jobId === jobId
+          ? { ...d, positionsTouched: true, positions: togglePositionCode(d.positions ?? [], code) }
+          : d,
+      ),
+    );
+  const renderFoundWhere = (d: FoundDraft) => {
+    const ui = positionUiFor(catalogById.get(d.jobId), jobItems.gapsEnabled);
+    if (ui.kind !== "chips") return null;
+    const picked = d.positions ?? [];
+    return (
+      <WhereOnCarChips
+        options={ui.options}
+        picked={picked}
+        onToggle={(code) => toggleFoundWhere(d.jobId, code)}
+        showHelper={picked.length === 0}
+        testId="found-where-on-car"
+      />
+    );
   };
 
   const ALL_WHEELS = ["LF", "RF", "LR", "RR"];
@@ -1708,6 +1789,7 @@ export function LogMaintenanceServiceDialog({
           onToggleAllPositions: () =>
             setLineExtras((prev) => ({
               ...prev,
+              positionsTouched: true,
               positions: ALL_WHEELS.every((p) => prev.positions.includes(p)) ? [] : [...ALL_WHEELS],
             })),
         }
@@ -1955,10 +2037,14 @@ export function LogMaintenanceServiceDialog({
                   />
                 ) : null}
                 {step === "lineDetails" && lineDetailCategories.length === 0 ? (
+                  <>
+                  {activeCategory ? <SaveLineHint show={saveLineBlocked(activeCategory)} /> : null}
                   <LogServiceWizardContinueButton
                     label={LOG_SERVICE_COPY.saveLineLabel}
+                    disabled={activeCategory ? saveLineBlocked(activeCategory) : false}
                     onClick={handleSaveCategory}
                   />
+                  </>
                 ) : null}
                 {step === "review" ? (
                   <>
@@ -2176,7 +2262,8 @@ export function LogMaintenanceServiceDialog({
                       partNumber={lineExtras.partNumber}
                       onBrandChange={(brand) => setLineExtras((prev) => ({ ...prev, brand }))}
                       onPartNumberChange={(partNumber) => setLineExtras((prev) => ({ ...prev, partNumber }))}
-                      showPositions={needsPositions(cat)}
+                      showPositions={positionUi(cat).kind === "wheels"}
+                      whereSlot={whereSlotFor(cat)}
                       sideOptions={sidePositionsFor(cat)}
                       positions={lineExtras.positions}
                       onTogglePosition={togglePosition}
@@ -2234,9 +2321,11 @@ export function LogMaintenanceServiceDialog({
                     </div>
                   )}
                   {activeCategory?.id === cat.id && (
-                    <div className="mt-4 flex justify-end">
+                    <div className="mt-4 flex items-center justify-end gap-3">
+                      <SaveLineHint show={saveLineBlocked(cat)} />
                       <LogServiceWizardContinueButton
                         label={LOG_SERVICE_COPY.saveLineLabel}
+                        disabled={saveLineBlocked(cat)}
                         onClick={handleSaveCategory}
                       />
                     </div>
@@ -2265,7 +2354,8 @@ export function LogMaintenanceServiceDialog({
               partNumber={lineExtras.partNumber}
               onBrandChange={(brand) => setLineExtras((prev) => ({ ...prev, brand }))}
               onPartNumberChange={(partNumber) => setLineExtras((prev) => ({ ...prev, partNumber }))}
-              showPositions={needsPositions(activeCategory)}
+              showPositions={positionUi(activeCategory).kind === "wheels"}
+              whereSlot={whereSlotFor(activeCategory)}
               sideOptions={sidePositionsFor(activeCategory)}
               positions={lineExtras.positions}
               onTogglePosition={togglePosition}
@@ -2339,6 +2429,7 @@ export function LogMaintenanceServiceDialog({
                   Boolean(allComponents.find((c) => c.id === line.categoryId)?.is_high_voltage),
               })}
               itemsEnabled={itemsEnabled || lines.some((l) => (l.items?.length ?? 0) > 0)}
+              gapsEnabled={jobItems.gapsEnabled}
               vehicleLabel={strip.vehicleLabel}
               baySessionLabel={idempotencyKey.slice(0, 8).toUpperCase()}
               date={formMeta.date}
@@ -2423,6 +2514,7 @@ export function LogMaintenanceServiceDialog({
         </LogServiceWizardChrome>
       </ResponsiveDialogContent>
       <PickPartDialog
+        gapsEnabled={jobItems.gapsEnabled}
         open={Boolean(pickingItem)}
         onClose={() => setPickingItem(null)}
         vehicleId={vehicleId}

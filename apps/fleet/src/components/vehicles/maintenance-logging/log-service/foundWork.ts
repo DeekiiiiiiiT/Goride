@@ -16,6 +16,10 @@ export type FoundDraft = {
   name: string;
   mode: FoundMode;
   note: string;
+  /** "Where on the car" on a "Not done yet" row (LS-06). */
+  positions?: string[];
+  /** A chip was tapped on this row (a saved found line that wasn't tapped keeps its stored positions). */
+  positionsTouched?: boolean;
 };
 
 export const FOUND_COPY = {
@@ -93,7 +97,14 @@ export function draftsFromLines(lines: MaintenanceLogLine[], inspectionJobId: st
     const id = lineJobId(l);
     if (!id || seen.has(id) || !belongsTo(l, inspectionJobId)) continue;
     if (isFoundLine(l) && !l.declined) {
-      out.push({ jobId: id, name: l.categoryName || "Job", mode: "later", note: l.notes ?? "" });
+      out.push({
+        jobId: id,
+        name: l.categoryName || "Job",
+        mode: "later",
+        note: l.notes ?? "",
+        positions: l.positions ? [...l.positions] : [],
+        positionsTouched: l.positionsTouched === true,
+      });
       seen.add(id);
     } else if (isFoundToday(l)) {
       out.push({ jobId: id, name: l.categoryName || "Job", mode: "today", note: "" });
@@ -123,6 +134,10 @@ export function foundLineFromDraft(
     declined: false,
     notes: note || undefined,
     values: { found_by_job: inspectionJobId },
+    positions: d.positions?.length ? [...d.positions] : [],
+    positionsTouched: d.positionsTouched === true,
+    positionScheme: cat?.position_scheme ?? null,
+    positionAware: cat?.position_aware ?? null,
   };
 }
 

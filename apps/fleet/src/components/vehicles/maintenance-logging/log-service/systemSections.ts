@@ -24,6 +24,8 @@ export type SystemSections = {
   serviceItemsEnabled?: boolean;
   /** The fleet's inspection-findings switch. False → no "what the inspection found" block. */
   inspectionFindingsEnabled?: boolean;
+  /** Log service parts gaps switch (non-wheel chips, etc.). False until enabled per org. */
+  logServicePartsGapsEnabled?: boolean;
 };
 
 /** Job id → its May-need items, from every job in a group's response (sections and other jobs). */

@@ -252,3 +252,21 @@ Deno.test("recordsFindings on jobs when switch off vs on", () => {
   assertEquals(payload.groups[0].sections[0].jobs[0].recordsFindings, false);
   assertEquals(payload.otherJobs[0].recordsFindings, false);
 });
+Deno.test("code review #4: an edit may send back saved finding marks; a new mark is still refused", () => {
+  const stored = new Map([
+    ["line-1", { fromFound: "", foundByJob: "", foundToday: true }],
+    ["line-2", { fromFound: "found-9", foundByJob: "", foundToday: false }],
+  ]);
+  // Same marks as saved → allowed.
+  assertEquals(
+    inspectInspectionFindingsOffPayload(
+      [{ id: "line-1", values: { found_today: true } }, { id: "line-2", fromFoundLineId: "found-9" }],
+      stored,
+    ),
+    false,
+  );
+  // A new line with a mark, or a saved line gaining one → refused.
+  assertEquals(inspectInspectionFindingsOffPayload([{ values: { found_today: true } }], stored), true);
+  assertEquals(inspectInspectionFindingsOffPayload([{ id: "line-2", values: { found_by_job: JOB } }], stored), true);
+  assertEquals(inspectInspectionFindingsOffPayload([{ id: "line-1", fromFoundLineId: "found-1" }], stored), true);
+});

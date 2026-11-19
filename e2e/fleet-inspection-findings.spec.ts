@@ -449,7 +449,9 @@ test.describe("Fleet inspection findings", () => {
     await page.getByRole("tab", { name: /service history/i }).click();
     // Wiper Blades was done on the inspection visit, so its row opens that service.
     const inspJob = page.getByTestId("service-history-job").filter({ hasText: wiper.name }).first();
-    const groupRow = page.getByRole("row").filter({ hasText: wiper.name }).first();
+    // Same-day services share one history row ("Brake rotor, Leak Inspection + 1 more"), so Wiper Blades can be
+    // folded into "+ N more": open the car's row, not a row that must spell out the job.
+    const groupRow = page.getByRole("row").filter({ hasText: MD_DISC_PLATE }).first();
     await expect(groupRow.or(inspJob).first()).toBeVisible({ timeout: 30_000 });
     // IF-16: found jobs never appear as history jobs (Shock absorber was only found, then Not needed).
     await expect(page.getByRole("table")).not.toContainText(shock.name);

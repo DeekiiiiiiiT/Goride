@@ -248,8 +248,13 @@ jobs:
           supabase/functions/_fleet-server/service_items_line_items.test.ts
           supabase/functions/_fleet-server/service_items_save.test.ts
           supabase/functions/_fleet-server/maintenance_completion.test.ts
+          supabase/functions/_fleet-server/log_service_unknown_parts.test.ts
+          supabase/functions/_fleet-server/parts_sourcing_drain.test.ts
+          supabase/functions/_fleet-server/pending_parts_group.test.ts
+          supabase/functions/_fleet-server/pending_parts_catalog_routes.test.ts
           supabase/functions/_fleet-server/canonical_from_ops_maintenance.test.ts
           supabase/functions/_fleet-server/maintenance_routes_policy.test.ts
+          supabase/functions/_fleet-server/log_service_positions.test.ts
 
       - name: Deno test platform MFA gate
         run: deno test --no-check supabase/functions/_fleet-server/platform_mfa_gate.test.ts
@@ -275,6 +280,9 @@ jobs:
           supabase/functions/_fleet-server/parts_resolution.test.ts
           supabase/functions/_fleet-server/catalog_privacy.test.ts
 
+      - name: Deno test part positions
+        run: deno test --no-check packages/types/src/partPositions.test.ts
+
       - name: Deno test find parts
         run: >
           deno test --no-check
@@ -291,6 +299,7 @@ jobs:
           supabase/functions/_fleet-server/catalog_research_worker.test.ts
           supabase/functions/_fleet-server/catalog_research_part_research.test.ts
           supabase/functions/_fleet-server/catalog_trusted_source_block.test.ts
+          supabase/functions/_fleet-server/parts_sourcing_request_build.test.ts
 
       - name: Deno test parts auto-match routes
         run: >

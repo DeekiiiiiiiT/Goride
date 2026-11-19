@@ -4,7 +4,7 @@
 import type { Context } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
-import { filterByOrg } from "./org_scope.ts";
+import { filterByOrg, recordVisibleToOrg } from "./org_scope.ts";
 
 export function vehicleContextStatus(foundInKv: boolean, inOrg: boolean): 200 | 403 | 404 {
   if (!foundInKv) return 404;
@@ -106,6 +106,34 @@ export type VerifiedCarAccess = {
   catalogId: string | null;
 };
 
+/** The car's own catalogue link, kept only when that catalogue car exists. One rule for both doors below. */
+async function linkedCatalogIds(
+  supabase: SupabaseClient,
+  vehicle: Record<string, unknown> | null,
+): Promise<Set<string>> {
+  const existing = await filterLinksExistingInCatalog(
+    supabase,
+    [readExplicitCatalogLink(vehicle)].filter((id): id is string => Boolean(id)),
+  );
+  return new Set(existing);
+}
+
+/**
+ * The same rule as verifiedCarForVehicle, by organization id with no request (the parts-sourcing drain):
+ * the kv car, filterByOrg's org rule (recordVisibleToOrg), and its existing catalogue link.
+ */
+export async function verifiedCatalogIdForVehicle(
+  supabase: SupabaseClient,
+  orgId: string,
+  vehicleId: string,
+): Promise<string | null> {
+  const raw = await kv.get(`vehicle:${vehicleId}`);
+  if (!raw || typeof raw !== "object") return null;
+  const vehicle = raw as Record<string, unknown>;
+  if (!recordVisibleToOrg(vehicle, orgId)) return null;
+  return verifiedCatalogIdFromLink(readExplicitCatalogLink(vehicle), await linkedCatalogIds(supabase, vehicle));
+}
+
 export async function verifiedCarForVehicle(
   c: Context,
   supabase: SupabaseClient,
@@ -115,11 +143,7 @@ export async function verifiedCarForVehicle(
   const found = Boolean(raw && typeof raw === "object");
   const scoped = found ? filterByOrg([raw as Record<string, unknown>], c) : [];
   const vehicle = scoped[0] ?? null;
-  const existing = await filterLinksExistingInCatalog(
-    supabase,
-    [readExplicitCatalogLink(vehicle)].filter((id): id is string => Boolean(id)),
-  );
-  return assembleVerifiedCarAccess(found, Boolean(vehicle), vehicle, new Set(existing));
+  return assembleVerifiedCarAccess(found, Boolean(vehicle), vehicle, await linkedCatalogIds(supabase, vehicle));
 }
 
 export async function verifiedCatalogIdsForOrg(c: Context, supabase: SupabaseClient): Promise<string[]> {

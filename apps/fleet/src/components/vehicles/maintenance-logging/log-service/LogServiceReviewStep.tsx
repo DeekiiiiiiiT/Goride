@@ -21,6 +21,8 @@ import { formatMaintenanceServiceDateLabel } from "../../../../utils/maintenance
 import { costRecorded, itemAmount, money, qtyWithUnit } from "./itemsUsed";
 import { actionLabel } from "./systemSections";
 import { FOUND_COPY, isFoundLine, isFoundToday } from "./foundWork";
+import { linePositionsText } from "./positionChips";
+import { isUnknownPart, RoamLooksItUpLine } from "./unknownParts";
 import { FromInspectionChip, ReviewFoundGroup } from "./FoundWorkSection";
 
 export type LogServiceReviewStepProps = {
@@ -61,6 +63,8 @@ export type LogServiceReviewStepProps = {
   whatHappensNext?: React.ReactNode;
   /** Show item lines and the Labor / Parts split (service items on, or lines already carry items). */
   itemsEnabled?: boolean;
+  /** LS-18: "Roam will look this part up…" under unknown parts (Stitch F7). */
+  gapsEnabled?: boolean;
   vehicleLabel?: string;
   /** Inspection findings: remove a "Found, not done yet" job (with Undo in the dialog). */
   onRemoveFoundLine?: (line: MaintenanceLogLine) => void;
@@ -103,6 +107,7 @@ export function LogServiceReviewStep({
   onMarkPackageCompleteChange,
   whatHappensNext,
   itemsEnabled = false,
+  gapsEnabled = false,
   vehicleLabel,
   lineFit,
   onRemoveFoundLine,
@@ -218,6 +223,13 @@ export function LogServiceReviewStep({
                     ) : null}
                   </div>
                 </div>
+                {linePositionsText(line) ? (
+                  // Stitch F7: a muted "Where on the car:" line under the job name.
+                  <p className={`${LT.bodySm} ${LS.muted} pl-9`} data-testid="review-where-on-car">
+                    {LOG_SERVICE_COPY.whereOnCarReview}{" "}
+                    <span className={`font-semibold ${LS.text}`}>{linePositionsText(line)}</span>
+                  </p>
+                ) : null}
                 {declined ? (
                   <div className="mt-2 p-3 bg-surface-container rounded-lg flex items-center justify-between flex-wrap gap-2">
                     <span className="flex items-center gap-1.5 text-sm text-on-surface-variant">
@@ -249,7 +261,15 @@ export function LogServiceReviewStep({
                         <span className="flex items-center gap-2 min-w-0">
                           <span className="w-1.5 h-1.5 rounded-full bg-outline-variant shrink-0" />
                           <span className="truncate">
-                            {it.itemName || "Item"} · {qtyWithUnit(it)}
+                            {/* Stitch F7 (switch on): name · part number · brand · qty. Off: name · qty, as today. */}
+                            {[
+                              it.itemName || "Item",
+                              gapsEnabled ? it.partNumber || null : null,
+                              gapsEnabled ? it.brand || null : null,
+                              qtyWithUnit(it),
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
                           </span>
                         </span>
                         {costRecorded(it) ? (
@@ -262,13 +282,17 @@ export function LogServiceReviewStep({
                         )}
                       </li>
                     ))}
+                    {gapsEnabled && items.some(isUnknownPart) ? (
+                      <li>
+                        <RoamLooksItUpLine className="mt-1" />
+                      </li>
+                    ) : null}
                   </ul>
                 ) : (
                   <p className={`pl-9 ${LT.bodySm} ${LS.muted}`}>
                     {[
                       line.qty != null ? `Qty ${line.qty}` : null,
                       line.brand || null,
-                      line.positions?.length ? line.positions.join(" ") : null,
                     ]
                       .filter(Boolean)
                       .join(" · ")}

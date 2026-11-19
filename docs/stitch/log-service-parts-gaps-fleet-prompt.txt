@@ -1,0 +1,200 @@
+ROAM FLEET — LOG SERVICE · WHERE ON THE CAR + PARTS ROAM DOESN'T HAVE YET — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Log service · Where on the car, and parts Roam doesn't have yet (Desktop Web App with a phone layout, for fleet owners, fleet managers and their staff):
+
+Design the changes to the existing "Log service" dialog of Fleet maintenance that let a fleet manager record exactly what was done, even when Roam doesn't know the part yet. Two things change. First, some jobs happen in one of several places on the car: an oxygen sensor is either in front of the exhaust converter or behind it; wiper blades are on the driver side, the passenger side or the back; a headlight bulb is low beam or high beam. For those jobs the job card now shows a row of choice chips under the job name ("Front (before converter)", "Rear (after converter)", "Not sure"), and the person must tap one before saving the job. "Not sure" is always there, for when the garage's paper doesn't say. Wheel jobs (Tire Change, Brakes, Brake rotor) keep today's four wheel buttons exactly as they are. Second, when a part isn't in Roam's list, the person can still log it with "+ Other item" or "Type it in instead", and can now add the part number from the box or the receipt. After the service is saved, Roam sends that part to its own team to look up and add to the parts list, and the service history shows that it was sent. The same position chips also appear on the "What the inspection found" rows, so a garage's "front oxygen sensor" can be recorded as not done yet and carried into "Log it now". The dialog keeps its four steps: 1 Date & mileage, 2 Work done, 3 Details, 4 Review. The person using this is a normal fleet owner, not a mechanic: plain words, no codes. The design must feel modern, calm and effortless, like the best business banking apps: generous spacing, soft 12–16px rounded cards, soft shadows, clear hierarchy. Draw each screen tall enough that every element is visible, with no inner scrolling and nothing cut off.
+
+
+BRAND IDENTITY:
+- Match the existing Roam Fleet web app and the existing Log service dialog exactly (do not redesign them):
+  - Top: a white nav row with the black "Roam Fleet" app tile, then: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations (active, underlined), Delivery Operations, Analytics, Reports, Business Finance, a bell with a red count, the avatar.
+  - Dark navy sub-bar below it: "Switch vehicle or search hub…" on the left; "07:48:21 AM EST · America/Jamaica · JM (JMD)" and an org chip "DE · Deeki T · platform_owner" on the right.
+  - Page "Fleet maintenance" with the orange wrench icon, a secondary "Refresh" button and a black primary "+ Log service" button on the right.
+  - Log service dialog: white, 720px wide, title "Log service" with a wrench icon in a round grey tile, subtitle "Vehicle maintenance & repair ledger entry", and a close X. Under the title, a black car bar: car icon, "Toyota Roomy (2019)", a grey plate chip "5179KZ", a green chip "Petrol"; on the right "198,849 km · 18 Nov 2026" and a small dark chip "fuel fill log".
+  - Step bar on a pale lavender strip: "✓ Date & mileage · ✓ Work done · 3 Details · 4 Review", done steps with green round checks, the current step with a black round number.
+  - Footer: a red "Cancel" button on the left; on the right a grey "← Back" and the black primary button.
+- LIGHT MODE (default):
+  - Primary: near-black #030213 — primary buttons, the current step, a selected chip
+  - Background: white #FFFFFF; page wash: #f8fafc; pale lavender panels: #f4f3fb
+  - Cards: white, 1px border rgba(0,0,0,0.1), 12px corners, soft shadow
+  - Text: #0a0a0a; muted text: #717182
+  - Sent / Done: emerald #059669 on a soft green #ecfdf5
+  - Waiting / Will send / Not done yet: amber #b45309 on a soft amber #fffbeb
+  - Not sure / Not sent: slate #475569 on #f1f5f9
+  - Error and danger: red #d4183d on #fff1f2
+  - Roam's team (sending a part): indigo #4f46e5 line icon on a #eef2ff rounded square
+- DARK MODE:
+  - Background #252525; surface #2e2e2e; border #444444
+  - Text #fafafa; muted #b4b4b4; primary buttons light #fafafa with dark text
+  - Green #34d399 on #064e3b; amber #fbbf24 on #451a03; slate #94a3b8 on #1e293b; red #f87171 on #450a0a; indigo #a5b4fc on #1e1b4b
+- Position chips (fully rounded, 36px tall, icon-free words):
+  - Not picked: white with a visible #cbd5e1 border and dark text.
+  - Picked: filled near-black #030213 with white text and a small white check.
+  - "Not sure": the same chip, slate when picked (#475569 fill, white text).
+  - Several chips can be picked on any job; picking "Not sure" clears the others.
+- Status lines under a part (one line, small icon + words, never colour alone):
+  - "Roam will look this part up and add it to the parts list." (indigo, search icon) — before saving
+  - "Sending to Roam…" (amber, clock) · "Sent to Roam to add to the parts list" (green, check) · "Will send tomorrow (daily limit reached)" (amber, clock) · "Not sent: this car isn't linked to a Roam car yet" (slate, info) · "Couldn't send yet. Roam will keep trying." (amber, refresh)
+- Money is Jamaican dollars with tabular figures: "J$ 8,000", "J$ 0"; kilometres "198,849 km"; dates "18 Nov 2026". Never codes, ids or words like "scheme", "catalyst", "position code", "line" or "outbox".
+- Typography: Inter. Dialog title 20px semibold, section titles 15px semibold, body 14px, muted helper 13px. Plates, km, money and part numbers in a mono font with tabular figures.
+- Icons: Lucide line icons, 20px. No gradients, glass or 3D. No AI badges, no percentages, no scores.
+- Buttons always look like buttons:
+  - Primary = solid near-black with white text. One primary per screen.
+  - Secondary = white with a visible #cbd5e1 border and dark text.
+  - Danger (Cancel, Remove) = red outline and red text; the dialog's "Cancel" stays as it is today.
+  - A disabled primary is a pale grey fill with grey text and a muted reason line next to it.
+  - Icon buttons are 32px with a visible border.
+  - Never underlined text links, never grey text-only buttons. Every confirm is an in-app overlay, never a browser pop-up.
+- Sample data (REAL jobs from Roam's job list):
+  - Car: Toyota Roomy (2019) · 5179KZ · Petrol · 198,849 km. Other car: Honda Fit (2018) · 1505LM.
+  - Service on 18 Nov 2026 at "Northside Auto, Spanish Town".
+  - Jobs: "Oxygen sensor" (Front (before converter) / Rear (after converter) / Not sure), "Wiper Blades" (Driver / Passenger / Rear / Not sure), "Headlight bulb" (Low beam / High beam / Not sure), "Tire Change" (today's four wheel buttons Front left / Front right / Rear left / Rear right).
+  - Other item: "Front oxygen sensor", part number "89467-B1040", brand "Denso", qty 1, cost each "J$ 9,500".
+  - Inspection job: "Inspection / diagnostic fee" J$ 8,000.
+  - The person: "Deeki T".
+
+
+DESIGN PRINCIPLES:
+- Ask only what matters: position chips appear only on jobs that can be in more than one place; every other job looks exactly as it does today.
+- Never stuck: "Not sure" is always a choice, so the person can always save.
+- Say what will happen before it happens: a part Roam doesn't have shows "Roam will look this part up…" before saving, and the history shows what really happened after.
+- Plain words for places on the car: "Front (before converter)", "Driver", "Low beam" — never technical codes.
+- Add to the existing screens, never take anything away: every part of today's Log service dialog, Items used, Pick a part and service history stays as it is.
+- Calm, not alarming: amber for waiting, red only for errors and Remove.
+- Desktop-first (1440px), with a phone layout. 8px spacing grid, soft shadows, skeleton loading.
+- One view per screen.
+
+
+SCREEN 1: STEP 3 DETAILS — OXYGEN SENSOR, WHERE NOT PICKED YET
+- The Log service dialog over the dimmed Fleet maintenance page. Step 3 "Details" is current. Above the card, muted text "Enter part details, costs and labour for each job (1 job)." and "STEP 3 OF 4" on the right.
+- The job card "Oxygen sensor" with the wrench icon tile.
+- NEW directly under the job name: a small label "Where on the car", then three chips in a row: "Front (before converter)", "Rear (after converter)", "Not sure" — none picked. Muted helper under the chips: "Pick where on the car. Tap Not sure if the paper doesn't say."
+- A pale panel "Service charge" (muted helper "Not counting the items or consumables below") with an empty input "J$" and a checkbox "No charge (free)".
+- "Items used" with the muted note "Tick what was used. Nothing is ticked for you." and a pale panel: "No standard items suggested for this service. Add parts or supplies if any were used." with a secondary "+ Other item" button.
+- The job total pill "Job J$ 0 + items J$ 0 = J$ 0", and the "Save line →" button disabled (pale grey) with a muted line to its left: "Pick where on the car first".
+- Below the card: the dashed "+ Add another job" row with "Save this job first, then add another."; the lavender "Subtotal summary" bar "JMD 0 (0 items)".
+- Footer: red "Cancel", grey "← Back", black "Continue to review →".
+
+
+SCREEN 2: STEP 3 DETAILS — FRONT PICKED, PART ROAM DOESN'T HAVE
+- The same dialog and job card as Screen 1, now with "Front (before converter)" picked (near-black chip with a white check); the helper line is gone.
+- "Service charge" input shows "J$ 4000".
+- "Items used": the "No standard items suggested…" panel, and below it an open "Other item" block (white card, orange "Custom service item" label at the top left, red-outline "Remove" button at the top right) with fields in a row:
+  - "What was it?" — "Front oxygen sensor"
+  - NEW "Part number (optional)" — "89467-B1040" in mono, muted helper under it "From the box or the receipt, if there is one."
+  - "Qty" stepper — "1"
+  - "Cost each" — "J$ 9500"
+  - "Brand (opt)" — "Denso"
+  - "Line total: J$ 9,500" right-aligned
+- NEW under the Other item block, one indigo status line with a search icon: "Roam will look this part up and add it to the parts list."
+- The job total pill "Job J$ 4,000 + items J$ 9,500 = J$ 13,500" and the black "Save line →" button (enabled).
+- Footer as in Screen 1.
+
+
+SCREEN 3: PICK A PART — NOTHING LISTED, TYPE IT IN
+- The same dialog with the existing in-app "Pick a part" overlay on top of the Details step, title "Pick a part", subtitle "Oxygen sensor for your Toyota Roomy", with a close X.
+- An empty-list panel with a search icon: "No parts are listed for this car yet. Type it in instead."
+- Below it the type-in form, as today: "Brand" — "Denso"; "Part number (optional)" — "89467-B1040" in mono.
+- NEW one indigo status line with a search icon under the form: "Roam will look this part up and add it to the parts list."
+- Bottom of the overlay: secondary "Cancel" and black primary "Use this part".
+
+
+SCREEN 4: STEP 3 DETAILS — WIPER BLADES, TWO PLACES PICKED
+- The same dialog with the job card "Wiper Blades".
+- Under the job name: "Where on the car" and four chips: "Driver" (picked), "Passenger" (picked), "Rear", "Not sure".
+- "Service charge" "J$ 1500".
+- "Items used" with one ticked row "Wiper blade 22 in" with a "Part" chip, quantity "2", cost each "J$ 900", amount "J$ 1,800" right-aligned; a secondary "+ Other item" button.
+- Job total pill "Job J$ 1,500 + items J$ 1,800 = J$ 3,300" and the black "Save line →" button.
+
+
+SCREEN 5: WHAT THE INSPECTION FOUND — WITH WHERE ON THE CAR
+- The Details step for the job card "Inspection / diagnostic fee" (small grey chip "Inspect"), "Service charge" "J$ 8000", and "Items used" as today.
+- The existing pale lavender section "What the inspection found" (indigo magnifying-glass icon tile, helper "Add the jobs the garage said this car needs. Mark each one done today or not done yet.") holding one white row:
+  - "Oxygen sensor", and NEW right under the name the chips "Front (before converter)" (picked), "Rear (after converter)", "Not sure", in the compact 32px size.
+  - The existing segmented control "Done today | Not done yet" with "Not done yet" selected (amber, clock icon).
+  - The note input "Note (optional)" showing "Garage says front sensor reading slow".
+  - "J$ 0 · not charged" in muted mono, and a red-outline "Remove" icon button.
+- Under the row: a secondary "+ Add job" button and the muted line "0 done today · 1 not done yet (kept on the car's list)".
+- Job total pill "Job J$ 8,000 + items J$ 0 = J$ 8,000" and the black "Save line →" button.
+
+
+SCREEN 6: LOG SERVICE OPENED FROM "LOG IT NOW" — FRONT ALREADY PICKED
+- The Log service dialog on step 3 "Details" for the Toyota Roomy 5179KZ, date 2 Dec 2026, odometer 200,140 km.
+- At the top of the step, the existing indigo-outlined banner with the magnifying-glass icon: "From inspection on 18 Nov 2026 · Inspection / diagnostic fee at Northside Auto", and below it the note "Garage says front sensor reading slow".
+- The job card "Oxygen sensor", already picked, with the indigo outline chip "From inspection", and the chips "Front (before converter)" already picked, "Rear (after converter)", "Not sure".
+- "Service charge" "J$ 4000"; "Items used" with an Other item "Front oxygen sensor", part number "89467-B1040", qty 1, "J$ 9500", and the indigo line "Roam will look this part up and add it to the parts list."
+- Job total pill "Job J$ 4,000 + items J$ 9,500 = J$ 13,500" and the black "Save line →" button.
+- Footer: red "Cancel", grey "← Back", black "Continue to review →".
+
+
+SCREEN 7: STEP 4 REVIEW — PLACES SHOWN IN PLAIN WORDS
+- Step 4 "Review" current. Top: editable summary rows for "Date 18 Nov 2026", "Odometer 198,849 km", "Garage Northside Auto, Spanish Town", "Currency JMD", each with a secondary "Edit" button.
+- Group "Work done" with job rows, each with the wrench icon tile, the name, a muted line with where on the car, the amount right-aligned and a secondary "Edit" button:
+  - "Oxygen sensor" — muted "Front (before converter)" — J$ 13,500, muted line "Job J$ 4,000 + items J$ 9,500"; under it the item line "Front oxygen sensor · 89467-B1040 · Denso ×1 · J$ 9,500"
+  - "Wiper Blades" — muted "Driver, Passenger" — J$ 3,300
+  - "Headlight bulb" — muted "Not sure" — J$ 2,000
+- A notes box "Notes" and an "Invoice" upload row, as in today's Review step.
+- Total card: "Total J$ 18,800" in large mono.
+- Footer: red "Cancel", grey "← Back", black "Save service".
+
+
+SCREEN 8: SERVICE HISTORY — THE SERVICE, WHERE, AND THE PART SENT TO ROAM
+- The Fleet maintenance page on the "Service history" tab, with the service detail panel open for "18 Nov 2026 · Toyota Roomy 5179KZ · Northside Auto, Spanish Town", total "J$ 18,800".
+- Section "Work done":
+  - "Oxygen sensor · Front (before converter)" — J$ 13,500; its item line "Front oxygen sensor · 89467-B1040 · Denso ×1 · J$ 9,500"; under the item the green status line with a check "Sent to Roam to add to the parts list".
+  - "Wiper Blades · Driver, Passenger" — J$ 3,300; item line "Wiper blade 22 in ×2 · J$ 1,800".
+  - "Headlight bulb · Not sure" — J$ 2,000.
+- The panel's existing buttons stay as they are today.
+
+
+SCREEN 9: STATES — WHAT HAPPENED TO A PART SENT TO ROAM
+- One board of five small cards stacked in one column, each the same item line "Front oxygen sensor · 89467-B1040 · Denso ×1 · J$ 9,500" with a different status line under it:
+  - Amber clock: "Sending to Roam…"
+  - Green check: "Sent to Roam to add to the parts list"
+  - Amber clock: "Will send tomorrow (daily limit reached)"
+  - Slate info: "Not sent: this car isn't linked to a Roam car yet"
+  - Amber refresh: "Couldn't send yet. Roam will keep trying."
+- No buttons on these lines; they are information only.
+
+
+SCREEN 10: PHONE 390px — WHERE ON THE CAR + OTHER ITEM
+- The Details step of Screen 2 on a 390px phone, as a full-screen sheet.
+- Compact header "Step 3 of 4 · Details", the car strip "Toyota Roomy · 5179KZ".
+- The job card "Oxygen sensor" with the three chips wrapping onto two lines, "Front (before converter)" picked.
+- "Service charge" card, then the Other item block with its fields stacked one per row ("What was it?", "Part number (optional)", "Qty", "Cost each", "Brand (opt)"), the indigo line "Roam will look this part up and add it to the parts list."
+- A sticky bottom bar with the total "J$ 13,500", a grey "← Back" and a black "Save line →".
+
+
+ADDITIONAL UI COMPONENTS:
+- "Where on the car" chip row: small label, chips 36px (32px inside "What the inspection found"), one-line muted helper when nothing is picked.
+- Choices per kind of job (plain words): Oxygen sensor and NOx sensor — "Front (before converter)", "Rear (after converter)"; Wiper Blades — "Driver", "Passenger", "Rear"; Headlight bulb — "Low beam", "High beam"; Indicator bulb and Suspension — "Front", "Rear", "Side"; Shock absorber, Tire Valve Stem, Wheel Balancing — "Front left", "Front right", "Rear left", "Rear right"; every one also has "Not sure". Wheel jobs (Tire Change, Brakes, Brake rotor, Brake caliper…) keep today's wheel buttons unchanged.
+- Other item block: today's block with one new field "Part number (optional)" between "What was it?" and "Qty".
+- Roam status line: 13px, small icon + words, under the item it belongs to, left-aligned with the item name.
+- Disabled "Save line →" with its reason line "Pick where on the car first".
+
+
+INTERACTIONS:
+- The chips show only on jobs that can be in more than one place; on any other job nothing changes.
+- Tapping a chip picks it; tapping it again unpicks it. Several places can be picked on any job (both oxygen sensors, both wipers). Picking "Not sure" unpicks all others; picking a place unpicks "Not sure".
+- "Save line →" stays disabled until at least one chip is picked; the reason line disappears as soon as one is.
+- Typing a name in Other item, or using "Type it in instead", shows the indigo line "Roam will look this part up…" under it at once. Removing the item removes the line.
+- Nothing is sent while the dialog is open; the part goes to Roam only after "Save service". The service history then shows the status line, and it updates by itself from "Sending to Roam…" to "Sent…" within a couple of minutes.
+- "Log it now" from a found job opens Log service with the same place already picked (Screen 6). If that place no longer applies to the job, nothing is picked and the chips ask again.
+- On the phone, chips wrap, fields stack, and the bottom bar is sticky.
+
+
+Spec screens / Area
+| Screen | Area |
+| 1 | Log service · Details — Oxygen sensor, where not picked yet (Save line disabled) |
+| 2 | Log service · Details — Front picked, Other item with Part number, "Roam will look this part up" |
+| 3 | Pick a part — nothing listed, Type it in, "Roam will look this part up" |
+| 4 | Log service · Details — Wiper Blades, two places picked |
+| 5 | What the inspection found — row with where on the car |
+| 6 | Log service from "Log it now" — Front already picked |
+| 7 | Log service · Review — places in plain words |
+| 8 | Service history — where, and "Sent to Roam" under the part |
+| 9 | States of a part sent to Roam |
+| 10 | Phone 390px — where on the car + Other item |

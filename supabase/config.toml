@@ -489,3 +489,6 @@ verify_jwt = false
 
 [functions.catalog-research]
 verify_jwt = false
+
+[functions.parts-sourcing-drain]
+verify_jwt = false

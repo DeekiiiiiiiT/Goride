@@ -20,6 +20,7 @@ import {
   type JobItem,
 } from "./itemsUsed";
 import type { JobItemsStatus } from "./useJobItems";
+import { cleanPartNumberInput, isUnknownPart, RoamLooksItUpLine, UNKNOWN_PART_COPY } from "./unknownParts";
 
 /** Stitch accents (service-items-fleet tailwind config). */
 export const ACCENT = {
@@ -77,6 +78,8 @@ type Props = {
   onPickPart: (item: LineItemDraft) => void;
   /** Shown between the items and the total pill (inspection jobs: "What the inspection found"). */
   beforeTotal?: React.ReactNode;
+  /** Log service parts gaps switch (LS-18): Other item Part number box + "Roam will look this part up…". */
+  gapsEnabled?: boolean;
 };
 
 const labelSm = "text-[11px] leading-[14px] tracking-[0.02em] font-semibold";
@@ -155,7 +158,9 @@ function SuggestedRow({
   onToggle,
   onUpdate,
   onPickPart,
+  gapsEnabled,
 }: {
+  gapsEnabled?: boolean;
   job: JobItem;
   item: LineItemDraft | undefined;
   currency: string;
@@ -272,6 +277,7 @@ function SuggestedRow({
           </button>
         </div>
       ) : null}
+      {gapsEnabled && item && job.kind === "part_type" && isUnknownPart(item) ? <RoamLooksItUpLine className="ml-7" /> : null}
       {err ? <p className={`ml-7 ${labelMd} text-error`}>{err}</p> : null}
     </div>
   );
@@ -282,7 +288,9 @@ function OtherItemBlock({
   currency,
   onUpdate,
   onRemove,
+  gapsEnabled,
 }: {
+  gapsEnabled?: boolean;
   item: LineItemDraft;
   currency: string;
   onUpdate: (patch: Partial<LineItemDraft>) => void;
@@ -345,6 +353,21 @@ function OtherItemBlock({
           />
         </label>
       </div>
+      {gapsEnabled ? (
+        // Stitch F2: Part number (optional) + its helper, under the other fields.
+        <label className="flex flex-col gap-1 md:max-w-[50%]">
+          <span className={`${labelMd} text-on-surface-variant`}>{UNKNOWN_PART_COPY.partNumber}</span>
+          <input
+            className={`${field} font-mono font-semibold tracking-wide`}
+            data-testid="other-item-part-number"
+            value={item.partNumber ?? ""}
+            maxLength={80}
+            onChange={(e) => onUpdate({ partNumber: cleanPartNumberInput(e.target.value) || null })}
+          />
+          <span className={`${labelMd} text-on-surface-variant`}>{UNKNOWN_PART_COPY.partNumberHelper}</span>
+        </label>
+      ) : null}
+      {gapsEnabled ? <RoamLooksItUpLine /> : null}
       <div className="flex items-center justify-between gap-2">
         {err ? <p className={`${labelMd} text-error`}>{err}</p> : <span />}
         <span className="flex items-center gap-2">
@@ -376,7 +399,7 @@ function Skeleton() {
   );
 }
 
-export function ItemsUsedSection({ jobItems, status, onRetry, items, onChange, currency, jobCharge, onPickPart, beforeTotal }: Props) {
+export function ItemsUsedSection({ jobItems, status, onRetry, items, onChange, currency, jobCharge, onPickPart, beforeTotal, gapsEnabled }: Props) {
   const { usually, sometimes } = groupJobItems(jobItems);
   const itemsTotal = items.reduce((s, i) => s + itemAmount(i), 0);
   const others = items.map((it, idx) => ({ it, idx })).filter(({ it }) => it.source === "other");
@@ -410,6 +433,7 @@ export function ItemsUsedSection({ jobItems, status, onRetry, items, onChange, c
             currency={currency}
             onToggle={() => onChange(toggleSuggested(items, job))}
             onUpdate={(patch) => updateSuggested(job.linkId, patch)}
+            gapsEnabled={gapsEnabled}
             onPickPart={() => {
               const it = findSuggested(items, job.linkId);
               if (it) onPickPart(it);
@@ -490,6 +514,7 @@ export function ItemsUsedSection({ jobItems, status, onRetry, items, onChange, c
           currency={currency}
           onUpdate={(patch) => update(idx, patch)}
           onRemove={() => onChange(items.filter((_, i) => i !== idx))}
+          gapsEnabled={gapsEnabled}
         />
       ))}
 
