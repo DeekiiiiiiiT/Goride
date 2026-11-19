@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { askNeedText, carNameOf, findQueryFor, makerTile, PARTS_FIT_COPY, partsFromFindBody, shortDate } from "./partsThatFit";
+import {
+  askNeedText,
+  brandNumbersFromLookup,
+  carNameOf,
+  copyCarOf,
+  findQueryFor,
+  makerTile,
+  nameWithMakerName,
+  PARTS_FIT_COPY,
+  partCopyText,
+  partsFromFindBody,
+  shortDate,
+} from "./partsThatFit";
 
 describe("partsFromFindBody", () => {
   it("flattens sections in order, one card per part, keeps the fit label", () => {
@@ -58,7 +70,7 @@ describe("helpers", () => {
   });
 
   it("ask text is the job and place in words, never a number", () => {
-    expect(askNeedText("Oxygen sensor", ["Rear (after converter)"])).toBe("Oxygen sensor · Rear (after converter)");
+    expect(askNeedText("Oxygen sensor", ["Rear (Oxygen sensor No.2)"])).toBe("Oxygen sensor · Rear (Oxygen sensor No.2)");
     expect(askNeedText("Exhaust clip", [])).toBe("Exhaust clip");
   });
 
@@ -69,5 +81,55 @@ describe("helpers", () => {
     expect(shortDate("")).toBe("");
     expect(makerTile("Denso").text).toBe("DENSO");
     expect(makerTile("Toyota (genuine)").text).toBe("TOYOTA");
+  });
+});
+
+describe("Copy part info (same block as Find parts)", () => {
+  const body = {
+    linked: true,
+    car: { make: "Toyota", model: "Roomy", year: 2019 },
+    pickedVariantId: "var-1",
+    picked: { id: "var-1", chassis_code: "M900A", engine_code: "1KR-FE", drivetrain: "2WD" },
+    plainSections: [],
+  };
+
+  it("reads the car line and chassis / engine / drive from the find answer", () => {
+    expect(copyCarOf(body)).toEqual({ line: "Toyota Roomy 2019", chassis: "M900A", engine: "1KR-FE", drive: "2WD", variantId: "var-1" });
+  });
+
+  it("car, details, part, whose number, other brands — like Find parts' Copy part info", () => {
+    const text = partCopyText(
+      copyCarOf(body),
+      { name: "Front oxygen sensor", brand: "Toyota", number: "89467-B1040" },
+      brandNumbersFromLookup({ reference: { brand: "Toyota", number: "89467-B1040" }, brandNumbers: [{ brand: "Denso", number: "234-9119" }] }),
+    );
+    expect(text).toBe(
+      [
+        "Toyota Roomy 2019",
+        "Chassis: M900A · Engine: 1KR-FE · Drive: 2WD",
+        "Front oxygen sensor",
+        "Toyota number: 89467-B1040",
+        "Also sold as: Denso 234-9119",
+      ].join("\n"),
+    );
+  });
+
+  it("missing facts are left out, never guessed", () => {
+    expect(partCopyText(null, { name: "Rear oxygen sensor", brand: "", number: "89465-B1120" })).toBe(
+      "Rear oxygen sensor\nPart number: 89465-B1120",
+    );
+  });
+});
+
+describe("nameWithMakerName (Toyota's own name in brackets)", () => {
+  it("adds the maker's name from the one place picked", () => {
+    expect(nameWithMakerName("Front oxygen sensor", ["Front (Air fuel ratio sensor)"])).toBe("Front oxygen sensor (Air fuel ratio sensor)");
+    expect(nameWithMakerName("Rear oxygen sensor", ["Rear (Oxygen sensor No.2)"])).toBe("Rear oxygen sensor (Oxygen sensor No.2)");
+  });
+  it("leaves the name alone for several places, no bracket, or when it already says it", () => {
+    expect(nameWithMakerName("Oxygen sensor", ["Front (Air fuel ratio sensor)", "Rear (Oxygen sensor No.2)"])).toBe("Oxygen sensor");
+    expect(nameWithMakerName("Front brake pad set", ["Front"])).toBe("Front brake pad set");
+    expect(nameWithMakerName("Air fuel ratio sensor", ["Front (Air fuel ratio sensor)"])).toBe("Air fuel ratio sensor");
+    expect(nameWithMakerName("Front oxygen sensor")).toBe("Front oxygen sensor");
   });
 });

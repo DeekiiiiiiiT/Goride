@@ -39,6 +39,51 @@ function positionCodesFromLine(line: Record<string, unknown>): string[] {
   return raw.map((p) => String(p));
 }
 
+type JobMeta = { is_part?: boolean; position_scheme?: string | null };
+export type DrainBatch = {
+  items: Map<string, Record<string, unknown>>;
+  lines: Map<string, Record<string, unknown>>;
+  workOrders: Map<string, Record<string, unknown>>;
+  jobs: Map<string, JobMeta>;
+};
+
+async function rowsById(
+  supabase: SupabaseClient,
+  table: string,
+  columns: string,
+  ids: string[],
+): Promise<Map<string, Record<string, unknown>>> {
+  const out = new Map<string, Record<string, unknown>>();
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return out;
+  const { data, error } = await supabase.from(table).select(columns).in("id", unique);
+  if (error) throw error;
+  for (const r of (data ?? []) as unknown as Array<Record<string, unknown>>) out.set(String(r.id), r);
+  return out;
+}
+
+/** The claimed rows' items, lines, services and jobs: 4 reads for the whole batch. */
+export async function loadDrainBatch(
+  supabase: SupabaseClient,
+  claimed: Array<Record<string, unknown>>,
+): Promise<DrainBatch> {
+  const items = await rowsById(supabase, "maintenance_work_order_line_item", "*", claimed.map((r) => String(r.line_item_id ?? "")));
+  const itemRows = [...items.values()];
+  const [lines, workOrders] = await Promise.all([
+    rowsById(supabase, "maintenance_work_order_lines", "*", itemRows.map((i) => String(i.work_order_line_id ?? ""))),
+    rowsById(supabase, "maintenance_work_orders", "*", itemRows.map((i) => String(i.work_order_id ?? ""))),
+  ]);
+  const jobRows = await rowsById(
+    supabase,
+    "maintenance_service_categories",
+    "id, is_part, position_scheme",
+    [...lines.values()].map((l) => String(l.component_id ?? "")),
+  );
+  const jobs = new Map<string, JobMeta>();
+  for (const [id, r] of jobRows) jobs.set(id, { is_part: r.is_part as boolean | undefined, position_scheme: (r.position_scheme as string | null) ?? null });
+  return { items, lines, workOrders, jobs };
+}
+
 export async function runPartsSourcingDrain(
   supabase: SupabaseClient,
   opts?: {
@@ -75,6 +120,25 @@ export async function runPartsSourcingDrain(
   if (claimErr) throw claimErr;
   const claimed = (rows ?? []) as Array<Record<string, unknown>>;
   summary.claimed = claimed.length;
+  if (!claimed.length) return summary;
+
+  // Code review #9: load the batch's items, lines, services and jobs in a few .in() reads, not 5 per row.
+  let batch: DrainBatch;
+  try {
+    batch = await loadDrainBatch(supabase, claimed);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[parts_sourcing_drain] batch load failed:", msg);
+    for (const ob of claimed) {
+      const { error: retryErr } = await supabase.rpc("parts_sourcing_outbox_retry", {
+        p_outbox_id: String(ob.id ?? ""),
+        p_reason: "error",
+      });
+      if (retryErr) console.error("[parts_sourcing_drain] retry failed:", ob.id, retryErr.message);
+      summary.errors += 1;
+    }
+    return summary;
+  }
 
   for (let i = 0; i < claimed.length; i += 1) {
     const ob = claimed[i];
@@ -96,48 +160,26 @@ export async function runPartsSourcingDrain(
     const outboxId = String(ob.id ?? "");
 
     try {
-      const lineItemId = String(ob.line_item_id ?? "");
-      const { data: item, error: itemErr } = await supabase
-        .from("maintenance_work_order_line_item")
-        .select("*")
-        .eq("id", lineItemId)
-        .maybeSingle();
-      if (itemErr) throw itemErr;
-      if (!item) throw new Error("line_item_missing");
-
-      const itemRow = item as Record<string, unknown>;
-      const { data: line, error: lineErr } = await supabase
-        .from("maintenance_work_order_lines")
-        .select("*")
-        .eq("id", itemRow.work_order_line_id)
-        .maybeSingle();
-      if (lineErr) throw lineErr;
-      if (!line) throw new Error("line_missing");
-
-      const lineRow = line as Record<string, unknown>;
-      const { data: wo, error: woErr } = await supabase
-        .from("maintenance_work_orders")
-        .select("*")
-        .eq("id", itemRow.work_order_id)
-        .maybeSingle();
-      if (woErr) throw woErr;
-      if (!wo) throw new Error("work_order_missing");
-
-      const woRow = wo as Record<string, unknown>;
+      const itemRow = batch.items.get(String(ob.line_item_id ?? ""));
+      const lineRow = itemRow ? batch.lines.get(String(itemRow.work_order_line_id ?? "")) : undefined;
+      const woRow = itemRow ? batch.workOrders.get(String(itemRow.work_order_id ?? "")) : undefined;
+      if (!itemRow || !lineRow || !woRow) {
+        // Code review #5: the item, its job line or its service is gone — nothing to send. Close the row as
+        // cancelled (as the send does for a deleted service) instead of retrying it into not_sent/error.
+        const { error: cancelErr } = await supabase
+          .from("parts_sourcing_outbox")
+          .update({ state: "cancelled", claimed_at: null, updated_at: now().toISOString() })
+          .eq("id", outboxId)
+          .eq("state", "pending");
+        if (cancelErr) throw cancelErr;
+        summary.cancelled += 1;
+        continue;
+      }
       const orgId = String(woRow.organization_id ?? "");
       const vehicleId = woRow.vehicle_id != null ? String(woRow.vehicle_id) : null;
 
-      let jobMeta: { is_part?: boolean; position_scheme?: string | null } | null = null;
       const componentId = lineRow.component_id ? String(lineRow.component_id) : "";
-      if (componentId) {
-        const { data: jobRow, error: jobErr } = await supabase
-          .from("maintenance_service_categories")
-          .select("is_part, position_scheme")
-          .eq("id", componentId)
-          .maybeSingle();
-        if (jobErr) throw jobErr;
-        jobMeta = (jobRow as typeof jobMeta) ?? null;
-      }
+      const jobMeta = componentId ? (batch.jobs.get(componentId) ?? null) : null;
 
       const resolveCatalog = opts?.catalogIdForVehicle ?? verifiedCatalogIdForVehicle;
       // No link → the row still goes to send with a blank catalogue car: send first checks a deleted or

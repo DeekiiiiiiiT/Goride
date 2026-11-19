@@ -55,10 +55,31 @@ export const AXLE_POSITIONS = [
   { id: "rear", label: "Rear Axle", icon: "radio_button_unchecked" as const },
 ];
 
+/** Front / Rear on any job with the before/after-catalyst places (e.g. NOx sensor). */
 export const CATALYST_POSITIONS = [
-  { id: "before_cat", label: "Before cat" },
-  { id: "after_cat", label: "After cat" },
+  { id: "before_cat", label: "Front" },
+  { id: "after_cat", label: "Rear" },
 ];
+
+/**
+ * The oxygen sensor job uses Toyota's own catalogue names in the brackets (owner, 19 Nov 2026: no made-up words):
+ * front = "SENSOR, AIR FUEL RATIO", rear = "SENSOR, OXYGEN NO.2".
+ */
+export const OXYGEN_SENSOR_POSITIONS = [
+  { id: "before_cat", label: "Front (Air fuel ratio sensor)" },
+  { id: "after_cat", label: "Rear (Oxygen sensor No.2)" },
+];
+
+/** Fleet job code "oxygen_sensor" or Dominion op code "ENG-O2". */
+export function isOxygenSensorJob(job: { code?: string | null; opCode?: string | null } | null | undefined): boolean {
+  const code = String(job?.code ?? "").trim().toLowerCase();
+  const op = String(job?.opCode ?? "").trim().toUpperCase();
+  return code === "oxygen_sensor" || op === "ENG-O2";
+}
+
+export function catalystPositionsFor(job: { code?: string | null; opCode?: string | null } | null | undefined) {
+  return isOxygenSensorJob(job) ? OXYGEN_SENSOR_POSITIONS : CATALYST_POSITIONS;
+}
 
 export const CORNER_SIDES = [
   { pos: "front", side: "left", label: "Front left" },
@@ -107,10 +128,7 @@ export function fleetPositionOptions(job: PositionJobInput): { code: string; lab
     } else if (isWheelScheme(scheme)) {
       options = wheelCodeOptions();
     } else if (scheme === "before_after_catalyst") {
-      options = [
-        { code: "before_cat", label: "Front (before converter)" },
-        { code: "after_cat", label: "Rear (after converter)" },
-      ];
+      options = catalystPositionsFor({ code }).map((p) => ({ code: p.id, label: p.label }));
     } else if (scheme === "driver_passenger_rear") {
       options = [
         { code: "driver", label: "Driver" },

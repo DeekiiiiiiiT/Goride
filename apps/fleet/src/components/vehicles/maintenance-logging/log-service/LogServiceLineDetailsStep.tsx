@@ -86,7 +86,23 @@ export type LogServiceLineDetailsStepProps = {
   partsPanel?: React.ReactNode;
   /** Log it now on a planned job (LC-05, Stitch 7): the two cost hints. */
   plannedHints?: boolean;
+  /**
+   * LC-16 a job an inspection found, not done yet: the SAME form as Log service (charge / labour / parts boxes,
+   * Items used), but everything entered is the garage's QUOTE — saved as a quote, never spend. Adds a quote banner
+   * and a note, and the total reads "Quote total".
+   */
+  quoteMode?: { note: string; onNoteChange: (v: string) => void };
+  /** "Also do" jobs for this job (e.g. Throttle Body Relearn after cleaning), each with an Add button. */
+  alsoDoSlot?: React.ReactNode;
 };
+
+export const QUOTE_MODE_COPY = {
+  banner: "Garage's quote — not paid yet",
+  bannerBody: "Enter what the garage says it will cost. It's saved as a quote and fills in the price when you mark the job Done.",
+  note: "Note (optional)",
+  notePlaceholder: "e.g. worn, replace within 2 weeks",
+  totalLabel: "Quote total",
+} as const;
 
 export const PLANNED_HINTS = {
   fitting: "What did the garage charge for fitting it?",
@@ -340,6 +356,31 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
   } = props;
 
   const actionPill = actionLabel(action);
+  const positionsBlock = showPositions ? (
+    <div className="space-y-2">
+      <Label className={`${LT.labelMd} ${LS.muted}`}>{props.sideOptions ? "Side" : "Positions"}</Label>
+      <div className="flex flex-wrap gap-2">
+        {(props.sideOptions ?? TIRE_BRAKE_POSITIONS.map((p) => ({ value: p, label: p }))).map(({ value: pos, label: posLabel }) => {
+          const on = positions.includes(pos);
+          return (
+            <button
+              key={pos}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onTogglePosition(pos)}
+              className={`min-h-11 min-w-11 px-3 rounded-lg border text-sm font-semibold ${
+                on
+                  ? "border-primary bg-primary/10 text-on-surface"
+                  : "border-outline-variant/40 bg-surface-container-lowest text-on-surface-variant"
+              }`}
+            >
+              {posLabel}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  ) : null;
   return (
     <div className="space-y-5">
       {props.hideHeading ? null : (
@@ -380,6 +421,17 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
         </div>
       ) : null}
       {props.whereSlot ?? null}
+
+      {props.alsoDoSlot ?? null}
+      {props.quoteMode ? (
+        <div className="rounded-lg p-3 bg-[#fffbeb] dark:bg-[#451a03]/50 flex items-start gap-2" data-testid="quote-mode-banner">
+          <Info className="h-4 w-4 shrink-0 mt-0.5 text-[#b45309] dark:text-[#fbbf24]" aria-hidden />
+          <div>
+            <p className={`${LT.labelMd} font-semibold text-[#92400e] dark:text-[#fde68a]`}>{QUOTE_MODE_COPY.banner}</p>
+            <p className={`${LT.bodySm} text-[#92400e]/90 dark:text-[#fde68a]/90`}>{QUOTE_MODE_COPY.bannerBody}</p>
+          </div>
+        </div>
+      ) : null}
 
       {props.serviceForm ? (
         <ServiceJobForm {...props} serviceForm={props.serviceForm} />
@@ -462,31 +514,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
         </div>
       ) : null}
 
-      {showPositions ? (
-        <div className="space-y-2">
-          <Label className={`${LT.labelMd} ${LS.muted}`}>{props.sideOptions ? "Side" : "Positions"}</Label>
-          <div className="flex flex-wrap gap-2">
-            {(props.sideOptions ?? TIRE_BRAKE_POSITIONS.map((p) => ({ value: p, label: p }))).map(({ value: pos, label: posLabel }) => {
-              const on = positions.includes(pos);
-              return (
-                <button
-                  key={pos}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => onTogglePosition(pos)}
-                  className={`min-h-11 min-w-11 px-3 rounded-lg border text-sm font-semibold ${
-                    on
-                      ? "border-primary bg-primary/10 text-on-surface"
-                      : "border-outline-variant/40 bg-surface-container-lowest text-on-surface-variant"
-                  }`}
-                >
-                  {posLabel}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
+      {positionsBlock}
 
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="flex items-center gap-3">
@@ -572,6 +600,20 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
       )}
       </>
       )}
+      {props.quoteMode ? (
+        <div className="space-y-2">
+          <Label htmlFor="quote-mode-note" className={`${LT.labelMd} ${LS.muted}`}>{QUOTE_MODE_COPY.note}</Label>
+          <Input
+            id="quote-mode-note"
+            data-testid="quote-mode-note"
+            maxLength={500}
+            placeholder={QUOTE_MODE_COPY.notePlaceholder}
+            className="h-10 rounded-lg border-0 bg-white shadow-sm focus-visible:ring-1 focus-visible:ring-[#c9c5cd] dark:bg-[#15161d]"
+            value={props.quoteMode.note}
+            onChange={(e) => props.quoteMode?.onNoteChange(e.target.value)}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

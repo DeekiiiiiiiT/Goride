@@ -14,7 +14,9 @@ import type { FoundWorkItem, MaintenanceLogLine } from "../../../types/maintenan
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../ui/dialog";
 import { foundDateLabel, isFoundLine, isFoundToday } from "./log-service/foundWork";
 import { linePositionsText } from "./log-service/positionChips";
-import { CopyNumberButton, MakerTile } from "./log-service/PartsThatFitPanel";
+import { CopyNumberButton, MakerTile, PartsThatFitPanel } from "./log-service/PartsThatFitPanel";
+import { partCopyText } from "./log-service/partsThatFit";
+import { ServiceHistoryViewDialog } from "./ServiceHistoryRowDialogs";
 
 function Sym({ name, size, className = "" }: { name: string; size: number; className?: string }) {
   return (
@@ -49,6 +51,21 @@ export const FOUND_UI_COPY = {
   confirmBodyPlanned: "It leaves the car's Not done yet list. Nothing was charged.",
   plannedTitle: "Not done yet",
   plannedHelper: "Jobs to do on this car.",
+  /** LC-11: the hub's "Not done yet" tab (every car). */
+  allTitle: "Not done yet",
+  allHelper: "Jobs a garage found or you planned, on every car. Oldest first. Copy the part info to buy what's needed.",
+  allEmpty: "Nothing waiting on any car.",
+  addJob: "Add a job",
+  /** LC-15 */
+  statusLabel: "Pending or done",
+  pending: "Pending",
+  quote: (amount: number) => `Garage quote J$ ${amount.toLocaleString("en-US", { maximumFractionDigits: 2 })}`,
+  notPaid: "not paid",
+  quotedTotal: (amount: number) => `J$ ${amount.toLocaleString("en-US", { maximumFractionDigits: 2 })} quoted, waiting`,
+  addJobHint: "Add a job to this inspection",
+  /** LC-13 */
+  fromInspection: "From inspection",
+  viewInspection: "View inspection",
   notDoneYet: "Not done yet",
   plannedLine: (date: string) => `Planned ${date}`,
   plannedOn: (date: string) => `Planned ${date}`,
@@ -162,7 +179,8 @@ type SectionState =
   | { kind: "loading" }
   | { kind: "off" }
   | { kind: "error" }
-  | { kind: "ok"; items: FoundWorkItem[] };
+  /** partsGapsEnabled null = an older server that doesn't say. */
+  | { kind: "ok"; items: FoundWorkItem[]; partsGapsEnabled: boolean | null };
 
 /**
  * "Found by inspection" at the top of the Due items drawer (Stitch screens 7, 8, 12, 13).
@@ -174,8 +192,15 @@ export function FoundByInspectionSection({
   onLogItNow,
   onChanged,
   phone = false,
+  carLabel,
+  onAddToInspection,
 }: {
-  vehicleId: string;
+  /** One car (Due items drawer); left out = every car (the hub's Not done yet tab, LC-11). */
+  vehicleId?: string;
+  /** Every-car list: the car's name on each card ("Toyota Roomy · 5179KZ"). */
+  carLabel?: (vehicleId: string) => string | null;
+  /** LC-14: "Add a job" opens Log service in add-to-inspection mode for that inspection (host owns the window). */
+  onAddToInspection?: (target: AddToInspectionRequest) => void;
   canEdit: boolean;
   onLogItNow?: (item: FoundWorkItem) => void;
   /** Counts on the fleet page change (Not needed). */
@@ -186,13 +211,15 @@ export function FoundByInspectionSection({
   const [confirm, setConfirm] = useState<FoundWorkItem | null>(null);
   const [busy, setBusy] = useState(false);
   const [conflict, setConflict] = useState(false);
+  /** LC-13: the inspection a found job came from, opened read-only (same window as Service history's View). */
+  const [viewing, setViewing] = useState<FoundWorkItem | null>(null);
 
   const load = useCallback(() => {
     let live = true;
     setState({ kind: "loading" });
     api
       .listFoundWork(vehicleId)
-      .then((res) => live && setState({ kind: "ok", items: res.items }))
+      .then((res) => live && setState({ kind: "ok", items: res.items, partsGapsEnabled: res.partsGapsEnabled ?? null }))
       .catch((e) => live && setState(isSwitchedOff(e) ? { kind: "off" } : { kind: "error" }));
     return () => {
       live = false;
@@ -229,6 +256,10 @@ export function FoundByInspectionSection({
   const items = state.kind === "ok" ? state.items : [];
   // Slice C: once a job was planned the list holds more than inspection finds (Stitch screen 6).
   const hasPlanned = items.some((i) => i.source === "planned");
+  const allCars = !vehicleId;
+  /** LC-15: what the waiting jobs were quoted at (not paid; never spend). */
+  const quotedTotal = Math.round(items.reduce((n, i) => n + (Number(i.quoteAmount) > 0 ? Number(i.quoteAmount) : 0), 0) * 100) / 100;
+  const carOf = (item: FoundWorkItem) => (allCars ? carLabel?.(item.vehicleId) ?? null : null);
 
   return (
     <section className="space-y-3" data-testid="found-by-inspection">
@@ -236,7 +267,7 @@ export function FoundByInspectionSection({
         <div className="flex items-center gap-2">
           <Sym name="schedule" size={20} className="text-[#47464c] dark:text-[#c9c5cd]" />
           <h3 className="text-[15px] font-semibold text-[#1a1b22] dark:text-[#e4e1ec]">
-            {hasPlanned ? FOUND_UI_COPY.plannedTitle : FOUND_UI_COPY.title}
+            {allCars ? FOUND_UI_COPY.allTitle : hasPlanned ? FOUND_UI_COPY.plannedTitle : FOUND_UI_COPY.title}
           </h3>
           {state.kind === "ok" ? (
             <span
@@ -248,8 +279,13 @@ export function FoundByInspectionSection({
           ) : null}
         </div>
         <p className="text-[13px] text-[#47464c] dark:text-[#c9c5cd] mt-0.5">
-          {hasPlanned ? FOUND_UI_COPY.plannedHelper : FOUND_UI_COPY.helper}
+          {allCars ? FOUND_UI_COPY.allHelper : hasPlanned ? FOUND_UI_COPY.plannedHelper : FOUND_UI_COPY.helper}
         </p>
+        {quotedTotal > 0 ? (
+          <p className="text-[13px] font-medium text-[#92400e] dark:text-[#fbbf24] mt-1 tabular-nums" data-testid="found-quoted-total">
+            {FOUND_UI_COPY.quotedTotal(quotedTotal)}
+          </p>
+        ) : null}
       </div>
 
       {conflict ? (
@@ -305,7 +341,7 @@ export function FoundByInspectionSection({
             <span className="w-8 h-8 rounded-full bg-white dark:bg-[#15161d] flex items-center justify-center">
               <Sym name="check_circle" size={18} className="text-[#059669] dark:text-[#34d399]" />
             </span>
-            {FOUND_UI_COPY.empty}
+            {allCars ? FOUND_UI_COPY.allEmpty : FOUND_UI_COPY.empty}
           </span>
           <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-white dark:bg-[#15161d] text-[#47464c] dark:text-[#c9c5cd]">
             {FOUND_UI_COPY.allClear}
@@ -318,6 +354,7 @@ export function FoundByInspectionSection({
               <PlannedJobCard
                 key={item.lineId}
                 item={item}
+                carName={carOf(item)}
                 canEdit={canEdit}
                 phone={phone}
                 onLogItNow={onLogItNow}
@@ -332,35 +369,74 @@ export function FoundByInspectionSection({
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <Sym name="build" size={18} className="text-[#47464c] dark:text-[#c9c5cd]" />
-                  <h4 className="text-[14px] font-semibold text-[#1a1b22] dark:text-[#e4e1ec] truncate">{item.jobName}</h4>
+                  <h4 className="text-[14px] font-semibold text-[#1a1b22] dark:text-[#e4e1ec] truncate" data-testid="found-card-title">
+                    {state.kind === "ok" && state.partsGapsEnabled ? foundTitle(item) : item.jobName}
+                  </h4>
                 </div>
                 <span className="inline-flex items-center gap-1 bg-[#eeedf7] dark:bg-[#23242e] px-2.5 py-0.5 rounded-full text-[11px] font-medium text-[#47464c] dark:text-[#c9c5cd] shrink-0">
                   <Sym name="schedule" size={13} />
                   {FOUND_UI_COPY.waiting}
                 </span>
               </div>
+              <CarLine name={carOf(item)} />
               {item.note ? (
                 <div className="rounded-lg bg-[#f4f2fd] dark:bg-[#1c1d26] p-2.5">
                   <p className="text-[13px] leading-snug text-[#1a1b22] dark:text-[#e4e1ec]">{item.note}</p>
                 </div>
               ) : null}
-              <div className="text-[12px] leading-tight text-[#47464c] dark:text-[#c9c5cd] flex items-start gap-1.5">
-                <Sym name="calendar_today" size={15} className="shrink-0 mt-0.5" />
-                <span data-testid="found-card-line">{FOUND_UI_COPY.foundLine(item)}</span>
-              </div>
-              {canEdit ? (
-                <div className={`flex gap-2 pt-1 ${phone ? "flex-col" : "items-center"}`}>
-                  {onLogItNow ? (
+              {/* LC-13: which inspection this came from, and a way to open it. */}
+              <div
+                className="rounded-lg p-2.5 bg-[#eef2ff]/80 dark:bg-[#312e81]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                data-testid="found-from-inspection"
+              >
+                <div className="flex items-start gap-2 min-w-0">
+                  <Sym name="search" size={16} className="shrink-0 mt-0.5 text-[#4338ca] dark:text-[#a5b4fc]" />
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-[#4338ca] dark:text-[#c7d2fe]">
+                      {FOUND_UI_COPY.fromInspection}
+                    </span>
+                    <span className="text-[13px] leading-snug text-[#1e1b4b] dark:text-[#e0e7ff]" data-testid="found-card-line">
+                      {FOUND_UI_COPY.foundLine(item)}
+                    </span>
+                  </div>
+                </div>
+                {item.workOrderId ? (
+                  <div className="flex flex-wrap gap-2 shrink-0 self-start sm:self-auto">
+                    {canEdit && onAddToInspection ? (
+                      <button
+                        type="button"
+                        data-testid="found-add-to-inspection"
+                        title={FOUND_UI_COPY.addJobHint}
+                        onClick={() =>
+                          onAddToInspection({
+                            vehicleId: item.vehicleId,
+                            workOrderId: item.workOrderId,
+                            inspectionLine: inspectionLineOf(item),
+                          })
+                        }
+                        className={`px-3 py-1.5 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5 ${BTN_SECONDARY}`}
+                      >
+                        <Sym name="add" size={15} />
+                        {FOUND_UI_COPY.addJob}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
-                      data-testid="found-log-it-now"
-                      onClick={() => onLogItNow(item)}
-                      className={`px-3.5 py-2 rounded-lg text-[12px] font-medium inline-flex items-center justify-center gap-1.5 ${phone ? "w-full h-12 text-[15px]" : ""} ${BTN_PRIMARY}`}
+                      data-testid="found-view-inspection"
+                      onClick={() => setViewing(item)}
+                      className={`px-3 py-1.5 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5 ${BTN_SECONDARY}`}
                     >
-                      <Sym name="edit_calendar" size={15} />
-                      {FOUND_UI_COPY.logItNow}
+                      <Sym name="visibility" size={15} />
+                      {FOUND_UI_COPY.viewInspection}
                     </button>
-                  ) : null}
+                  </div>
+                ) : null}
+              </div>
+              <QuoteLine amount={item.quoteAmount ?? null} />
+              {state.kind === "ok" && state.partsGapsEnabled ? <FoundPartsToBuy item={item} /> : null}
+              {canEdit ? (
+                <div className={`flex gap-2 pt-1 ${phone ? "flex-col" : "items-center"}`}>
+                  {onLogItNow ? <PendingDoneToggle phone={phone} onDone={() => onLogItNow(item)} /> : null}
                   <button
                     type="button"
                     data-testid="found-not-needed"
@@ -378,8 +454,132 @@ export function FoundByInspectionSection({
         </ul>
       )}
 
+      <ServiceHistoryViewDialog
+        workOrderId={viewing?.workOrderId ?? null}
+        vehicleLabel={viewing ? carLabel?.(viewing.vehicleId) ?? "" : ""}
+        onClose={() => setViewing(null)}
+        onAddToInspection={
+          onAddToInspection
+            ? (t) => {
+                setViewing(null);
+                onAddToInspection(t);
+              }
+            : undefined
+        }
+      />
       <NotNeededDialog item={confirm} busy={busy} onCancel={() => setConfirm(null)} onConfirm={() => void markNotNeeded()} />
     </section>
+  );
+}
+
+/**
+ * LC-15 status: Pending (default) | Done. Done opens Log service for this job (date + mileage with its estimate,
+ * the quote filled in, Review → Service history). Closing it leaves the job Pending.
+ */
+function PendingDoneToggle({ phone, onDone }: { phone: boolean; onDone: () => void }) {
+  const base = `px-3.5 py-2 text-[12px] font-medium inline-flex items-center justify-center gap-1.5 transition-colors ${phone ? "flex-1 h-12 text-[15px]" : ""}`;
+  return (
+    <div
+      className={`inline-flex rounded-lg p-0.5 border border-[#cbd5e1] dark:border-[#47464c] bg-[#f4f2fd] dark:bg-[#1c1d26] ${phone ? "w-full" : ""}`}
+      role="radiogroup"
+      aria-label={FOUND_UI_COPY.statusLabel}
+      data-testid="found-status"
+    >
+      <button
+        type="button"
+        role="radio"
+        aria-checked
+        data-testid="found-status-pending"
+        className={`${base} rounded-md bg-[#fef3c7] text-[#92400e] dark:bg-[#451a03] dark:text-[#fbbf24] font-semibold shadow-xs`}
+      >
+        <Sym name="schedule" size={15} />
+        {FOUND_UI_COPY.pending}
+      </button>
+      <button
+        type="button"
+        role="radio"
+        aria-checked={false}
+        data-testid="found-log-it-now"
+        onClick={onDone}
+        className={`${base} rounded-md text-[#47464c] dark:text-[#c9c5cd] hover:bg-white hover:text-[#047857] dark:hover:bg-[#15161d] dark:hover:text-[#34d399]`}
+      >
+        <Sym name="check_circle" size={15} />
+        {FOUND_UI_COPY.done}
+      </button>
+    </div>
+  );
+}
+
+/** LC-15 "Garage quote J$ 12,000 · not paid" (never part of any total). */
+function QuoteLine({ amount }: { amount: number | null }) {
+  if (amount == null || !(amount > 0)) return null;
+  return (
+    <div className="flex items-center gap-1.5 text-[13px] text-[#1a1b22] dark:text-[#e4e1ec]" data-testid="found-card-quote">
+      <Sym name="request_quote" size={16} className="text-[#47464c] dark:text-[#c9c5cd]" />
+      <span className="font-medium tabular-nums">{FOUND_UI_COPY.quote(amount)}</span>
+      <span className="text-[#47464c] dark:text-[#c9c5cd]">· {FOUND_UI_COPY.notPaid}</span>
+    </div>
+  );
+}
+
+/** What a host needs to open Log service in add-to-inspection mode (LC-14). */
+export type AddToInspectionRequest = { vehicleId: string; workOrderId: string; inspectionLine: string };
+
+/** "Inspection / diagnostic fee · 22 Aug 2026 · Whol-Hearted Car Service Ltd" (LC-14 window header). */
+export function inspectionLineOf(item: Pick<FoundWorkItem, "inspectionJobName" | "foundDate" | "garage">): string {
+  return [item.inspectionJobName || "Inspection", foundDateLabel(item.foundDate), item.garage].filter(Boolean).join(" · ");
+}
+
+/** The car's name on a card in the every-car list (LC-11). */
+function CarLine({ name }: { name: string | null }) {
+  if (!name) return null;
+  return (
+    <div className="flex items-center gap-1.5 text-[13px] font-medium text-[#1a1b22] dark:text-[#e4e1ec]" data-testid="found-card-car">
+      <Sym name="directions_car" size={16} className="text-[#47464c] dark:text-[#c9c5cd]" />
+      <span>{name}</span>
+    </div>
+  );
+}
+
+/** Each place in words, one per code ("Front (Air fuel ratio sensor)"). */
+function itemPlaceLabels(item: FoundWorkItem): string[] {
+  return (item.positions ?? [])
+    .filter(Boolean)
+    .map(
+      (code) =>
+        linePositionsText({
+          categoryCode: item.jobCode ?? "",
+          positionScheme: item.positionScheme ?? null,
+          positionAware: item.positionAware ?? null,
+          positions: [code],
+        }) ?? code,
+    );
+}
+
+/** "Oxygen sensor · Front (Air fuel ratio sensor)" */
+function foundTitle(item: FoundWorkItem): string {
+  return [item.jobName, itemPlaceLabels(item).join(", ")].filter(Boolean).join(" · ");
+}
+
+/**
+ * LC-10: an inspection's not-done-yet job shows what to buy: the same part cards as Log service, read-only,
+ * with Copy part info. Looked up live, so jobs saved before this was built get it too.
+ */
+function FoundPartsToBuy({ item }: { item: FoundWorkItem }) {
+  // A service (cleaning, relearn, alignment…) has no part to buy.
+  if (!item.vehicleId || !item.jobId || item.jobIsPart === false) return null;
+  return (
+    <PartsThatFitPanel
+      vehicleId={item.vehicleId}
+      jobId={item.jobId}
+      jobName={(item.jobName || "part").toLowerCase()}
+      places={(item.positions ?? []).filter(Boolean)}
+      placeLabels={itemPlaceLabels(item)}
+      needsPlace={false}
+      partId={null}
+      onPick={() => undefined}
+      toBuy
+    />
   );
 }
 
@@ -389,19 +589,21 @@ export function FoundByInspectionSection({
  */
 function PlannedJobCard({
   item,
+  carName = null,
   canEdit,
   phone,
   onLogItNow,
   onNotNeeded,
 }: {
   item: FoundWorkItem;
+  carName?: string | null;
   canEdit: boolean;
   phone: boolean;
   onLogItNow?: (item: FoundWorkItem) => void;
   onNotNeeded: () => void;
 }) {
   const places = linePositionsText({
-    categoryCode: "",
+    categoryCode: item.jobCode ?? "",
     positionScheme: item.positionScheme ?? null,
     positionAware: item.positionAware ?? null,
     positions: item.positions ?? [],
@@ -426,6 +628,8 @@ function PlannedJobCard({
           {FOUND_UI_COPY.notDoneYet}
         </span>
       </div>
+      <CarLine name={carName} />
+      <QuoteLine amount={item.quoteAmount ?? null} />
       {item.partId ? (
         <div className="p-2.5 bg-[#f4f2fd] dark:bg-[#1c1d26] rounded-lg flex items-center justify-between gap-2 flex-wrap" data-testid="planned-part">
           <div className="flex items-center gap-2 min-w-0">
@@ -438,7 +642,12 @@ function PlannedJobCard({
               </>
             ) : null}
           </div>
-          {item.partNumber ? <CopyNumberButton number={item.partNumber} /> : null}
+          {item.partNumber ? (
+            <CopyNumberButton
+              number={item.partNumber}
+              text={() => partCopyText(null, { name: item.partName ?? item.jobName, brand: item.partBrand ?? "", number: item.partNumber ?? "" })}
+            />
+          ) : null}
         </div>
       ) : null}
       {item.note ? (
@@ -457,17 +666,7 @@ function PlannedJobCard({
           >
             {FOUND_UI_COPY.notNeeded}
           </button>
-          {onLogItNow ? (
-            <button
-              type="button"
-              data-testid="found-log-it-now"
-              onClick={() => onLogItNow(item)}
-              className={`px-4 py-2 rounded-lg text-[12px] font-medium inline-flex items-center justify-center gap-1.5 ${phone ? "w-full h-12 text-[15px]" : ""} ${BTN_PRIMARY}`}
-            >
-              <Sym name="build" size={16} />
-              {FOUND_UI_COPY.logItNow}
-            </button>
-          ) : null}
+          {onLogItNow ? <PendingDoneToggle phone={phone} onDone={() => onLogItNow(item)} /> : null}
         </div>
       ) : null}
     </li>

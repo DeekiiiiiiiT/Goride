@@ -6,7 +6,7 @@
  * - "Done today" → a normal job on this same service, marked values.found_today = true so the
  *   "From inspection" chip and the history row "Done the same day" survive the save.
  */
-import type { MaintenanceLogLine, MaintenanceServiceCategory, FoundWorkItem } from "../../../../types/maintenance";
+import type { MaintenanceLogLine, MaintenanceServiceCategory, FoundWorkItem, LineItemDraft } from "../../../../types/maintenance";
 import { isNotUsual, type JobFitState } from "./jobFit";
 
 export type FoundMode = "today" | "later";
@@ -20,7 +20,87 @@ export type FoundDraft = {
   positions?: string[];
   /** A chip was tapped on this row (a saved found line that wasn't tapped keeps its stored positions). */
   positionsTouched?: boolean;
+  /** LC-15: the garage's quote (not paid). Kept on the found line only, never in the total. */
+  quote?: number | null;
+  /** LC-16: the quote's full job form (boxes + items), filled back in on Done. Never a cost. */
+  quoteDetail?: QuoteSnapshot | null;
 };
+
+/**
+ * LC-16 the garage's quote as the SAME job form Log service uses: the boxes, labour, part and Items used. Stored in
+ * values.quote of a J$ 0 found line (never read by any total) and filled back in when the job is marked Done.
+ */
+export type QuoteSnapshot = {
+  values?: Record<string, string | number | boolean | null>;
+  laborHours?: number | null;
+  laborRate?: number | null;
+  brand?: string;
+  partNumber?: string;
+  partId?: string | null;
+  warranty?: boolean;
+  complimentary?: boolean;
+  items?: LineItemDraft[];
+};
+
+const NOT_QUOTE_VALUE_KEYS = new Set(["found_by_job", "found_today", "quote", "quote_amount", "notes"]);
+
+/** A filled-in job form → its quote snapshot (values without the found / quote keys). */
+export function quoteSnapshotOf(line: MaintenanceLogLine): QuoteSnapshot {
+  const values: Record<string, string | number | boolean | null> = {};
+  for (const [k, v] of Object.entries((line.values ?? {}) as Record<string, unknown>)) {
+    if (NOT_QUOTE_VALUE_KEYS.has(k)) continue;
+    if (v == null || typeof v === "string" || typeof v === "number" || typeof v === "boolean") values[k] = v as never;
+  }
+  return {
+    values,
+    laborHours: line.laborHours ?? null,
+    laborRate: line.laborRate ?? null,
+    brand: line.brand ?? "",
+    partNumber: line.partNumber ?? "",
+    partId: line.partId ?? null,
+    warranty: line.warranty === true,
+    complimentary: line.complimentary === true,
+    items: (line.items ?? []).map((i) => ({ ...(i as LineItemDraft), id: undefined })),
+  };
+}
+
+/** The quote snapshot stored on a found line, or null. */
+export function quoteDetailOfLine(l: MaintenanceLogLine): QuoteSnapshot | null {
+  const q = (l.values as Record<string, unknown> | undefined)?.quote;
+  return q && typeof q === "object" && !Array.isArray(q) ? (q as QuoteSnapshot) : null;
+}
+
+/**
+ * Save a quote card onto its found line (J$ 0 stays J$ 0): total → quote_amount, form → quote, plus its note and
+ * place. Lines of other jobs / inspections are untouched.
+ */
+export function withQuoteOnFoundLine(
+  lines: MaintenanceLogLine[],
+  inspectionJobId: string,
+  jobId: string,
+  quoted: { snapshot: QuoteSnapshot; total: number; notes?: string; positions?: string[] },
+): MaintenanceLogLine[] {
+  return lines.map((l) => {
+    if (!isFoundLine(l) || lineJobId(l) !== jobId || foundByJob(l) !== inspectionJobId) return l;
+    const base = { ...((l.values ?? {}) as Record<string, unknown>) };
+    delete base.quote;
+    delete base.quote_amount;
+    const total = Math.round(quoted.total * 100) / 100;
+    return {
+      ...l,
+      notes: quoted.notes?.trim() ? quoted.notes.trim() : l.notes,
+      positions: quoted.positions?.length ? [...quoted.positions] : l.positions,
+      positionsTouched: quoted.positions?.length ? true : l.positionsTouched,
+      values: { ...base, ...(total > 0 ? { quote_amount: total } : {}), quote: quoted.snapshot } as unknown as MaintenanceLogLine["values"],
+    };
+  });
+}
+
+/** The quote stored on a found line (values.quote_amount), or null. */
+export function quoteOfLine(l: MaintenanceLogLine): number | null {
+  const n = Number((l.values as Record<string, unknown> | undefined)?.quote_amount);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 
 export const FOUND_COPY = {
   title: "What the inspection found",
@@ -32,6 +112,11 @@ export const FOUND_COPY = {
   todayHelper: "Will be added as its own job below, with its cost and parts",
   notCharged: (cur: string) => `${cur === "JMD" ? "J$" : cur} 0 · not charged`,
   notePlaceholder: "Note (optional)",
+  quoteLabel: "Garage quote (optional)",
+  bannerQuote: (amount: number) =>
+    `Garage quote: J$ ${amount.toLocaleString("en-US", { maximumFractionDigits: 2 })} — enter what you actually paid below.`,
+  quotePlaceholder: "What it will cost",
+  quoteHelper: "Not paid — it fills in the price when you mark it Done.",
   remove: "Remove",
   summary: (today: number, later: number) =>
     `${today} done today · ${later} not done yet (kept on the car's list)`,
@@ -56,7 +141,7 @@ export const FOUND_COPY = {
 } as const;
 
 /** The job the line was logged for (found lines and normal lines share categoryId). */
-function lineJobId(l: MaintenanceLogLine): string | null {
+export function lineJobId(l: MaintenanceLogLine): string | null {
   return l.categoryId ? String(l.categoryId) : null;
 }
 
@@ -104,6 +189,8 @@ export function draftsFromLines(lines: MaintenanceLogLine[], inspectionJobId: st
         note: l.notes ?? "",
         positions: l.positions ? [...l.positions] : [],
         positionsTouched: l.positionsTouched === true,
+        ...(quoteOfLine(l) != null ? { quote: quoteOfLine(l) } : {}),
+        ...(quoteDetailOfLine(l) ? { quoteDetail: quoteDetailOfLine(l) } : {}),
       });
       seen.add(id);
     } else if (isFoundToday(l)) {
@@ -133,7 +220,12 @@ export function foundLineFromDraft(
     recommended: true,
     declined: false,
     notes: note || undefined,
-    values: { found_by_job: inspectionJobId },
+    values: {
+      found_by_job: inspectionJobId,
+      ...(d.quote != null && d.quote > 0 ? { quote_amount: Math.round(d.quote * 100) / 100 } : {}),
+      ...(d.quoteDetail ? { quote: d.quoteDetail } : {}),
+      // The quote snapshot is nested JSON on purpose (values_json.quote); no total reads it.
+    } as unknown as MaintenanceLogLine["values"],
     positions: d.positions?.length ? [...d.positions] : [],
     positionsTouched: d.positionsTouched === true,
     positionScheme: cat?.position_scheme ?? null,

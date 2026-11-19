@@ -291,7 +291,7 @@ export function formatPartRequestExtras(group: Pick<
   const whereOnCar = codes.length
     ? positionsLabel({ code: null, position_aware: null, position_scheme: group.positionScheme ?? null }, codes)
     : null;
-  // Stitch D1: "89467-B1040 · Front (before converter)", leaving out whichever is unknown; "—" when both are.
+  // Stitch D1: "89467-B1040 · Front", leaving out whichever is unknown; "—" when both are.
   const detailLine = [partNumber, whereOnCar].filter(Boolean).join(" · ") || "—";
   return { requestedName, partNumber, whereOnCar, detailLine, sources: sourceLabels(group.origins) };
 }

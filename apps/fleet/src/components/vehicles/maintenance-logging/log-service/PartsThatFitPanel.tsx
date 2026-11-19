@@ -9,6 +9,8 @@ import { api } from "../../../../services/api";
 import { LS, LT } from "./logServiceStitch";
 import {
   askNeedText,
+  brandNumbersFromLookup,
+  partCopyText,
   findQueryFor,
   makerTile,
   PARTS_FIT_COPY as C,
@@ -19,6 +21,7 @@ import {
   type FitPart,
   type PartsForJob,
 } from "./partsThatFit";
+import type { StoreBrandNumber } from "../../find-parts/everyday/storeCopyText";
 
 function Sym({ name, size, className = "", fill = false }: { name: string; size: number; className?: string; fill?: boolean }) {
   return (
@@ -66,16 +69,18 @@ export function MakerTile({ brand, size = "md" }: { brand: string; size?: "sm" |
   );
 }
 
-export function CopyNumberButton({ number }: { number: string }) {
+/** Copies the full part info (same block as Find parts' "Copy part info"); just the number when no text is given. */
+export function CopyNumberButton({ number, text }: { number: string; text?: string | (() => string) }) {
   const [done, setDone] = useState(false);
   return (
     <button
       type="button"
-      title="Copy part number"
+      title="Copy part info"
       data-testid="parts-fit-copy"
       onClick={(e) => {
         e.stopPropagation();
-        const write = navigator.clipboard?.writeText?.(number);
+        const value = (typeof text === "function" ? text() : text) || number;
+        const write = navigator.clipboard?.writeText?.(value);
         if (!write) {
           toast.error(C.copyFailed);
           return;
@@ -101,27 +106,38 @@ function PartCard({
   chosen,
   dimmed,
   onPick,
+  copyText,
+  readOnly = false,
 }: {
   part: FitPart;
   chosen: boolean;
   dimmed: boolean;
   onPick: () => void;
+  /** Full "Copy part info" text (car, part, numbers). */
+  copyText: () => string;
+  /** Read-only ("Parts to buy"): the card can't be picked. */
+  readOnly?: boolean;
 }) {
+  const pickable = readOnly
+    ? {}
+    : {
+        role: "button",
+        tabIndex: 0,
+        "aria-pressed": chosen,
+        onClick: onPick,
+        onKeyDown: (e: React.KeyboardEvent) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onPick();
+          }
+        },
+      };
   return (
     <div
-      role="button"
-      tabIndex={0}
-      aria-pressed={chosen}
+      {...pickable}
       data-testid="parts-fit-card"
       data-part-id={part.partId}
-      onClick={onPick}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onPick();
-        }
-      }}
-      className={`relative rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer transition-all hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4b41e1] ${LS.lowest} ${
+      className={`relative rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all ${readOnly ? "" : "cursor-pointer hover:shadow-md"} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4b41e1] ${LS.lowest} ${
         chosen
           ? "ring-2 ring-black/90 dark:ring-white/80 shadow-[0_2px_8px_rgba(3,2,19,0.04)]"
           : "ring-1 ring-[#e5eeff] dark:ring-[#32333e] shadow-[0_2px_6px_rgba(3,2,19,0.02)]"
@@ -146,7 +162,7 @@ function PartCard({
               >
                 {part.number}
               </span>
-              <CopyNumberButton number={part.number} />
+              <CopyNumberButton number={part.number} text={copyText} />
             </div>
           ) : null}
           {chosen ? (
@@ -201,7 +217,7 @@ export type PartsThatFitPanelProps = {
   jobName: string;
   /** Places picked on the job ("before_cat", "LF"…). */
   places: string[];
-  /** The same places in words ("Rear (after converter)"). */
+  /** The same places in words ("Rear (Oxygen sensor No.2)"). */
   placeLabels: string[];
   /** The job has places and none is picked yet: the panel waits. */
   needsPlace: boolean;
@@ -212,14 +228,23 @@ export type PartsThatFitPanelProps = {
   onPick: (part: FitPart | null) => void;
   /** Shown only on a new service (not when editing one, not on Log it now). */
   onPlanIt?: (part: FitPart | null) => void;
+  /**
+   * LC-10 "Parts to buy": an inspection's not-done-yet job. Same cards + Copy part info, nothing to pick,
+   * no Skip / Plan it (the job is already on the car's list). Ask Roam stays when nothing is on file.
+   */
+  toBuy?: boolean;
 };
 
 export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
-  const { vehicleId, jobId, places, needsPlace, partId, onPick, onPlanIt } = props;
+  const { vehicleId, jobId, places, needsPlace, onPick, toBuy = false } = props;
+  const partId = toBuy ? null : props.partId;
+  const onPlanIt = toBuy ? undefined : props.onPlanIt;
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [skipped, setSkipped] = useState(false);
   const [asking, setAsking] = useState(false);
   const [askOverride, setAskOverride] = useState<FindAsk | null>(null);
+  /** Other brands' numbers per part, loaded ahead so Copy works at once (same lookup Find parts uses). */
+  const [brandNumbers, setBrandNumbers] = useState<Map<string, StoreBrandNumber[]>>(new Map());
   const placesKey = places.join(",");
 
   const load = useCallback(() => {
@@ -240,23 +265,48 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
     return load();
   }, [load, needsPlace, skipped]);
 
+  const loadedParts = state.kind === "ok" ? state.data.parts : null;
+  const variantId = state.kind === "ok" ? state.data.copyCar.variantId : null;
+  useEffect(() => {
+    if (!loadedParts?.length) return;
+    let live = true;
+    for (const p of loadedParts) {
+      api
+        .partsLookup(p.partId, variantId ?? undefined)
+        .then((body: unknown) => {
+          if (!live) return;
+          const list = brandNumbersFromLookup(body);
+          setBrandNumbers((prev) => new Map(prev).set(p.partId, list));
+        })
+        .catch(() => undefined); // Copy still gives the car, part and number.
+    }
+    return () => {
+      live = false;
+    };
+  }, [loadedParts, variantId]);
+
   const header = (
     <div className="flex items-start gap-2.5">
       <Sym name="directions_car" size={20} className={`mt-0.5 ${LS.text}`} />
       <div>
         <h3 className={`text-[16px] leading-5 font-semibold ${LS.text}`} data-testid="parts-fit-title">
-          {C.title(state.kind === "ok" ? state.data.carName : null)}
+          {(toBuy ? C.toBuyTitle : C.title)(state.kind === "ok" ? state.data.carName : null)}
         </h3>
-        <p className={`${LT.bodySm} ${LS.muted} mt-0.5`}>{C.helper}</p>
+        <p className={`${LT.bodySm} ${LS.muted} mt-0.5`}>{toBuy ? C.toBuyHelper : C.helper}</p>
       </div>
     </div>
   );
 
   const wrap = (body: React.ReactNode) => (
-    <div className="pt-4 border-t border-[#e5eeff] dark:border-[#32333e] space-y-3.5" data-testid="parts-fit-panel">
+    <div
+      className={toBuy ? "pt-3 space-y-3" : "pt-4 border-t border-[#e5eeff] dark:border-[#32333e] space-y-3.5"}
+      data-testid="parts-fit-panel"
+      data-mode={toBuy ? "to-buy" : "pick"}
+    >
       {body}
     </div>
   );
+  const skipButton = (onClick: () => void) => (toBuy ? null : <SkipButton onClick={onClick} />);
 
   if (skipped) {
     return wrap(
@@ -323,7 +373,7 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
           </button>
         </div>
         <div className="flex justify-end">
-          <SkipButton onClick={() => { onPick(null); setSkipped(true); }} />
+          {skipButton(() => { onPick(null); setSkipped(true); })}
         </div>
       </>,
     );
@@ -375,7 +425,7 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {onPlanIt ? <PlanItButton label={C.planItLater} onClick={() => onPlanIt(null)} /> : null}
-            <SkipButton onClick={skip} />
+            {skipButton(skip)}
           </div>
         </div>,
       );
@@ -417,8 +467,8 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
                 <Sym name="travel_explore" size={18} />
                 {asking ? C.asking : C.ask}
               </button>
-              <span className={`${LT.bodySm} ${LS.muted}`}>{C.saveAnyway}</span>
-              <SkipButton onClick={skip} />
+              {toBuy ? null : <span className={`${LT.bodySm} ${LS.muted}`}>{C.saveAnyway}</span>}
+              {skipButton(skip)}
             </div>
           </div>
         </div>
@@ -440,7 +490,7 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                   <span className={`${LT.labelMd} ${LS.muted}`}>{C.forTheStore}</span>
                   <span className={`font-mono text-[13px] font-semibold tracking-wide px-2 py-0.5 rounded ${LS.text} ${LS.mid}`}>{orphan.number}</span>
-                  <CopyNumberButton number={orphan.number} />
+                  <CopyNumberButton number={orphan.number} text={() => partCopyText(data.copyCar, orphan, undefined, props.placeLabels)} />
                 </div>
               ) : null}
             </div>
@@ -453,6 +503,8 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
             chosen={p.partId === partId}
             dimmed={Boolean(partId) && p.partId !== partId}
             onPick={() => onPick(p)}
+            readOnly={toBuy}
+            copyText={() => partCopyText(data.copyCar, p, brandNumbers.get(p.partId), props.placeLabels)}
           />
         ))}
       </div>
@@ -476,7 +528,7 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
           </button>
         </div>
       ) : null}
-      <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+      {toBuy ? null : <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         {onPlanIt ? (
           <div className="flex items-center gap-2">
             <PlanItButton label={C.planIt} onClick={() => onPlanIt(chosen)} />
@@ -486,7 +538,7 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
           <span />
         )}
         <SkipButton onClick={skip} />
-      </div>
+      </div>}
     </>,
   );
 }

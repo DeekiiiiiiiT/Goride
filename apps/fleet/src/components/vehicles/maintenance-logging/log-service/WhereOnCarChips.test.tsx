@@ -6,8 +6,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { SaveLineHint, WhereOnCarChips } from "./WhereOnCarChips";
 
 const options = [
-  { code: "before_cat", label: "Front (before converter)" },
-  { code: "after_cat", label: "Rear (after converter)" },
+  { code: "before_cat", label: "Front (Air fuel ratio sensor)" },
+  { code: "after_cat", label: "Rear (Oxygen sensor No.2)" },
   { code: "unknown", label: "Not sure" },
 ];
 
@@ -22,7 +22,7 @@ describe("WhereOnCarChips", () => {
 
   it("marks the picked chip and hides the helper (Stitch F2)", () => {
     render(<WhereOnCarChips options={options} picked={["before_cat"]} onToggle={() => {}} showHelper={false} />);
-    expect(screen.getByRole("button", { name: "Front (before converter)" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Front (Air fuel ratio sensor)" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.queryByText(/Tap Not sure/)).toBeNull();
   });
 

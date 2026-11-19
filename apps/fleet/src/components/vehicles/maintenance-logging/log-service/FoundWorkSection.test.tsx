@@ -188,3 +188,33 @@ describe("Review: Found, not done yet (Stitch screen 5)", () => {
     expect(screen.queryByTestId("review-found-group")).toBeNull();
   });
 });
+
+describe("LC-10 Parts to buy + the place on found jobs", () => {
+  it("renderParts shows under Not done yet rows only", () => {
+    section({ renderParts: (d) => <div data-testid="to-buy">{d.jobId}</div> });
+    const rows = screen.getAllByTestId("found-work-row");
+    expect(within(rows[0]).queryByTestId("to-buy")).toBeNull();
+    expect(within(rows[1]).getByTestId("to-buy")).toHaveTextContent("rotor");
+    expect(within(rows[2]).getByTestId("to-buy")).toHaveTextContent("shock");
+  });
+
+  it("the review row names the place", () => {
+    render(
+      <ReviewFoundGroup
+        lines={[
+          {
+            categoryId: "o2",
+            categoryCode: "oxygen_sensor",
+            categoryName: "Oxygen sensor",
+            recommended: true,
+            positions: ["before_cat"],
+            positionScheme: "before_after_catalyst",
+          },
+        ]}
+        currency="JMD"
+        onRemove={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("review-found-name")).toHaveTextContent("Oxygen sensor · Front (Air fuel ratio sensor)");
+  });
+});

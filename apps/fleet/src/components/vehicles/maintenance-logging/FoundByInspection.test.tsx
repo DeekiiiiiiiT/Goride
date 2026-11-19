@@ -9,6 +9,15 @@ import { MaintenanceSaveError } from "../../../services/maintenanceSaveError";
 const apiMock = vi.hoisted(() => ({
   listFoundWork: vi.fn(),
   markFoundWorkNotNeeded: vi.fn(),
+  findParts: vi.fn(),
+  partsLookup: vi.fn(),
+  requestFindPart: vi.fn(),
+  getWorkOrder: vi.fn(),
+  listQuickJobCategories: vi.fn(),
+  listMaintenanceSystems: vi.fn(),
+  listMaintenanceCategories: vi.fn(),
+  getSystemSections: vi.fn(),
+  addFoundJobToInspection: vi.fn(),
 }));
 vi.mock("../../../services/api", () => ({ api: apiMock }));
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
@@ -117,7 +126,8 @@ describe("Found by inspection in the Due items drawer (Stitch screens 7, 8, 12, 
     apiMock.listFoundWork.mockResolvedValue({ items: [rotor] });
     render(<FoundByInspectionSection vehicleId="car-1" canEdit onLogItNow={vi.fn()} phone />);
     await screen.findByTestId("found-card");
-    expect(screen.getByTestId("found-log-it-now").className).toContain("w-full");
+    expect(screen.getByTestId("found-status").className).toContain("w-full");
+    expect(screen.getByTestId("found-log-it-now").className).toContain("h-12");
     expect(screen.getByTestId("found-not-needed").className).toContain("w-full");
   });
 
@@ -347,5 +357,159 @@ describe("Planned jobs on Not done yet (Slice C, Stitch screen 6)", () => {
     await screen.findAllByTestId("found-card");
     expect(screen.getByText(FOUND_UI_COPY.title)).toBeInTheDocument();
     expect(screen.queryByText(FOUND_UI_COPY.plannedTitle)).toBeNull();
+  });
+});
+
+describe("LC-10 Parts to buy on an inspection's not-done-yet job", () => {
+  const o2: FoundWorkItem = {
+    ...rotor,
+    lineId: "line-o2",
+    jobId: "o2",
+    jobName: "Oxygen sensor",
+    note: null,
+    positions: ["before_cat"],
+    positionScheme: "before_after_catalyst",
+    jobCode: "oxygen_sensor",
+  };
+  const toyota = {
+    linked: true,
+    car: { make: "Toyota", model: "Roomy" },
+    plainSections: [
+      { items: [{ partId: "p1", name: "Front oxygen sensor", brand: "Toyota", number: "89467-B1040", fitLabel: "made_for_car", status: "verified" }] },
+    ],
+    ask: { state: "none", askedAt: null, byYou: false },
+  };
+
+  beforeEach(() => {
+    apiMock.findParts.mockReset();
+    apiMock.partsLookup.mockReset();
+  });
+
+  it("switch on: the title has the place and the parts to buy show, read-only, with Copy part info", async () => {
+    apiMock.listFoundWork.mockResolvedValue({ items: [o2], partsGapsEnabled: true });
+    apiMock.findParts.mockResolvedValue(toyota);
+    apiMock.partsLookup.mockResolvedValue({});
+    render(<FoundByInspectionSection vehicleId="car-1" canEdit onLogItNow={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId("parts-fit-card")).toBeTruthy());
+    expect(screen.getByTestId("found-card-title").textContent).toBe("Oxygen sensor · Front (Air fuel ratio sensor)");
+    expect(apiMock.findParts).toHaveBeenCalledWith({ vehicleId: "car-1", componentId: "o2", places: "before_cat" });
+    expect(screen.getByTestId("parts-fit-title").textContent).toBe("Parts to buy for your Toyota Roomy");
+    expect(screen.getByTestId("parts-fit-panel").getAttribute("data-mode")).toBe("to-buy");
+    expect(screen.getByTestId("parts-fit-card").getAttribute("role")).toBeNull();
+    expect(screen.getByTestId("parts-fit-copy").textContent).toContain("Copy part info");
+    expect(screen.queryByTestId("parts-fit-skip")).toBeNull();
+    expect(screen.queryByTestId("parts-fit-plan-it")).toBeNull();
+    expect(screen.getByTestId("found-log-it-now")).toBeTruthy();
+  });
+
+  it("switch off: today's card, no parts lookup", async () => {
+    apiMock.listFoundWork.mockResolvedValue({ items: [o2], partsGapsEnabled: false });
+    render(<FoundByInspectionSection vehicleId="car-1" canEdit />);
+    await waitFor(() => expect(screen.getByTestId("found-card-title")).toBeTruthy());
+    expect(screen.getByTestId("found-card-title").textContent).toBe("Oxygen sensor");
+    expect(screen.queryByTestId("parts-fit-panel")).toBeNull();
+    expect(apiMock.findParts).not.toHaveBeenCalled();
+  });
+});
+
+describe("LC-11 Not done yet tab (every car)", () => {
+  it("no car: loads every car's jobs, names each card's car, own title and empty line", async () => {
+    apiMock.listFoundWork.mockResolvedValue({ items: [rotor], partsGapsEnabled: false });
+    render(<FoundByInspectionSection canEdit carLabel={(id) => (id === "car-1" ? "Toyota Roomy · 5179KZ" : null)} />);
+    await waitFor(() => expect(screen.getByTestId("found-card")).toBeTruthy());
+    expect(apiMock.listFoundWork).toHaveBeenCalledWith(undefined);
+    expect(screen.getByText("Not done yet")).toBeTruthy();
+    expect(screen.getByTestId("found-card-car").textContent).toContain("Toyota Roomy · 5179KZ");
+  });
+
+  it("one car (the drawer): no car line", async () => {
+    apiMock.listFoundWork.mockResolvedValue({ items: [rotor] });
+    render(<FoundByInspectionSection vehicleId="car-1" canEdit carLabel={() => "Toyota Roomy · 5179KZ"} />);
+    await waitFor(() => expect(screen.getByTestId("found-card")).toBeTruthy());
+    expect(screen.queryByTestId("found-card-car")).toBeNull();
+  });
+
+  it("every car, nothing waiting", async () => {
+    apiMock.listFoundWork.mockResolvedValue({ items: [] });
+    render(<FoundByInspectionSection canEdit />);
+    await waitFor(() => expect(screen.getByTestId("found-empty")).toBeTruthy());
+    expect(screen.getByTestId("found-empty").textContent).toContain("Nothing waiting on any car.");
+  });
+});
+
+describe("LC-13 the inspection a found job came from", () => {
+  it("From inspection box names it; View inspection opens that service", async () => {
+    apiMock.listFoundWork.mockResolvedValue({ items: [rotor] });
+    apiMock.getWorkOrder.mockResolvedValue({ item: { id: "wo-1", lines: [], performedAtDate: "2026-11-17" } });
+    render(<FoundByInspectionSection canEdit carLabel={() => "Toyota Roomy · 5179KZ"} />);
+    await waitFor(() => expect(screen.getByTestId("found-from-inspection")).toBeTruthy());
+    const box = screen.getByTestId("found-from-inspection");
+    expect(box.textContent).toContain("From inspection");
+    expect(box.textContent).toContain("Inspection / diagnostic fee at Northside Auto");
+    fireEvent.click(screen.getByTestId("found-view-inspection"));
+    await waitFor(() => expect(apiMock.getWorkOrder).toHaveBeenCalledWith("wo-1"));
+  });
+});
+
+describe("LC-14 Add a job on the inspection a found job came from", () => {
+  it("the From inspection box has Add a job; it asks the host to open Log service for that inspection", async () => {
+    apiMock.listFoundWork.mockResolvedValue({ items: [rotor] });
+    const onAddToInspection = vi.fn();
+    render(<FoundByInspectionSection canEdit carLabel={() => "Toyota Roomy · 5179KZ"} onAddToInspection={onAddToInspection} />);
+    await waitFor(() => expect(screen.getByTestId("found-add-to-inspection")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("found-add-to-inspection"));
+    expect(onAddToInspection).toHaveBeenCalledWith({
+      vehicleId: "car-1",
+      workOrderId: "wo-1",
+      inspectionLine: "Inspection / diagnostic fee · 17 Nov 2026 · Northside Auto",
+    });
+  });
+
+  it("view only, or no host for it: no Add a job", async () => {
+    apiMock.listFoundWork.mockResolvedValue({ items: [rotor] });
+    const { unmount } = render(<FoundByInspectionSection canEdit={false} onAddToInspection={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId("found-view-inspection")).toBeTruthy());
+    expect(screen.queryByTestId("found-add-to-inspection")).toBeNull();
+    unmount();
+    render(<FoundByInspectionSection canEdit />);
+    await waitFor(() => expect(screen.getByTestId("found-view-inspection")).toBeTruthy());
+    expect(screen.queryByTestId("found-add-to-inspection")).toBeNull();
+  });
+});
+
+describe("Parts to buy only for part jobs", () => {
+  it("a found service (Throttle Body Cleaning) has no parts box", async () => {
+    apiMock.findParts.mockReset();
+    const tbc: FoundWorkItem = { ...rotor, lineId: "line-tbc", jobId: "tbc", jobName: "Throttle Body Cleaning", jobIsPart: false };
+    apiMock.listFoundWork.mockResolvedValue({ items: [tbc], partsGapsEnabled: true });
+    render(<FoundByInspectionSection vehicleId="car-1" canEdit />);
+    await waitFor(() => expect(screen.getByTestId("found-card")).toBeTruthy());
+    expect(screen.queryByTestId("parts-fit-panel")).toBeNull();
+    expect(apiMock.findParts).not.toHaveBeenCalled();
+  });
+});
+
+describe("LC-15 quote + Pending / Done", () => {
+  it("shows the garage quote (not paid), the quoted total, and Pending selected; Done opens the log", async () => {
+    const quoted: FoundWorkItem = { ...rotor, quoteAmount: 12000 };
+    const shockQuoted: FoundWorkItem = { ...shock, quoteAmount: 26500.5 };
+    apiMock.listFoundWork.mockResolvedValue({ items: [quoted, shockQuoted] });
+    const onLogItNow = vi.fn();
+    render(<FoundByInspectionSection canEdit onLogItNow={onLogItNow} />);
+    await waitFor(() => expect(screen.getAllByTestId("found-card-quote")).toHaveLength(2));
+    expect(screen.getAllByTestId("found-card-quote")[0].textContent).toContain("Garage quote J$ 12,000");
+    expect(screen.getAllByTestId("found-card-quote")[0].textContent).toContain("not paid");
+    expect(screen.getByTestId("found-quoted-total").textContent).toBe("J$ 38,500.5 quoted, waiting");
+    expect(screen.getAllByTestId("found-status-pending")[0].getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(screen.getAllByTestId("found-log-it-now")[0]);
+    expect(onLogItNow).toHaveBeenCalledWith(quoted);
+  });
+
+  it("no quote: no quote line and no total", async () => {
+    apiMock.listFoundWork.mockResolvedValue({ items: [rotor] });
+    render(<FoundByInspectionSection canEdit onLogItNow={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId("found-card")).toBeTruthy());
+    expect(screen.queryByTestId("found-card-quote")).toBeNull();
+    expect(screen.queryByTestId("found-quoted-total")).toBeNull();
   });
 });

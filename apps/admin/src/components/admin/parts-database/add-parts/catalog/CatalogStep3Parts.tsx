@@ -302,6 +302,7 @@ function PartRowEditor({
             ) : (
               <PositionChips
                 scheme={type.positionScheme}
+                opCode={type.opCode}
                 position={row.position ?? ""}
                 side={row.side ?? ""}
                 onPick={(pos, side) => onChange({ position: pos, side })}
@@ -394,6 +395,7 @@ function MobilePartCard({
           ) : (
             <PositionChips
               scheme={type.positionScheme}
+                opCode={type.opCode}
               position={row.position ?? ""}
               side={row.side ?? ""}
               onPick={(pos, side) => onChange({ position: pos, side })}

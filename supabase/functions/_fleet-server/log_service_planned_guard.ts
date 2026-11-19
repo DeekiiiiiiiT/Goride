@@ -32,3 +32,22 @@ export function mapFleetPlanJobError(message: string): { status: number; code: s
   }
   return null;
 }
+/** LC-14 fleet_add_found_job errors → HTTP answers in plain words (plan-job ones first). */
+export function mapFleetAddFoundJobError(message: string): { status: number; code: string; error: string } | null {
+  const shared = mapFleetPlanJobError(message);
+  if (shared) return shared;
+  const msg = String(message ?? "").trim();
+  const code = msg.split(/\s/)[0] ?? msg;
+  if (code === "service_not_found") return { status: 404, code, error: "That inspection was not found." };
+  if (code === "service_not_open_for_finds") {
+    return { status: 409, code, error: "This service was deleted or isn't saved yet, so jobs can't be added to it." };
+  }
+  if (code === "not_an_inspection") {
+    return { status: 409, code, error: "This service has no inspection, so it can't hold jobs it found." };
+  }
+  if (code === "quote_invalid") return { status: 400, code, error: "The quote must be a price from 0 up." };
+  if (code === "job_is_inspection") {
+    return { status: 400, code, error: "Pick the job the inspection found, not an inspection." };
+  }
+  return null;
+}

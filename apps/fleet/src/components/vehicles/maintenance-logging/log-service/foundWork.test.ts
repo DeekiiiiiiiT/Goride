@@ -13,6 +13,10 @@ import {
   openFoundCountFor,
   searchFoundJobs,
   type FoundDraft,
+  quoteOfLine,
+  quoteSnapshotOf,
+  withQuoteOnFoundLine,
+  quoteDetailOfLine,
 } from "./foundWork";
 import type { JobFitState } from "./jobFit";
 
@@ -162,5 +166,59 @@ describe("Log it now banner", () => {
     expect(foundBannerText({ foundDate: "2026-11-17", inspectionJobName: null, garage: null })).toBe(
       "From inspection on 17 Nov 2026",
     );
+  });
+});
+
+describe("LC-15 garage quote on found lines", () => {
+  it("is kept on the line as quote_amount only (never a cost field) and read back into the draft", () => {
+    const line = foundLineFromDraft(
+      { jobId: "o2", name: "Oxygen sensor", mode: "later", note: "", quote: 12000.456 },
+      undefined,
+      null,
+      "insp",
+    );
+    expect(line.values).toEqual({ found_by_job: "insp", quote_amount: 12000.46 });
+    expect(line.labor).toBeUndefined();
+    expect(line.material).toBeUndefined();
+    expect(quoteOfLine(line)).toBe(12000.46);
+    expect(draftsFromLines([line], "insp")[0].quote).toBe(12000.46);
+  });
+
+  it("no quote or 0: nothing stored", () => {
+    const line = foundLineFromDraft({ jobId: "o2", name: "Oxygen sensor", mode: "later", note: "", quote: 0 }, undefined, null, "insp");
+    expect(line.values).toEqual({ found_by_job: "insp" });
+    expect(quoteOfLine(line)).toBeNull();
+  });
+});
+
+describe("LC-16 quote form snapshot", () => {
+  it("a filled job form → snapshot without found/quote keys; saved onto its found line only", () => {
+    const form = {
+      categoryId: "tbc",
+      categoryCode: "throttle_body_cleaning",
+      categoryName: "Throttle Body Cleaning",
+      laborHours: 1,
+      laborRate: 4000,
+      notes: "Rough idle",
+      values: { cost_mode: "total", service_amount: 7000, found_by_job: "x" },
+      items: [{ source: "suggested", itemKind: "supply", itemName: "Throttle body cleaner", qty: 1, unitCost: 1500, id: "draft-1" }],
+    } as never;
+    const snap = quoteSnapshotOf(form);
+    expect(snap.values).toEqual({ cost_mode: "total", service_amount: 7000 });
+    expect(snap.items?.[0].itemName).toBe("Throttle body cleaner");
+    expect(snap.items?.[0].id).toBeUndefined();
+
+    const found = foundLineFromDraft({ jobId: "tbc", name: "Throttle Body Cleaning", mode: "later", note: "" }, undefined, null, "insp");
+    const other = { categoryId: "pads", categoryCode: "pads", categoryName: "Brake pads", labor: 5000 };
+    const out = withQuoteOnFoundLine([other as never, found], "insp", "tbc", { snapshot: snap, total: 8500, notes: "Rough idle" });
+    expect(out[0]).toBe(other);
+    expect(out[1].recommended).toBe(true);
+    expect(out[1].labor).toBeUndefined();
+    expect((out[1].values as Record<string, unknown>).quote_amount).toBe(8500);
+    expect(quoteDetailOfLine(out[1])?.values).toEqual({ cost_mode: "total", service_amount: 7000 });
+    expect(out[1].notes).toBe("Rough idle");
+    // the quote form comes back with the draft (so saving the inspection again keeps it)
+    expect(draftsFromLines(out, "insp")[0].quoteDetail?.values).toEqual({ cost_mode: "total", service_amount: 7000 });
+    expect(foundLineFromDraft(draftsFromLines(out, "insp")[0], undefined, null, "insp").values).toMatchObject({ quote: snap });
   });
 });

@@ -4,7 +4,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const apiMock = vi.hoisted(() => ({ findParts: vi.fn(), requestFindPart: vi.fn() }));
+const apiMock = vi.hoisted(() => ({ findParts: vi.fn(), requestFindPart: vi.fn(), partsLookup: vi.fn() }));
 vi.mock("../../../../services/api", () => ({ api: apiMock }));
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("sonner", () => ({ toast: toastMock }));
@@ -32,7 +32,7 @@ function renderPanel(over: Partial<React.ComponentProps<typeof PartsThatFitPanel
     jobId: "o2",
     jobName: "oxygen sensor",
     places: ["before_cat"],
-    placeLabels: ["Front (before converter)"],
+    placeLabels: ["Front (Air fuel ratio sensor)"],
     needsPlace: false,
     partId: null,
     onPick: vi.fn(),
@@ -46,6 +46,8 @@ describe("PartsThatFitPanel", () => {
   beforeEach(() => {
     apiMock.findParts.mockReset();
     apiMock.requestFindPart.mockReset();
+    apiMock.partsLookup.mockReset();
+    apiMock.partsLookup.mockResolvedValue({ reference: null, brandNumbers: [] });
   });
 
   it("waits for a place before asking the server", () => {
@@ -94,7 +96,7 @@ describe("PartsThatFitPanel", () => {
   it("nothing on file: Ask Roam once, then Roam is looking (button never twice)", async () => {
     apiMock.findParts.mockResolvedValue(none);
     apiMock.requestFindPart.mockResolvedValue({ ok: true });
-    renderPanel({ places: ["after_cat"], placeLabels: ["Rear (after converter)"], jobName: "oxygen sensor" });
+    renderPanel({ places: ["after_cat"], placeLabels: ["Rear (Oxygen sensor No.2)"], jobName: "oxygen sensor" });
     await waitFor(() => expect(screen.getByTestId("parts-fit-none")).toBeTruthy());
     expect(screen.getByText("Roam doesn't have this part for your Toyota Roomy yet")).toBeTruthy();
     fireEvent.click(screen.getByTestId("parts-fit-ask"));
@@ -105,7 +107,7 @@ describe("PartsThatFitPanel", () => {
       vehicleId: "car-1",
       maintenanceComponentId: "o2",
       positionCodes: ["after_cat"],
-      needText: "oxygen sensor · Rear (after converter)",
+      needText: "oxygen sensor · Rear (Oxygen sensor No.2)",
     });
     expect(screen.queryByTestId("parts-fit-ask")).toBeNull();
     expect(screen.getByTestId("parts-fit-asked-on").textContent).toMatch(/^Asked on /);
@@ -138,10 +140,67 @@ describe("PartsThatFitPanel", () => {
     await waitFor(() => expect(screen.getAllByTestId("parts-fit-card")).toHaveLength(2));
   });
 
+  it("Copy part info copies the car, the part, its number and the other brands (like Find parts)", async () => {
+    apiMock.findParts.mockResolvedValue({
+      ...twoParts,
+      car: { make: "Toyota", model: "Roomy", year: 2019 },
+      pickedVariantId: "var-1",
+      picked: { id: "var-1", chassis_code: "M900A", engine_code: "1KR-FE", drivetrain: "2WD" },
+    });
+    apiMock.partsLookup.mockImplementation(async (id: string) =>
+      id === "p1" ? { reference: { brand: "Toyota (genuine)", number: "89467-B1040" }, brandNumbers: [{ brand: "Denso", number: "234-9119" }] } : {},
+    );
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    renderPanel();
+    await waitFor(() => expect(apiMock.partsLookup).toHaveBeenCalledWith("p1", "var-1"));
+    await new Promise((r) => setTimeout(r, 0));
+    fireEvent.click(screen.getAllByTestId("parts-fit-copy")[0]);
+    expect(writeText).toHaveBeenCalledWith(
+      [
+        "Toyota Roomy 2019",
+        "Chassis: M900A · Engine: 1KR-FE · Drive: 2WD",
+        "Front oxygen sensor (Air fuel ratio sensor)",
+        "Toyota (genuine) number: 89467-B1040",
+        "Also sold as: Denso 234-9119",
+      ].join("\n"),
+    );
+    expect(screen.getAllByTestId("parts-fit-copy")[0].textContent).toMatch(/Copied|Copy part info/);
+  });
+
   it("a saved line's part not in today's list still reads as chosen", async () => {
     apiMock.findParts.mockResolvedValue(none);
     renderPanel({ partId: "old", chosenInfo: { name: "Oxygen sensor", brand: "Bosch", number: "0258" } });
     await waitFor(() => expect(screen.getByTestId("parts-fit-chosen-saved")).toBeTruthy());
     expect(screen.queryByTestId("parts-fit-none")).toBeNull();
+  });
+});
+
+describe("PartsThatFitPanel — Parts to buy (LC-10)", () => {
+  beforeEach(() => {
+    apiMock.findParts.mockReset();
+    apiMock.requestFindPart.mockReset();
+    apiMock.partsLookup.mockReset();
+    apiMock.partsLookup.mockResolvedValue({});
+  });
+
+  it("read-only cards: nothing to pick, no Skip / Plan it / Using, Copy part info stays", async () => {
+    apiMock.findParts.mockResolvedValue(twoParts);
+    const { props } = renderPanel({ toBuy: true, partId: "p1" });
+    await waitFor(() => expect(screen.getAllByTestId("parts-fit-card")).toHaveLength(2));
+    expect(screen.getByTestId("parts-fit-title").textContent).toBe("Parts to buy for your Toyota Roomy");
+    fireEvent.click(screen.getAllByTestId("parts-fit-card")[0]);
+    expect(props.onPick).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("parts-fit-skip")).toBeNull();
+    expect(screen.queryByTestId("parts-fit-plan-it")).toBeNull();
+    expect(screen.queryByTestId("parts-fit-using")).toBeNull();
+    expect(screen.getAllByTestId("parts-fit-copy")).toHaveLength(2);
+  });
+
+  it("nothing on file: Ask Roam stays, no Skip", async () => {
+    apiMock.findParts.mockResolvedValue(none);
+    renderPanel({ toBuy: true });
+    await waitFor(() => expect(screen.getByTestId("parts-fit-ask")).toBeTruthy());
+    expect(screen.queryByTestId("parts-fit-skip")).toBeNull();
   });
 });

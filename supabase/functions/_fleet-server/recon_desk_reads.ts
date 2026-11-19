@@ -128,6 +128,28 @@ export function historyItem(row: HistoryRow, names: Map<string, string>): Histor
 /** Names for user ids (staff profile name, else email). Unknown ids are left as they are. */
 const NAME_CACHE_MS = 5 * 60_000;
 const nameCache = new Map<string, { name: string; at: number }>();
+/** Code review #7: the cache never grows past this (oldest dropped first; a Map keeps insert order). */
+const NAME_CACHE_MAX = 500;
+
+/** Remember a looked-up name, dropping expired and then oldest entries so a long-lived isolate can't grow forever. */
+export function rememberName(id: string, name: string, now: number): void {
+  nameCache.delete(id);
+  nameCache.set(id, { name, at: now });
+  if (nameCache.size <= NAME_CACHE_MAX) return;
+  for (const [k, v] of nameCache) {
+    if (now - v.at >= NAME_CACHE_MS) nameCache.delete(k);
+  }
+  while (nameCache.size > NAME_CACHE_MAX) {
+    const oldest = nameCache.keys().next().value;
+    if (oldest === undefined) break;
+    nameCache.delete(oldest);
+  }
+}
+
+/** For tests. */
+export function nameCacheSize(): number {
+  return nameCache.size;
+}
 
 /** People's display names by user id. Looked up together (not one after another) and kept for 5 minutes (code review #8). */
 export async function displayNamesFor(ids: Array<string | null | undefined>): Promise<Map<string, string>> {
@@ -147,11 +169,14 @@ export async function displayNamesFor(ids: Array<string | null | undefined>): Pr
   }
   await Promise.all(missing.map(async (id) => {
     try {
-      const { data } = await getServiceClient().auth.admin.getUserById(id);
-      const u = data?.user;
-      const meta = (u?.user_metadata ?? {}) as { full_name?: string; name?: string };
-      const name = String(meta.full_name || meta.name || u?.email || "").trim();
-      nameCache.set(id, { name, at: now });
+      const { data, error } = await getServiceClient().auth.admin.getUserById(id);
+      // Code review #7: getUserById reports failures in { error } (it doesn't throw). A failed lookup is never cached,
+      // so a short auth outage doesn't blank "Closed by" names for 5 minutes; the next read tries again.
+      if (error || !data?.user) return;
+      const u = data.user;
+      const meta = (u.user_metadata ?? {}) as { full_name?: string; name?: string };
+      const name = String(meta.full_name || meta.name || u.email || "").trim();
+      rememberName(id, name, now);
       if (name) names.set(id, name);
     } catch {
       /* keep the id; not cached, so the next read tries again */

@@ -11,8 +11,8 @@ describe("Pending parts — name, number, position, source (LS-17, LS-21, LS-23)
       origins: ["service_log"],
     });
     expect(x.requestedName).toBe("Front oxygen sensor");
-    expect(x.detailLine).toBe("89467-B1040 · Front (before converter)");
-    expect(x.whereOnCar).toBe("Front (before converter)");
+    expect(x.detailLine).toBe("89467-B1040 · Front");
+    expect(x.whereOnCar).toBe("Front");
   });
 
   it("leaves out whichever is unknown, and shows — when both are", () => {

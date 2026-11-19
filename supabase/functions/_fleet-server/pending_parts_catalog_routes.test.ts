@@ -136,3 +136,28 @@ Deno.test("mapPendingOnFileParts dedupes by part id and maps tier labels", () =>
   assertEquals(rows[0].matchType, "Made for your car");
   assertEquals(rows[1].matchType, "Same car, different badge");
 });
+Deno.test("code review #8: a key asked again shows only today's open round, not last month's resolved asks", () => {
+  const key = "v2|v1|c1|fit||Sister|scheme|code|nm:again";
+  const base = { vehicle_catalog_id: "v1", platform_id: "p1", maintenance_component_id: "c1", research_group_key: key };
+  const groups = groupPartsRequests([
+    { ...base, id: "new", created_at: "2026-11-19T00:00:00Z", status: "open" },
+    { ...base, id: "old-1", created_at: "2026-10-01T00:00:00Z", status: "resolved", photo_url: "x" },
+    { ...base, id: "old-2", created_at: "2026-10-02T00:00:00Z", status: "rejected" },
+  ]);
+  assertEquals(groups.length, 1);
+  assertEquals(groups[0].status, "open");
+  assertEquals(groups[0].requestIds, ["new"]);
+  assertEquals(groups[0].photoCount, 0);
+  assertEquals(groups[0].firstAsked, "2026-11-19T00:00:00Z");
+});
+
+Deno.test("code review #8: a key with no open ask keeps its closed rows (history unchanged)", () => {
+  const key = "v2|v1|c1|fit||Sister|scheme|code|nm:closed";
+  const base = { vehicle_catalog_id: "v1", platform_id: "p1", maintenance_component_id: "c1", research_group_key: key };
+  const groups = groupPartsRequests([
+    { ...base, id: "a", created_at: "2026-10-01T00:00:00Z", status: "resolved" },
+    { ...base, id: "b", created_at: "2026-10-02T00:00:00Z", status: "resolved" },
+  ]);
+  assertEquals(groups.length, 1);
+  assertEquals(groups[0].requestIds.sort(), ["a", "b"]);
+});

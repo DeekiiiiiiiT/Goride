@@ -2,6 +2,7 @@
  * Slice C — "Parts that fit this car" (docs/log-service-parts-gaps-audit.md LC-01, LC-02, LC-05).
  * Reads the GET /parts/find answer into cards, the ask state and the car name. No prices, stock or selling.
  */
+import { buildStoreCopyText, carDetailsLine, type StoreBrandNumber } from "../../find-parts/everyday/storeCopyText";
 
 export type FitLabel = "made_for_car" | "also_fits" | "check_before_buying";
 
@@ -17,10 +18,22 @@ export type FitPart = {
 
 export type FindAsk = { state: "none" | "looking"; askedAt: string | null; byYou: boolean };
 
+/** The car facts the "Copy part info" text uses (same as Find parts); empty when unknown, never guessed. */
+export type CopyCar = {
+  /** "Toyota Roomy 2019" */
+  line: string;
+  chassis: string;
+  engine: string;
+  drive: string;
+  /** Dominion car version, for the part lookup (other brands' numbers). */
+  variantId: string | null;
+};
+
 export type PartsForJob = {
   /** The car isn't linked to a Dominion model: Roam can't list or look up parts for it. */
   linked: boolean;
   carName: string | null;
+  copyCar: CopyCar;
   parts: FitPart[];
   ask: FindAsk | null;
 };
@@ -28,8 +41,11 @@ export type PartsForJob = {
 export const PARTS_FIT_COPY = {
   title: (car: string | null) => (car ? `Parts that fit your ${car}` : "Parts that fit this car"),
   helper: "Show one of these at the parts store. Tap the one you're using.",
+  /** LC-10: an inspection's not-done-yet job. */
+  toBuyTitle: (car: string | null) => (car ? `Parts to buy for your ${car}` : "Parts to buy for this car"),
+  toBuyHelper: "Buy one of these. Copy the part info or show it at the parts store.",
   forTheStore: "For the parts store:",
-  copy: "Copy",
+  copy: "Copy part info",
   copied: "Copied",
   copyFailed: "Couldn't copy. Write it down from the card.",
   badge: {
@@ -115,7 +131,71 @@ export function partsFromFindBody(raw: unknown): PartsForJob {
     a && (a.state === "none" || a.state === "looking")
       ? { state: a.state, askedAt: a.askedAt ? String(a.askedAt) : null, byYou: a.byYou === true }
       : null;
-  return { linked, carName: carNameOf(body), parts, ask };
+  return { linked, carName: carNameOf(body), copyCar: copyCarOf(body), parts, ask };
+}
+
+/**
+ * "Copy part info": the same block Find parts copies — car, chassis / engine / drive, part, whose number it is, and the
+ * other brands' numbers for the same part (from the part lookup, when it has loaded). Nothing is guessed.
+ */
+export function partCopyText(
+  car: CopyCar | null | undefined,
+  part: Pick<FitPart, "name" | "brand" | "number">,
+  brandNumbers?: StoreBrandNumber[],
+  placeLabels?: string[],
+): string {
+  return buildStoreCopyText({
+    carLine: car?.line ?? "",
+    carDetails: car ? carDetailsLine({ chassis: car.chassis, engine: car.engine, drive: car.drive }) : "",
+    partName: nameWithMakerName(part.name, placeLabels),
+    number: part.number,
+    numberBrand: part.brand,
+    brandNumbers,
+  });
+}
+
+/**
+ * "Front oxygen sensor" + place "Front (Air fuel ratio sensor)" → "Front oxygen sensor (Air fuel ratio sensor)".
+ * The bracket is the car maker's own name from the one place picked; never added for several places or when the
+ * name already says it.
+ */
+export function nameWithMakerName(name: string, placeLabels?: string[]): string {
+  const places = (placeLabels ?? []).filter(Boolean);
+  if (places.length !== 1) return name;
+  const m = places[0].match(/\(([^)]+)\)\s*$/);
+  const maker = m?.[1]?.trim();
+  if (!maker || !name || name.toLowerCase().includes(maker.toLowerCase())) return name;
+  return `${name} (${maker})`;
+}
+
+/** The part lookup answer → every brand's number (reference first), as Find parts reads it. */
+export function brandNumbersFromLookup(raw: unknown): StoreBrandNumber[] {
+  const body = (raw && typeof raw === "object" ? raw : {}) as {
+    reference?: { brand?: string; number?: string };
+    brandNumbers?: Array<{ brand?: string; number?: string }>;
+  };
+  return [
+    ...(body.reference?.number ? [{ brand: String(body.reference.brand ?? ""), number: String(body.reference.number) }] : []),
+    ...(body.brandNumbers ?? []).map((b) => ({ brand: String(b.brand ?? ""), number: String(b.number ?? "") })),
+  ].filter((b) => b.number);
+}
+
+/** Car line + chassis / engine / drive from the find answer's car version (the one Find parts copies too). */
+export function copyCarOf(body: Record<string, unknown>): CopyCar {
+  const car = (body.car ?? null) as Record<string, unknown> | null;
+  const variants = Array.isArray(body.variants) ? (body.variants as Array<Record<string, unknown>>) : [];
+  const picked = ((body.picked as Record<string, unknown> | null) ?? (variants.length === 1 ? variants[0] : null)) as
+    | Record<string, unknown>
+    | null;
+  const year = str(car?.year ?? body.year);
+  const line = [str(car?.make ?? body.make), str(car?.model ?? body.model), year].filter(Boolean).join(" ");
+  return {
+    line,
+    chassis: str(picked?.chassis_code),
+    engine: str(picked?.engine_code),
+    drive: str(picked?.drivetrain),
+    variantId: str(body.pickedVariantId) || str(picked?.id) || null,
+  };
 }
 
 /**
@@ -159,7 +239,7 @@ export function askNeedText(jobName: string, placeLabels: string[]): string {
   return places.length ? `${jobName} · ${places.join(", ")}` : jobName;
 }
 
-/** "Oxygen sensor · Front (before converter)" for the Plan it overlay and the Not done yet card. */
+/** "Oxygen sensor · Front (Air fuel ratio sensor)" for the Plan it overlay and the Not done yet card. */
 export function jobWithPlaces(jobName: string, placeLabels: string[]): string {
   return askNeedText(jobName, placeLabels);
 }

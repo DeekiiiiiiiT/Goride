@@ -832,6 +832,29 @@ BEGIN
   IF v_job_name <> 'Join name A' THEN RAISE EXCEPTION 'join_or_create name kept'; END IF;
   IF v_job_pn <> 'PN-JOIN-1' THEN RAISE EXCEPTION 'join_or_create pn kept'; END IF;
 
+  -- Code review 19 Nov #2: a request a sent outbox row points at can be deleted; the row keeps state sent, link null.
+  DECLARE
+    v_sent_row uuid;
+    v_sent_req uuid;
+  BEGIN
+    SELECT id, request_id INTO v_sent_row, v_sent_req
+    FROM public.parts_sourcing_outbox WHERE state = 'sent' AND request_id IS NOT NULL LIMIT 1;
+    IF v_sent_row IS NULL THEN RAISE EXCEPTION 'review #2: no sent outbox row to test with'; END IF;
+    DELETE FROM public.parts_sourcing_requests WHERE id = v_sent_req;
+    IF (SELECT state FROM public.parts_sourcing_outbox WHERE id = v_sent_row) <> 'sent'
+       OR (SELECT request_id FROM public.parts_sourcing_outbox WHERE id = v_sent_row) IS NOT NULL THEN
+      RAISE EXCEPTION 'review #2: sent row should stay sent with no link';
+    END IF;
+  END;
+  -- …and a request link on a row that isn't sent/merged is still refused.
+  BEGIN
+    UPDATE public.parts_sourcing_outbox
+    SET request_id = (SELECT id FROM public.parts_sourcing_requests LIMIT 1)
+    WHERE id = (SELECT id FROM public.parts_sourcing_outbox WHERE state = 'pending' LIMIT 1);
+    IF FOUND THEN RAISE EXCEPTION 'review #2: link on a pending row should be refused'; END IF;
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+
   RAISE NOTICE 'log_service_parts_outbox_checks: ok';
 END $$;
 

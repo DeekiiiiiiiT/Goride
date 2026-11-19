@@ -8,6 +8,8 @@ export async function notifyFleetsRequestOutcome(
   supabase: SupabaseClient,
   groupId: string,
   kind: "not_found",
+  /** Only these asks (the ones just answered); leaves earlier rounds of the same key alone. */
+  requestIds?: string[],
 ) {
   let query = supabase
     .from("parts_sourcing_requests")
@@ -17,6 +19,7 @@ export async function notifyFleetsRequestOutcome(
     .eq("kind", "add_part_info")
     .in("status", ["open", "in_progress", "rejected"]);
   applyPendingPartsGroupFilter(query, groupId);
+  if (requestIds?.length) query = query.in("id", requestIds);
   const { data: rows, error } = await query;
   if (error) throw error;
   if (!rows?.length) return;

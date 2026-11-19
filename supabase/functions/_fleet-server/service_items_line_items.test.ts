@@ -122,7 +122,7 @@ Deno.test("parseLineItems other item part number cleaning", () => {
     itemName: "Sensor",
     qty: 1,
     partNumber: " 89467-test1 ",
-  }], { declined: false });
+  }], { declined: false, otherPartNumberAllowed: true });
   assertEquals(cleaned.ok, true);
   if (cleaned.ok) assertEquals(cleaned.items[0].part_number, "89467-test1");
 
@@ -132,7 +132,7 @@ Deno.test("parseLineItems other item part number cleaning", () => {
     itemName: "Sensor",
     qty: 1,
     partNumber: "!!!",
-  }], { declined: false });
+  }], { declined: false, otherPartNumberAllowed: true });
   assertEquals(empty.ok, true);
   if (empty.ok) assertEquals(empty.items[0].part_number, null);
 
@@ -146,6 +146,17 @@ Deno.test("parseLineItems other item part number cleaning", () => {
   }], { declined: false });
   assertEquals(supplyPn.ok, false);
   if (!supplyPn.ok) assertEquals(supplyPn.code, "part_number_not_allowed");
+});
+
+Deno.test("code review #4: Other-item part number follows the log_service_parts_gaps switch", () => {
+  const row = { source: "other", itemKind: "other", itemName: "Sensor", qty: 1, partNumber: "ABC-123" };
+  const off = parseLineItems([row], { declined: false });
+  assertEquals(off.ok, false);
+  if (!off.ok) assertEquals(off.code, "part_number_not_allowed");
+  const on = parseLineItems([row], { declined: false, otherPartNumberAllowed: true });
+  assertEquals(on.ok, true);
+  // no part number sent: fine either way
+  assertEquals(parseLineItems([{ ...row, partNumber: undefined }], { declined: false }).ok, true);
 });
 
 Deno.test("computeWoLineTotal with items (tests 21–23)", () => {

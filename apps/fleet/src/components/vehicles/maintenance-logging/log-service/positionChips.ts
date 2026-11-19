@@ -88,7 +88,7 @@ export function positionJobFromLine(
   };
 }
 
-/** "Front (before converter)", "Driver, Passenger", "LF, RF" — or null when the line has no position. */
+/** "Front (Air fuel ratio sensor)", "Driver, Passenger", "LF, RF" — or null when the line has no position. */
 export function linePositionsText(
   line: Pick<MaintenanceLogLine, "categoryCode" | "positionScheme" | "positionAware" | "positions">,
 ): string | null {

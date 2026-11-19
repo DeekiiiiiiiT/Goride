@@ -16,7 +16,7 @@ import { MmHardUseDialog } from "./MmHardUseDialog";
 import { MmWhySchedulePopover } from "./MmWhySchedulePopover";
 import { formatMaintenanceDisplayDate } from "../../../utils/maintenanceDisplayFormat";
 import type { FoundWorkItem } from "../../../types/maintenance";
-import { FoundByInspectionSection } from "./FoundByInspection";
+import { FoundByInspectionSection, type AddToInspectionRequest } from "./FoundByInspection";
 
 function vehicleLabel(row: {
   make?: string;
@@ -40,11 +40,14 @@ export function MaintenanceDueItemsDrawer({
   canEditMaintenance = true,
   onLogFoundWork,
   onFoundChanged,
+  onAddToInspection,
 }: {
   /** Inspection findings: "Log it now" on a found job (opens Log service for that job). */
   onLogFoundWork?: (item: FoundWorkItem) => void;
   /** A found job was closed here (Not needed) — the fleet page refreshes its counts. */
   onFoundChanged?: () => void;
+  /** LC-14: "Add a job" on an inspection opens Log service in add mode. */
+  onAddToInspection?: (target: AddToInspectionRequest) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   vehicle: {
@@ -256,6 +259,7 @@ export function MaintenanceDueItemsDrawer({
               canEdit={canEditMaintenance}
               onLogItNow={onLogFoundWork}
               onChanged={onFoundChanged}
+              onAddToInspection={onAddToInspection}
               phone={mobileCompact}
             />
           {loading ? (

@@ -43,6 +43,7 @@ export function Step2BySpec({
           <p className="font-label-md text-label-md font-semibold text-on-surface">Which blade?</p>
           <PositionChips
             scheme={draft.partType.positionScheme}
+              opCode={draft.partType.opCode}
             position={draft.position}
             side={draft.side}
             onPick={(pos, side) => setDraft({ ...draft, position: pos, side })}

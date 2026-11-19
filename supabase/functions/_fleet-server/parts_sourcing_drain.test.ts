@@ -20,6 +20,8 @@ function drainClient(rows: Record<string, unknown>[], handlers: {
   noCar?: boolean;
   item?: Record<string, unknown>;
   job?: Record<string, unknown>;
+  missingLine?: boolean;
+  onUpdate?: (table: string, patch: Record<string, unknown>) => void;
 }) {
   const rpcLog: Array<{ name: string; args: Record<string, unknown> }> = [];
   return {
@@ -40,66 +42,44 @@ function drainClient(rows: Record<string, unknown>[], handlers: {
         return Promise.resolve({ data: null, error: null });
       },
       from: (table: string) => {
+        // One row per id, as the database would answer (the drain now loads a whole batch with .in()).
+        const rowFor = (id: string): Record<string, unknown> | null => {
+          if (table === "maintenance_work_order_line_item") {
+            return handlers.item ?? {
+              id,
+              work_order_line_id: lineId,
+              work_order_id: woId,
+              item_kind: "other",
+              item_name: "Front oxygen sensor",
+              part_number: "89467-TEST1",
+            };
+          }
+          if (table === "maintenance_work_order_lines") {
+            return handlers.missingLine ? null : { id, component_id: componentId, positions: ["before_cat"] };
+          }
+          if (table === "maintenance_work_orders") {
+            return { id, organization_id: orgId, vehicle_id: vehicleId, updated_by: null };
+          }
+          if (table === "maintenance_service_categories") {
+            return { id, ...(handlers.job ?? { is_part: true, position_scheme: "before_after_catalyst" }) };
+          }
+          if (table === "vehicle_catalog") return { id: vcat, platform_id: "p1" };
+          return null;
+        };
         const chain = {
           select: () => chain,
+          in: (_col: string, ids: string[]) =>
+            Promise.resolve({ data: ids.map(rowFor).filter((r): r is Record<string, unknown> => r != null), error: null }),
           eq: (col: string, val: string) => {
-            if (table === "maintenance_work_order_line_item" && col === "id") {
-              return {
-                maybeSingle: () => Promise.resolve({
-                  data: handlers.item ?? {
-                    id: val,
-                    work_order_line_id: lineId,
-                    work_order_id: woId,
-                    item_kind: "other",
-                    item_name: "Front oxygen sensor",
-                    part_number: "89467-TEST1",
-                  },
-                  error: null,
-                }),
-              };
-            }
-            if (table === "maintenance_work_order_lines" && col === "id") {
-              return {
-                maybeSingle: () => Promise.resolve({
-                  data: {
-                    id: val,
-                    component_id: componentId,
-                    positions: ["before_cat"],
-                  },
-                  error: null,
-                }),
-              };
-            }
-            if (table === "maintenance_work_orders" && col === "id") {
-              return {
-                maybeSingle: () => Promise.resolve({
-                  data: {
-                    id: val,
-                    organization_id: orgId,
-                    vehicle_id: vehicleId,
-                    updated_by: null,
-                  },
-                  error: null,
-                }),
-              };
-            }
-            if (table === "maintenance_service_categories" && col === "id") {
-              return {
-                maybeSingle: () => Promise.resolve({
-                  data: handlers.job ?? { is_part: true, position_scheme: "before_after_catalyst" },
-                  error: null,
-                }),
-              };
-            }
-            if (table === "vehicle_catalog" && col === "id") {
-              return {
-                maybeSingle: () => Promise.resolve({
-                  data: { id: vcat, platform_id: "p1" },
-                  error: null,
-                }),
-              };
+            if (col === "id") {
+              return { maybeSingle: () => Promise.resolve({ data: rowFor(val), error: null }) };
             }
             return { maybeSingle: () => Promise.resolve({ data: null, error: null }) };
+          },
+          update: (patch: Record<string, unknown>) => {
+            handlers.onUpdate?.(table, patch);
+            const upd = { eq: () => upd, in: () => upd, then: (r: (v: unknown) => unknown) => Promise.resolve({ error: null }).then(r) };
+            return upd;
           },
         };
         return chain;
@@ -271,4 +251,38 @@ Deno.test("drain counts not_sent and unknown send results, so claimed always add
     assertEquals(summary[key], 1);
     assertEquals(summary.sent + summary.errors, 0);
   }
+});
+
+Deno.test("code review #5: the job line is gone → the row is cancelled, never retried into not_sent/error", async () => {
+  const updates: Array<{ table: string; patch: Record<string, unknown> }> = [];
+  const { client, rpcLog } = drainClient([{ id: outboxId, line_item_id: lineItemId }], {
+    missingLine: true,
+    onUpdate: (table, patch) => updates.push({ table, patch }),
+  });
+  const summary = await runPartsSourcingDrain(client as never, { limit: 5, catalogIdForVehicle: async () => vcat });
+  assertEquals(summary.cancelled, 1);
+  assertEquals(summary.errors, 0);
+  assertEquals(rpcLog.some((c) => c.name === "parts_sourcing_outbox_retry"), false);
+  assertEquals(rpcLog.some((c) => c.name === "parts_sourcing_outbox_send"), false);
+  assertEquals(updates[0]?.table, "parts_sourcing_outbox");
+  assertEquals(updates[0]?.patch.state, "cancelled");
+});
+
+Deno.test("code review #9: a batch of rows loads its items, lines, services and jobs in 4 reads", async () => {
+  const reads: string[] = [];
+  const { client } = drainClient(
+    Array.from({ length: 10 }, (_, i) => ({ id: `o${i}`, line_item_id: `i${i}` })),
+    {},
+  );
+  const counted = {
+    ...client,
+    from: (table: string) => {
+      const c = client.from(table) as Record<string, unknown>;
+      const origIn = c.in as (col: string, ids: string[]) => unknown;
+      return { ...c, select: () => ({ ...c, in: (col: string, ids: string[]) => { reads.push(table); return origIn(col, ids); } }) };
+    },
+  };
+  const summary = await runPartsSourcingDrain(counted as never, { limit: 25, catalogIdForVehicle: async () => vcat });
+  assertEquals(summary.sent, 10);
+  assertEquals(reads.length, 4);
 });

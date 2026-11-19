@@ -10,6 +10,7 @@ import type { MaintenanceLogLine, MaintenanceServiceCategory } from "../../../..
 import { FOUND_COPY, foundCounts, groupHits, type FoundDraft, type FoundMode, type FoundPickerHit } from "./foundWork";
 import { LS, LT } from "./logServiceStitch";
 import { money } from "./itemsUsed";
+import { linePositionsText } from "./positionChips";
 
 const ICON = "material-symbols-outlined";
 /** Material symbol at an exact size (the font's own stylesheet forces 24px over Tailwind text sizes). */
@@ -103,6 +104,7 @@ export function FoundWorkSection({
   onNoteChange,
   onRemove,
   renderWhere,
+  renderParts,
 }: {
   drafts: FoundDraft[];
   currency: string;
@@ -112,6 +114,8 @@ export function FoundWorkSection({
   onRemove: (jobId: string) => void;
   /** "Where on the car" chips under a "Not done yet" row's name (Stitch F5, LS-06). */
   renderWhere?: (d: FoundDraft) => React.ReactNode;
+  /** LC-10: "Parts to buy" under a "Not done yet" row, so the owner knows what to buy. */
+  renderParts?: (d: FoundDraft) => React.ReactNode;
 }) {
   const counts = foundCounts(drafts);
   const addButton = (
@@ -189,6 +193,7 @@ export function FoundWorkSection({
                     className={`w-full h-8 px-3 rounded-md ${LS.low} ${LT.bodySm} ${LS.text} border border-transparent focus:border-[#c9c5cd] focus:outline-none`}
                   />
                 )}
+                {d.mode === "later" && renderParts ? renderParts(d) : null}
               </li>
             ))}
           </ul>
@@ -385,7 +390,7 @@ export function FoundCollapsedInspectionRow({
 }
 
 /** Pale-blue banner on Log service opened from "Log it now" (Stitch screen 10). */
-export function FoundFromInspectionBanner({ text, note }: { text: string; note: string | null }) {
+export function FoundFromInspectionBanner({ text, note, quote = null }: { text: string; note: string | null; quote?: string | null }) {
   return (
     <div
       className="rounded-xl p-4 shadow-xs bg-[#eef2ff]/80 dark:bg-[#312e81]/30 flex flex-col gap-1"
@@ -395,6 +400,11 @@ export function FoundFromInspectionBanner({ text, note }: { text: string; note: 
         <Sym name="search" size={18} className={`text-[#4338ca] dark:text-[#a5b4fc]`} />
         <span>{text}</span>
       </div>
+      {quote ? (
+        <div className={`pl-7 ${LT.bodySm} font-semibold text-[#312e81] dark:text-[#c7d2fe]`} data-testid="found-banner-quote">
+          {quote}
+        </div>
+      ) : null}
       {note ? (
         <div className={`pl-7 flex items-center gap-1.5 ${LT.bodySm} italic text-[#312e81] dark:text-[#c7d2fe]`}>
           <Sym name="assignment_late" size={14} className={`not-italic text-[#4f46e5] dark:text-[#a5b4fc]`} />
@@ -437,7 +447,9 @@ export function ReviewFoundGroup({
           className={`rounded-lg p-3 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${LS.lowest}`}
         >
           <div className="flex items-center gap-2 flex-wrap min-w-0">
-            <span className={`${LT.titleSm} font-medium ${LS.text}`}>{line.categoryName}</span>
+            <span className={`${LT.titleSm} font-medium ${LS.text}`} data-testid="review-found-name">
+              {[line.categoryName, linePositionsText(line)].filter(Boolean).join(" · ")}
+            </span>
             {line.notes ? (
               <span className="text-[11px] leading-[14px] font-semibold px-2 py-0.5 rounded bg-[#fef3c7]/80 text-[#78350f] dark:bg-[#78350f]/50 dark:text-[#fde68a]">
                 {line.notes}

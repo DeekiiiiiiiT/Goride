@@ -246,7 +246,7 @@ test.describe("Fleet Log service positions (Slice A)", () => {
 
     const where = page.getByTestId("where-on-car");
     await expect(where).toBeVisible({ timeout: 30_000 });
-    for (const label of ["Front (before converter)", "Rear (after converter)", "Not sure"]) {
+    for (const label of ["Front (Air fuel ratio sensor)", "Rear (Oxygen sensor No.2)", "Not sure"]) {
       await expect(where.getByRole("button", { name: label })).toBeVisible();
     }
     await expect(where).toContainText("Pick where on the car. Tap Not sure if the paper doesn't say.");
@@ -254,13 +254,13 @@ test.describe("Fleet Log service positions (Slice A)", () => {
     await expect(saveLine(page)).toBeDisabled();
     await expect(page.getByTestId("pick-where-first")).toHaveText("Pick where on the car first");
 
-    await where.getByRole("button", { name: "Front (before converter)" }).click();
-    await expect(where.getByRole("button", { name: "Front (before converter)" })).toHaveAttribute("aria-pressed", "true");
+    await where.getByRole("button", { name: "Front (Air fuel ratio sensor)" }).click();
+    await expect(where.getByRole("button", { name: "Front (Air fuel ratio sensor)" })).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("pick-where-first")).toHaveCount(0);
     await expect(saveLine(page)).toBeEnabled();
     await saveLine(page).click();
 
-    await expect(page.getByTestId("review-where-on-car")).toHaveText("Where on the car: Front (before converter)", {
+    await expect(page.getByTestId("review-where-on-car")).toHaveText("Where on the car: Front (Air fuel ratio sensor)", {
       timeout: 30_000,
     });
     await logIt(page);
@@ -280,7 +280,7 @@ test.describe("Fleet Log service positions (Slice A)", () => {
            WHERE vehicle_id = '${MD_DISC_VEHICLE_ID}' AND category_id = '${o2.id}' AND position IS NOT NULL`),
     ).toBe("0");
 
-    // Done-test 6: Service history → View service reads "Oxygen sensor · Front (before converter)".
+    // Done-test 6: Service history → View service reads "Oxygen sensor · Front (Air fuel ratio sensor)".
     await gotoHub(page);
     await page.getByRole("tab", { name: /service history/i }).click();
     const row = page.getByTestId("service-history-job").filter({ hasText: o2.name }).first();
@@ -289,7 +289,7 @@ test.describe("Fleet Log service positions (Slice A)", () => {
     if (!(await row.isVisible().catch(() => false))) await groupRow.click();
     await row.getByRole("button", { name: "View service" }).click();
     await expect(page.getByTestId("service-details-job").filter({ hasText: o2.name }).first()).toHaveText(
-      `${o2.name} · Front (before converter)`,
+      `${o2.name} · Front (Air fuel ratio sensor)`,
       { timeout: 30_000 },
     );
   });
@@ -318,7 +318,7 @@ test.describe("Fleet Log service positions (Slice A)", () => {
     const where = foundRow.getByTestId("found-where-on-car");
     await expect(where).toBeVisible();
     await expect(saveLine(page)).toBeDisabled();
-    await where.getByRole("button", { name: "Front (before converter)" }).click();
+    await where.getByRole("button", { name: "Front (Air fuel ratio sensor)" }).click();
     await expect(saveLine(page)).toBeEnabled();
     await saveLine(page).click();
     // The saved inspection collapses to one row; then on to Review.
@@ -351,7 +351,7 @@ test.describe("Fleet Log service positions (Slice A)", () => {
     await page.getByRole("button", { name: /^Continue$/ }).click();
     await expect(page.getByTestId("log-service-job-header")).toContainText(o2.name, { timeout: 30_000 });
     await expect(
-      page.getByTestId("where-on-car").getByRole("button", { name: "Front (before converter)" }),
+      page.getByTestId("where-on-car").getByRole("button", { name: "Front (Air fuel ratio sensor)" }),
     ).toHaveAttribute("aria-pressed", "true", { timeout: 30_000 });
   });
 });

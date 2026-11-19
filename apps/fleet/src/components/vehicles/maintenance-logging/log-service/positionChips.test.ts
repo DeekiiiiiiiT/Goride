@@ -21,8 +21,8 @@ describe("positionUiFor", () => {
     const ui = positionUiFor(o2, true);
     expect(ui.kind).toBe("chips");
     expect(ui.kind === "chips" && ui.options.map((o) => o.label)).toEqual([
-      "Front (before converter)",
-      "Rear (after converter)",
+      "Front (Air fuel ratio sensor)",
+      "Rear (Oxygen sensor No.2)",
       "Not sure",
     ]);
   });
@@ -116,7 +116,7 @@ describe("linePositionsText (LS-07, done-test 6)", () => {
   it("labels by scheme + code", () => {
     expect(
       linePositionsText({ categoryCode: "oxygen_sensor", positionScheme: "before_after_catalyst", positionAware: false, positions: ["before_cat"] }),
-    ).toBe("Front (before converter)");
+    ).toBe("Front (Air fuel ratio sensor)");
     expect(
       linePositionsText({ categoryCode: "suspension", positionScheme: "front_rear_side", positionAware: false, positions: ["front"] }),
     ).toBe("Front");

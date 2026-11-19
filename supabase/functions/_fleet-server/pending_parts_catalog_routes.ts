@@ -71,9 +71,27 @@ export type PendingPartsQueueGroup = {
   sortFleetCount: number;
 };
 
-export function groupPartsRequests(rows: Array<Record<string, unknown>>): PendingPartsQueueGroup[] {
-  const groups = new Map<string, PendingPartsQueueGroup & { _origins: Set<string> }>();
+const OPEN_REQUEST_STATUSES = ["open", "in_progress"];
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Code review #8: a fixed v2 key can hold asks from different rounds (resolved last month, asked again today). A key
+ * with any open ask shows only its open asks (status, counts, dates and requestIds are today's round); a key with no
+ * open ask keeps its closed rows as before.
+ */
+export function currentRoundRows(rows: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  const openKeys = new Set<string>();
   for (const row of rows) {
+    if (OPEN_REQUEST_STATUSES.includes(String(row.status || "open"))) openKeys.add(groupIdForRow(row));
+  }
+  return rows.filter(
+    (row) => !openKeys.has(groupIdForRow(row)) || OPEN_REQUEST_STATUSES.includes(String(row.status || "open")),
+  );
+}
+
+export function groupPartsRequests(allRows: Array<Record<string, unknown>>): PendingPartsQueueGroup[] {
+  const groups = new Map<string, PendingPartsQueueGroup & { _origins: Set<string> }>();
+  for (const row of currentRoundRows(allRows)) {
     const vehicleCatalogId = row.vehicle_catalog_id ? String(row.vehicle_catalog_id) : "";
     const platformId = row.platform_id ? String(row.platform_id) : "";
     const componentId = row.maintenance_component_id ? String(row.maintenance_component_id) : "";
@@ -346,11 +364,18 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
       const user = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
       const actorId = user?.userId ?? user?.id ?? null;
 
-      const applyUpdate = async (patch: Record<string, unknown>) => {
-        let query = supabase.from("parts_sourcing_requests").update(patch).eq("kind", "add_part_info");
+      // Code review #3: only the group's still-open asks change. v2 keys are fixed, so the same key can also hold
+      // asks that were already resolved (part on file) or answered; those are never overwritten.
+      const applyUpdate = async (patch: Record<string, unknown>): Promise<string[]> => {
+        let query = supabase
+          .from("parts_sourcing_requests")
+          .update(patch)
+          .eq("kind", "add_part_info")
+          .in("status", OPEN_REQUEST_STATUSES);
         applyPendingPartsGroupFilter(query, groupId);
-        const { error } = await query;
+        const { data, error } = await query.select("id");
         if (error) throw error;
+        return (data ?? []).map((r: { id: string }) => String(r.id));
       };
 
       if (action === "looking") {
@@ -361,18 +386,21 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
           assigned_to: actorId,
         });
       } else if (action === "cant_find") {
-        await applyUpdate({
+        const changed = await applyUpdate({
           status: "rejected",
           cant_find_at: now,
           cant_find_reason: String(body.reason || "").slice(0, 500) || null,
         });
-        await notifyFleetsRequestOutcome(supabase, groupId, "not_found");
+        // Only the companies whose open ask was just answered are told (never one whose part is already on file).
+        if (changed.length) await notifyFleetsRequestOutcome(supabase, groupId, "not_found", changed);
       } else if (action === "added") {
         if (groupId.startsWith("legacy:")) {
           return c.json({ code: "legacy_group", error: "Legacy group cannot be resolved this way." }, 400);
         }
         const partId = String(body.partId ?? body.part_id ?? "").trim();
         if (!partId) return c.json({ error: "partId is required" }, 400);
+        // Code review #6: a malformed id is a 400, not a raw database error.
+        if (!UUID_RE.test(partId)) return c.json({ code: "part_id_invalid", error: "That part id isn't valid." }, 400);
         const { data, error } = await supabase.rpc("catalog_resolve_request_group", {
           p_group_key: groupId,
           p_part_id: partId,

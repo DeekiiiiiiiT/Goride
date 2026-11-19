@@ -362,7 +362,7 @@ test.describe("Log service — Roam shows the parts that fit (Slice C)", () => {
     await openO2FromDraft(page);
     await expect(page.getByTestId("parts-fit-pick-place")).toBeVisible();
     await expectNoPartNumberBox(page);
-    await pickPlace(page, "Front (before converter)");
+    await pickPlace(page, "Front (Air fuel ratio sensor)");
     const panel = page.getByTestId("parts-fit-panel");
     await expect(panel.getByTestId("parts-fit-title")).toHaveText("Parts that fit your Toyota Roomy", { timeout: 30_000 });
     const card = panel.locator(`[data-testid="parts-fit-card"][data-part-id="${FRONT.part}"]`);
@@ -392,7 +392,7 @@ test.describe("Log service — Roam shows the parts that fit (Slice C)", () => {
   test("C2 — Rear, nothing on file: Ask Roam → one Dominion row (Find parts); the panel then reads Roam is looking", async ({ page, browser }) => {
     expect((await findFor(coreA, MD_DISC_VEHICLE_ID, REAR.place)).ask?.state).toBe("none");
     await openO2FromDraft(page);
-    await pickPlace(page, "Rear (after converter)");
+    await pickPlace(page, "Rear (Oxygen sensor No.2)");
     const none = page.getByTestId("parts-fit-none");
     await expect(none).toBeVisible({ timeout: 30_000 });
     await expect(none).toContainText("Roam doesn't have this part for your Toyota Roomy yet");
@@ -417,7 +417,7 @@ test.describe("Log service — Roam shows the parts that fit (Slice C)", () => {
 
     const { ctx, dpage } = await openDominionPendingParts(browser);
     try {
-      const row = dpage.getByRole("row").filter({ has: dpage.getByTestId("pending-part-detail-line").filter({ hasText: "Rear (after converter)" }) });
+      const row = dpage.getByRole("row").filter({ has: dpage.getByTestId("pending-part-detail-line").filter({ hasText: /(^| · )Rear$/ }) });
       await expect(row).toHaveCount(1, { timeout: 60_000 });
       await expect(row).toContainText("Toyota Roomy");
       await expect(row.getByTestId("pending-part-source")).toHaveText("Find parts");
@@ -429,7 +429,7 @@ test.describe("Log service — Roam shows the parts that fit (Slice C)", () => {
     await page.reload();
     await page.getByText(/Loading application/).waitFor({ state: "hidden", timeout: 120_000 }).catch(() => {});
     await openO2FromDraft(page);
-    await pickPlace(page, "Rear (after converter)");
+    await pickPlace(page, "Rear (Oxygen sensor No.2)");
     await expect(page.getByTestId("parts-fit-looking")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("parts-fit-ask")).toHaveCount(0);
   });
@@ -440,7 +440,7 @@ test.describe("Log service — Roam shows the parts that fit (Slice C)", () => {
       vehicleId: B_VEHICLE_ID,
       maintenanceComponentId: o2.id,
       positionCodes: [REAR.place],
-      needText: "oxygen sensor · Rear (after converter)",
+      needText: "oxygen sensor · Rear (Oxygen sensor No.2)",
     });
     expect(asked.status, JSON.stringify(asked.json)).toBe(200);
     const groups = await rearGroups();
@@ -455,7 +455,7 @@ test.describe("Log service — Roam shows the parts that fit (Slice C)", () => {
     addPart(REAR);
     const { ctx, dpage } = await openDominionPendingParts(browser);
     try {
-      const row = dpage.getByRole("row").filter({ has: dpage.getByTestId("pending-part-detail-line").filter({ hasText: "Rear (after converter)" }) });
+      const row = dpage.getByRole("row").filter({ has: dpage.getByTestId("pending-part-detail-line").filter({ hasText: /(^| · )Rear$/ }) });
       await expect(row).toHaveCount(1, { timeout: 60_000 });
       await row.click();
       await dpage.getByTestId("added-pick-part-open").click({ timeout: 30_000 });
@@ -504,7 +504,7 @@ test.describe("Log service — Roam shows the parts that fit (Slice C)", () => {
 
   test("C5 — Plan it → Not done yet with Rear + the part, J$ 0; Log it now opens it with the part; saving closes it", async ({ page }) => {
     await openO2FromDraft(page);
-    await pickPlace(page, "Rear (after converter)");
+    await pickPlace(page, "Rear (Oxygen sensor No.2)");
     const card = page.locator(`[data-testid="parts-fit-card"][data-part-id="${REAR.part}"]`);
     await expect(card).toBeVisible({ timeout: 30_000 });
     await card.click();
@@ -512,14 +512,14 @@ test.describe("Log service — Roam shows the parts that fit (Slice C)", () => {
     const overlay = page.getByTestId("plan-job-dialog");
     await expect(overlay).toBeVisible();
     await expect(overlay).toContainText("Plan this job for later");
-    await expect(overlay.getByTestId("plan-job-line")).toContainText("Oxygen sensor · Rear (after converter)");
+    await expect(overlay.getByTestId("plan-job-line")).toContainText("Oxygen sensor · Rear (Oxygen sensor No.2)");
     await expect(overlay.getByTestId("plan-job-part")).toContainText(REAR.number);
     await expect(overlay).toContainText("J$ 0 · not charged yet");
     await expect(overlay).not.toContainText(/est\.|Pre-allocation|84,210/);
     await overlay.getByTestId("plan-job-note").fill("buy at Northside Auto on Friday");
     await shot(page, "C5-overlay", overlay);
     await overlay.getByTestId("plan-job-confirm").click();
-    await expect(page.getByText("Oxygen sensor · Rear (after converter) added to Not done yet")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Oxygen sensor · Rear (Oxygen sensor No.2) added to Not done yet")).toBeVisible({ timeout: 30_000 });
     // It was the only job: the window closes.
     await expect(page.getByTestId("log-service-job-header")).toHaveCount(0, { timeout: 30_000 });
 
@@ -545,7 +545,7 @@ test.describe("Log service — Roam shows the parts that fit (Slice C)", () => {
     await expect(section.getByTestId("found-loading")).toHaveCount(0, { timeout: 30_000 });
     const pcard = section.locator('[data-testid="found-card"][data-source="planned"]');
     await expect(pcard).toHaveCount(1);
-    await expect(pcard).toContainText("Oxygen sensor · Rear (after converter)");
+    await expect(pcard).toContainText("Oxygen sensor · Rear (Oxygen sensor No.2)");
     await expect(pcard.getByTestId("found-card-line")).toHaveText(/^Planned \d{1,2} \w{3} \d{4}$/);
     await expect(pcard.getByTestId("planned-part")).toContainText(REAR.number);
     await expect(pcard).toContainText("buy at Northside Auto on Friday");
@@ -586,7 +586,7 @@ test.describe("Log service — Roam shows the parts that fit (Slice C)", () => {
 
   test("C6 — Other item Exhaust clip, no number asked: one Dominion row by name", async ({ page }) => {
     await openO2FromDraft(page);
-    await pickPlace(page, "Front (before converter)");
+    await pickPlace(page, "Front (Air fuel ratio sensor)");
     await expect(page.getByTestId("parts-fit-card").first()).toBeVisible({ timeout: 30_000 });
     await page.getByTestId("parts-fit-skip").click();
     await expect(page.getByTestId("parts-fit-skipped")).toBeVisible();

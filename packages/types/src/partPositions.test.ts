@@ -107,7 +107,15 @@ Deno.test("positionLabel cases", () => {
   );
   assertEquals(
     positionLabel({ code: "job", position_aware: false, position_scheme: "before_after_catalyst" }, "before_cat"),
-    "Front (before converter)",
+    "Front",
+  );
+  assertEquals(
+    positionLabel({ code: "oxygen_sensor", position_aware: false, position_scheme: "before_after_catalyst" }, "before_cat"),
+    "Front (Air fuel ratio sensor)",
+  );
+  assertEquals(
+    positionLabel({ code: "oxygen_sensor", position_aware: false, position_scheme: "before_after_catalyst" }, "after_cat"),
+    "Rear (Oxygen sensor No.2)",
   );
   assertEquals(
     positionLabel({ code: "tires", position_aware: true, position_scheme: "four_corners" }, "LF"),

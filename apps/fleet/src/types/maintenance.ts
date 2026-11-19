@@ -258,6 +258,14 @@ export type FoundWorkItem = {
   positions?: string[];
   positionScheme?: string | null;
   positionAware?: boolean | null;
+  /** LC-10: the job's code, so places read in the car maker's words ("Front (Air fuel ratio sensor)"). */
+  jobCode?: string | null;
+  /** False = a service, not a part (no "Parts to buy"). */
+  jobIsPart?: boolean | null;
+  /** LC-15: the garage's quote for this job (not paid; never in spend). */
+  quoteAmount?: number | null;
+  /** LC-16: the quote's full job form (boxes + items), filled in when the job is marked Done. */
+  quoteDetail?: Record<string, unknown> | null;
   /** Slice C: "planned" = added with Plan it (bought first, logged later); else found by an inspection. */
   source?: "planned" | "inspection";
   /** Slice C: the part picked when it was planned. */

@@ -1,7 +1,7 @@
 {
   "slug": "fleet-ops",
-  "generatedAt": "2026-11-19T12:39:14.868Z",
-  "routeCount": 159,
+  "generatedAt": "2026-11-19T23:20:09.593Z",
+  "routeCount": 160,
   "routes": [
     "DELETE ${ADMIN_CAT}/:id",
     "DELETE ${ADMIN}/:id",
@@ -146,6 +146,7 @@
     "POST /maintenance-work-order-lines/:lineId/void",
     "POST /maintenance-work-orders",
     "POST /maintenance-work-orders/:id/complete",
+    "POST /maintenance-work-orders/:id/found-jobs",
     "POST /maintenance-work-orders/:id/triage",
     "POST /maintenance-work-orders/:id/void",
     "POST /maintenance/log-number",

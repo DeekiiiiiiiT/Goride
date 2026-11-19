@@ -47,7 +47,7 @@ export function PlanJobDialog({
 }: {
   open: boolean;
   carName: string;
-  /** "Oxygen sensor · Front (before converter)". */
+  /** "Oxygen sensor · Front (Air fuel ratio sensor)". */
   jobLine: string;
   part: FitPart | null;
   busy: boolean;

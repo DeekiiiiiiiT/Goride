@@ -298,7 +298,7 @@ async function fillJobAmount(page: Page, amount: string) {
 }
 
 async function pickFront(page: Page) {
-  await page.getByTestId("where-on-car").getByRole("button", { name: "Front (before converter)" }).click();
+  await page.getByTestId("where-on-car").getByRole("button", { name: "Front (Air fuel ratio sensor)" }).click();
 }
 
 const saveLine = (page: Page) => page.getByRole("button", { name: /^Save line/ }).first();
@@ -454,13 +454,13 @@ test.describe("Log service — unknown parts reach Dominion (Slice B)", () => {
       const row = dpage.getByRole("row").filter({ hasText: "Front oxygen sensor" });
       await expect(row).toHaveCount(1, { timeout: 60_000 });
       await expect(row).toContainText("Toyota Roomy");
-      await expect(row.getByTestId("pending-part-detail-line")).toHaveText("Front (before converter)");
+      await expect(row.getByTestId("pending-part-detail-line")).toHaveText("Front");
       await expect(row.getByTestId("pending-part-source")).toHaveText("Service log");
       await shot(dpage, "D1-table");
       await row.click();
       const details = dpage.getByTestId("pending-part-details");
       await expect(details).toBeVisible({ timeout: 30_000 });
-      for (const t of ["Front (before converter)", "Service log"]) await expect(details).toContainText(t);
+      for (const t of ["Front", "Service log"]) await expect(details).toContainText(t);
       await shot(dpage, "D2-drawer");
     } finally {
       await ctx.close();
@@ -769,7 +769,7 @@ test.describe("Log service — unknown parts reach Dominion (Slice B)", () => {
         .getByTestId("pending-part-card")
         .filter({ hasText: "Front oxygen sensor" })
         .filter({ has: narrow.dpage.getByTestId("pending-part-source").filter({ hasText: "Service log" }) })
-        .filter({ has: narrow.dpage.getByText("Front (before converter)", { exact: true }) })
+        .filter({ has: narrow.dpage.getByText("Front", { exact: true }) })
         .first();
       await expect(card).toBeVisible({ timeout: 60_000 });
       await expect(card.getByTestId("pending-part-source")).toHaveText("Service log");

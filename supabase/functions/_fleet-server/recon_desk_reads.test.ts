@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { countOtherApprovers, deskCashMismatches, historyItem } from "./recon_desk_reads.ts";
+import { countOtherApprovers, deskCashMismatches, historyItem, rememberName, nameCacheSize } from "./recon_desk_reads.ts";
 
 Deno.test("cash check: only drivers with a difference or an acceptance, biggest first; acceptance must still match", () => {
   const rows = [
@@ -90,4 +90,13 @@ Deno.test("step 6 money read never asks for a driver_name column", async () => {
   const i = src.indexOf("/runs/:line/:weekKey/money");
   const body = src.slice(i, src.indexOf("app.get(", i + 10));
   assertEquals(/select\("[^"]*driver_name/.test(body), false);
+});
+
+Deno.test("code review #7: the name cache stays bounded (expired, then oldest, dropped)", () => {
+  const t0 = 1_000_000;
+  for (let i = 0; i < 700; i += 1) rememberName(`id-${i}`, `Name ${i}`, t0);
+  assertEquals(nameCacheSize(), 500);
+  // A later write past the 5 minutes, once full, clears everything that expired.
+  rememberName("fresh", "Fresh", t0 + 6 * 60_000);
+  assertEquals(nameCacheSize(), 1);
 });

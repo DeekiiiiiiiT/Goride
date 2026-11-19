@@ -4,7 +4,7 @@ import { MaterialIcon } from "../import/MaterialIcon";
 import { PartsButton } from "../PartsButton";
 import {
   AXLE_POSITIONS,
-  CATALYST_POSITIONS,
+  catalystPositionsFor,
   CORNER_SIDES,
   DRIVER_PASSENGER_REAR,
   FRONT_REAR_SIDE,
@@ -232,13 +232,16 @@ export function AxlePositionButtons({
 export function CatalystPositionButtons({
   position,
   onPick,
+  opCode,
 }: {
   position: string;
   onPick: (pos: string, side: string) => void;
+  /** The part type's op code: the oxygen sensor shows Toyota's names in the brackets. */
+  opCode?: string | null;
 }) {
   return (
     <div className="grid grid-cols-2 gap-space-sm">
-      {CATALYST_POSITIONS.map((p) => {
+      {catalystPositionsFor({ opCode }).map((p) => {
         const active = position === p.id;
         return (
           <button
@@ -264,15 +267,17 @@ export function PositionChips({
   position,
   side,
   onPick,
+  opCode,
 }: {
   scheme: string;
   position: string;
   side: string;
   onPick: (pos: string, side: string) => void;
+  opCode?: string | null;
 }) {
   if (scheme === "none") return null;
   if (scheme === "before_after_catalyst") {
-    return <CatalystPositionButtons position={position} onPick={onPick} />;
+    return <CatalystPositionButtons position={position} onPick={onPick} opCode={opCode} />;
   }
   if (scheme === "axle" || scheme === "axle_inner_outer") {
     return <AxlePositionButtons position={position} onPick={onPick} />;

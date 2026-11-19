@@ -18,8 +18,14 @@ export function LogServiceLineDetailsMultiStep({
   onAddAnotherJob,
   addAnotherDisabledReason,
   banner,
+  afterBanner,
   children,
+  findOnly = false,
 }: {
+  /** LC-15 Done: "Also done on this visit?" under the banner. */
+  afterBanner?: React.ReactNode;
+  /** LC-14 add to inspection: jobs not done yet — no "costs and labour" line, no subtotal. */
+  findOnly?: boolean;
   /** Under the intro line (inspection findings: "From inspection on …" when opened from Log it now). */
   banner?: React.ReactNode;
   packageLabel?: string | null;
@@ -44,7 +50,9 @@ export function LogServiceLineDetailsMultiStep({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <p className={`${LT.bodyMd} ${LS.muted}`}>
-          Enter part details, costs and labour for each job{packageLabel ? ` in ${packageLabel}` : ""}{" "}
+          {findOnly
+            ? "Enter the garage's quote for each job — what it will cost, not paid yet"
+            : `Enter part details, costs and labour for each job${packageLabel ? ` in ${packageLabel}` : ""}`}{" "}
           <span className={`font-semibold ${LS.text}`}>
             ({componentCount} job{componentCount === 1 ? "" : "s"})
           </span>
@@ -54,6 +62,7 @@ export function LogServiceLineDetailsMultiStep({
       </div>
 
       {banner ?? null}
+      {afterBanner ?? null}
 
       <div className="flex flex-col gap-4">{children}</div>
 
@@ -75,6 +84,7 @@ export function LogServiceLineDetailsMultiStep({
         </div>
       ) : null}
 
+      {findOnly ? null : (
       <div className={`p-4 rounded-xl flex items-center justify-between gap-3 ${LS.low}`} data-testid="line-details-subtotal">
         <div className={`flex flex-wrap items-center gap-2 ${LS.muted}`}>
           <ReceiptText className="w-5 h-5" />
@@ -92,6 +102,7 @@ export function LogServiceLineDetailsMultiStep({
           </span>
         </div>
       </div>
+      )}
     </div>
   );
 }

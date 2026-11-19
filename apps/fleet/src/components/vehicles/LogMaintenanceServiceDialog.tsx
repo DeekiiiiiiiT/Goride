@@ -74,6 +74,14 @@ import {
 import { SaveLineHint, WhereOnCarChips } from "./maintenance-logging/log-service/WhereOnCarChips";
 import { PartsThatFitPanel } from "./maintenance-logging/log-service/PartsThatFitPanel";
 import { PLAN_COPY, PlanJobDialog } from "./maintenance-logging/log-service/PlanJobDialog";
+import { AlsoDoneOnVisit } from "./maintenance-logging/log-service/AlsoDoneOnVisit";
+import { QUOTE_MODE_COPY } from "./maintenance-logging/log-service/LogServiceLineDetailsStep";
+import { recommendedByJob, type RecommendedWith } from "./maintenance-logging/log-service/systemSections";
+import {
+  ADD_TO_INSPECTION_COPY,
+  AddToInspectionReview,
+  addFoundErrorText,
+} from "./maintenance-logging/log-service/addToInspection";
 import { jobWithPlaces, shortDate, type FitPart } from "./maintenance-logging/log-service/partsThatFit";
 import {
   isNotUsual,
@@ -97,7 +105,14 @@ import {
   foundByJob,
   foundLineFromDraft,
   openFoundCountFor,
+  foundLineFromDraft as foundLineFromDraftFn,
+  isFoundLine as isFoundLineFn,
+  lineJobId,
+  quoteDetailOfLine,
+  quoteSnapshotOf,
   searchFoundJobs,
+  withQuoteOnFoundLine,
+  type QuoteSnapshot,
   type FoundDraft,
   type FoundMode,
 } from "./maintenance-logging/log-service/foundWork";
@@ -178,7 +193,18 @@ export interface LogMaintenanceServiceDialogProps {
    * straight to that job's details, shows the "From inspection" banner and saves with fromFoundLineId.
    */
   fromFoundWork?: FoundWorkItem | null;
+  /**
+   * LC-14 "Add a job to this inspection": the same window, but the jobs are what a saved inspection found (not done
+   * yet, J$ 0). No Date & mileage, no prices; Review adds them to that inspection. What was paid never changes.
+   */
+  addToInspection?: AddToInspectionTarget | null;
 }
+
+export type AddToInspectionTarget = {
+  workOrderId: string;
+  /** "Inspection / diagnostic fee · 22 Aug 2026 · Whol-Hearted Car Service Ltd" */
+  inspectionLine: string;
+};
 
 function stripEverySuffix(label: string): string {
   return label.replace(/\s*\(Every[^)]*\)\s*$/i, "").trim() || label;
@@ -443,7 +469,9 @@ export function LogMaintenanceServiceDialog({
   onSaved,
   onLinkCar,
   fromFoundWork = null,
+  addToInspection = null,
 }: LogMaintenanceServiceDialogProps) {
+  const addMode = Boolean(addToInspection);
   // Powertrain job fit (audit PT-1 / PT-7): one answer per open; "off" until the server says otherwise.
   const [jobFit, setJobFit] = useState<JobFitState>({ status: "off" });
   const [jobFitTick, setJobFitTick] = useState(0);
@@ -487,6 +515,10 @@ export function LogMaintenanceServiceDialog({
   const [allComponents, setAllComponents] = useState<MaintenanceServiceCategory[]>([]);
   /** Sections per group (F1), loaded once per open for every group on the "What was done?" screen. */
   const [sectionsBySystem, setSectionsBySystem] = useState<Map<string, SystemSections>>(new Map());
+  /** "Also do" per job from EVERY loaded group (groups without sections too, e.g. Brakes). */
+  const [alsoDoByJob, setAlsoDoByJob] = useState<Map<string, RecommendedWith[]>>(new Map());
+  /** Groups whose "also do" list is loaded (or loading), so a job's own group is fetched once if it wasn't. */
+  const alsoDoGroupsRef = useRef<Set<string>>(new Set());
   const sectionNameByJob = useMemo(() => homeSectionNameByJob(sectionsBySystem), [sectionsBySystem]);
   const [systemComponents, setSystemComponents] = useState<MaintenanceServiceCategory[]>([]);
   const [systemComponentsLoading, setSystemComponentsLoading] = useState(false);
@@ -536,6 +568,28 @@ export function LogMaintenanceServiceDialog({
   /** "What the inspection found" on the open inspection job; written into `lines` on Save line. */
   const [foundDrafts, setFoundDrafts] = useState<FoundDraft[]>([]);
   const [foundPickerOpen, setFoundPickerOpen] = useState(false);
+  /**
+   * LC-16 quote cards: a "Not done yet" job of an inspection gets its own job card (the same form) for the garage's
+   * quote. Job id -> the inspection job it belongs to. Saving it writes the quote onto the J$ 0 found line.
+   */
+  const [quoteCards, setQuoteCards] = useState<Map<string, string>>(new Map());
+  const quoteCardsRef = useRef<Map<string, string>>(new Map());
+  /** LC-15 Done: the car's other pending jobs, and the ones ticked as "Also done on this visit". */
+  const [otherFound, setOtherFound] = useState<FoundWorkItem[]>([]);
+  const [extraFound, setExtraFound] = useState<FoundWorkItem[]>([]);
+  useEffect(() => {
+    setExtraFound([]);
+    setOtherFound([]);
+    if (!open || !fromFoundWork || !vehicleId) return;
+    let live = true;
+    api
+      .listFoundWork(vehicleId)
+      .then((res) => live && setOtherFound(res.items.filter((i) => i.lineId !== fromFoundWork.lineId)))
+      .catch(() => undefined); // the list is a helper; Done still works without it
+    return () => {
+      live = false;
+    };
+  }, [open, fromFoundWork, vehicleId]);
   /** "Done today" jobs waiting for their own card (so their form opens with the From inspection chip). */
   /** Done-today job id → the inspection job it came from. */
   const foundTodayIdsRef = useRef<Map<string, string>>(new Map());
@@ -690,7 +744,7 @@ export function LogMaintenanceServiceDialog({
   }, [open, vehicleId]);
 
   const persistDraft = useCallback(() => {
-    if (!draftUserId || !open) return;
+    if (!draftUserId || !open || addMode) return;
     writeLogServiceDraft(draftUserId, vehicleId, {
       version: 1,
       savedAt: new Date().toISOString(),
@@ -721,6 +775,7 @@ export function LogMaintenanceServiceDialog({
     anomalyAcknowledged,
     discountAmount,
     discountRowOpen,
+    addMode,
   ]);
 
   useEffect(() => {
@@ -730,17 +785,18 @@ export function LogMaintenanceServiceDialog({
   }, [open, persistDraft]);
 
   const clearDraftAndClose = useCallback(() => {
-    if (draftUserId) clearLogServiceDraft(draftUserId, vehicleId);
+    if (draftUserId && !addMode) clearLogServiceDraft(draftUserId, vehicleId);
     onOpenChange(false);
-  }, [draftUserId, vehicleId, onOpenChange]);
+  }, [draftUserId, vehicleId, onOpenChange, addMode]);
 
   const handleWizardStepClick = useCallback(
     (wizardStep: LogServiceWizardStep) => {
-      if (wizardStep === 1) setStep("dateMileage");
-      else if (wizardStep === 2) setStep("whatWasDone");
+      if (wizardStep === 1) {
+        if (!addMode) setStep("dateMileage");
+      } else if (wizardStep === 2) setStep("whatWasDone");
       else if (wizardStep === 3 && lineDetailCategories.length > 0) setStep("lineDetails");
     },
-    [lineDetailCategories.length],
+    [lineDetailCategories.length, addMode],
   );
 
   // Reset + load systems / quick jobs when dialog opens
@@ -790,7 +846,7 @@ export function LogMaintenanceServiceDialog({
 
     // "Log it now" always starts fresh on step 1 for that job; an unrelated saved draft is left alone.
     const savedDraft =
-      draftUserId && !initialLog?.id && !fromFoundWork ? readLogServiceDraft(draftUserId, vehicleId) : null;
+      draftUserId && !initialLog?.id && !fromFoundWork && !addToInspection ? readLogServiceDraft(draftUserId, vehicleId) : null;
     // Only a draft with jobs in it is worth keeping. It reopens on Review (jobs listed,
     // "Add another job" / "Discard draft" there). A draft with no jobs is dropped so the
     // window always opens fresh on step 1 — never stranded half-way.
@@ -848,7 +904,8 @@ export function LogMaintenanceServiceDialog({
           }));
         }
       } else {
-        setStep("dateMileage");
+        // Adding to a saved inspection: its date and mileage are already set — start on Work done.
+        setStep(addToInspection ? "whatWasDone" : "dateMileage");
       }
     }
 
@@ -894,12 +951,17 @@ export function LogMaintenanceServiceDialog({
         ).then((pairs) => {
           if (cancelled) return;
           const m = new Map<string, SystemSections>();
+          const all = new Map<string, SystemSections>();
           for (const p of pairs) {
             if (!p) continue;
             jobItems.ingest(p[0], p[1]);
+            if (p[1]) all.set(p[0], p[1]);
             if (p[1]?.groups?.length) m.set(p[0], p[1]);
           }
           setSectionsBySystem(m);
+          for (const id of all.keys()) alsoDoGroupsRef.current.add(id);
+          const loaded = recommendedByJob(all);
+          setAlsoDoByJob((prev) => new Map([...prev, ...loaded]));
         });
         setAllSystems(sItems.length ? sItems : qItems.filter((s) => s.kind === "system" || s.code?.startsWith("sys_")));
       })
@@ -962,17 +1024,37 @@ export function LogMaintenanceServiceDialog({
     return selectedSystem ?? null;
   };
 
+  /** The found job a card closes: the one Done was pressed on, or one ticked under "Also done on this visit?". */
+  const foundFor = (catId: string): FoundWorkItem | null =>
+    [fromFoundWork, ...extraFound].find((f): f is FoundWorkItem => Boolean(f) && f!.jobId === catId) ?? null;
   const openCategoryForm = (
     cat: MaintenanceServiceCategory,
     systemOverride?: MaintenanceServiceCategory | null,
   ) => {
     const existing = lines.find((l) => categoryMatchLine(cat, l));
     const system = systemOverride ?? resolveSystemForComponent(cat);
+    const found = foundFor(cat.id);
+    // LC-16: a quote card reads its found line; Done reads the found job's saved quote. Either fills the form.
+    const quoteInsp = quoteCards.get(cat.id);
+    const quoteLine = quoteInsp
+      ? lines.find((l) => isFoundLineFn(l) && lineJobId(l) === cat.id && foundByJob(l) === quoteInsp)
+      : undefined;
+    const snap: QuoteSnapshot | null = quoteLine
+      ? quoteDetailOfLine(quoteLine)
+      : !existing
+        ? ((found?.quoteDetail as QuoteSnapshot | null | undefined) ?? null)
+        : null;
     setActiveCategory(cat);
     setFieldValues(
       existing?.values
         ? { ...emptyValuesForCategory(cat), ...existing.values }
-        : emptyValuesForCategory(cat),
+        : {
+            ...emptyValuesForCategory(cat),
+            // LC-15: Done on a quoted job — the quote is the price to confirm (a service's charge box).
+            ...(found?.quoteAmount && isServiceJob(cat) ? { service_amount: found.quoteAmount } : {}),
+            ...(snap?.values ?? {}),
+            ...(quoteLine?.notes ? { notes: quoteLine.notes } : {}),
+          },
     );
     setLineExtras({
       action: (existing?.action as MaintenanceLineAction) || defaultActionForCategory(cat),
@@ -988,8 +1070,11 @@ export function LogMaintenanceServiceDialog({
           };
         }
         // "Log it now" (LS-06): open with the found job's position picked, minus codes the job no longer has.
-        if (fromFoundWork && fromFoundWork.jobId === cat.id) {
-          const kept = keepAllowedPositions(positionUiFor(cat, true), fromFoundWork.positions);
+        if (quoteLine?.positions?.length) {
+          return { positions: [...quoteLine.positions], positionsTouched: true };
+        }
+        if (found) {
+          const kept = keepAllowedPositions(positionUiFor(cat, true), found.positions);
           return { positions: kept, positionsTouched: kept.length > 0 };
         }
         return { positions: [] as string[], positionsTouched: false };
@@ -1000,22 +1085,33 @@ export function LogMaintenanceServiceDialog({
       supplierPartOfferId: existing?.supplierPartOfferId ?? null,
       partConfirmedFit: existing?.partConfirmedFit === true,
       // "Log it now" on a planned job (LC-05): opens with the part picked when it was planned.
-      ...(!existing && fromFoundWork && fromFoundWork.jobId === cat.id && fromFoundWork.partId
+      ...(!existing && found?.partId
         ? {
-            partId: fromFoundWork.partId,
-            brand: fromFoundWork.partBrand ?? "",
-            partNumber: fromFoundWork.partNumber ?? "",
+            partId: found.partId,
+            brand: found.partBrand ?? "",
+            partNumber: found.partNumber ?? "",
+          }
+        : {}),
+      ...(!existing && snap
+        ? {
+            laborHours: snap.laborHours ?? null,
+            laborRate: snap.laborRate ?? null,
+            brand: snap.brand ?? "",
+            partNumber: snap.partNumber ?? "",
+            warranty: snap.warranty === true,
+            complimentary: snap.complimentary === true,
+            ...(snap.partId ? { partId: snap.partId } : {}),
           }
         : {}),
       system,
-      items: existing?.items ? existing.items.map((i) => draftFromSavedItem(i)) : [],
+      items: existing?.items
+        ? existing.items.map((i) => draftFromSavedItem(i))
+        : (snap?.items ?? []).map((i) => ({ ...i })),
       foundToday:
         (existing?.values as Record<string, unknown> | undefined)?.found_today === true
           ? (existing ? foundByJob(existing) : null) ?? foundTodayIdsRef.current.get(cat.id) ?? null
           : (foundTodayIdsRef.current.get(cat.id) ?? null),
-      fromFoundLineId:
-        existing?.fromFoundLineId ??
-        (fromFoundWork && fromFoundWork.jobId === cat.id ? fromFoundWork.lineId : null),
+      fromFoundLineId: existing?.fromFoundLineId ?? found?.lineId ?? null,
     });
     // The found list is (re)loaded from the lines by the effect below once this job is known to be an inspection.
     foundDraftsForRef.current = null;
@@ -1092,6 +1188,7 @@ export function LogMaintenanceServiceDialog({
         onNoteChange={setFoundNote}
         onRemove={removeFoundDraft}
         renderWhere={renderFoundWhere}
+        renderParts={renderFoundParts}
       />
     ) : undefined;
   const fromInspectionChipFor = (cat: MaintenanceServiceCategory) =>
@@ -1122,6 +1219,7 @@ export function LogMaintenanceServiceDialog({
         onPickPart={(item) => setPickingItem(item)}
         beforeTotal={foundSlotFor(cat)}
         gapsEnabled={jobItems.gapsEnabled}
+        quoteTotal={isQuoteCard(cat)}
       />
     );
   };
@@ -1213,11 +1311,18 @@ export function LogMaintenanceServiceDialog({
     );
   };
 
+  /** LC-14: an inspection can't be a job an inspection found. */
+  const isInspectionCat = (c: MaintenanceServiceCategory) =>
+    isInspectionJob(c.id) || (c as { records_findings?: boolean }).records_findings === true;
   const handleContinueFromSystem = () => {
     // Ticked jobs may come from "Also do" chips in another group, so look them up in the full catalog.
-    const cats = selectedCategoryIds
+    let cats = selectedCategoryIds
       .map((id) => catalogById.get(id) ?? systemComponents.find((c) => c.id === id))
       .filter((c): c is MaintenanceServiceCategory => Boolean(c));
+    if (addMode && cats.some(isInspectionCat)) {
+      toast.error(ADD_TO_INSPECTION_COPY.noInspectionJobs);
+      cats = cats.filter((c) => !isInspectionCat(c));
+    }
     if (cats.length === 0) return;
     enterLineDetailsForCategories(cats, null);
   };
@@ -1266,6 +1371,23 @@ export function LogMaintenanceServiceDialog({
       toast.error("Fix the items marked in red first");
       return;
     }
+    const quoteInsp = quoteCards.get(activeCategory.id);
+    if (quoteInsp) {
+      // LC-16: the form is the garage's quote -> onto the J$ 0 found line (never a done job, never spend).
+      const quoted = withQuoteOnFoundLine(lines, quoteInsp, activeCategory.id, {
+        snapshot: quoteSnapshotOf(line),
+        total: lineTotalPreview(line),
+        notes: line.notes,
+        positions: line.positions,
+      });
+      setLines(quoted);
+      const nextCard = lineDetailCategories.find(
+        (c) => c.id !== activeCategory.id && !quoteCards.has(c.id) && !quoted.some((l) => categoryMatchLine(c, l)),
+      );
+      if (nextCard) openCategoryForm(nextCard);
+      else setActiveCategory(null);
+      return;
+    }
     let newLines = (() => {
       const without = lines.filter((l) => !categoryMatchLine(activeCategory, l));
       return [...without, line];
@@ -1303,6 +1425,19 @@ export function LogMaintenanceServiceDialog({
         (c) => c.id === activeCategory.id || todayIds.has(c.id) || !cameFromInspection(c),
       );
       detailCats = [...keptBase, ...todayCats.filter((c) => !keptBase.some((b) => b.id === c.id))];
+      // LC-16: each "Not done yet" job gets its own card for the garage's quote (optional).
+      const laterIds = new Set(foundDrafts.filter((d) => d.mode === "later").map((d) => d.jobId));
+      const nextQuote = new Map([...quoteCards].filter(([, insp]) => insp !== activeCategory.id));
+      for (const id of laterIds) nextQuote.set(id, activeCategory.id);
+      detailCats = detailCats.filter(
+        (c) => !(quoteCards.get(c.id) === activeCategory.id && !laterIds.has(c.id)),
+      );
+      const laterCats = [...laterIds]
+        .map((id) => catalogById.get(id))
+        .filter((c): c is MaintenanceServiceCategory => Boolean(c) && !detailCats.some((b) => b.id === c!.id));
+      detailCats = [...detailCats, ...laterCats];
+      setQuoteCards(nextQuote);
+      quoteCardsRef.current = nextQuote;
       setLineDetailCategories(detailCats);
       setFoundPickerOpen(false);
     }
@@ -1314,6 +1449,7 @@ export function LogMaintenanceServiceDialog({
       const next = detailCats.find(
         (c) =>
           c.id !== activeCategory.id &&
+          !quoteCardsRef.current.has(c.id) &&
           !newLines.some((l) => categoryMatchLine(c, l)),
       );
       if (next) openCategoryForm(next);
@@ -1333,8 +1469,9 @@ export function LogMaintenanceServiceDialog({
   };
 
   const handleContinueFromLineDetails = () => {
+    // Quote cards are optional (a quote may not be known yet).
     const pending = lineDetailCategories.filter(
-      (c) => !lines.some((l) => categoryMatchLine(c, l)),
+      (c) => !quoteCards.has(c.id) && !lines.some((l) => categoryMatchLine(c, l)),
     );
     if (pending.length > 0) {
       toast.error("Save each line before continuing");
@@ -1358,6 +1495,10 @@ export function LogMaintenanceServiceDialog({
       return;
     }
     const cat = catalogById.get(op.categoryId);
+    if (cat && addMode && isInspectionCat(cat)) {
+      toast.error(ADD_TO_INSPECTION_COPY.noInspectionJobs);
+      return;
+    }
     if (cat) {
       setLogMode("quick_job");
       if (!hasAddedJobs) setSelectedPackage(null);
@@ -1682,13 +1823,134 @@ export function LogMaintenanceServiceDialog({
     }
   };
 
+  /** A job picked from search can come from a group that isn't loaded yet: load its group once for "Also do". */
+  useEffect(() => {
+    const groupId = activeCategory?.parent_id;
+    if (!open || !groupId || alsoDoGroupsRef.current.has(groupId)) return;
+    alsoDoGroupsRef.current.add(groupId);
+    api
+      .getSystemSections(groupId)
+      .then((sec) => {
+        const loaded = recommendedByJob(new Map([[groupId, sec]]));
+        if (loaded.size) setAlsoDoByJob((prev) => new Map([...prev, ...loaded]));
+      })
+      .catch(() => alsoDoGroupsRef.current.delete(groupId));
+  }, [open, activeCategory?.parent_id]);
+
+  /** LC-15: tick / untick a pending job done on the same visit (its own card; closes its own found line). */
+  const toggleAlsoDone = (item: FoundWorkItem) => {
+    const cat = catalogById.get(item.jobId);
+    if (!cat) return;
+    if (extraFound.some((i) => i.lineId === item.lineId)) {
+      setExtraFound((prev) => prev.filter((i) => i.lineId !== item.lineId));
+      setLineDetailCategories((prev) => prev.filter((c) => c.id !== cat.id));
+      setLines((prev) => prev.filter((l) => !categoryMatchLine(cat, l)));
+      setSelectedCategoryIds((prev) => prev.filter((id) => id !== cat.id));
+      if (activeCategory?.id === cat.id) setActiveCategory(null);
+      return;
+    }
+    if (lineDetailCategories.some((c) => c.id === cat.id)) return;
+    setExtraFound((prev) => [...prev, item]);
+    setLineDetailCategories((prev) => [...prev, cat]);
+    setSelectedCategoryIds((prev) => (prev.includes(cat.id) ? prev : [...prev, cat.id]));
+  };
+
+  // ---- LC-14 "Add a job to this inspection" (the same window, found jobs only) ----
+  /** LC-16: the job form is the garage's quote (add-to-inspection jobs, and an inspection's Not done yet cards). */
+  const isQuoteCard = (cat: MaintenanceServiceCategory) => addMode || quoteCards.has(cat.id);
+  const quoteModeFor = (cat: MaintenanceServiceCategory) =>
+    isQuoteCard(cat)
+      ? {
+          note: typeof fieldValues.notes === "string" ? fieldValues.notes : "",
+          onNoteChange: (v: string) => setFieldValues((prev) => ({ ...prev, notes: v })),
+        }
+      : undefined;
+  /** "Also do" on the job card (e.g. Throttle Body Relearn after cleaning), so search-picked jobs get it too. */
+  const addAlsoDo = (from: MaintenanceServiceCategory, relId: string) => {
+    const rel = catalogById.get(relId);
+    if (!rel || lineDetailCategories.some((c) => c.id === rel.id)) return;
+    const insp = quoteCards.get(from.id);
+    if (insp) {
+      // An inspection's Not done yet job -> the also-do is found too: its own J$ 0 line + quote card.
+      const draft = { jobId: rel.id, name: rel.name, mode: "later" as const, note: "" };
+      setLines((prev) => [...prev, foundLineFromDraftFn(draft, rel, resolveSystemForComponent(rel), insp)]);
+      const next = new Map(quoteCards).set(rel.id, insp);
+      setQuoteCards(next);
+      quoteCardsRef.current = next;
+    }
+    setLineDetailCategories((prev) => [...prev, rel]);
+    setSelectedCategoryIds((prev) => (prev.includes(rel.id) ? prev : [...prev, rel.id]));
+  };
+  const alsoDoSlotFor = (cat: MaintenanceServiceCategory) => {
+    if (step !== "lineDetails" || lineDetailCategories.length === 0) return undefined;
+    const recs = (alsoDoByJob.get(cat.id) ?? []).filter(
+      (r) => !lineDetailCategories.some((c) => c.id === r.categoryId) && catalogById.has(r.categoryId),
+    );
+    if (!recs.length) return undefined;
+    return (
+      <div className="rounded-lg p-3 bg-[#eef2ff]/70 dark:bg-[#312e81]/25 flex flex-col gap-2" data-testid="details-also-do">
+        {recs.map((r) => (
+          <div key={r.categoryId} className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className={`${LT.labelMd} font-semibold ${LS.text}`}>Also do: {r.name}</p>
+              {r.note ? <p className={`${LT.bodySm} ${LS.muted}`}>{r.note}</p> : null}
+            </div>
+            <Button type="button" size="sm" variant="outline" data-testid="details-also-do-add" onClick={() => addAlsoDo(cat, r.categoryId)}>
+              Add
+            </Button>
+          </div>
+        ))}
+      </div>
+    );
+  };
+  const [addingFound, setAddingFound] = useState(false);
+  const addJobsToInspection = async () => {
+    if (!addToInspection || addingFound) return;
+    const todo = lines.filter((l) => !l.recommended && l.categoryId);
+    if (!todo.length) return;
+    setAddingFound(true);
+    let added = 0;
+    let listed = 0;
+    const failed: string[] = [];
+    let firstError: string | null = null;
+    const left: MaintenanceLogLine[] = [];
+    for (const l of todo) {
+      try {
+        const res = await api.addFoundJobToInspection(addToInspection.workOrderId, {
+          jobId: String(l.categoryId),
+          places: [...(l.positions ?? [])],
+          note: typeof l.notes === "string" && l.notes.trim() ? l.notes.trim() : null,
+          quote: lineTotalPreview(l) > 0 ? lineTotalPreview(l) : null,
+          quoteDetail: quoteSnapshotOf(l),
+        });
+        if (res.alreadyListed) listed += 1;
+        else added += 1;
+      } catch (e) {
+        failed.push(l.categoryName || "Job");
+        left.push(l);
+        firstError ??= addFoundErrorText(e);
+      }
+    }
+    setAddingFound(false);
+    if (added || listed) onSaved?.();
+    if (failed.length) {
+      // Keep only what didn't go in, so a retry never adds a job twice.
+      setLines(left);
+      toast.error(`${ADD_TO_INSPECTION_COPY.failed(failed)} ${firstError ?? ""}`.trim());
+      return;
+    }
+    toast.success(ADD_TO_INSPECTION_COPY.done(added, listed));
+    onOpenChange(false);
+  };
+
   const handleBack = () => {
     if (step === "whatWasDone" && hasAddedJobs) {
       setStep("review");
       return;
     }
     if (step === "whatWasDone" && lines.length === 0) {
-      setStep("dateMileage");
+      if (addMode) onOpenChange(false);
+      else setStep("dateMileage");
       return;
     }
     if (step === "dateMileage") {
@@ -1788,6 +2050,23 @@ export function LogMaintenanceServiceDialog({
   const partsPanelFor = (cat: MaintenanceServiceCategory) => {
     if (!jobItems.gapsEnabled || isServiceJob(cat) || cat.id.startsWith("synthetic-") || !vehicleId) return undefined;
     const ui = positionUi(cat);
+    if (isQuoteCard(cat)) {
+      // LC-14/16: not bought yet — show what to buy (read-only, Copy part info).
+      return (
+        <PartsThatFitPanel
+          key={`find-${cat.id}`}
+          vehicleId={vehicleId}
+          jobId={cat.id}
+          jobName={(cat.name || "part").toLowerCase()}
+          places={lineExtras.positions}
+          placeLabels={placeLabelsFor(cat, lineExtras.positions)}
+          needsPlace={ui.kind !== "none" && ui.kind !== "wheels" && lineExtras.positions.length === 0}
+          partId={null}
+          onPick={() => undefined}
+          toBuy
+        />
+      );
+    }
     return (
       <PartsThatFitPanel
         key={cat.id}
@@ -1854,8 +2133,7 @@ export function LogMaintenanceServiceDialog({
     }
   };
   /** Log it now on a planned job: the two cost hints under the price boxes (Stitch screen 7). */
-  const plannedHintsOn = (cat: MaintenanceServiceCategory) =>
-    fromFoundWork?.source === "planned" && cat.id === fromFoundWork.jobId;
+  const plannedHintsOn = (cat: MaintenanceServiceCategory) => Boolean(foundFor(cat.id));
   /** Jobs with their own Parts box get that hint under it (the fitting hint sits under the labour row). */
   const plannedCostHint = (key: string): string | null => {
     if (!activeCategory || !plannedHintsOn(activeCategory)) return null;
@@ -1892,6 +2170,27 @@ export function LogMaintenanceServiceDialog({
         onToggle={(code) => toggleFoundWhere(d.jobId, code)}
         showHelper={picked.length === 0}
         testId="found-where-on-car"
+      />
+    );
+  };
+  /** LC-10: an inspection's "Not done yet" job shows the parts to buy (read-only, Copy part info). */
+  const renderFoundParts = (d: FoundDraft) => {
+    const cat = catalogById.get(d.jobId);
+    if (!jobItems.gapsEnabled || !cat || isServiceJob(cat) || !vehicleId) return null;
+    const ui = positionUi(cat);
+    const picked = d.positions ?? [];
+    return (
+      <PartsThatFitPanel
+        key={`found-${d.jobId}`}
+        vehicleId={vehicleId}
+        jobId={d.jobId}
+        jobName={(cat.name || "part").toLowerCase()}
+        places={picked}
+        placeLabels={placeLabelsFor(cat, picked)}
+        needsPlace={ui.kind === "chips" && picked.length === 0}
+        partId={null}
+        onPick={() => undefined}
+        toBuy
       />
     );
   };
@@ -2188,6 +2487,14 @@ export function LogMaintenanceServiceDialog({
                         {LOG_SERVICE_COPY.addAnotherJob}
                       </Button>
                     ) : null}
+                    {addMode ? (
+                      <LogServiceWizardContinueButton
+                        label={ADD_TO_INSPECTION_COPY.confirm(lines.filter((l) => !l.recommended).length)}
+                        disabled={addingFound || lines.length < 1}
+                        loading={addingFound}
+                        onClick={() => void addJobsToInspection()}
+                      />
+                    ) : (
                     <LogServiceWizardContinueButton
                       label={LOG_SERVICE_COPY.logServiceLabel}
                       disabled={
@@ -2199,12 +2506,30 @@ export function LogMaintenanceServiceDialog({
                       loading={isLoading}
                       onClick={() => void handleSave()}
                     />
+                    )}
                   </>
                 ) : null}
               </div>
             </>
           }
         >
+          {addToInspection ? (
+            <div
+              className="mb-4 rounded-xl p-3 bg-[#eef2ff]/80 dark:bg-[#312e81]/30 flex items-start gap-2"
+              data-testid="add-to-inspection-banner"
+            >
+              <span className="material-symbols-outlined text-[#4338ca] dark:text-[#a5b4fc] mt-0.5" style={{ fontSize: 18 }} aria-hidden>
+                search
+              </span>
+              <div className="flex flex-col min-w-0">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-[#4338ca] dark:text-[#c7d2fe]">
+                  {ADD_TO_INSPECTION_COPY.bannerLabel}
+                </span>
+                <span className="text-[13px] leading-snug text-[#1e1b4b] dark:text-[#e0e7ff]">{addToInspection.inspectionLine}</span>
+                <span className="text-[12px] text-[#312e81]/80 dark:text-[#c7d2fe]/80">{ADD_TO_INSPECTION_COPY.bannerHelper}</span>
+              </div>
+            </div>
+          ) : null}
           {step === "dateMileage" && (
             <LogServiceDateMileageStep
               date={formMeta.date}
@@ -2233,7 +2558,7 @@ export function LogMaintenanceServiceDialog({
           )}
           {step === "whatWasDone" && (
             <LogServiceWhatWasDoneStep
-              packages={packageChoicesForStep}
+              packages={addMode ? [] : packageChoicesForStep}
               quickJobs={quickJobs}
               allJobs={allComponents}
               allSystems={allSystems}
@@ -2338,10 +2663,26 @@ export function LogMaintenanceServiceDialog({
                         : foundBannerText(fromFoundWork)
                     }
                     note={fromFoundWork.note}
+                    quote={fromFoundWork.quoteAmount ? FOUND_COPY.bannerQuote(fromFoundWork.quoteAmount) : null}
+                  />
+                ) : undefined
+              }
+              afterBanner={
+                fromFoundWork && !addMode ? (
+                  <AlsoDoneOnVisit
+                    items={otherFound}
+                    tickedLineIds={new Set(extraFound.map((i) => i.lineId))}
+                    blockedJobIds={new Set(lineDetailCategories.map((c) => c.id))}
+                    placesText={(i) => {
+                      const cat = catalogById.get(i.jobId);
+                      return cat ? placeLabelsFor(cat, i.positions ?? []).join(", ") : "";
+                    }}
+                    onToggle={toggleAlsoDone}
                   />
                 ) : undefined
               }
               packageLabel={selectedPackage?.shortLabel ?? null}
+              findOnly={addMode}
               componentCount={lineDetailCategories.length}
               baySessionLabel={idempotencyKey.slice(0, 8).toUpperCase()}
               configuredCount={lineDetailCategories.filter((c) => categoryHasLine(c)).length}
@@ -2421,13 +2762,15 @@ export function LogMaintenanceServiceDialog({
                           partNumber: prev.partNumber || partNumber || prev.partNumber,
                         }))
                       }
-                      lineTotalLabel="Line total"
+                      lineTotalLabel={activeCategory && isQuoteCard(activeCategory) ? QUOTE_MODE_COPY.totalLabel : "Line total"}
                       currency={formMeta.currency || "JMD"}
                       lineTotal={draftLineTotal}
                       serviceForm={serviceFormFor(cat)}
                       itemsSlot={itemsSlotFor(cat)}
                       foundSlot={itemsEnabled ? undefined : foundSlotFor(cat)}
                       headerChip={fromInspectionChipFor(cat)}
+                      quoteMode={quoteModeFor(cat)}
+                      alsoDoSlot={alsoDoSlotFor(cat)}
                     />
                   )}
                   {activeCategory?.id !== cat.id && isInspectionJob(cat.id) && categoryHasLine(cat) ? (
@@ -2447,11 +2790,15 @@ export function LogMaintenanceServiceDialog({
                       <div>
                         <p className={`${LT.titleMd} ${LS.text}`}>{cat.name}</p>
                         <p className={`${LT.bodySm} ${LS.muted}`}>
-                          {categoryHasLine(cat) ? "Saved" : "Needs details"}
+                          {quoteCards.has(cat.id)
+                            ? quoteDetailOfLine(lines.find((l) => isFoundLineFn(l) && lineJobId(l) === cat.id) ?? ({} as MaintenanceLogLine))
+                              ? "Garage quote saved · not done yet"
+                              : "Not done yet · add the garage's quote (optional)"
+                            : categoryHasLine(cat) ? "Saved" : "Needs details"}
                         </p>
                       </div>
                       <Button type="button" size="sm" variant="outline" onClick={() => openCategoryForm(cat)}>
-                        {categoryHasLine(cat) ? "Edit" : "Configure"}
+                        {quoteCards.has(cat.id) ? "Quote" : categoryHasLine(cat) ? "Edit" : "Configure"}
                       </Button>
                     </div>
                   )}
@@ -2515,13 +2862,15 @@ export function LogMaintenanceServiceDialog({
                   partNumber: prev.partNumber || partNumber || prev.partNumber,
                 }))
               }
-              lineTotalLabel="Line total"
+              lineTotalLabel={activeCategory && isQuoteCard(activeCategory) ? QUOTE_MODE_COPY.totalLabel : "Line total"}
               currency={formMeta.currency || "JMD"}
               lineTotal={draftLineTotal}
               serviceForm={serviceFormFor(activeCategory)}
               itemsSlot={itemsSlotFor(activeCategory)}
               foundSlot={itemsEnabled ? undefined : foundSlotFor(activeCategory)}
               headerChip={fromInspectionChipFor(activeCategory)}
+              quoteMode={quoteModeFor(activeCategory)}
+              alsoDoSlot={alsoDoSlotFor(activeCategory)}
             />
           )}
 
@@ -2566,7 +2915,22 @@ export function LogMaintenanceServiceDialog({
               <NotFinishedBanner state={saveProblem.finish} onFinish={() => void handleSave()} />
             </div>
           ) : null}
-          {step === "review" && (
+          {step === "review" && addMode ? (
+            <AddToInspectionReview
+              lines={lines.filter((l) => !l.recommended)}
+              quoteOf={lineTotalPreview}
+              placesText={(l) => {
+                const cat = l.categoryId ? catalogById.get(l.categoryId) : undefined;
+                return cat ? placeLabelsFor(cat, l.positions ?? []).join(", ") : (l.positions ?? []).join(", ");
+              }}
+              onEdit={(l) => {
+                const cat = l.categoryId ? catalogById.get(l.categoryId) : undefined;
+                if (cat) enterLineDetailsForCategories([cat], resolveSystemForComponent(cat));
+              }}
+              onRemove={(l) => setLines((prev) => prev.filter((x) => x !== l))}
+            />
+          ) : null}
+          {step === "review" && !addMode && (
             <LogServiceReviewStep
               lineFit={(line) => ({
                 // A saved line keeps the answer frozen when it was logged (PT-8); a new one uses today's.

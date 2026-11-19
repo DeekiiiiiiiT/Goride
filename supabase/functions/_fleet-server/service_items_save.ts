@@ -9,6 +9,7 @@ import {
 import { getCatalogParts } from "./catalog_api.ts";
 import { computeWoLineTotal, loadFleetVehicleForOrg } from "./maintenance_logging_helpers.ts";
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
+import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const WO_LINE_ACTIONS = new Set([
@@ -432,6 +433,19 @@ export async function prepareWorkOrderLines(
   const knownIds = args.workOrderId
     ? await loadLineIdsForWorkOrder(supabase, args.workOrderId)
     : new Set<string>();
+  // Code review #4: Other-item part numbers follow the company's log_service_parts_gaps switch (looked up only if sent).
+  const sendsOtherPartNumber = args.rawLines.some((ln) => {
+    const its = (ln as Record<string, unknown> | null)?.items;
+    return Array.isArray(its) && its.some((it) => {
+      const o = (it ?? {}) as Record<string, unknown>;
+      const kind = String(o.itemKind ?? o.item_kind ?? "");
+      const pn = o.partNumber ?? o.part_number;
+      return kind === "other" && pn != null && String(pn).trim() !== "";
+    });
+  });
+  const otherPartNumberAllowed = sendsOtherPartNumber
+    ? await isFeatureEnabled(FEATURE_FLAGS.LOG_SERVICE_PARTS_GAPS, args.orgId)
+    : false;
 
   for (const raw of args.rawLines) {
     if (!raw || typeof raw !== "object") {
@@ -526,7 +540,7 @@ export async function prepareWorkOrderLines(
       };
     }
 
-    const parsed = parseLineItems(itemsRaw, { declined });
+    const parsed = parseLineItems(itemsRaw, { declined, otherPartNumberAllowed });
     if (!parsed.ok) {
       return {
         ok: false,

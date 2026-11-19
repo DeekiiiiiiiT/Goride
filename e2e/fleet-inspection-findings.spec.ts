@@ -348,9 +348,12 @@ test.describe("Fleet inspection findings", () => {
     await card.screenshot({ path: join(shotsDir, "live-06-card.png") });
     await chip.screenshot({ path: join(shotsDir, "live-06-chip.png") });
 
-    // The card opens the car with the oldest waiting job: this car.
+    // LC-11: the card opens the Not done yet tab (every car); each card names its car.
     await card.click();
-    const section = await openFoundSection(page);
+    const section = page.getByTestId("found-by-inspection");
+    await expect(section).toBeVisible({ timeout: 30_000 });
+    await expect(section.getByTestId("found-loading")).toHaveCount(0, { timeout: 30_000 });
+    await expect(section.getByTestId("found-card-car").first()).toContainText(MD_DISC_PLATE);
     await expect(section.getByTestId("found-card")).toHaveCount(2);
     await expect(section.getByTestId("found-by-inspection-count")).toHaveText("2");
     const rotorCard = section.getByTestId("found-card").filter({ hasText: rotor.name });

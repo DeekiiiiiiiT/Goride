@@ -75,6 +75,8 @@ type Props = {
   currency: string;
   /** The job's own charge (no items), for the total pill. */
   jobCharge: number;
+  /** LC-16: the form is the garage's quote — the total line reads "Quote total". */
+  quoteTotal?: boolean;
   onPickPart: (item: LineItemDraft) => void;
   /** Shown between the items and the total pill (inspection jobs: "What the inspection found"). */
   beforeTotal?: React.ReactNode;
@@ -386,7 +388,7 @@ function Skeleton() {
   );
 }
 
-export function ItemsUsedSection({ jobItems, status, onRetry, items, onChange, currency, jobCharge, onPickPart, beforeTotal, gapsEnabled }: Props) {
+export function ItemsUsedSection({ jobItems, status, onRetry, items, onChange, currency, jobCharge, onPickPart, beforeTotal, gapsEnabled, quoteTotal = false }: Props) {
   const { usually, sometimes } = groupJobItems(jobItems);
   const itemsTotal = items.reduce((s, i) => s + itemAmount(i), 0);
   const others = items.map((it, idx) => ({ it, idx })).filter(({ it }) => it.source === "other");
@@ -522,7 +524,7 @@ export function ItemsUsedSection({ jobItems, status, onRetry, items, onChange, c
           receipt_long
         </span>
         <span>
-          Job {money(currency, jobCharge)} + items {money(currency, itemsTotal)} ={" "}
+          {quoteTotal ? "Quote total: " : ""}Job {money(currency, jobCharge)} + items {money(currency, itemsTotal)} ={" "}
           <strong className="text-on-surface font-bold text-xl">{money(currency, jobCharge + itemsTotal)}</strong>
         </span>
       </div>

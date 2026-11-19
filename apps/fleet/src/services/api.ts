@@ -3110,8 +3110,8 @@ export const api = {
     );
     // A 404 (switch off: code inspection_findings_off) keeps its status and code; the body is read once (IF-23).
     if (!response.ok) throw await maintenanceSaveErrorFrom(response, "Failed to load found work");
-    const json = await response.json() as { items?: FoundWorkItem[] };
-    return { items: Array.isArray(json.items) ? json.items : [] };
+    const json = await response.json() as { items?: FoundWorkItem[]; partsGapsEnabled?: boolean };
+    return { items: Array.isArray(json.items) ? json.items : [], partsGapsEnabled: typeof json.partsGapsEnabled === "boolean" ? json.partsGapsEnabled : null };
   },
 
   async foundWorkCounts() {
@@ -3525,6 +3525,16 @@ export const api = {
       });
       if (!response.ok) throw new Error((await response.json().catch(() => ({})) as { error?: string }).error || "Could not send the request");
       return response.json();
+  },
+
+  /** LC-14: add a job an inspection found to that saved inspection (J$ 0, not done yet). */
+  async addFoundJobToInspection(workOrderId: string, body: { jobId: string; places: string[]; note: string | null; quote?: number | null; quoteDetail?: unknown }) {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fleetOps}/maintenance-work-orders/${encodeURIComponent(workOrderId)}/found-jobs`,
+        { method: "POST", headers: await getHeaders(), body: JSON.stringify(body) },
+      );
+      if (!response.ok) throw await maintenanceSaveErrorFrom(response, "Could not add this job to the inspection");
+      return response.json() as Promise<{ workOrderId?: string; lineId?: string | null; created?: boolean; alreadyListed?: boolean }>;
   },
 
   /** Slice C: "Plan it — I'll buy it first" (fleet-ops). 404 log_service_parts_gaps_off when the switch is off. */

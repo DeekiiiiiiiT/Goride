@@ -134,6 +134,7 @@ export function Step2ByEngine({ draft, setDraft }: { draft: AddPartsDraft; setDr
             <p className="font-headline-md text-on-surface">Where on the car?</p>
             <PositionChips
               scheme={draft.partType.positionScheme}
+              opCode={draft.partType.opCode}
               position={draft.position}
               side={draft.side}
               onPick={(pos, side) => setDraft({ ...draft, position: pos, side })}

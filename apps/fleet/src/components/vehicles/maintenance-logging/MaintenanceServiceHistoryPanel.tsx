@@ -25,6 +25,7 @@ import {
 import type { LineItemDraft } from "../../../types/maintenance";
 import { NotFinishedServices } from "./NotFinishedServices";
 import { itemsUsedText } from "./serviceHistoryItems";
+import type { AddToInspectionRequest } from "./FoundByInspection";
 
 type HistoryRow = Record<string, unknown>;
 
@@ -57,7 +58,14 @@ function formatDate(iso: unknown, dateUnknown?: boolean): string {
   return formatMaintenanceServiceDateLabel(String(iso ?? "").slice(0, 10) || null, false);
 }
 
-export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: VehicleOption[] }) {
+export function MaintenanceServiceHistoryPanel({
+  vehicles,
+  onAddToInspection,
+}: {
+  vehicles: VehicleOption[];
+  /** LC-14: "Add a job to this inspection" in Service details opens Log service in add mode. */
+  onAddToInspection?: (target: AddToInspectionRequest) => void;
+}) {
   const [vehicleFilter, setVehicleFilter] = useState<string>("all");
   const partFilter = "";
   /** Stitch 08 search box: filters the loaded services by job, part number or shop. */
@@ -495,6 +503,14 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
         workOrderId={viewing?.workOrderId ?? null}
         vehicleLabel={viewing?.label ?? ""}
         onClose={() => setViewing(null)}
+        onAddToInspection={
+          onAddToInspection
+            ? (t) => {
+                setViewing(null);
+                onAddToInspection(t);
+              }
+            : undefined
+        }
       />
       <ServiceHistoryDeleteDialog
         target={deleting}
