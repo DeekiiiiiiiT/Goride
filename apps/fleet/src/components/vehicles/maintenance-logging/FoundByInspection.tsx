@@ -64,6 +64,8 @@ export const FOUND_UI_COPY = {
   noQuote: "No garage quote yet",
   /** LC-18 */
   plannedGroup: "Planned by you",
+  groupOpen: "Show the jobs",
+  groupClose: "Hide the jobs",
   groupCount: (n: number) => `${n} job${n === 1 ? "" : "s"} waiting`,
   groupQuoted: (amount: number) => `J$ ${amount.toLocaleString("en-US", { maximumFractionDigits: 2 })} quoted`,
   groupDays: (d: number) => `${d} day${d === 1 ? "" : "s"}`,
@@ -413,14 +415,10 @@ export function FoundByInspectionSection({
                           .join(" · ")}
                       </span>
                     </span>
-                    <Sym
-                      name={open ? "expand_less" : "expand_more"}
-                      size={22}
-                      className="shrink-0 ml-auto text-[#47464c] dark:text-[#c9c5cd]"
-                    />
                   </button>
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
                   {g.kind === "inspection" && first.workOrderId ? (
-                    <div className="flex flex-wrap gap-2 shrink-0">
+                    <>
                       {canEdit && onAddToInspection ? (
                         <button
                           type="button"
@@ -448,8 +446,20 @@ export function FoundByInspectionSection({
                         <Sym name="visibility" size={15} />
                         {FOUND_UI_COPY.viewInspection}
                       </button>
-                    </div>
+                    </>
                   ) : null}
+                    {/* Owner 20 Nov: the open / close arrow sits at the end of the row. */}
+                    <button
+                      type="button"
+                      onClick={toggle}
+                      aria-expanded={open}
+                      aria-label={open ? FOUND_UI_COPY.groupClose : FOUND_UI_COPY.groupOpen}
+                      data-testid="found-group-chevron"
+                      className={`w-9 h-9 rounded-lg flex items-center justify-center ${BTN_SECONDARY}`}
+                    >
+                      <Sym name={open ? "expand_less" : "expand_more"} size={22} className="text-[#47464c] dark:text-[#c9c5cd]" />
+                    </button>
+                  </div>
                 </div>
                 {open ? (
                   <ul className="p-3 flex flex-col gap-3" data-testid="found-group-jobs">

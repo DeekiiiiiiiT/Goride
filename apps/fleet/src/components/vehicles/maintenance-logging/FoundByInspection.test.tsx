@@ -554,3 +554,16 @@ describe("LC-18 one block per inspection, folded until tapped", () => {
     expect(within(groups[0]).queryByTestId("found-card")).toBeNull();
   });
 });
+
+describe("LC-18 the arrow sits at the end of the row", () => {
+  it("the arrow is the last control in the header and opens / closes the block", async () => {
+    apiMock.listFoundWork.mockResolvedValue({ items: [rotor] });
+    render(<FoundByInspectionSection canEdit onAddToInspection={vi.fn()} />);
+    const group = await screen.findByTestId("found-group");
+    const buttons = within(group).getAllByRole("button");
+    expect(buttons[buttons.length - 1].getAttribute("data-testid")).toBe("found-group-chevron");
+    fireEvent.click(within(group).getByTestId("found-group-chevron"));
+    expect(within(group).getAllByTestId("found-card")).toHaveLength(1);
+    expect(within(group).getByTestId("found-group-chevron").getAttribute("aria-label")).toBe("Hide the jobs");
+  });
+});
