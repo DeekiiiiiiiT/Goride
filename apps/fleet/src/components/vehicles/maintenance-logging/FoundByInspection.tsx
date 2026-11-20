@@ -62,6 +62,11 @@ export const FOUND_UI_COPY = {
   quote: (amount: number) => `Garage quote J$ ${amount.toLocaleString("en-US", { maximumFractionDigits: 2 })}`,
   notPaid: "not paid",
   noQuote: "No garage quote yet",
+  /** LC-18 */
+  plannedGroup: "Planned by you",
+  groupCount: (n: number) => `${n} job${n === 1 ? "" : "s"} waiting`,
+  groupQuoted: (amount: number) => `J$ ${amount.toLocaleString("en-US", { maximumFractionDigits: 2 })} quoted`,
+  groupDays: (d: number) => `${d} day${d === 1 ? "" : "s"}`,
   addQuote: "Add quote",
   editQuote: "Edit quote",
   quotedTotal: (amount: number) => `J$ ${amount.toLocaleString("en-US", { maximumFractionDigits: 2 })} quoted, waiting`,
@@ -197,7 +202,10 @@ export function FoundByInspectionSection({
   phone = false,
   carLabel,
   onAddToInspection,
+  startOpen = false,
 }: {
+  /** Blocks start open (tests, or a host that wants them open). Default: folded (LC-18). */
+  startOpen?: boolean;
   /** One car (Due items drawer); left out = every car (the hub's Not done yet tab, LC-11). */
   vehicleId?: string;
   /** Every-car list: the car's name on each card ("Toyota Roomy · 5179KZ"). */
@@ -216,6 +224,8 @@ export function FoundByInspectionSection({
   const [conflict, setConflict] = useState(false);
   /** LC-13: the inspection a found job came from, opened read-only (same window as Service history's View). */
   const [viewing, setViewing] = useState<FoundWorkItem | null>(null);
+  /** LC-18: which blocks are open (collapsed by default). */
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const load = useCallback(() => {
     let live = true;
@@ -351,113 +361,153 @@ export function FoundByInspectionSection({
           </span>
         </div>
       ) : (
-        <ul className="space-y-3">
-          {items.map((item) =>
-            item.source === "planned" ? (
-              <PlannedJobCard
-                key={item.lineId}
-                item={item}
-                carName={carOf(item)}
-                onEditQuote={canEdit && onAddToInspection ? () => onAddToInspection(editQuoteRequest(item)) : undefined}
-                canEdit={canEdit}
-                phone={phone}
-                onLogItNow={onLogItNow}
-                onNotNeeded={() => setConfirm(item)}
-              />
-            ) : (
-            <li
-              key={item.lineId}
-              className="rounded-xl bg-white dark:bg-[#15161d] p-4 shadow-sm flex flex-col gap-2 transition-shadow hover:shadow-md"
-              data-testid="found-card"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Sym name="build" size={18} className="text-[#47464c] dark:text-[#c9c5cd]" />
-                  <h4 className="text-[14px] font-semibold text-[#1a1b22] dark:text-[#e4e1ec] truncate" data-testid="found-card-title">
-                    {state.kind === "ok" && state.partsGapsEnabled ? foundTitle(item) : item.jobName}
-                  </h4>
-                </div>
-                <span className="inline-flex items-center gap-1 bg-[#eeedf7] dark:bg-[#23242e] px-2.5 py-0.5 rounded-full text-[11px] font-medium text-[#47464c] dark:text-[#c9c5cd] shrink-0">
-                  <Sym name="schedule" size={13} />
-                  {FOUND_UI_COPY.waiting}
-                </span>
-              </div>
-              <CarLine name={carOf(item)} />
-              {item.note ? (
-                <div className="rounded-lg bg-[#f4f2fd] dark:bg-[#1c1d26] p-2.5">
-                  <p className="text-[13px] leading-snug text-[#1a1b22] dark:text-[#e4e1ec]">{item.note}</p>
-                </div>
-              ) : null}
-              {/* LC-13: which inspection this came from, and a way to open it. */}
-              <div
-                className="rounded-lg p-2.5 bg-[#eef2ff]/80 dark:bg-[#312e81]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
-                data-testid="found-from-inspection"
+        <ul className="space-y-3" data-testid="found-groups">
+          {groupFoundItems(items).map((g) => {
+            const first = g.items[0];
+            // expanded holds the blocks the user flipped from their starting state.
+            const open = startOpen ? !expanded.has(g.key) : expanded.has(g.key);
+            const quoted = g.items.reduce((n, i) => n + (Number(i.quoteAmount) > 0 ? Number(i.quoteAmount) : 0), 0);
+            const days = Math.max(...g.items.map((i) => Number(i.daysWaiting) || 0));
+            const toggle = () =>
+              setExpanded((prev) => {
+                const next = new Set(prev);
+                if (next.has(g.key)) next.delete(g.key);
+                else next.add(g.key);
+                return next;
+              });
+            return (
+              <li
+                key={g.key}
+                className="rounded-xl bg-white dark:bg-[#15161d] shadow-sm overflow-hidden"
+                data-testid="found-group"
+                data-group-kind={g.kind}
               >
-                <div className="flex items-start gap-2 min-w-0">
-                  <Sym name="search" size={16} className="shrink-0 mt-0.5 text-[#4338ca] dark:text-[#a5b4fc]" />
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-[#4338ca] dark:text-[#c7d2fe]">
-                      {FOUND_UI_COPY.fromInspection}
-                    </span>
-                    <span className="text-[13px] leading-snug text-[#1e1b4b] dark:text-[#e0e7ff]" data-testid="found-card-line">
-                      {FOUND_UI_COPY.foundLine(item)}
-                    </span>
-                  </div>
-                </div>
-                {item.workOrderId ? (
-                  <div className="flex flex-wrap gap-2 shrink-0 self-start sm:self-auto">
-                    {canEdit && onAddToInspection ? (
-                      <button
-                        type="button"
-                        data-testid="found-add-to-inspection"
-                        title={FOUND_UI_COPY.addJobHint}
-                        onClick={() =>
-                          onAddToInspection({
-                            vehicleId: item.vehicleId,
-                            workOrderId: item.workOrderId,
-                            inspectionLine: inspectionLineOf(item),
-                          })
-                        }
-                        className={`px-3 py-1.5 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5 ${BTN_SECONDARY}`}
-                      >
-                        <Sym name="add" size={15} />
-                        {FOUND_UI_COPY.addJob}
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      data-testid="found-view-inspection"
-                      onClick={() => setViewing(item)}
-                      className={`px-3 py-1.5 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5 ${BTN_SECONDARY}`}
-                    >
-                      <Sym name="visibility" size={15} />
-                      {FOUND_UI_COPY.viewInspection}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-              <QuoteLine
-                amount={item.quoteAmount ?? null}
-                onEdit={canEdit && onAddToInspection ? () => onAddToInspection(editQuoteRequest(item)) : undefined}
-              />
-              {state.kind === "ok" && state.partsGapsEnabled ? <FoundPartsToBuy item={item} /> : null}
-              {canEdit ? (
-                <div className={`flex gap-2 pt-1 ${phone ? "flex-col" : "items-center"}`}>
-                  {onLogItNow ? <PendingDoneToggle phone={phone} onDone={() => onLogItNow(item)} /> : null}
+                {/* LC-18: one block per inspection (or "Planned by you"); its buttons once, jobs inside. */}
+                <div
+                  className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${g.kind === "inspection" ? "bg-[#eef2ff]/60 dark:bg-[#312e81]/25" : "bg-[#f4f2fd] dark:bg-[#1c1d26]"}`}
+                >
                   <button
                     type="button"
-                    data-testid="found-not-needed"
-                    onClick={() => setConfirm(item)}
-                    className={`px-3.5 py-2 rounded-lg text-[12px] font-medium inline-flex items-center justify-center gap-1.5 ${phone ? "w-full h-12 text-[15px]" : ""} ${BTN_SECONDARY}`}
+                    onClick={toggle}
+                    aria-expanded={open}
+                    data-testid="found-group-toggle"
+                    className="flex items-start gap-2.5 min-w-0 text-left flex-1"
                   >
-                    {phone ? <Sym name="do_not_disturb_on" size={18} /> : null}
-                    {FOUND_UI_COPY.notNeeded}
+                    <Sym
+                      name={g.kind === "inspection" ? "search" : "event"}
+                      size={18}
+                      className="shrink-0 mt-0.5 text-[#4338ca] dark:text-[#a5b4fc]"
+                    />
+                    <span className="flex flex-col min-w-0">
+                      <span className="text-[14px] font-semibold text-[#1e1b4b] dark:text-[#e0e7ff]" data-testid="found-group-title">
+                        {g.kind === "inspection" ? inspectionLineOf(first) : FOUND_UI_COPY.plannedGroup}
+                      </span>
+                      <span className="text-[13px] text-[#47464c] dark:text-[#c9c5cd]" data-testid="found-group-summary">
+                        {[
+                          carOf(first),
+                          FOUND_UI_COPY.groupCount(g.items.length),
+                          quoted > 0 ? FOUND_UI_COPY.groupQuoted(quoted) : null,
+                          FOUND_UI_COPY.groupDays(days),
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    </span>
+                    <Sym
+                      name={open ? "expand_less" : "expand_more"}
+                      size={22}
+                      className="shrink-0 ml-auto text-[#47464c] dark:text-[#c9c5cd]"
+                    />
                   </button>
+                  {g.kind === "inspection" && first.workOrderId ? (
+                    <div className="flex flex-wrap gap-2 shrink-0">
+                      {canEdit && onAddToInspection ? (
+                        <button
+                          type="button"
+                          data-testid="found-add-to-inspection"
+                          title={FOUND_UI_COPY.addJobHint}
+                          onClick={() =>
+                            onAddToInspection({
+                              vehicleId: first.vehicleId,
+                              workOrderId: first.workOrderId,
+                              inspectionLine: inspectionLineOf(first),
+                            })
+                          }
+                          className={`px-3 py-1.5 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5 ${BTN_SECONDARY}`}
+                        >
+                          <Sym name="add" size={15} />
+                          {FOUND_UI_COPY.addJob}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        data-testid="found-view-inspection"
+                        onClick={() => setViewing(first)}
+                        className={`px-3 py-1.5 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5 ${BTN_SECONDARY}`}
+                      >
+                        <Sym name="visibility" size={15} />
+                        {FOUND_UI_COPY.viewInspection}
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-            </li>
-            ),
-          )}
+                {open ? (
+                  <ul className="p-3 flex flex-col gap-3" data-testid="found-group-jobs">
+                    {g.items.map((item) =>
+                      item.source === "planned" ? (
+                        <PlannedJobCard
+                          key={item.lineId}
+                          item={item}
+                          onEditQuote={canEdit && onAddToInspection ? () => onAddToInspection(editQuoteRequest(item)) : undefined}
+                          canEdit={canEdit}
+                          phone={phone}
+                          onLogItNow={onLogItNow}
+                          onNotNeeded={() => setConfirm(item)}
+                        />
+                      ) : (
+                        <li
+                          key={item.lineId}
+                          className="rounded-lg border border-[#e3e1ec] dark:border-[#32333e] p-3 flex flex-col gap-2"
+                          data-testid="found-card"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Sym name="build" size={18} className="text-[#47464c] dark:text-[#c9c5cd]" />
+                            <h4 className="text-[14px] font-semibold text-[#1a1b22] dark:text-[#e4e1ec] truncate" data-testid="found-card-title">
+                              {state.kind === "ok" && state.partsGapsEnabled ? foundTitle(item) : item.jobName}
+                            </h4>
+                          </div>
+                          {item.note ? (
+                            <p className="text-[13px] leading-snug italic text-[#47464c] dark:text-[#c9c5cd]" data-testid="found-card-note">
+                              {item.note}
+                            </p>
+                          ) : null}
+                          <QuoteLine
+                            amount={item.quoteAmount ?? null}
+                            onEdit={canEdit && onAddToInspection ? () => onAddToInspection(editQuoteRequest(item)) : undefined}
+                          />
+                          {state.kind === "ok" && state.partsGapsEnabled ? <FoundPartsToBuy item={item} /> : null}
+                          {canEdit ? (
+                            <div className={`flex gap-2 pt-1 ${phone ? "flex-col" : "items-center"}`}>
+                              {onLogItNow ? <PendingDoneToggle phone={phone} onDone={() => onLogItNow(item)} /> : null}
+                              <button
+                                type="button"
+                                data-testid="found-not-needed"
+                                onClick={() => setConfirm(item)}
+                                className={`px-3.5 py-2 rounded-lg text-[12px] font-medium inline-flex items-center justify-center gap-1.5 ${phone ? "w-full h-12 text-[15px]" : ""} ${BTN_SECONDARY}`}
+                              >
+                                {phone ? <Sym name="do_not_disturb_on" size={18} /> : null}
+                                {FOUND_UI_COPY.notNeeded}
+                              </button>
+                            </div>
+                          ) : null}
+                        </li>
+                      ),
+                    )}
+                  </ul>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -555,6 +605,29 @@ function editQuoteRequest(item: FoundWorkItem): AddToInspectionRequest {
     inspectionLine: [item.jobName, inspectionLineOf(item)].filter(Boolean).join(" · "),
     editLine: item,
   };
+}
+
+/**
+ * LC-18: one block per inspection (its found jobs) and one "Planned by you" block per car, in the list's order
+ * (oldest first).
+ */
+export function groupFoundItems(
+  items: FoundWorkItem[],
+): Array<{ key: string; kind: "inspection" | "planned"; items: FoundWorkItem[] }> {
+  const out: Array<{ key: string; kind: "inspection" | "planned"; items: FoundWorkItem[] }> = [];
+  const byKey = new Map<string, (typeof out)[number]>();
+  for (const item of items) {
+    const kind = item.source === "planned" ? "planned" : "inspection";
+    const key = kind === "planned" ? `planned:${item.vehicleId}` : `insp:${item.workOrderId}`;
+    let g = byKey.get(key);
+    if (!g) {
+      g = { key, kind, items: [] };
+      byKey.set(key, g);
+      out.push(g);
+    }
+    g.items.push(item);
+  }
+  return out;
 }
 
 /** What a host needs to open Log service in add-to-inspection mode (LC-14). */

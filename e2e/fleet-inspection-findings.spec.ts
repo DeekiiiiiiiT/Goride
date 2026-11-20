@@ -196,8 +196,19 @@ async function openFoundSection(page: Page) {
   const section = page.getByTestId("found-by-inspection");
   await expect(section).toBeVisible({ timeout: 30_000 });
   await expect(section.getByTestId("found-loading")).toHaveCount(0, { timeout: 30_000 });
+  await openFoundBlocks(section);
   return section;
 }
+
+/** LC-18: the Not done yet list is folded into one block per inspection — open them all. */
+async function openFoundBlocks(section: import("@playwright/test").Locator) {
+  const toggles = section.getByTestId("found-group-toggle");
+  const n = await toggles.count();
+  for (let i = 0; i < n; i += 1) {
+    if ((await toggles.nth(i).getAttribute("aria-expanded")) === "false") await toggles.nth(i).click();
+  }
+}
+
 
 const dialogShot = (page: Page, id: string) =>
   page.getByRole("dialog").first().screenshot({ path: join(shotsDir, `live-${id}.png`) });
@@ -352,12 +363,14 @@ test.describe("Fleet inspection findings", () => {
     const section = page.getByTestId("found-by-inspection");
     await expect(section).toBeVisible({ timeout: 30_000 });
     await expect(section.getByTestId("found-loading")).toHaveCount(0, { timeout: 30_000 });
-    await expect(section.getByTestId("found-card-car").first()).toContainText(MD_DISC_PLATE);
+    await expect(section.getByTestId("found-group-summary").first()).toContainText(MD_DISC_PLATE);
+    await openFoundBlocks(section);
     await expect(section.getByTestId("found-card")).toHaveCount(2);
     await expect(section.getByTestId("found-by-inspection-count")).toHaveText("2");
     const rotorCard = section.getByTestId("found-card").filter({ hasText: rotor.name });
     await expect(rotorCard).toContainText("Front rotors worn, replace within 2 weeks");
-    await expect(rotorCard.getByTestId("found-card-line")).toContainText(`${insp.name} at Northside Auto`);
+    await expect(section.getByTestId("found-group-title").first()).toContainText(`${insp.name} · `);
+    await expect(section.getByTestId("found-group-title").first()).toContainText("Northside Auto");
     await expect(rotorCard.getByTestId("found-log-it-now")).toBeVisible();
     await expect(rotorCard.getByTestId("found-not-needed")).toBeVisible();
     await section.screenshot({ path: join(shotsDir, "live-07-drawer.png") });

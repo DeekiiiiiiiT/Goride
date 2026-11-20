@@ -301,6 +301,16 @@ async function openDominionPendingParts(browser: Browser) {
   return { ctx, dpage };
 }
 
+
+/** LC-18: the Not done yet list is folded into one block per inspection — open them all. */
+async function openFoundBlocks(section: import("@playwright/test").Locator) {
+  const toggles = section.getByTestId("found-group-toggle");
+  const n = await toggles.count();
+  for (let i = 0; i < n; i += 1) {
+    if ((await toggles.nth(i).getAttribute("aria-expanded")) === "false") await toggles.nth(i).click();
+  }
+}
+
 const carRow = (page: Page) => page.getByRole("row").filter({ hasText: MD_DISC_PLATE }).first();
 
 // ── Shared state between the serial tests ──
@@ -542,6 +552,7 @@ test.describe("Log service — Roam shows the parts that fit (Slice C)", () => {
     await expect(page.getByTestId("mm-due-drawer")).toBeVisible({ timeout: 30_000 });
     const section = page.getByTestId("found-by-inspection");
     await expect(section.getByTestId("found-loading")).toHaveCount(0, { timeout: 30_000 });
+    await openFoundBlocks(section);
     const pcard = section.locator('[data-testid="found-card"][data-source="planned"]');
     await expect(pcard).toHaveCount(1);
     await expect(pcard).toContainText("Oxygen sensor · Rear (Oxygen sensor No.2)");

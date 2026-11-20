@@ -198,8 +198,19 @@ async function openNotDoneYetTab(page: Page) {
   const section = tabSection(page);
   await expect(section).toBeVisible({ timeout: 30_000 });
   await expect(section.getByTestId("found-loading")).toHaveCount(0, { timeout: 30_000 });
+  await openFoundBlocks(section);
   return section;
 }
+
+/** LC-18: the Not done yet list is folded into one block per inspection — open them all. */
+async function openFoundBlocks(section: import("@playwright/test").Locator) {
+  const toggles = section.getByTestId("found-group-toggle");
+  const n = await toggles.count();
+  for (let i = 0; i < n; i += 1) {
+    if ((await toggles.nth(i).getAttribute("aria-expanded")) === "false") await toggles.nth(i).click();
+  }
+}
+
 
 const foundLines = () =>
   sql(`SELECT l.id || '|' || l.component_id || '|' || l.line_total::numeric::int || '|' || coalesce(l.values_json->>'quote_amount', '') || '|'
@@ -308,20 +319,21 @@ test.describe("Inspection Not done yet — quotes, Add a job, Done (LC-10 … LC
     await expect(page.locator('[data-maintenance-tab="work-orders"], [data-maintenance-tab="inspections"]')).toHaveCount(0);
     const card = section.getByTestId("found-card").filter({ hasText: o2.name });
     await expect(card.getByTestId("found-card-title")).toHaveText(`${o2.name} · Front (Air fuel ratio sensor)`);
-    await expect(card.getByTestId("found-card-car")).toContainText(MD_DISC_PLATE);
+    const block = section.getByTestId("found-group").filter({ hasText: o2.name });
+    await expect(block.getByTestId("found-group-summary")).toContainText(MD_DISC_PLATE);
     await expect(card.getByTestId("found-card-quote")).toContainText("Garage quote J$ 12,000");
     await expect(section.getByTestId("found-quoted-total")).toHaveText("J$ 12,000 quoted, waiting");
     await expect(card.getByTestId("parts-fit-number")).toHaveText(FRONT.number, { timeout: 30_000 });
-    await expect(card.getByTestId("found-from-inspection")).toContainText(insp.name);
+    await expect(block.getByTestId("found-group-title")).toContainText(insp.name);
     await expect(card.getByTestId("found-status-pending")).toHaveAttribute("aria-checked", "true");
-    await card.getByTestId("found-view-inspection").click();
+    await block.getByTestId("found-view-inspection").click();
     await expect(page.getByRole("dialog").getByText("Service details")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("service-details-add-found")).toBeVisible({ timeout: 30_000 });
   });
 
   test("N3 — Add a job to the saved inspection: Log service in add mode, Also do, quotes → two J$ 0 found lines", async ({ page }) => {
     const section = await openNotDoneYetTab(page);
-    await section.getByTestId("found-card").filter({ hasText: o2.name }).getByTestId("found-add-to-inspection").click();
+    await section.getByTestId("found-group").filter({ hasText: o2.name }).getByTestId("found-add-to-inspection").click();
     await expect(page.getByTestId("add-to-inspection-banner")).toContainText(insp.name, { timeout: 30_000 });
     // Starts on Work done: same search as Log service.
     const search = page.getByTestId("log-service-job-search").getByRole("searchbox");
@@ -415,6 +427,9 @@ test.describe("Inspection Not done yet — quotes, Add a job, Done (LC-10 … LC
                      FROM public.maintenance_work_order_lines WHERE id = '${o2Line.id}'`);
     expect(row).toBe("15000|0|15000");
     expect(sql(`SELECT total_cost::numeric::int FROM public.maintenance_work_orders WHERE id = '${inspectionWo}'`)).toBe("8000");
+    await expect(tabSection(page).getByTestId("found-groups")).toBeVisible({ timeout: 30_000 });
+    await page.waitForTimeout(1000);
+    await openFoundBlocks(tabSection(page));
     await expect(tabSection(page).getByTestId("found-card").filter({ hasText: o2.name }).getByTestId("found-card-quote"))
       .toContainText("J$ 15,000", { timeout: 30_000 });
   });
