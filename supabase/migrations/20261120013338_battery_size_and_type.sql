@@ -140,3 +140,9 @@ BEGIN
   END IF;
 END;
 $check$;
+
+-- e) helpers are internal: no anon / signed-in calls (called inside service-role / definer functions only)
+REVOKE ALL ON FUNCTION public.battery_case_key(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.battery_case_key(text) TO service_role;
+REVOKE ALL ON FUNCTION public.universal_part_extra_from_input(jsonb, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.universal_part_extra_from_input(jsonb, text) TO service_role;
