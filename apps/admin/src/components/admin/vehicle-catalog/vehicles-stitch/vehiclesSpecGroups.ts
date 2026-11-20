@@ -47,7 +47,7 @@ export const VEHICLE_SPEC_GROUP_DEFS: SpecGroupDef[] = [
     id: "battery",
     title: "Battery",
     icon: "battery_charging_full",
-    keys: ["battery_jis"],
+    keys: ["battery_jis", "battery_type"],
   },
   {
     id: "brakes",

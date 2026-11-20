@@ -313,6 +313,7 @@ export async function saveSelfServePart(draft: AddPartsDraft) {
   if (draft.fitMode === "spec") {
     body.specKey = draft.specKey || draft.partType?.specFields?.[0]?.specKey;
     body.specValue = draft.specValue || Object.values(draft.specValues)[0];
+    if (body.specKey === "battery_jis" && draft.batteryType) body.batteryType = draft.batteryType;
   }
   if (draft.factoryNumbers.length) body.factoryNumbers = draft.factoryNumbers;
   return catalogPost<Record<string, unknown>>("parts/add", body);

@@ -37,7 +37,7 @@
    2. Separate, later: the Add parts UX redesign (memory `add-parts-ux-redesign-needed`), and the Roomy wheel bearing
       part in Dominion (an "Ask Roam" request is already pending).
 
-## 0b. LC-17 Add / Edit quote on a waiting job (BUILT 20 Nov, local, NOT live yet)
+## 0b. LC-17 Add / Edit quote on a waiting job — LIVE 20 Nov (main 44a785f2; migration run by owner; fleet-ops/fleet-core deployed; worktree cleaned). Not yet re-checked live via SQL (MCP was down): confirm fleet_set_found_quote exists
 
 - **Migration `20261120000402_found_job_edit_quote.sql`:**
   - The line lock (`fleet.guard_completed_maintenance_wo_line`) gets ONE more allowed change: on an OPEN found line,
@@ -59,6 +59,45 @@
      `api.ts`, `LogMaintenanceServiceDialog.tsx`, `FoundByInspection(.test).tsx`, `addToInspection.tsx`,
      `FleetMaintenanceHub.tsx`, e2e spec).
   3. Remove the junctions before removing the worktree.
+
+## 0c. LC-18 folding blocks — BUILT 20 Nov, release copy ready (commits cf5945a8 + 3376aa8d in worktree
+`C:/Roam/Goride-golive`, branch `golive-found-blocks`), waiting for the owner's "release it"
+
+## 0d. LC-19 Batteries: right size, right type — BUILT 20 Nov (local). Migration `20261120013338_battery_size_and_type.sql` + `supabase/tests/battery_size_and_type_checks.sql` (B1–B4 pass locally; in CI). Dominion: `Step2BySpec` Battery type (+ test), `addPartsApi` sends `batteryType`, car spec group shows `battery_type`. NEXT: owner runs the migration + logbook line; release with LC-18; then Dominion data: Roomy `battery_jis`=B24L + `battery_type` (EFB if Eco Idle), add real batteries by size
+
+**What exists:**
+- The car spec `battery_jis` ("Battery size") in Dominion's car spec sheet.
+- A Battery part type whose by-size field is `battery_jis` ("JIS size", example 46B24L).
+- `universal_parts_for_variant` matches a by-size part to a car on EXACT text (`lower(btrim())`). Wipers already have
+  one extra rule (connector in `universal_part.extra`).
+
+**Gaps (owner's question: can the app log "2019 Roomy → JIS B24L / N-55, EFB if Eco Idle"):**
+1. No battery TYPE (Standard / EFB / AGM) on the car or on the battery part, so a standard battery is offered to a
+   stop-start car.
+2. Sizes only match on exact text: "B24L" ≠ "46B24L" ≠ "N-55".
+3. There is nowhere to say the car has Eco Idle. The battery type on the car covers it: EFB = stop-start.
+
+**Fix:**
+- **DB migration:**
+  - a) new car spec key `battery_type` (Standard / EFB / AGM; not a by-size key, so no section of its own);
+  - b) `battery_case_key(text)`: "46B24L" / "55B24L" / "B24L" → `B24L`; idling-stop codes K/M/N/Q/S/T-nn(R) → the JIS
+    case (K=B19, M=B20, N=B24, Q=D23, S=D26, T=D31; R suffix = right terminal, else left);
+  - c) `universal_parts_for_variant`: for `battery_jis`, match on `battery_case_key` both sides. Type rule from the
+    car's `battery_type`: Standard / none → any part; EFB → EFB or AGM; AGM → AGM only. A part with no type isn't
+    offered to an EFB / AGM car;
+  - d) the by-size save stores `extra.battery_type` from the form (live `save_self_serve_part_in_batch` patched in
+    place, the same way as `20261119164659`).
+- **Dominion Add a part (by size):**
+  - battery parts get a **Battery type** choice (sent as `batteryType`);
+  - the wiper-only boxes (Connector, Which blade) show only for wipers.
+- **Dominion car spec sheet:** `battery_type` shown in the Battery group.
+- **Fleet:** nothing new — Parts that fit already lists by-size parts, so the right batteries appear on the Battery job.
+- **Done-tests:**
+  - B1: Roomy `battery_jis` = B24L + `battery_type` = EFB → an EFB battery entered as "N-55" fits; a Standard B24L
+    doesn't; an AGM B24L does.
+  - B2: a car with no type → all B24L batteries.
+  - B3: a B20L battery never fits a B24L car.
+  - B4: Dominion saves `extra.battery_type`.
 
 ## 1. What is live (short)
 
