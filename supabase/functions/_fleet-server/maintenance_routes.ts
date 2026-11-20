@@ -4050,6 +4050,71 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
     },
   );
 
+  /**
+   * LC-17: Add quote / Edit quote on a job that's still Not done yet (fleet_set_found_quote: only the found line's
+   * quote + note change; the saved service and its total never do).
+   */
+  route.put(
+    "/maintenance-found-work/:lineId/quote",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        if (!(await isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId))) {
+          return c.json({ code: "inspection_findings_off" }, 404);
+        }
+        const lineId = c.req.param("lineId");
+        if (!isUuid(lineId)) return c.json({ error: "Invalid id" }, 400);
+        const actorId = rbacUserId(c);
+        if (!actorId) return c.json({ code: "actor_required", error: "Sign in again." }, 401);
+        const body = (await c.req.json()) as Record<string, unknown>;
+
+        const { data: line, error: lineErr } = await supabase
+          .from("maintenance_work_order_lines")
+          .select("id, work_order_id, maintenance_work_orders!inner(vehicle_id, organization_id)")
+          .eq("id", lineId)
+          .eq("maintenance_work_orders.organization_id", orgId)
+          .maybeSingle();
+        if (lineErr) throw lineErr;
+        if (!line) return c.json({ code: "found_line_not_found", error: "That job was not found." }, 404);
+        const wo = (line as unknown as { maintenance_work_orders: { vehicle_id: string } }).maintenance_work_orders;
+        const access = await verifiedCarForVehicle(c, supabase, String(wo?.vehicle_id ?? ""));
+        if (access.status === 404) return c.json({ error: "Not found" }, 404);
+        if (access.status === 403) return c.json({ error: "Forbidden" }, 403);
+
+        const quoteRaw = body.quote ?? body.quoteAmount ?? body.quote_amount;
+        const quote = quoteRaw == null || quoteRaw === "" ? null : Number(quoteRaw);
+        if (quote != null && (!Number.isFinite(quote) || quote < 0)) {
+          return c.json({ code: "quote_invalid", error: "The quote must be a price from 0 up." }, 400);
+        }
+        const detailRaw = body.quoteDetail ?? body.quote_detail;
+        const quoteDetail = detailRaw && typeof detailRaw === "object" && !Array.isArray(detailRaw) ? detailRaw : null;
+        const note = body.note != null ? String(body.note) : null;
+
+        const { data, error } = await supabase.rpc("fleet_set_found_quote", {
+          p_organization_id: orgId,
+          p_actor_id: actorId,
+          p_line_id: lineId,
+          p_quote: quote,
+          p_quote_detail: quoteDetail,
+          p_note: note,
+        });
+        if (error) {
+          const mapped = mapFleetAddFoundJobError(error.message ?? String(error));
+          if (mapped) return c.json({ code: mapped.code, error: mapped.error }, mapped.status);
+          throw error;
+        }
+        const row = (data ?? {}) as Record<string, unknown>;
+        return c.json({ lineId, quoteAmount: row.quoteAmount ?? null });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
   // -------------------------------------------------------------------------
   // Tenant — work orders (job cards)
   // -------------------------------------------------------------------------

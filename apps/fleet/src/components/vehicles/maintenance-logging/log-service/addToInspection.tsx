@@ -12,6 +12,12 @@ export const ADD_TO_INSPECTION_COPY = {
   button: "Add a job",
   buttonLong: "Add a job to this inspection",
   bannerLabel: "Adding to this inspection",
+  /** LC-17 */
+  bannerEditLabel: "Garage's quote for this job",
+  saveQuote: "Save quote",
+  quoteSaved: (job: string) => `Quote saved for ${job}`,
+  addQuote: "Add quote",
+  editQuote: "Edit quote",
   bannerHelper: "These are jobs it found that aren't done yet. They're added at J$ 0 — what you paid doesn't change.",
   reviewTitle: "Jobs to add to this inspection",
   reviewHelper: "Each goes on the car's Not done yet list with its parts to buy. Log it when it's done.",

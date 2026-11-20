@@ -3527,6 +3527,16 @@ export const api = {
       return response.json();
   },
 
+  /** LC-17: Add quote / Edit quote on a job that's still Not done yet (the quote + note only). */
+  async setFoundQuote(lineId: string, body: { quote: number | null; quoteDetail: unknown; note: string | null }) {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fleetOps}/maintenance-found-work/${encodeURIComponent(lineId)}/quote`,
+        { method: "PUT", headers: await getHeaders(), body: JSON.stringify(body) },
+      );
+      if (!response.ok) throw await maintenanceSaveErrorFrom(response, "Could not save the quote");
+      return response.json() as Promise<{ lineId: string; quoteAmount: number | null }>;
+  },
+
   /** LC-14: add a job an inspection found to that saved inspection (J$ 0, not done yet). */
   async addFoundJobToInspection(workOrderId: string, body: { jobId: string; places: string[]; note: string | null; quote?: number | null; quoteDetail?: unknown }) {
       const response = await fetchWithRetry(

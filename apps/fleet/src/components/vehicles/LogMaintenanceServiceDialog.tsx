@@ -202,6 +202,8 @@ export interface LogMaintenanceServiceDialogProps {
 
 export type AddToInspectionTarget = {
   workOrderId: string;
+  /** LC-17: Add / Edit quote on this one waiting job (opens straight on its form, saves only its quote). */
+  editLine?: FoundWorkItem | null;
   /** "Inspection / diagnostic fee · 22 Aug 2026 · Whol-Hearted Car Service Ltd" */
   inspectionLine: string;
 };
@@ -1026,7 +1028,7 @@ export function LogMaintenanceServiceDialog({
 
   /** The found job a card closes: the one Done was pressed on, or one ticked under "Also done on this visit?". */
   const foundFor = (catId: string): FoundWorkItem | null =>
-    [fromFoundWork, ...extraFound].find((f): f is FoundWorkItem => Boolean(f) && f!.jobId === catId) ?? null;
+    [fromFoundWork, ...extraFound, addToInspection?.editLine ?? null].find((f): f is FoundWorkItem => Boolean(f) && f!.jobId === catId) ?? null;
   const openCategoryForm = (
     cat: MaintenanceServiceCategory,
     systemOverride?: MaintenanceServiceCategory | null,
@@ -1054,6 +1056,10 @@ export function LogMaintenanceServiceDialog({
             ...(found?.quoteAmount && isServiceJob(cat) ? { service_amount: found.quoteAmount } : {}),
             ...(snap?.values ?? {}),
             ...(quoteLine?.notes ? { notes: quoteLine.notes } : {}),
+            // LC-17 Edit quote: the waiting job's own note comes back too.
+            ...(addToInspection?.editLine && found?.lineId === addToInspection.editLine.lineId && found.note
+              ? { notes: found.note }
+              : {}),
           },
     );
     setLineExtras({
@@ -1882,7 +1888,7 @@ export function LogMaintenanceServiceDialog({
     setSelectedCategoryIds((prev) => (prev.includes(rel.id) ? prev : [...prev, rel.id]));
   };
   const alsoDoSlotFor = (cat: MaintenanceServiceCategory) => {
-    if (step !== "lineDetails" || lineDetailCategories.length === 0) return undefined;
+    if (step !== "lineDetails" || lineDetailCategories.length === 0 || editQuoteLine) return undefined;
     const recs = (alsoDoByJob.get(cat.id) ?? []).filter(
       (r) => !lineDetailCategories.some((c) => c.id === r.categoryId) && catalogById.has(r.categoryId),
     );
@@ -1904,7 +1910,38 @@ export function LogMaintenanceServiceDialog({
     );
   };
   const [addingFound, setAddingFound] = useState(false);
+  const editQuoteLine = addToInspection?.editLine ?? null;
+  // LC-17: open straight on the job's form once the catalogue has it.
+  useEffect(() => {
+    if (!open || !editQuoteLine || step !== "whatWasDone" || lines.length > 0) return;
+    const cat = catalogById.get(editQuoteLine.jobId);
+    if (!cat) return;
+    setLogMode("quick_job");
+    setSelectedCategoryIds([cat.id]);
+    enterLineDetailsForCategories([cat], resolveSystemForComponent(cat));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editQuoteLine, step, lines.length, catalogById]);
+  const saveEditedQuote = async () => {
+    const l = lines.find((x) => !x.recommended && x.categoryId === editQuoteLine?.jobId);
+    if (!editQuoteLine || !l || addingFound) return;
+    setAddingFound(true);
+    try {
+      await api.setFoundQuote(editQuoteLine.lineId, {
+        quote: lineTotalPreview(l) > 0 ? lineTotalPreview(l) : null,
+        quoteDetail: quoteSnapshotOf(l),
+        note: typeof l.notes === "string" ? l.notes : null,
+      });
+      toast.success(ADD_TO_INSPECTION_COPY.quoteSaved(editQuoteLine.jobName));
+      onSaved?.();
+      onOpenChange(false);
+    } catch (e) {
+      toast.error(addFoundErrorText(e));
+    } finally {
+      setAddingFound(false);
+    }
+  };
   const addJobsToInspection = async () => {
+    if (editQuoteLine) return saveEditedQuote();
     if (!addToInspection || addingFound) return;
     const todo = lines.filter((l) => !l.recommended && l.categoryId);
     if (!todo.length) return;
@@ -2473,7 +2510,7 @@ export function LogMaintenanceServiceDialog({
                 ) : null}
                 {step === "review" ? (
                   <>
-                    {!initialLog?.id ? (
+                    {!initialLog?.id && !editQuoteLine ? (
                       <Button
                         type="button"
                         variant="outline"
@@ -2489,7 +2526,11 @@ export function LogMaintenanceServiceDialog({
                     ) : null}
                     {addMode ? (
                       <LogServiceWizardContinueButton
-                        label={ADD_TO_INSPECTION_COPY.confirm(lines.filter((l) => !l.recommended).length)}
+                        label={
+                          editQuoteLine
+                            ? ADD_TO_INSPECTION_COPY.saveQuote
+                            : ADD_TO_INSPECTION_COPY.confirm(lines.filter((l) => !l.recommended).length)
+                        }
                         disabled={addingFound || lines.length < 1}
                         loading={addingFound}
                         onClick={() => void addJobsToInspection()}
@@ -2523,7 +2564,7 @@ export function LogMaintenanceServiceDialog({
               </span>
               <div className="flex flex-col min-w-0">
                 <span className="text-[11px] font-semibold uppercase tracking-wide text-[#4338ca] dark:text-[#c7d2fe]">
-                  {ADD_TO_INSPECTION_COPY.bannerLabel}
+                  {editQuoteLine ? ADD_TO_INSPECTION_COPY.bannerEditLabel : ADD_TO_INSPECTION_COPY.bannerLabel}
                 </span>
                 <span className="text-[13px] leading-snug text-[#1e1b4b] dark:text-[#e0e7ff]">{addToInspection.inspectionLine}</span>
                 <span className="text-[12px] text-[#312e81]/80 dark:text-[#c7d2fe]/80">{ADD_TO_INSPECTION_COPY.bannerHelper}</span>
@@ -2692,7 +2733,7 @@ export function LogMaintenanceServiceDialog({
               mechanicNote={formMeta.notes}
               onMechanicNoteChange={(notes) => setFormMeta((p) => ({ ...p, notes }))}
               onAddAnotherJob={
-                !initialLog?.id
+                !initialLog?.id && !editQuoteLine
                   ? () => {
                       setActiveCategory(null);
                       setLineDetailCategories([]);

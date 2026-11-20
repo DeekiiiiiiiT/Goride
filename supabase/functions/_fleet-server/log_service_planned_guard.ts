@@ -46,6 +46,8 @@ export function mapFleetAddFoundJobError(message: string): { status: number; cod
     return { status: 409, code, error: "This service has no inspection, so it can't hold jobs it found." };
   }
   if (code === "quote_invalid") return { status: 400, code, error: "The quote must be a price from 0 up." };
+  if (code === "found_line_not_found") return { status: 404, code, error: "That job was not found." };
+  if (code === "found_line_not_open") return { status: 409, code, error: "This job is already done or closed, so its quote can't change." };
   if (code === "job_is_inspection") {
     return { status: 400, code, error: "Pick the job the inspection found, not an inspection." };
   }

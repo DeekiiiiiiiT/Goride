@@ -513,3 +513,26 @@ describe("LC-15 quote + Pending / Done", () => {
     expect(screen.queryByTestId("found-quoted-total")).toBeNull();
   });
 });
+
+describe("LC-17 Add quote / Edit quote", () => {
+  it("no quote yet: Add quote; with a quote: Edit quote — both open the job's quote form for that line", async () => {
+    const quoted: FoundWorkItem = { ...shock, quoteAmount: 26500 };
+    apiMock.listFoundWork.mockResolvedValue({ items: [rotor, quoted] });
+    const onAddToInspection = vi.fn();
+    render(<FoundByInspectionSection canEdit onAddToInspection={onAddToInspection} />);
+    await waitFor(() => expect(screen.getAllByTestId("found-edit-quote")).toHaveLength(2));
+    const [addBtn, editBtn] = screen.getAllByTestId("found-edit-quote");
+    expect(addBtn.textContent).toContain("Add quote");
+    expect(screen.getByText("No garage quote yet")).toBeTruthy();
+    expect(editBtn.textContent).toContain("Edit quote");
+    fireEvent.click(editBtn);
+    expect(onAddToInspection).toHaveBeenCalledWith(expect.objectContaining({ workOrderId: "wo-1", editLine: quoted }));
+  });
+
+  it("view only: no quote buttons", async () => {
+    apiMock.listFoundWork.mockResolvedValue({ items: [{ ...rotor, quoteAmount: 5000 }] });
+    render(<FoundByInspectionSection canEdit={false} onAddToInspection={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId("found-card-quote")).toBeTruthy());
+    expect(screen.queryByTestId("found-edit-quote")).toBeNull();
+  });
+});

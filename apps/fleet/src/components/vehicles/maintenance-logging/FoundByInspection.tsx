@@ -61,6 +61,9 @@ export const FOUND_UI_COPY = {
   pending: "Pending",
   quote: (amount: number) => `Garage quote J$ ${amount.toLocaleString("en-US", { maximumFractionDigits: 2 })}`,
   notPaid: "not paid",
+  noQuote: "No garage quote yet",
+  addQuote: "Add quote",
+  editQuote: "Edit quote",
   quotedTotal: (amount: number) => `J$ ${amount.toLocaleString("en-US", { maximumFractionDigits: 2 })} quoted, waiting`,
   addJobHint: "Add a job to this inspection",
   /** LC-13 */
@@ -355,6 +358,7 @@ export function FoundByInspectionSection({
                 key={item.lineId}
                 item={item}
                 carName={carOf(item)}
+                onEditQuote={canEdit && onAddToInspection ? () => onAddToInspection(editQuoteRequest(item)) : undefined}
                 canEdit={canEdit}
                 phone={phone}
                 onLogItNow={onLogItNow}
@@ -432,7 +436,10 @@ export function FoundByInspectionSection({
                   </div>
                 ) : null}
               </div>
-              <QuoteLine amount={item.quoteAmount ?? null} />
+              <QuoteLine
+                amount={item.quoteAmount ?? null}
+                onEdit={canEdit && onAddToInspection ? () => onAddToInspection(editQuoteRequest(item)) : undefined}
+              />
               {state.kind === "ok" && state.partsGapsEnabled ? <FoundPartsToBuy item={item} /> : null}
               {canEdit ? (
                 <div className={`flex gap-2 pt-1 ${phone ? "flex-col" : "items-center"}`}>
@@ -511,19 +518,53 @@ function PendingDoneToggle({ phone, onDone }: { phone: boolean; onDone: () => vo
 }
 
 /** LC-15 "Garage quote J$ 12,000 · not paid" (never part of any total). */
-function QuoteLine({ amount }: { amount: number | null }) {
-  if (amount == null || !(amount > 0)) return null;
+function QuoteLine({ amount, onEdit }: { amount: number | null; onEdit?: () => void }) {
+  const has = amount != null && amount > 0;
+  if (!has && !onEdit) return null;
   return (
-    <div className="flex items-center gap-1.5 text-[13px] text-[#1a1b22] dark:text-[#e4e1ec]" data-testid="found-card-quote">
+    <div className="flex flex-wrap items-center gap-1.5 text-[13px] text-[#1a1b22] dark:text-[#e4e1ec]" data-testid="found-card-quote-row">
       <Sym name="request_quote" size={16} className="text-[#47464c] dark:text-[#c9c5cd]" />
-      <span className="font-medium tabular-nums">{FOUND_UI_COPY.quote(amount)}</span>
-      <span className="text-[#47464c] dark:text-[#c9c5cd]">· {FOUND_UI_COPY.notPaid}</span>
+      {has ? (
+        <span data-testid="found-card-quote">
+          <span className="font-medium tabular-nums">{FOUND_UI_COPY.quote(amount as number)}</span>
+          <span className="text-[#47464c] dark:text-[#c9c5cd]"> · {FOUND_UI_COPY.notPaid}</span>
+        </span>
+      ) : (
+        <span className="text-[#47464c] dark:text-[#c9c5cd]">{FOUND_UI_COPY.noQuote}</span>
+      )}
+      {onEdit ? (
+        <button
+          type="button"
+          data-testid="found-edit-quote"
+          onClick={onEdit}
+          className={`ml-1 px-2.5 py-1 rounded-lg text-[12px] font-medium inline-flex items-center gap-1 ${BTN_SECONDARY}`}
+        >
+          <Sym name={has ? "edit" : "add"} size={14} />
+          {has ? FOUND_UI_COPY.editQuote : FOUND_UI_COPY.addQuote}
+        </button>
+      ) : null}
     </div>
   );
 }
 
+/** LC-17: open Log service on this job's quote form. */
+function editQuoteRequest(item: FoundWorkItem): AddToInspectionRequest {
+  return {
+    vehicleId: item.vehicleId,
+    workOrderId: item.workOrderId,
+    inspectionLine: [item.jobName, inspectionLineOf(item)].filter(Boolean).join(" · "),
+    editLine: item,
+  };
+}
+
 /** What a host needs to open Log service in add-to-inspection mode (LC-14). */
-export type AddToInspectionRequest = { vehicleId: string; workOrderId: string; inspectionLine: string };
+export type AddToInspectionRequest = {
+  vehicleId: string;
+  workOrderId: string;
+  inspectionLine: string;
+  /** LC-17: Add / Edit quote on this waiting job. */
+  editLine?: FoundWorkItem | null;
+};
 
 /** "Inspection / diagnostic fee · 22 Aug 2026 · Whol-Hearted Car Service Ltd" (LC-14 window header). */
 export function inspectionLineOf(item: Pick<FoundWorkItem, "inspectionJobName" | "foundDate" | "garage">): string {
@@ -590,6 +631,7 @@ function FoundPartsToBuy({ item }: { item: FoundWorkItem }) {
 function PlannedJobCard({
   item,
   carName = null,
+  onEditQuote,
   canEdit,
   phone,
   onLogItNow,
@@ -597,6 +639,7 @@ function PlannedJobCard({
 }: {
   item: FoundWorkItem;
   carName?: string | null;
+  onEditQuote?: () => void;
   canEdit: boolean;
   phone: boolean;
   onLogItNow?: (item: FoundWorkItem) => void;
@@ -629,7 +672,7 @@ function PlannedJobCard({
         </span>
       </div>
       <CarLine name={carName} />
-      <QuoteLine amount={item.quoteAmount ?? null} />
+      <QuoteLine amount={item.quoteAmount ?? null} onEdit={onEditQuote} />
       {item.partId ? (
         <div className="p-2.5 bg-[#f4f2fd] dark:bg-[#1c1d26] rounded-lg flex items-center justify-between gap-2 flex-wrap" data-testid="planned-part">
           <div className="flex items-center gap-2 min-w-0">

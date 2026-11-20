@@ -400,7 +400,11 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const openAddToInspection = useCallback(
     (t: AddToInspectionRequest) => {
       setServicesDueView(null);
-      void prepareLogForVehicle(t.vehicleId, null, null, { workOrderId: t.workOrderId, inspectionLine: t.inspectionLine });
+      void prepareLogForVehicle(t.vehicleId, null, null, {
+        workOrderId: t.workOrderId,
+        inspectionLine: t.inspectionLine,
+        editLine: t.editLine ?? null,
+      });
     },
     [prepareLogForVehicle],
   );

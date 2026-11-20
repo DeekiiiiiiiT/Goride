@@ -396,4 +396,27 @@ test.describe("Inspection Not done yet — quotes, Add a job, Done (LC-10 … LC
     const after = foundLines();
     expect(after.map((f) => f.jobId)).toEqual([o2.id]);
   });
+
+  test("N5 — Edit quote on a waiting job: opens its form filled in; Save quote changes only the quote", async ({ page }) => {
+    const o2Line = foundLines().find((f) => f.jobId === o2.id)!;
+    const section = await openNotDoneYetTab(page);
+    const card = section.getByTestId("found-card").filter({ hasText: o2.name });
+    await expect(card.getByTestId("found-card-quote")).toContainText("J$ 12,000");
+    await card.getByTestId("found-edit-quote").click();
+    await expect(page.getByTestId("add-to-inspection-banner")).toContainText("Garage's quote for this job", { timeout: 30_000 });
+    await expect(page.getByTestId("log-service-job-header")).toContainText(o2.name, { timeout: 30_000 });
+    await expect(page.locator("#labor-rate")).toHaveValue("12000");
+    await expect(page.getByTestId("quote-mode-note")).toHaveValue("Front sensor slow");
+    await page.locator("#labor-rate").fill("15000");
+    await page.getByRole("button", { name: /^Save line/ }).first().click();
+    await page.getByRole("button", { name: /continue to review/i }).click();
+    await page.getByRole("button", { name: "Save quote" }).click();
+    await expect(page.getByText(`Quote saved for ${o2.name}`)).toBeVisible({ timeout: 30_000 });
+    const row = sql(`SELECT (values_json->>'quote_amount')::numeric::int || '|' || line_total::numeric::int || '|' || (values_json->'quote'->>'laborRate')
+                     FROM public.maintenance_work_order_lines WHERE id = '${o2Line.id}'`);
+    expect(row).toBe("15000|0|15000");
+    expect(sql(`SELECT total_cost::numeric::int FROM public.maintenance_work_orders WHERE id = '${inspectionWo}'`)).toBe("8000");
+    await expect(tabSection(page).getByTestId("found-card").filter({ hasText: o2.name }).getByTestId("found-card-quote"))
+      .toContainText("J$ 15,000", { timeout: 30_000 });
+  });
 });

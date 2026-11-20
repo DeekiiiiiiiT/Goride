@@ -1,7 +1,7 @@
 {
   "slug": "fleet-ops",
-  "generatedAt": "2026-11-19T23:20:09.593Z",
-  "routeCount": 160,
+  "generatedAt": "2026-11-20T00:14:47.779Z",
+  "routeCount": 161,
   "routes": [
     "DELETE ${ADMIN_CAT}/:id",
     "DELETE ${ADMIN}/:id",
@@ -162,6 +162,7 @@
     "PUT /admin/maintenance/jobs/:id/items/order",
     "PUT /admin/maintenance/section-groups/order",
     "PUT /admin/maintenance/sections/:id/members",
-    "PUT /admin/maintenance/sections/order"
+    "PUT /admin/maintenance/sections/order",
+    "PUT /maintenance-found-work/:lineId/quote"
   ]
 }

@@ -31,5 +31,7 @@ Deno.test("mapFleetAddFoundJobError (LC-14)", () => {
   assertEquals(mapFleetAddFoundJobError("job_is_inspection")?.status, 400);
   assertEquals(mapFleetAddFoundJobError("actor_required")?.status, 401);
   assertEquals(mapFleetAddFoundJobError("quote_invalid")?.status, 400);
+  assertEquals(mapFleetAddFoundJobError("found_line_not_found")?.status, 404);
+  assertEquals(mapFleetAddFoundJobError("found_line_not_open")?.status, 409);
   assertEquals(mapFleetAddFoundJobError("something else"), null);
 });

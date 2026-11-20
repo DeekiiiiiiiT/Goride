@@ -162,6 +162,40 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN v_caught := SQLERRM; END;
   IF v_caught IS DISTINCT FROM 'quote_invalid' THEN RAISE EXCEPTION 'proof 8b: got %', v_caught; END IF;
 
+  -- 9. LC-17 Edit quote on an open found job: quote + note change; nothing else may; total untouched.
+  v_json := public.fleet_set_found_quote(v_org, v_actor, v_line, 5000, '{"values":{"service_amount":5000}}'::jsonb, 'Garage called back');
+  IF (SELECT (values_json->>'quote_amount')::numeric FROM public.maintenance_work_order_lines WHERE id = v_line) <> 5000
+     OR (SELECT values_json->'quote'->'values'->>'service_amount' FROM public.maintenance_work_order_lines WHERE id = v_line) <> '5000'
+     OR (SELECT notes FROM public.maintenance_work_order_lines WHERE id = v_line) <> 'Garage called back'
+     OR (SELECT values_json->>'found_by_job' FROM public.maintenance_work_order_lines WHERE id = v_line) <> v_insp::text
+     OR (SELECT line_total FROM public.maintenance_work_order_lines WHERE id = v_line) <> 0 THEN
+    RAISE EXCEPTION 'proof 9: quote not edited as a quote only';
+  END IF;
+  IF (SELECT total_cost FROM public.maintenance_work_orders WHERE id = v_wo) <> v_total_before THEN
+    RAISE EXCEPTION 'proof 9: the edit changed the service total';
+  END IF;
+  -- any other change on the line is still refused
+  v_caught := NULL;
+  BEGIN UPDATE public.maintenance_work_order_lines SET line_total = 99 WHERE id = v_line;
+  EXCEPTION WHEN OTHERS THEN v_caught := SQLERRM; END;
+  IF v_caught IS DISTINCT FROM 'completed work order lines cannot be edited' THEN RAISE EXCEPTION 'proof 9b: got %', v_caught; END IF;
+  v_caught := NULL;
+  BEGIN UPDATE public.maintenance_work_order_lines SET values_json = values_json || '{"labor":1}'::jsonb WHERE id = v_line;
+  EXCEPTION WHEN OTHERS THEN v_caught := SQLERRM; END;
+  IF v_caught IS DISTINCT FROM 'completed work order lines cannot be edited' THEN RAISE EXCEPTION 'proof 9c: got %', v_caught; END IF;
+  -- other company / closed job refused
+  v_caught := NULL;
+  BEGIN PERFORM public.fleet_set_found_quote(v_org_other, v_actor, v_line, 1, NULL, NULL);
+  EXCEPTION WHEN OTHERS THEN v_caught := SQLERRM; END;
+  IF v_caught IS DISTINCT FROM 'found_line_not_found' THEN RAISE EXCEPTION 'proof 9d: got %', v_caught; END IF;
+  UPDATE public.maintenance_work_order_lines
+  SET declined = true, closed_at = now(), closed_reason = 'not_needed'
+  WHERE id = v_line;
+  v_caught := NULL;
+  BEGIN PERFORM public.fleet_set_found_quote(v_org, v_actor, v_line, 1, NULL, NULL);
+  EXCEPTION WHEN OTHERS THEN v_caught := SQLERRM; END;
+  IF v_caught IS DISTINCT FROM 'found_line_not_open' THEN RAISE EXCEPTION 'proof 9e: got %', v_caught; END IF;
+
   -- 6. Signed-in users can't call it directly (only the server can).
   IF has_function_privilege('authenticated', 'public.fleet_add_found_job(text, uuid, uuid, uuid, text[], text, numeric, jsonb)', 'EXECUTE') THEN
     RAISE EXCEPTION 'proof 6: authenticated can execute';
