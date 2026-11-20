@@ -11,6 +11,7 @@ import { getCatalogParts } from "./catalog_api.ts";
 import { mapPendingOnFileParts } from "./pending_parts_on_file.ts";
 import { notifyFleetsRequestOutcome } from "./catalog_research_notify.ts";
 import { findParts, fitLabelForPart, splitPlacesForFind } from "./parts_finder.ts";
+import { candidateItems, findPartMatches, universalTwinIds } from "./fleet_parts_match.ts";
 
 const PREFIX = "/make-server-37f42386/admin/pending-catalog/parts-queue";
 const FORBIDDEN_RESPONSE_KEYS = new Set([
@@ -234,7 +235,7 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
       let query = supabase
         .from("parts_sourcing_requests")
         .select(
-          "vehicle_catalog_id, maintenance_component_id, position_scheme, position_codes",
+          "vehicle_catalog_id, maintenance_component_id, position_scheme, position_codes, need_text",
         )
         .eq("kind", "add_part_info")
         .limit(1);
@@ -245,6 +246,7 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
         vehicle_catalog_id?: string | null;
         maintenance_component_id?: string | null;
         position_codes?: string[] | null;
+        need_text?: string | null;
       } | null;
       if (!first?.vehicle_catalog_id || !first.maintenance_component_id) {
         return c.json({ items: [] });
@@ -257,14 +259,23 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
         placeCodes: split.placeCodes,
         attachFitLabels: true,
       });
-      const items = found.plainSections.flatMap((section) => section.items).map((item) => stripPii({
-        partId: item.partId,
+      const listed = found.plainSections.flatMap((section) => section.items).map((item) => ({
+        partId: String(item.partId),
         name: item.name,
         brand: item.brand,
         number: item.number,
         place: item.listingPlace ?? item.position,
-        fitLabel: item.fitLabel ?? fitLabelForPart(item),
+        fitLabel: (item.fitLabel ?? fitLabelForPart(item)) as string,
       }));
+      // LC-21: a by-size part is listed by its universal_part id; the resolve needs its part_master twin.
+      const twins = await universalTwinIds(supabase, listed.filter((p) => p.fitLabel === "fits_by_size").map((p) => p.partId));
+      const items = candidateItems(
+        listed,
+        twins,
+        // What the user typed (Log service "Add … as the battery I used"): close matches of this job, even when
+        // not listed for this car — the part really in the car (Dominion staff only; never shown to customers).
+        first.need_text ? await findPartMatches(supabase, String(first.maintenance_component_id), String(first.need_text)) : [],
+      ).map((p) => stripPii(p));
       return c.json({ items });
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);

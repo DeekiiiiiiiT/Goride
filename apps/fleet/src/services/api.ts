@@ -3421,6 +3421,14 @@ export const api = {
       return response.json();
   },
 
+  /** LC-21: close matches for the part in your hand (one job, ≥4 letters, ≤5 hits). */
+  async partsMatch(vehicleId: string, componentId: string, q: string) {
+      const params = new URLSearchParams({ vehicleId, componentId, q });
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/match?${params}`, { headers: await getHeaders(null) });
+      if (!response.ok) throw new Error((await response.json().catch(() => ({})) as { error?: string }).error || "Could not search parts");
+      return response.json();
+  },
+
   async partsBrowse(variantId?: string) {
       const q = variantId ? `?variantId=${encodeURIComponent(variantId)}` : "";
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/browse${q}`, { headers: await getHeaders(null) });

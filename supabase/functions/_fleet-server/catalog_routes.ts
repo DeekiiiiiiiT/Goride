@@ -1,6 +1,7 @@
 /**
  * Catalog read API. Any signed-in app user. Reference data only.
  */
+import { autoResolveFromBatch } from "./catalog_request_autoresolve.ts";
 import type { Context } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { assertPlatformStaffResponse, hasPlatformOwnerAccess, requireAuth } from "./rbac_middleware.ts";
@@ -1309,6 +1310,8 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
       const { data, error } = await supabase.rpc("save_self_serve_part", { p_input: body });
       if (error) return c.json({ error: error.message }, 400);
       const payload = (data ?? {}) as Record<string, unknown>;
+      // LC-21c: close the Pending catalog requests this save answers.
+      payload.requestsClosed = await autoResolveFromBatch(supabase, String(payload.batchId ?? ""), String(body.actorId ?? "") || null);
       const chassisInput = body.listings ? { listings: body.listings } : { vehicleIds: body.vehicleIds ?? [] };
       const { data: chassisList, error: chassisErr } = await supabase.rpc("self_serve_save_chassis_list", { p_input: chassisInput });
       if (!chassisErr && chassisList) payload.chassisList = chassisList;
@@ -1329,7 +1332,9 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
       if (UUID_RE.test(actorId)) body.actorId = actorId;
       const { data, error } = await supabase.rpc("save_self_serve_catalog_page", { p_input: body });
       if (error) return c.json({ error: error.message }, 400);
-      return staffJson(c, (data ?? {}) as Record<string, unknown>);
+      const pagePayload = (data ?? {}) as Record<string, unknown>;
+      pagePayload.requestsClosed = await autoResolveFromBatch(supabase, String(pagePayload.batchId ?? ""), String(body.actorId ?? "") || null);
+      return staffJson(c, pagePayload);
     } catch (error) {
       return fail(c, error);
     }
@@ -1345,7 +1350,9 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
       if (UUID_RE.test(actorId)) body.actorId = actorId;
       const { data, error } = await supabase.rpc("save_self_serve_fluid_bundle", { p_input: body });
       if (error) return c.json({ error: error.message }, 400);
-      return staffJson(c, (data ?? {}) as Record<string, unknown>);
+      const fluidPayload = (data ?? {}) as Record<string, unknown>;
+      fluidPayload.requestsClosed = await autoResolveFromBatch(supabase, String(fluidPayload.batchId ?? ""), String(body.actorId ?? "") || null);
+      return staffJson(c, fluidPayload);
     } catch (error) {
       return fail(c, error);
     }

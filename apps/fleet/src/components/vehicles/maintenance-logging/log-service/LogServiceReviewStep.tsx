@@ -23,6 +23,9 @@ import { actionLabel } from "./systemSections";
 import { FOUND_COPY, isFoundLine, isFoundToday } from "./foundWork";
 import { linePositionsText } from "./positionChips";
 import { isUnknownPart, RoamLooksItUpLine } from "./unknownParts";
+import { partPickFromValues, shownItems } from "./partPick";
+import { PartPickLines } from "./PartPickLines";
+import { warrantyFromValues, warrantyText } from "./warrantyPeriod";
 import { FromInspectionChip, ReviewFoundGroup } from "./FoundWorkSection";
 
 export type LogServiceReviewStepProps = {
@@ -179,7 +182,8 @@ export function LogServiceReviewStep({
           {listLines.map((line, idx) => {
             const declined = Boolean(line.declined);
             const total = lineTotalPreview(line);
-            const items = line.items ?? [];
+            const pick = partPickFromValues(line.values, line);
+            const items = shownItems(line.items, pick);
             const charge = Math.round((total - lineItemsAmount(line)) * 100) / 100;
             const pill = actionLabel(line.action);
             const fit = lineFit?.(line) ?? { notUsual: false, highVoltage: false };
@@ -228,6 +232,12 @@ export function LogServiceReviewStep({
                   <p className={`${LT.bodySm} ${LS.muted} pl-9`} data-testid="review-where-on-car">
                     {LOG_SERVICE_COPY.whereOnCarReview}{" "}
                     <span className={`font-semibold ${LS.text}`}>{linePositionsText(line)}</span>
+                  </p>
+                ) : null}
+                {pick && !declined ? <PartPickLines pick={pick} className="pl-9" /> : null}
+                {!declined && line.warranty && warrantyFromValues(line.values) ? (
+                  <p className={`${LT.bodySm} ${LS.muted} pl-9`} data-testid="review-warranty">
+                    Warranty: <span className={`font-semibold ${LS.text}`}>{warrantyText(warrantyFromValues(line.values)!)}</span>
                   </p>
                 ) : null}
                 {declined ? (

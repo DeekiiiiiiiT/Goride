@@ -41,6 +41,8 @@ export type LogServiceLineDetailsStepProps = {
   warranty: boolean;
   complimentary: boolean;
   onWarrantyChange: (v: boolean) => void;
+  /** LC-22: the warranty period under the box ("1 year · until 19 Nov 2027" + Edit). */
+  warrantyNote?: React.ReactNode;
   onComplimentaryChange: (v: boolean) => void;
   partsLoading: boolean;
   compatibleParts: CompatiblePartsItem[];
@@ -540,6 +542,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
           </Label>
         </div>
       </div>
+      {warranty && props.warrantyNote ? props.warrantyNote : null}
 
       {props.partsPanel ? props.partsPanel : (
       <div className="space-y-2">

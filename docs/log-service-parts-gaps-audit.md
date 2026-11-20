@@ -60,8 +60,93 @@
      `FleetMaintenanceHub.tsx`, e2e spec).
   3. Remove the junctions before removing the worktree.
 
-## 0c. LC-18 folding blocks — BUILT 20 Nov, release copy ready (commits cf5945a8 + 3376aa8d in worktree
-`C:/Roam/Goride-golive`, branch `golive-found-blocks`), waiting for the owner's "release it"
+## 0c. 20 Nov release — LIVE (main 4fdc39a3; edge + Vercel deployed, function tests green; worktree removed)
+- LC-18 folding blocks per inspection (arrow at the row end).
+- LC-19 batteries (size + type). Owner ran migration `20261120013338` + the REVOKE/GRANT lines added after
+  (section e of the file) — "Success" 20 Nov. Not re-checked via MCP (was down).
+- Tier 5 parts say **"Fits by size"**; the "Skip — I don't know the part" button is gone.
+- **Car size line:** `/parts/find` returns `carSizes`; the panel shows "Toyota lists for your car · Battery size:
+  M-42 · EFB" above the parts ("Your car takes" when the source isn't the car maker's catalogue). Best-effort lookup,
+  never blocks the list.
+- **Roomy data (live):** variants `3cd9cbf3…` + `7c71d591…` battery_jis **M-42**, battery_type **EFB** — source Toyota
+  EPC on Amayama for frame M900A-0344862 (1611– drawing; N-55 is only the 2020/09+ car). By-size part: GS Yuasa
+  ER-M-55/55B20L (EFB) = bigger sister in the same B20L case. Toyota gives no battery part number (only the size).
+- Open: CI "migration parity" red = toll migration `20261117204932` live but not on main (not this work).
+
+## 0c2. LC-21 "I used a different …" (label search) — BUILT 20 Nov (local, not shipped; replaces LC-20 Brand/Part number boxes)
+- **Why (owner, Roomy battery run):** the battery in the car (Interstate PF-NS60L-5-INTL, Standard, B24L) isn't on the
+  Roomy's list. Users don't know part numbers — they read the label. Roam must find it if known, else the user adds it
+  and it goes to Dominion to confirm. The user is never told Roam is "looking it up".
+- **Owner rules (20 Nov):** close matches only (keeps the 9 Nov "own verified cars only" rule): one kind of part (the
+  job), ≥4 letters, ≤5 hits, brand / name / number only, no list of cars. A part is classified by what it is (size +
+  type), never "for the Roomy" — the size/type rules (LC-19) keep it off the Roomy's list. The service history keeps
+  what is really in the car, with a grey "Not what Toyota lists (Battery size: M-42 · EFB)." line.
+- **Screen (`OtherPartSearch.tsx`, in `PartsThatFitPanel`):** "I used a different {job}" → one box "Search by what's on
+  the label" → matches (badge: the card's own fit, or "Not on your car's list") → tap; or `Add "Interstate NS60L" as the
+  battery I used`. Chosen: "Using Interstate NS60L" (+ "Added by you") + grey line + Change. Every pick state; never on
+  Parts to buy. A match that is a card above picks that card.
+- **Server:** `GET /parts/match` (fleet-core, `fleet_parts_match.ts`): part_master of the job + universal_part of the
+  job's size keys (`specKeysForComponent`, now exported from parts_finder), every typed word must match (hyphens
+  ignored); unlinked car → no matches. Save check (`log_service_part_fit.ts`, fleet-ops): a part not listed for the car
+  is accepted when it is a part of the line's own job (`firstRefusedLine`) — capture, never gate.
+- **Saving:** the pick lives in the job's values (`part_pick_source` size|found|added, `part_pick_name`,
+  `part_pick_key`, `part_not_listed_for`) + brand / number on the line; part_id only for a found part_master part.
+  An added part rides to Dominion as a hidden Other item (`partPick.ts` carrier; existing outbox → drain sends Other
+  items on an is_part job with the job as the part); hidden in Items used, Review and Service details.
+- **Bug fixed on the way (live since 4fdc39a3):** tapping a "Fits by size" card stored the universal_part id as the
+  line's part_id → save refused ("Battery: that part does not fit this car"; part_id FK is part_master). Size picks
+  now save brand + number only; Plan it with a size part plans with no part.
+- **Tests:** fleet_parts_match.test.ts (6), log_service_part_fit.test.ts (+2), partPick.test.ts (4),
+  PartsThatFitPanel.test.tsx (LC-21 ×6); Fleet maintenance-logging 236/236; server 55/55; route contract ok.
+- **To release:** fleet-core + fleet-ops deploy and Fleet (Vercel), via the worktree recipe (this branch carries other
+  unshipped work). Files: `fleet_parts_match(.test).ts`, `fleet_find_parts_routes.ts`, `parts_finder.ts`,
+  `log_service_part_fit(.test).ts`, ci.yml line, Fleet `api.ts` (partsMatch), `OtherPartSearch.tsx`,
+  `PartPickLines.tsx`, `partPick(.test).ts`, `PartsThatFitPanel(.test).tsx`, `partsThatFit.ts`, `itemsUsed(.test).ts`,
+  `LogServiceReviewStep.tsx`, `ServiceHistoryRowDialogs.tsx`, `LogMaintenanceServiceDialog.tsx` (LC-21 hunks only).
+
+## 0c3. LC-22 Warranty period + "Cost" label — BUILT 20 Nov (local, not shipped; Fleet only)
+- Ticking **Warranty** opens an in-app overlay (`WarrantyDialog.tsx`): 3 / 6 months, 1 year, 18 months, 2 / 3 years,
+  Other (months/years); shows "Covered until …" from the service date. Saved in the job's values
+  (`warranty_months`, `warranty_until`; `warrantyPeriod.ts`); the tick lands on Save, Cancel leaves it off, untick
+  clears. Shown under the box ("Warranty: 1 year · until 19 Nov 2027" + Edit), on Review and in Service details.
+- The part price box reads **Cost** on every job (Fleet overrides Dominion's "Parts / materials" label, key `material`).
+- Customer copy rule (owner 20 Nov): no text about Roam's database / lookups anywhere in Fleet (label search stripped).
+- Tests: warrantyPeriod.test.tsx (5); suite 242/242.
+
+## 0c4. LC-21b Dominion side of an added part — BUILT 20 Nov (local, not shipped)
+- **Real run (owner, 20 Nov):** Roomy service 10 Mar 2026, J$12,000, Interstate PF-NS60L-5-INTL "Added by you", warranty
+  6 months → outbox sent → request REQ-3381D6DD (origin service_log) open in Pending catalog.
+- **Gaps found:** (1) "A fluid, oil or size part" (FluidPartFlow) could not save without ticking a car, and ticking a car
+  OVERWRITES its spec (Roomy M-42 → 46B24L); it never asked Standard/EFB/AGM and saved every product as genuine/car-maker
+  catalogue. (2) "Added — pick the part" listed only parts fitting the car, and listed by-size parts by their
+  universal_part id, which the resolve RPC (part_master only) refuses. (3) Resolving sends "… is now on file" to the
+  company even for a part they logged themselves.
+- **Fixes:** FluidPartFlow — Who makes it? (car maker / another brand → oem+car_maker_catalogue / aftermarket+
+  part_maker_catalogue), Battery type for battery_jis, Save with no cars → `parts/add` (spec) only, "No car specs were
+  changed." Candidates (platform-catalog `pending_parts_catalog_routes.ts`) — by-size rows swapped to their part_master
+  twin (`universal_part.extra.partId`, written by every by-size save; GS Yuasa row has none → left out), plus close
+  matches of the request's need_text labelled "Not listed for this car" (`candidateItems`, `universalTwinIds` in
+  fleet_parts_match.ts). Fleet /parts/match lists a by-size battery once (twin skipped). Migration
+  `20261120150348_resolve_request_no_notice_for_service_log.sql`: notice loop skips origin service_log.
+- **Source link optional (owner 20 Nov):** for a by-size product saved with no cars. Migration
+  `20261120151201_size_product_source_link_optional.sql` (universal_part.evidence_url nullable; save_universal_part +
+  save_self_serve_part_in_batch link checks relaxed for fitMode spec with no factory numbers; no link → Needs checking).
+  Ticking cars (car specs) still needs a link: the screen says "Add the page you found it on to change car specs."
+- **Auto-close (LC-21c, owner 20 Nov):** every Add parts save (parts/add, fluid-bundle, catalog-page in catalog_routes.ts)
+  runs `autoResolveFromBatch` (catalog_request_autoresolve.ts): service-log requests close when the typed text holds
+  the saved part's number; car asks close when the part is now listed for that car. 10 tests. REQ-3381D6DD (Interstate)
+  closed by hand with the same RPC on 20 Nov (resolved 1, companies 0 — no notice).
+- **Tests:** FluidPartFlow.test.tsx (1), fleet_parts_match.test.ts (+2 → 8).
+- **To release:** owner runs the migration + logbook line; deploy platform-catalog + fleet-core + fleet-ops; Fleet +
+  Dominion (Vercel). Then: Pending catalog → Interstate → Added — pick the part → the Interstate row.
+
+## 0c5. Gemini model retired — FIXED 20 Nov (local, not shipped)
+- Google retired `gemini-2.5-flash` for new users (research paused: gemini_http_404). One shared name now:
+  `gemini_models.ts` GEMINI_TEXT_MODEL = `gemini-3.8-flash` (already used live by the vehicle document reader).
+- Switched: catalog research (`catalog_research_gemini.ts`), `gemini_service.ts` (4 calls), analyze-fleet /
+  parse-invoice / parse-inspection (were 1.5 / 2.0 models, also retired); price row added in `api_pricing.ts`.
+- **To release:** deploy `catalog-research` by hand (`pnpm deploy:catalog-research` — NOT in the workflow's ALL_FNS)
+  + fleet-core; then Dominion Pending catalog → Resume Dispatcher; the failed wheel-bearing job → Reprocess.
 
 ## 0d. LC-19 Batteries: right size, right type — BUILT 20 Nov (local). Migration `20261120013338_battery_size_and_type.sql` + `supabase/tests/battery_size_and_type_checks.sql` (B1–B4 pass locally; in CI). Dominion: `Step2BySpec` Battery type (+ test), `addPartsApi` sends `batteryType`, car spec group shows `battery_type`. NEXT: owner runs the migration + logbook line; release with LC-18; then Dominion data: Roomy `battery_jis`=B24L + `battery_type` (EFB if Eco Idle), add real batteries by size
 

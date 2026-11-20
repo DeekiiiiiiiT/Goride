@@ -574,23 +574,29 @@ export async function findParts(
   return body;
 }
 
-async function loadUniversalToleranceMm(
-  supabase: SupabaseClient,
-  componentId: string | null,
-): Promise<number | null> {
-  if (!componentId) return null;
-  // universal_part has no part-type column: it links to a part type through its spec key
-  // (spec_key.component_id / maintenance_component_id, or part_type_spec_field.part_type_id).
+/**
+ * The by-size spec keys of a part type. universal_part has no part-type column: it links to a part type through its
+ * spec key (spec_key.component_id / maintenance_component_id, or part_type_spec_field.part_type_id).
+ */
+export async function specKeysForComponent(supabase: SupabaseClient, componentId: string): Promise<string[]> {
   const [{ data: keyRows, error: keyErr }, { data: fieldRows, error: fieldErr }] = await Promise.all([
     supabase.from("spec_key").select("key").or(`component_id.eq.${componentId},maintenance_component_id.eq.${componentId}`),
     supabase.from("part_type_spec_field").select("spec_key").eq("part_type_id", componentId),
   ]);
   if (keyErr) throw keyErr;
   if (fieldErr) throw fieldErr;
-  const specKeys = [...new Set([
+  return [...new Set([
     ...(keyRows ?? []).map((r) => String((r as { key?: string }).key ?? "")),
     ...(fieldRows ?? []).map((r) => String((r as { spec_key?: string }).spec_key ?? "")),
   ].filter(Boolean))];
+}
+
+async function loadUniversalToleranceMm(
+  supabase: SupabaseClient,
+  componentId: string | null,
+): Promise<number | null> {
+  if (!componentId) return null;
+  const specKeys = await specKeysForComponent(supabase, componentId);
   if (!specKeys.length) return null;
   const { data, error } = await supabase
     .from("universal_part")

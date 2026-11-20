@@ -89,7 +89,20 @@ import {
   powertrainPill,
   type JobFitState,
 } from "./maintenance-logging/log-service/jobFit";
-import { draftFromSavedItem, linesHaveItemErrors, money } from "./maintenance-logging/log-service/itemsUsed";
+import {
+  draftFromSavedItem,
+  linesHaveItemErrors,
+  money,
+} from "./maintenance-logging/log-service/itemsUsed";
+import {
+  partPickFromValues,
+  partPickValues,
+  shownItems,
+  withCarrier,
+  type PartPick,
+} from "./maintenance-logging/log-service/partPick";
+import { WarrantyDialog } from "./maintenance-logging/log-service/WarrantyDialog";
+import { warrantyFromValues, warrantyText, warrantyValues } from "./maintenance-logging/log-service/warrantyPeriod";
 import {
   AddFoundJobDialog,
   FoundCollapsedInspectionRow,
@@ -600,6 +613,8 @@ export function LogMaintenanceServiceDialog({
   /** The ticked part item whose "Pick a part" dialog is open. */
   const [pickingItem, setPickingItem] = useState<LineItemDraft | null>(null);
   /** Slice C "Plan it" overlay: the job (and part) being planned. */
+  /** LC-22: the "How long is the warranty?" overlay. */
+  const [warrantyAsk, setWarrantyAsk] = useState(false);
   const [planTarget, setPlanTarget] = useState<{ cat: MaintenanceServiceCategory; part: FitPart | null } | null>(null);
   const [planBusy, setPlanBusy] = useState(false);
   const planKeyRef = useRef<string>(crypto.randomUUID());
@@ -1218,8 +1233,15 @@ export function LogMaintenanceServiceDialog({
         jobItems={jobItems.itemsByJob.get(cat.id) ?? []}
         status={jobItemsStatusFor(cat)}
         onRetry={() => void jobItems.ensure(cat.parent_id, { force: true })}
-        items={lineExtras.items}
-        onChange={(items) => setLineExtras((prev) => ({ ...prev, items }))}
+        // LC-21: an added part's carrier item is never shown; edits keep it.
+        items={shownItems(lineExtras.items, partPickFromValues(fieldValues, lineExtras))}
+        onChange={(items) =>
+          setLineExtras((prev) => {
+            const pick = partPickFromValues(fieldValues, prev);
+            const carrier = prev.items.filter((it) => !shownItems([it], pick).length);
+            return { ...prev, items: [...items, ...carrier] };
+          })
+        }
         currency={formMeta.currency || "JMD"}
         jobCharge={Math.round(charge * 100) / 100}
         onPickPart={(item) => setPickingItem(item)}
@@ -2085,7 +2107,39 @@ export function LogMaintenanceServiceDialog({
     const sides = sidePositionsFor(cat);
     return codes.map((c) => sides?.find((s) => s.value === c)?.label ?? c);
   };
-  const pickFitPart = (part: FitPart | null) =>
+  /** LC-21: the job's part when it isn't a car-listed card (by size, found by its label, or added). */
+  const otherPick = partPickFromValues(fieldValues, lineExtras);
+  /** Sets (or clears) that part: values for read-back, brand / number on the line, the added part's hidden carrier. */
+  const setOtherPick = (next: PartPick | null) => {
+    setFieldValues((prev) => ({ ...prev, ...partPickValues(next) }));
+    setLineExtras((prev) => ({
+      ...prev,
+      partId: next?.source === "found" && next.key && !next.key.startsWith("size:") ? next.key : null,
+      supplierPartOfferId: null,
+      partConfirmedFit: false,
+      brand: next ? next.brand || (next.source === "added" ? next.name : "") : "",
+      partNumber: next?.number ?? "",
+      items: withCarrier(prev.items, otherPick, next),
+    }));
+  };
+  const pickFitPart = (part: FitPart | null) => {
+    if (part?.fitLabel === "fits_by_size") {
+      // A by-size part isn't a Roam part id (universal_part): it is saved as brand + number, never as part_id.
+      setOtherPick({
+        source: "size",
+        name: part.name,
+        brand: part.brand,
+        number: part.number,
+        key: `size:${part.partId}`,
+        notListedFor: null,
+      });
+      return;
+    }
+    if (!part && otherPick) {
+      setOtherPick(null);
+      return;
+    }
+    if (part && otherPick) setFieldValues((prev) => ({ ...prev, ...partPickValues(null) }));
     setLineExtras((prev) => {
       if (!part) {
         // Only a part picked from the panel is cleared; an old typed brand / number re-saves unchanged (rule 7).
@@ -2099,8 +2153,42 @@ export function LogMaintenanceServiceDialog({
         partConfirmedFit: part.verified,
         brand: part.brand,
         partNumber: part.number,
+        items: withCarrier(prev.items, otherPick, null),
       };
     });
+  };
+  /** LC-22: ticking Warranty asks for the period first (the tick lands on Save); unticking clears it. */
+  const changeWarranty = (on: boolean) => {
+    if (on) {
+      setWarrantyAsk(true);
+      return;
+    }
+    setFieldValues((prev) => ({ ...prev, ...warrantyValues(null) }));
+    setLineExtras((prev) => ({ ...prev, warranty: false }));
+  };
+  const warrantyNow = warrantyFromValues(fieldValues);
+  const warrantyNote = warrantyNow ? (
+    <div className="flex items-center gap-2 -mt-2 text-[13px] text-on-surface-variant" data-testid="warranty-note">
+      <span className="material-symbols-outlined text-[16px] text-[#059669] dark:text-[#34d399]" aria-hidden>
+        verified_user
+      </span>
+      <span>
+        Warranty: <span className="font-semibold text-on-surface">{warrantyText(warrantyNow)}</span>
+      </span>
+      <button
+        type="button"
+        onClick={() => setWarrantyAsk(true)}
+        className="ml-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-surface-container hover:bg-surface-container-high text-on-surface"
+      >
+        Edit
+      </button>
+    </div>
+  ) : null;
+  /** A by-size card on the car's own list reads as that card (ring + Using), not as a found part. */
+  const listedSizeId =
+    otherPick?.source === "size" && !otherPick.notListedFor && otherPick.key?.startsWith("size:")
+      ? otherPick.key.slice(5)
+      : null;
   // A planned job lives on the Not done yet list, which needs the inspection findings switch (code review #2).
   const canPlanJobs = !initialLog?.id && !fromFoundWork && jobItems.findingsEnabled;
   const partsPanelFor = (cat: MaintenanceServiceCategory) => {
@@ -2132,14 +2220,19 @@ export function LogMaintenanceServiceDialog({
         places={lineExtras.positions}
         placeLabels={placeLabelsFor(cat, lineExtras.positions)}
         needsPlace={ui.kind !== "none" && lineExtras.positions.length === 0}
-        partId={lineExtras.partId}
+        partId={listedSizeId ?? lineExtras.partId}
         chosenInfo={
-          lineExtras.partId
-            ? { name: cat.name, brand: lineExtras.brand, number: lineExtras.partNumber }
-            : null
+          listedSizeId && otherPick
+            ? { name: otherPick.name, brand: otherPick.brand, number: otherPick.number }
+            : lineExtras.partId
+              ? { name: cat.name, brand: lineExtras.brand, number: lineExtras.partNumber }
+              : null
         }
         onPick={pickFitPart}
-        onPlanIt={canPlanJobs ? (part) => setPlanTarget({ cat, part }) : undefined}
+        otherPick={listedSizeId ? null : otherPick}
+        onPickOther={itemsEnabled ? setOtherPick : undefined}
+        // A by-size part has no Roam part id to plan with (only car-listed parts do).
+        onPlanIt={canPlanJobs ? (part) => setPlanTarget({ cat, part: part?.fitLabel === "fits_by_size" ? null : part }) : undefined}
       />
     );
   };
@@ -2321,7 +2414,8 @@ export function LogMaintenanceServiceDialog({
       return (
         <div key={field.key} className="space-y-2">
           <Label htmlFor={id}>
-            {field.label}
+            {/* Owner 20 Nov: the part's price box reads "Cost" on every job (Dominion's label stays as is). */}
+            {field.key === "material" ? "Cost" : field.label}
             {field.required ? " *" : ""}
           </Label>
           <Input
@@ -2806,7 +2900,8 @@ export function LogMaintenanceServiceDialog({
                       onTogglePosition={togglePosition}
                       warranty={lineExtras.warranty}
                       complimentary={lineExtras.complimentary}
-                      onWarrantyChange={(warranty) => setLineExtras((prev) => ({ ...prev, warranty }))}
+                      onWarrantyChange={changeWarranty}
+                      warrantyNote={warrantyNote}
                       onComplimentaryChange={(complimentary) =>
                         setLineExtras((prev) => ({ ...prev, complimentary }))
                       }
@@ -2907,7 +3002,8 @@ export function LogMaintenanceServiceDialog({
               onTogglePosition={togglePosition}
               warranty={lineExtras.warranty}
               complimentary={lineExtras.complimentary}
-              onWarrantyChange={(warranty) => setLineExtras((prev) => ({ ...prev, warranty }))}
+              onWarrantyChange={changeWarranty}
+              warrantyNote={warrantyNote}
               onComplimentaryChange={(complimentary) =>
                 setLineExtras((prev) => ({ ...prev, complimentary }))
               }
@@ -2935,6 +3031,19 @@ export function LogMaintenanceServiceDialog({
               alsoDoSlot={alsoDoSlotFor(activeCategory)}
             />
           )}
+
+          <WarrantyDialog
+            open={warrantyAsk}
+            partName={(activeCategory?.name || "part").toLowerCase()}
+            serviceDate={formMeta.date || null}
+            initial={warrantyFromValues(fieldValues)}
+            onCancel={() => setWarrantyAsk(false)}
+            onSave={(w) => {
+              setFieldValues((prev) => ({ ...prev, ...warrantyValues(w) }));
+              setLineExtras((prev) => ({ ...prev, warranty: true }));
+              setWarrantyAsk(false);
+            }}
+          />
 
           <PlanJobDialog
             open={Boolean(planTarget)}

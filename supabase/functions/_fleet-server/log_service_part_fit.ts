@@ -54,8 +54,8 @@ export async function partFitsVerifiedCar(
 export function linesNeedingPartFit(
   rawLines: unknown[],
   existingByLineId?: Map<string, { part_id: string | null; component_name: string | null }>,
-): Array<{ partId: string; jobName: string }> {
-  const out: Array<{ partId: string; jobName: string }> = [];
+): Array<{ partId: string; jobName: string; componentId: string | null }> {
+  const out: Array<{ partId: string; jobName: string; componentId: string | null }> = [];
   for (const raw of rawLines) {
     if (!raw || typeof raw !== "object") continue;
     const line = raw as Record<string, unknown>;
@@ -67,8 +67,31 @@ export function linesNeedingPartFit(
     if (prev && prev.part_id === partId) continue;
     out.push({
       partId,
+      componentId: parsePartId(line.componentId ?? line.component_id ?? line.categoryId ?? line.category_id),
       jobName: String(line.componentName ?? line.component_name ?? line.categoryName ?? prev?.component_name ?? "This job"),
     });
+  }
+  return out;
+}
+
+/** The first line whose part isn't listed for the car AND isn't a part of the line's own job (LC-21); null = all fine. */
+export function firstRefusedLine<T extends { partId: string; componentId: string | null }>(
+  toCheck: T[],
+  notListed: Set<string>,
+  jobOf: Map<string, string>,
+): T | null {
+  return toCheck.find((l) => notListed.has(l.partId) && !(l.componentId && jobOf.get(l.partId) === l.componentId)) ?? null;
+}
+
+/** part_master id → its job (maintenance_component_id). */
+export async function partComponentIds(supabase: SupabaseClient, partIds: string[]): Promise<Map<string, string>> {
+  const ids = partIds.filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+  const out = new Map<string, string>();
+  if (!ids.length) return out;
+  const { data, error } = await supabase.from("part_master").select("id, maintenance_component_id").in("id", ids);
+  if (error) throw error;
+  for (const r of (data ?? []) as Array<{ id: string; maintenance_component_id?: string | null }>) {
+    if (r.maintenance_component_id) out.set(String(r.id), String(r.maintenance_component_id));
   }
   return out;
 }
@@ -89,7 +112,10 @@ export async function validateLinePartFitOnSave(
   const distinct = [...new Set(toCheck.map((l) => l.partId))];
   const fits = await Promise.all(distinct.map((id) => partFitsVerifiedCar(supabase, access.catalogId ?? null, id)));
   const bad = new Set(distinct.filter((_, i) => !fits[i]));
-  const first = toCheck.find((l) => bad.has(l.partId));
+  // LC-21: a real Roam part of this same job (found by "I used a different …") is what is in the car — logged even
+  // when it isn't listed for this car. Capture, never gate.
+  const jobOf = bad.size ? await partComponentIds(supabase, [...bad]) : new Map<string, string>();
+  const first = firstRefusedLine(toCheck, bad, jobOf);
   if (!first) return { ok: true };
   return {
     ok: false,

@@ -125,6 +125,8 @@ export function PendingPartRequestDrawer({
     const row = (jobDetail?.proposals || [])[0] as Record<string, unknown> | undefined;
     return row ? parseProposalRow(row) : null;
   }, [jobDetail]);
+  /** LC-21c: added by hand (Add parts auto-close or "Added — pick the part"): no robot Undo / Looks right. */
+  const handAdded = (job?.state ?? jobDetail?.job?.state) === "added" && !proposal;
 
   const checks = useMemo(
     () => (proposal ? buildPartProposalChecks(proposal, detail?.onFile?.length ?? 0) : null),
@@ -508,6 +510,8 @@ export function PendingPartRequestDrawer({
                 </button>
               </div>
             </div>
+          ) : handAdded ? (
+            <p className="text-center text-[13px] text-on-surface-variant" data-testid="drawer-hand-added">Added by hand. Nothing more to do.</p>
           ) : variant === "auto_added" ? (
             <div className="grid grid-cols-2 gap-2">
               <button

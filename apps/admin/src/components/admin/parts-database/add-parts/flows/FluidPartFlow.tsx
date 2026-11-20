@@ -2,13 +2,18 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PartsButton } from "../../PartsButton";
-import { fetchSelfServePartTypes, fetchVehicleSpecValues, saveFluidBundle } from "../addPartsApi";
+import { fetchSelfServePartTypes, fetchVehicleSpecValues, saveFluidBundle, saveSizeProductOnly } from "../addPartsApi";
 import { CatalogStep2Cars } from "../catalog/CatalogStep2Cars";
 import { carSpecValueForSave } from "../catalog/carSpecValueForSave";
 import { emptyCatalogDraft, type CatalogPageDraft } from "../addPartsTypes";
 import { MaterialIcon } from "../../import/MaterialIcon";
 import { PartTypeIcon } from "../addPartsShared";
 import { D_CARD, D_MONO, D_MUTED, D_TXT } from "../catalog/dominionKit";
+
+/** Tabs, line breaks and repeated spaces → one space; ends trimmed. */
+export function cleanText(raw: string): string {
+  return raw.replace(/\s+/g, " ").trim();
+}
 
 export function FluidPartFlow({ onHome }: { onHome: () => void }) {
   const [step, setStep] = useState<"type" | "details" | "cars" | "done">("type");
@@ -19,6 +24,10 @@ export function FluidPartFlow({ onHome }: { onHome: () => void }) {
   const [specKey, setSpecKey] = useState("brake_fluid");
   const [specValue, setSpecValue] = useState("");
   const [framePreTickDone, setFramePreTickDone] = useState(false);
+  /** LC-21: Standard / EFB / AGM — batteries only (saved as extra.battery_type; EFB / AGM cars only get EFB / AGM). */
+  const [batteryType, setBatteryType] = useState<"" | "Standard" | "EFB" | "AGM">("");
+  /** LC-21: genuine (the car maker's own) or another brand — was always saved as genuine. */
+  const [maker, setMaker] = useState<"" | "car_maker" | "other_brand">("");
 
   const types = useQuery({ queryKey: ["self-serve-part-types"], queryFn: fetchSelfServePartTypes });
   const fluidTypes = (types.data ?? []).filter((t) => t.defaultFitMode === "spec");
@@ -35,25 +44,38 @@ export function FluidPartFlow({ onHome }: { onHome: () => void }) {
     enabled: step === "cars" && selectedIds.length > 0 && Boolean(specKey),
   });
 
+  const isBattery = specKey === "battery_jis";
+
   async function save() {
+    const product = {
+      partTypeId,
+      // Pasted text can carry tabs / odd spaces (a pasted "\tInterstate"): clean every box before saving.
+      brand: cleanText(brand),
+      partNumber: cleanText(partNumber),
+      specKey,
+      specValue: cleanText(specValue),
+      evidenceUrl: draft.evidenceUrl.trim(),
+      sourceType: maker === "car_maker" ? "car_maker_catalogue" : "part_maker_catalogue",
+      partKind: maker === "car_maker" ? "oem" : "aftermarket",
+      ...(isBattery && batteryType ? { batteryType } : {}),
+    };
     try {
-      await saveFluidBundle({
-        partTypeId,
-        brand,
-        partNumber,
-        specKey,
-        specValue,
-        evidenceUrl: draft.evidenceUrl,
-        sourceType: draft.sourceType,
-        partKind: draft.partKind,
-        fitMode: "spec",
-        vehicleListings: draft.vehicleListings.map((l) => ({
-          vehicleId: l.vehicleId,
-          yearFrom: l.yearFrom,
-          yearTo: l.yearTo,
-        })),
-      });
-      toast.success("Fluid and car specs saved");
+      if (!draft.vehicleListings.length) {
+        // No cars ticked: save the product only — no car's spec is written or changed.
+        await saveSizeProductOnly(product);
+        toast.success("Product saved");
+      } else {
+        await saveFluidBundle({
+          ...product,
+          fitMode: "spec",
+          vehicleListings: draft.vehicleListings.map((l) => ({
+            vehicleId: l.vehicleId,
+            yearFrom: l.yearFrom,
+            yearTo: l.yearTo,
+          })),
+        });
+        toast.success("Product and car specs saved");
+      }
       setStep("done");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save");
@@ -62,7 +84,11 @@ export function FluidPartFlow({ onHome }: { onHome: () => void }) {
 
   const picked = fluidTypes.find((t) => t.id === partTypeId) ?? null;
   const specField = picked?.specFields.find((f) => f.specKey === specKey) ?? picked?.specFields[0];
-  const detailsReady = Boolean(partTypeId && brand && partNumber && specValue && draft.evidenceUrl);
+  /** Changing a car's spec still needs a source page; the product on its own does not (LC-21b). */
+  const needsLinkForCars = draft.vehicleListings.length > 0 && !draft.evidenceUrl.trim();
+  const detailsReady = Boolean(
+    partTypeId && brand && partNumber && specValue && maker && (!isBattery || batteryType),
+  );
   const byVehicle = new Map((existingSpecs.data ?? []).map((r) => [r.vehicleId, r.value]));
   const specLabel = specField?.label && !/dot|rating|spec|type|size|grade/i.test(specField.label) ? specField.label : picked?.name ?? "Spec";
   const fieldCls =
@@ -77,7 +103,9 @@ export function FluidPartFlow({ onHome }: { onHome: () => void }) {
           </span>
           <p className={`text-[26px] font-semibold ${D_TXT}`}>1 product saved</p>
           <p className={`text-[16px] ${D_MUTED}`}>
-            {draft.vehicleListings.length} car{draft.vehicleListings.length === 1 ? " now shows" : "s now show"} {picked?.name ?? "the spec"}: {targetSpecValue}
+            {draft.vehicleListings.length
+              ? `${draft.vehicleListings.length} car${draft.vehicleListings.length === 1 ? " now shows" : "s now show"} ${picked?.name ?? "the spec"}: ${targetSpecValue}`
+              : "No car specs were changed."}
           </p>
           <PartsButton variant="primary" onClick={onHome}>Back to Add parts</PartsButton>
         </div>
@@ -162,8 +190,60 @@ export function FluidPartFlow({ onHome }: { onHome: () => void }) {
                     {specField?.label ?? "Spec"}{specField?.example ? ` — e.g. ${specField.example}` : ""}
                   </span>
                 </label>
+                <div className="flex flex-col gap-1.5">
+                  <span className={`text-[14px] font-medium ${D_TXT}`}>Who makes it?</span>
+                  <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Who makes it?">
+                    {([
+                      ["car_maker", "The car maker (genuine)"],
+                      ["other_brand", "Another brand"],
+                    ] as const).map(([id, label]) => (
+                      <button
+                        key={id}
+                        type="button"
+                        role="radio"
+                        aria-checked={maker === id}
+                        data-testid={`fluid-maker-${id}`}
+                        onClick={() => setMaker(id)}
+                        className={`h-10 rounded-lg border px-3.5 text-[14px] font-medium ${
+                          maker === id
+                            ? "border-[#0153dc] bg-[#0153dc] text-white"
+                            : `border-[#e6e7ee] bg-[#f3f4fb] dark:border-[#1e293b] dark:bg-[#0b1220] ${D_TXT}`
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {isBattery ? (
+                  <div className="flex flex-col gap-1.5">
+                    <span className={`text-[14px] font-medium ${D_TXT}`}>Battery type</span>
+                    <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Battery type">
+                      {(["Standard", "EFB", "AGM"] as const).map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          role="radio"
+                          aria-checked={batteryType === t}
+                          data-testid={`fluid-battery-type-${t}`}
+                          onClick={() => setBatteryType(t)}
+                          className={`h-10 rounded-lg border px-3.5 text-[14px] font-medium ${
+                            batteryType === t
+                              ? "border-[#0153dc] bg-[#0153dc] text-white"
+                              : `border-[#e6e7ee] bg-[#f3f4fb] dark:border-[#1e293b] dark:bg-[#0b1220] ${D_TXT}`
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                    <span className={`text-[13px] ${D_MUTED}`}>
+                      EFB and AGM are for cars that stop the engine at idle. A car that needs EFB is only offered EFB or AGM.
+                    </span>
+                  </div>
+                ) : null}
                 <label className="flex flex-col gap-1.5">
-                  <span className={`text-[14px] font-medium ${D_TXT}`}>The page you found it on</span>
+                  <span className={`text-[14px] font-medium ${D_TXT}`}>The page you found it on <span className="font-normal text-[#5d5f68]">(optional)</span></span>
                   <div className="flex gap-2">
                     <div className="relative flex-1">
                       <MaterialIcon name="link" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-[#5d5f68]" />
@@ -235,7 +315,7 @@ export function FluidPartFlow({ onHome }: { onHome: () => void }) {
               <p className={`text-[14px] ${D_MUTED}`}>
                 {draft.vehicleListings.length
                   ? `${draft.vehicleListings.length} car${draft.vehicleListings.length === 1 ? "" : "s"} will show "${specLabel}: ${targetSpecValue}"`
-                  : "Tick the cars that use it."}
+                  : "Optional. Tick only cars whose maker lists this size; leave it empty to save just the product."}
               </p>
               <ul className="mt-2 flex flex-col gap-1">
                 {draft.vehicleListings.map((l) => {
@@ -257,10 +337,17 @@ export function FluidPartFlow({ onHome }: { onHome: () => void }) {
             variant="primary"
             className="!h-12 w-full text-[16px]"
             onClick={() => void save()}
-            disabled={!detailsReady || !draft.vehicleListings.length}
+            disabled={!detailsReady || needsLinkForCars}
+            data-testid="fluid-save"
           >
-            <MaterialIcon name="save" className="text-[18px]" /> Save and update {draft.vehicleListings.length} car spec{draft.vehicleListings.length === 1 ? "" : "s"}
+            <MaterialIcon name="save" className="text-[18px]" />{" "}
+            {draft.vehicleListings.length
+              ? `Save and update ${draft.vehicleListings.length} car spec${draft.vehicleListings.length === 1 ? "" : "s"}`
+              : "Save the product"}
           </PartsButton>
+          {needsLinkForCars ? (
+            <p className={`text-[13px] ${D_MUTED}`} data-testid="fluid-needs-link">Add the page you found it on to change car specs.</p>
+          ) : null}
           <PartsButton variant="danger" className="w-full" onClick={onHome}>Cancel</PartsButton>
         </aside>
       </div>

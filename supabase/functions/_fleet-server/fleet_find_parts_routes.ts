@@ -45,6 +45,7 @@ export { splitPlacesForFind };
 import { loadFindPartsAskState, type FindPartsAskState } from "./log_service_find_ask.ts";
 import { listFleetPartsNotices, orgVehicleIdByCatalog } from "./log_service_parts_notices.ts";
 import { loadJobPositionMeta } from "./job_position_meta.ts";
+import { findPartMatches } from "./fleet_parts_match.ts";
 
 /** Maker logo key → media.roamfleet.co address (null when no logo). */
 export function makerLogoUrl(key: string | null): string | null {
@@ -406,6 +407,26 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
         },
         ...(ask !== undefined ? { ask } : {}),
       });
+    } catch (error) {
+      return c.json({ error: errorText(error) }, 500);
+    }
+  });
+
+  // LC-21: close matches for "I used a different …" (one kind of part, ≥4 letters, ≤5 hits, no car lists).
+  app.get(`${PREFIX}/match`, ...view, async (c: Context) => {
+    try {
+      const vehicleId = c.req.query("vehicleId")?.trim() || "";
+      const vehicleGate = rejectUnlessVehicleId(vehicleId);
+      if (vehicleGate) return c.json({ error: vehicleGate.error }, vehicleGate.status);
+      const componentId = c.req.query("componentId")?.trim() || "";
+      if (!UUID_RE.test(componentId)) return c.json({ error: "componentId is required" }, 400);
+      const q = (c.req.query("q") ?? "").slice(0, 80);
+      const access = await verifiedCarForVehicle(c, supabase, vehicleId);
+      if (access.status === 404) return c.json({ error: "Vehicle not found" }, 404);
+      if (access.status === 403) return c.json({ error: "Forbidden" }, 403);
+      // Same gate as Find parts: only a car verified on Roam gets parts info.
+      if (!access.catalogId) return c.json({ matches: [] });
+      return c.json({ matches: await findPartMatches(supabase, componentId, q) });
     } catch (error) {
       return c.json({ error: errorText(error) }, 500);
     }

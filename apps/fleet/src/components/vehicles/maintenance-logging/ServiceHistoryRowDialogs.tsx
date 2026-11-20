@@ -24,6 +24,9 @@ import { FromInspectionChip } from "./log-service/FoundWorkSection";
 import { isFoundToday } from "./log-service/foundWork";
 import { linePositionsText } from "./log-service/positionChips";
 import { SourcingLine } from "./log-service/unknownParts";
+import { partPickFromValues, shownItems } from "./log-service/partPick";
+import { PartPickLines } from "./log-service/PartPickLines";
+import { warrantyFromValues, warrantyText } from "./log-service/warrantyPeriod";
 
 type ApiLine = MaintenanceLogLine;
 
@@ -150,7 +153,7 @@ export function ServiceHistoryViewDialog({
                         </span>
                       ) : null}
                       <p className="text-xs text-stitch-secondary">
-                        {[l.systemName, l.brand, l.partNumber]
+                        {(partPickFromValues(l.values, l) ? [l.systemName] : [l.systemName, l.brand, l.partNumber])
                           .filter(Boolean)
                           .join(" · ") || " "}
                       </p>
@@ -159,13 +162,22 @@ export function ServiceHistoryViewDialog({
                       {l.complimentary && !l.itemsAmount ? "Free" : formatServiceMoney(wo.currency, l.lineTotal)}
                     </span>
                   </div>
-                  {itemsUsedText(l.items, wo.currency) ? (
-                    <p className="mt-1 text-xs text-on-surface-variant" data-testid="service-details-items-used">
-                      <span className="font-semibold text-on-surface">Items used:</span> {itemsUsedText(l.items, wo.currency)}
+                  {partPickFromValues(l.values, l) ? (
+                    <PartPickLines pick={partPickFromValues(l.values, l)!} className="mt-1" />
+                  ) : null}
+                  {l.warranty && warrantyFromValues(l.values) ? (
+                    <p className="mt-0.5 text-xs text-on-surface-variant" data-testid="service-details-warranty">
+                      Warranty: <span className="font-semibold text-on-surface">{warrantyText(warrantyFromValues(l.values)!)}</span>
                     </p>
                   ) : null}
-                  {/* LS-16 / Stitch F8: what happened to each part Roam didn't have. */}
-                  {(l.items || [])
+                  {itemsUsedText(shownItems(l.items, partPickFromValues(l.values, l)), wo.currency) ? (
+                    <p className="mt-1 text-xs text-on-surface-variant" data-testid="service-details-items-used">
+                      <span className="font-semibold text-on-surface">Items used:</span>{" "}
+                      {itemsUsedText(shownItems(l.items, partPickFromValues(l.values, l)), wo.currency)}
+                    </p>
+                  ) : null}
+                  {/* LS-16 / Stitch F8: what happened to each part Roam didn't have (an added part's carrier: never). */}
+                  {shownItems(l.items, partPickFromValues(l.values, l))
                     .filter((it) => it.sourcingState)
                     .map((it, k) => (
                       <div key={it.id ?? k} className="mt-1 flex flex-col gap-0.5" data-testid="service-details-unknown-part">

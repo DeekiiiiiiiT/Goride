@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "npm:@google/generative-ai";
+import { GEMINI_TEXT_MODEL } from "./gemini_models.ts";
 import { trackedProviderCall } from "./api_usage_logger.ts";
 
 const API_KEY = Deno.env.get("GEMINI_API_KEY")!;
@@ -16,7 +17,7 @@ export interface OCRResult {
 }
 
 export async function processFuelReceiptVision(imageBase64: string): Promise<OCRResult> {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: GEMINI_TEXT_MODEL });
 
     const prompt = `
         You are a specialized OCR engine for fleet management.
@@ -47,7 +48,7 @@ export async function processFuelReceiptVision(imageBase64: string): Promise<OCR
                 provider: "gemini",
                 service: "vision",
                 route: "gemini_service/processFuelReceiptVision",
-                model: "gemini-2.5-flash",
+                model: GEMINI_TEXT_MODEL,
                 run: () => model.generateContent([
                     prompt,
                     {
@@ -95,7 +96,7 @@ export async function processFuelReceiptVision(imageBase64: string): Promise<OCR
 }
 
 export async function verifyOdometerLogic(currentOdo: number, previousOdo: number, tripsDistance: number, previousDate?: string, currentDate?: string) {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: GEMINI_TEXT_MODEL });
 
     // Compute elapsed time context if dates are available
     let timeContext = "";
@@ -149,7 +150,7 @@ export async function verifyOdometerLogic(currentOdo: number, previousOdo: numbe
             provider: "gemini",
             service: "text",
             route: "gemini_service/verifyOdometerLogic",
-            model: "gemini-2.5-flash",
+            model: GEMINI_TEXT_MODEL,
             run: () => model.generateContent(prompt),
             extractUsage: (r: any) => ({
                 inputTokens: r?.response?.usageMetadata?.promptTokenCount,

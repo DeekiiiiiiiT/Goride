@@ -16,12 +16,15 @@ const FIT_TEXT: Record<PendingPartsCandidate["fitLabel"], string> = {
   also_fits: "Also fits",
   fits_by_size: "Fits by size",
   check_before_buying: "Needs checking",
+  // LC-21: what the user typed in a service log; the part really in the car, not on this car's list.
+  not_listed: "Not listed for this car",
 };
 const FIT_CLS: Record<PendingPartsCandidate["fitLabel"], string> = {
   made_for_car: "bg-[#ecfdf5] text-[#047857] dark:bg-[#064e3b] dark:text-[#34d399]",
   also_fits: "bg-[#eff6ff] text-[#1d4ed8] dark:bg-[#172554] dark:text-[#93c5fd]",
   fits_by_size: "bg-[#eff6ff] text-[#1d4ed8] dark:bg-[#172554] dark:text-[#93c5fd]",
   check_before_buying: "bg-[#fffbeb] text-[#b45309] dark:bg-[#451a03] dark:text-[#fbbf24]",
+  not_listed: "bg-[#f1f0f4] text-[#47464c] dark:bg-[#2a2b35] dark:text-[#c9c5cd]",
 };
 
 type Load = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ok"; items: PendingPartsCandidate[] };
@@ -80,7 +83,7 @@ export function AddedPickPartPanel({
       <div>
         <p className="text-[14px] font-semibold text-[#1a1b22] dark:text-[#e4e1ec]">Which part did you add?</p>
         <p className="text-[12px] text-[#47464c] dark:text-[#c9c5cd]">
-          Parts on file for this car and place. Add it in Add a part first if it isn&apos;t here.
+          Parts on file for this car and place, and parts matching what they typed. Add it in Add parts first if it isn&apos;t here.
         </p>
       </div>
       {load.kind === "loading" ? (

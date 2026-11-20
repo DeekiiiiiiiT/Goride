@@ -4,7 +4,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const apiMock = vi.hoisted(() => ({ findParts: vi.fn(), requestFindPart: vi.fn(), partsLookup: vi.fn() }));
+const apiMock = vi.hoisted(() => ({ findParts: vi.fn(), requestFindPart: vi.fn(), partsLookup: vi.fn(), partsMatch: vi.fn() }));
 vi.mock("../../../../services/api", () => ({ api: apiMock }));
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("sonner", () => ({ toast: toastMock }));
@@ -230,5 +230,139 @@ describe("PartsThatFitPanel — Parts to buy (LC-10)", () => {
     renderPanel({ toBuy: true });
     await waitFor(() => expect(screen.getByTestId("parts-fit-ask")).toBeTruthy());
     expect(screen.queryByTestId("parts-fit-skip")).toBeNull();
+  });
+});
+
+describe("PartsThatFitPanel — I used a different part (LC-21)", () => {
+  const battery = {
+    linked: true,
+    car: { make: "Toyota", model: "Roomy" },
+    carSizes: [{ specKey: "battery_jis", label: "Battery size", value: "M-42", type: "EFB", fromCarMaker: true }],
+    plainSections: [
+      { items: [{ partId: "u-gs", name: "GS Yuasa M-55", brand: "GS Yuasa", number: "ER-M-55/55B20L", fitLabel: "fits_by_size", status: "verified" }] },
+    ],
+    ask: { state: "none", askedAt: null, byYou: false },
+  };
+  beforeEach(() => {
+    apiMock.findParts.mockReset();
+    apiMock.partsMatch.mockReset();
+    apiMock.partsLookup.mockReset();
+    apiMock.partsLookup.mockResolvedValue({ reference: null, brandNumbers: [] });
+  });
+
+  async function openSearch(over: Partial<React.ComponentProps<typeof PartsThatFitPanel>> = {}) {
+    apiMock.findParts.mockResolvedValue(battery);
+    const onPickOther = vi.fn();
+    const r = renderPanel({ jobId: "bat", jobName: "battery", places: [], placeLabels: [], onPickOther, ...over });
+    await waitFor(() => expect(screen.getByTestId("parts-fit-used-different")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("parts-fit-used-different"));
+    return { ...r, onPickOther };
+  }
+
+  it("one box: what's on the label; nothing asked under 4 letters; no part number box, no 'looks it up'", async () => {
+    await openSearch();
+    expect(screen.getByText("Search by what's on the label")).toBeTruthy();
+    expect(screen.queryByText(/part number/i)).toBeNull();
+    fireEvent.change(screen.getByTestId("parts-fit-other-search"), { target: { value: "NS6" } });
+    await new Promise((r) => setTimeout(r, 400));
+    expect(apiMock.partsMatch).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("roam-looks-it-up")).toBeNull();
+    expect(screen.queryByText(/look/i)).toBeNull();
+  });
+
+  it("a Roam match not on the car's list: tap → found, with the grey Toyota line", async () => {
+    apiMock.partsMatch.mockResolvedValue({
+      matches: [{ key: "pm-1", partId: "pm-1", kind: "part", name: "Battery NS60L", brand: "Interstate", number: "PF-NS60L-5-INTL", size: null, type: null }],
+    });
+    const { onPickOther } = await openSearch();
+    fireEvent.change(screen.getByTestId("parts-fit-other-search"), { target: { value: "Interstate NS60" } });
+    await waitFor(() => expect(screen.getAllByTestId("parts-fit-other-match")).toHaveLength(1));
+    expect(apiMock.partsMatch).toHaveBeenCalledWith("car-1", "bat", "Interstate NS60");
+    expect(screen.queryByText(/parts list|database|not on/i)).toBeNull();
+    fireEvent.click(screen.getByTestId("parts-fit-other-match"));
+    expect(onPickOther).toHaveBeenCalledWith({
+      source: "found",
+      name: "Interstate Battery NS60L",
+      brand: "Interstate",
+      number: "PF-NS60L-5-INTL",
+      key: "pm-1",
+      notListedFor: "Not what Toyota lists (Battery size: M-42 · EFB).",
+    });
+  });
+
+  it("a match that is a card above picks that card", async () => {
+    apiMock.partsMatch.mockResolvedValue({
+      matches: [{ key: "size:u-gs", partId: null, kind: "size", name: "GS Yuasa M-55", brand: "GS Yuasa", number: "ER-M-55/55B20L", size: "55B20L", type: "EFB" }],
+    });
+    const { props, onPickOther } = await openSearch();
+    fireEvent.change(screen.getByTestId("parts-fit-other-search"), { target: { value: "yuasa m55" } });
+    await waitFor(() => expect(screen.getByTestId("parts-fit-other-match")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("parts-fit-other-match"));
+    expect(props.onPick).toHaveBeenCalledWith(expect.objectContaining({ partId: "u-gs" }));
+    expect(onPickOther).not.toHaveBeenCalled();
+  });
+
+  it("not in Roam: Add \"…\" as the battery I used", async () => {
+    apiMock.partsMatch.mockResolvedValue({ matches: [] });
+    const { onPickOther } = await openSearch();
+    fireEvent.change(screen.getByTestId("parts-fit-other-search"), { target: { value: "  Interstate   NS60L " } });
+    await waitFor(() => expect(screen.getByTestId("parts-fit-other-add")).toBeTruthy());
+    expect(screen.getByTestId("parts-fit-other-add").textContent).toContain('Add "Interstate NS60L" as the battery I used');
+    fireEvent.click(screen.getByTestId("parts-fit-other-add"));
+    expect(onPickOther).toHaveBeenCalledWith(
+      expect.objectContaining({ source: "added", name: "Interstate NS60L", key: null, notListedFor: "Not what Toyota lists (Battery size: M-42 · EFB)." }),
+    );
+  });
+
+  it("chosen: Using … · Added by you, grey line, cards dimmed, Change clears", async () => {
+    apiMock.findParts.mockResolvedValue(battery);
+    const onPickOther = vi.fn();
+    renderPanel({
+      jobId: "bat", jobName: "battery", places: [], placeLabels: [], onPickOther,
+      otherPick: { source: "added", name: "Interstate NS60L", brand: "", number: "", key: null, notListedFor: "Not what Toyota lists (Battery size: M-42 · EFB)." },
+    });
+    await waitFor(() => expect(screen.getByTestId("parts-fit-other-chosen")).toBeTruthy());
+    expect(screen.getByTestId("parts-fit-other-label").textContent).toBe("Using Interstate NS60L");
+    expect(screen.getByText("Added by you")).toBeTruthy();
+    expect(screen.getByTestId("parts-fit-not-listed").textContent).toContain("Not what Toyota lists (Battery size: M-42 · EFB).");
+    expect(screen.getAllByTestId("parts-fit-card")[0].className).toContain("opacity-50");
+    fireEvent.click(screen.getByTestId("parts-fit-other-change"));
+    expect(onPickOther).toHaveBeenCalledWith(null);
+  });
+
+  it("never on Parts to buy", async () => {
+    apiMock.findParts.mockResolvedValue(battery);
+    renderPanel({ jobId: "bat", jobName: "battery", places: [], placeLabels: [], onPickOther: vi.fn(), toBuy: true });
+    await waitFor(() => expect(screen.getAllByTestId("parts-fit-card")).toHaveLength(1));
+    expect(screen.queryByTestId("parts-fit-used-different")).toBeNull();
+  });
+});
+
+describe("PartsThatFitPanel — label search dropdown (LC-21)", () => {
+  it("results drop down under the box; arrow keys + Enter pick; 5 hits say type more; Add is the last row", async () => {
+    apiMock.findParts.mockReset();
+    apiMock.partsLookup.mockResolvedValue({ reference: null, brandNumbers: [] });
+    apiMock.findParts.mockResolvedValue({ linked: true, car: { make: "Toyota", model: "Roomy" }, plainSections: [], ask: { state: "none", askedAt: null, byYou: false } });
+    apiMock.partsMatch.mockReset();
+    apiMock.partsMatch.mockResolvedValue({
+      matches: Array.from({ length: 5 }, (_, i) => ({
+        key: `pm-${i}`, partId: `pm-${i}`, kind: "part", name: `Battery ${i}`, brand: "Interstate", number: `N-${i}`, size: null, type: null,
+      })),
+    });
+    const onPickOther = vi.fn();
+    renderPanel({ jobId: "bat", jobName: "battery", places: [], placeLabels: [], onPickOther });
+    await waitFor(() => expect(screen.getByTestId("parts-fit-used-different")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("parts-fit-used-different"));
+    const box = screen.getByTestId("parts-fit-other-search");
+    fireEvent.change(box, { target: { value: "interstate" } });
+    await waitFor(() => expect(screen.getAllByTestId("parts-fit-other-match")).toHaveLength(5));
+    expect(screen.getByTestId("parts-fit-other-dropdown")).toBeTruthy();
+    expect(screen.queryByText(/narrow|type more|parts list/i)).toBeNull();
+    const rows = screen.getByTestId("parts-fit-other-dropdown").querySelectorAll("[role=option]");
+    expect(rows[rows.length - 1].getAttribute("data-testid")).toBe("parts-fit-other-add");
+    fireEvent.keyDown(box, { key: "ArrowDown" });
+    fireEvent.keyDown(box, { key: "ArrowDown" });
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(onPickOther).toHaveBeenCalledWith(expect.objectContaining({ source: "found", key: "pm-1" }));
   });
 });

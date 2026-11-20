@@ -258,6 +258,8 @@ jobs:
           supabase/functions/_fleet-server/inspection_findings.test.ts
           supabase/functions/_fleet-server/log_service_find_ask.test.ts
           supabase/functions/_fleet-server/log_service_part_fit.test.ts
+          supabase/functions/_fleet-server/fleet_parts_match.test.ts
+          supabase/functions/_fleet-server/catalog_request_autoresolve.test.ts
           supabase/functions/_fleet-server/log_service_parts_notices.test.ts
           supabase/functions/_fleet-server/log_service_planned_guard.test.ts
           supabase/functions/_fleet-server/parts_finder_places.test.ts

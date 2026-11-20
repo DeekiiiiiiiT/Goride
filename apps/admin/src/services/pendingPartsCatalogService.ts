@@ -140,7 +140,7 @@ export type PendingPartsCandidate = {
   brand: string;
   number: string;
   place: string | null;
-  fitLabel: "made_for_car" | "also_fits" | "fits_by_size" | "check_before_buying";
+  fitLabel: "made_for_car" | "also_fits" | "fits_by_size" | "check_before_buying" | "not_listed";
 };
 
 export async function fetchPendingPartsCandidates(

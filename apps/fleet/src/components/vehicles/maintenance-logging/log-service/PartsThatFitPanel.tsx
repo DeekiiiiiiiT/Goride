@@ -23,6 +23,8 @@ import {
   type PartsForJob,
 } from "./partsThatFit";
 import type { StoreBrandNumber } from "../../find-parts/everyday/storeCopyText";
+import type { PartPick } from "./partPick";
+import { OtherPartSearch } from "./OtherPartSearch";
 
 function Sym({ name, size, className = "", fill = false }: { name: string; size: number; className?: string; fill?: boolean }) {
   return (
@@ -240,12 +242,32 @@ export type PartsThatFitPanelProps = {
    * no Skip / Plan it (the job is already on the car's list). Ask Roam stays when nothing is on file.
    */
   toBuy?: boolean;
+  /** LC-21: the part used when it isn't a tapped card (found by its label, by size, or added); null when none. */
+  otherPick?: PartPick | null;
+  /** LC-21: shows "I used a different …". Null clears the pick. */
+  onPickOther?: (pick: PartPick | null) => void;
 };
 
 export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
   const { vehicleId, jobId, places, needsPlace, onPick, toBuy = false } = props;
-  const partId = toBuy ? null : props.partId;
+  const onPickOther = toBuy ? undefined : props.onPickOther;
+  const other = onPickOther ? props.otherPick ?? null : null;
+  // A found / added part is the line's part: no card reads as chosen while it is in use.
+  const partId = toBuy || other ? null : props.partId;
   const onPlanIt = toBuy ? undefined : props.onPlanIt;
+  const typeIn = (data: PartsForJob | null) =>
+    onPickOther ? (
+      <OtherPartSearch
+        vehicleId={vehicleId}
+        jobId={jobId}
+        jobName={props.jobName}
+        data={data}
+        pick={other}
+        onPickOther={onPickOther}
+        onPickListed={(p) => onPick(p)}
+      />
+    ) : null;
+  const typed = other;
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [asking, setAsking] = useState(false);
   const [askOverride, setAskOverride] = useState<FindAsk | null>(null);
@@ -313,7 +335,7 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
     </div>
   );
   // Owner 20 Nov: no "Skip — I don't know the part". Tapping a part is optional (no tap = no part on the line);
-  // Change undoes a pick; a different part goes under Items used → Other item.
+  // Change undoes a pick; a different part goes in "I used a different …" (LC-20).
 
   if (needsPlace) {
     return wrap(
@@ -364,6 +386,7 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
             {C.tryAgain}
           </button>
         </div>
+        {typeIn(null)}
       </>,
     );
   }
@@ -377,6 +400,7 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
         <p className={`rounded-xl p-3 ${LS.low} ${LT.bodySm} ${LS.muted}`} data-testid="parts-fit-not-linked">
           {C.notLinked}
         </p>
+        {typeIn(data)}
       </>,
     );
   }
@@ -390,6 +414,7 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
     const ask = askOverride ?? data.ask ?? { state: "none", askedAt: null, byYou: false };
     if (ask.state === "looking") {
       return wrap(
+        <>
         <div className="rounded-xl p-4 sm:p-6 flex flex-col gap-4 bg-[#e2dfff]/30 dark:bg-[#2e2a5c]/40" data-testid="parts-fit-looking">
           <div className="flex items-start gap-4">
             <div className="w-12 h-12 rounded-full bg-[#e2dfff] dark:bg-[#3323cc]/40 flex items-center justify-center shrink-0 shadow-sm text-[#4b41e1] dark:text-[#c3c0ff]">
@@ -411,7 +436,9 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
           <div className="flex flex-wrap items-center gap-2">
             {onPlanIt ? <PlanItButton label={C.planItLater} onClick={() => onPlanIt(null)} /> : null}
           </div>
-        </div>,
+        </div>
+        {typeIn(data)}
+        </>,
       );
     }
     const sendAsk = async () => {
@@ -458,6 +485,7 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
           </div>
         </div>
       </div>
+      {typeIn(data)}
       </>,
     );
   }
@@ -488,7 +516,7 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
             key={p.partId}
             part={p}
             chosen={p.partId === partId}
-            dimmed={Boolean(partId) && p.partId !== partId}
+            dimmed={Boolean(typed) || (Boolean(partId) && p.partId !== partId)}
             onPick={() => onPick(p)}
             readOnly={toBuy}
             copyText={() => partCopyText(data.copyCar, p, brandNumbers.get(p.partId), props.placeLabels)}
@@ -515,6 +543,7 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
           </button>
         </div>
       ) : null}
+      {chosen || orphan ? null : typeIn(data)}
       {!toBuy && onPlanIt ? (
         <div className="pt-2 flex items-center gap-2">
           <PlanItButton label={C.planIt} onClick={() => onPlanIt(chosen)} />
