@@ -271,8 +271,7 @@ async function openO2FromDraft(page: Page, opts: { items?: boolean } = {}) {
 }
 
 async function fillLabour(page: Page, amount: string) {
-  await page.locator("#labor-hours").fill("1");
-  await page.locator("#labor-rate").fill(amount);
+  await page.locator("#labor-amount").fill(amount);
 }
 
 const pickPlace = (page: Page, label: string) =>

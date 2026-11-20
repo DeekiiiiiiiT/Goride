@@ -161,8 +161,7 @@ async function fillJobAmount(page: Page, amount: string) {
   if (await service.isVisible().catch(() => false)) return service.fill(amount);
   const labor = page.locator("#cat-field-labor");
   if (await labor.isVisible().catch(() => false)) return labor.fill(amount);
-  await page.locator("#labor-hours").fill("1");
-  await page.locator("#labor-rate").fill(amount);
+  await page.locator("#labor-amount").fill(amount);
 }
 
 const saveLine = (page: Page) => page.getByRole("button", { name: /^Save line/ }).first();

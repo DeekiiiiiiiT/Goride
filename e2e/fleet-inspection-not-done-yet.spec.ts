@@ -284,8 +284,7 @@ test.describe("Inspection Not done yet — quotes, Add a job, Done (LC-10 … LC
     await page.getByRole("button", { name: "Quote", exact: true }).click();
     await expect(page.getByTestId("quote-mode-banner")).toContainText("Garage's quote — not paid yet");
     await expect(page.getByText(/Quote total/).first()).toBeVisible();
-    await page.locator("#labor-hours").fill("1");
-    await page.locator("#labor-rate").fill("12000");
+    await page.locator("#labor-amount").fill("12000");
     await page.getByTestId("quote-mode-note").fill("Front sensor slow");
     await saveLine(page).click();
     await expect(page.getByText("Garage quote saved · not done yet")).toBeVisible({ timeout: 15_000 });
@@ -300,7 +299,7 @@ test.describe("Inspection Not done yet — quotes, Add a job, Done (LC-10 … LC
     expect(found[0]).toMatchObject({ jobId: o2.id, lineTotal: 0, quote: 12000, places: "before_cat" });
     inspectionWo = found[0].woId;
     expect(sql(`SELECT total_cost::numeric::int FROM public.maintenance_work_orders WHERE id = '${inspectionWo}'`)).toBe("8000");
-    expect(sql(`SELECT values_json->'quote'->>'laborRate' FROM public.maintenance_work_order_lines WHERE id = '${found[0].id}'`)).toBe("12000");
+    expect(sql(`SELECT values_json->'quote'->'values'->>'labor' FROM public.maintenance_work_order_lines WHERE id = '${found[0].id}'`)).toBe("12000");
     expect(sql(`SELECT notes FROM public.maintenance_work_order_lines WHERE id = '${found[0].id}'`)).toBe("Front sensor slow");
   });
 
@@ -405,14 +404,14 @@ test.describe("Inspection Not done yet — quotes, Add a job, Done (LC-10 … LC
     await card.getByTestId("found-edit-quote").click();
     await expect(page.getByTestId("add-to-inspection-banner")).toContainText("Garage's quote for this job", { timeout: 30_000 });
     await expect(page.getByTestId("log-service-job-header")).toContainText(o2.name, { timeout: 30_000 });
-    await expect(page.locator("#labor-rate")).toHaveValue("12000");
+    await expect(page.locator("#labor-amount")).toHaveValue("12000");
     await expect(page.getByTestId("quote-mode-note")).toHaveValue("Front sensor slow");
-    await page.locator("#labor-rate").fill("15000");
+    await page.locator("#labor-amount").fill("15000");
     await page.getByRole("button", { name: /^Save line/ }).first().click();
     await page.getByRole("button", { name: /continue to review/i }).click();
     await page.getByRole("button", { name: "Save quote" }).click();
     await expect(page.getByText(`Quote saved for ${o2.name}`)).toBeVisible({ timeout: 30_000 });
-    const row = sql(`SELECT (values_json->>'quote_amount')::numeric::int || '|' || line_total::numeric::int || '|' || (values_json->'quote'->>'laborRate')
+    const row = sql(`SELECT (values_json->>'quote_amount')::numeric::int || '|' || line_total::numeric::int || '|' || (values_json->'quote'->'values'->>'labor')
                      FROM public.maintenance_work_order_lines WHERE id = '${o2Line.id}'`);
     expect(row).toBe("15000|0|15000");
     expect(sql(`SELECT total_cost::numeric::int FROM public.maintenance_work_orders WHERE id = '${inspectionWo}'`)).toBe("8000");

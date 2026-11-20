@@ -180,8 +180,7 @@ async function fillJobAmount(page: Page, amount: string) {
     return;
   }
   // Jobs without a single cost box (e.g. Brake rotor): 1 hour × the amount.
-  await page.locator("#labor-hours").fill("1");
-  await page.locator("#labor-rate").fill(amount);
+  await page.locator("#labor-amount").fill(amount);
 }
 
 async function gotoHub(page: Page) {

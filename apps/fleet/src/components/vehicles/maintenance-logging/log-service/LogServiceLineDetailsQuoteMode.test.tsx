@@ -34,6 +34,8 @@ function props(over: Partial<LogServiceLineDetailsStepProps> = {}): LogServiceLi
     lineTotalLabel: "Line total",
     currency: "JMD",
     lineTotal: 0,
+    laborAmount: null,
+    onLaborAmountChange: vi.fn(),
     ...over,
   };
 }
@@ -52,7 +54,9 @@ describe("Details step — quote mode (LC-16: the same form, entered as the gara
     );
     expect(screen.getByTestId("quote-mode-banner").textContent).toContain("Garage's quote — not paid yet");
     expect(screen.getByText("Action")).toBeTruthy();
-    expect(screen.getByLabelText("Labor hours")).toBeTruthy();
+    expect(screen.getByLabelText("Labor (J$)")).toBeTruthy();
+    expect(screen.queryByLabelText("Labor hours")).toBeNull();
+    expect(screen.queryByLabelText("Labor rate")).toBeNull();
     expect(screen.getByText("Quote total")).toBeTruthy();
     expect(screen.getByTestId("to-buy-panel")).toBeTruthy();
     expect(screen.getByTestId("also-do")).toBeTruthy();
@@ -68,5 +72,17 @@ describe("Details step — quote mode (LC-16: the same form, entered as the gara
     expect(screen.getByText("Line total")).toBeTruthy();
     expect(screen.queryByTestId("quote-mode-banner")).toBeNull();
     expect(screen.queryByTestId("quote-mode-note")).toBeNull();
+  });
+});
+
+describe("Details step — one Labor amount (owner 20 Nov: no hours × rate)", () => {
+  it("one Labor box; typing calls back with the amount", () => {
+    const onLaborAmountChange = vi.fn();
+    render(<LogServiceLineDetailsStep {...props({ laborAmount: 4000, onLaborAmountChange })} />);
+    const box = screen.getByLabelText("Labor (J$)") as HTMLInputElement;
+    expect(box.value).toBe("4000");
+    fireEvent.change(box, { target: { value: "5500" } });
+    expect(onLaborAmountChange).toHaveBeenCalledWith(5500);
+    expect(screen.queryByLabelText("Labor hours")).toBeNull();
   });
 });

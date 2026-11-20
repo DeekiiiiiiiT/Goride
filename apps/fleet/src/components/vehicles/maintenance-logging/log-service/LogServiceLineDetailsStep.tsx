@@ -92,9 +92,17 @@ export type LogServiceLineDetailsStepProps = {
    * and a note, and the total reads "Quote total".
    */
   quoteMode?: { note: string; onNoteChange: (v: string) => void };
+  /** One labour amount for the job (replaces hours × rate). Shown where hours/rate were. */
+  laborAmount?: number | null;
+  onLaborAmountChange?: (v: number | null) => void;
   /** "Also do" jobs for this job (e.g. Throttle Body Relearn after cleaning), each with an Add button. */
   alsoDoSlot?: React.ReactNode;
 };
+
+export const LABOR_COPY = {
+  label: (currency: string) => `Labor (${currency === "JMD" ? "J$" : currency})`,
+  placeholder: "Cost for the job",
+} as const;
 
 export const QUOTE_MODE_COPY = {
   banner: "Garage's quote — not paid yet",
@@ -456,31 +464,21 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">{categoryFields}</div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {!props.hiddenFields?.includes("labor_hours") ? (
+        {/* Owner 20 Nov: garages bill labour as one amount — no hours × rate. */}
+        {props.onLaborAmountChange && !props.hiddenFields?.includes("labor_rate") ? (
         <div className="space-y-2">
-          <Label htmlFor="labor-hours" className={`${LT.labelMd} ${LS.muted}`}>Labor hours</Label>
+          <Label htmlFor="labor-amount" className={`${LT.labelMd} ${LS.muted}`}>{LABOR_COPY.label(currency)}</Label>
           <Input
-            id="labor-hours"
+            id="labor-amount"
             type="number"
-            step="0.1"
+            min={0}
+            step="0.01"
+            inputMode="decimal"
+            placeholder={LABOR_COPY.placeholder}
             className="h-10 rounded-lg border-0 bg-white shadow-sm focus-visible:ring-1 focus-visible:ring-[#c9c5cd] dark:bg-[#15161d]"
-            value={laborHours ?? ""}
+            value={props.laborAmount ?? ""}
             onChange={(e) =>
-              onLaborHoursChange(e.target.value === "" ? null : Number(e.target.value))
-            }
-          />
-        </div>
-        ) : null}
-        {!props.hiddenFields?.includes("labor_rate") ? (
-        <div className="space-y-2">
-          <Label htmlFor="labor-rate" className={`${LT.labelMd} ${LS.muted}`}>Labor rate</Label>
-          <Input
-            id="labor-rate"
-            type="number"
-            className="h-10 rounded-lg border-0 bg-white shadow-sm focus-visible:ring-1 focus-visible:ring-[#c9c5cd] dark:bg-[#15161d]"
-            value={laborRate ?? ""}
-            onChange={(e) =>
-              onLaborRateChange(e.target.value === "" ? null : Number(e.target.value))
+              props.onLaborAmountChange?.(e.target.value === "" ? null : Number(e.target.value))
             }
           />
         </div>

@@ -1862,6 +1862,25 @@ export function LogMaintenanceServiceDialog({
   };
 
   // ---- LC-14 "Add a job to this inspection" (the same window, found jobs only) ----
+  /**
+   * Owner 20 Nov: labour is one amount for the job (values.labor), not hours × rate. Jobs whose own form already has
+   * a Labor box keep it (no second box). A line saved with hours × rate opens showing that total.
+   */
+  const laborAmountProps = (cat: MaintenanceServiceCategory) => {
+    if ((cat.field_schema?.fields ?? []).some((f) => f.key === "labor")) return {};
+    const typed = typeof fieldValues.labor === "number" ? fieldValues.labor : null;
+    const fromRate =
+      lineExtras.laborHours != null && lineExtras.laborRate != null && lineExtras.laborHours > 0 && lineExtras.laborRate > 0
+        ? Math.round(lineExtras.laborHours * lineExtras.laborRate * 100) / 100
+        : null;
+    return {
+      laborAmount: typed ?? fromRate,
+      onLaborAmountChange: (v: number | null) => {
+        setFieldValues((prev) => ({ ...prev, labor: v }));
+        setLineExtras((prev) => ({ ...prev, laborHours: null, laborRate: null }));
+      },
+    };
+  };
   /** LC-16: the job form is the garage's quote (add-to-inspection jobs, and an inspection's Not done yet cards). */
   const isQuoteCard = (cat: MaintenanceServiceCategory) => addMode || quoteCards.has(cat.id);
   const quoteModeFor = (cat: MaintenanceServiceCategory) =>
@@ -2773,6 +2792,7 @@ export function LogMaintenanceServiceDialog({
                       laborRate={lineExtras.laborRate}
                       onLaborHoursChange={(v) => setLineExtras((prev) => ({ ...prev, laborHours: v }))}
                       onLaborRateChange={(v) => setLineExtras((prev) => ({ ...prev, laborRate: v }))}
+                      {...laborAmountProps(cat)}
                       brand={lineExtras.brand}
                       partNumber={lineExtras.partNumber}
                       onBrandChange={(brand) => setLineExtras((prev) => ({ ...prev, brand }))}
@@ -2873,6 +2893,7 @@ export function LogMaintenanceServiceDialog({
               laborRate={lineExtras.laborRate}
               onLaborHoursChange={(v) => setLineExtras((prev) => ({ ...prev, laborHours: v }))}
               onLaborRateChange={(v) => setLineExtras((prev) => ({ ...prev, laborRate: v }))}
+              {...laborAmountProps(activeCategory)}
               brand={lineExtras.brand}
               partNumber={lineExtras.partNumber}
               onBrandChange={(brand) => setLineExtras((prev) => ({ ...prev, brand }))}
