@@ -22,7 +22,7 @@ const CANDIDATE_CAP = 6;
 export type PartPosition = "front" | "rear" | "both" | null;
 export type PartSide = "left" | "right" | "both" | null;
 
-export type FitLabel = "check_before_buying" | "made_for_car" | "also_fits";
+export type FitLabel = "check_before_buying" | "made_for_car" | "also_fits" | "fits_by_size";
 
 export type FoundPart = {
   partId: string;
@@ -125,6 +125,8 @@ export function keepForPlaceCodes<T extends { listingPlace?: string | null }>(
 export function fitLabelForPart(item: { status: string; tier: number }): FitLabel {
   if (item.status === "needs_checking") return "check_before_buying";
   if (item.tier === 1) return "made_for_car";
+  // Tier 5 = matched on the car's size spec (battery, tyre, bulb, wiper…), owner 20 Nov.
+  if (item.tier === 5) return "fits_by_size";
   return "also_fits";
 }
 

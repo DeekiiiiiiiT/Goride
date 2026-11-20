@@ -14,11 +14,13 @@ import {
 const FIT_TEXT: Record<PendingPartsCandidate["fitLabel"], string> = {
   made_for_car: "Made for this car",
   also_fits: "Also fits",
+  fits_by_size: "Fits by size",
   check_before_buying: "Needs checking",
 };
 const FIT_CLS: Record<PendingPartsCandidate["fitLabel"], string> = {
   made_for_car: "bg-[#ecfdf5] text-[#047857] dark:bg-[#064e3b] dark:text-[#34d399]",
   also_fits: "bg-[#eff6ff] text-[#1d4ed8] dark:bg-[#172554] dark:text-[#93c5fd]",
+  fits_by_size: "bg-[#eff6ff] text-[#1d4ed8] dark:bg-[#172554] dark:text-[#93c5fd]",
   check_before_buying: "bg-[#fffbeb] text-[#b45309] dark:bg-[#451a03] dark:text-[#fbbf24]",
 };
 

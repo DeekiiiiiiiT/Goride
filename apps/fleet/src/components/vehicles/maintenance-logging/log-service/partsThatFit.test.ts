@@ -133,3 +133,13 @@ describe("nameWithMakerName (Toyota's own name in brackets)", () => {
     expect(nameWithMakerName("Front oxygen sensor")).toBe("Front oxygen sensor");
   });
 });
+
+describe("Fits by size (owner 20 Nov)", () => {
+  it("a part matched on the car's size spec (tier 5) reads Fits by size", () => {
+    const out = partsFromFindBody({
+      plainSections: [{ items: [{ partId: "bat", name: "Battery", brand: "GS Yuasa", number: "ER-M-55/55B20L", tier: 5, status: "verified" }] }],
+    });
+    expect(out.parts[0].fitLabel).toBe("fits_by_size");
+    expect(PARTS_FIT_COPY.badge.fits_by_size).toBe("Fits by size");
+  });
+});

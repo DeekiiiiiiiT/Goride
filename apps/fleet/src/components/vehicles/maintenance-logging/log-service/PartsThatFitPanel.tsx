@@ -40,6 +40,7 @@ const BTN_SOFT = `${LS.lowest} ${LS.text} ${LS.hoverMid} shadow-sm border border
 const BADGE: Record<FitLabel, { cls: string; icon: string }> = {
   made_for_car: { cls: "bg-[#ecfdf5] text-[#059669] dark:bg-[#064e3b] dark:text-[#34d399]", icon: "verified_user" },
   also_fits: { cls: "bg-[#eff6ff] text-[#2563eb] dark:bg-[#172554] dark:text-[#93c5fd]", icon: "link" },
+  fits_by_size: { cls: "bg-[#eff6ff] text-[#2563eb] dark:bg-[#172554] dark:text-[#93c5fd]", icon: "straighten" },
   check_before_buying: { cls: "bg-[#fffbeb] text-[#b45309] dark:bg-[#451a03] dark:text-[#fbbf24]", icon: "warning" },
 };
 

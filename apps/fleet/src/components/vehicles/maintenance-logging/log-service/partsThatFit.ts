@@ -4,7 +4,7 @@
  */
 import { buildStoreCopyText, carDetailsLine, type StoreBrandNumber } from "../../find-parts/everyday/storeCopyText";
 
-export type FitLabel = "made_for_car" | "also_fits" | "check_before_buying";
+export type FitLabel = "made_for_car" | "also_fits" | "fits_by_size" | "check_before_buying";
 
 export type FitPart = {
   partId: string;
@@ -51,6 +51,7 @@ export const PARTS_FIT_COPY = {
   badge: {
     made_for_car: "Made for your car",
     also_fits: "Also fits",
+    fits_by_size: "Fits by size",
     check_before_buying: "Check before buying",
   } satisfies Record<FitLabel, string>,
   using: (brand: string, name: string) => `Using ${[brand, name.charAt(0).toLowerCase() + name.slice(1)].filter(Boolean).join(" ")}`,
@@ -80,7 +81,7 @@ export const PARTS_FIT_COPY = {
   planItLater: "Plan it — I'll buy it later",
 } as const;
 
-const FIT_LABELS = new Set<FitLabel>(["made_for_car", "also_fits", "check_before_buying"]);
+const FIT_LABELS = new Set<FitLabel>(["made_for_car", "also_fits", "fits_by_size", "check_before_buying"]);
 
 function str(v: unknown): string {
   return v == null ? "" : String(v).trim();
@@ -100,7 +101,8 @@ function fitLabelOf(item: Record<string, unknown>): FitLabel {
   const raw = str(item.fitLabel) as FitLabel;
   if (FIT_LABELS.has(raw)) return raw;
   if (str(item.status) === "needs_checking") return "check_before_buying";
-  return Number(item.tier) === 1 ? "made_for_car" : "also_fits";
+  if (Number(item.tier) === 1) return "made_for_car";
+  return Number(item.tier) === 5 ? "fits_by_size" : "also_fits";
 }
 
 /** The /parts/find answer → cards in the server's order (best tier first), one card per part. */

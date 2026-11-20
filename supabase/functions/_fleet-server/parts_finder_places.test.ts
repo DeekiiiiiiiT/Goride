@@ -46,6 +46,9 @@ Deno.test("front/rear wheel filtering unchanged", () => {
 Deno.test("fitLabel cases", () => {
   assertEquals(fitLabelForPart({ status: "needs_checking", tier: 1 }), "check_before_buying");
   assertEquals(fitLabelForPart({ status: "verified", tier: 1 }), "made_for_car");
+  // owner 20 Nov: parts matched on the car size spec say Fits by size
+  assertEquals(fitLabelForPart({ status: "verified", tier: 5 }), "fits_by_size");
+  assertEquals(fitLabelForPart({ status: "verified", tier: 3 }), "also_fits");
   assertEquals(fitLabelForPart({ status: "verified", tier: 2 }), "also_fits");
 });
 Deno.test("Log service places: wheel codes go to the wheel filter, never the place-code filter", async () => {
