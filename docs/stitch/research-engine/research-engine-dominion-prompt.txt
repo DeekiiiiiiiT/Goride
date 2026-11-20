@@ -1,0 +1,288 @@
+ROAM DOMINION — RESEARCH ENGINE (ROAM FILLS THE CATALOGUE) — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Dominion - Research Engine (Desktop Admin, for the owner, who is not a mechanic):
+
+Design high-fidelity desktop screens for the research engine in the Roam Dominion admin console. Dominion is Roam's master database of cars, their sizes and fluids, and their parts, and every Roam app reads from it. Today the owner fills it by hand, one car at a time. The research engine now does that work. For a car version it looks up the car's exact identity, its specs (battery, oil, wipers, tyres, fluids) and its parts on trusted catalogue websites. It saves a copy of the page each answer came from and adds the answer to Dominion. The owner only steps in for three things: (1) a "Looks right" review of what Roam found; (2) a "browser check", where a catalogue website won't let Roam read it, so the owner opens the page, finds one line and pastes it; and (3) a "two makers disagree" decision. The engine fills the cars that matter first, so most cars will show "Not started yet" or "Waiting its turn" for a while. Those calm waiting states matter as much as the busy ones. The design must feel modern, seamless and effortless, like a premium consumer app, not a tool for engineers. Each screen is one view, drawn tall enough to show everything with no inner scrolling.
+
+
+BRAND IDENTITY:
+- Keep the existing Dominion console frame exactly as it is today:
+  - dark navy left sidebar "Dominion · Roam Admin Console". Groups: MASTER DATA (Overview, Vehicles active, Places and Maps, Fuel, Tolls, Tax and Vendors), ENGINES, DISTRIBUTION, PLATFORM, BACK OFFICE.
+  - top bar: search "Search entities, engines, routes…" with a ⌘K chip, moon icon, user "Deeki T · Owner".
+  - Everything right of the sidebar and below the top bar is the design.
+- Theme: "Calm modern workspace". Generous spacing, 16px rounded cards, soft shadows, clear hierarchy, few codes.
+- LIGHT MODE (draw every screen in light mode; dark mode comes from the Stitch theme switch):
+  - Primary: #0153dc; primary container: #dbe1ff
+  - Success: #006e31 on #e6f4ea
+  - Warning: #8a5a00 on #fff4dc
+  - Error: #a83836 on #fdecec
+  - Outline: #797a84; hairlines #e6e7ee
+  - Background: #faf8fe; cards white, 16px radius, hairline border and a very soft shadow (0 4px 16px rgba(1,83,220,0.04))
+  - Text: #30323b; muted text: #5d5f68
+- DARK MODE (for the theme switch):
+  - Background #0b1220; cards #111a2e; hairlines #1e293b
+  - Text #e2e8f0; muted #94a3b8
+  - Primary #5b8def; success #4ade80; warning #fbbf24; error #f87171
+- Trust pills (one style everywhere a value is shown):
+  - "Confirmed" = green on soft green, with a small check
+  - "Confirmed · you checked it" = green outline pill with a small person icon
+  - "Needs checking" = amber on soft amber
+  - "Browser check" = blue on primary container, with a small window icon
+  - "Not started yet" / "Waiting its turn" = slate #475569 on #f1f5f9
+  - "Couldn't find" = muted outline pill
+- Job status pills: "Researching" (blue with a soft pulse dot), "Needs review" (amber), "Added" (green), "Added automatically" (green outline), "Couldn't find" (muted outline), "Paused" (slate).
+- Maker logos in round tiles everywhere a car maker is named; the logo comes first.
+- Typography: Inter. Titles 26px semibold, section titles 18px semibold, body 15px, hints 13px muted. Mono only for part numbers, frame codes and money, always after the plain words.
+- Buttons always look like buttons:
+  - Primary = solid #0153dc with white text.
+  - Secondary = white with a visible #c5c6d0 border and dark text.
+  - Danger (Reject, Remove, Undo, Neither is right, Turn off) = #a83836 border with red text; solid red only for a final confirm.
+  - Icon buttons are 32px with a visible border.
+  - No underlined text links and no grey text-only buttons. A link is only used to open an outside website, and it shows an "opens in a new tab" arrow.
+- Every confirm is an in-app dialog, never a browser pop-up.
+- Never show who asked: no company, fleet, customer, plate or driver names, no "asked by N fleets", no "first asked" or "last asked" dates, and no text a customer typed.
+- Sample data (real):
+  - Car: Toyota Roomy · 2016–2020 · 2WD · 1.0 petrol · frame M900A · engine 1KR-FE. Its sister: Toyota Tank M900A.
+  - Database today: 2,679 car versions · 0 fully ready · best car 4 of 10 key parts.
+  - Trusted part-maker sites: SB (sbparts.jp), NiBK (jnbk-brakes.com), Masuma (masuma.parts). Car-maker catalogues that block Roam: Amayama (amayama.com), Megazip (megazip.net), Partsouq (partsouq.com). Reference only (may suggest, never confirm): RockAuto (rockauto.com), 7zap (7zap.com).
+  - Found part: "Front brake pads" · factory number 04465-B1190 · listed by SB and NiBK for the Roomy M900A → "Confirmed · two part makers agree".
+  - Proposal needing review: "Rear wheel bearing" · JTEKT 3G080 · "No page shows this number for this car yet".
+  - Spec found: "Battery" · M-42 · EFB.
+  - Specs from the old import: tyre size, bolt pattern and brakes on 2,470 cars, all "Needs checking · from the old import".
+  - Cost: about US$0.04 per research job; today US$1.20 of a US$5.80 daily limit.
+
+
+DESIGN PRINCIPLES:
+- Desktop-first at 1440px; content column max 1120px. One phone screen (390px) is included.
+- Plain words first: "Front brake pads for the Toyota Roomy 2016–2020 2WD", never codes first.
+- Every answer shows where it came from: the site's logo or name, "Read on 20 Nov 2026", and a "See the saved page text" button that opens the exact quoted line.
+- One clear next action per row. Review actions sit at the bottom of the drawer in one row.
+- Waiting is normal, not an error: waiting states are calm slate cards, never red.
+- The owner's effort is shown and limited: a counter "Browser checks waiting for you: 7 of 25" appears wherever checks are listed.
+- Undo is always offered after an add, inside a green toast and in the item's history.
+- Right-side drawers are 560px wide and open over the list; the list stays visible behind a soft scrim.
+
+
+SCREEN 1: PENDING PARTS LIST
+- Breadcrumb "Vehicles › Pending catalog", title "Pending catalog", muted line "What Roam is researching, and what needs you."
+- Tabs: Parts (active), Vehicles, Auto-match conflicts, Settings and health.
+- Top row of four small summary cards:
+  - "Needs review" 4
+  - "Browser checks waiting for you" 7 of 25
+  - "Researching now" 1
+  - "Added this week" 12
+- Filter pills: All, Needs review, Browser check, Researching, Waiting its turn, Added automatically, Added, Couldn't find, Failed. A search box "Search car or part".
+- Table, one row per car + part:
+  - columns: car (maker logo, "Toyota Roomy 2016–2020 2WD", muted "M900A · 1KR-FE"), part and place ("Rear wheel bearing · Rear left and right"), source (site logo), status pill, result ("JTEKT 3G080" or "—"), chevron button.
+  - Rows: Front brake pads · Added automatically; Rear wheel bearing · Needs review; Battery · Browser check; Wiper blades · Researching; Air filter · Waiting its turn.
+  - No dates asked, no counts of who asked.
+- Header actions (secondary buttons): "Export CSV", "Re-run waiting jobs (up to 50)".
+
+
+SCREEN 2: REQUEST DRAWER — ROAM FOUND
+- Drawer over Screen 1. Header: "Rear wheel bearing", muted "Toyota Roomy 2016–2020 2WD · Rear left and right", status pill "Needs review".
+- Section "Roam found", one card:
+  - big "JTEKT 3G080", pill "Needs checking"
+  - fit block: "Fits: Toyota Roomy 2016–2020 2WD, Toyota Tank 2016–2020 2WD · Rear left and right · frame M900A"
+  - source row: masuma.parts logo, "Read on 20 Nov 2026", secondary button "See the saved page text"
+  - "How sure" line: "One part maker lists it. Two makers, or the car maker's catalogue, would confirm it."
+- Section "Checks" with three rows, each with a green check or amber dot: "Number is on the page", "This car is in the same row", "Rear position is in the same row".
+- Bottom action row: primary "Looks right — add it", secondary "Edit and add", secondary "Research again", danger "Couldn't find it".
+
+
+SCREEN 3: REQUEST DRAWER — BROWSER CHECK
+- Drawer header: "Battery", muted "Toyota Roomy 2016–2020 2WD", pill "Browser check".
+- Calm blue card "Amayama doesn't let Roam read its pages. It takes you about 20 seconds:"
+  - Step 1: primary button "Open the Amayama page" with an "opens in a new tab" arrow
+  - Step 2: "Find the line that shows M900A and the battery"
+  - Step 3: a large paste box, placeholder "Paste that line here"
+- Under the box, a soft preview of what Roam read from the pasted line: "Battery · M-42 · EFB · M900A".
+- Bottom row: primary "Confirm", danger "Not on this page".
+- Footer note in muted text: "Browser checks waiting for you: 7 of 25 · a check left for 30 days closes as Couldn't find."
+
+
+SCREEN 4: REQUEST DRAWER — TWO MAKERS DISAGREE
+- Drawer header: "Rear brake shoes", muted "Toyota Roomy 2016–2020 2WD · Rear", amber pill "Two makers disagree".
+- Two side-by-side cards. Each shows the maker logo, a number (use clear placeholders "00000-A0001" and "00000-B0002"), "Read on 20 Nov 2026", "See the saved page text", and a primary "Use this one" button.
+- Below them, a full-width danger button "Neither is right".
+- A muted line: "Nothing is added until you choose. The other number is set aside."
+
+
+SCREEN 5: PENDING PARTS — FILLING THE CARS THAT MATTER FIRST
+- Same tab as Screen 1, but nothing needs the owner.
+- A large friendly empty card with a soft illustration of a car and a check:
+  - title "You're all caught up"
+  - text "Roam is filling the most-used cars first. Other cars wait their turn."
+- A progress strip: "Cars being filled first: 200 · fully ready 38 · in progress 121 · waiting 41".
+- Secondary button "See what's waiting".
+
+
+SCREEN 6: PENDING VEHICLES LIST
+- Tabs as Screen 1, Vehicles active.
+- Filter pills: All, Needs review, Researching, Waiting its turn, Added, Couldn't find. A market filter "Market: Japan".
+- Table rows (maker logo first): "Toyota Roomy 2020 on · 2WD · 1.0 turbo petrol" · New version · Needs review; "Toyota Roomy 2016–2020 · 4WD" · Identity filled · Needs review; "Daihatsu Thor 2016–2020 · 2WD" · Researching.
+- Paging at the bottom: "1–25 of 63", previous and next buttons.
+
+
+SCREEN 7: VEHICLE PROPOSAL DRAWER
+- Header: "Toyota Roomy 2020 on · 2WD · 1.0 turbo petrol", tag pill "New version".
+- Fact grid with each value's trust pill: Frame code M900A · Years 2020 on · Engine 1KR-VET · Drivetrain 2WD · Gearbox CVT · Frame range "Not on file".
+- Source row: site logo, "Read on 20 Nov 2026", "See the saved page text".
+- Duplicate check card (green): "No matching car on file."
+- Bottom row: primary "Approve — add this car", secondary "Research again", danger "Reject" (opens an in-app dialog asking for a reason), danger outline "Couldn't find it".
+
+
+SCREEN 8: RESEARCH THIS MODEL — REVIEW
+- Title "Toyota Roomy — every version", muted "Roam found 5 versions."
+- Table, one row per version, each with a tag pill:
+  - "2016–2020 · 2WD · M900A · 1KR-FE" Same
+  - "2016–2020 · 4WD · M910A · 1KR-FE" Same
+  - "2020 on · 2WD · M900A · 1KR-FE" Update (shows "Frame range added")
+  - "2020 on · 2WD · M900A · 1KR-VET" New
+  - "2020 on · 4WD · M910A · 1KR-FE" New
+- Each row has "Approve" (secondary) and "Reject" (danger) buttons.
+- Top right: primary "Approve all new (2)".
+
+
+SCREEN 9: RESEARCH SETTINGS AND HEALTH
+- Tabs as Screen 1, Settings and health active.
+- Card "Engine": a green status "Running", a large toggle "Research engine on", and a secondary "Pause" button.
+- Card "Auto-add": toggle "Practice mode (Roam suggests, you approve everything)" ON; progress "Ready to add on its own after 20 good answers in a row: 6 of 20".
+- Card "Cost":
+  - "About US$0.04 per job (last 7 days)"
+  - a bar "Today US$1.20 of US$5.80"
+  - "Goal: fill the most-used cars by 18 Feb 2027 · on track"
+  - a separate line "Cars without a frame code: 763 — their identity is filled first"
+- Card "Recent problems": rows "Google limit reached — paused until 00:05", "Amayama blocked Roam — now a browser check site", each with a secondary "Retry" button.
+- Secondary button "Manage trusted sites" opens Screen 10.
+
+
+SCREEN 10: TRUSTED SOURCES
+- Breadcrumb "Parts database › Trusted sources". Title "Trusted sources", muted line "Where Roam is allowed to confirm parts and specs."
+- Three groups as cards, each a list of site rows:
+  - "Part makers": SB, NiBK, Masuma
+  - "Car-maker catalogues": Amayama, Megazip, Partsouq
+  - "Reference only": RockAuto, 7zap
+- Site row: logo, domain, makers it covers ("Toyota · Daihatsu · Lexus"), a reading pill ("Roam can read it" green / "Browser check only" blue / "Not checked yet" slate), "Pages confirmed 14", and a row of buttons: secondary "Recipes", secondary "Mark as readable" or "Mark as browser check", danger "Remove".
+- Header: primary "Add a site".
+
+
+SCREEN 11: ADD A SITE
+- Centered in-app dialog, 560px.
+- Fields asked one at a time, each appearing under the last answer:
+  - "Website address" (example "sbparts.jp")
+  - "What kind of site is it?" as three big choice cards: "Part maker", "Car-maker catalogue", "Reference only (can suggest, can't confirm)"
+  - "Which makers does it cover?" as logo chips
+  - "Does it allow automatic reading?" as two choice cards, "Yes — I checked its rules" and "No — browser checks only", with a date "Checked on 20 Nov 2026"
+- Bottom: secondary "Cancel" (red border, red text), primary "Add site".
+
+
+SCREEN 12: A SITE'S LOOKUP RECIPES
+- Drawer over Screen 10: "SB (sbparts.jp) — how Roam looks things up".
+- Recipe cards:
+  - "Search by car, then open the result" — Active
+  - "Search by part number" — Active
+- Each card shows its steps in plain words ("1 Search for the car · 2 Open the matching result · 3 Read the row with the number"), a last-run line "Worked 14 times · last on 20 Nov 2026", and buttons secondary "Edit" and danger "Turn off".
+- Primary "Add a recipe".
+
+
+SCREEN 13: CAR PAGE — COVERAGE
+- Car page header: Toyota logo, "Toyota Roomy 2016–2020 · 2WD · 1.0 petrol", muted "M900A · 1KR-FE", a ring "4 of 10 key parts ready".
+- Section "Key parts": a grid of 10 tiles (Front brake pads, Rear brake shoes, Oil filter, Air filter, Cabin filter, Spark plugs, Wiper blades, Battery, Wheel bearings, Drive belt), each with a trust pill (Confirmed / Needs checking / Browser check / Researching / Not started yet).
+- Section "Specs": tiles for Battery, Engine oil, Oil capacity, Wiper sizes, Bulbs, Tyre size, Brake fluid, Coolant, each with a pill.
+- Header buttons: primary "Fill this car", secondary "Fill every Roomy version", secondary "Research this model".
+
+
+SCREEN 14: CAR PAGE — IDENTITY FIRST
+- Same car page layout for "Toyota Glanza 2019 on", which has no frame code on file.
+- A calm slate card at the top: "Roam needs this car's frame code before it can look up parts." Primary button "Find this car's identity".
+- The key-parts and spec grids show every tile as "Waiting for identity" in slate.
+
+
+SCREEN 15: CAR SPECS WITH TRUST
+- Car page, Specs tab. Each spec is a row: plain label, value, trust pill, source, buttons.
+  - Engine oil "0W-20" · Confirmed · source logo
+  - Battery "M-42 · EFB" · Confirmed · you checked it on 20 Nov 2026
+  - Tyre size "165/65R14" · Needs checking · "from the old import"
+  - Front brakes "Ventilated disc" · Needs checking · "from the old import"
+  - Coolant · "Not on file"
+- Each row has secondary "Research this spec" and secondary "Edit".
+
+
+SCREEN 16: OVERVIEW WITH A NOTICE BANNER
+- The Dominion Overview page with a slim banner across the top, warning colours: "Research is paused: today's Google limit was reached. It starts again at 00:05." with a secondary button "Open research settings".
+- Under it, a second, blue banner: "Amayama now blocks Roam. Its checks moved to browser checks." with a secondary "Open trusted sources".
+- The rest of the Overview is unchanged.
+
+
+SCREEN 17: STATES
+- One view with five small cards side by side, each a real state of the Pending parts list:
+  - Loading: skeleton rows with a soft shimmer
+  - Couldn't load: "Couldn't load the queue" with a secondary "Try again"
+  - Engine paused: a slate card "Research is paused" with a primary "Resume"
+  - Undo toast after an add: green toast "Added Front brake pads to the Toyota Roomy" with a danger-outline "Undo"
+  - Reject dialog: "Why isn't this right?" with a text box, a secondary "Keep it" and a solid red "Reject"
+
+
+SCREEN 18: PHONE — BROWSER CHECK (390px)
+- The browser check from Screen 3 as a full-screen sheet on a phone:
+  - header "Battery · Toyota Roomy 2016–2020 2WD"
+  - a large primary "Open the Amayama page"
+  - a large paste box
+  - a sticky bottom row: primary "Confirm" and danger "Not on this page"
+
+
+ADDITIONAL UI COMPONENTS:
+- Trust pill set and job status pill set (as in Brand identity)
+- Summary card with a big number
+- Car row with maker logo, plain name and muted codes
+- Right drawer (560px) with a sticky bottom action row
+- "Roam found" card with fit block, source row and "See the saved page text"
+- Saved page text overlay: the quoted line highlighted, the site, the address and the date read
+- Browser check card with three numbered steps and a paste box
+- Two-makers comparison pair
+- Coverage tile grid; spec row with source
+- Site row with reading pill; choice cards; logo chips
+- Notice banner; empty-state card; skeleton rows; toast with Undo; in-app confirm dialog
+
+
+INTERACTIONS:
+- **Row chevron (Screens 1, 6):** opens that item's drawer; Esc or the close button closes it.
+- **Looks right — add it:** adds the part, shows the green toast with Undo, and the row turns "Added".
+- **Edit and add:** opens the same fields in edit mode inside the drawer, then saves.
+- **See the saved page text:** opens the saved-text overlay above the drawer.
+- **Open the Amayama page:** opens the outside site in a new browser tab; the drawer stays open.
+- **Paste box:** as soon as text is pasted, Roam shows what it read under the box. Confirm turns blue only when the line contains the car and a number.
+- **Use this one / Neither is right:** an in-app dialog confirms, then the drawer closes and the row updates.
+- **Approve all new:** an in-app dialog "Add 2 new Roomy versions?" then a toast.
+- **Fill this car / Fill every version / Research this model / Find this car's identity:** a toast "Roam queued 14 jobs for this car" and the tiles change to "Waiting its turn".
+- **Toggles (Screen 9):** turning the engine off asks first in an in-app dialog.
+- **Mark as readable / browser check, Remove, Turn off:** always an in-app dialog.
+- **Filters and search:** the list updates as you type; filters can be combined with search.
+- **Keyboard:** "/" focuses search; Esc closes the top drawer or dialog.
+
+
+Spec screens / Area
+| Screen | Area |
+|---|---|
+| 1 | Pending parts list — summary cards, filters, rows with no "who asked" |
+| 2 | Request drawer — Roam found, checks, Looks right |
+| 3 | Request drawer — browser check with paste box |
+| 4 | Request drawer — two makers disagree |
+| 5 | Pending parts — all caught up, filling the cars that matter first |
+| 6 | Pending vehicles list |
+| 7 | Vehicle proposal drawer — facts with trust, duplicate check |
+| 8 | Research this model — new / update / same review |
+| 9 | Research settings and health — engine, practice mode, cost, problems |
+| 10 | Trusted sources — part makers, car-maker catalogues, reference only |
+| 11 | Add a site — one question at a time |
+| 12 | A site's lookup recipes |
+| 13 | Car page — key parts and specs coverage |
+| 14 | Car page — identity first (no frame code) |
+| 15 | Car specs with trust and source |
+| 16 | Overview with notice banners |
+| 17 | States — loading, couldn't load, paused, Undo toast, reject dialog |
+| 18 | Phone 390px — browser check |

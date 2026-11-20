@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base { html, body { margin: 0; padding: 0; } body { overscroll-behavior: none; } main > :first-child { margin-top: 0 !important; } main > :last-child { margin-bottom: 0 !important; } } ::-webkit-scrollbar { display: none; }</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-background": "#191b24", "surface-variant": "#e1e1ed", "on-secondary": "#ffffff", "on-primary-fixed": "#00174b", "background": "#faf8ff", "inverse-primary": "#b4c5ff", "on-error": "#ffffff", "surface-bright": "#faf8ff", "tertiary": "#005323", "primary-fixed-dim": "#b4c5ff", "tertiary-container": "#006e31", "secondary": "#5c5e67", "outline-variant": "#c3c6d7", "on-primary": "#ffffff", "inverse-on-surface": "#f0f0fc", "error-container": "#ffdad6", "on-surface-variant": "#434655", "on-primary-container": "#ced8ff", "error": "#ba1a1a", "on-secondary-fixed-variant": "#44464f", "surface-container-highest": "#e1e1ed", "surface-dim": "#d9d9e5", "on-error-container": "#93000a", "secondary-fixed": "#e1e2ec", "on-secondary-container": "#60626b", "tertiary-fixed": "#9af7aa", "surface-container-high": "#e7e7f3", "surface-container-low": "#f3f3ff", "secondary-container": "#dedfea", "surface": "#faf8ff", "surface-container": "#ededf9", "on-tertiary-fixed": "#00210a", "surface-container-lowest": "#ffffff", "primary-container": "#0153dc", "secondary-fixed-dim": "#c5c6d0", "on-primary-fixed-variant": "#003ea8", "outline": "#737686", "inverse-surface": "#2e3039", "on-secondary-fixed": "#191b23", "primary-fixed": "dbe1ff", "primary": "#003ea9", "on-tertiary-fixed-variant": "#005323", "on-tertiary-container": "#91eea1", "on-surface": "#191b24", "surface-tint": "#0053db", "on-tertiary": "#ffffff", "tertiary-fixed-dim": "#7fda90" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-sm": "0.5rem", "gutter": "1.5rem", "space-xs": "0.25rem", "space-md": "1rem", "margin-sm": "1rem", "gutter-sm": "1rem", "space-xl": "2rem", "space-lg": "1.5rem", "margin": "2rem" }, "fontFamily": { "code-data": ["JetBrains Mono"], "label-md": ["Inter"], "headline-lg": ["Inter"], "body-sm": ["Inter"], "headline-md": ["Inter"], "headline-lg-mobile": ["Inter"], "label-sm": ["Inter"], "body-lg": ["Inter"], "body-md": ["Inter"], "headline-sm": ["Inter"] }, "fontSize": { "code-data": ["13px", { "lineHeight": "16px", "fontWeight": "500" }], "label-md": ["13px", { "lineHeight": "16px", "fontWeight": "500" }], "headline-lg": ["26px", { "lineHeight": "34px", "letterSpacing": "-0.015em", "fontWeight": "600" }], "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }], "headline-md": ["18px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "headline-lg-mobile": ["22px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "label-sm": ["12px", { "lineHeight": "16px", "fontWeight": "500" }], "body-lg": ["15px", { "lineHeight": "22px", "fontWeight": "400" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }], "headline-sm": ["16px", { "lineHeight": "22px", "fontWeight": "600" }] } } } };</script></head><body class="bg-surface font-body-md text-on-surface"><aside class="fixed left-0 top-0 h-screen w-[260px] bg-inverse-surface z-50 flex flex-col justify-between overflow-y-auto"><div class="flex flex-col"><div class="px-space-md py-space-md flex flex-col gap-space-xs"><div class="flex items-center justify-between"><span class="font-headline-md text-headline-md font-semibold text-inverse-on-surface tracking-tight">Dominion</span><span class="inline-flex items-center gap-1 px-space-xs py-0.5 rounded-full bg-primary-container text-on-primary font-label-sm text-label-sm"><span class="material-symbols-outlined text-[12px]">hub</span>Roam</span></div><p class="font-label-sm text-label-sm text-outline-variant">Roam Admin Console</p></div><nav class="flex flex-col gap-space-md px-space-sm pb-space-lg" data-active-classes="bg-primary-container text-on-primary font-semibold rounded-lg shadow-sm"><div class="flex flex-col gap-1"><span class="px-space-sm py-1 font-label-sm text-label-sm text-outline uppercase tracking-wider">Master Data</span><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span><span class="font-label-md text-label-md">Overview</span></a><a class="flex items-center justify-between px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="vehicles" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">directions_car</span><span class="font-label-md text-label-md">Vehicles</span></div><span class="font-code-data text-code-data px-1.5 py-0.5 rounded-full bg-tertiary text-on-tertiary">Active</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">map</span><span class="font-label-md text-label-md">Places and Maps</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span class="font-label-md text-label-md">Fuel</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px]">toll</span><span class="font-label-md text-label-md">Tolls</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span class="font-label-md text-label-md">Tax and Vendors</span></a></div><div class="flex flex-col gap-1"><span class="px-space-sm py-1 font-label-sm text-label-sm text-outline uppercase tracking-wider">Engines</span><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="research-engine" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">query_stats</span><span class="font-label-md text-label-md">Research Engine</span></div><span class="w-2 h-2 rounded-full bg-primary-fixed-dim animate-pulse"></span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="fitment-matcher" href="#"><span class="material-symbols-outlined text-[18px]">tune</span><span class="font-label-md text-label-md">Fitment Matcher</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="normalizer" href="#"><span class="material-symbols-outlined text-[18px]">auto_fix_high</span><span class="font-label-md text-label-md">Normalizer</span></a></div><div class="flex flex-col gap-1"><span class="px-space-sm py-1 font-label-sm text-label-sm text-outline uppercase tracking-wider">Distribution</span><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="fleet-apis" href="#"><span class="material-symbols-outlined text-[18px]">api</span><span class="font-label-md text-label-md">Fleet APIs</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="consumer-app-feed" href="#"><span class="material-symbols-outlined text-[18px]">rss_feed</span><span class="font-label-md text-label-md">Consumer App Feed</span></a></div><div class="flex flex-col gap-1"><span class="px-space-sm py-1 font-label-sm text-label-sm text-outline uppercase tracking-wider">Platform</span><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="catalog-integrations" href="#"><span class="material-symbols-outlined text-[18px]">integration_instructions</span><span class="font-label-md text-label-md">Catalog Integrations</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="system-health" href="#"><span class="material-symbols-outlined text-[18px]">monitor_heart</span><span class="font-label-md text-label-md">System Health</span></a></div><div class="flex flex-col gap-1"><span class="px-space-sm py-1 font-label-sm text-label-sm text-outline uppercase tracking-wider">Back Office</span><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="settings-and-roles" href="#"><span class="material-symbols-outlined text-[18px]">admin_panel_settings</span><span class="font-label-md text-label-md">Settings &amp; Roles</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="audit-log" href="#"><span class="material-symbols-outlined text-[18px]">history</span><span class="font-label-md text-label-md">Audit Log</span></a></div></nav></div><div class="p-space-sm flex flex-col gap-space-xs bg-surface-container-highest/10"><div class="flex items-center justify-between text-outline-variant font-label-sm text-label-sm"><div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-tertiary-fixed"></span><span>Dominion v4.8.2 · Online</span></div></div><div class="flex items-center justify-between px-space-sm py-1.5 rounded-lg bg-surface-container-highest/20 text-inverse-on-surface"><span class="font-label-sm text-label-sm text-outline-variant">Daily Budget</span><span class="font-code-data text-code-data text-primary-fixed">$1.20 / $5.80</span></div></div></aside><div class="pl-[260px]"><header class="fixed top-0 left-[260px] right-0 h-16 bg-surface-container-lowest z-40 flex items-center justify-between px-space-lg shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="flex items-center gap-space-sm w-96"><div class="relative flex items-center w-full"><span class="material-symbols-outlined absolute left-3 text-secondary text-[18px]">search</span><input class="w-full h-10 pl-9 pr-14 rounded-lg bg-surface-container-lowest font-body-sm text-body-sm text-on-surface placeholder:text-secondary focus:outline-none focus:ring-2 focus:ring-primary-container" placeholder="Search entities, engines, routes…" type="text"/><div class="absolute right-2.5 flex items-center px-1.5 py-0.5 rounded bg-surface-container font-code-data text-code-data text-secondary">⌘K</div></div></div><div class="flex items-center gap-space-md"><div class="flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm"><span class="font-label-sm text-label-sm text-secondary">Research Cost:</span><span class="font-code-data text-code-data font-semibold text-primary">US$1.20 of US$5.80</span></div><div class="flex items-center gap-space-xs"><button aria-label="Theme Toggle" class="w-8 h-8 rounded-lg bg-surface-container-lowest flex items-center justify-center text-secondary hover:bg-surface-container hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[16px]">dark_mode</span></button><button aria-label="Notifications" class="w-8 h-8 rounded-lg bg-surface-container-lowest flex items-center justify-center text-secondary hover:bg-surface-container hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[16px]">notifications</span></button></div><div class="flex items-center gap-space-sm pl-space-xs"><div class="flex flex-col items-end text-right"><span class="font-label-md text-label-md text-on-surface">Deeki T</span><span class="font-label-sm text-label-sm text-secondary">Owner</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full pt-16 bg-surface min-h-screen"><div class="flex flex-col w-full relative min-h-[calc(100vh-4rem)] overflow-hidden font-body-md text-on-surface">
+<!-- ===================================================================== -->
+<!-- BACKGROUND SCREEN 4: PENDING VEHICLES LIST (Under soft blurred scrim) -->
+<!-- ===================================================================== -->
+<div class="w-full px-space-xl py-space-lg flex flex-col gap-space-lg pointer-events-none select-none filter blur-[1.5px] opacity-75">
+<!-- Breadcrumb & Top Bar -->
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs font-label-sm text-label-sm text-secondary">
+<span class="hover:underline cursor-pointer">Master Data</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="hover:underline cursor-pointer">Vehicles</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="text-on-surface font-semibold">Pending catalog proposals</span>
+</div>
+<div class="flex items-center gap-space-sm">
+<div class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container font-label-sm text-label-sm text-secondary">
+<span class="w-2 h-2 rounded-full bg-tertiary-container"></span>
+<span>Catalog Sync Engine: Active</span>
+</div>
+</div>
+</div>
+<!-- Header Block -->
+<div class="flex flex-col gap-1">
+<div class="flex items-baseline gap-space-md">
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Vehicle Proposals</h1>
+<span class="px-2.5 py-0.5 rounded-full bg-primary-fixed text-primary font-code-data text-code-data font-semibold">18 Pending Review</span>
+</div>
+<p class="font-body-md text-body-md text-secondary">Automated discovery pipeline results awaiting administrative verification before Dominion Fleet API ingestion.</p>
+</div>
+<!-- Filter Bar & Segment Controls -->
+<div class="flex items-center justify-between bg-surface-container-lowest p-space-sm rounded-xl shadow-sm">
+<div class="flex items-center gap-space-xs">
+<button class="px-3 py-1.5 rounded-lg bg-primary-container text-on-primary font-label-md text-label-md">All (18)</button>
+<button class="px-3 py-1.5 rounded-lg text-secondary hover:bg-surface-container font-label-md text-label-md flex items-center gap-1.5">
+<span>Needs review</span>
+<span class="w-4 h-4 rounded-full bg-amber-100 text-amber-900 text-[10px] font-bold flex items-center justify-center">12</span>
+</button>
+<button class="px-3 py-1.5 rounded-lg text-secondary hover:bg-surface-container font-label-md text-label-md">Auto-matched (6)</button>
+<div class="h-4 w-px bg-surface-variant mx-1"></div>
+<button class="px-3 py-1.5 rounded-lg bg-surface-container text-on-surface font-label-md text-label-md flex items-center gap-1">
+<span>Market: Japan (JDM)</span>
+<span class="material-symbols-outlined text-[14px]">arrow_drop_down</span>
+</button>
+</div>
+<div class="flex items-center gap-space-sm text-secondary font-label-sm text-label-sm">
+<span>Sorted by: Discovery date (Recent first)</span>
+</div>
+</div>
+<!-- Background Table Mockup -->
+<div class="w-full bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<!-- Row 1: Selected (Roomy) -->
+<div class="p-space-md bg-primary-fixed/25 flex items-center justify-between">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center font-bold text-secondary">T</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-headline-sm text-headline-sm text-primary font-semibold">Toyota Roomy 2020 on · 2WD · 1.0 turbo petrol</span>
+<span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-label-sm text-label-sm">Needs review</span>
+</div>
+<p class="font-body-sm text-body-sm text-secondary">Frame: M900A | Engine: 1KR-VET | Trim: Custom G-T | Region: JDM</p>
+</div>
+</div>
+<div class="flex items-center gap-space-xl">
+<span class="font-code-data text-code-data text-secondary">ID: PROP-99420-TY</span>
+<span class="material-symbols-outlined text-primary">arrow_forward_ios</span>
+</div>
+</div>
+<!-- Row 2 -->
+<div class="p-space-md bg-surface-container-lowest flex items-center justify-between">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center font-bold text-secondary">H</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">Honda N-Box 2023 on · 4WD · 660cc e:HEV</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-secondary font-label-sm text-label-sm">Waiting Turn</span>
+</div>
+<p class="font-body-sm text-body-sm text-secondary">Frame: JF5 | Engine: S07B | Trim: L Turbo 4WD</p>
+</div>
+</div>
+<div class="flex items-center gap-space-xl">
+<span class="font-code-data text-code-data text-secondary">ID: PROP-99418-HN</span>
+<span class="material-symbols-outlined text-outline">arrow_forward_ios</span>
+</div>
+</div>
+<!-- Row 3 -->
+<div class="p-space-md bg-surface-container-lowest flex items-center justify-between">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center font-bold text-secondary">N</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">Nissan Serena e-POWER 2022 on · 2WD · 1.4 HR14DDe</span>
+<span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-label-sm text-label-sm">Needs review</span>
+</div>
+<p class="font-body-sm text-body-sm text-secondary">Frame: C28 | Engine: HR14DDe | Trim: Highway Star V</p>
+</div>
+</div>
+<div class="flex items-center gap-space-xl">
+<span class="font-code-data text-code-data text-secondary">ID: PROP-99415-NS</span>
+<span class="material-symbols-outlined text-outline">arrow_forward_ios</span>
+</div>
+</div>
+</div>
+</div>
+<!-- ===================================================================== -->
+<!-- SCRIM OVERLAY (Closes drawer on backdrop click) -->
+<!-- ===================================================================== -->
+<div class="absolute inset-0 bg-[#00174b]/15 backdrop-blur-[2px] transition-opacity duration-300 z-40" id="drawerScrim"></div>
+<!-- ===================================================================== -->
+<!-- SCREEN 7: VEHICLE PROPOSAL DRAWER (560px Fixed Right Container) -->
+<!-- ===================================================================== -->
+<aside class="fixed top-16 right-0 w-[560px] h-[calc(100vh-4rem)] bg-surface-container-lowest shadow-2xl z-50 flex flex-col justify-between transition-transform duration-300 ease-out" id="proposalDrawer">
+<!-- UPPER PORTION: Full view layout without inner scroll bars -->
+<div class="p-space-lg flex flex-col gap-space-md">
+<!-- 1. DRAWER HEADER -->
+<div class="flex flex-col gap-2">
+<div class="flex items-start justify-between">
+<!-- Maker Badge + Badges Row -->
+<div class="flex items-center gap-2.5">
+<div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-primary shadow-sm">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">directions_car</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="h-6 px-2.5 rounded-full bg-[#fff4dc] text-[#8a5a00] font-label-sm text-label-sm flex items-center gap-1 font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-[#8a5a00]"></span>
+                Needs review
+              </span>
+<span class="h-6 px-2.5 rounded-full bg-primary-fixed text-primary font-label-sm text-label-sm font-medium">
+                New version
+              </span>
+</div>
+</div>
+<!-- Close Action -->
+<button aria-label="Close drawer" class="w-8 h-8 rounded-lg bg-surface-container-lowest hover:bg-surface-container flex items-center justify-center text-secondary transition-colors" id="closeDrawerBtn">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<div class="flex flex-col mt-1">
+<h2 class="font-headline-lg text-headline-lg text-on-surface tracking-tight leading-tight">
+            Toyota Roomy 2020 on · 2WD · 1.0 turbo petrol
+          </h2>
+<p class="font-body-sm text-body-sm text-secondary mt-0.5">
+            Proposed new vehicle version discovered via catalog research · Market: Japan
+          </p>
+</div>
+</div>
+<!-- 2. DUPLICATE CHECK CARD -->
+<div class="p-space-md rounded-xl bg-[#e6f4ea] flex items-start gap-space-sm">
+<span class="material-symbols-outlined text-tertiary text-[20px] mt-0.5" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-2">
+<span class="font-headline-sm text-headline-sm text-tertiary font-semibold">Duplicate check passed</span>
+<span class="font-label-sm text-label-sm font-semibold text-tertiary">No matching car on file</span>
+</div>
+<p class="font-body-sm text-body-sm text-tertiary/90 leading-snug">
+            Compared against 2,679 vehicles in Dominion master database across frame <span class="font-code-data font-semibold">M900A</span>, engine <span class="font-code-data font-semibold">1KR-VET</span>, and model years.
+          </p>
+</div>
+</div>
+<!-- 3. FACT GRID (Identity & Specs) -->
+<div class="flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold tracking-tight">
+            Vehicle identity &amp; specifications
+          </span>
+<span class="font-code-data text-code-data text-secondary">8 data points</span>
+</div>
+<div class="grid grid-cols-2 gap-2">
+<!-- Item 1: Frame Code -->
+<div class="p-space-xs px-2.5 rounded-lg bg-surface-container-low flex flex-col gap-1">
+<span class="font-label-sm text-label-sm text-secondary">Frame Code</span>
+<div class="flex items-center justify-between">
+<span class="font-code-data text-code-data font-bold text-on-surface bg-surface-container px-1.5 py-0.5 rounded">M900A</span>
+<span class="h-5 px-2 rounded-full bg-[#e6f4ea] text-tertiary font-label-sm text-label-sm flex items-center gap-1 font-medium text-[11px]">
+<span class="material-symbols-outlined text-[13px]">check</span>Confirmed
+              </span>
+</div>
+</div>
+<!-- Item 2: Years -->
+<div class="p-space-xs px-2.5 rounded-lg bg-surface-container-low flex flex-col gap-1">
+<span class="font-label-sm text-label-sm text-secondary">Years Active</span>
+<div class="flex items-center justify-between">
+<span class="font-body-md text-body-md font-semibold text-on-surface">2020 on (Current)</span>
+<span class="h-5 px-2 rounded-full bg-[#e6f4ea] text-tertiary font-label-sm text-label-sm flex items-center gap-1 font-medium text-[11px]">
+<span class="material-symbols-outlined text-[13px]">check</span>Confirmed
+              </span>
+</div>
+</div>
+<!-- Item 3: Engine -->
+<div class="p-space-xs px-2.5 rounded-lg bg-surface-container-low flex flex-col gap-1">
+<span class="font-label-sm text-label-sm text-secondary">Engine Spec</span>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1 min-w-0">
+<span class="font-code-data text-code-data font-bold text-on-surface bg-surface-container px-1 rounded">1KR-VET</span>
+<span class="font-body-sm text-body-sm text-secondary truncate">1.0L Turbo</span>
+</div>
+<span class="h-5 px-2 rounded-full bg-[#e6f4ea] text-tertiary font-label-sm text-label-sm flex items-center gap-1 font-medium text-[11px]">
+<span class="material-symbols-outlined text-[13px]">check</span>Confirmed
+              </span>
+</div>
+</div>
+<!-- Item 4: Drivetrain -->
+<div class="p-space-xs px-2.5 rounded-lg bg-surface-container-low flex flex-col gap-1">
+<span class="font-label-sm text-label-sm text-secondary">Drivetrain</span>
+<div class="flex items-center justify-between">
+<span class="font-body-md text-body-md font-medium text-on-surface">2WD (FWD)</span>
+<span class="h-5 px-2 rounded-full bg-[#e6f4ea] text-tertiary font-label-sm text-label-sm flex items-center gap-1 font-medium text-[11px]">
+<span class="material-symbols-outlined text-[13px]">check</span>Confirmed
+              </span>
+</div>
+</div>
+<!-- Item 5: Gearbox -->
+<div class="p-space-xs px-2.5 rounded-lg bg-surface-container-low flex flex-col gap-1">
+<span class="font-label-sm text-label-sm text-secondary">Transmission</span>
+<div class="flex items-center justify-between">
+<span class="font-body-md text-body-md font-medium text-on-surface">CVT Automatic</span>
+<span class="h-5 px-2 rounded-full bg-[#e6f4ea] text-tertiary font-label-sm text-label-sm flex items-center gap-1 font-medium text-[11px]">
+<span class="material-symbols-outlined text-[13px]">check</span>Confirmed
+              </span>
+</div>
+</div>
+<!-- Item 6: Frame Range (Amber Needs Checking) -->
+<div class="p-space-xs px-2.5 rounded-lg bg-surface-container-low flex flex-col gap-1">
+<span class="font-label-sm text-label-sm text-secondary">Frame Range</span>
+<div class="flex items-center justify-between">
+<span class="font-body-sm text-body-sm text-secondary italic">Not on file</span>
+<span class="h-5 px-2 rounded-full bg-[#fff4dc] text-[#8a5a00] font-label-sm text-label-sm flex items-center gap-1 font-medium text-[11px]">
+<span class="material-symbols-outlined text-[13px]">help</span>Needs checking
+              </span>
+</div>
+</div>
+<!-- Item 7: Body Style -->
+<div class="p-space-xs px-2.5 rounded-lg bg-surface-container-low flex flex-col gap-1">
+<span class="font-label-sm text-label-sm text-secondary">Body Style</span>
+<div class="flex items-center justify-between">
+<span class="font-body-sm text-body-sm font-medium text-on-surface truncate">5-door Tall Wagon</span>
+<span class="h-5 px-2 rounded-full bg-[#e6f4ea] text-tertiary font-label-sm text-label-sm flex items-center gap-1 font-medium text-[11px]">
+<span class="material-symbols-outlined text-[13px]">check</span>Confirmed
+              </span>
+</div>
+</div>
+<!-- Item 8: Power Rating -->
+<div class="p-space-xs px-2.5 rounded-lg bg-surface-container-low flex flex-col gap-1">
+<span class="font-label-sm text-label-sm text-secondary">Power Output</span>
+<div class="flex items-center justify-between">
+<span class="font-code-data text-code-data text-on-surface font-medium">72 kW (98 PS)</span>
+<span class="h-5 px-2 rounded-full bg-[#e6f4ea] text-tertiary font-label-sm text-label-sm flex items-center gap-1 font-medium text-[11px]">
+<span class="material-symbols-outlined text-[13px]">check</span>Confirmed
+              </span>
+</div>
+</div>
+</div>
+</div>
+<!-- 4. SOURCE ATTRIBUTION CARD -->
+<div class="p-space-sm rounded-xl bg-surface-container-low flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded bg-primary-fixed text-primary flex items-center justify-center font-code-data text-code-data font-bold text-[10px]">
+              JP
+            </div>
+<div class="flex flex-col">
+<div class="flex items-center gap-1.5">
+<span class="font-label-md text-label-md font-semibold text-on-surface">toyota.jp / gazoo.com catalog</span>
+<span class="material-symbols-outlined text-secondary text-[14px]">open_in_new</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary">Scraped 20 Nov 2026, 14:10 UTC · Dominion Engine #04</span>
+</div>
+</div>
+<button class="px-2.5 py-1 rounded-lg bg-surface-container-lowest hover:bg-surface-container text-on-surface font-label-sm text-label-sm flex items-center gap-1 transition-colors shadow-sm" id="viewSavedTextBtn">
+<span class="material-symbols-outlined text-[14px]">description</span>
+<span>Saved text</span>
+</button>
+</div>
+<!-- Excerpt Code Snippet -->
+<div class="p-2 rounded bg-surface-container-lowest font-code-data text-code-data text-on-surface-variant overflow-x-hidden text-[12px] leading-relaxed">
+<span class="text-primary font-bold">»</span> Frame: M900A-BGBGE | Engine: 1KR-VET | Grade: Custom G-T | Prod: 2020/09 - present
+        </div>
+</div>
+<!-- 5. DOWNSTREAM IMPACT NOTICE -->
+<div class="px-space-md py-2.5 rounded-lg bg-primary-fixed/30 flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-primary text-[20px]">hub</span>
+<p class="font-body-sm text-body-sm text-on-surface leading-tight">
+          Adding this version enables part-matching for <strong class="font-semibold text-primary">14 common consumable parts</strong> and registers the canonical vehicle entity across Dominion Fleet APIs.
+        </p>
+</div>
+</div>
+<!-- 6. BOTTOM STICKY ACTION ROW (Exact Brand Actions) -->
+<div class="p-space-md bg-surface-container-lowest shadow-[0_-4px_16px_rgba(0,0,0,0.03)] flex flex-col gap-2">
+<div class="flex items-center justify-between gap-space-sm">
+<!-- Primary Approve Button -->
+<button class="flex-1 h-10 px-space-md rounded-lg bg-primary-container text-on-primary font-label-md text-label-md font-medium hover:bg-primary transition-colors flex items-center justify-center gap-2 shadow-sm" id="approveBtn">
+<span class="material-symbols-outlined text-[18px]">done_all</span>
+<span>Approve — add this car</span>
+</button>
+<!-- Secondary Research Again -->
+<button class="h-10 px-space-md rounded-lg bg-surface-container-lowest text-on-surface font-label-md text-label-md font-medium hover:bg-surface-container transition-colors flex items-center justify-center gap-1.5 shadow-sm" id="researchBtn">
+<span class="material-symbols-outlined text-[18px] text-secondary">refresh</span>
+<span>Research again</span>
+</button>
+</div>
+<!-- Sub-actions: Rejection & Missing -->
+<div class="flex items-center justify-between pt-1">
+<button class="h-8 px-2 rounded-lg bg-error-container/30 hover:bg-error-container/60 text-error font-label-sm text-label-sm flex items-center gap-1 transition-colors" id="rejectBtn">
+<span class="material-symbols-outlined text-[16px]">close</span>
+<span>Reject proposal…</span>
+</button>
+<button class="h-8 px-2.5 rounded-full bg-surface-container text-secondary hover:text-on-surface font-label-sm text-label-sm flex items-center gap-1 transition-colors" id="couldntFindBtn">
+<span class="material-symbols-outlined text-[15px]">search_off</span>
+<span>Couldn't find it</span>
+</button>
+</div>
+</div>
+</aside>
+<!-- Notification Toast Container -->
+<div class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-inverse-surface text-inverse-on-surface px-space-md py-space-sm rounded-lg shadow-xl font-label-md text-label-md flex items-center gap-2 transition-all duration-300 opacity-0 pointer-events-none z-50" id="toastNotification">
+<span class="material-symbols-outlined text-tertiary-fixed text-[18px]">check_circle</span>
+<span id="toastMessage">Vehicle proposal approved and queued for Fleet API sync.</span>
+</div>
+<!-- Inline Script for Realistic Admin Console Micro-interactions -->
+<script>
+    (function initVehicleDrawer() {
+      const drawer = document.getElementById('proposalDrawer');
+      const scrim = document.getElementById('drawerScrim');
+      const closeBtn = document.getElementById('closeDrawerBtn');
+      const approveBtn = document.getElementById('approveBtn');
+      const rejectBtn = document.getElementById('rejectBtn');
+      const toast = document.getElementById('toastNotification');
+      const toastMessage = document.getElementById('toastMessage');
+
+      function showToast(msg) {
+        if (!toast || !toastMessage) return;
+        toastMessage.textContent = msg;
+        toast.classList.remove('opacity-0', 'pointer-events-none', '-translate-y-2');
+        toast.classList.add('opacity-100', 'translate-y-0');
+        setTimeout(() => {
+          toast.classList.add('opacity-0', 'pointer-events-none', '-translate-y-2');
+          toast.classList.remove('opacity-100', 'translate-y-0');
+        }, 3400);
+      }
+
+      function closeDrawer() {
+        if (drawer && scrim) {
+          drawer.style.transform = 'translateX(100%)';
+          scrim.style.opacity = '0';
+          scrim.style.pointerEvents = 'none';
+        }
+      }
+
+      if (closeBtn) {
+        closeBtn.addEventListener('click', closeDrawer);
+      }
+
+      if (scrim) {
+        scrim.addEventListener('click', closeDrawer);
+      }
+
+      if (approveBtn) {
+        approveBtn.addEventListener('click', () => {
+          showToast('Toyota Roomy (M900A) approved into Dominion master dataset.');
+          setTimeout(closeDrawer, 800);
+        });
+      }
+
+      if (rejectBtn) {
+        rejectBtn.addEventListener('click', () => {
+          const reason = prompt('Specify rejection reason for audit log:', 'Incomplete trim designation');
+          if (reason) {
+            showToast('Proposal rejected and archived: ' + reason);
+            setTimeout(closeDrawer, 800);
+          }
+        });
+      }
+
+      const viewTextBtn = document.getElementById('viewSavedTextBtn');
+      if (viewTextBtn) {
+        viewTextBtn.addEventListener('click', () => {
+          showToast('Loaded snapshot cache: 14.8KB DOM text preview');
+        });
+      }
+
+      const researchBtn = document.getElementById('researchBtn');
+      if (researchBtn) {
+        researchBtn.addEventListener('click', () => {
+          showToast('Triggered live re-scrape on Japanese OEM catalog worker...');
+        });
+      }
+
+      const couldntFindBtn = document.getElementById('couldntFindBtn');
+      if (couldntFindBtn) {
+        couldntFindBtn.addEventListener('click', () => {
+          showToast('Marked as unverified in gazoo.com catalog.');
+        });
+      }
+    })();
+  </script>
+</div></main></div></body></html>

@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base { html, body { margin: 0; padding: 0; } body { overscroll-behavior: none; } main > :first-child { margin-top: 0 !important; } main > :last-child { margin-bottom: 0 !important; } } ::-webkit-scrollbar { display: none; }</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-background": "#191b24", "surface-variant": "#e1e1ed", "on-secondary": "#ffffff", "on-primary-fixed": "#00174b", "background": "#faf8ff", "inverse-primary": "#b4c5ff", "on-error": "#ffffff", "surface-bright": "#faf8ff", "tertiary": "#005323", "primary-fixed-dim": "#b4c5ff", "tertiary-container": "#006e31", "secondary": "#5c5e67", "outline-variant": "#c3c6d7", "on-primary": "#ffffff", "inverse-on-surface": "#f0f0fc", "error-container": "#ffdad6", "on-surface-variant": "#434655", "on-primary-container": "#ced8ff", "error": "#ba1a1a", "on-secondary-fixed-variant": "#44464f", "surface-container-highest": "#e1e1ed", "surface-dim": "#d9d9e5", "on-error-container": "#93000a", "secondary-fixed": "#e1e2ec", "on-secondary-container": "#60626b", "tertiary-fixed": "#9af7aa", "surface-container-high": "#e7e7f3", "surface-container-low": "#f3f3ff", "secondary-container": "#dedfea", "surface": "#faf8ff", "surface-container": "#ededf9", "on-tertiary-fixed": "#00210a", "surface-container-lowest": "#ffffff", "primary-container": "#0153dc", "secondary-fixed-dim": "#c5c6d0", "on-primary-fixed-variant": "#003ea8", "outline": "#737686", "inverse-surface": "#2e3039", "on-secondary-fixed": "#191b23", "primary-fixed": "dbe1ff", "primary": "#003ea9", "on-tertiary-fixed-variant": "#005323", "on-tertiary-container": "#91eea1", "on-surface": "#191b24", "surface-tint": "#0053db", "on-tertiary": "#ffffff", "tertiary-fixed-dim": "#7fda90" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-sm": "0.5rem", "gutter": "1.5rem", "space-xs": "0.25rem", "space-md": "1rem", "margin-sm": "1rem", "gutter-sm": "1rem", "space-xl": "2rem", "space-lg": "1.5rem", "margin": "2rem" }, "fontFamily": { "code-data": ["JetBrains Mono"], "label-md": ["Inter"], "headline-lg": ["Inter"], "body-sm": ["Inter"], "headline-md": ["Inter"], "headline-lg-mobile": ["Inter"], "label-sm": ["Inter"], "body-lg": ["Inter"], "body-md": ["Inter"], "headline-sm": ["Inter"] }, "fontSize": { "code-data": ["13px", { "lineHeight": "16px", "fontWeight": "500" }], "label-md": ["13px", { "lineHeight": "16px", "fontWeight": "500" }], "headline-lg": ["26px", { "lineHeight": "34px", "letterSpacing": "-0.015em", "fontWeight": "600" }], "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }], "headline-md": ["18px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "headline-lg-mobile": ["22px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "label-sm": ["12px", { "lineHeight": "16px", "fontWeight": "500" }], "body-lg": ["15px", { "lineHeight": "22px", "fontWeight": "400" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }], "headline-sm": ["16px", { "lineHeight": "22px", "fontWeight": "600" }] } } } };</script></head><body class="bg-surface font-body-md text-on-surface"><aside class="fixed left-0 top-0 h-screen w-[260px] bg-inverse-surface z-50 flex flex-col justify-between overflow-y-auto"><div class="flex flex-col"><div class="px-space-md py-space-md flex flex-col gap-space-xs"><div class="flex items-center justify-between"><span class="font-headline-md text-headline-md font-semibold text-inverse-on-surface tracking-tight">Dominion</span><span class="inline-flex items-center gap-1 px-space-xs py-0.5 rounded-full bg-primary-container text-on-primary font-label-sm text-label-sm"><span class="material-symbols-outlined text-[12px]">hub</span>Roam</span></div><p class="font-label-sm text-label-sm text-outline-variant">Roam Admin Console</p></div><nav class="flex flex-col gap-space-md px-space-sm pb-space-lg" data-active-classes="bg-primary-container text-on-primary font-semibold rounded-lg shadow-sm"><div class="flex flex-col gap-1"><span class="px-space-sm py-1 font-label-sm text-label-sm text-outline uppercase tracking-wider">Master Data</span><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span><span class="font-label-md text-label-md">Overview</span></a><a class="flex items-center justify-between px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="vehicles" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">directions_car</span><span class="font-label-md text-label-md">Vehicles</span></div><span class="font-code-data text-code-data px-1.5 py-0.5 rounded-full bg-tertiary text-on-tertiary">Active</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">map</span><span class="font-label-md text-label-md">Places and Maps</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span class="font-label-md text-label-md">Fuel</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px]">toll</span><span class="font-label-md text-label-md">Tolls</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span class="font-label-md text-label-md">Tax and Vendors</span></a></div><div class="flex flex-col gap-1"><span class="px-space-sm py-1 font-label-sm text-label-sm text-outline uppercase tracking-wider">Engines</span><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="research-engine" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">query_stats</span><span class="font-label-md text-label-md">Research Engine</span></div><span class="w-2 h-2 rounded-full bg-primary-fixed-dim animate-pulse"></span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="fitment-matcher" href="#"><span class="material-symbols-outlined text-[18px]">tune</span><span class="font-label-md text-label-md">Fitment Matcher</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="normalizer" href="#"><span class="material-symbols-outlined text-[18px]">auto_fix_high</span><span class="font-label-md text-label-md">Normalizer</span></a></div><div class="flex flex-col gap-1"><span class="px-space-sm py-1 font-label-sm text-label-sm text-outline uppercase tracking-wider">Distribution</span><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="fleet-apis" href="#"><span class="material-symbols-outlined text-[18px]">api</span><span class="font-label-md text-label-md">Fleet APIs</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="consumer-app-feed" href="#"><span class="material-symbols-outlined text-[18px]">rss_feed</span><span class="font-label-md text-label-md">Consumer App Feed</span></a></div><div class="flex flex-col gap-1"><span class="px-space-sm py-1 font-label-sm text-label-sm text-outline uppercase tracking-wider">Platform</span><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="catalog-integrations" href="#"><span class="material-symbols-outlined text-[18px]">integration_instructions</span><span class="font-label-md text-label-md">Catalog Integrations</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="system-health" href="#"><span class="material-symbols-outlined text-[18px]">monitor_heart</span><span class="font-label-md text-label-md">System Health</span></a></div><div class="flex flex-col gap-1"><span class="px-space-sm py-1 font-label-sm text-label-sm text-outline uppercase tracking-wider">Back Office</span><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="settings-and-roles" href="#"><span class="material-symbols-outlined text-[18px]">admin_panel_settings</span><span class="font-label-md text-label-md">Settings &amp; Roles</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-inverse-on-surface hover:bg-surface-variant hover:text-on-surface transition-colors" data-path="audit-log" href="#"><span class="material-symbols-outlined text-[18px]">history</span><span class="font-label-md text-label-md">Audit Log</span></a></div></nav></div><div class="p-space-sm flex flex-col gap-space-xs bg-surface-container-highest/10"><div class="flex items-center justify-between text-outline-variant font-label-sm text-label-sm"><div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-tertiary-fixed"></span><span>Dominion v4.8.2 · Online</span></div></div><div class="flex items-center justify-between px-space-sm py-1.5 rounded-lg bg-surface-container-highest/20 text-inverse-on-surface"><span class="font-label-sm text-label-sm text-outline-variant">Daily Budget</span><span class="font-code-data text-code-data text-primary-fixed">$1.20 / $5.80</span></div></div></aside><div class="pl-[260px]"><header class="fixed top-0 left-[260px] right-0 h-16 bg-surface-container-lowest z-40 flex items-center justify-between px-space-lg shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="flex items-center gap-space-sm w-96"><div class="relative flex items-center w-full"><span class="material-symbols-outlined absolute left-3 text-secondary text-[18px]">search</span><input class="w-full h-10 pl-9 pr-14 rounded-lg bg-surface-container-lowest font-body-sm text-body-sm text-on-surface placeholder:text-secondary focus:outline-none focus:ring-2 focus:ring-primary-container" placeholder="Search entities, engines, routes…" type="text"/><div class="absolute right-2.5 flex items-center px-1.5 py-0.5 rounded bg-surface-container font-code-data text-code-data text-secondary">⌘K</div></div></div><div class="flex items-center gap-space-md"><div class="flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm"><span class="font-label-sm text-label-sm text-secondary">Research Cost:</span><span class="font-code-data text-code-data font-semibold text-primary">US$1.20 of US$5.80</span></div><div class="flex items-center gap-space-xs"><button aria-label="Theme Toggle" class="w-8 h-8 rounded-lg bg-surface-container-lowest flex items-center justify-center text-secondary hover:bg-surface-container hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[16px]">dark_mode</span></button><button aria-label="Notifications" class="w-8 h-8 rounded-lg bg-surface-container-lowest flex items-center justify-center text-secondary hover:bg-surface-container hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[16px]">notifications</span></button></div><div class="flex items-center gap-space-sm pl-space-xs"><div class="flex flex-col items-end text-right"><span class="font-label-md text-label-md text-on-surface">Deeki T</span><span class="font-label-sm text-label-sm text-secondary">Owner</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full pt-16 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<div class="p-margin flex flex-col gap-space-xl">
+<!-- Top Bar & Spec Header -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-space-md">
+<div class="flex flex-col gap-space-xs">
+<nav class="flex items-center gap-2 font-label-sm text-label-sm text-secondary">
+<span>Vehicles</span>
+<span class="material-symbols-outlined text-[14px] text-outline">chevron_right</span>
+<span>Pending catalog</span>
+<span class="material-symbols-outlined text-[14px] text-outline">chevron_right</span>
+<span class="font-semibold text-primary">System States</span>
+</nav>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Pending Parts — Interface States</h1>
+<p class="font-body-md text-body-md text-secondary max-w-3xl">Visual specifications for loading, error, pause, undo, and rejection states in the Pending parts queue.</p>
+</div>
+<div class="flex items-center gap-space-sm self-start md:self-auto">
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[16px] text-primary">verified</span>
+<span>Pattern Spec v4.8.2</span>
+</div>
+<button class="h-10 px-4 rounded-lg bg-surface-container-lowest text-on-surface font-label-md text-label-md shadow-sm hover:bg-surface-container transition-colors flex items-center gap-2" type="button">
+<span class="material-symbols-outlined text-[18px]">replay</span>
+<span>Re-simulate All</span>
+</button>
+</div>
+</div>
+<!-- Live Architecture Overview Ribbon -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-space-md p-space-md rounded-xl bg-surface-container-low">
+<div class="flex flex-col gap-0.5">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Queue Pipeline</span>
+<div class="flex items-center gap-2 mt-1">
+<span class="w-2.5 h-2.5 rounded-full bg-tertiary-container animate-pulse"></span>
+<span class="font-headline-sm text-headline-sm text-on-surface">DOMIN_ROAM_v4</span>
+</div>
+<span class="font-code-data text-code-data text-outline mt-1">LATENCY: 42ms · TLS 1.3</span>
+</div>
+<div class="flex flex-col gap-0.5">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">State Transition Matrix</span>
+<div class="flex items-center gap-2 mt-1">
+<span class="material-symbols-outlined text-[18px] text-primary">swap_horiz</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">5 Canonical Specs</span>
+</div>
+<span class="font-body-sm text-body-sm text-secondary mt-1">Deterministic error fallbacks</span>
+</div>
+<div class="flex flex-col gap-0.5">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Operator Safe-Net</span>
+<div class="flex items-center gap-2 mt-1">
+<span class="material-symbols-outlined text-[18px] text-tertiary">history_toggle_off</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">12s Reversible Window</span>
+</div>
+<span class="font-body-sm text-body-sm text-secondary mt-1">Client state undo staging</span>
+</div>
+<div class="flex flex-col gap-0.5">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Audit Protocol</span>
+<div class="flex items-center gap-2 mt-1">
+<span class="material-symbols-outlined text-[18px] text-secondary">database</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">Normalizer Sync</span>
+</div>
+<span class="font-code-data text-code-data text-outline mt-1">TELEMETRY_LOGGED: YES</span>
+</div>
+</div>
+<!-- 5-State Modular Exhibition Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-5 gap-space-md items-start">
+<!-- ================= STATE 1: LOADING ================= -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between px-1">
+<span class="font-code-data text-code-data text-secondary">01 / QUEUE</span>
+<span class="px-2.5 py-1 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface-variant font-medium">Loading state</span>
+</div>
+<div class="rounded-xl bg-surface-container-lowest p-space-md shadow-sm min-h-[420px] flex flex-col justify-between">
+<div class="flex flex-col gap-space-md">
+<!-- Skeleton header strip -->
+<div class="flex items-center justify-between pb-space-sm">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-md bg-surface-container-high animate-pulse"></div>
+<div class="w-24 h-3.5 rounded bg-surface-container-high animate-pulse"></div>
+</div>
+<div class="w-12 h-3.5 rounded-full bg-surface-container-high animate-pulse"></div>
+</div>
+<!-- Repeated skeleton entries -->
+<div class="flex flex-col gap-space-sm">
+<!-- Skeleton Item 1 -->
+<div class="p-3 rounded-lg bg-surface-container-low flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<div class="w-28 h-4 rounded bg-surface-container-highest animate-pulse"></div>
+<div class="w-16 h-4 rounded-full bg-surface-container-highest animate-pulse"></div>
+</div>
+<div class="w-40 h-3 rounded bg-surface-variant animate-pulse"></div>
+<div class="flex items-center gap-2 pt-1">
+<div class="w-14 h-6 rounded-md bg-surface-container-highest animate-pulse"></div>
+<div class="w-14 h-6 rounded-md bg-surface-container-highest animate-pulse"></div>
+</div>
+</div>
+<!-- Skeleton Item 2 -->
+<div class="p-3 rounded-lg bg-surface-container-low flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<div class="w-32 h-4 rounded bg-surface-container-highest animate-pulse"></div>
+<div class="w-16 h-4 rounded-full bg-surface-container-highest animate-pulse"></div>
+</div>
+<div class="w-36 h-3 rounded bg-surface-variant animate-pulse"></div>
+<div class="flex items-center gap-2 pt-1">
+<div class="w-14 h-6 rounded-md bg-surface-container-highest animate-pulse"></div>
+<div class="w-14 h-6 rounded-md bg-surface-container-highest animate-pulse"></div>
+</div>
+</div>
+<!-- Skeleton Item 3 -->
+<div class="p-3 rounded-lg bg-surface-container-low opacity-60 flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<div class="w-20 h-4 rounded bg-surface-container-highest animate-pulse"></div>
+<div class="w-16 h-4 rounded-full bg-surface-container-highest animate-pulse"></div>
+</div>
+<div class="w-24 h-3 rounded bg-surface-variant animate-pulse"></div>
+</div>
+</div>
+</div>
+<!-- Bottom Status -->
+<div class="flex items-center justify-between pt-space-md">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary-container animate-ping"></span>
+<span class="font-body-sm text-body-sm text-secondary">Fetching live catalog queue...</span>
+</div>
+<span class="font-code-data text-code-data text-outline">HTTP 202</span>
+</div>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-low">
+<p class="font-label-sm text-label-sm text-secondary">
+<span class="font-semibold text-on-surface">Trigger:</span> Activated while resolving asynchronous queue snapshots over Roam engine websocket.
+          </p>
+</div>
+</div>
+<!-- ================= STATE 2: COULDN'T LOAD ================= -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between px-1">
+<span class="font-code-data text-code-data text-secondary">02 / EXCEPTION</span>
+<span class="px-2.5 py-1 rounded-full bg-error-container font-label-sm text-label-sm text-on-error-container font-medium">Error state</span>
+</div>
+<div class="rounded-xl bg-surface-container-lowest p-space-md shadow-sm min-h-[420px] flex flex-col justify-between">
+<div class="flex flex-col items-center text-center pt-space-lg">
+<div class="w-14 h-14 rounded-2xl bg-error-container text-on-error-container flex items-center justify-center mb-space-md">
+<span class="material-symbols-outlined text-[30px] text-error">error</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Couldn't load the queue</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-space-xs px-2 leading-relaxed">
+              Network connection to Dominion research engine timed out. Running background retry in 30s.
+            </p>
+<div class="mt-space-md w-full p-space-sm rounded-lg bg-surface-container font-code-data text-code-data text-outline text-left">
+              ERR_SOCKET_TIMEOUT · host: api.dominion.internal:8080
+            </div>
+</div>
+<div class="flex flex-col gap-space-xs pt-space-md">
+<button class="w-full h-10 rounded-lg bg-surface-container-lowest text-on-surface font-label-md text-label-md shadow-sm hover:bg-surface-container transition-colors flex items-center justify-center gap-2" type="button">
+<span class="material-symbols-outlined text-[16px] text-primary">sync</span>
+<span>Try again</span>
+</button>
+<div class="flex items-center justify-center gap-1.5 py-1">
+<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
+<span class="font-label-sm text-label-sm text-secondary">Circuit breaker: OPEN (Attempt 2/5)</span>
+</div>
+</div>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-low">
+<p class="font-label-sm text-label-sm text-secondary">
+<span class="font-semibold text-on-surface">Trigger:</span> Upstream microservice unresponsive (&gt;4500ms) or edge cluster partition.
+          </p>
+</div>
+</div>
+<!-- ================= STATE 3: ENGINE PAUSED ================= -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between px-1">
+<span class="font-code-data text-code-data text-secondary">03 / CONTROL</span>
+<span class="px-2.5 py-1 rounded-full bg-secondary-container font-label-sm text-label-sm text-on-secondary-container font-medium">Engine paused</span>
+</div>
+<div class="rounded-xl bg-surface-container-lowest p-space-md shadow-sm min-h-[420px] flex flex-col justify-between">
+<div class="flex flex-col items-center text-center pt-space-lg">
+<div class="w-14 h-14 rounded-2xl bg-secondary-container text-secondary flex items-center justify-center mb-space-md">
+<span class="material-symbols-outlined text-[30px]">pause_circle</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Research is paused</h2>
+<p class="font-body-sm text-body-sm text-secondary mt-space-xs px-2 leading-relaxed">
+              Daily search quota reached or operator paused. Sockets idle, 1,428 jobs preserved in queue.
+            </p>
+<div class="mt-space-md w-full grid grid-cols-2 gap-2 text-left">
+<div class="p-2.5 rounded-lg bg-surface-container-low">
+<span class="font-label-sm text-label-sm text-outline block">STASHED</span>
+<span class="font-code-data text-code-data font-semibold text-on-surface">1,428 jobs</span>
+</div>
+<div class="p-2.5 rounded-lg bg-surface-container-low">
+<span class="font-label-sm text-label-sm text-outline block">EST. RESTART</span>
+<span class="font-code-data text-code-data font-semibold text-primary">00:00 UTC</span>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-space-xs pt-space-md">
+<button class="w-full h-10 rounded-lg bg-primary-container text-on-primary font-label-md text-label-md shadow-sm hover:bg-primary transition-colors flex items-center justify-center gap-2" type="button">
+<span class="material-symbols-outlined text-[18px]">play_arrow</span>
+<span>Resume</span>
+</button>
+<span class="font-label-sm text-label-sm text-center text-outline">Budget lock at $5.80 / day</span>
+</div>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-low">
+<p class="font-label-sm text-label-sm text-secondary">
+<span class="font-semibold text-on-surface">Trigger:</span> Automatic budget ceiling reached or manual admin freeze toggle.
+          </p>
+</div>
+</div>
+<!-- ================= STATE 4: UNDO TOAST ================= -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between px-1">
+<span class="font-code-data text-code-data text-secondary">04 / TRANSIENT</span>
+<span class="px-2.5 py-1 rounded-full bg-tertiary-fixed font-label-sm text-label-sm text-on-tertiary-fixed font-medium">Confirmation Toast</span>
+</div>
+<div class="rounded-xl bg-surface-container-lowest p-space-md shadow-sm min-h-[420px] flex flex-col justify-between relative overflow-hidden">
+<!-- Background Simulated UI Context -->
+<div class="flex flex-col gap-3 opacity-30 select-none pointer-events-none">
+<div class="flex justify-between items-center pb-2">
+<span class="font-headline-sm text-headline-sm">Pending Verification</span>
+<span class="w-6 h-6 rounded-full bg-surface-variant"></span>
+</div>
+<div class="p-2.5 rounded-lg bg-surface-container flex items-center justify-between">
+<div class="flex flex-col gap-1">
+<span class="font-label-md text-label-md font-semibold">Rear Caliper Bushing</span>
+<span class="font-body-sm text-body-sm">Nissan Note E12 · 2017</span>
+</div>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-variant">OEM</span>
+</div>
+<div class="p-2.5 rounded-lg bg-surface-container flex items-center justify-between">
+<div class="flex flex-col gap-1">
+<span class="font-label-md text-label-md font-semibold">Oxygen Sensor Downstream</span>
+<span class="font-body-sm text-body-sm">Honda Fit GP5 · Hybrid</span>
+</div>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-variant">OEM</span>
+</div>
+</div>
+<!-- Realistic Docked Toast Component -->
+<div class="relative z-10 w-full mt-auto rounded-xl bg-surface-container-lowest shadow-xl p-space-md flex flex-col gap-3">
+<div class="flex items-start gap-3">
+<div class="w-7 h-7 rounded-full bg-tertiary text-on-tertiary flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[16px]">check</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Front brake pads</span>
+<span class="font-body-sm text-body-sm text-secondary">Added to Toyota Roomy</span>
+</div>
+</div>
+<!-- Toast action and timer countdown indicator -->
+<div class="flex items-center justify-between pt-1">
+<span class="font-code-data text-code-data text-outline">Dismisses in 8s</span>
+<button class="h-8 px-3 rounded-lg bg-surface-container text-error font-label-md text-label-md hover:bg-error-container hover:text-on-error-container transition-colors flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[16px]">undo</span>
+<span>Undo</span>
+</button>
+</div>
+<!-- Animated linear dismiss track -->
+<div class="w-full h-1 bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-primary-container rounded-full w-2/3 transition-all"></div>
+</div>
+</div>
+<!-- Spec Footer Caption -->
+<div class="pt-space-xs text-center">
+<span class="font-label-sm text-label-sm text-outline">Docked 16px bottom-right</span>
+</div>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-low">
+<p class="font-label-sm text-label-sm text-secondary">
+<span class="font-semibold text-on-surface">Trigger:</span> Immediately following manual "Add to Live Fleet Catalog" action.
+          </p>
+</div>
+</div>
+<!-- ================= STATE 5: REJECT DIALOG ================= -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between px-1">
+<span class="font-code-data text-code-data text-secondary">05 / INTERACTIVE</span>
+<span class="px-2.5 py-1 rounded-full bg-surface-container-high font-label-sm text-label-sm text-on-surface font-medium">Rejection modal</span>
+</div>
+<div class="rounded-xl bg-surface-container-lowest p-space-md shadow-sm min-h-[420px] flex flex-col justify-between">
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between pb-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-error">cancel</span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Why isn't this right?</h2>
+</div>
+<span class="font-code-data text-code-data text-outline">ESC</span>
+</div>
+<p class="font-body-sm text-body-sm text-secondary">
+              Help the Roam Normalizer learn from this decision.
+            </p>
+<!-- Mini Textarea -->
+<div class="flex flex-col gap-1 mt-1">
+<textarea class="w-full p-2.5 rounded-lg bg-surface-container-lowest text-on-surface font-body-sm text-body-sm placeholder:text-secondary focus:outline-none focus:bg-surface-container-low resize-none transition-colors" placeholder="e.g. Incompatible rotor diameter for 2WD chassis break..." rows="3"></textarea>
+</div>
+<!-- Reason Quick Tags -->
+<div class="flex flex-col gap-1.5">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Quick Reasons</span>
+<div class="flex flex-wrap gap-1.5">
+<button class="px-2 py-1 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm hover:bg-surface-container-high transition-colors" type="button">
+                  Wrong chassis code
+                </button>
+<button class="px-2 py-1 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm hover:bg-surface-container-high transition-colors" type="button">
+                  Superseded part #
+                </button>
+<button class="px-2 py-1 rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm" type="button">
+                  ✓ Trim mismatch
+                </button>
+</div>
+</div>
+</div>
+<!-- Dialog Button Row -->
+<div class="flex items-center justify-end gap-2 pt-space-md">
+<button class="h-9 px-3 rounded-lg bg-surface-container-lowest text-on-surface font-label-md text-label-md hover:bg-surface-container transition-colors" type="button">
+              Keep it
+            </button>
+<button class="h-9 px-4 rounded-lg bg-error text-on-error font-label-md text-label-md shadow-sm hover:bg-on-error-container transition-colors flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+<span>Reject</span>
+</button>
+</div>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-low">
+<p class="font-label-sm text-label-sm text-secondary">
+<span class="font-semibold text-on-surface">Trigger:</span> Triggered when reviewer rejects candidate match to train engine weights.
+          </p>
+</div>
+</div>
+</div>
+<!-- Technical Specification Matrix Footer -->
+<div class="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-md">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-sm pb-space-sm">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">tune</span>
+<h2 class="font-headline-md text-headline-md text-on-surface">Operator Ergonomics &amp; Guardrail Rules</h2>
+</div>
+<div class="flex items-center gap-space-sm">
+<span class="font-label-sm text-label-sm text-outline">TARGET FPS: 60</span>
+<span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span>
+<span class="font-label-sm text-label-sm text-outline">ARIA 1.2 COMPLIANT</span>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-md">
+<div class="p-space-sm rounded-lg bg-surface-container-low flex flex-col gap-1">
+<span class="font-label-md text-label-md text-on-surface font-semibold">1. Zero Destructive Loss</span>
+<p class="font-body-sm text-body-sm text-secondary">Any rejected or purged candidate item is archived in audit storage for 90 days. Accidental clicks can be rolled back via audit terminal.</p>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-low flex flex-col gap-1">
+<span class="font-label-md text-label-md text-on-surface font-semibold">2. Auto-Throttled Fetching</span>
+<p class="font-body-sm text-body-sm text-secondary">Engine loading states use exponential jitter backoff (1s, 2s, 5s, 15s, 30s) to prevent cascading stampedes during network reconnects.</p>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-low flex flex-col gap-1">
+<span class="font-label-md text-label-md text-on-surface font-semibold">3. Cognitive Composure</span>
+<p class="font-body-sm text-body-sm text-secondary">Animations adhere strictly to <span class="font-code-data text-code-data text-primary">prefers-reduced-motion</span>. Gray pulsing shimmers substitute heavy spinners to avoid operator eye fatigue.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+  // Micro-interaction handlers for the state exhibition
+  document.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const text = btn.innerText.trim();
+      if (text.includes('Try again') || text.includes('Re-simulate All')) {
+        btn.classList.add('opacity-50');
+        setTimeout(() => btn.classList.remove('opacity-50'), 400);
+      }
+    });
+  });
+</script></main></div></body></html>
