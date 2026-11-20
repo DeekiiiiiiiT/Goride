@@ -121,15 +121,13 @@ describe("PartsThatFitPanel", () => {
     expect(screen.queryByTestId("parts-fit-ask")).toBeNull();
   });
 
-  it("Skip collapses the panel and can be undone", async () => {
+  it("no Skip button (owner 20 Nov): picking is optional; nothing is picked unless a card is tapped", async () => {
     apiMock.findParts.mockResolvedValue(twoParts);
     const { props } = renderPanel();
-    await waitFor(() => expect(screen.getByTestId("parts-fit-skip")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("parts-fit-skip"));
-    expect(props.onPick).toHaveBeenCalledWith(null);
-    expect(screen.getByTestId("parts-fit-skipped")).toBeTruthy();
-    fireEvent.click(screen.getByText("Show the parts that fit"));
     await waitFor(() => expect(screen.getAllByTestId("parts-fit-card")).toHaveLength(2));
+    expect(screen.queryByTestId("parts-fit-skip")).toBeNull();
+    expect(screen.queryByText(/I don't know the part/)).toBeNull();
+    expect(props.onPick).not.toHaveBeenCalled();
   });
 
   it("load error: try again, and the job can still be saved", async () => {

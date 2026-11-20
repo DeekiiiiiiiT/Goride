@@ -195,20 +195,6 @@ function PlanItButton({ label, onClick }: { label: string; onClick: () => void }
   );
 }
 
-function SkipButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      data-testid="parts-fit-skip"
-      className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg ${LT.labelMd} ${BTN_SOFT}`}
-    >
-      <Sym name="help_outline" size={16} className={LS.muted} />
-      {C.skip}
-    </button>
-  );
-}
-
 type LoadState = { kind: "loading" } | { kind: "error" } | { kind: "ok"; data: PartsForJob };
 
 export type PartsThatFitPanelProps = {
@@ -241,7 +227,6 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
   const partId = toBuy ? null : props.partId;
   const onPlanIt = toBuy ? undefined : props.onPlanIt;
   const [state, setState] = useState<LoadState>({ kind: "loading" });
-  const [skipped, setSkipped] = useState(false);
   const [asking, setAsking] = useState(false);
   const [askOverride, setAskOverride] = useState<FindAsk | null>(null);
   /** Other brands' numbers per part, loaded ahead so Copy works at once (same lookup Find parts uses). */
@@ -262,9 +247,9 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
   }, [vehicleId, jobId, placesKey]);
 
   useEffect(() => {
-    if (needsPlace || skipped) return;
+    if (needsPlace) return;
     return load();
-  }, [load, needsPlace, skipped]);
+  }, [load, needsPlace]);
 
   const loadedParts = state.kind === "ok" ? state.data.parts : null;
   const variantId = state.kind === "ok" ? state.data.copyCar.variantId : null;
@@ -307,22 +292,8 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
       {body}
     </div>
   );
-  const skipButton = (onClick: () => void) => (toBuy ? null : <SkipButton onClick={onClick} />);
-
-  if (skipped) {
-    return wrap(
-      <div className={`rounded-xl p-3 px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${LS.low}`} data-testid="parts-fit-skipped">
-        <span className={`${LT.bodySm} ${LS.muted}`}>{C.skipped}</span>
-        <button
-          type="button"
-          onClick={() => setSkipped(false)}
-          className={`self-start sm:self-auto px-3 py-1.5 text-xs font-semibold rounded-lg ${BTN_SOFT}`}
-        >
-          {C.showParts}
-        </button>
-      </div>,
-    );
-  }
+  // Owner 20 Nov: no "Skip — I don't know the part". Tapping a part is optional (no tap = no part on the line);
+  // Change undoes a pick; a different part goes under Items used → Other item.
 
   if (needsPlace) {
     return wrap(
@@ -373,18 +344,11 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
             {C.tryAgain}
           </button>
         </div>
-        <div className="flex justify-end">
-          {skipButton(() => { onPick(null); setSkipped(true); })}
-        </div>
       </>,
     );
   }
 
   const { data } = state;
-  const skip = () => {
-    onPick(null);
-    setSkipped(true);
-  };
 
   if (!data.linked) {
     return wrap(
@@ -426,7 +390,6 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {onPlanIt ? <PlanItButton label={C.planItLater} onClick={() => onPlanIt(null)} /> : null}
-            {skipButton(skip)}
           </div>
         </div>,
       );
@@ -469,7 +432,6 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
                 {asking ? C.asking : C.ask}
               </button>
               {toBuy ? null : <span className={`${LT.bodySm} ${LS.muted}`}>{C.saveAnyway}</span>}
-              {skipButton(skip)}
             </div>
           </div>
         </div>
@@ -529,17 +491,12 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
           </button>
         </div>
       ) : null}
-      {toBuy ? null : <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-        {onPlanIt ? (
-          <div className="flex items-center gap-2">
-            <PlanItButton label={C.planIt} onClick={() => onPlanIt(chosen)} />
-            <span className={`${LT.bodySm} ${LS.muted} hidden md:inline`}>{C.planItHelper}</span>
-          </div>
-        ) : (
-          <span />
-        )}
-        <SkipButton onClick={skip} />
-      </div>}
+      {!toBuy && onPlanIt ? (
+        <div className="pt-2 flex items-center gap-2">
+          <PlanItButton label={C.planIt} onClick={() => onPlanIt(chosen)} />
+          <span className={`${LT.bodySm} ${LS.muted} hidden md:inline`}>{C.planItHelper}</span>
+        </div>
+      ) : null}
     </>,
   );
 }

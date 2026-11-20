@@ -598,8 +598,8 @@ test.describe("Log service — Roam shows the parts that fit (Slice C)", () => {
     await openO2FromDraft(page);
     await pickPlace(page, "Front (Air fuel ratio sensor)");
     await expect(page.getByTestId("parts-fit-card").first()).toBeVisible({ timeout: 30_000 });
-    await page.getByTestId("parts-fit-skip").click();
-    await expect(page.getByTestId("parts-fit-skipped")).toBeVisible();
+    // No card tapped (picking a part is optional; there is no Skip button).
+    await expect(page.getByTestId("parts-fit-skip")).toHaveCount(0);
     await fillLabour(page, "2000");
     await page.getByTestId("items-used-add-other").first().click();
     const other = page.getByTestId("other-item-block");
