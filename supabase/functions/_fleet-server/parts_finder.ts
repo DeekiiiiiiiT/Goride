@@ -505,14 +505,18 @@ export async function findParts(
     )
     : assembleMatchSections([], []);
   const sections = groupFindSections(rawSections);
-  let carSizes: CarSize[] = [];
-  if (pickedId && carSizesFrom(universalSource, []).length) {
-    const { data: specRows, error: specErr } = await supabase.rpc("specs_for_variant", {
-      p_catalog_id: pickedId,
-      p_vehicle_year: year,
-    });
-    if (specErr) throw specErr;
-    carSizes = carSizesFrom(universalSource, Array.isArray(specRows) ? specRows as SpecRow[] : []);
+  // The size line is extra info: a failed source lookup still shows the size (as "Your car takes"), never blocks the parts.
+  let carSizes: CarSize[] = pickedId ? carSizesFrom(universalSource, []) : [];
+  if (carSizes.length && typeof (supabase as { rpc?: unknown }).rpc === "function") {
+    try {
+      const { data: specRows, error: specErr } = await supabase.rpc("specs_for_variant", {
+        p_catalog_id: pickedId,
+        p_vehicle_year: year,
+      });
+      if (!specErr && Array.isArray(specRows)) carSizes = carSizesFrom(universalSource, specRows as SpecRow[]);
+    } catch {
+      // keep the plain sizes
+    }
   }
   let coverage = null;
   if (pickedId) {
