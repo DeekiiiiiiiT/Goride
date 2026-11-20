@@ -10,6 +10,7 @@ import {
   PARTS_FIT_COPY,
   partCopyText,
   partsFromFindBody,
+  carSizeLine,
   shortDate,
 } from "./partsThatFit";
 
@@ -56,8 +57,22 @@ describe("partsFromFindBody", () => {
     expect(out.ask?.askedAt).toBe("2026-11-18T10:00:00Z");
   });
 
+  it("reads the car's own size (owner 20 Nov: car maker's answer first)", () => {
+    const out = partsFromFindBody({
+      car: { make: "Toyota", model: "Roomy" },
+      plainSections: [],
+      carSizes: [{ specKey: "battery_jis", label: "Battery size", value: "M-42", unit: null, type: "EFB", fromCarMaker: true }, { specKey: "x" }],
+    });
+    expect(out.carMake).toBe("Toyota");
+    expect(out.carSizes).toEqual([{ specKey: "battery_jis", label: "Battery size", value: "M-42", unit: null, type: "EFB", fromCarMaker: true }]);
+    expect(carSizeLine(out.carSizes[0])).toBe("Battery size: M-42 · EFB");
+    expect(PARTS_FIT_COPY.carSizeTitle("Toyota", true)).toBe("Toyota lists for your car");
+    expect(PARTS_FIT_COPY.carSizeTitle("Toyota", false)).toBe("Your car takes");
+  });
+
   it("survives junk", () => {
     expect(partsFromFindBody(null).parts).toEqual([]);
+    expect(partsFromFindBody(null).carSizes).toEqual([]);
     expect(carNameOf(null)).toBeNull();
   });
 });

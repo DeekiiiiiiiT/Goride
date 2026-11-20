@@ -9,6 +9,7 @@ import { api } from "../../../../services/api";
 import { LS, LT } from "./logServiceStitch";
 import {
   askNeedText,
+  carSizeLine,
   brandNumbersFromLookup,
   partCopyText,
   findQueryFor,
@@ -176,6 +177,25 @@ function PartCard({
       </div>
       <div className="hidden sm:flex flex-col items-end gap-1 shrink-0">
         <FitBadge label={part.fitLabel} />
+      </div>
+    </div>
+  );
+}
+
+/** The car's own size (e.g. "Toyota lists for your car · Battery size: M-42 · EFB") above the parts. */
+function CarSizeBox({ data, hasParts }: { data: PartsForJob; hasParts: boolean }) {
+  if (!data.carSizes.length) return null;
+  return (
+    <div className={`rounded-xl p-3 px-4 flex items-start gap-3 ${LS.low}`} data-testid="parts-fit-car-size">
+      <Sym name="verified" size={20} className="text-[#4b41e1] dark:text-[#c3c0ff] mt-0.5 shrink-0" />
+      <div className="min-w-0">
+        {data.carSizes.map((size) => (
+          <div key={size.specKey}>
+            <span className={`${LT.labelSm} ${LS.muted} block`}>{C.carSizeTitle(data.carMake, size.fromCarMaker)}</span>
+            <span className={`${LT.titleSm} text-[15px] ${LS.text}`} data-testid="parts-fit-car-size-line">{carSizeLine(size)}</span>
+          </div>
+        ))}
+        {hasParts ? <span className={`${LT.bodySm} ${LS.muted} block mt-0.5`}>{C.carSizeFitsBelow}</span> : null}
       </div>
     </div>
   );
@@ -412,6 +432,8 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
       }
     };
     return wrap(
+      <>
+      <CarSizeBox data={data} hasParts={false} />
       <div className={`rounded-2xl p-6 shadow-sm ${LS.low}`} data-testid="parts-fit-none">
         <div className="flex flex-col sm:flex-row items-start gap-4">
           <div className={`w-14 h-14 rounded-2xl ${LS.lowest} text-[#4b41e1] dark:text-[#c3c0ff] flex items-center justify-center shrink-0 shadow-sm`}>
@@ -435,7 +457,8 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
             </div>
           </div>
         </div>
-      </div>,
+      </div>
+      </>,
     );
   }
 
@@ -443,6 +466,7 @@ export function PartsThatFitPanel(props: PartsThatFitPanelProps) {
     <>
       {header}
       <div className="space-y-3">
+        <CarSizeBox data={data} hasParts={listed.length > 0} />
         {orphan ? (
           <div className={`rounded-2xl p-4 flex items-center gap-3.5 ring-2 ring-black/90 dark:ring-white/80 ${LS.lowest}`} data-testid="parts-fit-chosen-saved">
             <MakerTile brand={orphan.brand} />

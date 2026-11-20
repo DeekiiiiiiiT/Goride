@@ -198,6 +198,56 @@ type UniversalSpec = {
   items?: Array<{ id?: string; manufacturer?: string | null; partNumber?: string | null; name?: string | null }>;
 };
 
+/** The car's own size for this job (owner 20 Nov): what the car maker lists, shown above the parts. */
+export type CarSize = {
+  specKey: string;
+  label: string;
+  value: string;
+  unit: string | null;
+  /** Battery only: Standard / EFB / AGM from the car's battery_type spec. */
+  type: string | null;
+  /** The source is the car maker's own catalogue (or a trusted frame-number catalogue of it). */
+  fromCarMaker: boolean;
+};
+
+/** Frame-number catalogues that show the car maker's own parts book (owner's source rule). */
+const CAR_MAKER_SOURCE_HOSTS = ["amayama.com", "megazip.net", "partsouq.com", "toyota", "daihatsu", "honda", "nissan", "mazda", "suzuki", "mitsubishi", "subaru"];
+
+export function isCarMakerSource(url: string | null | undefined): boolean {
+  if (!url) return false;
+  let host = "";
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return CAR_MAKER_SOURCE_HOSTS.some((h) => (h.includes(".") ? host === h || host.endsWith(`.${h}`) : host.split(".").includes(h)));
+}
+
+type SpecRow = { spec_key?: string | null; value?: string | null; evidence_url?: string | null };
+
+/** The universal section's specs (this job only) → the car's sizes, with the source and the battery type. */
+export function carSizesFrom(universal: unknown, specRows: SpecRow[]): CarSize[] {
+  const rows = Array.isArray(universal) ? universal as UniversalSpec[] : [];
+  const byKey = new Map(specRows.map((row) => [String(row.spec_key ?? ""), row]));
+  const out: CarSize[] = [];
+  for (const spec of rows) {
+    const specKey = String(spec.specKey ?? "");
+    const value = String(spec.value ?? "").trim();
+    if (!specKey || !value || specKey === "battery_type") continue;
+    const type = specKey === "battery_jis" ? String(byKey.get("battery_type")?.value ?? "").trim() || null : null;
+    out.push({
+      specKey,
+      label: String(spec.label ?? specKey),
+      value,
+      unit: spec.unit ? String(spec.unit) : null,
+      type,
+      fromCarMaker: isCarMakerSource(byKey.get(specKey)?.evidence_url ?? null),
+    });
+  }
+  return out;
+}
+
 /** Universal rows become tier 5 parts so they show with the other match types. */
 export function universalsToFound(universal: unknown, variantId: string): FoundPart[] {
   const rows = Array.isArray(universal) ? universal as UniversalSpec[] : [];
@@ -455,6 +505,15 @@ export async function findParts(
     )
     : assembleMatchSections([], []);
   const sections = groupFindSections(rawSections);
+  let carSizes: CarSize[] = [];
+  if (pickedId && carSizesFrom(universalSource, []).length) {
+    const { data: specRows, error: specErr } = await supabase.rpc("specs_for_variant", {
+      p_catalog_id: pickedId,
+      p_vehicle_year: year,
+    });
+    if (specErr) throw specErr;
+    carSizes = carSizesFrom(universalSource, Array.isArray(specRows) ? specRows as SpecRow[] : []);
+  }
   let coverage = null;
   if (pickedId) {
     const [{ data: readyRow }, { data: specRows }, { data: listingRows }] = await Promise.all([
@@ -493,6 +552,7 @@ export async function findParts(
     sections,
     plainSections: built.sections,
     emptyTiers: built.emptyTiers,
+    carSizes,
     bestPick: best
       ? (() => {
         const hit = merged.find((item) => item.partId === best.id) ?? null;

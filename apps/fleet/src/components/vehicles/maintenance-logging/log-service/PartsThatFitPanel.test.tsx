@@ -166,6 +166,36 @@ describe("PartsThatFitPanel", () => {
     expect(screen.getAllByTestId("parts-fit-copy")[0].textContent).toMatch(/Copied|Copy part info/);
   });
 
+  it("the car maker's size sits above the parts (battery M-42 · EFB)", async () => {
+    apiMock.findParts.mockResolvedValue({
+      ...twoParts,
+      carSizes: [{ specKey: "battery_jis", label: "Battery size", value: "M-42", unit: null, type: "EFB", fromCarMaker: true }],
+    });
+    renderPanel();
+    await waitFor(() => expect(screen.getByTestId("parts-fit-car-size")).toBeTruthy());
+    expect(screen.getByTestId("parts-fit-car-size").textContent).toContain("Toyota lists for your car");
+    expect(screen.getByTestId("parts-fit-car-size-line").textContent).toBe("Battery size: M-42 · EFB");
+    expect(screen.getByTestId("parts-fit-car-size").textContent).toContain("The parts below fit this size.");
+  });
+
+  it("the car's size still shows when Roam has no part for it yet", async () => {
+    apiMock.findParts.mockResolvedValue({
+      ...none,
+      carSizes: [{ specKey: "battery_jis", label: "Battery size", value: "M-42", unit: null, type: null, fromCarMaker: false }],
+    });
+    renderPanel();
+    await waitFor(() => expect(screen.getByTestId("parts-fit-none")).toBeTruthy());
+    expect(screen.getByTestId("parts-fit-car-size").textContent).toContain("Your car takes");
+    expect(screen.getByTestId("parts-fit-car-size").textContent).not.toContain("The parts below");
+  });
+
+  it("no size box when the car has no size for this job", async () => {
+    apiMock.findParts.mockResolvedValue(twoParts);
+    renderPanel();
+    await waitFor(() => expect(screen.getAllByTestId("parts-fit-card")).toHaveLength(2));
+    expect(screen.queryByTestId("parts-fit-car-size")).toBeNull();
+  });
+
   it("a saved line's part not in today's list still reads as chosen", async () => {
     apiMock.findParts.mockResolvedValue(none);
     renderPanel({ partId: "old", chosenInfo: { name: "Oxygen sensor", brand: "Bosch", number: "0258" } });

@@ -29,6 +29,18 @@ export type CopyCar = {
   variantId: string | null;
 };
 
+/** The car's own size for this job (battery M-42, tyre, bulb…), shown above the parts. */
+export type CarSize = {
+  specKey: string;
+  label: string;
+  value: string;
+  unit: string | null;
+  /** Battery only: Standard / EFB / AGM. */
+  type: string | null;
+  /** From the car maker's own catalogue. */
+  fromCarMaker: boolean;
+};
+
 export type PartsForJob = {
   /** The car isn't linked to a Dominion model: Roam can't list or look up parts for it. */
   linked: boolean;
@@ -36,6 +48,9 @@ export type PartsForJob = {
   copyCar: CopyCar;
   parts: FitPart[];
   ask: FindAsk | null;
+  /** "Toyota" — for "Toyota lists for your car". */
+  carMake: string | null;
+  carSizes: CarSize[];
 };
 
 export const PARTS_FIT_COPY = {
@@ -76,7 +91,36 @@ export const PARTS_FIT_COPY = {
   lookingBody: (part: string, car: string | null) =>
     `We'll send you a notification when the ${part} for your ${car ?? "car"} is added.`,
   planItLater: "Plan it — I'll buy it later",
+  /** Owner 20 Nov: the car maker's answer first — for batteries/bulbs/tyres that is a size, not a part number. */
+  carSizeTitle: (make: string | null, fromCarMaker: boolean) =>
+    fromCarMaker && make ? `${make} lists for your car` : "Your car takes",
+  carSizeFitsBelow: "The parts below fit this size.",
 } as const;
+
+/** "Battery size: M-42 · EFB" */
+export function carSizeLine(size: CarSize): string {
+  const value = [size.value, size.unit].filter(Boolean).join(" ");
+  return [`${size.label}: ${value}`, size.type].filter(Boolean).join(" · ");
+}
+
+function carSizesOf(raw: unknown): CarSize[] {
+  if (!Array.isArray(raw)) return [];
+  const out: CarSize[] = [];
+  for (const row of raw as Array<Record<string, unknown>>) {
+    const specKey = str(row?.specKey);
+    const value = str(row?.value);
+    if (!specKey || !value) continue;
+    out.push({
+      specKey,
+      label: str(row.label) || specKey,
+      value,
+      unit: str(row.unit) || null,
+      type: str(row.type) || null,
+      fromCarMaker: row.fromCarMaker === true,
+    });
+  }
+  return out;
+}
 
 const FIT_LABELS = new Set<FitLabel>(["made_for_car", "also_fits", "fits_by_size", "check_before_buying"]);
 
@@ -130,7 +174,9 @@ export function partsFromFindBody(raw: unknown): PartsForJob {
     a && (a.state === "none" || a.state === "looking")
       ? { state: a.state, askedAt: a.askedAt ? String(a.askedAt) : null, byYou: a.byYou === true }
       : null;
-  return { linked, carName: carNameOf(body), copyCar: copyCarOf(body), parts, ask };
+  const car = (body.car ?? null) as Record<string, unknown> | null;
+  const carMake = str(car?.make ?? body.make) || null;
+  return { linked, carName: carNameOf(body), copyCar: copyCarOf(body), parts, ask, carMake, carSizes: carSizesOf(body.carSizes) };
 }
 
 /**
