@@ -552,6 +552,11 @@ const RECIPE_STEPS: Record<LookupRecipe["kind"], Array<{ title: string; line: (s
     { title: "Check the car", line: () => "The car's frame code must be in the same row" },
     { title: "Save the row", line: () => "Keeps a copy of the row it found" },
   ],
+  form_then_page: [
+    { title: "Fill in the search form", line: (s) => `Puts the part number into ${s}'s search form and sends it` },
+    { title: "Open the page it leads to", line: () => "Reads the part page the site opens" },
+    { title: "Check the car's row", line: () => "Keeps it only when the page lists the number and the car's row points to this part for that position" },
+  ],
   browser_check_link: [
     { title: "Make the catalogue link", line: (s) => `Builds the ${s} page link for this car` },
     { title: "You open it in your browser", line: () => "Roam never reads this site itself" },
@@ -563,6 +568,7 @@ const KIND_LABEL: Record<LookupRecipe["kind"], string> = {
   search_then_page: "Search by car, then open the result",
   by_part_number: "Search by part number",
   browser_check_link: "Browser check link",
+  form_then_page: "Fill the site's search form, then read the page it opens",
 };
 
 function SiteRecipesDrawer({ token, site, owner, onClose }: { token: string; site: TrustedSite; owner: boolean; onClose: () => void }) {
@@ -628,7 +634,7 @@ function SiteRecipesDrawer({ token, site, owner, onClose }: { token: string; sit
           <div key={r.id} className={`${D_CARD} flex flex-col gap-4 p-6`} data-testid="recipe-card">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2.5">
-                <DIcon name={r.kind === "by_part_number" ? "pin" : r.kind === "browser_check_link" ? "web" : "directions_car"} className="text-[20px] text-[#0153dc]" />
+                <DIcon name={r.kind === "by_part_number" || r.kind === "form_then_page" ? "pin" : r.kind === "browser_check_link" ? "web" : "directions_car"} className="text-[20px] text-[#0153dc]" />
                 <h3 className={`truncate text-[16px] font-semibold ${D_TXT}`}>{r.name || KIND_LABEL[r.kind]}</h3>
               </div>
               {r.active ? <RePill tone="green" icon="check">Active</RePill> : <RePill tone="grey">Off</RePill>}
@@ -684,14 +690,17 @@ function RecipeForm({
   recipe?: LookupRecipe;
   busy: boolean;
   onCancel: () => void;
-  onSave: (body: { name: string; kind: LookupRecipe["kind"]; searchUrlTemplate: string; resultLinkRule?: string; notes?: string }) => void;
+  onSave: (body: { name: string; kind: LookupRecipe["kind"]; searchUrlTemplate: string; formBodyTemplate?: string; resultLinkRule?: string; notes?: string }) => void;
 }) {
   const [name, setName] = useState(recipe?.name ?? "");
   const [kind, setKind] = useState<LookupRecipe["kind"]>(recipe?.kind ?? "by_part_number");
   const [tpl, setTpl] = useState(recipe?.search_url_template ?? "");
   const [linkRule, setLinkRule] = useState(recipe?.result_link_rule ?? "");
+  const [formBody, setFormBody] = useState(recipe?.form_body_template ?? "");
+  const usesLink = kind === "search_then_page" || kind === "form_then_page";
   const [notes, setNotes] = useState(recipe?.notes ?? "");
   const tplOk = /^https:\/\//.test(tpl.trim());
+  const formOk = kind !== "form_then_page" || /^[^=&\s]+=[^&]*(&[^=&\s]+=[^&]*)*$/.test(formBody.trim());
   const input =
     "h-10 w-full rounded-lg border border-[#c5c6d0] bg-white px-3 text-[14px] text-[#30323b] outline-none focus:ring-2 focus:ring-[#0153dc] dark:border-[#334155] dark:bg-[#0b1220] dark:text-[#e2e8f0]";
   return (
@@ -705,6 +714,7 @@ function RecipeForm({
         <select className={input} value={kind} onChange={(e) => setKind(e.target.value as LookupRecipe["kind"])}>
           <option value="by_part_number">{KIND_LABEL.by_part_number}</option>
           <option value="search_then_page">{KIND_LABEL.search_then_page}</option>
+          <option value="form_then_page">{KIND_LABEL.form_then_page}</option>
           <option value="browser_check_link">{KIND_LABEL.browser_check_link}</option>
         </select>
       </label>
@@ -714,9 +724,24 @@ function RecipeForm({
         <span className="text-[12px]">Use {"{number}"}, {"{chassis}"}, {"{model}"}, {"{make}"} or {"{engine}"} where the value goes.</span>
         {tpl && !tplOk ? <span className="text-[12px] text-[#a83836]">Needs https</span> : null}
       </label>
-      {kind === "search_then_page" ? (
+      {kind === "form_then_page" ? (
         <label className={`flex flex-col gap-1 text-[13px] ${D_MUTED}`}>
-          Result link contains
+          Form fields
+          <input
+            className={`${input} ${D_MONO}`}
+            value={formBody}
+            onChange={(e) => setFormBody(e.target.value)}
+            placeholder="txtPartNo={number}&txtClass=1"
+            maxLength={1000}
+            data-testid="recipe-form-fields"
+          />
+          <span className="text-[12px]">The fields the site's search form sends, joined with &amp;. Put {"{number}"} where the part number goes.</span>
+          {formBody && !formOk ? <span className="text-[12px] text-[#a83836]">Write them like name=value&amp;name=value</span> : null}
+        </label>
+      ) : null}
+      {usesLink ? (
+        <label className={`flex flex-col gap-1 text-[13px] ${D_MUTED}`}>
+          {kind === "form_then_page" ? "Result link contains (only if the form opens a list)" : "Result link contains"}
           <input className={input} value={linkRule} onChange={(e) => setLinkRule(e.target.value)} placeholder="/catalog/" />
         </label>
       ) : null}
@@ -730,8 +755,16 @@ function RecipeForm({
         </PartsButton>
         <PartsButton
           variant="primary"
-          disabled={busy || !name.trim() || !tplOk}
-          onClick={() => onSave({ name: name.trim(), kind, searchUrlTemplate: tpl.trim(), resultLinkRule: linkRule.trim() || undefined, notes: notes.trim() || undefined })}
+          disabled={busy || !name.trim() || !tplOk || !formOk || (kind === "form_then_page" && !formBody.trim())}
+          onClick={() =>
+            onSave({
+              name: name.trim(),
+              kind,
+              searchUrlTemplate: tpl.trim(),
+              formBodyTemplate: kind === "form_then_page" ? formBody.trim() : undefined,
+              resultLinkRule: usesLink ? linkRule.trim() : "",
+              notes: notes.trim() || undefined,
+            })}
           data-testid="recipe-save"
         >
           Save recipe
@@ -749,6 +782,7 @@ function RecipeTest({ token, recipe, onClose }: { token: string; recipe: LookupR
   const [number, setNumber] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ found: boolean; block?: string; reason?: string } | null>(null);
+  const needsNumber = recipe.kind === "by_part_number" || recipe.kind === "form_then_page";
 
   useEffect(() => {
     void listVehicleCatalogPicker(token).then((r) => setCars(r.items)).catch(() => setCars([]));
@@ -799,14 +833,14 @@ function RecipeTest({ token, recipe, onClose }: { token: string; recipe: LookupR
           ))}
         </>
       )}
-      {recipe.kind === "by_part_number" ? (
-        <input className={`${input} ${D_MONO}`} value={number} onChange={(e) => setNumber(e.target.value)} placeholder="Part number to look for" />
+      {needsNumber ? (
+        <input className={`${input} ${D_MONO}`} data-testid="recipe-test-number" value={number} onChange={(e) => setNumber(e.target.value)} placeholder="Part number to look for" />
       ) : null}
       <div className="flex justify-end gap-2">
         <PartsButton variant="secondary" onClick={onClose}>
           Close
         </PartsButton>
-        <PartsButton variant="primary" disabled={!car || busy || (recipe.kind === "by_part_number" && !number.trim())} onClick={() => void test()} data-testid="recipe-test-run">
+        <PartsButton variant="primary" disabled={!car || busy || (needsNumber && !number.trim())} onClick={() => void test()} data-testid="recipe-test-run">
           {busy ? "Testing…" : "Run test"}
         </PartsButton>
       </div>
