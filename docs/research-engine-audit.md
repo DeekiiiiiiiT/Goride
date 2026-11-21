@@ -1,11 +1,11 @@
 # Research engine (cars, specs, parts) — audit
 
-**Rev 4.9 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
+**Rev 5.0 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
 US$1.35/day.** What runs live is the **search-first** flow with the new proof (Gemini + Google search proposes
 numbers, recipes and trusted pages prove them); the planned catalogue-first flow is RE-49, not built yet (§13–14). Live database: migrations 1a/1b/2/3 (03:10 UTC) and `20261121100925_research_form_recipe` (10:25 UTC),
 all with logbook lines. Live code: main `0e00cd5b` (platform-catalog, catalog-research, Dominion). Branch
 `parts-auto-match` `fc2e2b85` holds the same research code. Held back: readiness counts only Confirmed specs (§6 step 5).
-**Next = §R step 1 (owner: NiBK recipe + Test on a car) and step 2 (Claude: honest_fetch + Spike 1 by-car check).**
+**Next = §R step 2 (Claude: honest_fetch + Spike 1 by-car check) and step 3 (owner: Fill this car on the Roomy).**
 
 History (not needed to continue): the closed plan with all findings RE-01…RE-29 and the Spike 0 tables is
 `git show 6064a3f4:docs/research-engine-audit.md`. The 18-screen Keep / Drop / Add lists are in
@@ -38,8 +38,10 @@ History (not needed to continue): the closed plan with all findings RE-01…RE-2
   front pads (NiBK `PN5562`); asking for rear was refused. The reads were saved on the local copy only (§9).
 - Live: both server parts start (401 without login = running), settings unchanged (on, practice, US$1.35, 0 failures).
 
-**What is not proven yet:** every real-run done-test in §5, and done-test 39 on live. None has run: no recipe exists on
-live yet, and no fill has been started.
+**Proven on live (21 Nov 12:35 UTC):** done-test 39 — the owner added the NiBK recipe and Test on a car proved the Roomy
+front pads (NiBK PN5562 for `04465-B1120`); only a `recipe_test` read was saved.
+
+**What is not proven yet:** every other real-run done-test in §5. No fill has been started.
 
 **CI on main `0e00cd5b`:** edge deploy, Vercel, Supabase function tests, Parts SQL checks, Parts auto-match e2e,
 recon-worker — green. Red, both already red before today and not caused by this work:
@@ -49,8 +51,7 @@ Because (2) fails first in the "Dominion places checks" job, the research screen
 (it passes locally).
 
 **Next steps (in order)**
-1. **Owner:** Trusted sources → jnbk-brakes.com → Add a recipe with the values in §9 "Owner's recipe"; **Test on a car**
-   with Roomy M900A + `04465-B1120` → expect the M900A row with `Front Brake: PN5562` (done-test 39).
+1. ~~**Owner:** NiBK recipe + **Test on a car**~~ **Done 21 Nov 12:35 UTC** — done-test 39 passed on live.
 2. **Claude, at the same time:**
    a. **RE-52** `scripts/honest_fetch.mjs` (§14) — first, because the next step fetches 12 sites by hand.
    b. **Spike 1, part one — by-car lookups (RE-46, §12; moved up by §14):** for the 12 brand sites, robots.txt + terms
@@ -62,7 +63,8 @@ Because (2) fails first in the "Dominion places checks" job, the research screen
    - **Claude, right after:** write the measured cost per job, searches per job, jobs per day at the cap and the
      200-car finish date into §1 (RE-37).
    - **Claude, one small-fix round:** `GET /health` (RE-45), research screen test in its own CI job (RE-40), the two
-     master-data breaks (RE-41), jobs per day + finish date on Settings (RE-37), cap ceiling on Settings (RE-50).
+     master-data breaks (RE-41), jobs per day + finish date on Settings (RE-37), cap ceiling on Settings (RE-50),
+     closest row first (RE-55).
 4. **Claude: Spike 1, part two:** one recipe for each allowed site that works with a link or a form; run the Roomy
    M900A against the 10 core part types → a real "N of 17" replaces Spike 0's "0 of 17".
 5. **Build RE-49** (§13–15) when part one found by-car lookups: catalogue first by car, one recipe per part type, no
@@ -242,7 +244,7 @@ screen tests and the local end-to-end run (Rev 3.0–3.2). Rev 4.2+ tests are nu
 | 32 | On a real conflict: **Use this one** adds that number, rejects the other, closes the request once; **Neither is right** adds nothing and sets the job to Couldn't find (and the fleets are told) | Open · needs a real conflict |
 | 37 | A form recipe posts the filled fields, follows the 303 and reads the product page; a 307 answer is refused | **Passed** (unit tests; real NiBK through the reader on the local copy) |
 | 38 | NiBK-shaped page: cross-reference + M900A row + Front Brake cell linking here → found; rear / number missing / only M910A / cell links elsewhere → not found | **Passed** (unit tests + real NiBK page) |
-| 39 | Save a form recipe; card shows its steps; **Test on a car** on live NiBK with Roomy M900A + `04465-B1120` shows `Front Brake: PN5562`, saves only the `recipe_test` read | Half · saving passes in the screen test; live test = §R step 1 |
+| 39 | Save a form recipe; card shows its steps; **Test on a car** on live NiBK with Roomy M900A + `04465-B1120` shows `Front Brake: PN5562`, saves only the `recipe_test` read | **Passed on live** 21 Nov 12:35 UTC: owner ran it (Toyota → Roomy → 2019 → Custom G 2WD 1.0 L, `04465-B1120`) → Row found `Front Brake: PN5562`; one `recipe_test` read saved, 0 proposals |
 
 ## 6. Go live
 
@@ -679,3 +681,14 @@ of real years; makes/models grouped whatever the capitals; a reply for an older 
 load the numbers" instead of "no numbers on file" when the load fails; a part's name is never sent as a number.
 Checks: admin tsc 0, vitest 52 (new `carPick.test.ts`), screen test 16 (Test on a car now goes Make → Model → Year,
 asserts no code on the panel, and a part-number recipe sends the picked number).
+
+## 17. Rev 5.0 — first live recipe test (21 Nov)
+
+Done-test 39 passed on live at 12:35 UTC (see §5). Found while reading the result:
+
+**RE-55 · Low · With several rows for one frame, the proof takes the first, not the closest.** The owner picked the
+non-turbo Roomy (engine 1KR-FE); NiBK lists two M900A rows (1KR-FE and the turbo 1KR-VET) and the cross-reference
+proof returned the turbo row. The pads are the same on both, so the answer was right, but the saved evidence should be
+the car's own row. Fix: in `findCrossReferenceRow`, among rows that pass, prefer one that also has the car's engine code
+(then its model name); fall back to the first passing row. Done-test 61: a page with a 1KR-VET row first and a 1KR-FE
+row second, for a 1KR-FE car → evidence is the 1KR-FE row. Goes in the §R small-fix round.
