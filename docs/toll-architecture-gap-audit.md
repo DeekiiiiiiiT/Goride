@@ -1,6 +1,6 @@
 # Toll architecture: disputes and InDrive (plan + build status)
 
-**Rev 36 · 21 Nov 2026 · Status: LIVE, ON FOR EVERY COMPANY.** Toll disputes, InDrive logged trips and "rider pays driver" are switched on for every company, and every new company starts with them on and its settings set up (migration `20261121214215_toll_on_for_everyone.sql`). Switching on surfaced 3 bugs, all fixed in that migration (L2.6 below). Left: watch the nightly money check and one real week. Rev 34 removed finished build notes; they stay in git.
+**Rev 36 · 21 Nov 2026 · Status: LIVE, ON FOR EVERY COMPANY.** Toll disputes, InDrive logged trips and "rider pays driver" are switched on for every company, and every new company starts with them on and its settings set up (migration `20261121214215_toll_on_for_everyone.sql`). Switching on surfaced 4 bugs, all fixed and live (L2.6 below; the 4th, the sealed-week fingerprint, in `20261121215609_toll_week_hash_disputed_zero.sql`). Left: watch the nightly money check and one real week. Rev 34 removed finished build notes; they stay in git.
 
 ## START HERE (for a new chat)
 
@@ -28,7 +28,7 @@
 | UI2 | Roam Driver "Tolls to dispute" (`apps/driver/src/components/tolls/`), Driver Settlements → Disputes tab (`tolls-v2/disputes/`), Fleet Policy Configuration → Tolls tab (`tolls-v2/policy/`) | **Done** (62acff92) |
 | **P** | Proof on the local copy, then live, switched on for every company | **LIVE** — 24 / 24 done-tests; on for every company (20261121214215) |
 
-**Owner to-dos:** push the local commits (through 4e70be07 and this audit). Commit the log-service work's migration `20261118181439_log_service_positions.sql` before pushing: its time is earlier than S3's, and a database push can refuse it once S3 is live.
+**Owner to-dos:** none. Everything through c0e2e100 is pushed and live.
 
 **Where the new screens show:** for every company: the six-part Tolls step, the Driver Settlements Disputes tab and Fleet Policy → Tolls. The driver's dispute card shows in the next Roam Driver app build.
 
