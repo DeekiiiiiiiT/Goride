@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"surface-container-low":"#f6f2fa","surface-container-high":"#eae7ee","primary-container":"#1b192e","on-surface":"#1b1b20","inverse-surface":"#303035","outline":"#78767d","tertiary-fixed":"#dce1ff","surface-tint":"#5e5c74","secondary-container":"#d3e3ff","on-secondary-container":"#56657d","on-primary-container":"#84819a","surface":"#fcf8ff","primary-fixed-dim":"#c8c3df","on-tertiary-container":"#547aff","on-primary":"#ffffff","inverse-on-surface":"#f3eff7","surface-bright":"#fcf8ff","surface-container-lowest":"#ffffff","secondary":"#505f76","on-background":"#1b1b20","background":"#fcf8ff","on-tertiary-fixed":"#001551","surface-dim":"#dcd9e0","on-secondary":"#ffffff","surface-container-highest":"#e4e1e9","on-secondary-fixed":"#0b1c30","secondary-fixed-dim":"#b7c7e2","secondary-fixed":"#d3e3ff","on-error-container":"#93000a","tertiary-container":"#001551","on-surface-variant":"#47464c","on-secondary-fixed-variant":"#38485e","error":"#ba1a1a","primary":"#000000","inverse-primary":"#c8c3df","tertiary-fixed-dim":"#b7c4ff","primary-fixed":"#e4dffc","on-error":"#ffffff","error-container":"#ffdad6","on-tertiary":"#ffffff","outline-variant":"#c9c5cd","on-primary-fixed":"#1b192e","on-primary-fixed-variant":"#46445b","surface-variant":"#e4e1e9","tertiary":"#000000","surface-container":"#f0ecf4","on-tertiary-fixed-variant":"#0039b5"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},spacing:{"gutter":"1.5rem","gutter-mobile":"1rem","space-sm":"0.5rem","space-md":"1rem","space-xl":"2.5rem","space-xs":"0.25rem","space-lg":"1.5rem","margin":"2rem","margin-mobile":"1rem"},fontFamily:{"headline-xl-mobile":["Inter"],"headline-xl":["Inter"],"currency-table":["Inter"],"body-sm":["Inter"],"label-sm":["Inter"],"headline-lg-mobile":["Inter"],"body-lg":["Inter"],"label-lg":["Inter"],"headline-lg":["Inter"],"body-md":["Inter"],"headline-md":["Inter"],"headline-sm":["Inter"],"currency-display":["Inter"],"label-md":["Inter"]},fontSize:{"headline-xl-mobile":["30px",{lineHeight:"38px",letterSpacing:"-0.02em",fontWeight:"600"}],"headline-xl":["40px",{lineHeight:"48px",letterSpacing:"-0.025em",fontWeight:"600"}],"currency-table":["14px",{lineHeight:"20px",letterSpacing:"0em",fontWeight:"500"}],"body-sm":["12px",{lineHeight:"16px",letterSpacing:"0em",fontWeight:"400"}],"label-sm":["11px",{lineHeight:"14px",letterSpacing:"0.02em",fontWeight:"600"}],"headline-lg-mobile":["24px",{lineHeight:"32px",letterSpacing:"-0.015em",fontWeight:"600"}],"body-lg":["16px",{lineHeight:"24px",letterSpacing:"-0.005em",fontWeight:"400"}],"label-lg":["14px",{lineHeight:"20px",letterSpacing:"0.005em",fontWeight:"500"}],"headline-lg":["32px",{lineHeight:"40px",letterSpacing:"-0.02em",fontWeight:"600"}],"body-md":["14px",{lineHeight:"20px",letterSpacing:"0em",fontWeight:"400"}],"headline-md":["22px",{lineHeight:"28px",letterSpacing:"-0.015em",fontWeight:"600"}],"headline-sm":["18px",{lineHeight:"24px",letterSpacing:"-0.01em",fontWeight:"600"}],"currency-display":["28px",{lineHeight:"32px",letterSpacing:"-0.02em",fontWeight:"600"}],"label-md":["12px",{lineHeight:"16px",letterSpacing:"0.01em",fontWeight:"500"}]}}}}</script></head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 w-full z-50"><div class="h-16 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="w-full max-w-[1440px] mx-auto px-margin h-full flex items-center justify-between gap-space-lg"><div class="flex items-center gap-space-xl"><div class="flex items-center gap-space-sm"><div class="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shadow-sm"><span class="material-symbols-outlined text-on-primary text-[20px]">local_shipping</span></div><span class="font-headline-sm text-headline-sm text-on-surface tracking-tight font-bold">Roam Fleet</span></div><nav class="hidden xl:flex items-center gap-space-lg" data-active-classes="text-primary font-bold relative after:content-[''] after:absolute after:bottom-[-20px] after:left-0 after:w-full after:h-[2px] after:bg-primary"><a class="font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface transition-colors py-2" data-path="dashboard" href="#">Dashboard</a><a class="font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface transition-colors py-2" data-path="fleet-operations" href="#">Fleet Operations</a><a aria-current="page" class="transition-colors py-2 text-primary font-bold relative after:content-[''] after:absolute after:bottom-[-20px] after:left-0 after:w-full after:h-[2px] after:bg-primary" data-path="driver-operations" href="#">Driver Operations</a><a class="font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface transition-colors py-2" data-path="money" href="#">Money</a><a class="font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface transition-colors py-2" data-path="vehicle-operations" href="#">Vehicle Operations</a><a class="font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface transition-colors py-2" data-path="delivery-operations" href="#">Delivery Operations</a><a class="font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface transition-colors py-2" data-path="analytics" href="#">Analytics</a><a class="font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface transition-colors py-2" data-path="reports" href="#">Reports</a><a class="font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface transition-colors py-2" data-path="business-finance" href="#">Business Finance</a></nav></div><div class="flex items-center gap-space-md"><div class="hidden md:flex items-center gap-space-xs text-on-surface-variant hover:text-on-surface cursor-pointer py-1.5 px-3 rounded-lg hover:bg-surface-container-low transition-colors"><span class="font-label-md text-label-md">Hub Kingston-01</span><span class="material-symbols-outlined text-[18px]">expand_more</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center cursor-pointer shadow-sm"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></div><div class="h-12 bg-tertiary-container shadow-[0_2px_12px_rgba(0,0,0,0.08)]"><div class="w-full max-w-[1440px] mx-auto px-margin h-full flex items-center justify-between gap-space-md"><div class="flex items-center gap-space-sm w-full max-w-md"><div class="relative w-full flex items-center"><span class="material-symbols-outlined absolute left-3 text-secondary-fixed-dim text-[18px]">search</span><input class="w-full h-8 pl-9 pr-3 rounded-lg bg-on-secondary-fixed text-tertiary-fixed placeholder:text-secondary-fixed-dim font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-secondary-fixed-dim transition-all" placeholder="Switch vehicle or search hub…" type="text"/></div></div><div class="flex items-center gap-space-md shrink-0"><div class="flex items-center gap-space-xs"><span class="w-2 h-2 rounded-full bg-on-tertiary-container animate-pulse"></span><span class="font-label-sm text-label-sm text-tertiary-fixed tracking-wide">06:11:49 PM EST</span></div><div class="hidden sm:flex items-center"><span class="font-label-sm text-label-sm text-secondary-fixed-dim font-normal">America/Jamaica</span></div></div></div></div></header><main class="w-full pt-28 bg-surface"><div class="w-full max-w-[1440px] mx-auto px-margin py-space-lg"><div class="flex flex-col w-full pb-16">
+<!-- Top Breadcrumb / Workspace Header Area -->
+<div class="flex flex-col gap-space-sm mb-space-lg">
+<div class="flex items-center gap-2 text-on-surface-variant font-label-md text-label-md">
+<span>Fleet Operations</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span>Driver Remittances</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="text-on-surface font-medium">Disputes Ledger</span>
+</div>
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-space-md pt-space-xs">
+<div>
+<h1 class="font-headline-lg text-headline-lg text-on-secondary-fixed tracking-tight">Driver Settlements</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">
+          Tolls Uber paid short. The driver asks Uber for the rest from the Roam Driver app.
+        </p>
+</div>
+<!-- Quick Export / Ledger Actions -->
+<div class="flex items-center gap-space-sm">
+<button class="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl bg-surface-container-lowest text-on-secondary-fixed font-label-md text-label-md shadow-sm hover:bg-surface-container-low transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">download</span>
+<span>Export Shortfalls</span>
+</button>
+<button class="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl bg-surface-container-lowest text-on-secondary-fixed font-label-md text-label-md shadow-sm hover:bg-surface-container-low transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">sync</span>
+<span>Re-sync Toll Gateways</span>
+</button>
+</div>
+</div>
+<!-- Secondary Navigation Tabs -->
+<div class="flex items-center gap-2 mt-space-md overflow-x-auto pb-1">
+<a class="px-4 py-2 rounded-lg font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-all whitespace-nowrap" href="#">
+        Cash desk
+      </a>
+<a class="px-4 py-2 rounded-lg font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-all whitespace-nowrap" href="#">
+        Close Week
+      </a>
+<a class="px-4 py-2 rounded-lg font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-all whitespace-nowrap" href="#">
+        Restatements
+      </a>
+<a class="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-on-primary font-label-lg text-label-lg shadow-sm whitespace-nowrap" href="#">
+<span>Disputes</span>
+<span class="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200 text-label-sm font-label-sm">12</span>
+</a>
+</div>
+</div>
+<!-- Summary Tiles Row (3 cards in horizontal grid) -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-gutter mb-space-xl">
+<!-- Tile 1: TO SEND -->
+<div class="relative overflow-hidden rounded-2xl bg-[#fffbeb] p-space-lg shadow-sm">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm tracking-wider uppercase text-[#b45309]">To Send</span>
+<span class="w-7 h-7 rounded-full bg-amber-200/50 flex items-center justify-center">
+<span class="material-symbols-outlined text-[#b45309] text-[18px]">outbox</span>
+</span>
+</div>
+<div class="mt-4 flex items-baseline gap-1.5 text-[#b45309]">
+<span class="font-currency-display text-currency-display tracking-tight font-bold">10</span>
+<span class="font-headline-sm text-headline-sm font-semibold opacity-90">· J$200.00</span>
+</div>
+<p class="mt-2 font-body-sm text-body-sm text-[#b45309]/80 font-medium">Ready for driver submission</p>
+<div class="mt-4 w-full bg-amber-200/50 h-1.5 rounded-full overflow-hidden">
+<div class="bg-[#b45309] h-full rounded-full w-[71%]"></div>
+</div>
+</div>
+<!-- Tile 2: SENT, WAITING ON UBER -->
+<div class="relative overflow-hidden rounded-2xl bg-[#eff6ff] p-space-lg shadow-sm">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm tracking-wider uppercase text-[#1d4ed8]">Sent, Waiting on Uber</span>
+<span class="w-7 h-7 rounded-full bg-blue-200/60 flex items-center justify-center">
+<span class="material-symbols-outlined text-[#1d4ed8] text-[18px]">hourglass_top</span>
+</span>
+</div>
+<div class="mt-4 flex items-baseline gap-1.5 text-[#1d4ed8]">
+<span class="font-currency-display text-currency-display tracking-tight font-bold">2</span>
+<span class="font-headline-sm text-headline-sm font-semibold opacity-90">· J$40.00</span>
+</div>
+<p class="mt-2 font-body-sm text-body-sm text-[#1d4ed8]/80 font-medium">Awaiting platform credit</p>
+<div class="mt-4 w-full bg-blue-200/60 h-1.5 rounded-full overflow-hidden">
+<div class="bg-[#1d4ed8] h-full rounded-full w-[21%]"></div>
+</div>
+</div>
+<!-- Tile 3: LATE -->
+<div class="relative overflow-hidden rounded-2xl bg-[#fff1f2] p-space-lg shadow-sm">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm tracking-wider uppercase text-[#ba1a1a] flex items-center gap-1">
+<span>Late</span>
+<span class="material-symbols-outlined text-[16px] text-[#ba1a1a]">warning</span>
+</span>
+<span class="w-7 h-7 rounded-full bg-red-200/60 flex items-center justify-center">
+<span class="material-symbols-outlined text-[#ba1a1a] text-[18px]">error</span>
+</span>
+</div>
+<div class="mt-4 flex items-baseline gap-1.5 text-[#ba1a1a]">
+<span class="font-currency-display text-currency-display tracking-tight font-bold">1</span>
+<span class="font-headline-sm text-headline-sm font-semibold opacity-90">· J$20.00</span>
+</div>
+<p class="mt-2 font-body-sm text-body-sm text-[#ba1a1a]/80 font-medium">Expiring within 48 hours</p>
+<div class="mt-4 w-full bg-red-200/60 h-1.5 rounded-full overflow-hidden">
+<div class="bg-[#ba1a1a] h-full rounded-full w-[8%]"></div>
+</div>
+</div>
+</div>
+<!-- Operational Header & Driver Filter Chips Row -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-md mb-space-md">
+<div class="flex items-center gap-2 overflow-x-auto py-1">
+<!-- All drivers filter pill -->
+<button class="inline-flex items-center gap-2 h-9 px-4 rounded-full bg-[#030213] text-on-primary font-label-md text-label-md shadow-sm whitespace-nowrap" type="button">
+<span>All drivers</span>
+<span class="inline-flex items-center justify-center px-1.5 py-0.2 rounded-full bg-white/20 text-white text-[11px] font-semibold">14</span>
+</button>
+<!-- Kenny Gregory Rattray filter pill with late alert dot -->
+<button class="inline-flex items-center gap-2 h-9 px-4 rounded-full bg-surface-container-lowest text-on-secondary-fixed font-label-md text-label-md shadow-sm hover:bg-surface-container-low transition-colors whitespace-nowrap" type="button">
+<span class="w-2 h-2 rounded-full bg-[#ba1a1a]"></span>
+<span>Kenny Gregory Rattray</span>
+<span class="text-on-surface-variant font-normal">12</span>
+</button>
+<!-- Marlon Andre Sterling filter pill -->
+<button class="inline-flex items-center gap-2 h-9 px-4 rounded-full bg-surface-container-lowest text-on-secondary-fixed font-label-md text-label-md shadow-sm hover:bg-surface-container-low transition-colors whitespace-nowrap" type="button">
+<span>Marlon Andre Sterling</span>
+<span class="text-on-surface-variant font-normal">2</span>
+</button>
+</div>
+<!-- Right Controls: Sort & Filter -->
+<div class="flex items-center gap-space-sm shrink-0">
+<div class="relative">
+<button class="h-9 px-3 rounded-lg bg-surface-container-lowest text-on-surface-variant font-label-md text-label-md shadow-sm flex items-center gap-1.5 hover:text-on-surface transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">swap_vert</span>
+<span>Sort: Urgency</span>
+</button>
+</div>
+<button class="h-9 px-3 rounded-lg bg-surface-container-lowest text-on-surface-variant font-label-md text-label-md shadow-sm flex items-center gap-1.5 hover:text-on-surface transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">filter_list</span>
+<span>Filters</span>
+</button>
+</div>
+</div>
+<!-- Dispute Rows List (6 cards stacked vertically) -->
+<div class="flex flex-col gap-4">
+<!-- Card 1 (Most Urgent) -->
+<div class="bg-surface-container-lowest rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+<!-- Main details -->
+<div class="flex flex-col gap-2.5">
+<!-- Line 1: Timestamp, Location, Plate, Driver -->
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+<span class="font-headline-sm text-headline-sm text-on-secondary-fixed">10 Nov, 12:55 PM</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm">· Spanish Town</span>
+<span class="px-2.5 py-0.5 rounded-lg bg-surface-container text-on-surface-variant font-label-sm text-label-sm tracking-wide font-medium">5179KZ</span>
+<span class="font-label-lg text-label-lg text-on-secondary-fixed">Kenny Gregory Rattray</span>
+</div>
+<!-- Line 2: Toll Calculation & Shortfall Badge -->
+<div class="flex flex-wrap items-center gap-x-2 gap-y-1.5 font-currency-table text-currency-table text-on-surface-variant">
+<span>Toll J$280.00</span>
+<span>·</span>
+<span>Uber paid J$260.00</span>
+<span>·</span>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#fffbeb] text-[#b45309] font-label-sm text-label-sm font-semibold">
+              J$20.00 to dispute
+            </span>
+</div>
+<!-- Line 3: Operational Chips & Urgency Countdown -->
+<div class="flex flex-wrap items-center gap-2 pt-1">
+<span class="px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">
+              Uber trip 12:30 PM–1:15 PM
+            </span>
+<span class="px-2.5 py-1 rounded-full bg-[#fffbeb] text-[#b45309] font-label-sm text-label-sm font-medium">
+              Not sent yet
+            </span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#fff1f2] text-[#ba1a1a] font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">schedule</span>
+<span>1 of 9 days left</span>
+</span>
+<span class="px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">
+              Week of 9 Nov
+            </span>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex items-center gap-2.5 shrink-0 pt-2 lg:pt-0">
+<button class="h-10 px-5 rounded-xl bg-surface-container-lowest text-on-secondary-fixed font-label-lg text-label-lg shadow-sm hover:bg-surface-container-low transition-colors" type="button">
+            Open week
+          </button>
+<button class="h-10 px-5 rounded-xl bg-[#030213] text-on-primary font-label-lg text-label-lg shadow-sm hover:bg-[#1e1c38] transition-colors" type="button">
+            Mark as sent
+          </button>
+</div>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="bg-surface-container-lowest rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+<!-- Main details -->
+<div class="flex flex-col gap-2.5">
+<!-- Line 1 -->
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+<span class="font-headline-sm text-headline-sm text-on-secondary-fixed">9 Nov, 7:15 AM</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm">· Portmore</span>
+<span class="px-2.5 py-0.5 rounded-lg bg-surface-container text-on-surface-variant font-label-sm text-label-sm tracking-wide font-medium">5179KZ</span>
+<span class="font-label-lg text-label-lg text-on-secondary-fixed">Kenny Gregory Rattray</span>
+</div>
+<!-- Line 2 -->
+<div class="flex flex-wrap items-center gap-x-2 gap-y-1.5 font-currency-table text-currency-table text-on-surface-variant">
+<span>Toll J$390.00</span>
+<span>·</span>
+<span>Uber paid J$370.00</span>
+<span>·</span>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#fffbeb] text-[#b45309] font-label-sm text-label-sm font-semibold">
+              J$20.00 to dispute
+            </span>
+</div>
+<!-- Line 3 -->
+<div class="flex flex-wrap items-center gap-2 pt-1">
+<span class="px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">
+              Uber trip 6:55 AM–7:40 AM
+            </span>
+<span class="px-2.5 py-1 rounded-full bg-[#fffbeb] text-[#b45309] font-label-sm text-label-sm font-medium">
+              Not sent yet
+            </span>
+<span class="px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">
+              8 of 9 days left
+            </span>
+<span class="px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">
+              Week of 9 Nov
+            </span>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex items-center gap-2.5 shrink-0 pt-2 lg:pt-0">
+<button class="h-10 px-5 rounded-xl bg-surface-container-lowest text-on-secondary-fixed font-label-lg text-label-lg shadow-sm hover:bg-surface-container-low transition-colors" type="button">
+            Open week
+          </button>
+<button class="h-10 px-5 rounded-xl bg-[#030213] text-on-primary font-label-lg text-label-lg shadow-sm hover:bg-[#1e1c38] transition-colors" type="button">
+            Mark as sent
+          </button>
+</div>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="bg-surface-container-lowest rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+<!-- Main details -->
+<div class="flex flex-col gap-2.5">
+<!-- Line 1 -->
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+<span class="font-headline-sm text-headline-sm text-on-secondary-fixed">9 Nov, 12:24 PM</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm">· Portmore</span>
+<span class="px-2.5 py-0.5 rounded-lg bg-surface-container text-on-surface-variant font-label-sm text-label-sm tracking-wide font-medium">5179KZ</span>
+<span class="font-label-lg text-label-lg text-on-secondary-fixed">Kenny Gregory Rattray</span>
+</div>
+<!-- Line 2 -->
+<div class="flex flex-wrap items-center gap-x-2 gap-y-1.5 font-currency-table text-currency-table text-on-surface-variant">
+<span>Toll J$390.00</span>
+<span>·</span>
+<span>Uber paid J$370.00</span>
+<span>·</span>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#fffbeb] text-[#b45309] font-label-sm text-label-sm font-semibold">
+              J$20.00 to dispute
+            </span>
+</div>
+<!-- Line 3 -->
+<div class="flex flex-wrap items-center gap-2 pt-1">
+<span class="px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">
+              Uber trip 12:00 PM–12:45 PM
+            </span>
+<span class="px-2.5 py-1 rounded-full bg-[#fffbeb] text-[#b45309] font-label-sm text-label-sm font-medium">
+              Not sent yet
+            </span>
+<span class="px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">
+              8 of 9 days left
+            </span>
+<span class="px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">
+              Week of 9 Nov
+            </span>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex items-center gap-2.5 shrink-0 pt-2 lg:pt-0">
+<button class="h-10 px-5 rounded-xl bg-surface-container-lowest text-on-secondary-fixed font-label-lg text-label-lg shadow-sm hover:bg-surface-container-low transition-colors" type="button">
+            Open week
+          </button>
+<button class="h-10 px-5 rounded-xl bg-[#030213] text-on-primary font-label-lg text-label-lg shadow-sm hover:bg-[#1e1c38] transition-colors" type="button">
+            Mark as sent
+          </button>
+</div>
+</div>
+</div>
+<!-- Card 4 (Sent, Waiting on Uber / Marlon Andre Sterling) -->
+<div class="bg-surface-container-lowest rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+<!-- Main details -->
+<div class="flex flex-col gap-2.5">
+<!-- Line 1 -->
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+<span class="font-headline-sm text-headline-sm text-on-secondary-fixed">4 Nov, 8:10 AM</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm">· Portmore</span>
+<span class="px-2.5 py-0.5 rounded-lg bg-surface-container text-on-surface-variant font-label-sm text-label-sm tracking-wide font-medium">8421LA</span>
+<span class="font-label-lg text-label-lg text-on-secondary-fixed">Marlon Andre Sterling</span>
+</div>
+<!-- Line 2 -->
+<div class="flex flex-wrap items-center gap-x-2 gap-y-1.5 font-currency-table text-currency-table text-on-surface-variant">
+<span>Toll J$390.00</span>
+<span>·</span>
+<span>Uber paid J$370.00</span>
+<span>·</span>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#eff6ff] text-[#1d4ed8] font-label-sm text-label-sm font-semibold">
+              J$20.00 disputed
+            </span>
+</div>
+<!-- Line 3 -->
+<div class="flex flex-wrap items-center gap-2 pt-1">
+<span class="px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">
+              Uber trip 7:45 AM–8:30 AM
+            </span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#eff6ff] text-[#1d4ed8] font-label-sm text-label-sm font-medium">
+<span class="material-symbols-outlined text-[13px]">check_circle</span>
+<span>Sent 5 Nov · waiting on Uber</span>
+</span>
+<span class="px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">
+              Week of 2 Nov
+            </span>
+</div>
+</div>
+<!-- Action Buttons (Danger Button "Lost" + Secondary "Open week") -->
+<div class="flex items-center gap-2.5 shrink-0 pt-2 lg:pt-0">
+<button class="h-10 px-5 rounded-xl bg-surface-container-lowest text-on-secondary-fixed font-label-lg text-label-lg shadow-sm hover:bg-surface-container-low transition-colors" type="button">
+            Open week
+          </button>
+<button class="h-10 px-5 rounded-xl bg-surface-container-lowest text-[#ba1a1a] shadow-sm hover:bg-[#fff1f2] font-label-lg text-label-lg transition-colors" type="button">
+            Lost
+          </button>
+</div>
+</div>
+</div>
+<!-- Card 5 -->
+<div class="bg-surface-container-lowest rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+<!-- Main details -->
+<div class="flex flex-col gap-2.5">
+<!-- Line 1 -->
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+<span class="font-headline-sm text-headline-sm text-on-secondary-fixed">11 Nov, 7:11 AM</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm">· Portmore</span>
+<span class="px-2.5 py-0.5 rounded-lg bg-surface-container text-on-surface-variant font-label-sm text-label-sm tracking-wide font-medium">5179KZ</span>
+<span class="font-label-lg text-label-lg text-on-secondary-fixed">Kenny Gregory Rattray</span>
+</div>
+<!-- Line 2 -->
+<div class="flex flex-wrap items-center gap-x-2 gap-y-1.5 font-currency-table text-currency-table text-on-surface-variant">
+<span>Toll J$390.00</span>
+<span>·</span>
+<span>Uber paid J$370.00</span>
+<span>·</span>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#fffbeb] text-[#b45309] font-label-sm text-label-sm font-semibold">
+              J$20.00 to dispute
+            </span>
+</div>
+<!-- Line 3 -->
+<div class="flex flex-wrap items-center gap-2 pt-1">
+<span class="px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">
+              Uber trip 6:40 AM–7:30 AM
+            </span>
+<span class="px-2.5 py-1 rounded-full bg-[#fffbeb] text-[#b45309] font-label-sm text-label-sm font-medium">
+              Not sent yet
+            </span>
+<span class="px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">
+              9 of 9 days left
+            </span>
+<span class="px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">
+              Week of 9 Nov
+            </span>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex items-center gap-2.5 shrink-0 pt-2 lg:pt-0">
+<button class="h-10 px-5 rounded-xl bg-surface-container-lowest text-on-secondary-fixed font-label-lg text-label-lg shadow-sm hover:bg-surface-container-low transition-colors" type="button">
+            Open week
+          </button>
+<button class="h-10 px-5 rounded-xl bg-[#030213] text-on-primary font-label-lg text-label-lg shadow-sm hover:bg-[#1e1c38] transition-colors" type="button">
+            Mark as sent
+          </button>
+</div>
+</div>
+</div>
+<!-- Card 6 -->
+<div class="bg-surface-container-lowest rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+<!-- Main details -->
+<div class="flex flex-col gap-2.5">
+<!-- Line 1 -->
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+<span class="font-headline-sm text-headline-sm text-on-secondary-fixed">12 Nov, 7:54 AM</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm">· Portmore</span>
+<span class="px-2.5 py-0.5 rounded-lg bg-surface-container text-on-surface-variant font-label-sm text-label-sm tracking-wide font-medium">5179KZ</span>
+<span class="font-label-lg text-label-lg text-on-secondary-fixed">Kenny Gregory Rattray</span>
+</div>
+<!-- Line 2 -->
+<div class="flex flex-wrap items-center gap-x-2 gap-y-1.5 font-currency-table text-currency-table text-on-surface-variant">
+<span>Toll J$390.00</span>
+<span>·</span>
+<span>Uber paid J$370.00</span>
+<span>·</span>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#fffbeb] text-[#b45309] font-label-sm text-label-sm font-semibold">
+              J$20.00 to dispute
+            </span>
+</div>
+<!-- Line 3 -->
+<div class="flex flex-wrap items-center gap-2 pt-1">
+<span class="px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">
+              Uber trip 7:20 AM–8:10 AM
+            </span>
+<span class="px-2.5 py-1 rounded-full bg-[#fffbeb] text-[#b45309] font-label-sm text-label-sm font-medium">
+              Not sent yet
+            </span>
+<span class="px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">
+              9 of 9 days left
+            </span>
+<span class="px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">
+              Week of 9 Nov
+            </span>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex items-center gap-2.5 shrink-0 pt-2 lg:pt-0">
+<button class="h-10 px-5 rounded-xl bg-surface-container-lowest text-on-secondary-fixed font-label-lg text-label-lg shadow-sm hover:bg-surface-container-low transition-colors" type="button">
+            Open week
+          </button>
+<button class="h-10 px-5 rounded-xl bg-[#030213] text-on-primary font-label-lg text-label-lg shadow-sm hover:bg-[#1e1c38] transition-colors" type="button">
+            Mark as sent
+          </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Under the list: Centered Load More Control -->
+<div class="flex flex-col items-center justify-center mt-space-xl gap-2">
+<button class="h-11 px-8 rounded-xl bg-surface-container-lowest text-on-secondary-fixed font-label-lg text-label-lg shadow-sm hover:bg-surface-container-low transition-all" type="button">
+      Show all 14 disputes
+    </button>
+<span class="text-on-surface-variant font-body-sm text-body-sm">
+      Showing 6 of 14 toll shortfalls across Kingston Metropolitan Region
+    </span>
+</div>
+</div></div></main><footer class="w-full bg-surface-container-lowest mt-space-xl shadow-[0_-1px_8px_rgba(0,0,0,0.02)]"><div class="w-full max-w-[1440px] mx-auto px-margin py-space-md flex flex-col md:flex-row items-center justify-between gap-space-sm"><div class="flex items-center gap-space-sm"><span class="font-label-md text-label-md text-on-surface-variant">© 2024 Roam Fleet Inc. Global Fleet Operating System.</span></div><div class="flex items-center gap-space-lg"><a class="font-label-sm text-label-sm text-on-surface-variant hover:text-on-surface transition-colors" href="#">Security & Compliance</a><a class="font-label-sm text-label-sm text-on-surface-variant hover:text-on-surface transition-colors" href="#">System Status</a><a class="font-label-sm text-label-sm text-on-surface-variant hover:text-on-surface transition-colors" href="#">Audit Logs</a></div></div></footer></body></html>

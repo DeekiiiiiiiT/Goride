@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={"darkMode":"class","theme":{"extend":{"colors":{"surface-variant":"#e4e1e9","background":"#fcf8ff","tertiary-fixed-dim":"#b7c4ff","on-tertiary":"#ffffff","surface-container":"#f0ecf4","outline-variant":"#c9c5cd","primary-fixed":"#e4dffc","surface-container-lowest":"#ffffff","on-tertiary-fixed-variant":"#0039b5","on-primary-fixed-variant":"#46445b","on-surface":"#1b1b20","surface":"#fcf8ff","on-primary-container":"#84819a","on-secondary-fixed-variant":"#38485e","outline":"#78767d","primary-fixed-dim":"#c8c3df","inverse-primary":"#c8c3df","surface-dim":"#dcd9e0","on-secondary-container":"#56657d","on-surface-variant":"#47464c","primary-container":"#1b192e","inverse-surface":"#303035","surface-bright":"#fcf8ff","on-secondary":"#ffffff","on-error":"#ffffff","on-tertiary-container":"#547aff","tertiary-container":"#001551","inverse-on-surface":"#f3eff7","surface-container-low":"#f6f2fa","on-secondary-fixed":"#0b1c30","on-tertiary-fixed":"#001551","on-background":"#1b1b20","error-container":"#ffdad6","on-primary-fixed":"#1b192e","error":"#ba1a1a","secondary-container":"#d3e3ff","tertiary":"#000000","surface-container-highest":"#e4e1e9","surface-tint":"#5e5c74","secondary":"#505f76","secondary-fixed":"#d3e3ff","on-error-container":"#93000a","primary":"#000000","on-primary":"#ffffff","secondary-fixed-dim":"#b7c7e2","tertiary-fixed":"#dce1ff","surface-container-high":"#eae7ee"},"borderRadius":{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},"spacing":{"space-sm":"0.5rem","space-lg":"1.5rem","space-xs":"0.25rem","margin-mobile":"1rem","space-xl":"2.5rem","space-md":"1rem","gutter-mobile":"1rem","margin":"2rem","gutter":"1.5rem"},"fontFamily":{"label-sm":["Inter"],"headline-lg-mobile":["Inter"],"headline-sm":["Inter"],"headline-md":["Inter"],"headline-lg":["Inter"],"label-lg":["Inter"],"currency-display":["Inter"],"label-md":["Inter"],"headline-xl":["Inter"],"currency-table":["Inter"],"headline-xl-mobile":["Inter"],"body-sm":["Inter"],"body-lg":["Inter"],"body-md":["Inter"]},"fontSize":{"label-sm":["11px",{"lineHeight":"14px","letterSpacing":"0.02em","fontWeight":"600"}],"headline-lg-mobile":["24px",{"lineHeight":"32px","letterSpacing":"-0.015em","fontWeight":"600"}],"headline-sm":["18px",{"lineHeight":"24px","letterSpacing":"-0.01em","fontWeight":"600"}],"headline-md":["22px",{"lineHeight":"28px","letterSpacing":"-0.015em","fontWeight":"600"}],"headline-lg":["32px",{"lineHeight":"40px","letterSpacing":"-0.02em","fontWeight":"600"}],"label-lg":["14px",{"lineHeight":"20px","letterSpacing":"0.005em","fontWeight":"500"}],"currency-display":["28px",{"lineHeight":"32px","letterSpacing":"-0.02em","fontWeight":"600"}],"label-md":["12px",{"lineHeight":"16px","letterSpacing":"0.01em","fontWeight":"500"}],"headline-xl":["40px",{"lineHeight":"48px","letterSpacing":"-0.025em","fontWeight":"600"}],"currency-table":["14px",{"lineHeight":"20px","letterSpacing":"0em","fontWeight":"500"}],"headline-xl-mobile":["30px",{"lineHeight":"38px","letterSpacing":"-0.02em","fontWeight":"600"}],"body-sm":["12px",{"lineHeight":"16px","letterSpacing":"0em","fontWeight":"400"}],"body-lg":["16px",{"lineHeight":"24px","letterSpacing":"-0.005em","fontWeight":"400"}],"body-md":["14px",{"lineHeight":"20px","letterSpacing":"0em","fontWeight":"400"}]}}}};</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 right-0 z-50 shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 w-full px-margin bg-surface-container-lowest flex items-center justify-between"><div class="flex items-center gap-space-lg"><a class="flex items-center gap-space-sm bg-primary text-on-primary px-3 py-2 rounded-lg" data-path="dashboard" href="#"><span class="material-symbols-outlined text-[20px]">local_shipping</span><span class="font-label-lg text-label-lg tracking-tight">Roam Fleet</span></a><nav class="hidden xl:flex items-center gap-space-md" data-active-classes="text-on-surface font-semibold"><a class="text-on-surface-variant font-label-md text-label-md hover:text-on-surface transition-colors py-1" data-path="dashboard" href="#">Dashboard</a><a class="text-on-surface-variant font-label-md text-label-md hover:text-on-surface transition-colors py-1" data-path="fleet-operations" href="#">Fleet Operations</a><a class="text-on-surface-variant font-label-md text-label-md hover:text-on-surface transition-colors py-1" data-path="driver-operations" href="#">Driver Operations</a><a class="text-on-surface-variant font-label-md text-label-md hover:text-on-surface transition-colors py-1" data-path="money" href="#">Money</a><a class="text-on-surface-variant font-label-md text-label-md hover:text-on-surface transition-colors py-1" data-path="vehicle-operations" href="#">Vehicle Operations</a><a class="text-on-surface-variant font-label-md text-label-md hover:text-on-surface transition-colors py-1" data-path="delivery-operations" href="#">Delivery Operations</a><a class="text-on-surface-variant font-label-md text-label-md hover:text-on-surface transition-colors py-1" data-path="analytics" href="#">Analytics</a><a class="text-on-surface-variant font-label-md text-label-md hover:text-on-surface transition-colors py-1" data-path="reports" href="#">Reports</a><a class="text-on-surface-variant font-label-md text-label-md hover:text-on-surface transition-colors py-1" data-path="business-finance" href="#">Business Finance</a></nav></div><div class="flex items-center gap-space-md"><button class="flex items-center gap-space-xs bg-surface-container-low hover:bg-surface-container text-on-surface px-3 py-1.5 rounded-lg transition-colors" type="button"><span class="material-symbols-outlined text-outline text-[18px]">hub</span><span class="font-label-sm text-label-sm">Hub Kingston-01</span><span class="material-symbols-outlined text-outline text-[16px]">expand_more</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div><div class="h-12 w-full px-margin bg-on-secondary-fixed flex items-center justify-between text-on-primary"><div class="flex items-center gap-space-sm w-80"><span class="material-symbols-outlined text-secondary-fixed-dim text-[18px]">search</span><input class="w-full bg-transparent border-0 text-on-primary placeholder:text-secondary-fixed-dim/60 font-body-sm text-body-sm focus:outline-none" placeholder="Switch vehicle or search hub…" type="text"/></div><div class="flex items-center gap-space-md"><div class="flex items-center gap-space-xs"><span class="relative flex h-2 w-2"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-tertiary-fixed-dim opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-secondary-fixed"></span></span><span class="font-label-sm text-label-sm tracking-wide text-surface-container-lowest">06:11:49 PM EST</span></div><div class="h-3 w-px bg-secondary-fixed-dim/30"></div><span class="font-label-sm text-label-sm text-secondary-fixed-dim">America/Jamaica</span></div></div></header><main class="w-full pt-28 bg-surface min-h-[calc(100vh-4rem)]"><div class="flex flex-col w-full">
+<div class="max-w-[1440px] w-full mx-auto px-margin py-space-xl flex flex-col gap-space-lg">
+<!-- Header Block -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-space-md">
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-space-xs text-on-surface-variant font-label-md text-label-md">
+<span>Fleet Operations</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span>Compliance &amp; Settings</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Fleet Policy Configuration</h1>
+<p class="font-body-md text-body-md text-on-surface-variant">Company rules for fuel, reconciliations, and automated toll tracking.</p>
+</div>
+<!-- Quick Context Hub / Version Pill -->
+<div class="flex items-center gap-2 bg-surface-container-low px-3 py-1.5 rounded-full shadow-sm">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Version 4.12 · Active Fleet Mandate</span>
+</div>
+</div>
+<!-- Tab Row -->
+<div class="flex items-center gap-2 bg-surface-container-low p-1.5 rounded-xl shadow-sm self-start">
+<button class="px-5 py-2 rounded-lg font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface transition-colors" type="button">
+        Rules
+      </button>
+<button class="px-5 py-2 rounded-lg font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface transition-colors" type="button">
+        Schedule
+      </button>
+<button class="px-5 py-2 rounded-lg font-label-lg text-label-lg bg-surface-container-lowest text-on-surface shadow-sm transition-all flex items-center gap-2" type="button">
+<span>Tolls</span>
+<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
+</button>
+</div>
+<!-- Read-Only Status Strip -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-space-md">
+<div class="flex flex-wrap items-center gap-space-sm">
+<!-- Chip 1: Toll Disputes -->
+<div class="h-[26px] px-2.5 rounded-full bg-surface-container flex items-center gap-1.5 shadow-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-[#069669]"></span>
+<span class="font-label-sm text-label-sm text-on-surface">Toll disputes: On</span>
+</div>
+<!-- Chip 2: InDrive Rider -->
+<div class="h-[26px] px-2.5 rounded-full bg-surface-container flex items-center gap-1.5 shadow-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-[#069669]"></span>
+<span class="font-label-sm text-label-sm text-on-surface">InDrive rider pays driver: On</span>
+</div>
+<!-- Chip 3: Hand-logged trips -->
+<div class="h-[26px] px-2.5 rounded-full bg-surface-container-high flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Hand-logged trips: Off</span>
+</div>
+</div>
+<div class="flex items-center gap-1.5 text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px] text-outline">verified_user</span>
+<span class="font-label-sm text-label-sm">Switched on by Roam support.</span>
+</div>
+</div>
+<!-- CRITICAL WARNING BANNER (Settings Missing) -->
+<div class="bg-error-container/40 p-space-lg rounded-2xl shadow-sm flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-full bg-error/15 flex items-center justify-center text-error">
+<span class="material-symbols-outlined text-[20px]">warning</span>
+</div>
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-semibold tracking-tight">Disputes can't open until these are set</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Toll reconciliation engines require matching ride-share subsidy figures for automated driver chargebacks.</p>
+</div>
+</div>
+<span class="h-6 px-2.5 rounded-full bg-error text-on-error font-label-sm text-label-sm flex items-center">2 Required</span>
+</div>
+<div class="bg-surface-container-lowest/80 rounded-xl p-space-md flex flex-col gap-space-sm shadow-sm">
+<!-- Alert Row 1 -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm py-1">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-error text-[18px]">error</span>
+<div class="flex items-baseline gap-2">
+<span class="font-label-lg text-label-lg text-on-surface">Spanish Town</span>
+<span class="font-body-sm text-body-sm text-error">no Uber rate defined for Class 1</span>
+</div>
+</div>
+<button class="h-9 px-4 rounded-xl bg-surface-container-lowest hover:bg-surface-container-low text-on-surface font-label-md text-label-md shadow-sm transition-all flex items-center gap-1.5 self-start sm:self-auto" type="button">
+<span class="material-symbols-outlined text-[16px]">add</span>
+<span>Add rate</span>
+</button>
+</div>
+<div class="w-full h-px bg-error-container/60"></div>
+<!-- Alert Row 2 -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm py-1">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-error text-[18px]">error</span>
+<div class="flex items-baseline gap-2">
+<span class="font-label-lg text-label-lg text-on-surface">May Pen</span>
+<span class="font-body-sm text-body-sm text-error">no Uber rate defined for Class 1</span>
+</div>
+</div>
+<button class="h-9 px-4 rounded-xl bg-surface-container-lowest hover:bg-surface-container-low text-on-surface font-label-md text-label-md shadow-sm transition-all flex items-center gap-1.5 self-start sm:self-auto" type="button">
+<span class="material-symbols-outlined text-[16px]">add</span>
+<span>Add rate</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Cards Grid (Card 1: Dispute liability, Card 2: Platforms) -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-space-lg">
+<!-- Card 1: When a dispute doesn't work out -->
+<div class="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm flex flex-col justify-between gap-space-lg">
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-on-surface-variant text-[20px]">balance</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold">When a dispute doesn't work out</h3>
+</div>
+<span class="font-label-sm text-label-sm bg-surface-container px-2 py-0.5 rounded-full text-on-surface-variant">Default Rule</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Defines settlement account distribution if an appeal fails or SLA expires.</p>
+</div>
+<div class="flex flex-col gap-3">
+<!-- Row: Who pays when lost -->
+<div class="flex items-center justify-between p-3.5 rounded-xl bg-surface-container-low">
+<div class="flex flex-col">
+<span class="font-body-md text-body-md text-on-surface font-medium">Who pays when lost</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Ride platform denied fee adjustment</span>
+</div>
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-lowest shadow-sm">
+<span class="material-symbols-outlined text-[18px] text-on-surface">domain</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">The fleet</span>
+</div>
+</div>
+<!-- Row: Who pays when not sent in time -->
+<div class="flex items-center justify-between p-3.5 rounded-xl bg-surface-container-low">
+<div class="flex flex-col">
+<span class="font-body-md text-body-md text-on-surface font-medium">Who pays when not sent in time</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Receipt exceeded 72-hour filing window</span>
+</div>
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-lowest shadow-sm">
+<span class="material-symbols-outlined text-[18px] text-on-surface">badge</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">The driver</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-2 text-on-surface-variant pt-2">
+<span class="material-symbols-outlined text-[16px]">info</span>
+<span class="font-body-sm text-body-sm">Governed under Jamaica Transport Authority guidelines.</span>
+</div>
+</div>
+<!-- Card 2: Platforms -->
+<div class="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm flex flex-col justify-between gap-space-lg">
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-on-surface-variant text-[20px]">cell_tower</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Platforms</h3>
+</div>
+<span class="font-label-sm text-label-sm bg-surface-container px-2 py-0.5 rounded-full text-on-surface-variant">3 Integrated</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Active fleet dispatch gateways connected to telemetry reconciliation.</p>
+</div>
+<div class="flex flex-col gap-2.5">
+<!-- Platform: Uber -->
+<div class="flex items-center justify-between p-3.5 rounded-xl bg-surface-container-low">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-primary text-on-primary flex items-center justify-center font-bold font-label-lg text-label-lg">
+                Ub
+              </div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface">Uber</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">API v3.4 direct sync</span>
+</div>
+</div>
+<span class="h-6 px-2.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface inline-flex items-center gap-1.5 shadow-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-[#069669]"></span>
+              Active
+            </span>
+</div>
+<!-- Platform: InDrive -->
+<div class="flex items-center justify-between p-3.5 rounded-xl bg-surface-container-low">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-surface-container-highest text-on-surface flex items-center justify-center font-bold font-label-lg text-label-lg">
+                iD
+              </div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface">InDrive</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Cash passenger model</span>
+</div>
+</div>
+<span class="h-6 px-2.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface inline-flex items-center gap-1.5 shadow-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-[#069669]"></span>
+              Active
+            </span>
+</div>
+<!-- Platform: Roam -->
+<div class="flex items-center justify-between p-3.5 rounded-xl bg-surface-container-low">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-primary text-on-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">local_shipping</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface">Roam</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Private fleet dispatch</span>
+</div>
+</div>
+<span class="h-6 px-2.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface inline-flex items-center gap-1.5 shadow-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-[#069669]"></span>
+              Native
+            </span>
+</div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Last audited 2h ago</span>
+<button class="text-on-surface font-label-sm text-label-sm hover:underline flex items-center gap-1" type="button">
+<span>Configure webhooks</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Card 3: Toll Prices Ledger Table -->
+<div class="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm flex flex-col gap-space-md">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm">
+<div class="flex flex-col">
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Toll prices</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Plaza electronic tag charges compared against digital dispatch allowances.</p>
+</div>
+<div class="flex items-center gap-space-sm">
+<div class="flex items-center gap-1.5 bg-surface-container-low px-3 py-1.5 rounded-xl">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Vehicle Class:</span>
+<span class="font-label-sm text-label-sm text-on-surface font-semibold">Class 1 (Passenger)</span>
+</div>
+<button class="h-10 px-4 rounded-xl bg-primary text-on-primary font-label-md text-label-md shadow-sm hover:bg-primary-container transition-all flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>+ Add rate</span>
+</button>
+</div>
+</div>
+<!-- Ledger Table -->
+<div class="w-full overflow-x-auto rounded-xl">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low text-on-surface-variant font-label-md text-label-md h-10">
+<th class="px-space-md font-semibold">Plaza</th>
+<th class="px-space-md text-right font-semibold">Tag price</th>
+<th class="px-space-md text-right font-semibold">Uber pays</th>
+<th class="px-space-md text-center font-semibold">InDrive</th>
+<th class="px-space-md font-semibold">Since</th>
+<th class="px-space-md text-right font-semibold"><span class="sr-only">Actions</span></th>
+</tr>
+</thead>
+<tbody class="divide-y-0">
+<!-- Row 1: Portmore -->
+<tr class="h-[56px] hover:bg-surface-container-low/50 transition-colors group cursor-pointer">
+<td class="px-space-md font-body-md text-body-md text-on-surface font-medium">
+<div class="flex items-center gap-2">
+<span>Portmore</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant bg-surface-container px-2 py-0.5 rounded">Class 1</span>
+</div>
+</td>
+<td class="px-space-md text-right font-currency-table text-currency-table text-on-surface tabular-nums">
+                J$390.00
+              </td>
+<td class="px-space-md text-right font-currency-table text-currency-table text-on-surface tabular-nums">
+                J$370.00
+              </td>
+<td class="px-space-md text-center font-body-md text-body-md text-on-surface-variant">
+                —
+              </td>
+<td class="px-space-md font-body-sm text-body-sm text-on-surface-variant">
+                from 1 Nov 2026
+              </td>
+<td class="px-space-md text-right">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface transition-colors text-[20px]">chevron_right</span>
+</td>
+</tr>
+<!-- Row 2: Spanish Town -->
+<tr class="h-[56px] hover:bg-surface-container-low/50 transition-colors group cursor-pointer bg-error-container/10">
+<td class="px-space-md font-body-md text-body-md text-on-surface font-medium">
+<div class="flex items-center gap-2">
+<span>Spanish Town</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant bg-surface-container px-2 py-0.5 rounded">Class 1</span>
+</div>
+</td>
+<td class="px-space-md text-right font-currency-table text-currency-table text-on-surface tabular-nums">
+                J$280.00
+              </td>
+<td class="px-space-md text-right">
+<span class="h-[24px] px-2.5 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm inline-flex items-center gap-1 shadow-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
+                  Missing
+                </span>
+</td>
+<td class="px-space-md text-center font-body-md text-body-md text-on-surface-variant">
+                —
+              </td>
+<td class="px-space-md font-body-sm text-body-sm text-on-surface-variant">
+                —
+              </td>
+<td class="px-space-md text-right">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface transition-colors text-[20px]">chevron_right</span>
+</td>
+</tr>
+<!-- Row 3: May Pen -->
+<tr class="h-[56px] hover:bg-surface-container-low/50 transition-colors group cursor-pointer bg-error-container/10">
+<td class="px-space-md font-body-md text-body-md text-on-surface font-medium">
+<div class="flex items-center gap-2">
+<span>May Pen</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant bg-surface-container px-2 py-0.5 rounded">Class 1</span>
+</div>
+</td>
+<td class="px-space-md text-right font-currency-table text-currency-table text-on-surface tabular-nums">
+                J$450.00
+              </td>
+<td class="px-space-md text-right">
+<span class="h-[24px] px-2.5 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm inline-flex items-center gap-1 shadow-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
+                  Missing
+                </span>
+</td>
+<td class="px-space-md text-center font-body-md text-body-md text-on-surface-variant">
+                —
+              </td>
+<td class="px-space-md font-body-sm text-body-sm text-on-surface-variant">
+                —
+              </td>
+<td class="px-space-md text-right">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface transition-colors text-[20px]">chevron_right</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Additional Plaza Coverage Footnote -->
+<div class="flex items-center justify-between p-space-sm bg-surface-container-low rounded-xl">
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">alt_route</span>
+<span class="font-body-sm text-body-sm">Highway 2000 East-West Corridor &amp; North-South Link covered under automated transponder.</span>
+</div>
+<button class="text-on-surface font-label-sm text-label-sm hover:underline" type="button">
+          View full tariff sheet
+        </button>
+</div>
+</div>
+</div>
+<!-- Sticky Footer Bar -->
+<div class="sticky bottom-0 left-0 right-0 z-40 bg-surface-container-lowest/95 backdrop-blur-md shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+<div class="max-w-[1440px] w-full mx-auto px-margin h-16 flex items-center justify-between">
+<!-- Footer Status Left -->
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-outline">sync_saved_locally</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">No changes · All system policies in sync</span>
+</div>
+<!-- Action Buttons Right -->
+<div class="flex items-center gap-space-sm">
+<button class="h-10 px-4 rounded-xl bg-surface-container-lowest hover:bg-surface-container-low text-on-surface-variant font-label-lg text-label-lg transition-colors" type="button">
+          Discard
+        </button>
+<button class="h-10 px-6 rounded-xl bg-surface-container-highest text-outline cursor-not-allowed font-label-lg text-label-lg transition-none flex items-center gap-2" disabled="" type="button">
+<span class="material-symbols-outlined text-[16px]">lock</span>
+<span>Save</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<script>
+  // Micro-interaction for demo feedback on the banner buttons
+  document.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      if (btn.hasAttribute('disabled')) return;
+      const originalText = btn.innerText;
+      if (originalText.includes('Add rate')) {
+        const row = btn.closest('div');
+        btn.classList.add('bg-surface-container');
+        setTimeout(() => {
+          btn.classList.remove('bg-surface-container');
+        }, 200);
+      }
+    });
+  });
+</script></main><footer class="w-full bg-surface-container-low"><div class="w-full px-margin py-space-md flex flex-col md:flex-row items-center justify-between gap-space-sm"><div class="text-on-surface-variant font-body-sm text-body-sm">© 2024 Roam Fleet Inc. Global Fleet Operating System.</div><div class="flex items-center gap-space-lg"><a class="text-on-surface-variant hover:text-on-surface font-label-sm text-label-sm transition-colors" href="#">Security &amp; Compliance</a><a class="text-on-surface-variant hover:text-on-surface font-label-sm text-label-sm transition-colors" href="#">System Status</a><a class="text-on-surface-variant hover:text-on-surface font-label-sm text-label-sm transition-colors" href="#">Audit Logs</a></div></div></footer></body></html>

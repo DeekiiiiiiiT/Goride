@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roam Driver - Home</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      background-color: #f1f5f9;
+      color: #0f172a;
+    }
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+    .card-shadow {
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
+    }
+  </style>
+</head>
+<body class="bg-slate-100 flex justify-center min-h-screen p-0 md:p-6 text-slate-900">
+  <!-- Mobile Container 390px -->
+  <div class="w-full max-w-[390px] bg-slate-100 min-h-screen flex flex-col justify-between relative shadow-xl overflow-hidden">
+    
+    <!-- Top Header Bar -->
+    <header class="bg-white border-b border-slate-200 px-4 pt-12 pb-3.5 sticky top-0 z-20 flex items-center justify-between">
+      <!-- Menu Button Left -->
+      <button class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-slate-100 text-slate-800 transition-colors" aria-label="Menu">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+        </svg>
+      </button>
+
+      <!-- App Brand Center -->
+      <div class="flex items-center gap-1.5">
+        <span class="font-bold text-lg tracking-tight text-slate-900">Roam</span>
+        <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">Driver</span>
+      </div>
+
+      <!-- Right Actions: Notification Bell + Avatar -->
+      <div class="flex items-center gap-2">
+        <button class="relative w-10 h-10 rounded-full flex items-center justify-center hover:bg-slate-100 text-slate-700 transition-colors" aria-label="Notifications">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+          </svg>
+          <!-- Small Red Notification Dot -->
+          <span class="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-red-600 ring-2 ring-white"></span>
+        </button>
+        <div class="w-9 h-9 rounded-full bg-slate-200 border border-slate-300 flex items-center justify-center font-semibold text-xs text-slate-700">
+          KR
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Scrollable Content Area -->
+    <main class="flex-1 px-4 py-4 space-y-4">
+      
+      <!-- Driver Car & Greeting Header -->
+      <div class="flex items-center justify-between pt-1">
+        <div>
+          <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Good morning</p>
+          <h1 class="text-lg font-bold text-slate-900 leading-tight">Kenny Rattray</h1>
+        </div>
+        <div class="flex items-center gap-1.5 bg-slate-200/80 px-2.5 py-1 rounded-lg border border-slate-300">
+          <svg class="w-3.5 h-3.5 text-slate-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
+          </svg>
+          <span class="text-xs font-mono font-semibold text-slate-700 tracking-wide">5179KZ</span>
+        </div>
+      </div>
+
+      <!-- NEW SCREEN 1 PROMINENT COMPONENT: TOLLS TO DISPUTE CARD -->
+      <section class="bg-white rounded-2xl border border-slate-200 border-l-[5px] border-l-amber-500 p-4 card-shadow">
+        <div class="flex items-start justify-between gap-2 mb-2">
+          <div class="flex items-center gap-2">
+            <div class="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+              <svg class="w-3.5 h-3.5 text-amber-700" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h2 class="text-[17px] font-semibold text-slate-900 leading-snug">
+              12 tolls to dispute with Uber
+            </h2>
+          </div>
+          <!-- Red Chip on the right -->
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-600 border border-red-200 flex-shrink-0">
+            1 day left on the oldest
+          </span>
+        </div>
+
+        <p class="text-[15px] text-slate-600 leading-relaxed mb-4">
+          Uber still owes <span class="font-semibold text-slate-900 tabular-nums">J$240.00</span> on tolls from your trips. It takes about a minute each.
+        </p>
+
+        <!-- Primary Emerald Button "Start" (full width, at least 48px) -->
+        <a href="#" class="w-full h-12 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold text-[15px] rounded-xl flex items-center justify-center gap-2 shadow-sm transition-colors">
+          <span>Start</span>
+          <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+          </svg>
+        </a>
+      </section>
+
+      <!-- Existing Driver Home Card: Weekly Earnings -->
+      <section class="bg-white rounded-2xl border border-slate-200 p-4 card-shadow">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">This Week's Payout</span>
+          <span class="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+            On Track
+          </span>
+        </div>
+        <div class="mb-4">
+          <div class="text-3xl font-bold text-slate-900 tabular-nums">J$84,350.00</div>
+          <div class="text-[13px] text-slate-500 mt-0.5">Target: J$110,000.00 · 3 days remaining</div>
+        </div>
+        
+        <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden mb-4 border border-slate-200">
+          <div class="bg-emerald-600 h-2.5 rounded-full" style="width: 76%"></div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100 text-[13px]">
+          <div>
+            <span class="text-slate-500 block">Completed Trips</span>
+            <span class="font-semibold text-slate-800 text-sm">64 trips</span>
+          </div>
+          <div>
+            <span class="text-slate-500 block">Fleet Rate</span>
+            <span class="font-semibold text-slate-800 text-sm">J$1,318 / trip avg</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Existing Driver Home Card: Vehicle & Shift status -->
+      <section class="bg-white rounded-2xl border border-slate-200 p-4 card-shadow">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2">
+            <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
+            <span class="text-sm font-semibold text-slate-900">Active Shift</span>
+          </div>
+          <span class="text-xs text-slate-500">Started 6:30 AM</span>
+        </div>
+        <div class="flex items-center justify-between text-sm text-slate-700 py-2 border-y border-slate-100">
+          <span class="text-slate-600">Vehicle</span>
+          <span class="font-medium text-slate-900">Toyota Roomy <span class="bg-slate-100 border border-slate-200 text-xs px-1.5 py-0.5 rounded font-mono">5179KZ</span></span>
+        </div>
+        <div class="flex items-center justify-between text-sm text-slate-700 pt-2">
+          <span class="text-slate-600">Inspection Status</span>
+          <span class="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">Verified</span>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Bottom Tab Bar -->
+    <nav class="bg-white border-t border-slate-200 px-6 py-2 sticky bottom-0 z-20 flex items-center justify-between">
+      <!-- Home (Active) -->
+      <button class="flex flex-col items-center gap-1 text-emerald-600 w-16 py-1">
+        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M11.47 3.84a.75.75 0 011.06 0l8.69 8.69a.75.75 0 101.06-1.06l-8.689-8.69a2.25 2.25 0 00-3.182 0l-8.69 8.69a.75.75 0 001.061 1.06l8.69-8.69z" />
+          <path d="M12 5.432l8.159 8.159c.03.03.06.058.091.086v6.198c0 1.035-.84 1.875-1.875 1.875H15a.75.75 0 01-.75-.75v-4.5a.75.75 0 00-.75-.75h-3a.75.75 0 00-.75.75V21a.75.75 0 01-.75.75H5.625a1.875 1.875 0 01-1.875-1.875v-6.198a2.29 2.29 0 00.091-.086L12 5.432z" />
+        </svg>
+        <span class="text-[11px] font-semibold">Home</span>
+      </button>
+
+      <!-- Trips -->
+      <button class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600 w-16 py-1 transition-colors">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
+        </svg>
+        <span class="text-[11px] font-medium">Trips</span>
+      </button>
+
+      <!-- Earnings -->
+      <button class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600 w-16 py-1 transition-colors">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span class="text-[11px] font-medium">Earnings</span>
+      </button>
+
+      <!-- More -->
+      <button class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600 w-16 py-1 transition-colors">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM12.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM18.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+        </svg>
+        <span class="text-[11px] font-medium">More</span>
+      </button>
+    </nav>
+
+  </div>
+</body>
+</html>

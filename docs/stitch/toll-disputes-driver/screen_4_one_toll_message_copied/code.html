@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Screen 4: One Toll — Message Copied</title>
+<!-- Load Tailwind CSS v3 with forms and container queries -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: Inter -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<style data-purpose="custom-typography">
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+  </style>
+<style data-purpose="custom-layout">
+    /* Hide scrollbars for slick native mobile app aesthetic */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-slate-200 min-h-screen flex items-center justify-center p-0 sm:p-4 select-none">
+<!-- BEGIN: MobileFrameContainer -->
+<!-- 390px typical modern mobile viewport container -->
+<div class="w-full max-w-[390px] h-[844px] bg-[#f8fafc] text-slate-800 flex flex-col relative overflow-hidden shadow-2xl sm:rounded-[36px] border border-slate-200" data-purpose="mobile-viewport">
+<!-- BEGIN: TopBar -->
+<header class="bg-white border-b border-slate-100 px-4 pt-3 pb-3 flex items-center justify-between shrink-0 z-10">
+<!-- Back button -->
+<button aria-label="Go back" class="p-1 text-slate-700 hover:text-slate-900 transition-colors focus:outline-none" type="button">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" viewbox="0 0 24 24">
+<path d="M19 12H5M12 19l-7-7 7-7"></path>
+</svg>
+</button>
+<!-- Screen Title -->
+<h1 class="text-[16px] font-semibold text-slate-900 tracking-tight">
+        Dispute this toll with Uber
+      </h1>
+<!-- Help Question Button -->
+<button aria-label="Help &amp; Information" class="p-1 text-slate-400 hover:text-slate-600 transition-colors focus:outline-none" type="button">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<circle cx="12" cy="12" r="10"></circle>
+<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+<line x1="12" x2="12.01" y1="17" y2="17"></line>
+</svg>
+</button>
+</header>
+<!-- END: TopBar -->
+<!-- BEGIN: ScrollableContent -->
+<main class="flex-1 overflow-y-auto no-scrollbar px-4 pt-3 pb-24 space-y-3">
+<!-- BEGIN: TollSummaryCard -->
+<section class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100" data-purpose="toll-summary-card">
+<!-- Top row: Toll date & Plate badge -->
+<div class="flex items-center justify-between">
+<span class="text-[13px] font-medium text-slate-800">
+            9 Nov, 7:15 AM · Portmore toll
+          </span>
+<span class="bg-slate-100 text-slate-600 text-[11px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded">
+            5179KZ
+          </span>
+</div>
+<!-- Big Amount Owed -->
+<div class="mt-2 text-[26px] font-bold text-amber-500 tracking-tight leading-none">
+          J$20.00 <span class="text-[15px] font-medium text-amber-500">still owed</span>
+</div>
+<!-- Breakout Breakdown -->
+<div class="mt-1.5 text-[12px] text-slate-500 font-normal">
+          Toll J$390.00 · Uber paid back J$370.00
+        </div>
+<!-- Uber Trip Pill -->
+<div class="mt-3">
+<span class="inline-block bg-slate-100 text-slate-600 text-[11px] font-medium px-2.5 py-1 rounded-full">
+            Uber trip 6:55 AM–7:40 AM
+          </span>
+</div>
+<!-- Status Chip & Deadline -->
+<div class="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2 text-[12px]">
+<span class="bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-medium px-2.5 py-0.5 rounded-full">
+            Not sent yet
+          </span>
+<div class="flex items-center text-slate-500 text-[12px] gap-1">
+<svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<circle cx="12" cy="12" r="10"></circle>
+<polyline points="12 6 12 12 16 14"></polyline>
+</svg>
+<span>8 of 9 days left · send by Wed 18 Nov</span>
+</div>
+</div>
+</section>
+<!-- END: TollSummaryCard -->
+<!-- BEGIN: Step1Card -->
+<section class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100" data-purpose="step-copy-message">
+<!-- Step Header -->
+<div class="flex items-center gap-2.5 mb-2.5">
+<div class="w-5 h-5 rounded-full bg-slate-100 text-slate-700 text-[11px] font-bold flex items-center justify-center">
+            1
+          </div>
+<h2 class="text-[14px] font-semibold text-slate-900">
+            Copy the message
+          </h2>
+</div>
+<!-- Message Box -->
+<div class="bg-[#f8fafc] border border-slate-100 rounded-xl p-3 text-[13px] leading-relaxed text-slate-700">
+          Hi, on 9 Nov 2026 at 7:15 AM I drove through the Portmore toll during this trip. The toll cost J$390.00 and I was refunded J$370.00, so J$20.00 is still owed. Please refund the remaining J$20.00. Thank you.
+        </div>
+<!-- Copied State Button -->
+<button class="mt-3 w-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 font-medium py-2.5 px-4 rounded-xl text-[14px] flex items-center justify-center gap-2 transition-colors active:scale-[0.99]" type="button">
+<!-- Checkmark Icon -->
+<svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewbox="0 0 24 24">
+<polyline points="20 6 9 17 4 12"></polyline>
+</svg>
+<span>Copied</span>
+</button>
+</section>
+<!-- END: Step1Card -->
+<!-- BEGIN: Step2Card -->
+<section class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100" data-purpose="step-open-uber">
+<!-- Step Header -->
+<div class="flex items-center gap-2.5 mb-1.5">
+<div class="w-5 h-5 rounded-full bg-slate-100 text-slate-700 text-[11px] font-bold flex items-center justify-center">
+            2
+          </div>
+<h2 class="text-[14px] font-semibold text-slate-900">
+            Open Uber and paste it on this trip
+          </h2>
+</div>
+<!-- Description -->
+<p class="text-[12px] leading-relaxed text-slate-500 mb-3 pl-[30px]">
+          In the Uber Driver app, open Earnings, find the trip on 9 Nov at 6:55 AM, choose Help and paste the message.
+        </p>
+<!-- Open Uber App Button -->
+<button class="w-full bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 font-medium py-2.5 px-4 rounded-xl text-[14px] flex items-center justify-center gap-1.5 transition-colors shadow-xs active:scale-[0.99]" type="button">
+<span>Open Uber App</span>
+<svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+<polyline points="15 3 21 3 21 9"></polyline>
+<line x1="10" x2="21" y1="14" y2="3"></line>
+</svg>
+</button>
+</section>
+<!-- END: Step2Card -->
+<!-- BEGIN: Step3Card -->
+<section class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100" data-purpose="step-mark-sent">
+<!-- Step Header -->
+<div class="flex items-center gap-2.5 mb-1.5">
+<div class="w-5 h-5 rounded-full bg-slate-100 text-slate-700 text-[11px] font-bold flex items-center justify-center">
+            3
+          </div>
+<h2 class="text-[14px] font-semibold text-slate-900">
+            Mark as sent
+          </h2>
+</div>
+<!-- Helper Text -->
+<p class="text-[12px] text-slate-500 mb-3 pl-[30px]">
+          Tap this once you've sent it in Uber.
+        </p>
+<!-- Mark as sent Button -->
+<button class="w-full bg-[#059669] hover:bg-[#047857] text-white font-medium py-3 px-4 rounded-xl text-[14px] flex items-center justify-center transition-colors shadow-sm active:scale-[0.99]" type="button">
+          Mark as sent
+        </button>
+</section>
+<!-- END: Step3Card -->
+<!-- BEGIN: SettlementWarningNotice -->
+<div class="flex items-start gap-2 px-1 text-[11.5px] leading-tight text-slate-500 pt-1 pb-4">
+<svg class="w-4 h-4 text-slate-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<circle cx="12" cy="12" r="10"></circle>
+<line x1="12" x2="12" y1="8" y2="12"></line>
+<line x1="12" x2="12.01" y1="16" y2="16"></line>
+</svg>
+<span>If you don't send this by Wed 18 Nov, J$20.00 will be charged to you on your settlement.</span>
+</div>
+<!-- END: SettlementWarningNotice -->
+</main>
+<!-- END: ScrollableContent -->
+<!-- BEGIN: FloatingToastNotification -->
+<!-- Positioned seamlessly right above the navigation tab bar -->
+<div class="absolute bottom-[66px] left-0 right-0 px-4 flex justify-center pointer-events-none z-20" data-purpose="copied-toast">
+<div class="bg-slate-900 text-white text-[12px] font-medium px-4 py-2.5 rounded-full shadow-xl flex items-center gap-2 border border-slate-800 pointer-events-auto">
+<!-- Toast Emerald Checkmark Icon -->
+<svg class="w-3.5 h-3.5 text-emerald-400 shrink-0" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewbox="0 0 24 24">
+<polyline points="20 6 9 17 4 12"></polyline>
+</svg>
+<span>Message copied. Now open Uber and paste it.</span>
+</div>
+</div>
+<!-- END: FloatingToastNotification -->
+<!-- BEGIN: BottomNavigation -->
+<nav class="bg-white border-t border-slate-200 px-4 py-2 flex justify-around items-center shrink-0 z-10">
+<!-- Home tab -->
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600 text-[10px] font-medium" href="#">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" viewbox="0 0 24 24">
+<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+<polyline points="9 22 9 12 15 12 15 22"></polyline>
+</svg>
+<span>Home</span>
+</a>
+<!-- Trips tab (Active) -->
+<a class="flex flex-col items-center gap-1 text-[#059669] text-[10px] font-medium" href="#">
+<!-- Custom Trips / Ticket Icon -->
+<svg class="w-5 h-5 fill-current" viewbox="0 0 24 24">
+<path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2.5a2.5 2.5 0 0 0 0 5V16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2.5a2.5 2.5 0 0 0 0-5V6z"></path>
+</svg>
+<span>Trips</span>
+</a>
+<!-- Earnings tab -->
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600 text-[10px] font-medium" href="#">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" viewbox="0 0 24 24">
+<circle cx="12" cy="12" r="9"></circle>
+<path d="M14.5 9h-4a1.5 1.5 0 0 0 0 3h3a1.5 1.5 0 0 1 0 3h-4"></path>
+<path d="M12 7v1.5M12 15.5V17"></path>
+</svg>
+<span>Earnings</span>
+</a>
+<!-- More tab -->
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600 text-[10px] font-medium" href="#">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" viewbox="0 0 24 24">
+<circle cx="12" cy="12" r="1"></circle>
+<circle cx="19" cy="12" r="1"></circle>
+<circle cx="5" cy="12" r="1"></circle>
+</svg>
+<span>More</span>
+</a>
+</nav>
+<!-- END: BottomNavigation -->
+</div>
+<!-- END: MobileFrameContainer -->
+</body></html>

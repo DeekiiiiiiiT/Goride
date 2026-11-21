@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Screen 8: One Toll — Time is Up</title>
+<!-- Load Tailwind CSS v3 with forms and container queries -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: Inter -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<style data-purpose="base-typography">
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+  </style>
+<style data-purpose="custom-shadows">
+    .card-shadow {
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
+    }
+  </style>
+</head>
+<body class="bg-slate-200 min-h-screen flex items-center justify-center p-0 sm:py-8 antialiased">
+<!-- BEGIN: MobileFrameContainer -->
+<!-- Constrained mobile device canvas matching the reference design -->
+<div class="w-full max-w-[400px] bg-slate-100 min-h-screen sm:min-h-[880px] sm:rounded-3xl sm:border sm:border-slate-300 sm:shadow-2xl overflow-hidden flex flex-col justify-between" data-purpose="mobile-screen-wrapper">
+<!-- Top Scrollable Content Container -->
+<div class="flex-1 flex flex-col">
+<!-- BEGIN: TopAppBar -->
+<header class="bg-white border-b border-slate-100 px-4 py-3.5 flex items-center justify-between sticky top-0 z-20" data-purpose="top-app-bar">
+<!-- Back Navigation Button -->
+<button aria-label="Go back" class="p-1 -ml-1 text-slate-700 hover:text-slate-900 transition-colors" type="button">
+<svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M10 19l-7-7m0 0l7-7m-7 7h18" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+<!-- Header Title -->
+<h1 class="text-[17px] font-semibold text-slate-900 tracking-tight text-center">Dispute this toll with Uber</h1>
+<!-- Help Information Button -->
+<button aria-label="Help and Info" class="p-1 -mr-1 text-slate-500 hover:text-slate-800 transition-colors" type="button">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+</header>
+<!-- END: TopAppBar -->
+<!-- Main Content Area -->
+<main class="p-4 space-y-3.5 flex-1" data-purpose="main-content"><!-- BEGIN: TollSummaryCard -->
+<section class="bg-white rounded-2xl border border-slate-200/80 p-4 card-shadow space-y-3" data-purpose="toll-summary-card">
+<!-- Line 1: Toll Location & License Plate -->
+<div class="flex items-center justify-between">
+<span class="text-[15px] font-semibold text-slate-900">10 Nov, 12:55 PM · Spanish Town toll</span>
+<span class="inline-flex items-center font-mono font-semibold bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs">5179KZ</span>
+</div>
+<!-- Line 2: Large Amount Owed -->
+<div>
+<div class="text-[26px] font-bold tracking-tight text-slate-900 leading-tight">
+      J$20.00 <span class="text-[19px] font-semibold text-slate-700">still owed</span>
+</div>
+</div>
+<!-- Line 3: Toll Breakdown Muted Line -->
+<p class="text-[13px] text-slate-500 font-normal">
+    Toll J$280.00 · Uber paid back J$260.00
+  </p>
+<!-- Line 4: Trip Pill Tag -->
+<div>
+<span class="inline-flex items-center text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full font-medium">
+      Uber trip 12:30 PM–1:15 PM
+    </span>
+</div>
+<!-- Line 5: Status Badge (Time is up) -->
+<div class="flex items-center gap-2 pt-0.5">
+<span class="inline-flex items-center text-xs px-2.5 py-0.5 rounded-full font-medium" style="background-color: #fef2f2; color: #dc2626; border: 1px solid #fecaca;">
+      Time is up
+    </span>
+</div>
+</section>
+<!-- END: TollSummaryCard -->
+<!-- BEGIN: ExpiredDisputeCard -->
+<section class="rounded-2xl p-4 card-shadow space-y-2" data-purpose="expired-dispute-card" style="background-color: #fef2f2; border: 1px solid #fee2e2;">
+<h2 class="text-[16px] font-semibold leading-snug" style="color: #7f1d1d;">
+    The 9 days to dispute this toll have passed.
+  </h2>
+<p class="text-[14px] leading-relaxed" style="color: #991b1b;">
+    J$20.00 will be charged to you on your settlement.
+  </p>
+</section>
+<!-- END: ExpiredDisputeCard -->
+<!-- BEGIN: BackActionContainer -->
+<div class="pt-2">
+<button class="w-full h-12 bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 rounded-xl font-medium text-[15px] flex items-center justify-center transition active:scale-[0.99]" data-purpose="back-to-tolls-button" type="button">
+    Back to tolls
+  </button>
+</div>
+<!-- END: BackActionContainer --></main>
+</div>
+<!-- BEGIN: BottomNavigationBar -->
+<!-- Replicated bottom navigation bar with active Trips indicator -->
+<nav aria-label="Bottom Navigation" class="bg-white border-t border-slate-200 px-6 py-2 flex items-center justify-between" data-purpose="bottom-navigation-bar">
+<!-- Home Tab -->
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600 transition group" data-purpose="nav-item" href="#">
+<svg class="w-6 h-6 stroke-current" fill="none" viewbox="0 0 24 24">
+<path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+</svg>
+<span class="text-[11px] font-medium tracking-tight">Home</span>
+</a>
+<!-- Trips Tab (Active State) -->
+<a class="flex flex-col items-center gap-1 text-emerald-600 font-semibold" data-purpose="nav-item-active" href="#">
+<svg class="w-6 h-6 stroke-current fill-current fill-opacity-20" fill="none" viewbox="0 0 24 24">
+<path d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+<path d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span class="text-[11px] font-medium tracking-tight">Trips</span>
+</a>
+<!-- Earnings Tab -->
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600 transition group" data-purpose="nav-item" href="#">
+<svg class="w-6 h-6 stroke-current" fill="none" viewbox="0 0 24 24">
+<circle cx="12" cy="12" r="9" stroke-width="1.8"></circle>
+<path d="M12 7v10m-3-7.5c0-1.38 1.343-2.5 3-2.5s3 1.12 3 2.5c0 2-3 2-3 3.5m0 0c0 1.5 1.343 2.5 3 2.5s3-1 3-2" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+</svg>
+<span class="text-[11px] font-medium tracking-tight">Earnings</span>
+</a>
+<!-- More Tab -->
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600 transition group" data-purpose="nav-item" href="#">
+<svg class="w-6 h-6 stroke-current" fill="none" viewbox="0 0 24 24">
+<circle cx="5" cy="12" fill="currentColor" r="1.5" stroke-width="1"></circle>
+<circle cx="12" cy="12" fill="currentColor" r="1.5" stroke-width="1"></circle>
+<circle cx="19" cy="12" fill="currentColor" r="1.5" stroke-width="1"></circle>
+</svg>
+<span class="text-[11px] font-medium tracking-tight">More</span>
+</a>
+</nav>
+<!-- END: BottomNavigationBar -->
+</div>
+<!-- END: MobileFrameContainer -->
+</body></html>

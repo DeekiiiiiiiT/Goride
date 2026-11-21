@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roam Driver - Tolls to Dispute List</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      background-color: #f1f5f9;
+      color: #0f172a;
+    }
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+    .card-shadow {
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
+    }
+  </style>
+</head>
+<body class="bg-slate-100 flex justify-center min-h-screen p-0 md:p-6 text-slate-900">
+  <!-- Mobile Container 390px -->
+  <div class="w-full max-w-[390px] bg-slate-100 min-h-screen flex flex-col justify-between relative shadow-xl">
+    
+    <!-- Top Header Bar with Back Arrow -->
+    <header class="bg-white border-b border-slate-200 px-4 pt-12 pb-3.5 sticky top-0 z-20 flex items-center justify-between">
+      <button class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-slate-100 text-slate-800 transition-colors" aria-label="Go back">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+        </svg>
+      </button>
+
+      <h1 class="text-[17px] font-semibold text-slate-900 tracking-tight">Tolls to dispute</h1>
+
+      <!-- Balanced spacer or info button -->
+      <button class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-slate-100 text-slate-500 transition-colors" aria-label="Help">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
+        </svg>
+      </button>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 px-4 py-4 space-y-3">
+      
+      <!-- Summary Card at the Top -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 card-shadow">
+        <div class="flex items-baseline justify-between mb-1">
+          <span class="text-[17px] font-semibold text-slate-900">
+            12 to send · <span class="text-amber-700 font-bold tabular-nums">J$240.00</span> still owed
+          </span>
+        </div>
+        <p class="text-[13px] text-slate-600">
+          Sent and waiting on Uber: <span class="font-medium text-slate-800 tabular-nums">0</span>
+        </p>
+      </div>
+
+      <!-- One-line Muted Tip -->
+      <div class="flex items-center gap-1.5 px-1 py-0.5 text-[13px] text-slate-600">
+        <svg class="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+        </svg>
+        <span>Uber only accepts these within 9 days of the trip.</span>
+      </div>
+
+      <!-- Toll Cards (Oldest First) -->
+      <div class="space-y-3 pt-1">
+        
+        <!-- Toll Card 1: 9 Nov, 7:15 AM · Portmore (Oldest) -->
+        <a href="#" class="block bg-white rounded-2xl border border-slate-200 p-4 card-shadow hover:border-slate-300 active:bg-slate-50 transition-all">
+          <div class="flex items-center justify-between">
+            <div class="flex-1 pr-3">
+              <!-- Line 1: time · place and the plate box -->
+              <div class="flex items-center gap-2 mb-1.5">
+                <span class="text-[15px] font-semibold text-slate-900">9 Nov, 7:15 AM · Portmore</span>
+                <span class="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-xs font-mono font-medium text-slate-700">5179KZ</span>
+              </div>
+              <!-- Line 2: amount still owed, big and amber -->
+              <div class="text-xl font-bold text-amber-700 tabular-nums mb-2">
+                J$20.00 <span class="text-xs font-normal text-amber-800/80">still owed</span>
+              </div>
+              <!-- Line 3: state chip and days left with small clock icon -->
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                  Not sent yet
+                </span>
+                <span class="inline-flex items-center gap-1 text-[13px] text-slate-600">
+                  <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>8 of 9 days left</span>
+                </span>
+              </div>
+            </div>
+            <!-- Chevron on the right -->
+            <div class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 flex-shrink-0">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
+            </div>
+          </div>
+        </a>
+
+        <!-- Toll Card 2: 10 Nov, 12:55 PM · Spanish Town (URGENT: 1 day left) -->
+        <a href="#" class="block bg-white rounded-2xl border border-red-200 p-4 card-shadow hover:border-red-300 active:bg-slate-50 transition-all relative overflow-hidden">
+          <div class="absolute left-0 top-0 bottom-0 w-1 bg-red-500"></div>
+          <div class="flex items-center justify-between pl-1">
+            <div class="flex-1 pr-3">
+              <!-- Line 1: time · place and the plate box -->
+              <div class="flex items-center gap-2 mb-1.5">
+                <span class="text-[15px] font-semibold text-slate-900">10 Nov, 12:55 PM · Spanish Town</span>
+                <span class="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-xs font-mono font-medium text-slate-700">5179KZ</span>
+              </div>
+              <!-- Line 2: amount still owed, big and amber -->
+              <div class="text-xl font-bold text-amber-700 tabular-nums mb-2">
+                J$20.00 <span class="text-xs font-normal text-amber-800/80">still owed</span>
+              </div>
+              <!-- Line 3: state chip and days left with small clock icon (turns red with 2 days or fewer) -->
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-600 border border-red-200 font-medium">
+                  1 day left
+                </span>
+                <span class="inline-flex items-center gap-1 text-[13px] text-red-600 font-medium">
+                  <svg class="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>Send by Wed 18 Nov</span>
+                </span>
+              </div>
+            </div>
+            <!-- Chevron on the right -->
+            <div class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 flex-shrink-0">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
+            </div>
+          </div>
+        </a>
+
+        <!-- Toll Card 3: 9 Nov, 12:24 PM · Portmore -->
+        <a href="#" class="block bg-white rounded-2xl border border-slate-200 p-4 card-shadow hover:border-slate-300 active:bg-slate-50 transition-all">
+          <div class="flex items-center justify-between">
+            <div class="flex-1 pr-3">
+              <div class="flex items-center gap-2 mb-1.5">
+                <span class="text-[15px] font-semibold text-slate-900">9 Nov, 12:24 PM · Portmore</span>
+                <span class="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-xs font-mono font-medium text-slate-700">5179KZ</span>
+              </div>
+              <div class="text-xl font-bold text-amber-700 tabular-nums mb-2">
+                J$20.00 <span class="text-xs font-normal text-amber-800/80">still owed</span>
+              </div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                  Not sent yet
+                </span>
+                <span class="inline-flex items-center gap-1 text-[13px] text-slate-600">
+                  <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>8 of 9 days left</span>
+                </span>
+              </div>
+            </div>
+            <div class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 flex-shrink-0">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
+            </div>
+          </div>
+        </a>
+
+        <!-- Toll Card 4: 11 Nov, 7:11 AM · Portmore -->
+        <a href="#" class="block bg-white rounded-2xl border border-slate-200 p-4 card-shadow hover:border-slate-300 active:bg-slate-50 transition-all">
+          <div class="flex items-center justify-between">
+            <div class="flex-1 pr-3">
+              <div class="flex items-center gap-2 mb-1.5">
+                <span class="text-[15px] font-semibold text-slate-900">11 Nov, 7:11 AM · Portmore</span>
+                <span class="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-xs font-mono font-medium text-slate-700">5179KZ</span>
+              </div>
+              <div class="text-xl font-bold text-amber-700 tabular-nums mb-2">
+                J$20.00 <span class="text-xs font-normal text-amber-800/80">still owed</span>
+              </div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                  Not sent yet
+                </span>
+                <span class="inline-flex items-center gap-1 text-[13px] text-slate-600">
+                  <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>9 of 9 days left</span>
+                </span>
+              </div>
+            </div>
+            <div class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 flex-shrink-0">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
+            </div>
+          </div>
+        </a>
+
+        <!-- Toll Card 5: 12 Nov, 7:54 AM · Portmore -->
+        <a href="#" class="block bg-white rounded-2xl border border-slate-200 p-4 card-shadow hover:border-slate-300 active:bg-slate-50 transition-all">
+          <div class="flex items-center justify-between">
+            <div class="flex-1 pr-3">
+              <div class="flex items-center gap-2 mb-1.5">
+                <span class="text-[15px] font-semibold text-slate-900">12 Nov, 7:54 AM · Portmore</span>
+                <span class="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-xs font-mono font-medium text-slate-700">5179KZ</span>
+              </div>
+              <div class="text-xl font-bold text-amber-700 tabular-nums mb-2">
+                J$20.00 <span class="text-xs font-normal text-amber-800/80">still owed</span>
+              </div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                  Not sent yet
+                </span>
+                <span class="inline-flex items-center gap-1 text-[13px] text-slate-600">
+                  <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>9 of 9 days left</span>
+                </span>
+              </div>
+            </div>
+            <div class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 flex-shrink-0">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
+            </div>
+          </div>
+        </a>
+
+      </div>
+
+      <div class="pt-2 pb-1 text-center">
+        <span class="text-xs text-slate-500 font-medium">+ 7 more tolls</span>
+      </div>
+
+    </main>
+
+    <!-- Bottom Tab Bar -->
+    <nav class="bg-white border-t border-slate-200 px-6 py-2 sticky bottom-0 z-20 flex items-center justify-between">
+      <!-- Home -->
+      <button class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600 w-16 py-1 transition-colors">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+        </svg>
+        <span class="text-[11px] font-medium">Home</span>
+      </button>
+
+      <!-- Trips (Active context for Tolls) -->
+      <button class="flex flex-col items-center gap-1 text-emerald-600 w-16 py-1">
+        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M3.375 4.5C2.339 4.5 1.5 5.34 1.5 6.375V13.5h12V6.375c0-1.036-.84-1.875-1.875-1.875h-7.5zM13.5 15h-12v2.625c0 1.035.84 1.875 1.875 1.875h.375a3 3 0 116 0h3.75a.75.75 0 00.75-.75V15z" />
+          <path d="M8.25 19.5a1.5 1.5 0 10-3 0 1.5 1.5 0 003 0zM15.75 6.75a.75.75 0 00-.75.75v11.25c0 .087.015.17.042.248a3 3 0 014.208-4.208.75.75 0 00.75-.75V8.25a1.5 1.5 0 00-1.5-1.5h-2.75z" />
+        </svg>
+        <span class="text-[11px] font-semibold">Trips</span>
+      </button>
+
+      <!-- Earnings -->
+      <button class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600 w-16 py-1 transition-colors">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span class="text-[11px] font-medium">Earnings</span>
+      </button>
+
+      <!-- More -->
+      <button class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600 w-16 py-1 transition-colors">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM12.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM18.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+        </svg>
+        <span class="text-[11px] font-medium">More</span>
+      </button>
+    </nav>
+
+  </div>
+</body>
+</html>
