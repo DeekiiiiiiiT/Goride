@@ -53,8 +53,17 @@ Roomy's one four-corner shock job `d6f9a45e…` closed as `failed` / "replaced b
 suggestions rejected with the same reason. Date question reworded (owner kept it): "Under the part, how many different
 Period dates? One / Two" → "The second Period starts:" (live main f4602c11).
 
+**RE-71 (21 Nov, fixed, owner OK):** Fill this car re-queued the Roomy's confirmed spark plugs + air filter: parts
+without positions were skipped only on `variant_parts_readiness = 'verified'`, which is stale (nightly rebuild failing,
+§3 item 5). `20261121193256_research_fill_skip_confirmed.sql` (live + logbook) also skips a part with a confirmed
+listing on the car. Dry run on live (rolled back): Roomy fill → 0 new jobs. The two re-queued jobs closed `failed` /
+"already confirmed (owner)".
+
+**Open (21 Nov, not decided):** the per-axle fill queued **rear brake pads** and a **rear brake rotor** for the Roomy,
+but the Roomy has rear **drums** (BRK-DRUM / BRK-SHOES rear confirmed). Fill doesn't know drum vs disc per axle.
+
 **Next for the owner, in Pending catalog → Parts (refresh first):**
-1. Press **Fill this car** on the Roomy → a Front and a Rear shock check. Each: Open Amayama → its own page ("Front
+1. ~~Press **Fill this car**~~ (done 21 Nov) — wait for on the Roomy → a Front and a Rear shock check. Each: Open Amayama → its own page ("Front
    spring & shock absorber" / "Rear …") → **Two** → Nov 2018 → before and from number per side (table above) → Confirm.
 2. **Cabin A/C Filter** browser check, same way.
 3. The **Needs review** rows (coolant, tyre size, H4 bulb, thermostat, wheel bearing, drive belt) have no source; they
