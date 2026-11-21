@@ -824,3 +824,20 @@ writes it, first build month, model name; or "Click M900A-AGBVE"; skipped when s
 Paste here**; ⑤ **Copy the address bar. Paste here**. Removed: the "doesn't let Roam read" line, the car description,
 the grade note, the "Roam remembers" note, the suggested-numbers list. Lesson: read every owner-facing panel as the
 owner would before shipping — one instruction per step, no explanations.
+
+**RE-66 · High · Step 2 matches three rows.** "1KRFE · 11.2016 · ROOMY" fits Amayama's M900A-AGBGE (grade G),
+M900A-AGBME (X) and M900A-AGBVE (CTMG = Custom G). Only the catalogue's model name singles out the car, and Dominion's
+stored codes are wrong (RE-64). Fix: (1) per car, store the catalogue's model name once — from the first confirmed
+check (RE-63) or set by the owner/Claude when known (Roomy 2016–2020 Custom G 2WD = `M900A-AGBVE`, page
+`…/tank-roomy/m900a/147989`); then step ① opens that version and step ② disappears; (2) RE-64 corrects
+`full_model_code` / `trim_suffix_code` from Toyota's list so new cars start right; (3) until a car has it, step ② adds
+the grade as the catalogue writes it when Dominion knows it, else says "if several rows match, pick your grade".
+
+**RE-67 · High · Step 2 must show the whole row (owner: "just put the full info: Model, Engine, Prod period, Grade,
+Transm").** Fix (built + live): step 2 is a one-row table in the catalogue's columns — Model · Engine · Prod period ·
+Grade · Transm — "Click this row:" (or "Check it's this one:" when step 1 opens the remembered version). Values come
+from the catalogue's own words stored with the remembered version (migration
+`20261121162224_research_car_site_version_row.sql`: `engine`, `prod_period`, `grade`, `transmission`; the dates are
+learned from the pasted title line on confirm), else Dominion's values, else "—". The Roomy's row (M900A-AGBVE · 1KRFE ·
+11.2016 - 09.2020 · CTMG · CVT) was saved by the owner in the SQL editor (the model on 21 Nov; the other four with the
+SQL handed over the same day).

@@ -243,3 +243,11 @@ Deno.test("RE-63 review: frames stored with a prefix or a list still find the ve
   assertEquals(versionCodeOnLine("DBA-M900A-AGBVE 11.2016 - 09.2020", "M900A"), "M900A-AGBVE");
   assertEquals(versionCodeOnLine("M900A-BGBVE 11.2016 - 09.2020\nM900A-AGBVE 11.2016 - 09.2020", "M900A"), null);
 });
+
+import { periodTextOnLine } from "./research_browser_check.ts";
+
+Deno.test("RE-67: the version's dates are read as the catalogue writes them", () => {
+  assertEquals(periodTextOnLine("Toyota Tank/Roomy, M900A-AGBVE 11.2016 - 09.2020\n17801-21060 ..."), "11.2016 - 09.2020");
+  assertEquals(periodTextOnLine("M900A-GBME 09.2020 - ..."), "09.2020 - ...");
+  assertEquals(periodTextOnLine("no dates"), null);
+});

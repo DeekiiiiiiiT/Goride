@@ -33,7 +33,7 @@ import {
 import {
   browserCheckTarget,
   buildDates,
-  versionRowWords,
+  catalogueVersionRow,
   catalogueEngineCode,
   partFinder,
   carLabel,
@@ -534,7 +534,10 @@ function BrowserCheckCard({
   // Step 1 opens the remembered version when Roam knows it, else Roam's (list) link.
   const openUrl = detail.knownVersion?.url || url;
   // Step 2 (only when needed): the version's name if remembered, else the row in the catalogue's own words.
-  const versionStep = detail.knownVersion?.url ? null : detail.knownVersion ? detail.knownVersion.code : versionRowWords(detail.car);
+  // Step 2 (RE-67): the version's row in the catalogue's own columns — the stored catalogue words when Roam knows them,
+  // else Dominion's values. Shown whenever any value is known.
+  const versionRow = catalogueVersionRow(detail.car, detail.knownVersion ?? null);
+  const versionStep = versionRow.some((c) => c.value !== "—") ? true : null;
   const jobType = detail.job.job_type === "spec" ? "spec" : "part";
 
   // The server reads the line with the same rule Confirm uses (part → car + number; spec → car + a value of its shape).
@@ -594,10 +597,32 @@ function BrowserCheckCard({
         {versionStep ? (
           <div className="flex items-start gap-2" data-testid="browser-check-instruction">
             <StepDot n={2} />
-            <p className="pt-0.5">
-              {detail.knownVersion ? "Click " : "Click the row with "}
-              <span className={`rounded bg-white/80 px-1.5 py-0.5 font-semibold ${D_MONO} dark:bg-[#0b1220]/60`}>{versionStep}</span>
-            </p>
+            <div className="flex w-full flex-col gap-2 pt-0.5">
+              <p>{detail.knownVersion?.url ? "Check it's this one:" : "Click this row:"}</p>
+              {/* RE-67: the row exactly as the catalogue lists it. */}
+              <div className="overflow-x-auto rounded-lg bg-white text-[13px] text-[#30323b] shadow-sm dark:bg-[#0b1220] dark:text-[#e2e8f0]">
+                <table className="w-full" data-testid="guide-version-row">
+                  <thead>
+                    <tr className="text-left text-[12px] text-[#5d5f68] dark:text-[#94a3b8]">
+                      {versionRow.map((c) => (
+                        <th key={c.label} className="px-3 pb-1 pt-2 font-medium">
+                          {c.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className={`font-semibold ${D_MONO}`}>
+                      {versionRow.map((c) => (
+                        <td key={c.label} className="whitespace-nowrap px-3 pb-2">
+                          {c.value}
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         ) : null}
         <div className="flex items-start gap-2" data-testid="guide-find-part">

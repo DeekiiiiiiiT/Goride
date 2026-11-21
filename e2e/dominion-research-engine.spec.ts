@@ -371,11 +371,11 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect(d.getByTestId("open-catalogue-page")).toHaveAttribute("href", "https://www.amayama.com/en/part/toyota/roomy-m900a");
     await expect(d.getByTestId("open-catalogue-page")).toContainText("Open Amayama");
     // RE-62: the car in plain words (dates, regular engine), never a frame code.
-    await expect(d.getByTestId("browser-check-instruction")).toContainText("Click the row with");
+    await expect(d.getByTestId("browser-check-instruction")).toContainText("Click this row:");
     await expect(d.getByTestId("browser-check-instruction")).not.toContainText("M900A");
     // RE-63: the version table in the catalogue's own column words.
     await expect(d.getByTestId("browser-check-instruction")).toContainText("1KRFE");
-    await expect(d.getByTestId("browser-check-instruction")).toContainText("ROOMY");
+    await expect(d.getByTestId("guide-version-row")).toContainText("Prod period");
     await expect(d.getByTestId("browser-check-counter")).toContainText("7 of 25");
     await expect(d.getByTestId("browser-check-confirm")).toBeDisabled();
     await d.getByTestId("browser-check-paste").fill("Roomy M900A battery");
@@ -407,8 +407,9 @@ test.describe("Research engine screens (layer 3)", () => {
     await page.getByTestId("parts-row").filter({ hasText: "Spark plugs" }).getByTestId("row-open-browser-check").click();
     const d = page.getByTestId("research-drawer");
     // RE-63: a remembered version is named; the part step says what to search, which row, and Roam's numbers.
-    // RE-65: a remembered version opens directly — no "click the row" step.
-    await expect(d.getByTestId("browser-check-instruction")).toHaveCount(0);
+    // RE-67: a remembered version opens directly; step 2 shows its catalogue row to check.
+    await expect(d.getByTestId("browser-check-instruction")).toContainText("Check it's this one:");
+    await expect(d.getByTestId("guide-version-row")).toContainText("M900A-AGBVE");
     await expect(d.getByTestId("guide-find-part")).toContainText("spark plug");
     await expect(d.getByTestId("guide-find-part")).toContainText("PLUG, SPARK");
     // Only the car line (with a sister frame code): no number, Confirm stays off, the typing box appears.

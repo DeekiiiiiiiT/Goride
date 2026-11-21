@@ -183,3 +183,17 @@ describe("short guide (RE-65)", () => {
     expect(versionRowWords(null)).toBeNull();
   });
 });
+
+import { catalogueVersionRow } from "./researchModel";
+
+describe("version row (RE-67)", () => {
+  const car = { id: "x", make: "Toyota", model: "Roomy", production_start_year: 2016, production_start_month: 11, production_end_year: 2020,
+    production_end_month: 8, chassis_code: "M900A", engine_code: "1KR-FE", drivetrain: "2WD", transmission: "CVT", catalog_trim: "Custom G" };
+  it("uses the catalogue's own words when stored", () => {
+    expect(catalogueVersionRow(car, { code: "M900A-AGBVE", engine: "1KRFE", prodPeriod: "11.2016 - 09.2020", grade: "CTMG", transmission: "CVT" }).map((c) => c.value))
+      .toEqual(["M900A-AGBVE", "1KRFE", "11.2016 - 09.2020", "CTMG", "CVT"]);
+  });
+  it("falls back to Dominion's values, and a dash when unknown", () => {
+    expect(catalogueVersionRow(car, null).map((c) => c.value)).toEqual(["—", "1KRFE", "11.2016 – 08.2020", "Custom G", "CVT"]);
+  });
+});
