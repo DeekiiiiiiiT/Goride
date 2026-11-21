@@ -7,9 +7,10 @@ import { containsToken } from "./research_recipes.ts";
  * The value read is echoed back as "Detected:".
  */
 
-export type GateResult = { ok: true; detected: string } | { ok: false; reason: "no_car" | "no_number" | "no_value" | "empty" };
+export type GateResult =
+  | { ok: true; detected: string }
+  | { ok: false; reason: "no_car" | "no_number" | "number_not_on_line" | "no_value" | "empty" };
 
-const NUMBER = /\b(?=[A-Z0-9-]*\d)(?=[A-Z0-9-]*[A-Z0-9]{4})[A-Z0-9][A-Z0-9-]{3,24}\b/i;
 
 /** Value shapes per spec key; keys not listed accept any short text after the car is named. */
 export const SPEC_VALUE_SHAPES: Record<string, RegExp> = {
@@ -35,6 +36,50 @@ export const SPEC_VALUE_SHAPES: Record<string, RegExp> = {
   indicator_bulb: /\b(T\d{2}|WY\d+W|PY21W|LED)\b/i,
 };
 
+const normNum = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+/**
+ * The number as the page writes it, when `number` is a whole number on the line: one token, or 2–3 neighbouring tokens
+ * joined (a page that splits "0446 5B1190"). Punctuation is ignored; a number that is only part of a longer one never
+ * counts ("90919-0125" is not on "90919-01253").
+ */
+export function wholeNumberOnLine(line: string, number: string): string | null {
+  const want = normNum(number);
+  if (want.length < 4) return null;
+  const tokens = line.split(/[\s,;|]+/).map((t) => t.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "")).filter(Boolean);
+  for (let i = 0; i < tokens.length; i++) {
+    let joined = "";
+    for (let k = 0; k < 3 && i + k < tokens.length; k++) {
+      joined += normNum(tokens[i + k]);
+      // One token → as the page writes it; a number the page split → the number's own spelling, never with the gap.
+      if (joined === want) return k === 0 ? tokens[i].toUpperCase() : number.trim().toUpperCase();
+      if (joined.length >= want.length) break;
+    }
+  }
+  return null;
+}
+
+/**
+ * Frame codes with an emissions prefix (DBA-M910A) and model years are never a typed part number. A bare frame code
+ * (M910A) is caught when the page lists it after "Frame"; bare shapes like VCH16 are real part numbers, so allowed.
+ */
+const FRAME_SHAPE = /^[A-Z0-9]{2,3}-[A-Z]{1,3}\d{2,3}[A-Z]{0,2}$/;
+const YEAR_SHAPE = /^(19|20)\d{2}$/;
+
+export function typedLooksLikePartNumber(typed: string, line: string, identity: string[]): boolean {
+  const t = typed.trim().toUpperCase();
+  const n = normNum(t);
+  if (n.length < 5 || !/\d/.test(n) || !/^[A-Z0-9][A-Z0-9 .\-/]*$/.test(t)) return false;
+  if (YEAR_SHAPE.test(n) || FRAME_SHAPE.test(t)) return false;
+  if (identity.map(normNum).filter(Boolean).some((c) => n === c || n.includes(c))) return false;
+  // Codes the page lists after "Frame", "Engine" or "Model" describe the car, not the part.
+  const carWords = line.match(/\b(?:frame|engine|model)\b[:\s]+((?:[A-Z0-9][A-Z0-9-]*\s*){1,4})/gi) ?? [];
+  for (const w of carWords) {
+    for (const code of w.split(/\s+/).slice(1)) if (normNum(code) === n) return false;
+  }
+  return true;
+}
+
 export function lineNamesCar(line: string, identity: string[]): boolean {
   const upper = line.toUpperCase();
   return identity.some((t) => t.trim().length >= 2 && containsToken(upper, t));
@@ -46,21 +91,32 @@ export function browserCheckGate(input: {
   identity: string[];
   specKey?: string | null;
   expectedNumber?: string | null;
+  /** Every open number Roam suggested for this job (part checks). */
+  candidates?: string[];
+  /** The number the owner typed because the page shows a different one (part checks). */
+  typedNumber?: string | null;
 }): GateResult {
   const line = String(input.pasted ?? "").replace(/\s+/g, " ").trim().slice(0, 2000);
   if (!line) return { ok: false, reason: "empty" };
   if (!lineNamesCar(line, input.identity)) return { ok: false, reason: "no_car" };
 
   if (input.jobType === "part") {
-    if (input.expectedNumber) {
-      const want = input.expectedNumber.toUpperCase().replace(/[^A-Z0-9]/g, "");
-      const have = line.toUpperCase().replace(/[^A-Z0-9]/g, "");
-      if (want.length >= 3 && have.includes(want)) return { ok: true, detected: input.expectedNumber };
+    // RE-57: never guess a number from the line (a sister car's frame code, "DBA-M910A", was read as the part number).
+    // A number counts only when it is a WHOLE number on the pasted text (one token, or 2–3 neighbouring tokens for a
+    // number the page splits, "0446 5B1190"), punctuation ignored. Roam's suggestions are tried first, then the number
+    // the owner typed. Detected = the number as the page writes it.
+    const typed = String(input.typedNumber ?? "").trim();
+    const candidates = [input.expectedNumber, ...(input.candidates ?? [])].filter((n): n is string => Boolean(n && n.trim()));
+    for (const n of candidates) {
+      const hit = wholeNumberOnLine(line, n);
+      if (hit) return { ok: true, detected: hit };
     }
-    // the car's own frame code is not a part number
-    const withoutCar = input.identity.reduce((s, t) => (t ? s.split(t).join(" ") : s), line);
-    const m = withoutCar.match(NUMBER);
-    return m ? { ok: true, detected: m[0] } : { ok: false, reason: "no_number" };
+    if (typed) {
+      if (!typedLooksLikePartNumber(typed, line, input.identity)) return { ok: false, reason: "number_not_on_line" };
+      const hit = wholeNumberOnLine(line, typed);
+      return hit ? { ok: true, detected: hit } : { ok: false, reason: "number_not_on_line" };
+    }
+    return { ok: false, reason: "no_number" };
   }
 
   const shape = input.specKey ? SPEC_VALUE_SHAPES[input.specKey] : undefined;

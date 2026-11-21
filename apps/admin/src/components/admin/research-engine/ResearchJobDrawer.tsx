@@ -278,8 +278,8 @@ export function ResearchJobDrawer({ token, jobId, group, fallbackTitle, fallback
           itemName={itemName}
           browserChecks={browserChecks ?? null}
           busy={busy}
-          onConfirm={(pasted, url) =>
-            void run("Confirmed", () => researchApi.confirmBrowserCheck(token, jobId!, pasted, url), {
+          onConfirm={(pasted, url, number) =>
+            void run("Confirmed", () => researchApi.confirmBrowserCheck(token, jobId!, pasted, url, number), {
               message: `Confirmed ${itemName} for ${carName} from your browser check.`,
             })
           }
@@ -507,10 +507,12 @@ function BrowserCheckCard({
   itemName: string;
   browserChecks: { open: number; max: number } | null;
   busy: boolean;
-  onConfirm: (pasted: string, url: string) => void;
+  onConfirm: (pasted: string, url: string, number?: string) => void;
   onNotOnPage: () => void;
 }) {
   const [pasted, setPasted] = useState("");
+  // RE-57: when the page shows a different number than Roam suggested, the owner types it; it must be on the line.
+  const [typedNumber, setTypedNumber] = useState("");
   const [gate, setGate] = useState<BrowserCheckGate | null>(null);
   const url = detail.browserCheckUrl;
   const site = siteName(url);
@@ -519,14 +521,13 @@ function BrowserCheckCard({
 
   // The server reads the line with the same rule Confirm uses (part → car + number; spec → car + a value of its shape).
   useEffect(() => {
-    if (!pasted.trim()) {
-      setGate(null);
-      return;
-    }
+    // Any edit clears the old reading, so Confirm never acts on a number the screen no longer shows.
+    setGate(null);
+    if (!pasted.trim()) return;
     let cancelled = false;
     const t = window.setTimeout(() => {
       void researchApi
-        .previewBrowserCheck(token, detail.job.id, pasted)
+        .previewBrowserCheck(token, detail.job.id, pasted, typedNumber.trim() || undefined)
         .then((g) => {
           if (!cancelled) setGate(g);
         })
@@ -538,9 +539,11 @@ function BrowserCheckCard({
       cancelled = true;
       window.clearTimeout(t);
     };
-  }, [pasted, token, detail.job.id]);
+  }, [pasted, typedNumber, token, detail.job.id]);
 
   const canConfirm = Boolean(gate?.ok && url);
+  const askNumber =
+    jobType === "part" && pasted.trim() !== "" && (typedNumber !== "" || (gate !== null && !gate.ok && (gate.reason === "no_number" || gate.reason === "number_not_on_line")));
 
   async function pasteFromClipboard() {
     try {
@@ -628,6 +631,20 @@ function BrowserCheckCard({
         </div>
       ) : null}
 
+      {askNumber ? (
+        <label className={`flex flex-col gap-1 text-[13px] ${D_MUTED}`}>
+          Number shown on the page
+          <input
+            value={typedNumber}
+            onChange={(e) => setTypedNumber(e.target.value)}
+            placeholder="Type the part number exactly as the page shows it"
+            maxLength={40}
+            data-testid="browser-check-typed-number"
+            className={`h-10 w-full rounded-lg border border-[#c5c6d0] bg-white px-3 text-[14px] text-[#30323b] outline-none focus:ring-2 focus:ring-[#0153dc] dark:border-[#334155] dark:bg-[#0b1220] dark:text-[#e2e8f0] ${D_MONO}`}
+          />
+        </label>
+      ) : null}
+
       <div className="sticky bottom-0 -mx-6 -mb-6 mt-auto flex flex-col gap-3 bg-white px-6 py-4 shadow-[0_-4px_16px_rgba(1,83,220,0.04)] dark:bg-[#111a2e]">
         {browserChecks ? (
           <p className={`text-[13px] ${D_MUTED}`} data-testid="browser-check-counter">
@@ -641,7 +658,7 @@ function BrowserCheckCard({
             className="!min-h-[40px] flex-1"
             disabled={busy || !canConfirm}
             data-testid="browser-check-confirm"
-            onClick={() => url && onConfirm(pasted, url)}
+            onClick={() => url && onConfirm(pasted, url, typedNumber.trim() || undefined)}
           >
             <DIcon name="check" className="text-[18px]" /> Confirm
           </PartsButton>

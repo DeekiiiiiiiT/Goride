@@ -240,10 +240,16 @@ export function browserCheckTarget(car: ResearchCar | null, itemName: string): {
   return { code: car?.chassis_code || car?.model || null, item: itemName.toLowerCase() };
 }
 
-export function gateReasonText(reason: "no_car" | "no_number" | "no_value" | "empty", jobType: "part" | "spec"): string {
+export function gateReasonText(
+  reason: "no_car" | "no_number" | "number_not_on_line" | "no_value" | "empty",
+  jobType: "part" | "spec",
+): string {
   if (reason === "empty") return "Paste the line from the page.";
   if (reason === "no_car") return "That line doesn't name this car.";
-  if (reason === "no_number" || jobType === "part") return "That line has no part number.";
+  if (reason === "number_not_on_line") return "The number you typed isn't on the pasted line.";
+  if (reason === "no_number" || jobType === "part") {
+    return "None of Roam's suggested numbers is on this line. If the page shows a different number, type it below.";
+  }
   return "That line has no value of the right kind.";
 }
 

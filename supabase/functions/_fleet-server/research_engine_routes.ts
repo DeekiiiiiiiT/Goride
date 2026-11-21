@@ -215,8 +215,9 @@ export function registerResearchEngineRoutes(
     if (denied) return denied;
     const ctx = await browserCheckContext(supabase, c.req.param("jobId"));
     if ("error" in ctx) return c.json({ error: ctx.error }, ctx.status);
-    const pasted = str((await body(c)).pasted, 2000);
-    return c.json({ gate: browserCheckGate({ ...ctx.gateInput, pasted }) });
+    const b = await body(c);
+    const pasted = str(b.pasted, 2000);
+    return c.json({ gate: browserCheckGate({ ...ctx.gateInput, pasted, typedNumber: str(b.number, 40) || null }) });
   });
 
   app.post(`${PREFIX}/browser-checks/:jobId/confirm`, async (c: Context) => {
@@ -245,7 +246,7 @@ export function registerResearchEngineRoutes(
     });
     if (!allowed) return c.json({ error: "That page isn't on a trusted catalogue for this car. Use the Open page button." }, 400);
 
-    const gate = browserCheckGate({ ...ctx.gateInput, pasted });
+    const gate = browserCheckGate({ ...ctx.gateInput, pasted, typedNumber: str(b.number, 40) || null });
     if (!gate.ok) return c.json({ error: "Confirm needs the car and a value on the pasted line", gate }, 422);
 
     const actor = actorOf(c);
@@ -283,19 +284,21 @@ export function registerResearchEngineRoutes(
 
     // Part: the number the owner saw on the car maker's catalogue (owner-checked, RE-29).
     const norm = gate.detected.toUpperCase().replace(/[^A-Z0-9]/g, "");
-    const { data: existing } = await supabase.from("catalog_part_proposal").select("id, brand, part_name")
-      .eq("job_id", jobId).eq("part_number_norm", norm).maybeSingle();
+    // The suggestion the owner confirmed keeps its own brand and kind (a part maker's number stays aftermarket).
+    const { data: existingRows } = await supabase.from("catalog_part_proposal").select("id, brand, part_name, match_kind")
+      .eq("job_id", jobId).eq("part_number_norm", norm).order("created_at").limit(1);
+    const existing = (existingRows ?? [])[0] as { brand?: string; part_name?: string; match_kind?: string } | undefined;
     const { data: comp } = await supabase.from("maintenance_service_categories").select("name").eq("id", ctx.job.maintenance_component_id).maybeSingle();
     const fit = String(ctx.job.fit_descriptor ?? "").toLowerCase();
     const positionKey = fit.includes("rear") ? "rear" : fit.includes("front") ? "front" : "";
     const { data: prop, error } = await supabase.from("catalog_part_proposal").upsert({
       job_id: jobId,
-      brand: (existing as { brand?: string } | null)?.brand ?? ctx.car.make ?? "OEM",
+      brand: existing?.brand ?? ctx.car.make ?? "OEM",
       part_number: gate.detected,
       part_number_norm: norm,
-      part_name: (existing as { part_name?: string } | null)?.part_name ?? comp?.name ?? "Part",
+      part_name: existing?.part_name ?? comp?.name ?? "Part",
       position_key: positionKey,
-      match_kind: "oem",
+      match_kind: existing?.match_kind ?? "oem",
       trust_route: "owner_browser",
       evidence_read_ids: [readId],
       fits: { listings: [{ vehicleId: ctx.job.vehicle_catalog_id, position: positionKey || undefined }] },
@@ -590,7 +593,11 @@ type JobRow = {
 };
 
 async function browserCheckContext(supabase: SupabaseClient, jobId: string): Promise<
-  | { job: JobRow; car: Record<string, string | null>; gateInput: { jobType: "part" | "spec"; identity: string[]; specKey?: string | null; expectedNumber?: string | null } }
+  | {
+    job: JobRow;
+    car: Record<string, string | null>;
+    gateInput: { jobType: "part" | "spec"; identity: string[]; specKey?: string | null; expectedNumber?: string | null; candidates: string[] };
+  }
   | { error: string; status: 400 | 404 | 409 }
 > {
   if (!UUID.test(jobId)) return { error: "Bad job id", status: 400 };
@@ -601,9 +608,11 @@ async function browserCheckContext(supabase: SupabaseClient, jobId: string): Pro
   if (j.state !== "browser_check") return { error: "Not an open browser check", status: 409 };
   if (j.job_type !== "part" && j.job_type !== "spec") return { error: "Browser checks are for parts and specs", status: 409 };
   const { data: car } = await supabase.from("vehicle_catalog").select("make, model, chassis_code, engine_code").eq("id", j.vehicle_catalog_id).maybeSingle();
-  const { data: top } = j.job_type === "part"
-    ? await supabase.from("catalog_part_proposal").select("part_number").eq("job_id", jobId).eq("status", "open").limit(1).maybeSingle()
-    : { data: null };
+  // Every open number Roam suggested, first suggestion first (RE-57: the line must hold one of them, or a typed one).
+  const { data: open } = j.job_type === "part"
+    ? await supabase.from("catalog_part_proposal").select("part_number").eq("job_id", jobId).eq("status", "open").order("created_at")
+    : { data: [] };
+  const candidates = ((open ?? []) as Array<{ part_number: string | null }>).map((p) => String(p.part_number ?? "").trim()).filter(Boolean);
   return {
     job: j,
     car: (car ?? {}) as Record<string, string | null>,
@@ -611,7 +620,8 @@ async function browserCheckContext(supabase: SupabaseClient, jobId: string): Pro
       jobType: j.job_type as "part" | "spec",
       identity: identityTokens((car ?? {}) as Record<string, string>),
       specKey: j.spec_key,
-      expectedNumber: (top as { part_number?: string } | null)?.part_number ?? null,
+      expectedNumber: candidates[0] ?? null,
+      candidates,
     },
   };
 }

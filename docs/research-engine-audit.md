@@ -1,6 +1,6 @@
 # Research engine (cars, specs, parts) — audit
 
-**Rev 5.1 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
+**Rev 5.2 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
 US$1.35/day.** What runs live is the **search-first** flow with the new proof (Gemini + Google search proposes
 numbers, recipes and trusted pages prove them); the planned catalogue-first flow is RE-49, not built yet (§13–14). Live database: migrations 1a/1b/2/3 (03:10 UTC) and `20261121100925_research_form_recipe` (10:25 UTC),
 all with logbook lines. Live code: main `0e00cd5b` (platform-catalog, catalog-research, Dominion). Branch
@@ -717,3 +717,33 @@ Fix: the RE-49 part-type column applies to **every** recipe, not only by-car one
 part type is in its list; a recipe with no list runs for none until one is set (NiBK's: brake pads, brake shoes, brake
 rotors, drums). Ships with RE-49; until then the cost is wasted reads, not wrong answers. Done-test 62: a spark-plug job
 sends nothing to NiBK.
+
+## 19. Rev 5.2 — first browser check on live, and the paste check fix (21 Nov)
+
+Owner ran the spark-plug browser check on live (~14:00 UTC): Amayama's page for the Roomy listed two sections — the
+turbo (1KR-VET, plug 90048-51220) and the regular engine (1KR-FE, frames DBA-M900A/DBA-M910A, plug **90048-51216**).
+With the 1KR-FE "Scheme fits to" line + the plug row pasted, Confirm added `Toyota 90048-51216` for the Roomy
+(`part_listing`: trust confirmed, route `owner_browser`, one evidence read with the pasted text). Done-test 2's
+browser-check path is proven on live (the proposal went straight to Added, not to review — an owner's check is the
+owner's word).
+
+**RE-57 · High · The paste check guessed a number (fixed, built).** With only the "Scheme fits to" line pasted, the check
+showed "Detected: DBA-M910A · Matched": it removed this car's own codes, then took the first number-like text left —
+the sister 4WD frame. Confirm would have saved a frame code as the spark plug number. Fix: a part check never guesses.
+The pasted text must hold one of Roam's suggested numbers (every open suggestion, not only the first) or a number the
+owner types in a new "Number shown on the page" box, as a **whole** number (one token, or a number the page splits
+across 2–3 tokens; never part of a longer number). A typed number can't be a year, a frame code with an emissions
+prefix, the car's own codes, or a code the page lists after "Frame"/"Engine"/"Model". The saved number is the page's
+own spelling. The confirmed suggestion keeps its brand and kind. The screen clears the old reading on every edit.
+Code review (medium) found 7 + 1 pre-existing; all fixed. Tests: `research_browser_check.test.ts` (RE-57 cases incl.
+the exact Amayama line), screen test "RE-57 — part browser check never guesses" (17 pass).
+
+**RE-58 · Low · An owner's browser check is stored as `trust_set_by = 'engine'`.** The save keeps evidence reads only
+for engine verdicts, so `promote_part_proposal` marks owner checks as engine. The screen says "You checked it" (from
+`trust_route = owner_browser`) and `research_page_read.checked_by` holds the person. Fix (next database round): the
+save keeps evidence reads for `trustSetBy = 'owner'` when `trustRoute = 'owner_browser'`, and promote sends 'owner' for
+that route.
+
+**RE-59 · Low · Pasted catalogue text keeps prices.** Amayama's row carries "21.56" (price) and the saved evidence keeps
+the pasted text as-is; Dominion never stores prices. Fix (with RE-34): before saving, the browser check keeps only the
+lines that name the car or the confirmed number, and drops currency-shaped amounts from the part line.
