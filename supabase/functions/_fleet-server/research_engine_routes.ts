@@ -278,6 +278,7 @@ export function registerResearchEngineRoutes(
         suggestions: ctx.gateInput.jobType === "part" ? ctx.gateInput.candidates : ctx.specSuggestions,
         positionScheme: ctx.positionScheme,
         jobAxle: side as "front" | "rear" | null,
+        build: ctx.gateInput.build ?? null,
       });
       if (!ans.ok) {
         const msg: Record<string, string> = {
@@ -291,6 +292,7 @@ export function registerResearchEngineRoutes(
           retype_mismatch: "The two numbers you typed don't match.",
           bad_position: "Those places don't fit this part. Refresh the page and answer again.",
           needs_positions: "This part comes in left and right: give the number for each place.",
+          bad_change_date: "Pick a change month inside this car's build dates.",
         };
         return c.json({ error: msg[ans.reason] ?? "Check your answers.", gate: ans }, 422);
       }
@@ -365,20 +367,32 @@ export function registerResearchEngineRoutes(
     const { data: comp } = await supabase.from("maintenance_service_categories").select("name").eq("id", ctx.job.maintenance_component_id).maybeSingle();
     const fit = String(ctx.job.fit_descriptor ?? "").toLowerCase();
     const jobAxle = fit.includes("rear") ? "rear" : fit.includes("front") ? "front" : "";
-    type Group = { number: string; places: Array<{ axle: string; side: string | null }> };
+    // RE-70: a number that changed during the build carries the build years it is for.
+    type Place = { axle: string; side: string | null; yearFrom: number | null; yearTo: number | null; periodText: string | null };
+    type Group = { number: string; places: Place[] };
     const groups = new Map<string, Group>();
     if (positionItems && positionItems.length) {
       for (const it of positionItems) {
         const k = it.detected.toUpperCase().replace(/[^A-Z0-9]/g, "");
         const g = groups.get(k) ?? { number: it.detected, places: [] };
-        g.places.push({ axle: it.axle, side: it.side });
+        g.places.push({
+          axle: it.axle ?? jobAxle,
+          side: it.side,
+          yearFrom: it.yearFrom ?? null,
+          yearTo: it.yearTo ?? null,
+          periodText: it.periodText ?? null,
+        });
         groups.set(k, g);
       }
     } else {
-      groups.set(detected.toUpperCase().replace(/[^A-Z0-9]/g, ""), { number: detected, places: [{ axle: jobAxle, side: null }] });
+      groups.set(detected.toUpperCase().replace(/[^A-Z0-9]/g, ""), {
+        number: detected,
+        places: [{ axle: jobAxle, side: null, yearFrom: null, yearTo: null, periodText: null }],
+      });
     }
     const results: Array<{ number: string; places: string[]; result: unknown }> = [];
-    const placeText = (g: Group) => g.places.map((p) => `${p.axle}${p.side ? ` ${p.side}` : ""}`.trim() || "this car");
+    const placeText = (g: Group) =>
+      g.places.map((p) => [`${p.axle}${p.side ? ` ${p.side}` : ""}`.trim() || "this car", p.periodText ?? ""].filter(Boolean).join(" "));
     const partial = (g: Group, why: string) => {
       const saved = results.map((r) => `${r.places.join(", ")} ${r.number}`).join("; ");
       return c.json({
@@ -389,16 +403,23 @@ export function registerResearchEngineRoutes(
       }, 400);
     };
     for (const [norm, g] of groups) {
-      // Listings: one per axle; both sides of an axle on the same number → side "both".
-      const byAxle = new Map<string, Set<string>>();
+      // Listings: one per axle (and build years, RE-70); both sides of an axle on the same number → side "both".
+      const byAxle = new Map<string, { axle: string; yearFrom: number | null; yearTo: number | null; sides: Set<string> }>();
       for (const p of g.places) {
-        const s = byAxle.get(p.axle) ?? new Set<string>();
-        if (p.side) s.add(p.side);
-        byAxle.set(p.axle, s);
+        const key = `${p.axle}|${p.yearFrom ?? ""}|${p.yearTo ?? ""}`;
+        const e = byAxle.get(key) ?? { axle: p.axle, yearFrom: p.yearFrom, yearTo: p.yearTo, sides: new Set<string>() };
+        if (p.side) e.sides.add(p.side);
+        byAxle.set(key, e);
       }
-      const listings = [...byAxle.entries()].map(([axle, sides]) => {
+      const listings = [...byAxle.values()].map(({ axle, yearFrom, yearTo, sides }) => {
         const side = sides.size === 2 ? "both" : sides.size === 1 ? [...sides][0] : undefined;
-        return { vehicleId: ctx.job.vehicle_catalog_id, position: axle || undefined, ...(side ? { side } : {}) };
+        return {
+          vehicleId: ctx.job.vehicle_catalog_id,
+          position: axle || undefined,
+          ...(side ? { side } : {}),
+          ...(yearFrom != null ? { yearFrom } : {}),
+          ...(yearTo != null ? { yearTo } : {}),
+        };
       });
       // The proposal keeps the lookup's own axle as its key (the worker's suggestion row is updated, not duplicated);
       // the exact places live in its listings.

@@ -32,6 +32,8 @@ import {
 } from "./ReKit";
 import {
   buildDates,
+  changeYearOptions,
+  MONTHS,
   catalogueVersionRow,
   checkPositions,
   catalogueEngineCode,
@@ -521,8 +523,15 @@ function BrowserCheckCard({
   const [sideOk, setSideOk] = useState<boolean | null>(null);
   // RE-69: one number per position (shocks, bearings, brakes…): tapped or typed (typed twice).
   const [posVals, setPosVals] = useState<Record<string, { picked: string; typed: string; again: string }>>({});
+  // RE-70: the car maker changed the number during the build (e.g. Roomy shocks at 11.2018): a number for each period.
+  const [changed, setChanged] = useState(false);
+  const [changeMonth, setChangeMonth] = useState(0);
+  const [changeYear, setChangeYear] = useState(0);
   // Another check opened in the same drawer starts clean (keyed on the job only, so a refetch keeps the answers).
   useEffect(() => {
+    setChanged(false);
+    setChangeMonth(0);
+    setChangeYear(0);
     setVersionOk(null);
     setVersionCode("");
     setPartFound(null);
@@ -572,13 +581,70 @@ function BrowserCheckCard({
   const posAgainOk = (k: string) => Boolean(pv(k).picked) || !pv(k).typed.trim() || pv(k).again.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") === pv(k).typed.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
   const filledPositions = (positions ?? []).filter((p) => posValue(p.key));
   const positionsOk = filledPositions.length > 0 && filledPositions.every((p) => posAgainOk(p.key));
+  // RE-70: with a change date, every place (or the one number) has a "before" and a "from" entry.
+  const canSplit = jobType === "part";
+  const split = canSplit && changed;
+  const changeYears = changeYearOptions(detail.car);
+  const changeText = changeMonth && changeYear ? `${MONTHS[changeMonth - 1]} ${changeYear}` : "the change";
+  const splitKeys = (positions ?? [{ key: "one", axle: null, side: null, label: "" }]).flatMap((p) => [
+    { place: p, period: "before" as const, key: `${p.key}|before` },
+    { place: p, period: "from" as const, key: `${p.key}|from` },
+  ]);
+  const filledSplit = splitKeys.filter((k) => posValue(k.key));
+  const splitOk = Boolean(changeMonth && changeYear) && filledSplit.length > 0 && filledSplit.every((k) => posAgainOk(k.key));
   const anyNo = versionOk === false || partFound === false || datesOk === false || sideOk === false;
   const canConfirm = Boolean(
     openUrl &&
       versionAnswered &&
       partFound === true &&
       datesOk === true &&
-      (positions ? positionsOk : Boolean(value) && againOk && (!side || sideOk === true)),
+      (split
+        ? splitOk && (positions || !side || sideOk === true)
+        : positions
+        ? positionsOk
+        : Boolean(value) && againOk && (!side || sideOk === true)),
+  );
+  const numberPick = (k: string, testid: string) => (
+    <>
+      {suggestions.length ? (
+        <div className="flex flex-wrap gap-2">
+          {suggestions.map((sug) => (
+            <span key={sug} className="inline-flex items-center gap-1">
+              <PartsButton
+                variant={pv(k).picked === sug ? "primary" : "secondary"}
+                className={`!min-h-[32px] ${D_MONO}`}
+                onClick={() => setPv(k, { picked: pv(k).picked === sug ? "" : sug, typed: "", again: "" })}
+                data-testid={`${testid}-suggestion`}
+              >
+                {sug}
+              </PartsButton>
+              <CopyIcon text={sug} />
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <input
+        value={pv(k).typed}
+        onChange={(e) => setPv(k, { typed: e.target.value, picked: "" })}
+        placeholder={suggestions.length ? "Or type it" : "Type it"}
+        maxLength={60}
+        className={input}
+        data-testid={`${testid}-value`}
+      />
+      {!pv(k).picked && pv(k).typed.trim() ? (
+        <>
+          <input
+            value={pv(k).again}
+            onChange={(e) => setPv(k, { again: e.target.value })}
+            placeholder="Type it again"
+            maxLength={60}
+            className={input}
+            data-testid={`${testid}-again`}
+          />
+          {pv(k).again.trim() && !posAgainOk(k) ? <p className="text-[#a83836]">They don&apos;t match.</p> : null}
+        </>
+      ) : null}
+    </>
   );
 
   const yesNo = (v: boolean | null, set: (b: boolean) => void, id: string, noLabel = "No") => (
@@ -672,7 +738,83 @@ function BrowserCheckCard({
           </div>
         </div>
 
-        {positions ? (
+        {canSplit ? (
+          <div className="flex items-start gap-2" data-testid="q-change">
+            <StepDot n={n++} />
+            <div className="flex w-full flex-col gap-2 pt-0.5">
+              <p>Does it show one number, or a change by build date?</p>
+              <div className="flex flex-wrap gap-2">
+                <PartsButton
+                  variant={!changed ? "primary" : "secondary"}
+                  className="!min-h-[32px]"
+                  onClick={() => setChanged(false)}
+                  data-testid="q-change-one"
+                >
+                  One number
+                </PartsButton>
+                <PartsButton
+                  variant={changed ? "primary" : "secondary"}
+                  className="!min-h-[32px]"
+                  onClick={() => setChanged(true)}
+                  data-testid="q-change-split"
+                >
+                  Changed during the build
+                </PartsButton>
+              </div>
+              {changed ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span>Changed in:</span>
+                  <select
+                    value={changeMonth || ""}
+                    onChange={(e) => setChangeMonth(Number(e.target.value) || 0)}
+                    className={`${input} !w-auto`}
+                    data-testid="q-change-month"
+                  >
+                    <option value="">Month</option>
+                    {MONTHS.map((m, i) => (
+                      <option key={m} value={i + 1}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={changeYear || ""}
+                    onChange={(e) => setChangeYear(Number(e.target.value) || 0)}
+                    className={`${input} !w-auto`}
+                    data-testid="q-change-year"
+                  >
+                    <option value="">Year</option>
+                    {changeYears.map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        {split ? (
+          <div className="flex items-start gap-2" data-testid="q-split">
+            <StepDot n={n++} />
+            <div className="flex w-full flex-col gap-3 pt-0.5">
+              <p>{positions ? "Its numbers for each place:" : "Its numbers:"}</p>
+              {splitKeys.map((k) => (
+                <div key={k.key} className="flex flex-col gap-1.5" data-testid={`q-split-${k.key}`}>
+                  <span className="font-semibold">
+                    {k.place.label ? `${k.place.label}, built ` : "Built "}
+                    {k.period === "before" ? "before" : "from"} {changeText}:
+                  </span>
+                  {numberPick(k.key, "q-split")}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {positions && !split ? (
           <div className="flex items-start gap-2" data-testid="q-positions">
             <StepDot n={n++} />
             <div className="flex w-full flex-col gap-3 pt-0.5">
@@ -680,51 +822,14 @@ function BrowserCheckCard({
               {positions.map((p) => (
                 <div key={p.key} className="flex flex-col gap-1.5" data-testid={`q-position-${p.key}`}>
                   <span className="font-semibold">{p.label}:</span>
-                  {suggestions.length ? (
-                    <div className="flex flex-wrap gap-2">
-                      {suggestions.map((sug) => (
-                        <span key={sug} className="inline-flex items-center gap-1">
-                          <PartsButton
-                            variant={pv(p.key).picked === sug ? "primary" : "secondary"}
-                            className={`!min-h-[32px] ${D_MONO}`}
-                            onClick={() => setPv(p.key, { picked: pv(p.key).picked === sug ? "" : sug, typed: "", again: "" })}
-                            data-testid="q-position-suggestion"
-                          >
-                            {sug}
-                          </PartsButton>
-                          <CopyIcon text={sug} />
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                  <input
-                    value={pv(p.key).typed}
-                    onChange={(e) => setPv(p.key, { typed: e.target.value, picked: "" })}
-                    placeholder={suggestions.length ? "Or type it" : "Type it"}
-                    maxLength={60}
-                    className={input}
-                    data-testid="q-position-value"
-                  />
-                  {!pv(p.key).picked && pv(p.key).typed.trim() ? (
-                    <>
-                      <input
-                        value={pv(p.key).again}
-                        onChange={(e) => setPv(p.key, { again: e.target.value })}
-                        placeholder="Type it again"
-                        maxLength={60}
-                        className={input}
-                        data-testid="q-position-again"
-                      />
-                      {pv(p.key).again.trim() && !posAgainOk(p.key) ? <p className="text-[#a83836]">They don&apos;t match.</p> : null}
-                    </>
-                  ) : null}
+                  {numberPick(p.key, "q-position")}
                 </div>
               ))}
             </div>
           </div>
         ) : null}
 
-        {positions ? null : (
+        {positions || split ? null : (
           <div className="flex items-start gap-2">
             <StepDot n={n++} />
             <div className="flex w-full flex-col gap-2 pt-0.5">
@@ -782,7 +887,8 @@ function BrowserCheckCard({
           <StepDot n={n++} />
           <div className="flex w-full flex-col gap-2 pt-0.5">
             <p>
-              Do its dates include <span className="font-semibold">{dates || "your car's years"}</span>?
+              {split ? "Do their dates together cover " : "Do its dates include "}
+              <span className="font-semibold">{dates || "your car's years"}</span>?
             </p>
             {yesNo(datesOk, setDatesOk, "q-dates")}
           </div>
@@ -828,16 +934,35 @@ function BrowserCheckCard({
                   versionOk: known ? versionOk === true : null,
                   versionCode: known ? null : versionCode.trim(),
                   partFound: partFound === true,
-                  value: positions ? "" : value,
-                  valueAgain: positions ? null : needsAgain ? typedAgain.trim() : null,
-                  positions: positions
-                    ? filledPositions.map((p) => ({
-                      axle: p.axle,
-                      side: p.side,
-                      value: posValue(p.key),
-                      valueAgain: pv(p.key).picked ? null : pv(p.key).again.trim(),
-                    }))
-                    : null,
+                  ...(split
+                    ? {
+                      changeAt: { month: changeMonth, year: changeYear },
+                      value: positions ? "" : posValue("one|before"),
+                      valueAgain: positions || pv("one|before").picked ? null : pv("one|before").again.trim(),
+                      valueFrom: positions ? null : posValue("one|from") || null,
+                      valueFromAgain: positions || pv("one|from").picked ? null : pv("one|from").again.trim(),
+                      positions: positions
+                        ? filledSplit.map((k) => ({
+                          axle: k.place.axle as "front" | "rear",
+                          side: k.place.side,
+                          value: posValue(k.key),
+                          valueAgain: pv(k.key).picked ? null : pv(k.key).again.trim(),
+                          period: k.period,
+                        }))
+                        : null,
+                    }
+                    : {
+                      value: positions ? "" : value,
+                      valueAgain: positions ? null : needsAgain ? typedAgain.trim() : null,
+                      positions: positions
+                        ? filledPositions.map((p) => ({
+                          axle: p.axle,
+                          side: p.side,
+                          value: posValue(p.key),
+                          valueAgain: pv(p.key).picked ? null : pv(p.key).again.trim(),
+                        }))
+                        : null,
+                    }),
                   datesOk: datesOk === true,
                   sideOk: side && !positions ? sideOk === true : null,
                 },

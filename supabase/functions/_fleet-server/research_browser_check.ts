@@ -196,10 +196,60 @@ export type CheckAnswers = {
    * RE-69: parts that come in positions (shocks, bearings, brakes…) — one number per position the owner filled.
    * When present, these replace `value`.
    */
-  positions?: Array<{ axle: "front" | "rear"; side?: "left" | "right" | null; value?: string | null; valueAgain?: string | null }> | null;
+  positions?: Array<{
+    axle: "front" | "rear";
+    side?: "left" | "right" | null;
+    value?: string | null;
+    valueAgain?: string | null;
+    /** RE-70: when the number changed during the build — the number for cars built before / from `changeAt`. */
+    period?: "before" | "from" | null;
+  }> | null;
+  /**
+   * RE-70: the car maker changed the number during the car's build ("To frame …0255546 / From …0255547"): the month it
+   * changed. Then `value` is the number for cars built before it and `valueFrom` the number from it (parts without
+   * positions), or each position says its `period`.
+   */
+  changeAt?: { month: number; year: number } | null;
+  valueFrom?: string | null;
+  valueFromAgain?: string | null;
 };
 
-export type PositionItem = { detected: string; axle: "front" | "rear"; side: "left" | "right" | null };
+export type PositionItem = {
+  detected: string;
+  axle: "front" | "rear" | null;
+  side: "left" | "right" | null;
+  /** RE-70: the build years this number is for (whole years; a change mid-year lists both numbers for that year). */
+  yearFrom?: number | null;
+  yearTo?: number | null;
+  /** RE-70: "built before 11.2018" / "built from 11.2018". */
+  periodText?: string | null;
+};
+
+/**
+ * RE-70: years for a number that changed during the build. A change in month M of year Y: the old number is for cars
+ * built up to Y (up to Y-1 when it changed in January), the new one from Y. Whole years only, so a car built in the
+ * change year is shown both numbers.
+ */
+export function changeYears(
+  changeAt: { month: number; year: number },
+  period: "before" | "from",
+): { yearFrom: number | null; yearTo: number | null } {
+  return period === "before"
+    ? { yearFrom: null, yearTo: changeAt.month === 1 ? changeAt.year - 1 : changeAt.year }
+    : { yearFrom: changeAt.year, yearTo: null };
+}
+
+/** RE-70: a change month must fall inside the car's build (after its first month, not after its last). */
+export function changeAtFits(changeAt: unknown, build: CarBuild | null | undefined): { month: number; year: number } | null {
+  const c = changeAt as { month?: unknown; year?: unknown } | null;
+  const month = Number(c?.month);
+  const year = Number(c?.year);
+  if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year) || year < 1950 || year > 2100) return null;
+  const at = year * 12 + month;
+  if (build?.startYear && at <= build.startYear * 12 + (build.startMonth ?? 1)) return null;
+  if (build?.endYear && at > build.endYear * 12 + (build.endMonth ?? 12)) return null;
+  return { month, year };
+}
 
 export type AnswersResult =
   | { ok: true; detected: string; versionCode: string | null; evidence: string; items?: PositionItem[] }
@@ -215,7 +265,8 @@ export type AnswersResult =
       | "bad_version"
       | "retype_mismatch"
       | "bad_position"
-      | "needs_positions";
+      | "needs_positions"
+      | "bad_change_date";
   };
 
 /**
@@ -239,6 +290,8 @@ export function answersGate(input: {
   /** RE-69: the part type's position scheme and the job's own axle (server's own records). */
   positionScheme?: string | null;
   jobAxle?: "front" | "rear" | null;
+  /** RE-70: when the car was built (server's own record) — a change month must fall inside it. */
+  build?: CarBuild | null;
 }): AnswersResult {
   const a = input.answers ?? {};
   // A remembered version is checked with Yes/No; otherwise the owner types the model shown at the top.
@@ -284,27 +337,70 @@ export function answersGate(input: {
     return { ok: true, detected };
   };
 
+  // RE-70: a number that changed during the build — the change month must fall inside the car's build.
+  const split = a.changeAt != null && input.jobType === "part";
+  const changeAt = split ? changeAtFits(a.changeAt, input.build) : null;
+  if (split && !changeAt) return { ok: false, reason: "bad_change_date" };
+  const changeText = changeAt ? `${String(changeAt.month).padStart(2, "0")}.${changeAt.year}` : "";
+  const periodOf = (period: "before" | "from" | null): Pick<PositionItem, "yearFrom" | "yearTo" | "periodText"> =>
+    changeAt && period ? { ...changeYears(changeAt, period), periodText: `built ${period} ${changeText}` } : {};
+
   let detected = "";
   let items: PositionItem[] | undefined;
   let valueText = "";
+  const itemText = (i: PositionItem) =>
+    [`${i.axle ?? ""}${i.side ? ` ${i.side}` : ""}`.trim(), i.detected, i.periodText ?? ""].filter(Boolean).join(" ");
   if (positioned) {
     // RE-69: one number per filled position; empty positions are simply not saved.
-    items = [];
+    type Raw = { axle: "front" | "rear"; side: "left" | "right" | null; period: "before" | "from" | null; detected: string };
+    const raws: Raw[] = [];
     for (const p of a.positions!) {
       if (!String(p?.value ?? "").trim()) continue;
       const axle = p.axle === "rear" ? "rear" : p.axle === "front" ? "front" : null;
       if (!axle) return { ok: false, reason: "no_value" };
       const side = p.side === "left" || p.side === "right" ? p.side : null;
+      const period = p.period === "before" || p.period === "from" ? p.period : null;
+      // RE-70: with a change date every number says before/from; without one, none may.
+      if (changeAt ? !period : period) return { ok: false, reason: "bad_position" };
       if (input.jobAxle && axle !== input.jobAxle) return { ok: false, reason: "bad_position" };
       if (sided ? !side : side) return { ok: false, reason: "bad_position" };
-      if (items.some((x) => x.axle === axle && x.side === side)) return { ok: false, reason: "bad_position" };
+      if (raws.some((x) => x.axle === axle && x.side === side && x.period === period)) return { ok: false, reason: "bad_position" };
       const r = check(p.value, p.valueAgain);
       if (!r.ok) return { ok: false, reason: r.reason };
-      items.push({ detected: r.detected, axle, side });
+      raws.push({ axle, side, period, detected: r.detected });
+    }
+    items = [];
+    for (const r of raws) {
+      // RE-70: a place whose number didn't change (same before and from) is saved once, for every year.
+      const twin = r.period
+        ? raws.find((x) => x !== r && x.axle === r.axle && x.side === r.side && normV(x.detected) === normV(r.detected))
+        : undefined;
+      if (twin && r.period === "from") continue;
+      items.push({ detected: r.detected, axle: r.axle, side: r.side, ...(twin ? {} : periodOf(r.period)) });
     }
     if (!items.length) return { ok: false, reason: "no_value" };
     detected = items[0].detected;
-    valueText = items.map((i) => `${i.axle}${i.side ? ` ${i.side}` : ""} ${i.detected}`).join(", ");
+    valueText = items.map(itemText).join(", ");
+  } else if (changeAt) {
+    // RE-70: one number for cars built before the change, another from it (either may be left empty, not both).
+    const axle = input.jobAxle ?? null;
+    items = [];
+    const pairs: Array<["before" | "from", unknown, unknown]> = [
+      ["before", a.value, a.valueAgain],
+      ["from", a.valueFrom, a.valueFromAgain],
+    ];
+    for (const [period, v, again] of pairs) {
+      if (!String(v ?? "").trim()) continue;
+      const r = check(v, again);
+      if (!r.ok) return { ok: false, reason: r.reason };
+      items.push({ detected: r.detected, axle, side: null, ...periodOf(period) });
+    }
+    if (!items.length) return { ok: false, reason: "no_value" };
+    if (items.length === 2 && normV(items[0].detected) === normV(items[1].detected)) {
+      items = [{ detected: items[0].detected, axle, side: null }];
+    }
+    detected = items[0].detected;
+    valueText = items.map(itemText).join(", ");
   } else {
     const r = check(a.value, a.valueAgain);
     if (!r.ok) return { ok: false, reason: r.reason };
@@ -317,7 +413,11 @@ export function answersGate(input: {
     versionCode ?? input.knownCode ?? null,
     input.rowName ?? null,
     valueText,
-    input.buildText ? `dates include ${input.buildText}` : "dates include the car's build",
+    changeAt
+      ? `changed ${changeText}; dates together cover ${input.buildText || "the car's build"}`
+      : input.buildText
+      ? `dates include ${input.buildText}`
+      : "dates include the car's build",
     !positioned && input.needsSide ? `for the ${input.needsSide}` : null,
   ].filter(Boolean).join(" · ");
   return { ok: true, detected, versionCode, evidence: evidence.slice(0, 2000), ...(items ? { items } : {}) };

@@ -357,3 +357,88 @@ Deno.test("RE-69 review: places must fit the part type and the job's axle", () =
   // an axle-only part on its own axle
   assertEquals(answersGate({ ...base, positionScheme: "axle", jobAxle: "front", answers: { ...YES, positions: [{ axle: "front", side: null, value: "48510-B9285" }] } }).ok, true);
 });
+
+import { changeAtFits, changeYears } from "./research_browser_check.ts";
+
+Deno.test("RE-70: a number that changed during the build gets years per period", () => {
+  assertEquals(changeYears({ month: 11, year: 2018 }, "before"), { yearFrom: null, yearTo: 2018 });
+  assertEquals(changeYears({ month: 11, year: 2018 }, "from"), { yearFrom: 2018, yearTo: null });
+  // a January change: the old number ends the year before
+  assertEquals(changeYears({ month: 1, year: 2019 }, "before"), { yearFrom: null, yearTo: 2018 });
+  const roomy = { startYear: 2016, startMonth: 11, endYear: 2020, endMonth: 9 };
+  assertEquals(changeAtFits({ month: 11, year: 2018 }, roomy), { month: 11, year: 2018 });
+  assertEquals(changeAtFits({ month: 11, year: 2016 }, roomy), null); // the first build month is not a change
+  assertEquals(changeAtFits({ month: 10, year: 2020 }, roomy), null); // after the build ended
+  assertEquals(changeAtFits({ month: 13, year: 2018 }, roomy), null);
+  assertEquals(changeAtFits(null, roomy), null);
+});
+
+Deno.test("RE-70: Roomy shocks — before and from numbers per place; an unchanged place is saved once", () => {
+  const shocks = {
+    ...ANS_BASE,
+    rowName: "ABSORBER ASSY, SHOCK",
+    suggestions: ["48510-B9285", "48520-B9285", "48530-B9285"],
+    positionScheme: "four_corners",
+    build: { startYear: 2016, startMonth: 11, endYear: 2020, endMonth: 9 },
+    buildText: "11.2016 – 09.2020",
+  };
+  const r = answersGate({
+    ...shocks,
+    answers: {
+      ...YES,
+      changeAt: { month: 11, year: 2018 },
+      positions: [
+        { axle: "front", side: "left", value: "48520-B9285", period: "before" },
+        { axle: "front", side: "left", value: "48520-B9115", valueAgain: "48520-B9115", period: "from" },
+        { axle: "rear", side: "right", value: "48530-B9285", period: "before" },
+        { axle: "rear", side: "right", value: "48530-B9285", period: "from" },
+      ],
+    },
+  });
+  assertEquals(r.ok, true);
+  if (r.ok) {
+    assertEquals(r.items, [
+      { detected: "48520-B9285", axle: "front", side: "left", yearFrom: null, yearTo: 2018, periodText: "built before 11.2018" },
+      { detected: "48520-B9115", axle: "front", side: "left", yearFrom: 2018, yearTo: null, periodText: "built from 11.2018" },
+      { detected: "48530-B9285", axle: "rear", side: "right" },
+    ]);
+    assertEquals(r.evidence.includes("front left 48520-B9285 built before 11.2018"), true);
+    assertEquals(r.evidence.includes("changed 11.2018; dates together cover 11.2016 – 09.2020"), true);
+  }
+  // a change month outside the build; a period without a change date; a change date with a place missing its period
+  assertEquals(
+    answersGate({ ...shocks, answers: { ...YES, changeAt: { month: 1, year: 2015 }, positions: [{ axle: "front", side: "left", value: "48520-B9285", period: "before" }] } }),
+    { ok: false, reason: "bad_change_date" },
+  );
+  assertEquals(
+    answersGate({ ...shocks, answers: { ...YES, positions: [{ axle: "front", side: "left", value: "48520-B9285", period: "before" }] } }),
+    { ok: false, reason: "bad_position" },
+  );
+  assertEquals(
+    answersGate({ ...shocks, answers: { ...YES, changeAt: { month: 11, year: 2018 }, positions: [{ axle: "front", side: "left", value: "48520-B9285" }] } }),
+    { ok: false, reason: "bad_position" },
+  );
+});
+
+Deno.test("RE-70: a part without places — one number before, another from", () => {
+  const filter = { ...ANS_BASE, suggestions: ["87139-B2010"], build: { startYear: 2016, startMonth: 11, endYear: 2020, endMonth: 9 } };
+  const r = answersGate({
+    ...filter,
+    answers: { ...YES, changeAt: { month: 6, year: 2019 }, value: "87139-B2010", valueFrom: "87139-B2030", valueFromAgain: "87139-B2030" },
+  });
+  assertEquals(r.ok, true);
+  if (r.ok) {
+    assertEquals(r.items, [
+      { detected: "87139-B2010", axle: null, side: null, yearFrom: null, yearTo: 2019, periodText: "built before 06.2019" },
+      { detected: "87139-B2030", axle: null, side: null, yearFrom: 2019, yearTo: null, periodText: "built from 06.2019" },
+    ]);
+  }
+  // the same number both times → saved once, for every year
+  const same = answersGate({ ...filter, answers: { ...YES, changeAt: { month: 6, year: 2019 }, value: "87139-B2010", valueFrom: "87139-B2010" } });
+  assertEquals(same.ok && same.items, [{ detected: "87139-B2010", axle: null, side: null }]);
+  // the "from" number typed once only
+  assertEquals(
+    answersGate({ ...filter, answers: { ...YES, changeAt: { month: 6, year: 2019 }, value: "87139-B2010", valueFrom: "87139-B2030" } }),
+    { ok: false, reason: "retype_mismatch" },
+  );
+});

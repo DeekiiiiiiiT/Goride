@@ -488,6 +488,52 @@ test.describe("Research engine screens (layer 3)", () => {
     });
   });
 
+  test("RE-70 — a number that changed during the build: change month, then a before and a from number per place", async ({ page }) => {
+    const calls: Calls = [];
+    await install(page, calls);
+    await openParts(page);
+    await page.getByTestId("parts-row").filter({ hasText: "Shock absorber" }).getByTestId("row-open-browser-check").click();
+    const d = page.getByTestId("research-drawer");
+    await expect(d.getByTestId("q-change")).toContainText("Does it show one number, or a change by build date?");
+    await d.getByTestId("q-version-yes").click();
+    await d.getByTestId("q-part-yes").click();
+    await d.getByTestId("q-change-split").click();
+    await expect(d.getByTestId("q-positions")).toHaveCount(0);
+    await d.getByTestId("q-change-month").selectOption("11");
+    await d.getByTestId("q-change-year").selectOption("2018");
+    await expect(d.getByTestId("q-split-front-left|before")).toContainText("Front left, built before Nov 2018:");
+    await expect(d.getByTestId("q-split-front-left|from")).toContainText("Front left, built from Nov 2018:");
+    await d.getByTestId("q-split-front-left|before").getByTestId("q-split-suggestion").filter({ hasText: "00000-S0002" }).click();
+    await d.getByTestId("q-split-front-left|from").getByTestId("q-split-value").fill("00000-S0012");
+    await d.getByTestId("q-split-front-left|from").getByTestId("q-split-again").fill("00000-S0012");
+    await expect(d.getByText("Do their dates together cover")).toBeVisible();
+    await d.getByTestId("q-dates-yes").click();
+    await shot(page, "21-changed-during-build");
+    await d.getByTestId("browser-check-confirm").click();
+    await expect.poll(() => calls.find((c) => c.path === "/browser-checks/job-bcs/confirm")?.body).toEqual({
+      url: "https://www.amayama.com/en/part/toyota/roomy-m900a-agbve",
+      answers: {
+        versionOk: true,
+        versionCode: null,
+        partFound: true,
+        changeAt: { month: 11, year: 2018 },
+        value: "",
+        valueAgain: null,
+        valueFrom: null,
+        valueFromAgain: null,
+        positions: [
+          { axle: "front", side: "left", value: "00000-S0002", valueAgain: null, period: "before" },
+          { axle: "front", side: "left", value: "00000-S0012", valueAgain: "00000-S0012", period: "from" },
+        ],
+        datesOk: true,
+        sideOk: null,
+      },
+      rowName: "ABSORBER ASSY, SHOCK",
+      buildText: "2016 – 2020",
+      knownCode: "M900A-AGBVE",
+    });
+  });
+
   test("Screen 18 — browser check on a phone is a full-screen sheet", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await install(page, []);

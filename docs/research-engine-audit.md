@@ -1,6 +1,6 @@
 # Research engine (cars, specs, parts) — audit
 
-**Rev 6.0 · 21 Nov 2026 · Status: LIVE, in practice mode.** Engine on, practice (shadow) mode, US$1.35/day.
+**Rev 6.1 · 21 Nov 2026 · Status: LIVE, in practice mode.** RE-70 (number changed during the build) added. Engine on, practice (shadow) mode, US$1.35/day.
 Live code: main `c7df3041` (platform-catalog, catalog-research, fleet-core, Dominion). Branch `parts-auto-match` has the
 same research code. **One database change is written but NOT on live:** `20261121171424_research_fill_per_axle.sql` (§3).
 
@@ -40,9 +40,17 @@ Amayama version `M900A-AGBVE`, remembered in `research_car_site_version`). Done 
 - Fill this car ran (8 lookups, 0 proven automatically, US$0.008).
 - Browser checks confirmed by the owner: **spark plugs Toyota 90048-51216**, **engine air filter Toyota 17801-21060**.
 
+**RE-70 (21 Nov, fixed):** Toyota changed the Roomy shocks at 11.2018 (frame M900A-0255547): front LH 48520-B9285 →
+B9115, front RH 48510-B9285 → B9115, rear (both) 48530-B9285 → B9165. The check could hold only one number per place and
+its date question passed any overlap, so the early numbers would have been saved for every Roomy. Now the number step has
+**One number / Changed during the build**: pick the change month + year, then a "built before" and a "built from" number
+per place (or one pair for parts without places). Saved as `part_listing.year_to` / `year_from` (whole years; a change
+mid-year lists both numbers for that year; January → old number ends the year before). Fleet's parts lookup already
+filters by the car's year (`catalog_api.ts` `yearInRange`). The exact month stays in the evidence text.
+
 **Next for the owner, in Pending catalog → Parts (refresh first):**
 1. **Shock absorber** browser check: Open Amayama → "Front spring & shock absorber" and "Rear spring & shock absorber" →
-   tap the number for each place (front left / front right / rear left / rear right) → Confirm.
+   **Changed during the build** → Nov 2018 → tap/type the before and from number for each place (table above) → Confirm.
 2. **Cabin A/C Filter** browser check, same way.
 3. The **Needs review** rows (coolant, tyre size, H4 bulb, thermostat, wheel bearing, drive belt) have no source; they
    need a browser check or a reject — don't press "Looks right" on an unsourced row.
@@ -55,9 +63,11 @@ Pending catalog → Parts → a "Browser check" row → **Open browser check**. 
    Model and Engine) → Yes / No. When Roam doesn't know the version yet: "Click the row with: …" + type the Model shown
    (remembered after Confirm).
 3. **Search _x_. Do you see _ROW NAME_?** (copy icons) → Yes / No.
-4. **Its number:** tap one of Roam's numbers (copy icons) or type it (typed twice). Parts that come in positions
-   (shocks, bearings, brakes, calipers) ask **a number for each place**.
-5. **Do its dates include the car's build?** → Yes / No. Any No → "Then press Not on this page."
+4. **One number, or a change by build date?** (parts only; "One number" is the default). Changed → month + year.
+5. **Its number:** tap one of Roam's numbers (copy icons) or type it (typed twice). Parts that come in positions
+   (shocks, bearings, brakes, calipers) ask **a number for each place**; after a change, a before and a from number.
+6. **Do its dates include the car's build?** (after a change: "Do their dates together cover …?") → Yes / No. Any No →
+   "Then press Not on this page."
 Confirm saves the number(s) as Confirmed, route `owner_browser`, proof = the page link + the answers.
 
 ## 3. Open work, in order
