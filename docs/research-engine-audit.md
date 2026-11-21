@@ -824,3 +824,11 @@ writes it, first build month, model name; or "Click M900A-AGBVE"; skipped when s
 Paste here**; ⑤ **Copy the address bar. Paste here**. Removed: the "doesn't let Roam read" line, the car description,
 the grade note, the "Roam remembers" note, the suggested-numbers list. Lesson: read every owner-facing panel as the
 owner would before shipping — one instruction per step, no explanations.
+
+**RE-66 · High · Step 2 matches three rows.** "1KRFE · 11.2016 · ROOMY" fits Amayama's M900A-AGBGE (grade G),
+M900A-AGBME (X) and M900A-AGBVE (CTMG = Custom G). Only the catalogue's model name singles out the car, and Dominion's
+stored codes are wrong (RE-64). Fix: (1) per car, store the catalogue's model name once — from the first confirmed
+check (RE-63) or set by the owner/Claude when known (Roomy 2016–2020 Custom G 2WD = `M900A-AGBVE`, page
+`…/tank-roomy/m900a/147989`); then step ① opens that version and step ② disappears; (2) RE-64 corrects
+`full_model_code` / `trim_suffix_code` from Toyota's list so new cars start right; (3) until a car has it, step ② adds
+the grade as the catalogue writes it when Dominion knows it, else says "if several rows match, pick your grade".
