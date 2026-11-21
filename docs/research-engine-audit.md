@@ -1,27 +1,74 @@
 # Research engine (cars, specs, parts) — audit
 
-**Rev 4.2 · 21 Nov 2026 · Status: LIVE, plus one fix being built (§9 RE-30/RE-31).** Migrations 1a/1b/2/3 applied to
-live 03:10 UTC 21 Nov (logbook lines in); main 8c63c773 deployed platform-catalog + catalog-research + Dominion; engine
-on, practice (shadow) mode, US$1.35/day. Held back: readiness counts only Confirmed specs (§6 step 5).
-§6 step 3 could not work as written: the engine can only open a plain web address, NiBK only searches through a form,
-and NiBK's product pages never hold the factory number and the car in the same row. **Next = build §9, then §6 step 3.**
+**Rev 4.3 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
+US$1.35/day.** Live database: migrations 1a/1b/2/3 (03:10 UTC) and `20261121100925_research_form_recipe` (10:25 UTC),
+all with logbook lines. Live code: main `0e00cd5b` (platform-catalog, catalog-research, Dominion). Branch
+`parts-auto-match` `fc2e2b85` holds the same research code. Held back: readiness counts only Confirmed specs (§6 step 5).
+**Next = §R step 1: the owner adds the NiBK recipe and runs Test on a car on the Roomy.**
 
 History (not needed to continue): the closed plan with all findings RE-01…RE-29 and the Spike 0 tables is
 `git show 6064a3f4:docs/research-engine-audit.md`. The 18-screen Keep / Drop / Add lists are in
 `git show 92b3cd21:docs/research-engine-audit.md`.
 
+## R. Reviewer summary (21 Nov)
+
+**What was done, in order**
+
+| When (UTC, 20–21 Nov) | What | Commit / where |
+|---|---|---|
+| 20 Nov | Plan closed (RE-01…RE-29), Spike 0 on real sites, 18 Stitch screens | `6064a3f4` |
+| 20–21 Nov | Layers 1–3 built: database, honest page reader + recipes + same-row proof, worker, 18 Dominion screens | `92b3cd21`, `07badfa1` |
+| 21 Nov | Code review (high): 10 fixes (§2a) | `92b3cd21` |
+| 21 Nov 03:10 | Go-live: 4 migrations, server, Dominion; readiness rebuild held back (§6 step 5) | main `8c63c773`, `87f420cf` |
+| 21 Nov | Found that §6 step 3 couldn't work: NiBK searches by form only; its product pages split the factory number from the car row (§9) | — |
+| 21 Nov | Built RE-30 (form recipes) + RE-31 (cross-reference proof); code review (high) found 7, 6 fixed, 1 not needed (§9) | `fc2e2b85` |
+| 21 Nov 10:30 | Rev 4.2 live: migration + server + Dominion | main `0e00cd5b` |
+| 21 Nov | Access decision: no robot of any kind on sites that forbid it; next round = screenshot browser checks, Chrome helper, honest browser reader (§10) | this file |
+
+**What is proven**
+- Unit, SQL and screen tests: Deno 136, SQL checks (incl. 3 form-recipe checks), admin tsc 0 + vitest 45, screen
+  test 16 — all pass locally. Done-tests 30, 33, 34 pass in tests.
+- Real site, real reader: the engine's own reader posted NiBK's form for `04465-B1120` and proved the Roomy M900A
+  front pads (NiBK `PN5562`); asking for rear was refused. The reads were saved on the local copy only (§9).
+- Live: both server parts start (401 without login = running), settings unchanged (on, practice, US$1.35, 0 failures).
+
+**What is not proven yet:** every real-run done-test in §5, and done-test 35 on live. None has run: no recipe exists on
+live yet, and no fill has been started.
+
+**CI on main `0e00cd5b`:** edge deploy, Vercel, Supabase function tests, Parts SQL checks, Parts auto-match e2e,
+recon-worker — green. Red, both already red before today and not caused by this work:
+(1) "migration version list matches production": `20261117204932` (cash tolls) is live but only on the branch;
+(2) `e2e/dominion-find-parts-visual.spec.ts` "parts database keeps the tab in the address bar" (stale since 8 Nov).
+Because (2) fails first in the "Dominion places checks" job, the research screen test did not run on CI for this push
+(it passes locally).
+
+**Next steps (in order)**
+1. **Owner:** Trusted sources → jnbk-brakes.com → Add a recipe with the values in §9 "Owner's recipe"; **Test on a car**
+   with Roomy M900A + `04465-B1120` → expect the M900A row with `Front Brake: PN5562` (done-test 35).
+2. **Owner:** **Fill this car** on the Roomy M900A, still in practice mode → proves done-tests 5 and 4 (on Looks right).
+   Claude reads the results on live and records them here.
+3. **Owner:** send the permission emails to Masuma, Amayama, Megazip and Partsouq (Claude drafts them). The biggest
+   unlock: Spike 0 showed 0 of 17 Roomy parts automatic today, at most 2 of 17 with NiBK + SB.
+4. **Build RE-34 + RE-35** (§10): screenshot drop and one-click Chrome helper for browser checks. Playbook order: audit
+   round 1 → Stitch prompt for the new parts of the browser check screen → screens → round 2 → build.
+5. **Build RE-36** (§10): honest browser reader for allowed sites that only work in a browser (SB Parts) → done-tests
+   1 and 31.
+6. **Fix the nightly readiness rebuild** (separate audit; it has failed every night since at least 16 Nov), then run
+   §6 step 5.
+7. **Switch on for everyone** (leave practice mode) once steps 1–2 show correct results (owner rule: on for all companies).
+8. Cleanup migration (§6 step 6) and the §7 follow-ups.
+
 ## START HERE (for a new chat)
 
-1. Read this file top to bottom. Follow `docs/how-we-build-playbook.md` and §0. Plain words to the owner, short replies.
-   **Never `git stash`.** Branch `parts-auto-match` also holds other unsaved work (toll, Fleet maintenance, trips, rides) —
-   commit only research files.
-2. **Where we are (21 Nov):** layers 1–3 are committed (92b3cd21, 07badfa1, d639e4b4) and live. Building §9 (NiBK form
-   recipe + cross-reference proof). Push order (owner rule): build → code review → local Playwright → push, then go live
-   from a worktree off origin/main (see memory "golive-worktree-recipe").
-3. After §9 is live, the owner does §6 step 3 with the exact values in §9 "Owner's recipe".
-4. A push does **not** change the owner's localhost screens — localhost reads the LIVE server. Only a go-live does.
-5. The Overview page keeps its current look on purpose (every other Stitch card was invented). If the owner wants the
-   Stitch Overview look, that is new work: first decide which real number fills each card.
+1. Read §R, then this file top to bottom. Follow `docs/how-we-build-playbook.md` and §0. Plain words to the owner,
+   short replies. **Never `git stash`.** Branch `parts-auto-match` also holds other unsaved work (toll, Fleet
+   maintenance, trips, rides) — commit only research files.
+2. Push order (owner rule): build → code review → local Playwright → push; go live from a worktree off origin/main
+   (memory "golive-worktree-recipe"). Apply a migration to live **before** pushing code that reads its columns; dry-run
+   it as BEGIN … ROLLBACK first; add its logbook line.
+3. A push to the branch does **not** change the owner's localhost screens — localhost reads the LIVE server.
+4. The Overview page keeps its current look on purpose (every other Stitch card was invented). If the owner wants the
+   Stitch Overview look, the first build step is naming the real number behind each card.
 
 ## 0. Goal and the owner's rules
 
@@ -35,7 +82,9 @@ what it could not prove.
   (b) a part maker's own catalogue for its own part, (c) two different part makers naming the same factory number.
   Shops, aggregators and TecDoc copies = Needs checking. Forums and AI text are never a source.
 - **No bypass.** The engine reads a site only if robots.txt and terms allow it, as `RoamResearchBot/1.0`, never
-  disguised. Blocked catalogues become **browser checks** (the owner opens the page and pastes the line).
+  disguised. Blocked catalogues become **browser checks** (the owner opens the page and pastes the line). This holds
+  for every kind of robot — server reader, hidden browser, screenshot robot, or a program moving the owner's own mouse
+  (§10).
 - Information only (no prices / stock / ordering). Customer screens never mention lookups.
 - Owner preferences: plain words, one fix per finding, no approval gates, buttons look like buttons (danger = red
   border), no browser pop-ups, exact hex colours in Dominion (dark-mode remap). Stitch = the look, the audit = the
@@ -50,7 +99,7 @@ what it could not prove.
 2,679 car versions (763 with no frame code); 0 cars "ready"; specs on 3 cars before the CSV backfill (2,471 tyre sizes
 become Needs checking in layer 1b). Research jobs ever: 3.
 
-## 2. What is built (local only)
+## 2. What is built (all live)
 
 | Layer | Main files | What it does |
 |---|---|---|
@@ -60,6 +109,7 @@ become Needs checking in layer 1b). Research jobs ever: 3.
 | 2 server | `_fleet-server/research_*.ts`, `catalog_research_*.ts`, `listings_for_vehicle.ts`, `api_pricing.ts`, `api_usage_logger.ts`, `platform-catalog/index.ts` | Honest page reader, recipes + same-row proof, source-rule routing, provider faults, worker rev `catalog-research-7`, privacy guard on every research + pending route, browser-check gate. |
 | 3 database | `…20261121004356_research_engine_layer3_reads.sql` | `catalog_research_screen_summary()` and `catalog_research_coverage(car)` for the screens. |
 | 3 screens | `apps/admin/src/components/admin/research-engine/` + `services/researchEngineService.ts` | All 18 Stitch screens: Parts list / drawer / browser check / two makers disagree / all caught up / states / phone sheet, Vehicles list / proposal drawer / Research this model, Settings and health, Trusted sources + Add a site + recipes with Test on a car, car page Coverage tab + identity first, Car specs table with trust, notice banners (Overview + Pending catalog). Old pending-parts / vehicles / settings / trusted-sources screens deleted. |
+| Rev 4.2 | `…20261121100925_research_form_recipe.sql`, `research_page_reader.ts`, `research_recipes.ts`, `catalog_research_worker.ts`, `research_engine_routes.ts`, `TrustedSitesScreen.tsx`, `research_form_recipe.test.ts` | Form recipes (`form_then_page` + `form_body_template`), cross-reference proof, Form fields box and part number in Test on a car (§9). |
 
 ### 2a. Code review fixes (21 Nov, all done and tested)
 
@@ -81,31 +131,17 @@ Also: removing a site no longer opens a never-closing "site blocked" banner, and
 re-key keeps the open job; read guards let all Dominion staff read (writes still need `catalog.write`).
 Not fixed (small, noted): Fleet Find parts' spec coverage count includes the CSV "Needs checking" rows.
 
-### 2b. Files to commit (research engine only)
+### 2b. Commits
 
-- Migrations: the four `supabase/migrations/2026112023*_research_engine_*.sql` + `20261121004356_research_engine_layer3_reads.sql`;
-  `supabase/tests/research_engine_checks.sql`, `supabase/tests/catalog_research_claim_checks.sql`.
-- Server: `supabase/functions/_fleet-server/` `research_*.ts` (+ tests), `catalog_research_*.ts` (+ tests),
-  `listings_for_vehicle.ts` (+ test), `api_pricing.ts` (+ test), `api_usage_logger.ts`, `pending_parts_catalog_routes.ts`
-  (+ test), `pending_parts_group.ts` (+ test), `supabase/functions/platform-catalog/index.ts`.
-- Admin: `apps/admin/src/components/admin/research-engine/` (whole folder), `services/researchEngineService.ts`,
-  `services/pendingPartsCatalogService.ts`, `vehicle-catalog/PendingVehicleCatalogManager.tsx`,
-  `vehicle-catalog/pending-parts/PendingCatalogShell.tsx`, `pending-parts/AddedPickPartPanel.tsx` (+ test),
-  `pending-parts/pendingPartRequestExtras.test.ts`, `vehicle-catalog/VehiclesStitchFlow.tsx`,
-  `vehicles-stitch/VehiclesCarSpecsTab.tsx`, `parts-database/PartsDatabasePage.tsx`, `AdminDashboard.tsx`, and the
-  deletions (old pending-parts screens, `parts-database/trusted-sources/TrustedSourcesTab.tsx`).
-- Tests / config: `e2e/dominion-research-engine.spec.ts`, deletion of `e2e/dominion-pending-parts-visual.spec.ts`,
-  `e2e/fleet-log-service-unknown-parts.spec.ts`, `e2e/fleet-log-service-parts-that-fit.spec.ts`,
-  `playwright.dominion.config.ts`, `package.json` (script `test:e2e:dominion:research-engine`),
-  `.github/workflows/dominion-places-e2e.yml`, `.github/workflows/verify-migrations-replay.yml`.
-- This file.
+All research files are committed: `92b3cd21`, `07badfa1`, `d639e4b4`, `fc2e2b85` on `parts-auto-match`; on main
+`8c63c773`, `87f420cf`, `0e00cd5b`. The branch's other unsaved work is not research and stays out of research commits.
 
 ## 3. Checks to keep green
 
 - SQL (local copy up: `npx supabase start`; after editing a migration run `npx supabase db reset`):
   `docker exec -i supabase_db_Goride psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q < supabase/tests/research_engine_checks.sql`
   and the same for `supabase/tests/catalog_research_claim_checks.sql`. `node scripts/validate-migration-sql.mjs`.
-- Deno (116 pass): `deno test --no-check --allow-all supabase/functions/_fleet-server/catalog_research_*.test.ts
+- Deno (136 pass, incl. `research_form_recipe.test.ts`): `deno test --no-check --allow-all supabase/functions/_fleet-server/catalog_research_*.test.ts
   supabase/functions/_fleet-server/research_*.test.ts supabase/functions/_fleet-server/listings_for_vehicle.test.ts
   supabase/functions/_fleet-server/api_pricing.test.ts supabase/functions/_fleet-server/catalog_privacy.test.ts
   supabase/functions/_fleet-server/pending_parts_catalog_routes.test.ts`. Afterwards the owner's Fleet app may need
@@ -129,35 +165,35 @@ Reads need Dominion staff; writes need `catalog.write`; ★ = platform owner onl
 
 ## 5. Done-tests still to prove (real sites, a real run, or real cars)
 
-1. SB and NiBK both list the same factory number for the Roomy M900A rear pads → Confirmed by route (c), both reads in
-   `evidence_read_ids`, `trust_set_by = 'engine'`.
-2. Amayama blocked: a Toyota OEM number job makes a browser check with the exact link and no server fetch; after the
-   owner confirms it is Confirmed by route (a), goes to review, shows "Confirmed · owner-checked <date>".
-3. "Wheel bearing · rear" on the Roomy: the fit lists the version(s), LR/RR and the frame range from the page block.
-4. **Looks right** → Fleet Find parts for 5179KZ shows it, the four former `part_fitment` readers return it, the request
-   closes by itself, Undo removes it.
-5. **Fill this car** on the Roomy → a job for every missing core part and spec; after the queue drains none is left
-   Missing without a job.
-8. A car with no frame code → **Research identity** fills chassis + frame range + engine, then its part jobs run.
-9. **Research this model** "Toyota Roomy" → every version tagged new / update / same, **Approve all new** adds them,
-   nothing duplicated.
-17. Settings shows the measured cost per job (grounding included), the daily cap and the expected finish date.
-18. Once, on a test key, Google's 1,500-a-day grounding limit is passed: record the reply; the engine pauses until
-    00:05 UTC with no job failed.
-31. **Test on a car** on the SB recipe shows the found row for the Roomy, logs one `recipe_test` read, saves nothing;
-    two failed tests leave the site `allowed`.
-32. On a real conflict: **Use this one** adds that number, rejects the other, closes the request once; **Neither is
-    right** adds nothing and sets the job to Couldn't find (and the fleets are told).
+Status on 21 Nov: **none of these has run on live yet** (no recipe on live, no fill started). §R lists which step proves
+which test.
 
-## 6. Go live (after §5)
+| # | Test | Status · proved by |
+|---|---|---|
+| 1 | SB and NiBK both list the same factory number for the Roomy M900A pads → Confirmed by route (c), both reads in `evidence_read_ids`, `trust_set_by = 'engine'` | Open · waits for RE-36 (SB can't be read yet). Note: the Roomy M900A rear is drums + shoes (NiBK `FN0046`), so use the **front** pads (`04465-B1120`). |
+| 2 | Amayama blocked: a Toyota OEM number job makes a browser check with the exact link and no server fetch; after the owner confirms it is Confirmed by route (a), goes to review, shows "Confirmed · owner-checked <date>" | Open · §R step 2 (a Fill makes these) |
+| 3 | "Wheel bearing · rear" on the Roomy: the fit lists the version(s), LR/RR and the frame range from the page block | Open · §R step 2 |
+| 4 | **Looks right** → Fleet Find parts for 5179KZ shows it, the four former `part_fitment` readers return it, the request closes by itself, Undo removes it | Open · §R step 2 |
+| 5 | **Fill this car** on the Roomy → a job for every missing core part and spec; after the queue drains none is left Missing without a job | Open · §R step 2 |
+| 8 | A car with no frame code → **Research identity** fills chassis + frame range + engine, then its part jobs run | Open |
+| 9 | **Research this model** "Toyota Roomy" → every version tagged new / update / same, **Approve all new** adds them, nothing duplicated | Open |
+| 17 | Settings shows the measured cost per job (grounding included), the daily cap and the expected finish date | Open · readable after §R step 2 |
+| 18 | Once, on a test key, Google's 1,500-a-day grounding limit is passed: record the reply; the engine pauses until 00:05 UTC with no job failed | Open |
+| 31 | **Test on a car** on the SB recipe shows the found row for the Roomy, logs one `recipe_test` read, saves nothing; two failed tests leave the site `allowed` | Open · waits for RE-36 |
+| 32 | On a real conflict: **Use this one** adds that number, rejects the other, closes the request once; **Neither is right** adds nothing and sets the job to Couldn't find (and the fleets are told) | Open · needs a real conflict |
+| 33 | A form recipe posts the filled fields, follows the 303 and reads the product page; a 307 answer is refused | **Passed** (unit tests; real NiBK through the reader on the local copy) |
+| 34 | NiBK-shaped page: cross-reference + M900A row + Front Brake cell linking here → found; rear / number missing / only M910A / cell links elsewhere → not found | **Passed** (unit tests + real NiBK page) |
+| 35 | Save a form recipe; card shows its steps; **Test on a car** on live NiBK with Roomy M900A + `04465-B1120` shows `Front Brake: PN5562`, saves only the `recipe_test` read | Half · saving passes in the screen test; live test = §R step 1 |
 
-1. One go: apply the migrations in order 1a → 1b → 2 → layer-3 reads (1b rebuilds the readiness view once — slow);
-   each hand-run file needs its logbook line in `supabase_migrations.schema_migrations`. Deploy `platform-catalog` and
-   `catalog-research` (check the edge deploy list). Ship the admin app.
-2. `catalog_research_settings.enabled = true`, shadow (practice) mode on, `daily_spend_usd = 1.35`.
-3. Trusted sources → add the first recipe (NiBK's catalogue form) → **Test on a car** on the Roomy M900A → **Fill this
-   car** on the Roomy.
-4. Switch on for everyone (owner rule).
+## 6. Go live
+
+1. ~~Apply migrations 1a → 1b → 2 → layer-3 reads with logbook lines; deploy `platform-catalog` + `catalog-research`;
+   ship the admin app.~~ **Done 21 Nov 03:10 UTC** (1b's readiness rebuild held back, step 5). Rev 4.2 migration done
+   10:25 UTC.
+2. ~~`catalog_research_settings.enabled = true`, practice mode on, `daily_spend_usd = 1.35`.~~ **Done**, checked 10:35 UTC.
+3. Trusted sources → add the first recipe (NiBK's catalogue form, values in §9) → **Test on a car** on the Roomy M900A →
+   **Fill this car** on the Roomy. **Next (owner) — §R steps 1–2.**
+4. Switch on for everyone (owner rule) — §R step 7.
 5. **Held back (21 Nov go-live): readiness counts only Confirmed specs (layer 1b §3).** Rebuilding
    `variant_parts_readiness` takes longer than live's 2-minute limit — the nightly `catalog-demand-readiness` job has
    failed on it every night since at least 16 Nov, so readiness on live is stale. Fix the slow rebuild first (separate
@@ -176,14 +212,14 @@ Reads need Dominion staff; writes need `catalog.write`; ★ = platform owner onl
 - `GET /admin/catalog/signals` returns fleet demand counts to Dominion (breaks the master-data rule).
 - The live "Added — pick the part" panel says "Added. N companies were told…" (a company count in Dominion).
 - RE-29's 24-month re-check of owner-checked rows is not built (no row can be that old before 2028).
-- If the owner wants the Stitch Overview design: decide the real number for each card first (START HERE step 6).
+- Stitch Overview design (if the owner wants it): first name the real number behind each card (START HERE step 4).
 
 ## 8. Not in this audit
 
 Service schedules research; prices / suppliers / stock; licensed TecDoc feeds; the parts auto-match engine (S3);
 `log-service-parts-gaps-audit.md` items.
 
-## 9. Rev 4.2 — NiBK form recipe and cross-reference proof (21 Nov)
+## 9. Rev 4.2 — NiBK form recipe and cross-reference proof (21 Nov) — LIVE (main `0e00cd5b`)
 
 Found while preparing §6 step 3 (checked on the real site with `RoamResearchBot/1.0`; robots.txt and terms allowed it in
 Spike 0):
@@ -209,15 +245,17 @@ The saved read keeps the form address as `url` and the landing page as `final_ur
 **RE-31 · High · Same-row proof never passes on a product page.** The factory number is in the cross-reference list,
 the car is in a table row, and the row holds the site's own number in a cell named by position, so no single row has
 number + car + position. Fix: "cross-reference proof" in `research_recipes.ts`, used for recipe pages and for pages
-Google found, tried only when the same-row proof fails. It passes only when all three hold: (1) the factory number is
-on the page as a whole token inside a cross-reference block (not just anywhere in the text); (2) a table row names the
+Google found, tried only when the same-row proof fails. It passes only when all three hold: (1) the factory number stands on
+its own as an element's whole text, the way a cross-reference list shows it (punctuation ignored; a search echo, a
+"Similar:" line, a heading, a link or a form control never counts) — or it is the site's own number in the position
+cell; (2) a table row names the
 car (whole-token frame code, model or engine, as today); (3) in that row, the cell whose `data-title`/`data-label`
-names the position (when the job has one) links to this same page (same host and path as the final address). The
+names the position (when the job has one) links to this same page (same host, path and query string; `#` and `javascript:` links never count). The
 saved evidence text is `Cross-reference: <that block> · Fits: <row with cell labels>`. Same source-rule routing as
 today (NiBK = part maker, its own catalogue).
 
 **RE-32 · Low · SB Parts can't be read by a recipe.** Not fixed in this round: it needs a real browser. SB pages
-Google finds are still read as today. Done-test 1 (SB + NiBK agree) waits for this.
+Google finds are still read as today. Done-tests 1 and 31 wait for this. Fix = RE-36 (§10).
 
 **Files:** new migration (`npx supabase migration new research_form_recipe`: column + kind check), `research_page_reader.ts`
 (form input), `research_recipes.ts` (kind, cross-reference proof), `catalog_research_worker.ts` (select the column,
@@ -250,3 +288,45 @@ Checks: Deno 136 pass (`research_form_recipe.test.ts` new), SQL checks + 3 new f
 copy, admin tsc 0 + vitest 45, screen test 16 pass (new: save a form recipe). Real run through the engine's own reader
 against jnbk-brakes.com (reads saved on the local copy only): `04465-B1120` + Roomy M900A front → found, row
 `BODY: M900A · Front Brake: PN5562`; rear → not found.
+
+## 10. Rev 4.3 — access: what the engine may read, and the next round (21 Nov)
+
+**RE-33 · High · Most parts are behind sites that forbid robots.** Spike 0 (20 Nov, real Roomy): 0 of 17 core parts
+could be proven automatically; at most 2 of 17 once NiBK and SB both work. The rest are on Amayama, Megazip, Partsouq
+(terms ban automated access) and Masuma's by-car pages (robots.txt blocks `/find-parts/`).
+The owner asked on 21 Nov whether a robot could do the lookups the owner and Claude do by hand: a hidden browser, a robot
+that takes screenshots for the AI to read, or a program that moves the owner's own mouse and clicks. **The rule stays:
+no robot of any kind on a site that forbids it.** Reasons: (1) those terms ban automated access whatever the method — a
+screenshot or a real mouse doesn't change that; (2) to work it would have to pass as a person, which is the bypass §0
+rules out; (3) it would run on the owner's own computer, address and accounts, so a ban would also end the owner's
+manual checks; (4) ~3,000 lookups for the 200 cars that matter is bulk copying of their catalogue. The line: **the owner
+visits the page and the computer helps capture and read it** = allowed; **the computer does the visiting** = not.
+Fix, in order of reach: (a) permission emails to the four sites (owner; Claude drafts) — one "yes" opens a whole site to
+the engine; (b) make each browser check take seconds (RE-34, RE-35); (c) an honest browser reader for allowed sites
+(RE-36); (d) if (a) gets no answer, a licensed parts data feed (paid; outside this audit, §8).
+
+**RE-34 · Medium · Browser checks need copy-paste.** Today the owner opens the page and pastes the matching line.
+Fix: the browser check accepts a **screenshot** as well as pasted text. The AI reads the screenshot and returns the line
+it read (number, car, position); the screen shows that line next to the picture; the same deterministic gate as today
+then checks number + car (+ position) in that line; nothing is added until the owner presses Confirm. Saved evidence:
+the image's hash, the line the AI read, the line the owner confirmed, the page link. This loosens RE-21 ("page text
+never goes to Gemini") only for screenshots the owner submits, never for pages the engine reads. Size limit and image
+types to follow the existing upload rules; the image is not kept after the line is confirmed (only its hash).
+Done-tests: 36. a screenshot with the number and M900A on one line → line shown, Confirm adds it as owner-checked;
+37. a screenshot where the AI reads a different number → the gate refuses it and nothing is added; 38. no screenshot
+is ever sent without the owner's click.
+
+**RE-35 · Medium · Moving text from the page into Dominion is manual.** Fix: a one-click Chrome helper. While the owner
+is on the catalogue page, one click sends the selected text (or the visible page text) and the page address to the
+open browser check in Dominion. It only acts when clicked, never opens or clicks pages itself, and only sends to
+the owner's own Dominion session. Done-tests: 39. click on an Amayama page → the browser check fills with that page's
+text + address, the gate runs; 40. with no browser check open, the helper says so and sends nothing.
+
+**RE-36 · Medium · Allowed sites that only work in a browser can't be read (RE-32).** Fix: a browser reader for
+`automated_read = allowed` sites only, under the same rules as today's reader: robots.txt re-checked for
+`RoamResearchBot`, honest name, same caps, one page per lookup, same saved evidence. Check before building: SB's
+robots.txt names ClaudeBot (Spike 0) — confirm it allows `RoamResearchBot`. Done-tests: 1, 31, and 41. a site marked
+`blocked` is never opened by the browser reader.
+
+**Order:** RE-34 and RE-35 follow the playbook (round 1 → Stitch prompt for the new parts of the browser check screen
+→ screens → round 2 → build); RE-36 has no new screen (a new recipe kind on Trusted sources, same form).
