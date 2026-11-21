@@ -327,7 +327,9 @@ export type SiteRead = {
   readAt: string;
 };
 
-export type BrowserCheckGate = { ok: true; detected: string } | { ok: false; reason: "no_car" | "no_number" | "no_value" | "empty" };
+export type BrowserCheckGate =
+  | { ok: true; detected: string }
+  | { ok: false; reason: "no_car" | "no_number" | "number_not_on_line" | "no_value" | "empty" };
 
 // ------------------------------------------------------------------ reads
 
@@ -383,10 +385,10 @@ export const researchApi = {
   fillItem: (t: string, body: { vehicleCatalogId: string; componentId?: string; specKey?: string }) => send(t, "POST", "/fill/item", body),
 
   browserChecks: (t: string) => getJson<{ open: number; waiting: number; max: number }>(t, "/browser-checks/summary"),
-  previewBrowserCheck: (t: string, jobId: string, pasted: string) =>
-    send<{ gate: BrowserCheckGate }>(t, "POST", `/browser-checks/${encodeURIComponent(jobId)}/preview`, { pasted }).then((r) => r.gate),
-  confirmBrowserCheck: (t: string, jobId: string, pasted: string, url: string) =>
-    send<{ detected: string }>(t, "POST", `/browser-checks/${encodeURIComponent(jobId)}/confirm`, { pasted, url }),
+  previewBrowserCheck: (t: string, jobId: string, pasted: string, number?: string) =>
+    send<{ gate: BrowserCheckGate }>(t, "POST", `/browser-checks/${encodeURIComponent(jobId)}/preview`, { pasted, number: number || undefined }).then((r) => r.gate),
+  confirmBrowserCheck: (t: string, jobId: string, pasted: string, url: string, number?: string) =>
+    send<{ detected: string }>(t, "POST", `/browser-checks/${encodeURIComponent(jobId)}/confirm`, { pasted, url, number: number || undefined }),
   notOnPage: (t: string, jobId: string) => send(t, "POST", `/browser-checks/${encodeURIComponent(jobId)}/not-on-page`),
 
   resolveConflict: (t: string, id: string, body: { resolution: "picked" | "both_wrong"; proposalId?: string }) =>

@@ -55,6 +55,7 @@ const PART_JOBS = [
   job({ jobId: "job-auto", state: "auto_added", partTypeName: "Front brake pads", fitDescriptor: "front", resultPartNumber: "SB 00000-T0001", trustRoute: "c", siteDomains: ["sbparts.jp", "jnbk-brakes.com"] }),
   job({ jobId: "job-review", state: "needs_review", partTypeName: "Rear wheel bearing", fitDescriptor: "rear", resultPartNumber: "Masuma 00000-T0002", siteDomains: ["masuma.parts"] }),
   job({ jobId: "job-bc", jobType: "spec", state: "browser_check", partTypeId: null, partTypeName: null, specKey: "battery_jis", specLabel: "Battery size" }),
+  job({ jobId: "job-bcp", state: "browser_check", partTypeName: "Spark plugs", resultPartNumber: "Toyota 00000-T0009" }),
   job({ jobId: "job-res", state: "researching", partTypeName: "Wiper blades" }),
   job({ jobId: "job-wait", state: "queued", partTypeName: "Air filter" }),
   job({ jobId: "job-cf", state: "needs_review", partTypeName: "Rear brake shoes", fitDescriptor: "rear", conflictOpen: true }),
@@ -99,6 +100,8 @@ function detail(jobId: string) {
       return { ...base, job: j("auto_added", { fit_descriptor: "front" }), partType: { id: "c-2", name: "Front brake pads" }, proposals: [proposal("p-2", jobId, { brand: "SB", part_number: "00000-T0001", position_key: "front", status: "promoted", trust_route: "c", checks: { trust: "confirmed" }, sources: [{ domain: "sbparts.jp", readId: "r-2", block: "M900A front pad 00000-T0001", url: "https://sbparts.jp/x" }] })] };
     case "job-bc":
       return { ...base, job: j("browser_check", { job_type: "spec", spec_key: "battery_jis", maintenance_component_id: null, fit_descriptor: null }), spec: { key: "battery_jis", label: "Battery size", unit: null }, browserCheckUrl: "https://www.amayama.com/en/part/toyota/roomy-m900a" };
+    case "job-bcp":
+      return { ...base, job: j("browser_check", { fit_descriptor: null }), partType: { id: "c-9", name: "Spark plugs" }, browserCheckUrl: "https://www.amayama.com/en/part/toyota/roomy-m900a-plugs", proposals: [proposal("p-9", jobId, { brand: "Toyota", part_number: "00000-T0009" })] };
     case "job-cf":
       return {
         ...base,
@@ -210,6 +213,17 @@ async function install(page: Page, calls: Calls, mode: Mode = {}) {
     const R = "/admin/catalog-research";
     if (method !== "GET" && path.includes(R)) {
       calls.push({ method, path: path.slice(path.indexOf(R) + R.length), body: req.postDataJSON?.() ?? null });
+      if (path.endsWith("/browser-checks/job-bcp/preview")) {
+        const b = (req.postDataJSON() as { pasted?: string; number?: string }) ?? {};
+        const pasted = String(b.pasted ?? "");
+        const num = String(b.number ?? "");
+        const gate = !/M900A/i.test(pasted)
+          ? { ok: false, reason: "no_car" }
+          : num
+            ? pasted.includes(num) ? { ok: true, detected: num } : { ok: false, reason: "number_not_on_line" }
+            : pasted.includes("00000-T0009") ? { ok: true, detected: "00000-T0009" } : { ok: false, reason: "no_number" };
+        return route.fulfill({ json: { gate } });
+      }
       if (path.endsWith("/preview")) {
         const pasted = String((req.postDataJSON() as { pasted?: string })?.pasted ?? "");
         return route.fulfill({ json: { gate: /M900A/i.test(pasted) && /M-42/i.test(pasted) ? { ok: true, detected: "M-42" } : { ok: false, reason: /M900A/i.test(pasted) ? "no_value" : "no_car" } } });
@@ -283,7 +297,7 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect(page.getByTestId("card-needs-review")).toContainText("2");
     await expect(page.getByTestId("card-browser-checks")).toContainText("7 of 25");
     await expect(page.getByTestId("card-researching")).toContainText("Toyota Roomy 2016–2020");
-    await expect(page.getByTestId("parts-row")).toHaveCount(6);
+    await expect(page.getByTestId("parts-row")).toHaveCount(7);
     await expect(page.getByTestId("row-route-line").first()).toContainText("Two makers agree");
     await expect(page.getByTestId("filter-browser_check")).toContainText("7 of 25 open");
     await expect(page.getByTestId("notice-engine_paused")).toContainText("Open research settings");
@@ -368,6 +382,29 @@ test.describe("Research engine screens (layer 3)", () => {
     await page.getByTestId("parts-row").filter({ hasText: "Battery size" }).click();
     await page.getByTestId("not-on-page").click();
     await expect.poll(() => calls.some((c) => c.path === "/browser-checks/job-bc/not-on-page")).toBe(true);
+  });
+
+  test("RE-57 — part browser check never guesses a number; a number the page shows can be typed", async ({ page }) => {
+    const calls: Calls = [];
+    await install(page, calls);
+    await openParts(page);
+    await page.getByTestId("parts-row").filter({ hasText: "Spark plugs" }).getByTestId("row-open-browser-check").click();
+    const d = page.getByTestId("research-drawer");
+    // Only the car line (with a sister frame code): no number, Confirm stays off, the typing box appears.
+    await d.getByTestId("browser-check-paste").fill("Engine 1KR-FE Frame DBA-M900A DBA-M910A Production years 2016 2017 2018");
+    await expect(d.getByTestId("browser-check-readback")).toContainText("None of Roam's suggested numbers is on this line");
+    await expect(d.getByTestId("browser-check-confirm")).toBeDisabled();
+    await expect(d.getByTestId("browser-check-typed-number")).toBeVisible();
+    // The page shows another number: pasted with the car line and typed, it confirms with that number.
+    await d.getByTestId("browser-check-paste").fill("Frame DBA-M900A 00000-T0010 Plug, spark");
+    await d.getByTestId("browser-check-typed-number").fill("00000-T0010");
+    await expect(d.getByTestId("detected-value")).toHaveText("Detected: 00000-T0010");
+    await d.getByTestId("browser-check-confirm").click();
+    await expect.poll(() => calls.find((c) => c.path === "/browser-checks/job-bcp/confirm")?.body).toEqual({
+      pasted: "Frame DBA-M900A 00000-T0010 Plug, spark",
+      url: "https://www.amayama.com/en/part/toyota/roomy-m900a-plugs",
+      number: "00000-T0010",
+    });
   });
 
   test("Screen 18 — browser check on a phone is a full-screen sheet", async ({ page }) => {
