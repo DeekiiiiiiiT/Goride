@@ -703,15 +703,31 @@ story("15", "Undo a dispute result after its result week was sealed (only manage
   const results = (await desk(co, week)).results as Row[];
   const undo = (results.find((r) => String(r.id) === d0.id || r.chargeId === d0.charge_id)?.undo ?? null) as Row | null;
   check(undo && undo.decision_id, "Undo offered on Results this week", results);
+  // Undo is four-eyes only above J$5,000 (B14): a J$20 undo goes straight through.
   const code = await refused(co, "undo_decision", { decision_id: undo!.decision_id });
   const needs = code === "NEEDS_APPROVAL";
-  await cmd(co, "undo_decision", { decision_id: undo!.decision_id, ...(needs ? { self_approval_reason: "Uber reversed it by phone" } : {}) });
+  check(needs || code === "SUCCEEDED", "undo went through or asked for approval", code);
+  if (needs) {
+    await cmd(co, "undo_decision", { decision_id: undo!.decision_id, self_approval_reason: "Uber reversed it by phone" });
+  }
+  check(
+    (await refused(co, "undo_decision", { decision_id: undo!.decision_id })) === "WRONG_STATE",
+    "a second undo of the same result is refused",
+  );
   check((await ledgerHash(co, week)) === before, "sealed week unchanged");
   const d = await dispute(co, "t15");
   check(d.state === "sent", "dispute open again", d);
   check((await money(co)).owedByUber === 2000, "J$20 owed by Uber again in the open week");
   await nightlyClean(co);
-  return `undo ${needs ? "needed the only manager's reason" : "went through"}; sealed week unchanged`;
+  // The reopened dispute still settles: Uber's next J$20 refund wins it in the open week.
+  await uberAdjustment(co, "adj-t15b", 0, 2000);
+  await runMatcher(co);
+  const d2 = await dispute(co, "t15");
+  check(d2.state === "won" && d2.posted_in_week_key === (await weekStart(0)), "reopened dispute won again in the open week", d2);
+  check((await money(co)).owedByUber === 0, "nothing owed by Uber after the second refund", await money(co));
+  check((await ledgerHash(co, week)) === before, "sealed week still unchanged");
+  await nightlyClean(co);
+  return `undo ${needs ? "needed the only manager's reason" : "went through"}; sealed week unchanged; next refund won it again`;
 });
 
 story("16", "Uber's reports for both periods never arrive → 23 days after sending, lost (no report), the fleet bears it; 'report late' alert raised", async () => {

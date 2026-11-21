@@ -1186,4 +1186,244 @@ BEGIN
 END;
 $$;
 
+-- ── P-02 (R10, done-test 15): the result posted while its charge week was open; the week was sealed
+--    afterwards; the undo leaves the sealed week (ledger and allocations) untouched and posts the money
+--    back in the open posting week as a carried dispute_result fact.
+CREATE OR REPLACE FUNCTION pg_temp._p02_after_undo(
+  p_label text, p_week date, p_charge uuid, p_undo uuid, p_hash text, p_alloc jsonb, p_amount bigint
+) RETURNS void
+LANGUAGE plpgsql AS $p$
+DECLARE v_org uuid := pg_temp._s1_org(); v_pw date := toll_system.posting_week(pg_temp._s1_org()); v_n int;
+BEGIN
+  IF pg_temp._s1_week_ledger_hash(p_week) IS DISTINCT FROM p_hash THEN
+    RAISE EXCEPTION '% sealed week ledger changed', p_label;
+  END IF;
+  IF (SELECT coalesce(jsonb_agg(a.id ORDER BY a.id), '[]'::jsonb) FROM toll.allocations a
+      WHERE a.organization_id = v_org AND a.charge_id = p_charge AND a.reversed_by IS NULL) IS DISTINCT FROM p_alloc THEN
+    RAISE EXCEPTION '% allocations changed', p_label;
+  END IF;
+  SELECT count(*)::int INTO v_n FROM toll.carried_facts f
+  WHERE f.organization_id = v_org AND f.decision_id = p_undo AND f.kind = 'dispute_result'
+    AND f.from_week = p_week AND f.to_week = v_pw AND f.amount_minor = p_amount;
+  IF v_n <> 1 THEN RAISE EXCEPTION '% carried fact (% found)', p_label, v_n; END IF;
+  SELECT count(*)::int INTO v_n FROM ledger.entries e
+  WHERE e.organization_id = v_org AND e.reference_type = 'toll'
+    AND e.idempotency_key LIKE 'toll:' || v_org::text || ':' || (SELECT command_id FROM toll.decisions WHERE id = p_undo) || ':%'
+    AND (e.metadata ->> 'toll_week')::date IS DISTINCT FROM v_pw;
+  IF v_n <> 0 THEN RAISE EXCEPTION '% undo posted outside the posting week %', p_label, v_pw; END IF;
+  PERFORM pg_temp._s1_assert_nightly();
+END;
+$p$;
+
+CREATE OR REPLACE FUNCTION pg_temp._p02_alloc(p_charge uuid) RETURNS jsonb
+LANGUAGE sql AS $a$
+  SELECT coalesce(jsonb_agg(a.id ORDER BY a.id), '[]'::jsonb) FROM toll.allocations a
+  WHERE a.organization_id = pg_temp._s1_org() AND a.charge_id = p_charge AND a.reversed_by IS NULL;
+$a$;
+
+CREATE OR REPLACE FUNCTION pg_temp._p02_seal(p_cmd text, p_week date) RETURNS void
+LANGUAGE sql AS $s$
+  SELECT pg_temp._s1_cmd('seal_week', jsonb_build_object(
+    'command_id', p_cmd, 'week_key', p_week, 'expected_week_version', toll_system.week_version(pg_temp._s1_org(), p_week)));
+$s$;
+
+-- p02-won: refund won in the open week → seal → undo → sent again, J$20 owed by Uber; a new refund wins it again
+DO $$
+DECLARE
+  v_org uuid := pg_temp._s1_org();
+  v_charge uuid; v_pb uuid; v_week date;
+  c toll.charges; p toll.paybacks; d toll.disputes;
+  v_dispute uuid; v_r jsonb; v_snap jsonb; v_settle uuid; v_undo uuid; v_alloc jsonb; v_hash text;
+BEGIN
+  SELECT * INTO v_charge, v_pb, v_week FROM pg_temp._s1_setup390('p02-w', 266);
+  c := pg_temp._s1_ch('s1-ch-p02-w'); p := pg_temp._s1_pb('trip:s1-trip-p02-w');
+  v_r := pg_temp._s1_cmd('open_dispute', jsonb_build_object(
+    'command_id', 's1-p02-w', 'charge_id', c.id, 'payback_id', p.id,
+    'expected_charge_version', c.version, 'expected_payback_version', p.version));
+  v_dispute := (v_r ->> 'dispute_id')::uuid;
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  PERFORM pg_temp._s1_cmd('mark_dispute_sent', jsonb_build_object(
+    'command_id', 's1-p02-w-sent', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
+  PERFORM public.toll_sys_import(v_org, 'uber', format(
+    '[{"row_type":"adjustment","reference":"s1-adj-p02-w","driver_id":"s1-d1","paid_on":"%s","amount_minor":2000}]',
+    (now() AT TIME ZONE 'America/Jamaica')::date)::jsonb, 's1-adj-p02-w', 'smoke');
+  p := pg_temp._s1_pb('s1-adj-p02-w');
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  v_r := pg_temp._s1_cmd('settle_dispute', jsonb_build_object(
+    'command_id', 's1-p02-w-settle', 'dispute_id', v_dispute, 'payback_id', p.id,
+    'expected_dispute_version', d.version, 'expected_payback_version', p.version));
+  v_settle := (v_r ->> 'decision_id')::uuid;
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  IF d.state <> 'won' OR d.posted_in_week_key <> v_week THEN
+    RAISE EXCEPTION 'p02-won setup: % in %', d.state, d.posted_in_week_key;
+  END IF;
+  PERFORM pg_temp._p02_seal('s1-p02-w-seal', v_week);
+  v_hash := pg_temp._s1_week_ledger_hash(v_week);
+  v_alloc := pg_temp._p02_alloc(v_charge);
+  v_snap := pg_temp._s1_snap_bals();
+
+  v_r := pg_temp._s1_cmd('undo_decision', jsonb_build_object('command_id', 's1-p02-w-undo', 'decision_id', v_settle));
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND reopens_id = v_dispute;
+  v_undo := d.decision_ids[1];
+  IF d.state <> 'sent' OR d.recovered_minor <> 0 THEN RAISE EXCEPTION 'p02-won reopened % %', d.state, d.recovered_minor; END IF;
+  PERFORM pg_temp._s1_assert_delta(v_snap, 'p02-won', -2000, 2000, 0, 0, 0);
+  PERFORM pg_temp._p02_after_undo('p02-won', v_week, v_charge, v_undo, v_hash, v_alloc, 2000);
+
+  -- a second undo of the same result is refused
+  PERFORM pg_temp._s1_refused('undo_decision', jsonb_build_object('command_id', 's1-p02-w-undo2', 'decision_id', v_settle),
+    'WRONG_STATE');
+
+  -- the reopened dispute still settles (charge week sealed: P22 in the open week)
+  v_dispute := d.id;
+  PERFORM public.toll_sys_import(v_org, 'uber', format(
+    '[{"row_type":"adjustment","reference":"s1-adj-p02-w2","driver_id":"s1-d1","paid_on":"%s","amount_minor":2000}]',
+    (now() AT TIME ZONE 'America/Jamaica')::date)::jsonb, 's1-adj-p02-w2', 'smoke');
+  p := pg_temp._s1_pb('s1-adj-p02-w2');
+  v_r := pg_temp._s1_cmd('settle_dispute', jsonb_build_object(
+    'command_id', 's1-p02-w-settle2', 'dispute_id', v_dispute, 'payback_id', p.id,
+    'expected_dispute_version', d.version, 'expected_payback_version', p.version));
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  IF d.state <> 'won' OR d.posted_in_week_key <> toll_system.posting_week(v_org) THEN
+    RAISE EXCEPTION 'p02-won second refund: % in %', d.state, d.posted_in_week_key;
+  END IF;
+  IF pg_temp._s1_bal('receivable_platform_dispute') <> (v_snap ->> 'receivable_platform_dispute')::bigint THEN
+    RAISE EXCEPTION 'p02-won second refund receivable %', pg_temp._s1_bal('receivable_platform_dispute');
+  END IF;
+  IF pg_temp._s1_week_ledger_hash(v_week) IS DISTINCT FROM v_hash THEN RAISE EXCEPTION 'p02-won second refund hash'; END IF;
+  PERFORM pg_temp._s1_assert_nightly();
+END;
+$$;
+
+-- p02-lost: Lost in the open week → seal → undo → sent again; the bearer's J$20 comes back off them
+DO $$
+DECLARE
+  v_org uuid := pg_temp._s1_org();
+  v_charge uuid; v_pb uuid; v_week date;
+  c toll.charges; p toll.paybacks; d toll.disputes;
+  v_dispute uuid; v_r jsonb; v_snap jsonb; v_lost uuid; v_undo uuid; v_alloc jsonb; v_hash text;
+BEGIN
+  SELECT * INTO v_charge, v_pb, v_week FROM pg_temp._s1_setup390('p02-l', 280);
+  c := pg_temp._s1_ch('s1-ch-p02-l'); p := pg_temp._s1_pb('trip:s1-trip-p02-l');
+  v_r := pg_temp._s1_cmd('open_dispute', jsonb_build_object(
+    'command_id', 's1-p02-l', 'charge_id', c.id, 'payback_id', p.id,
+    'expected_charge_version', c.version, 'expected_payback_version', p.version));
+  v_dispute := (v_r ->> 'dispute_id')::uuid;
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  PERFORM pg_temp._s1_cmd('mark_dispute_sent', jsonb_build_object(
+    'command_id', 's1-p02-l-sent', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  v_r := pg_temp._s1_cmd('close_dispute_lost', jsonb_build_object(
+    'command_id', 's1-p02-l-lost', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
+  v_lost := (v_r ->> 'decision_id')::uuid;
+  PERFORM pg_temp._p02_seal('s1-p02-l-seal', v_week);
+  v_hash := pg_temp._s1_week_ledger_hash(v_week);
+  v_alloc := pg_temp._p02_alloc(v_charge);
+  v_snap := pg_temp._s1_snap_bals();
+
+  v_r := pg_temp._s1_cmd('undo_decision', jsonb_build_object('command_id', 's1-p02-l-undo', 'decision_id', v_lost));
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND reopens_id = v_dispute;
+  v_undo := d.decision_ids[1];
+  IF d.state <> 'sent' THEN RAISE EXCEPTION 'p02-lost reopened %', d.state; END IF;
+  IF pg_temp._s1_bal('receivable_platform_dispute') - (v_snap ->> 'receivable_platform_dispute')::bigint <> -2000
+     OR (pg_temp._s1_bal('receivable_driver') - (v_snap ->> 'receivable_driver')::bigint)
+      + (pg_temp._s1_bal('expense') - (v_snap ->> 'expense')::bigint) <> 2000
+     OR pg_temp._s1_bal('payback_unallocated') <> (v_snap ->> 'payback_unallocated')::bigint
+     OR pg_temp._s1_bal('suspense') <> (v_snap ->> 'suspense')::bigint THEN
+    RAISE EXCEPTION 'p02-lost balances % → %', v_snap, pg_temp._s1_snap_bals();
+  END IF;
+  PERFORM pg_temp._p02_after_undo('p02-lost', v_week, v_charge, v_undo, v_hash, v_alloc, 2000);
+END;
+$$;
+
+-- p02-expire: expired in the open week (bearer charged) → seal → undo → to_send again
+DO $$
+DECLARE
+  v_org uuid := pg_temp._s1_org(); v_owner uuid := 'f0111111-1111-4111-8111-111111111111'::uuid;
+  v_charge uuid; v_pb uuid; v_week date;
+  c toll.charges; p toll.paybacks; d toll.disputes;
+  v_dispute uuid; v_r jsonb; v_snap jsonb; v_expire uuid; v_undo uuid; v_alloc jsonb; v_hash text;
+BEGIN
+  SELECT * INTO v_charge, v_pb, v_week FROM pg_temp._s1_setup390('p02-e', 294);
+  c := pg_temp._s1_ch('s1-ch-p02-e'); p := pg_temp._s1_pb('trip:s1-trip-p02-e');
+  v_r := pg_temp._s1_cmd('open_dispute', jsonb_build_object(
+    'command_id', 's1-p02-e', 'charge_id', c.id, 'payback_id', p.id,
+    'expected_charge_version', c.version, 'expected_payback_version', p.version));
+  v_dispute := (v_r ->> 'dispute_id')::uuid;
+  ALTER TABLE toll.disputes DISABLE TRIGGER USER;
+  UPDATE toll.disputes SET deadline = now() - interval '2 hours' WHERE organization_id = v_org AND id = v_dispute;
+  ALTER TABLE toll.disputes ENABLE TRIGGER USER;
+  INSERT INTO toll.decisions (organization_id, command_id, intent, actor, actor_user_id)
+  VALUES (v_org, 's1-p02-e-exp', 'dispute_expire', 'user', v_owner) RETURNING id INTO v_expire;
+  PERFORM toll_system.dispute_expire(v_org, v_dispute, v_expire, 's1-p02-e-exp');
+  PERFORM pg_temp._p02_seal('s1-p02-e-seal', v_week);
+  v_hash := pg_temp._s1_week_ledger_hash(v_week);
+  v_alloc := pg_temp._p02_alloc(v_charge);
+  v_snap := pg_temp._s1_snap_bals();
+
+  v_r := pg_temp._s1_cmd('undo_decision', jsonb_build_object('command_id', 's1-p02-e-undo', 'decision_id', v_expire));
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND reopens_id = v_dispute;
+  v_undo := d.decision_ids[1];
+  IF d.state <> 'to_send' THEN RAISE EXCEPTION 'p02-expire reopened %', d.state; END IF;
+  IF pg_temp._s1_bal('receivable_platform_dispute') - (v_snap ->> 'receivable_platform_dispute')::bigint <> -2000
+     OR (pg_temp._s1_bal('receivable_driver') - (v_snap ->> 'receivable_driver')::bigint)
+      + (pg_temp._s1_bal('expense') - (v_snap ->> 'expense')::bigint) <> 2000 THEN
+    RAISE EXCEPTION 'p02-expire balances % → %', v_snap, pg_temp._s1_snap_bals();
+  END IF;
+  PERFORM pg_temp._p02_after_undo('p02-expire', v_week, v_charge, v_undo, v_hash, v_alloc, 2000);
+END;
+$$;
+
+-- p02-expired-refund: expired (driver bore J$20), Uber's refund won it in the open week → seal → undo →
+-- expired again, the driver charged again in the open week
+DO $$
+DECLARE
+  v_org uuid := pg_temp._s1_org(); v_owner uuid := 'f0111111-1111-4111-8111-111111111111'::uuid;
+  v_charge uuid; v_pb uuid; v_week date;
+  c toll.charges; p toll.paybacks; d toll.disputes;
+  v_dispute uuid; v_r jsonb; v_snap jsonb; v_expire uuid; v_settle uuid; v_undo uuid; v_alloc jsonb; v_hash text;
+BEGIN
+  SELECT * INTO v_charge, v_pb, v_week FROM pg_temp._s1_setup390('p02-x', 308);
+  c := pg_temp._s1_ch('s1-ch-p02-x'); p := pg_temp._s1_pb('trip:s1-trip-p02-x');
+  v_r := pg_temp._s1_cmd('open_dispute', jsonb_build_object(
+    'command_id', 's1-p02-x', 'charge_id', c.id, 'payback_id', p.id,
+    'expected_charge_version', c.version, 'expected_payback_version', p.version));
+  v_dispute := (v_r ->> 'dispute_id')::uuid;
+  ALTER TABLE toll.disputes DISABLE TRIGGER USER;
+  UPDATE toll.disputes SET deadline = now() - interval '2 hours' WHERE organization_id = v_org AND id = v_dispute;
+  ALTER TABLE toll.disputes ENABLE TRIGGER USER;
+  INSERT INTO toll.decisions (organization_id, command_id, intent, actor, actor_user_id)
+  VALUES (v_org, 's1-p02-x-exp', 'dispute_expire', 'user', v_owner) RETURNING id INTO v_expire;
+  PERFORM toll_system.dispute_expire(v_org, v_dispute, v_expire, 's1-p02-x-exp');
+  PERFORM public.toll_sys_import(v_org, 'uber', format(
+    '[{"row_type":"adjustment","reference":"s1-adj-p02-x","driver_id":"s1-d1","paid_on":"%s","amount_minor":2000}]',
+    (now() AT TIME ZONE 'America/Jamaica')::date)::jsonb, 's1-adj-p02-x', 'smoke');
+  p := pg_temp._s1_pb('s1-adj-p02-x');
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  -- a refund on an expired dispute is the matcher's (system) settle
+  INSERT INTO toll.decisions (organization_id, command_id, intent, actor, actor_job)
+  VALUES (v_org, 's1-p02-x-settle', 'settle_dispute', 'system', 'matcher:system') RETURNING id INTO v_settle;
+  PERFORM toll_write.intent_settle_dispute(v_org, v_settle, 's1-p02-x-settle', jsonb_build_object(
+    'dispute_id', v_dispute, 'payback_id', p.id,
+    'expected_dispute_version', d.version, 'expected_payback_version', p.version), true);
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  IF d.state <> 'won' THEN RAISE EXCEPTION 'p02-expired-refund setup %', d.state; END IF;
+  PERFORM pg_temp._p02_seal('s1-p02-x-seal', v_week);
+  v_hash := pg_temp._s1_week_ledger_hash(v_week);
+  v_alloc := pg_temp._p02_alloc(v_charge);
+  v_snap := pg_temp._s1_snap_bals();
+
+  v_r := pg_temp._s1_cmd('undo_decision', jsonb_build_object('command_id', 's1-p02-x-undo', 'decision_id', v_settle));
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND reopens_id = v_dispute;
+  v_undo := d.decision_ids[1];
+  IF d.state <> 'expired' THEN RAISE EXCEPTION 'p02-expired-refund reopened %', d.state; END IF;
+  IF pg_temp._s1_bal('receivable_platform_dispute') <> (v_snap ->> 'receivable_platform_dispute')::bigint
+     OR pg_temp._s1_bal('payback_unallocated') - (v_snap ->> 'payback_unallocated')::bigint <> 2000
+     OR (pg_temp._s1_bal('receivable_driver') - (v_snap ->> 'receivable_driver')::bigint)
+      + (pg_temp._s1_bal('expense') - (v_snap ->> 'expense')::bigint) <> -2000 THEN
+    RAISE EXCEPTION 'p02-expired-refund balances % → %', v_snap, pg_temp._s1_snap_bals();
+  END IF;
+  PERFORM pg_temp._p02_after_undo('p02-expired-refund', v_week, v_charge, v_undo, v_hash, v_alloc, 2000);
+END;
+$$;
+
 ROLLBACK;
