@@ -13,7 +13,6 @@ import {
 import { Switch } from '../../../../ui/switch';
 import { Input } from '../../../../ui/input';
 import { Label } from '../../../../ui/label';
-import { Textarea } from '../../../../ui/textarea';
 import { useTollV2Commands } from '../useTollV2Commands';
 import { TollV2ApprovalReasonDialog } from '../dialogs/TollV2DisputeDialogs';
 import { TollV2PrimaryButton, TollV2SecondaryButton } from '../TollV2Buttons';
@@ -60,7 +59,6 @@ export function TollPolicyTab() {
   const s = query.data;
   const saved = useMemo(() => (s ? draftFrom(s) : null), [s]);
   const [draft, setDraft] = useState<TollPolicyDraft | null>(null);
-  const [saveOpen, setSaveOpen] = useState(false);
   const [addRate, setAddRate] = useState<AddRatePrefill>(null);
   const [history, setHistory] = useState<TollPlazaSettings | null>(null);
 
@@ -81,14 +79,13 @@ export function TollPolicyTab() {
     .filter(([, p]) => p.takesDisputes)
     .map(([k]) => k);
 
-  const save = async (reason: string) => {
+  // Owner 21 Nov: toll settings save straight away; no reason, no second manager.
+  const save = async () => {
     if (!diff || nChanges === 0) return;
-    const body: Record<string, unknown> = { ...diff.body, note: reason };
-    if (s.approvals.soleManager) body.self_approval_reason = reason;
+    const body: Record<string, unknown> = { ...diff.body, note: 'Toll settings changed' };
     try {
       const res = await runCommand('change_toll_settings', body);
       if (res === null) return;
-      setSaveOpen(false);
       await refresh();
       toast.success('Toll settings saved');
     } catch {
@@ -301,16 +298,13 @@ export function TollPolicyTab() {
             <TollV2SecondaryButton type="button" className="w-auto" disabled={nChanges === 0} onClick={() => saved && setDraft(saved)}>
               Discard
             </TollV2SecondaryButton>
-            <TollV2PrimaryButton type="button" className="w-auto" disabled={nChanges === 0 || busy} onClick={() => setSaveOpen(true)} data-testid="toll-policy-save">
+            <TollV2PrimaryButton type="button" className="w-auto" disabled={nChanges === 0 || busy} onClick={() => void save()} data-testid="toll-policy-save">
               Save
             </TollV2PrimaryButton>
           </div>
         </div>
       </div>
 
-      {saveOpen && diff ? (
-        <SaveDialog changes={diff.changes} soleManager={s.approvals.soleManager} busy={busy} onCancel={() => setSaveOpen(false)} onSave={(r) => void save(r)} />
-      ) : null}
       {addRate ? (
         <AddRateDialog
           plazas={s.plazas}
@@ -375,56 +369,6 @@ function BearerQuestion({
         ))}
       </div>
     </div>
-  );
-}
-
-function SaveDialog({
-  changes,
-  soleManager,
-  busy,
-  onCancel,
-  onSave,
-}: {
-  changes: Array<{ label: string; from: string; to: string }>;
-  soleManager: boolean;
-  busy: boolean;
-  onCancel: () => void;
-  onSave: (reason: string) => void;
-}) {
-  const [reason, setReason] = useState('');
-  const ok = reason.trim().length >= 8;
-  return (
-    <AlertDialog open onOpenChange={(o) => !o && onCancel()}>
-      <AlertDialogContent data-testid="toll-policy-save-dialog">
-        <AlertDialogHeader>
-          <AlertDialogTitle>Save toll settings?</AlertDialogTitle>
-        </AlertDialogHeader>
-        <ul className="space-y-1 rounded-xl bg-[#f8f9ff] p-3 text-sm text-[#0b1c30]">
-          {changes.map((c) => (
-            <li key={c.label}>
-              {c.label}: {c.from} → <span className="font-semibold">{c.to}</span>
-            </li>
-          ))}
-        </ul>
-        <p className="text-sm text-[#47464c]">
-          {soleManager
-            ? 'Toll settings normally need a second manager. You are the only manager, so write why.'
-            : 'Write why. A second manager has to approve toll settings.'}
-        </p>
-        <div className="space-y-1">
-          <Label htmlFor="toll-policy-reason">Reason</Label>
-          <Textarea id="toll-policy-reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="At least 8 characters" data-testid="toll-policy-reason" />
-        </div>
-        <AlertDialogFooter>
-          <TollV2SecondaryButton type="button" onClick={onCancel}>
-            Cancel
-          </TollV2SecondaryButton>
-          <TollV2PrimaryButton type="button" disabled={!ok || busy} onClick={() => onSave(reason.trim())} data-testid="toll-policy-save-confirm">
-            Save
-          </TollV2PrimaryButton>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
   );
 }
 

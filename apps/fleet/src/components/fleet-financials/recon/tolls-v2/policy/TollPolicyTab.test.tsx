@@ -89,24 +89,21 @@ describe('Fleet Policy — Tolls tab (UI2)', () => {
     expect((screen.getByTestId('toll-policy-save') as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('Save sends only what changed, with the reason as note and self-approval', async () => {
+  it('Save saves straight away: only what changed, no reason box, no approval', async () => {
     wrap();
     await screen.findByTestId('toll-policy-tab');
     fireEvent.click(within(screen.getByTestId('toll-policy-lost')).getByRole('radio', { name: 'The driver' }));
     expect(screen.getByTestId('toll-policy-change-count').textContent).toBe('1 change');
     fireEvent.click(screen.getByTestId('toll-policy-save'));
-    const dlg = await screen.findByTestId('toll-policy-save-dialog');
-    expect(dlg.textContent).toMatch(/When a dispute is lost, who pays: The fleet → The driver/);
-    fireEvent.change(within(dlg).getByTestId('toll-policy-reason'), { target: { value: 'Drivers agreed in November' } });
-    fireEvent.click(within(dlg).getByTestId('toll-policy-save-confirm'));
     await waitFor(() => expect(tollV2Command).toHaveBeenCalled());
     const [intent, body] = tollV2Command.mock.calls[0]!;
     expect(intent).toBe('change_toll_settings');
     expect(body).toMatchObject({
       dispute_policy: { lost_bearer: 'driver' },
-      note: 'Drivers agreed in November',
-      self_approval_reason: 'Drivers agreed in November',
+      note: 'Toll settings changed',
     });
+    expect(body).not.toHaveProperty('self_approval_reason');
+    expect(screen.queryByTestId('toll-policy-save-dialog')).toBeNull();
     expect(body).not.toHaveProperty('platform_settings');
   });
 

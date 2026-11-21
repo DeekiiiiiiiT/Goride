@@ -371,15 +371,19 @@ BEGIN
     'dispute_id', v_dispute, 'payback_id', p.id, 'expected_dispute_version', d.version,
     'expected_payback_version', p.version), true);
 
-  -- ── 3. Always gated: reopen_week, change_toll_settings ──
+  -- ── 3. reopen_week is gated; toll settings save with no approval and no reason (owner, 21 Nov) ──
   PERFORM pg_temp._s1b_refused(v_owner2, v_org2, 'reopen_week', jsonb_build_object(
     'command_id', 's1b-always-reopen', 'week_key', v_week, 'expected_week_version', 2,
     'reason', 'four eyes reopen'), 'NEEDS_APPROVAL');
-  UPDATE toll.switch_state SET toll_disputes = false WHERE organization_id = v_org2;
-  PERFORM pg_temp._s1b_refused(v_owner2, v_org2, 'change_toll_settings', jsonb_build_object(
-    'command_id', 's1b-always-settings', 'note', 'seed note',
-    'dispute_policy', jsonb_build_object('lost_bearer', 'driver')), 'NEEDS_APPROVAL');
-  UPDATE toll.switch_state SET toll_disputes = true WHERE organization_id = v_org2;
+  v_r := pg_temp._s1b_cmd(v_owner2, v_org2, 'change_toll_settings', jsonb_build_object(
+    'command_id', 's1b-always-settings', 'note', 'Toll settings changed',
+    'dispute_policy', jsonb_build_object('lost_bearer', 'driver')));
+  IF (SELECT lost_bearer FROM toll.dispute_policy WHERE organization_id = v_org2) <> 'driver' THEN
+    RAISE EXCEPTION '3 settings change without approval did not save';
+  END IF;
+  PERFORM pg_temp._s1b_cmd(v_owner2, v_org2, 'change_toll_settings', jsonb_build_object(
+    'command_id', 's1b-always-settings-back', 'note', 'Toll settings changed',
+    'dispute_policy', jsonb_build_object('lost_bearer', 'fleet')));
 
   -- ── 4. Prepare + approve (two-seat) ──
   PERFORM pg_temp._s1b_cmd(v_owner2, v_org2, 'seal_week', jsonb_build_object(
