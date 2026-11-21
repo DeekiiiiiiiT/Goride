@@ -1,6 +1,6 @@
 # Research engine (cars, specs, parts) — audit
 
-**Rev 4.3 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
+**Rev 4.4 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
 US$1.35/day.** Live database: migrations 1a/1b/2/3 (03:10 UTC) and `20261121100925_research_form_recipe` (10:25 UTC),
 all with logbook lines. Live code: main `0e00cd5b` (platform-catalog, catalog-research, Dominion). Branch
 `parts-auto-match` `fc2e2b85` holds the same research code. Held back: readiness counts only Confirmed specs (§6 step 5).
@@ -24,10 +24,11 @@ History (not needed to continue): the closed plan with all findings RE-01…RE-2
 | 21 Nov | Built RE-30 (form recipes) + RE-31 (cross-reference proof); code review (high) found 7, 6 fixed, 1 not needed (§9) | `fc2e2b85` |
 | 21 Nov 10:30 | Rev 4.2 live: migration + server + Dominion | main `0e00cd5b` |
 | 21 Nov | Access decision: no robot of any kind on sites that forbid it; next round = screenshot browser checks, Chrome helper, honest browser reader (§10) | this file |
+| 21 Nov | Reviewer round on Rev 4.3: 9 findings RE-37…RE-45, one fix each; done-tests renumbered 37–46 (§11) | this file |
 
 **What is proven**
 - Unit, SQL and screen tests: Deno 136, SQL checks (incl. 3 form-recipe checks), admin tsc 0 + vitest 45, screen
-  test 16 — all pass locally. Done-tests 30, 33, 34 pass in tests.
+  test 16 — all pass locally. Done-tests 30, 37, 38 pass in tests.
 - Real site, real reader: the engine's own reader posted NiBK's form for `04465-B1120` and proved the Roomy M900A
   front pads (NiBK `PN5562`); asking for rear was refused. The reads were saved on the local copy only (§9).
 - Live: both server parts start (401 without login = running), settings unchanged (on, practice, US$1.35, 0 failures).
@@ -44,9 +45,13 @@ Because (2) fails first in the "Dominion places checks" job, the research screen
 
 **Next steps (in order)**
 1. **Owner:** Trusted sources → jnbk-brakes.com → Add a recipe with the values in §9 "Owner's recipe"; **Test on a car**
-   with Roomy M900A + `04465-B1120` → expect the M900A row with `Front Brake: PN5562` (done-test 35).
+   with Roomy M900A + `04465-B1120` → expect the M900A row with `Front Brake: PN5562` (done-test 39).
 2. **Owner:** **Fill this car** on the Roomy M900A, still in practice mode → proves done-tests 5 and 4 (on Looks right).
    Claude reads the results on live and records them here.
+   - **Claude, right after:** write the measured cost per job, searches per job, jobs per day at the cap and the
+     200-car finish date into §1 (RE-37).
+   - **Claude, one small-fix round:** `GET /health` (RE-45), research screen test in its own CI job (RE-40), the two
+     master-data breaks (RE-41), jobs per day + finish date on Settings (RE-37).
 3. **Owner:** send the permission emails to Masuma, Amayama, Megazip and Partsouq (Claude drafts them). The biggest
    unlock: Spike 0 showed 0 of 17 Roomy parts automatic today, at most 2 of 17 with NiBK + SB.
 4. **Build RE-34 + RE-35** (§10): screenshot drop and one-click Chrome helper for browser checks. Playbook order: audit
@@ -56,6 +61,8 @@ Because (2) fails first in the "Dominion places checks" job, the research screen
 6. **Fix the nightly readiness rebuild** (separate audit; it has failed every night since at least 16 Nov), then run
    §6 step 5.
 7. **Switch on for everyone** (leave practice mode) once steps 1–2 show correct results (owner rule: on for all companies).
+   With 0–2 of 17 parts automatic, this mostly grows the owner's browser-check queue, not coverage; the 25-open cap is
+   the brake (RE-42). Best done after RE-34/RE-35 are live, so each check takes seconds.
 8. Cleanup migration (§6 step 6) and the §7 follow-ups.
 
 ## START HERE (for a new chat)
@@ -89,15 +96,22 @@ what it could not prove.
 - Owner preferences: plain words, one fix per finding, no approval gates, buttons look like buttons (danger = red
   border), no browser pop-ups, exact hex colours in Dominion (dark-mode remap). Stitch = the look, the audit = the
   content (invented facts dropped).
-- Decided: research model stays Google Gemini; cost ~US$0.075 per job; daily cap US$1.35; build runs "fill the cars that
-  matter first" (owner-started fills + browser checks, at most 25 open). Readable sites: sbparts.jp, jnbk-brakes.com,
-  bremboparts.com, rockauto.com (reference). Blocked: masuma.parts (`/find-parts/`), amayama.com, megazip.net,
+- Decided: research model stays Google Gemini; cost ~US$0.075 per job (Spike 0, measured — see RE-37 for
+  the pace this gives); daily cap US$1.35; build runs "fill the cars that
+  matter first" (owner-started fills + browser checks, at most 25 open). Allowed sites: jnbk-brakes.com (readable, form recipe),
+  bremboparts.com, rockauto.com (reference), sbparts.jp (allowed but **unreadable until RE-36** — its search only works
+  in a browser). Blocked: masuma.parts (`/find-parts/`), amayama.com, megazip.net,
   partsouq.com, 7zap.com.
 
 ## 1. Numbers (20 Nov, live)
 
 2,679 car versions (763 with no frame code); 0 cars "ready"; specs on 3 cars before the CSV backfill (2,471 tyre sizes
 become Needs checking in layer 1b). Research jobs ever: 3.
+
+**Pace (RE-37):** at US$0.075 a job (Spike 0) the US$1.35 cap buys 18 paid jobs a day, plus the free 5,000 Google
+searches a month (~960 jobs if nothing else in Roam uses them) → ~1,500 jobs a month → the 200 cars that matter
+(~3,400 lookups) in ~2.3 months, ~6 months without the free searches. **To replace with live measurements after §R
+step 2:** cost per job, searches per job, jobs per day, finish date.
 
 ## 2. What is built (all live)
 
@@ -166,7 +180,9 @@ Reads need Dominion staff; writes need `catalog.write`; ★ = platform owner onl
 ## 5. Done-tests still to prove (real sites, a real run, or real cars)
 
 Status on 21 Nov: **none of these has run on live yet** (no recipe on live, no fill started). §R lists which step proves
-which test.
+which test. Only real-site / real-car tests are listed. The rest of the closed plan's list (0, 6, 7, 10–16, 19–30,
+33–36; text in `git show 6064a3f4:docs/research-engine-audit.md` §7) were proven on the local copy by the Deno, SQL and
+screen tests and the local end-to-end run (Rev 3.0–3.2). Rev 4.2+ tests are numbered from 37 on (37–39 §9, 40–45 §10).
 
 | # | Test | Status · proved by |
 |---|---|---|
@@ -181,9 +197,9 @@ which test.
 | 18 | Once, on a test key, Google's 1,500-a-day grounding limit is passed: record the reply; the engine pauses until 00:05 UTC with no job failed | Open |
 | 31 | **Test on a car** on the SB recipe shows the found row for the Roomy, logs one `recipe_test` read, saves nothing; two failed tests leave the site `allowed` | Open · waits for RE-36 |
 | 32 | On a real conflict: **Use this one** adds that number, rejects the other, closes the request once; **Neither is right** adds nothing and sets the job to Couldn't find (and the fleets are told) | Open · needs a real conflict |
-| 33 | A form recipe posts the filled fields, follows the 303 and reads the product page; a 307 answer is refused | **Passed** (unit tests; real NiBK through the reader on the local copy) |
-| 34 | NiBK-shaped page: cross-reference + M900A row + Front Brake cell linking here → found; rear / number missing / only M910A / cell links elsewhere → not found | **Passed** (unit tests + real NiBK page) |
-| 35 | Save a form recipe; card shows its steps; **Test on a car** on live NiBK with Roomy M900A + `04465-B1120` shows `Front Brake: PN5562`, saves only the `recipe_test` read | Half · saving passes in the screen test; live test = §R step 1 |
+| 37 | A form recipe posts the filled fields, follows the 303 and reads the product page; a 307 answer is refused | **Passed** (unit tests; real NiBK through the reader on the local copy) |
+| 38 | NiBK-shaped page: cross-reference + M900A row + Front Brake cell linking here → found; rear / number missing / only M910A / cell links elsewhere → not found | **Passed** (unit tests + real NiBK page) |
+| 39 | Save a form recipe; card shows its steps; **Test on a car** on live NiBK with Roomy M900A + `04465-B1120` shows `Front Brake: PN5562`, saves only the `recipe_test` read | Half · saving passes in the screen test; live test = §R step 1 |
 
 ## 6. Go live
 
@@ -209,8 +225,8 @@ which test.
 
 - Email Masuma / Amayama / Megazip / Partsouq for permission (owner) — the biggest unlock.
 - No nightly creator for the "200 cars that matter" sweep yet; fills are owner-started.
-- `GET /admin/catalog/signals` returns fleet demand counts to Dominion (breaks the master-data rule).
-- The live "Added — pick the part" panel says "Added. N companies were told…" (a company count in Dominion).
+- `GET /admin/catalog/signals` returns fleet demand counts to Dominion (breaks the master-data rule) — now RE-41, in the §R step 2 small-fix round.
+- The live "Added — pick the part" panel says "Added. N companies were told…" (a company count in Dominion) — now RE-41.
 - RE-29's 24-month re-check of owner-checked rows is not built (no row can be that old before 2028).
 - Stitch Overview design (if the owner wants it): first name the real number behind each card (START HERE step 4).
 
@@ -263,11 +279,11 @@ use the shared proof on Google pages, a form read counts as 1 read), `research_e
 `TrustedSitesScreen.tsx` + `researchEngineService.ts` (kind option, "Form fields" box, recipe card steps), their tests.
 
 **Done-tests (made-up pages in unit tests, real NiBK page for the owner's run):**
-33. A form recipe posts the filled fields, follows the 303 and reads the product page; a 307 answer is refused.
-34. On a page shaped like NiBK's: number in the cross-reference list + M900A row + `Front Brake` cell linking to this page
+37. A form recipe posts the filled fields, follows the 303 and reads the product page; a 307 answer is refused.
+38. On a page shaped like NiBK's: number in the cross-reference list + M900A row + `Front Brake` cell linking to this page
     → found; job wants **rear** → not found; number missing from the list → not found; only an M910A row while the car
     is M900A → not found; the `Front Brake` cell links to another page → not found.
-35. The recipe form saves and edits a form recipe; the card shows its steps; **Test on a car** on the live NiBK recipe
+39. The recipe form saves and edits a form recipe; the card shows its steps; **Test on a car** on the live NiBK recipe
     with the Roomy M900A and `04465-B1120` shows the M900A row with `Front Brake PN5562`, saves nothing but the
     `recipe_test` read.
 
@@ -306,27 +322,89 @@ the engine; (b) make each browser check take seconds (RE-34, RE-35); (c) an hone
 (RE-36); (d) if (a) gets no answer, a licensed parts data feed (paid; outside this audit, §8).
 
 **RE-34 · Medium · Browser checks need copy-paste.** Today the owner opens the page and pastes the matching line.
-Fix: the browser check accepts a **screenshot** as well as pasted text. The AI reads the screenshot and returns the line
+Fix: the browser check accepts a **screenshot** as well as pasted text. Before anything is sent, the drop zone has a
+crop step: the owner marks the part of the page with the line; only that cropped area is sent (never browser bars,
+other tabs or the whole screen). The AI reads the cropped image and returns the line
 it read (number, car, position); the screen shows that line next to the picture; the same deterministic gate as today
-then checks number + car (+ position) in that line; nothing is added until the owner presses Confirm. Saved evidence:
-the image's hash, the line the AI read, the line the owner confirmed, the page link. This loosens RE-21 ("page text
-never goes to Gemini") only for screenshots the owner submits, never for pages the engine reads. Size limit and image
-types to follow the existing upload rules; the image is not kept after the line is confirmed (only its hash).
-Done-tests: 36. a screenshot with the number and M900A on one line → line shown, Confirm adds it as owner-checked;
-37. a screenshot where the AI reads a different number → the gate refuses it and nothing is added; 38. no screenshot
+then checks number + car (+ position) in that line; nothing is added until the owner presses Confirm. Saved evidence (review RE-39): the cropped image itself in private
+storage (Cloudflare R2, private, same path rules as other Dominion files) for as long as the row exists, plus its hash,
+the line the AI read, the line the owner confirmed and the page link, so the row can be re-checked later. The row is
+labelled "Confirmed · owner-checked <date>" (route (a), the owner's own check), with the image one click away. This
+loosens RE-21 ("page text never goes to Gemini") only for cropped screenshots the owner submits, never for pages the
+engine reads. Size limit and image types follow the existing upload rules.
+Done-tests: 40. a screenshot with the number and M900A on one line → line shown, Confirm adds it as owner-checked;
+41. a screenshot where the AI reads a different number → the gate refuses it and nothing is added; 42. no screenshot
 is ever sent without the owner's click.
 
-**RE-35 · Medium · Moving text from the page into Dominion is manual.** Fix: a one-click Chrome helper. While the owner
-is on the catalogue page, one click sends the selected text (or the visible page text) and the page address to the
-open browser check in Dominion. It only acts when clicked, never opens or clicks pages itself, and only sends to
-the owner's own Dominion session. Done-tests: 39. click on an Amayama page → the browser check fills with that page's
-text + address, the gate runs; 40. with no browser check open, the helper says so and sends nothing.
+**RE-35 · Medium · Moving text from the page into Dominion is manual.** Fix: a one-click Chrome helper. On the catalogue page the owner
+selects the matching line and clicks; the helper sends **only the selected text** and the page address to the open
+browser check in Dominion. With nothing selected it asks the owner to select the line and sends nothing (a whole
+catalogue page can carry prices and stock, which Dominion never stores). Permissions: Chrome's `activeTab` only (works
+on the tab the owner clicked, nothing else; no all-sites access). It never opens or clicks pages itself and only
+sends to the owner's own Dominion session. The text goes through the same deterministic gate as pasted text and is
+**never sent to Gemini** (review RE-43). Done-tests: 43. click on an Amayama page → the browser check fills with that page's
+text + address, the gate runs; 44. with no browser check open, the helper says so and sends nothing.
 
-**RE-36 · Medium · Allowed sites that only work in a browser can't be read (RE-32).** Fix: a browser reader for
+**RE-36 · Medium · Allowed sites that only work in a browser can't be read (RE-32).** Where it runs (review RE-38):
+**Cloudflare Browser Rendering** (its REST page-content call returns the page after the browser has built it), called
+from the existing reader in the edge function. Reasons: the owner is already moving storage to Cloudflare (R2), so no
+new server to keep running; the edge function stays the single reader, so the trusted-site check, robots check, caps
+and evidence saving are unchanged; a render counts as one read with a 30-second limit inside the 2-minute tick.
+Checks before building, with the answers written here: Cloudflare's price per render, that it identifies itself as a
+robot and does not get around bot protection, and that SB's robots.txt allows it. If any answer is no, RE-36 stops and
+SB stays readable only through pages Google finds. Fix: a browser reader for
 `automated_read = allowed` sites only, under the same rules as today's reader: robots.txt re-checked for
 `RoamResearchBot`, honest name, same caps, one page per lookup, same saved evidence. Check before building: SB's
-robots.txt names ClaudeBot (Spike 0) — confirm it allows `RoamResearchBot`. Done-tests: 1, 31, and 41. a site marked
+robots.txt names ClaudeBot (Spike 0) — confirm it allows `RoamResearchBot`. Done-tests: 1, 31, and 45. a site marked
 `blocked` is never opened by the browser reader.
 
 **Order:** RE-34 and RE-35 follow the playbook (round 1 → Stitch prompt for the new parts of the browser check screen
 → screens → round 2 → build); RE-36 has no new screen (a new recipe kind on Trusted sources, same form).
+
+## 11. Rev 4.4 — reviewer round on Rev 4.3 (21 Nov)
+
+The reviewer checked the document against the repo (migrations, routes, screens, spend cap at layer 2 line 128, privacy
+guard wired on all four route groups in `platform-catalog/index.ts`) and found nothing out of line with the code.
+Findings, one fix each:
+
+**RE-37 · High · The pace isn't stated.** At US$0.075 a job the cap buys **18 paid jobs a day**; one Fill this car is
+~17 part jobs plus its spec jobs. Where the number comes from: Spike 0 (20 grounded calls, 20 Nov) measured
+**5.2 Google searches per call** × US$0.014 = US$0.073, plus US$0.00075 of tokens. That is a measurement, not a guess:
+the screen test's `costPerJob7dUsd: 0.075` is a display fixture copied from it, and the earlier US$0.029 was the
+pre-spike estimate at ~2 searches. Google's first 5,000 searches a month are free and `groundingCostUSD` logs them at
+US$0, so they don't count against the cap; if nothing else in Roam uses them, that is ~960 extra jobs a month. Pace for
+the ~3,400 lookups of the 200 cars that matter: **~1,500 jobs a month ≈ 2.3 months** with the free searches, **~6
+months** without them. Fix: after §R step 2, write into §1 the measured cost per job, searches per job, jobs per day at
+the cap and the 200-car finish date; Settings shows jobs per day and the finish date next to cost and cap (done-test 17
+now includes both). If the finish date is past the 90-day target (RE-24), the cap is raised to the figure that meets it.
+
+**RE-38 · High · RE-36 had no place to run.** Edge functions have no browser. Fix: Cloudflare Browser Rendering,
+written into RE-36 (§10) with the checks to answer before building.
+
+**RE-39 · High · A hash of a deleted screenshot proves nothing.** Fix: keep the cropped image in private storage for as
+long as the row exists, crop before sending, label the row as the owner's check. Written into RE-34 (§10).
+
+**RE-40 · Medium · CI skipped the research screen test.** In "Dominion places checks" a stale find-parts visual test
+(owned by the find-parts work, red since 8 Nov) fails first, so the later steps never run. Fix: the research screen
+test gets its own job in `.github/workflows/dominion-places-e2e.yml`, so nothing else can skip it.
+
+**RE-41 · Medium · Two live breaks of the master-data rule (§7).** (1) `GET /admin/catalog/signals`
+(`catalog_routes.ts:225`) returns `fleet_count`, `vehicle_count` and `open_count` to Dominion. Fix: the response drops
+those fields; the server keeps using them to order work. (2) The "Added — pick the part" panel says "Added. N companies
+were told…". Fix: it says "Added. The fleets that asked were told." Both go in the small-fix round under §R step 2.
+
+**RE-42 · Medium · Switching on for everyone grows the queue, not coverage.** Fix: written into §R step 7 (the 25-open
+browser-check cap is the brake; best after RE-34/35).
+
+**RE-43 · Medium · RE-35 sent too much and asked for too much.** Fix: `activeTab` only, selected text only, never to
+Gemini. Written into RE-35 (§10).
+
+**RE-44 · Low · §0 called SB readable.** Fixed in §0: allowed, unreadable until RE-36.
+
+**RE-45 · Low · "401 = running" is not a health check.** Fix: `GET /admin/catalog-research/health` (Dominion staff)
+reads the database and returns: on / practice / paused, spend today vs cap, jobs waiting per queue, open browser
+checks, and the time of the newest worker step. Done-test 46: with the engine on it answers within 2 s and the newest
+step is under 10 minutes old while jobs are waiting; with the database unreachable it answers 503, not 401.
+
+**Also (found while answering):** the Rev 4.2/4.3 done-tests were numbered 33–41, which the closed plan already used
+for other tests (33–36). They are now 37–45, and §5 says which closed-plan tests were proven locally.
