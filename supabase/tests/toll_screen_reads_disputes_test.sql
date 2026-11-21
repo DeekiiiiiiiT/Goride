@@ -321,12 +321,9 @@ BEGIN
   PERFORM pg_temp._s3rd_cmd('approve_settings_seed', jsonb_build_object(
     'command_id', 's3rd-seed', 'note', 's3rd screen reads seed',
     'self_approval_reason', 'twelve chars'));
-  PERFORM pg_temp._s3rd_cmd('change_toll_settings', jsonb_build_object(
-    'command_id', 's3rd-rate-370', 'note', 'uber platform refund rate',
-    'self_approval_reason', 'twelve chars',
-    'plaza_rates_add', jsonb_build_array(jsonb_build_object(
-      'plaza_id', 's3rd-pz', 'platform', 'uber', 'rate_minor', 37000,
-      'effective_from', p_week::text))));
+  -- Uber's rate is shared data (no longer set from Fleet: 20261121222218)
+  INSERT INTO toll.plaza_rates (plaza_id, rate_kind, platform, amount_minor, valid_from)
+  VALUES ('s3rd-pz', 'platform_refund', 'uber', 37000, (p_week)::date);
   INSERT INTO toll.plaza_rates (plaza_id, rate_kind, platform, amount_minor, valid_from)
   VALUES ('s3rd-pz', 'tag_price', NULL, 39000, p_week)
   ON CONFLICT DO NOTHING;
@@ -1276,12 +1273,9 @@ BEGIN
     'dispute_policy', jsonb_build_object('lost_bearer', 'driver')));
   v_set := pg_temp._s3rd_settings();
   IF v_set -> 'disputePolicy' ->> 'lostBearer' <> 'driver' THEN RAISE EXCEPTION '12 policy read'; END IF;
-  PERFORM pg_temp._s3rd_cmd('change_toll_settings', jsonb_build_object(
-    'command_id', 's3rd-rate-400', 'note', 'rate history',
-    'self_approval_reason', 'twelve chars',
-    'plaza_rates_add', jsonb_build_array(jsonb_build_object(
-      'plaza_id', 's3rd-pz', 'platform', 'uber', 'rate_minor', 40000,
-      'effective_from', (v_week + 14)::text))));
+  -- Uber's rate is shared data (no longer set from Fleet: 20261121222218)
+  INSERT INTO toll.plaza_rates (plaza_id, rate_kind, platform, amount_minor, valid_from)
+  VALUES ('s3rd-pz', 'platform_refund', 'uber', 40000, ((v_week + 14))::date);
   v_set := pg_temp._s3rd_settings();
   IF NOT EXISTS (
     SELECT 1 FROM jsonb_array_elements(v_set -> 'plazas') pl

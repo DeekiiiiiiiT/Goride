@@ -92,14 +92,14 @@ async function company(name: string, opts: { lostBearer?: "fleet" | "driver"; ri
   );
   const co = { org, owner, name, tag };
   made.push(co);
-  // Plaza prices are shared by every company: the first test company adds the Uber rate, the rest find it.
-  const hasRate = Number(await val(
-    `SELECT count(*) FROM toll.plaza_rates WHERE plaza_id = 'dt-pz' AND rate_kind = 'platform_refund' AND platform = 'uber'`,
-  )) > 0;
+  // Uber's rate at the test plaza is shared by every company (no longer set from Fleet: 20261121222218).
+  await q(
+    `INSERT INTO toll.plaza_rates (plaza_id, rate_kind, platform, amount_minor, valid_from)
+     SELECT 'dt-pz', 'platform_refund', 'uber', 37000, DATE '2020-01-01'
+     WHERE NOT EXISTS (SELECT 1 FROM toll.plaza_rates WHERE plaza_id = 'dt-pz' AND rate_kind = 'platform_refund' AND platform = 'uber')`,
+  );
   await cmd(co, "change_toll_settings", {
     note: "Done-test company settings",
-    self_approval_reason: "done-test company",
-    ...(hasRate ? {} : { plaza_rates_add: [{ plaza_id: "dt-pz", platform: "uber", rate_minor: 37000, effective_from: "2020-01-01" }] }),
     dispute_policy: { lost_bearer: opts.lostBearer ?? "fleet" },
   });
   return co;

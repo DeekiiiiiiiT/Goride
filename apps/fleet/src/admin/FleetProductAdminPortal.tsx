@@ -24,6 +24,7 @@ import {
   BookOpen,
   Wrench,
   Calculator,
+  Route,
   BarChart3,
   ShieldCheck,
   CreditCard,
@@ -45,6 +46,7 @@ import { StorageCenterPage } from './storage/StorageCenterPage';
 import { MaintenanceScheduleLedgerPage } from './ledger/MaintenanceScheduleLedgerPage';
 import { FleetAdminPartsDesk } from './FleetAdminPartsDesk';
 import { WeekCalculatorPage } from './WeekCalculatorPage';
+import { TollPlatformsPage } from './TollPlatformsPage';
 import { CustomerAccounts, PlatformStaffMfaStep, TeamMembers, usePlatformStaffMfa } from '@roam/admin-core';
 import { FleetBooks } from './FleetBooks';
 import {
@@ -85,7 +87,8 @@ type AdminPage =
   | 'storage'
   | 'ledger-maintenance'
   | 'parts'
-  | 'week-calculator';
+  | 'week-calculator'
+  | 'toll-platforms';
 
 function FleetAdminLogin({ onSession }: { onSession: (s: Session) => void }) {
   const [email, setEmail] = useState('');
@@ -457,6 +460,13 @@ export function FleetProductAdminPortal() {
         >
           <Calculator className="h-4 w-4" /> Week calculator
         </button>
+        <button
+          type="button"
+          onClick={() => setPage('toll-platforms')}
+          className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${page === 'toll-platforms' ? 'bg-slate-800' : 'hover:bg-slate-900'}`}
+        >
+          <Route className="h-4 w-4" /> Toll platforms
+        </button>
         <div className="mt-1">
           <button
             type="button"
@@ -553,6 +563,7 @@ export function FleetProductAdminPortal() {
         {page === 'week-calculator' && (
           <WeekCalculatorPage accessToken={token} />
         )}
+        {page === 'toll-platforms' && <TollPlatformsPage accessToken={token} />}
 
         {page === 'ledger-maintenance' && (
           <MaintenanceScheduleLedgerPage accessToken={token} />

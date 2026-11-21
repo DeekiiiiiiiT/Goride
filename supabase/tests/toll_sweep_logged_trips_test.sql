@@ -272,12 +272,9 @@ BEGIN
   PERFORM pg_temp._s3_cmd('approve_settings_seed', jsonb_build_object(
     'command_id', 's3-seed', 'note', 's2b sweep test seed',
     'self_approval_reason', 'twelve chars'));
-  PERFORM pg_temp._s3_cmd('change_toll_settings', jsonb_build_object(
-    'command_id', 's3-rate-370', 'note', 'uber platform refund rate',
-    'self_approval_reason', 'twelve chars',
-    'plaza_rates_add', jsonb_build_array(jsonb_build_object(
-      'plaza_id', 's3-pz', 'platform', 'uber', 'rate_minor', 37000,
-      'effective_from', p_week::text))));
+  -- Uber's rate is shared data (no longer set from Fleet: 20261121222218)
+  INSERT INTO toll.plaza_rates (plaza_id, rate_kind, platform, amount_minor, valid_from)
+  VALUES ('s3-pz', 'platform_refund', 'uber', 37000, (p_week)::date);
 END;
 $seed$;
 

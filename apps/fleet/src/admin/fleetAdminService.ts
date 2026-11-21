@@ -491,3 +491,40 @@ export async function fetchFleetMaintLedgerOrgDetail(
   if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
   return data as FleetMaintLedgerOrgDetail;
 }
+
+/** Roam-wide: how each ride platform pays tolls back. Saving updates every fleet. */
+export type TollPlatformRule = {
+  platform: string;
+  paysTollsBack: boolean;
+  paybackMode: string;
+  takesDisputes: boolean;
+  disputeWindowDays: number | null;
+  updatedAt?: string | null;
+};
+
+export type TollPlatformsRead = { platforms: TollPlatformRule[]; canEdit: boolean; companiesUpdated?: number };
+
+export async function fetchTollPlatforms(accessToken: string): Promise<TollPlatformsRead> {
+  const res = await fetch(`${API_ENDPOINTS.admin}/fleet-admin/toll-platforms`, { headers: authHeaders(accessToken) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+  return { platforms: Array.isArray(data.platforms) ? data.platforms : [], canEdit: data.canEdit === true };
+}
+
+export async function saveTollPlatforms(
+  accessToken: string,
+  platforms: Array<Pick<TollPlatformRule, 'platform' | 'paysTollsBack' | 'paybackMode' | 'takesDisputes' | 'disputeWindowDays'>>,
+): Promise<TollPlatformsRead> {
+  const res = await fetch(`${API_ENDPOINTS.admin}/fleet-admin/toll-platforms`, {
+    method: 'PUT',
+    headers: authHeaders(accessToken, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ platforms }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+  return {
+    platforms: Array.isArray(data.platforms) ? data.platforms : [],
+    canEdit: true,
+    companiesUpdated: typeof data.companiesUpdated === 'number' ? data.companiesUpdated : undefined,
+  };
+}

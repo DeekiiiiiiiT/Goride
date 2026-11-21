@@ -215,6 +215,7 @@ import {
 import { registerFleetAdminStorageRoutes } from "./fleet_admin_storage_routes.ts";
 import { registerFleetAdminMaintenanceLedgerRoutes } from "./fleet_admin_maintenance_ledger_routes.ts";
 import { registerReconWorkerSwitchRoutes } from "./recon_worker_switch_routes.ts";
+import { registerTollPlatformAdminRoutes } from "./toll_platform_admin_routes.ts";
 import { registerEnterpriseAdminRoutes } from "./enterprise_admin_routes.ts";
 import { registerFleetPortalRoutes } from "./fleet_portal_routes.ts";
 import { registerEnterpriseIntakeAdminRoutes } from "./enterprise_intake_admin_routes.ts";
@@ -514,6 +515,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
   registerProductAdminAccountRoutes(app, supabase);
   registerFleetAdminMaintenanceLedgerRoutes(app, supabase, kv);
   registerReconWorkerSwitchRoutes(app, supabase);
+  registerTollPlatformAdminRoutes(app, supabase);
   registerPendingVehicleCatalogRoutes(app, supabase);
   registerVehiclePictureRoutes(app, supabase);
   registerVehiclePictureAdminRoutes(app, supabase);

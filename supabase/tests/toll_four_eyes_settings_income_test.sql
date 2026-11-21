@@ -566,15 +566,36 @@ BEGIN
     'bogus_key', 'x'), 'BAD_REQUEST');
 
   v_rates := (SELECT count(*)::int FROM toll.plaza_rates WHERE plaza_id = 's1b-pz');
-  v_r := pg_temp._s1b_cmd(v_owner1, v_org1, 'change_toll_settings', jsonb_build_object(
-    'command_id', 's1b-rate-add', 'note', 'rate add',
-    'self_approval_reason', 'twelve chars',
-    'plaza_rates_add', jsonb_build_array(jsonb_build_object(
-      'plaza_id', 's1b-pz', 'platform', 'uber', 'rate_minor', 39000,
-      'effective_from', v_week::text))));
+  -- Uber's rate is shared data (no longer set from Fleet: 20261121222218)
+  INSERT INTO toll.plaza_rates (plaza_id, rate_kind, platform, amount_minor, valid_from)
+  VALUES ('s1b-pz', 'platform_refund', 'uber', 39000, (v_week)::date);
   IF (SELECT count(*)::int FROM toll.plaza_rates WHERE plaza_id = 's1b-pz') <> v_rates + 1 THEN
     RAISE EXCEPTION '6 plaza_rates_add';
   END IF;
+
+  -- Fleet can no longer change platform rules or toll prices (20261121222218)
+  PERFORM pg_temp._s1b_refused(v_owner1, v_org1, 'change_toll_settings', jsonb_build_object(
+    'command_id', 's1b-no-plat', 'note', 'x',
+    'platform_settings', jsonb_build_object('uber', jsonb_build_object('dispute_window_days', 5))), 'FORBIDDEN');
+  PERFORM pg_temp._s1b_refused(v_owner1, v_org1, 'change_toll_settings', jsonb_build_object(
+    'command_id', 's1b-no-rate', 'note', 'x',
+    'plaza_rates_add', jsonb_build_array(jsonb_build_object('plaza_id', 's1b-pz', 'platform', 'uber',
+      'rate_minor', 1, 'effective_from', v_week::text))), 'FORBIDDEN');
+  -- Roam Fleet Admin saves the Roam-wide list; every company follows it
+  PERFORM public.toll_sys_platform_defaults_save(jsonb_build_array(jsonb_build_object(
+    'platform', 'uber', 'disputeWindowDays', 10)), v_owner1);
+  IF EXISTS (SELECT 1 FROM toll.platform_settings WHERE platform = 'uber' AND dispute_window_days <> 10) THEN
+    RAISE EXCEPTION '6 Roam-wide save did not reach every company';
+  END IF;
+  PERFORM public.toll_sys_platform_defaults_save(jsonb_build_array(jsonb_build_object(
+    'platform', 'uber', 'disputeWindowDays', 9)), v_owner1);
+  BEGIN
+    PERFORM public.toll_sys_platform_defaults_save(jsonb_build_array(jsonb_build_object(
+      'platform', 'uber', 'disputeWindowDays', 0)), v_owner1);
+    RAISE EXCEPTION '6 bad days saved';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'BAD_REQUEST' THEN RAISE; END IF;
+  END;
 
   -- ── 7. Settings missing (a new plaza, settings deleted): the matcher sets them up itself and claims ──
   PERFORM pg_temp._s1b_import(v_org1, 'm7', v_week + 70, 39000, 37000, 's1b-pz-miss');

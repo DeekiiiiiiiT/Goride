@@ -75,16 +75,14 @@ describe('Fleet Policy — Tolls tab (UI2)', () => {
     rpc.mockResolvedValue({ data: settings(), error: null });
   });
 
-  it('shows the switches, the missing list, prices and a Missing chip where Uber has no rate', async () => {
+  it('shows only the who-pays section: no switches, no platforms, no toll prices', async () => {
     wrap();
-    await screen.findByTestId('toll-policy-tab');
-    expect(screen.getByText('Toll disputes: On')).toBeTruthy();
-    expect(screen.getByText('Hand-logged trips: Off')).toBeTruthy();
-    expect(screen.getByTestId('toll-policy-missing').textContent).toMatch(/A toll plaza has no toll price rules yet/);
-    const pm = screen.getByTestId('toll-policy-plaza-pm');
-    expect(pm.textContent).toMatch(/J\$390\.00/);
-    expect(pm.textContent).toMatch(/J\$370\.00/);
-    expect(within(screen.getByTestId('toll-policy-plaza-st')).getByTestId('toll-policy-missing-chip')).toBeTruthy();
+    const tab = await screen.findByTestId('toll-policy-tab');
+    expect(tab.textContent).toMatch(/When a dispute doesn.t work out/);
+    expect(tab.textContent).not.toMatch(/Toll disputes: On|Platforms|Toll prices|Add rate|Disputes can.t open/);
+    expect(screen.queryByTestId('toll-policy-plaza-pm')).toBeNull();
+    expect(screen.queryByTestId('toll-policy-add-rate')).toBeNull();
+    expect(screen.queryByTestId('toll-policy-missing')).toBeNull();
     expect(screen.getByTestId('toll-policy-change-count').textContent).toBe('No changes');
     expect((screen.getByTestId('toll-policy-save') as HTMLButtonElement).disabled).toBe(true);
   });
@@ -107,33 +105,6 @@ describe('Fleet Policy — Tolls tab (UI2)', () => {
     expect(body).not.toHaveProperty('platform_settings');
   });
 
-  it('the Missing chip opens Add rate filled in; Add rate sends plaza_rates_add', async () => {
-    wrap();
-    await screen.findByTestId('toll-policy-tab');
-    fireEvent.click(screen.getByTestId('toll-policy-missing-chip'));
-    const dlg = await screen.findByTestId('toll-policy-add-rate-dialog');
-    expect((within(dlg).getByLabelText('Plaza') as HTMLSelectElement).value).toBe('st');
-    expect((within(dlg).getByLabelText('Platform') as HTMLSelectElement).value).toBe('uber');
-    fireEvent.change(within(dlg).getByTestId('toll-rate-amount'), { target: { value: '260' } });
-    fireEvent.change(within(dlg).getByTestId('toll-rate-from'), { target: { value: '2026-12-01' } });
-    fireEvent.click(within(dlg).getByTestId('toll-rate-confirm'));
-    await waitFor(() =>
-      expect(tollV2Command).toHaveBeenCalledWith(
-        'change_toll_settings',
-        expect.objectContaining({
-          plaza_rates_add: [{ plaza_id: 'st', platform: 'uber', rate_minor: 26000, effective_from: '2026-12-01' }],
-        }),
-      ),
-    );
-  });
-
-  it('a plaza row opens its price history with Now and Starts chips', async () => {
-    wrap();
-    fireEvent.click(await screen.findByTestId('toll-policy-plaza-pm'));
-    const panel = await screen.findByTestId('toll-policy-history');
-    expect(within(panel).getAllByText('Now').length).toBeGreaterThan(0);
-    expect(within(panel).getByText(/Starts 1 Dec/)).toBeTruthy();
-  });
 });
 
 describe('toll policy logic', () => {
