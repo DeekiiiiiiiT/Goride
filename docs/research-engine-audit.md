@@ -1,6 +1,6 @@
 # Research engine (cars, specs, parts) — audit
 
-**Rev 4.4 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
+**Rev 4.5 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
 US$1.35/day.** Live database: migrations 1a/1b/2/3 (03:10 UTC) and `20261121100925_research_form_recipe` (10:25 UTC),
 all with logbook lines. Live code: main `0e00cd5b` (platform-catalog, catalog-research, Dominion). Branch
 `parts-auto-match` `fc2e2b85` holds the same research code. Held back: readiness counts only Confirmed specs (§6 step 5).
@@ -25,6 +25,7 @@ History (not needed to continue): the closed plan with all findings RE-01…RE-2
 | 21 Nov 10:30 | Rev 4.2 live: migration + server + Dominion | main `0e00cd5b` |
 | 21 Nov | Access decision: no robot of any kind on sites that forbid it; next round = screenshot browser checks, Chrome helper, honest browser reader (§10) | this file |
 | 21 Nov | Reviewer round on Rev 4.3: 9 findings RE-37…RE-45, one fix each; done-tests renumbered 37–46 (§11) | this file |
+| 21 Nov | Reviewer: coverage is a sources problem — more part makers (Spike 1), PDF catalogues, the distributor, licensed-feed rule (RE-46…RE-48, §12) | this file |
 
 **What is proven**
 - Unit, SQL and screen tests: Deno 136, SQL checks (incl. 3 form-recipe checks), admin tsc 0 + vitest 45, screen
@@ -52,18 +53,26 @@ Because (2) fails first in the "Dominion places checks" job, the research screen
      200-car finish date into §1 (RE-37).
    - **Claude, one small-fix round:** `GET /health` (RE-45), research screen test in its own CI job (RE-40), the two
      master-data breaks (RE-41), jobs per day + finish date on Settings (RE-37).
-3. **Owner:** send the permission emails to Masuma, Amayama, Megazip and Partsouq (Claude drafts them). The biggest
-   unlock: Spike 0 showed 0 of 17 Roomy parts automatic today, at most 2 of 17 with NiBK + SB.
-4. **Build RE-34 + RE-35** (§10): screenshot drop and one-click Chrome helper for browser checks. Playbook order: audit
+3. **Claude: Spike 1 — more part makers (RE-46, §12).** Robots.txt + terms for the 12 brand sites in §12, recorded
+   exactly as Spike 0; one recipe for each site that passes and works without a browser; run the Roomy M900A against
+   the 10 core part types → a real "N of 17" replaces Spike 0's "0 of 17". The result sets the order of steps 4–6.
+4. **Owner:** two asks, same week (Claude drafts both): (a) the Toyota/Daihatsu parts distributor in Jamaica — catalogue
+   access, a parts data export or a dealer account (RE-46 (c)); (b) the permission emails to Masuma, Amayama, Megazip
+   and Partsouq.
+5. **Build RE-47** (§12) if Spike 1 finds part makers whose catalogue is a PDF: the PDF catalogue reader.
+6. **Build RE-34 + RE-35** (§10): screenshot drop and one-click Chrome helper for browser checks. Playbook order: audit
    round 1 → Stitch prompt for the new parts of the browser check screen → screens → round 2 → build.
-5. **Build RE-36** (§10): honest browser reader for allowed sites that only work in a browser (SB Parts) → done-tests
-   1 and 31.
-6. **Fix the nightly readiness rebuild** (separate audit; it has failed every night since at least 16 Nov), then run
+7. **Build RE-36** (§10): honest browser reader for allowed sites that only work in a browser (SB Parts, and any
+   Spike 1 site that needs it) → done-tests 1 and 31.
+8. **Fix the nightly readiness rebuild** (separate audit; it has failed every night since at least 16 Nov), then run
    §6 step 5.
-7. **Switch on for everyone** (leave practice mode) once steps 1–2 show correct results (owner rule: on for all companies).
+9. **Switch on for everyone** (leave practice mode) once steps 1–2 show correct results (owner rule: on for all companies).
    With 0–2 of 17 parts automatic, this mostly grows the owner's browser-check queue, not coverage; the 25-open cap is
    the brake (RE-42). Best done after RE-34/RE-35 are live, so each check takes seconds.
-8. Cleanup migration (§6 step 6) and the §7 follow-ups.
+10. Cleanup migration (§6 step 6) and the §7 follow-ups.
+
+If Spike 1 reaches 6 or more of 17, the engine works without any blocked site and the EPC emails become a bonus. If it
+stays at about 2 of 17, the gap is a data source, not software: the distributor, or a licensed feed (RE-48).
 
 ## START HERE (for a new chat)
 
@@ -87,7 +96,8 @@ what it could not prove.
   demand counts (RE-23). Demand may order work on the server only.
 - **Source rule.** Confirmed only by (a) the car maker's catalogue (or a frame-number site trusted for that maker),
   (b) a part maker's own catalogue for its own part, (c) two different part makers naming the same factory number.
-  Shops, aggregators and TecDoc copies = Needs checking. Forums and AI text are never a source.
+  Shops, aggregators and TecDoc copy sites = Needs checking; a licensed TecDoc feed counts as (b) for each supplier's
+  own parts (RE-48). Forums and AI text are never a source.
 - **No bypass.** The engine reads a site only if robots.txt and terms allow it, as `RoamResearchBot/1.0`, never
   disguised. Blocked catalogues become **browser checks** (the owner opens the page and pastes the line). This holds
   for every kind of robot — server reader, hidden browser, screenshot robot, or a program moving the owner's own mouse
@@ -319,7 +329,8 @@ manual checks; (4) ~3,000 lookups for the 200 cars that matter is bulk copying o
 visits the page and the computer helps capture and read it** = allowed; **the computer does the visiting** = not.
 Fix, in order of reach: (a) permission emails to the four sites (owner; Claude drafts) — one "yes" opens a whole site to
 the engine; (b) make each browser check take seconds (RE-34, RE-35); (c) an honest browser reader for allowed sites
-(RE-36); (d) if (a) gets no answer, a licensed parts data feed (paid; outside this audit, §8).
+(RE-36); (d) if (a) gets no answer, a licensed parts data feed (paid; outside this audit, §8). **Reordered by RE-46
+(§12):** more part makers (Spike 1) and the distributor come first; the EPC emails run alongside.
 
 **RE-34 · Medium · Browser checks need copy-paste.** Today the owner opens the page and pastes the matching line.
 Fix: the browser check accepts a **screenshot** as well as pasted text. Before anything is sent, the drop zone has a
@@ -408,3 +419,64 @@ step is under 10 minutes old while jobs are waiting; with the database unreachab
 
 **Also (found while answering):** the Rev 4.2/4.3 done-tests were numbered 33–41, which the closed plan already used
 for other tests (33–36). They are now 37–45, and §5 says which closed-plan tests were proven locally.
+
+## 12. Rev 4.5 — coverage is a sources problem, not a scraping problem (21 Nov, reviewer)
+
+**RE-46 · High · The trusted list has only three part makers, so "0 of 17" measures the list, not the engine.**
+Source rule route (b) already makes a part maker's own catalogue, for its own part, Confirmed: no car-maker catalogue
+(Amayama etc.) is needed for those parts. But the trusted list holds three part makers (SB, NiBK, Brembo), and Spike 0
+only checked those plus the blocked EPCs. The aim is **one Confirmed source per core part type** — about ten sites, fewer
+where one brand covers several types. Brand sites are usually far less closed than reseller catalogues: a reseller's
+catalogue is its stock list; a part maker wants its fitment found.
+
+Brands to check (reviewer's list; **none checked yet** — Spike 1 records what each site really allows and offers):
+
+| Part type | Brands whose own catalogue may cover it |
+|---|---|
+| Oil / air / cabin filter | Denso, Sakura, Vic (Masuma: by-car pages blocked, Spike 0) |
+| Spark plugs | NGK, Denso |
+| Wiper blades | NWB, Denso |
+| Brake pads / rotors | NiBK (live), SB (needs RE-36), Akebono, Advics, Brembo |
+| Serpentine belt | Mitsuboshi, Bando |
+| Thermostat | Aisin, Tama |
+| Shocks | KYB, Tokico |
+| Battery | Yuasa, Furukawa |
+
+Fix, in three parts:
+(a) **Spike 1** (Claude, same method as Spike 0): for Denso, NGK, Aisin, KYB, Akebono, Advics, Mitsuboshi, Bando, NWB,
+Sakura, Yuasa and Brembo record robots.txt and terms (allowed / blocked, with the exact line), and how the catalogue is
+offered (plain link, form, browser-only, PDF). Each allowed site gets a `trusted_site` row (kind part maker, its maker
+names) through **Add a site**. Each one that works with a link or a form gets a recipe (config, no code). Then run
+**Test on a car** for the Roomy M900A on every core part type and write the real "N of 17" into §1 and §R.
+(b) **PDF catalogues** for brands that publish their application lists as PDFs → RE-47.
+(c) **The distributor:** the Toyota/Daihatsu parts distributor in Jamaica holds the maker's parts catalogue (EPC) for
+the cars the fleet runs. The owner asks, as a fleet that buys parts, for catalogue access, a parts data export or a
+dealer account (Claude drafts the message). A data export or account under a written agreement would make Toyota /
+Daihatsu / Lexus parts route (a) without any blocked site. It gets a `trusted_site` row once the agreement says
+automated use is allowed.
+Done-tests: 47. Spike 1's table is in this section with a dated verdict for all 12 sites; 48. after Spike 1's recipes,
+**Fill this car** on the Roomy M900A proves at least the parts Spike 1 says it should, each with saved evidence.
+
+**RE-47 · Medium · Part makers' PDF catalogues can't be read.** The reader caps pages at 2 MB
+(`MAX_BODY_BYTES`) and only reads HTML; application catalogues are often large PDFs. A PDF is the best source there is:
+nothing to get past, the same lines every time, and the file itself is the evidence a year later. Fix: a PDF catalogue
+reader. The owner (or Claude) adds the PDF's link to the maker's `trusted_site`; the server downloads it once (allowed
+site only, honest name), keeps the file in private storage (Cloudflare R2) with its hash, turns each page into text
+lines, and stores them as `research_pdf_line` rows (file, page, line text). Lookups search those lines with the same
+same-row proof (number + car + position in one line, or the RE-31 cross-reference shape). Evidence = file hash + page +
+line; the read row links the stored file. A file is re-downloaded once a quarter; a changed hash starts a new set of
+lines and keeps the old ones. Size cap for PDFs: 200 MB, read in parts outside the 2-minute tick (a queue job per file).
+Done-tests: 49. a made-up two-page PDF with "04465-Z7001 · M900A · Front" on page 2 → found, evidence names page 2;
+50. the same number on a page without the car → not found; 51. a re-download with a new hash keeps the old lines and
+their evidence.
+
+**RE-48 · Low · The source rule would refuse a licensed feed.** §0 says "TecDoc copies = Needs checking". That is right
+for copy sites, but a **licensed** TecDoc (TecAlliance) feed is the suppliers' own data, delivered under contract. Fix:
+§0 now says copy sites stay Needs checking, and a licensed feed counts as route (b) for each supplier's own parts. Only
+needed for all 2,679 cars: it is quote-only, usually thousands a year with a contract; for the 200 cars that matter
+Spike 1 + the distributor + browser checks are cheaper (§8 keeps the feed outside this audit).
+
+**Also recorded:** proxy and anti-bot services (ScraperAPI, Bright Data, Zyte, residential proxies, stealth browsers)
+on the blocked sites are the §10 bypass, rented, and stay ruled out. A browser for an **allowed** site is RE-36. The
+difference is permission, not technology. The last mile is a person: ~3,400 lookups at 15–20 s each with RE-34/35 is
+~15–20 hours, which matches Spike 0's ~17 hours of owner time.
