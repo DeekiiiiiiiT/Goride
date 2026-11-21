@@ -404,7 +404,7 @@ export async function postCatalogResearchJobAction(
 }
 
 /** Matches `ENGINE_REV` in supabase/functions/_fleet-server/catalog_research_worker.ts */
-export const CATALOG_RESEARCH_ENGINE_REV = "catalog-research-1";
+export const CATALOG_RESEARCH_ENGINE_REV = "catalog-research-7";
 
 export type CatalogResearchJobListItem = {
   jobId: string;

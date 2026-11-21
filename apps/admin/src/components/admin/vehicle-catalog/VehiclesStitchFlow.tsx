@@ -34,6 +34,7 @@ import { VehiclesCarSpecsTab } from "./vehicles-stitch/VehiclesCarSpecsTab";
 import { VehiclesPartsOnFileTab } from "./vehicles-stitch/VehiclesPartsOnFileTab";
 import { VehiclesSisterTab } from "./vehicles-stitch/VehiclesSisterTab";
 import { VehiclesHistoryTab } from "./vehicles-stitch/VehiclesHistoryTab";
+import { CarCoverageTab } from "../research-engine/CarCoverageTab";
 import { VehiclesAddCarFlow } from "./vehicles-stitch/VehiclesAddCarFlow";
 import { VehiclesStatesGallery } from "./vehicles-stitch/VehiclesStatesGallery";
 import { PowertrainCheckScreen } from "./vehicles-stitch/PowertrainCheckScreen";
@@ -545,6 +546,7 @@ export function VehiclesStitchFlow({
       { id: "overview", label: "Overview" },
       { id: "specs", label: "Car specs" },
       { id: "parts", label: "Parts on file" },
+      { id: "coverage", label: "Coverage" },
       { id: "sisters", label: "Sister cars" },
       { id: "history", label: "History" },
     ];
@@ -644,6 +646,9 @@ export function VehiclesStitchFlow({
           />
         ) : null}
         {tab === "parts" ? <VehiclesPartsOnFileTab car={car} jobs={jobs} otherParts={otherParts as Parameters<typeof VehiclesPartsOnFileTab>[0]["otherParts"]} /> : null}
+        {tab === "coverage" ? (
+          <CarCoverageTab carId={car.id} make={car.make} model={car.model} onOpenParts={() => setTab("parts")} />
+        ) : null}
         {tab === "sisters" ? (
           <VehiclesSisterTab car={car} sisters={sisters} items={items} logoByMake={logoByMake} onOpenCar={openCar} />
         ) : null}

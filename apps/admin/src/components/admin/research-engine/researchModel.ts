@@ -1,0 +1,349 @@
+/**
+ * Research engine screens — pure view logic (docs/research-engine-audit.md §4 / §4b). No React, no fetches.
+ * Every word shown comes from real data; nothing here invents a score, an id or a provider (§4b "Drop").
+ */
+import type {
+  CoveragePart,
+  CoverageSpec,
+  PartProposal,
+  ResearchCar,
+  ResearchJobListItem,
+  ResearchJobState,
+  TrustRoute,
+} from "../../../services/researchEngineService";
+
+// ------------------------------------------------------------------ cars + places
+
+export function yearsLabel(start: number | null | undefined, end: number | null | undefined): string {
+  if (start && end) return `${start}–${end}`;
+  if (start) return `${start} on`;
+  if (end) return `to ${end}`;
+  return "";
+}
+
+/** "Toyota Roomy 2016–2020 2WD" */
+export function carLabel(car: Pick<ResearchCar, "make" | "model" | "production_start_year" | "production_end_year" | "drivetrain"> | null | undefined): string {
+  if (!car) return "Car not on file";
+  return [car.make, car.model, yearsLabel(car.production_start_year, car.production_end_year), car.drivetrain]
+    .filter(Boolean)
+    .join(" ");
+}
+
+/** "M900A · 1KR-FE" */
+export function carCodes(car: { chassis_code?: string | null; engine_code?: string | null } | null | undefined): string {
+  if (!car) return "";
+  return [car.chassis_code, car.engine_code].filter(Boolean).join(" · ");
+}
+
+/** The place on the car, from the job's fit descriptor or the proposal's position ("front" / "rear"). */
+export function placeLabel(place: string | null | undefined): string | null {
+  const p = (place ?? "").trim().toLowerCase();
+  if (!p) return null;
+  if (p === "front") return "Front";
+  if (p === "rear") return "Rear";
+  return p.charAt(0).toUpperCase() + p.slice(1).replace(/_/g, " ");
+}
+
+/** What the job is about: the part type, or the spec's label. */
+export function jobItemName(job: Pick<ResearchJobListItem, "jobType" | "partTypeName" | "specLabel">): string {
+  if (job.jobType === "spec") return job.specLabel || "Spec";
+  return job.partTypeName || "Part";
+}
+
+// ------------------------------------------------------------------ sites
+
+const SITE_NAMES: Record<string, string> = {
+  "amayama.com": "Amayama",
+  "megazip.net": "Megazip",
+  "partsouq.com": "Partsouq",
+  "7zap.com": "7zap",
+  "masuma.parts": "Masuma",
+  "sbparts.jp": "SB",
+  "jnbk-brakes.com": "NiBK",
+  "bremboparts.com": "Brembo",
+  "rockauto.com": "RockAuto",
+};
+
+/** A short name for a catalogue site: known names first, else the first part of the address. */
+export function siteName(domainOrUrl: string | null | undefined): string {
+  if (!domainOrUrl) return "the catalogue";
+  let host = domainOrUrl.trim().toLowerCase();
+  try {
+    if (/^https?:\/\//.test(host)) host = new URL(host).hostname;
+  } catch {
+    /* keep as typed */
+  }
+  host = host.replace(/^www\./, "");
+  if (SITE_NAMES[host]) return SITE_NAMES[host];
+  const first = host.split(".")[0] || host;
+  return first.charAt(0).toUpperCase() + first.slice(1);
+}
+
+// ------------------------------------------------------------------ job states → filters + pills
+
+export type PartsFilter =
+  | "all"
+  | "needs_review"
+  | "browser_check"
+  | "researching"
+  | "waiting"
+  | "auto_added"
+  | "added"
+  | "not_found"
+  | "failed";
+
+export const PARTS_FILTERS: Array<{ id: PartsFilter; label: string; dot?: "amber" | "blue" | "pulse" }> = [
+  { id: "all", label: "All" },
+  { id: "needs_review", label: "Needs review", dot: "amber" },
+  { id: "browser_check", label: "Browser check", dot: "blue" },
+  { id: "researching", label: "Researching", dot: "pulse" },
+  { id: "waiting", label: "Waiting its turn" },
+  { id: "auto_added", label: "Added automatically" },
+  { id: "added", label: "Added" },
+  { id: "not_found", label: "Couldn't find" },
+  { id: "failed", label: "Failed" },
+];
+
+export function filterForState(state: ResearchJobState | null | undefined): Exclude<PartsFilter, "all"> {
+  switch (state) {
+    case "needs_review":
+      return "needs_review";
+    case "browser_check":
+      return "browser_check";
+    case "researching":
+    case "checking":
+      return "researching";
+    case "auto_added":
+      return "auto_added";
+    case "added":
+      return "added";
+    case "not_found":
+      return "not_found";
+    case "failed":
+      return "failed";
+    default:
+      return "waiting";
+  }
+}
+
+export type PillTone = "green" | "green-outline" | "amber" | "blue" | "grey" | "grey-outline" | "red";
+
+export type StatePill = { label: string; tone: PillTone; icon?: string; pulse?: boolean };
+
+export function statePill(state: ResearchJobState | null | undefined, conflictOpen = false): StatePill {
+  if (conflictOpen && state !== "added" && state !== "auto_added") return { label: "Two makers disagree", tone: "red" };
+  switch (state) {
+    case "needs_review":
+      return { label: "Needs review", tone: "amber", icon: "priority_high" };
+    case "browser_check":
+      return { label: "Browser check", tone: "blue", icon: "open_in_browser" };
+    case "researching":
+    case "checking":
+      return { label: "Researching", tone: "blue", pulse: true };
+    case "auto_added":
+      return { label: "Added automatically", tone: "green-outline", icon: "check" };
+    case "added":
+      return { label: "Added", tone: "green", icon: "check" };
+    case "not_found":
+      return { label: "Couldn't find", tone: "grey-outline" };
+    case "failed":
+      return { label: "Failed", tone: "red" };
+    default:
+      return { label: "Waiting its turn", tone: "grey" };
+  }
+}
+
+/** The small line under a status: which part of the source rule proved it (§0, RE-19). */
+export function trustRouteLine(route: TrustRoute | null | undefined): string | null {
+  switch (route) {
+    case "a":
+      return "Car maker's catalogue";
+    case "b":
+      return "Part maker's own catalogue";
+    case "c":
+      return "Two makers agree";
+    case "owner_browser":
+      return "You checked it";
+    default:
+      return null;
+  }
+}
+
+// ------------------------------------------------------------------ proposals
+
+export function keptSources(p: Pick<PartProposal, "sources">): Array<Required<Pick<NonNullable<PartProposal["sources"]>[number], "domain">> & NonNullable<PartProposal["sources"]>[number]> {
+  return (p.sources ?? []).filter((s) => !s.dropped && typeof s.domain === "string" && Boolean(s.block)) as never;
+}
+
+export function proposalConfirmed(p: Pick<PartProposal, "checks" | "trust_route">): boolean {
+  return p.checks?.trust === "confirmed" || p.trust_route === "a" || p.trust_route === "b" || p.trust_route === "c" || p.trust_route === "owner_browser";
+}
+
+/** The "how sure" line on a Roam found card. */
+export function howSureLine(p: Pick<PartProposal, "checks" | "trust_route" | "sources">): string {
+  switch (p.trust_route) {
+    case "a":
+      return "The car maker's catalogue lists it.";
+    case "b":
+      return "The part maker's own catalogue lists its own part.";
+    case "c":
+      return "Two part makers name the same factory number.";
+    case "owner_browser":
+      return "You checked it on the car maker's catalogue.";
+    default:
+      break;
+  }
+  const kinds = new Set((p.checks?.passes ?? []).map((x) => x.kind));
+  if (kinds.has("reference")) return "Only a reference site lists it. Reference sites can suggest but never confirm.";
+  if (keptSources(p).length > 0 || kinds.size > 0) {
+    return "One part maker lists it. Two makers, or the car maker's catalogue, would confirm it.";
+  }
+  return "No trusted catalogue showed it yet.";
+}
+
+export type CheckRow = { label: string; ok: boolean };
+
+/**
+ * The Checks list. The engine only keeps a page block when the number, the car (and the place, when the part has
+ * one) are in the same row, so a kept block proves all three; no kept block means none were proven.
+ */
+export function proposalChecks(p: Pick<PartProposal, "sources" | "position_key">): CheckRow[] {
+  const proven = keptSources(p).length > 0;
+  const rows: CheckRow[] = [
+    { label: "Number is on the page", ok: proven },
+    { label: "This car is in the same row", ok: proven },
+  ];
+  const place = placeLabel(p.position_key);
+  if (place) rows.push({ label: `${place} position is in the same row`, ok: proven });
+  return rows;
+}
+
+/** "Read on 20 Nov 2026" */
+export function readOnLabel(iso: string | null | undefined): string {
+  if (!iso) return "";
+  return `Read on ${shortDate(iso)}`;
+}
+
+export function shortDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  // A plain date ("2027-02-18") is a calendar day, not a moment: never shift it into the viewer's time zone.
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(iso);
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", ...(dateOnly ? { timeZone: "UTC" } : {}) });
+}
+
+// ------------------------------------------------------------------ browser checks
+
+/** What the owner looks for on the catalogue page: "M900A" and the part / spec in plain words. */
+export function browserCheckTarget(car: ResearchCar | null, itemName: string): { code: string | null; item: string } {
+  return { code: car?.chassis_code || car?.model || null, item: itemName.toLowerCase() };
+}
+
+export function gateReasonText(reason: "no_car" | "no_number" | "no_value" | "empty", jobType: "part" | "spec"): string {
+  if (reason === "empty") return "Paste the line from the page.";
+  if (reason === "no_car") return "That line doesn't name this car.";
+  if (reason === "no_number" || jobType === "part") return "That line has no part number.";
+  return "That line has no value of the right kind.";
+}
+
+// ------------------------------------------------------------------ coverage tiles (S6)
+
+export type TileState =
+  | "confirmed"
+  | "needs_checking"
+  | "browser_check"
+  | "disagree"
+  | "researching"
+  | "waiting"
+  | "not_started"
+  | "couldnt_find"
+  | "not_applicable"
+  | "waiting_identity";
+
+export type TileAction = "open" | "review" | "open_browser_check" | "choose" | "research_part" | "research_again" | null;
+
+export const TILE_META: Record<TileState, { label: string; tone: PillTone; action: TileAction; actionLabel: string | null }> = {
+  confirmed: { label: "Confirmed", tone: "green", action: "open", actionLabel: "Open" },
+  needs_checking: { label: "Needs checking", tone: "amber", action: "review", actionLabel: "Review" },
+  browser_check: { label: "Browser check", tone: "blue", action: "open_browser_check", actionLabel: "Open browser check" },
+  disagree: { label: "Two makers disagree", tone: "red", action: "choose", actionLabel: "Choose" },
+  researching: { label: "Researching", tone: "blue", action: null, actionLabel: null },
+  waiting: { label: "Waiting its turn", tone: "grey", action: null, actionLabel: null },
+  not_started: { label: "Not started", tone: "grey", action: "research_part", actionLabel: "Research this part" },
+  couldnt_find: { label: "Couldn't find", tone: "grey-outline", action: "research_again", actionLabel: "Research again" },
+  not_applicable: { label: "Not applicable", tone: "grey", action: null, actionLabel: null },
+  waiting_identity: { label: "Waiting for identity", tone: "grey", action: null, actionLabel: null },
+};
+
+/** The order matters: a confirmed or not-applicable cell wins; then the latest job decides; then what is on file. */
+export function partTileState(p: Pick<CoveragePart, "cell" | "jobState" | "conflictId">, identityMissing = false): TileState {
+  if (identityMissing) return "waiting_identity";
+  if (p.cell === "verified") return "confirmed";
+  if (p.cell === "not_applicable") return "not_applicable";
+  if (p.conflictId) return "disagree";
+  const fromJob = jobTileState(p.jobState);
+  if (fromJob) return fromJob;
+  if (p.cell === "unverified") return "needs_checking";
+  return "not_started";
+}
+
+export function specTileState(s: Pick<CoverageSpec, "value" | "trust" | "jobState">, identityMissing = false): TileState {
+  if (identityMissing) return "waiting_identity";
+  if (s.value && s.trust === "confirmed") return "confirmed";
+  const fromJob = jobTileState(s.jobState);
+  if (fromJob) return fromJob;
+  if (s.value) return "needs_checking";
+  return "not_started";
+}
+
+function jobTileState(state: ResearchJobState | null | undefined): TileState | null {
+  switch (state) {
+    case "needs_review":
+      return "needs_checking";
+    case "browser_check":
+      return "browser_check";
+    case "researching":
+    case "checking":
+      return "researching";
+    case "queued":
+    case "browser_check_queued":
+      return "waiting";
+    case "not_found":
+    case "failed":
+      return "couldnt_find";
+    default:
+      return null;
+  }
+}
+
+/** "4 Confirmed · 3 Needs checking · 1 Browser check" — only states that occur, in a fixed order. */
+export function tileSummary(states: TileState[]): Array<{ state: TileState; count: number }> {
+  const order: TileState[] = ["confirmed", "needs_checking", "browser_check", "disagree", "researching", "waiting", "not_started", "couldnt_find", "not_applicable"];
+  return order
+    .map((state) => ({ state, count: states.filter((s) => s === state).length }))
+    .filter((x) => x.count > 0);
+}
+
+// ------------------------------------------------------------------ specs source line (S7)
+
+/** S7 source line: "From the old import" (CSV), "You checked it on <date>" (owner), "<site> · Read on <date>" (engine). */
+export function specSourceLine(s: Pick<CoverageSpec, "trust" | "sourceNote" | "sourceUrl" | "trustRoute" | "checkedAt">): string {
+  const note = (s.sourceNote ?? "").toLowerCase();
+  if (note.includes("csv") || note.includes("import")) return "From the old import";
+  if (s.trustRoute === "owner_browser") return s.checkedAt ? `You checked it on ${shortDate(s.checkedAt)}` : "You checked it";
+  if (s.sourceUrl) return s.checkedAt ? `${siteName(s.sourceUrl)} · ${readOnLabel(s.checkedAt)}` : siteName(s.sourceUrl);
+  return "No source on file";
+}
+
+// ------------------------------------------------------------------ money + dates (S4)
+
+export function usd(n: number | null | undefined, digits = 2): string {
+  if (n == null || Number.isNaN(Number(n))) return "—";
+  return `US$${Number(n).toFixed(digits)}`;
+}
+
+export function onTrack(target: string | null | undefined, expected: string | null | undefined): boolean | null {
+  if (!target || !expected) return null;
+  return expected <= target;
+}

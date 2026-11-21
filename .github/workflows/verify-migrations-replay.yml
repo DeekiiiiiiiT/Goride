@@ -43,3 +43,4 @@ jobs:
           supabase db query -f supabase/tests/places_checks.sql
           supabase db query -f supabase/tests/price_engine_checks.sql
           supabase db query -f supabase/tests/catalog_research_claim_checks.sql
+          supabase db query -f supabase/tests/research_engine_checks.sql

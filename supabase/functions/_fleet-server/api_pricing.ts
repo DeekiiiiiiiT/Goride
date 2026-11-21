@@ -76,6 +76,21 @@ const GOOGLE_MAPS_PER_1K: Record<string, number> = {
 // ---------------------------------------------------------------------------
 // Estimator
 // ---------------------------------------------------------------------------
+// Google Search grounding (Gemini 3+): billed per search query the model runs, after a free monthly allowance that
+// every Gemini 3+ grounding call in Roam shares. Source: ai.google.dev/gemini-api/docs/pricing (checked 20 Nov 2026).
+export const GEMINI_GROUNDING_PER_QUERY_USD = 0.014;
+export const GEMINI_GROUNDING_FREE_QUERIES_PER_MONTH = 5000;
+
+/** Cost of `queries` grounding queries when `usedThisMonth` were already run this calendar month (UTC). */
+export function groundingCostUSD(queries: number, usedThisMonth: number): number {
+  const q = Math.max(0, Math.floor(queries || 0));
+  if (q === 0) return 0;
+  const used = Number.isFinite(usedThisMonth) ? Math.max(0, Math.floor(usedThisMonth)) : Number.POSITIVE_INFINITY;
+  const freeLeft = Math.max(0, GEMINI_GROUNDING_FREE_QUERIES_PER_MONTH - (Number.isFinite(used) ? used : GEMINI_GROUNDING_FREE_QUERIES_PER_MONTH));
+  const billable = Math.max(0, q - freeLeft);
+  return Math.round(billable * GEMINI_GROUNDING_PER_QUERY_USD * 1e6) / 1e6;
+}
+
 export function estimateCostUSD(
   provider: Provider,
   model: string | undefined,
@@ -96,6 +111,10 @@ export function estimateCostUSD(
     if (provider === "gemini") {
       if (service === "image" && model && GEMINI_IMAGE_PER_IMG[model]) {
         return GEMINI_IMAGE_PER_IMG[model] * (usage.images || 1);
+      }
+      if (service === "grounding") {
+        // Without a month count, charge every query (the cap errs on the safe side).
+        return (usage.requests || 0) * GEMINI_GROUNDING_PER_QUERY_USD;
       }
       const rate = model ? GEMINI_TEXT[model] : undefined;
       if (!rate) return 0;
@@ -119,7 +138,11 @@ export function estimateCostUSD(
 export function getPricingTable() {
   return {
     openai:     { chat: OPENAI_CHAT, image: OPENAI_IMAGE_PER_IMG },
-    gemini:     { text: GEMINI_TEXT, image: GEMINI_IMAGE_PER_IMG },
+    gemini:     {
+      text: GEMINI_TEXT,
+      image: GEMINI_IMAGE_PER_IMG,
+      grounding: { perQueryUSD: GEMINI_GROUNDING_PER_QUERY_USD, freeQueriesPerMonth: GEMINI_GROUNDING_FREE_QUERIES_PER_MONTH },
+    },
     google_maps: GOOGLE_MAPS_PER_1K,
   };
 }

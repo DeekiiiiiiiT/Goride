@@ -166,14 +166,28 @@ type Job = { id: string; name: string; code: string };
 let o2: Job;
 
 type Group = {
-  groupId: string; vehicleCatalogId: string | null; requestIds: string[]; origins: string[];
-  positionCodes: string[] | null; requestedName: string | null; requestedPartNumber: string | null; componentId: string | null;
-  status: string;
+  groupId: string; vehicleCatalogId: string | null; requestIds: string[];
+  positionCodes: string[] | null; componentId: string | null; status: string;
 };
+// Research engine RE-23: Dominion never shows who asked, what they typed or where they asked from.
+const DOMINION_PRIVATE = ["requestedName", "requestedPartNumber", "origins", "firstAsked", "lastAsked", "fleetCount"];
 async function dominionGroups(): Promise<Group[]> {
   const res = await dominion("GET", "/make-server-37f42386/admin/pending-catalog/parts-queue");
   expect(res.status, JSON.stringify(res.json)).toBe(200);
-  return (res.json.items as Group[]).filter((g) => g.vehicleCatalogId === CAT);
+  const items = res.json.items as Array<Record<string, unknown>>;
+  for (const g of items) for (const k of DOMINION_PRIVATE) expect(g, `Dominion row shows ${k}`).not.toHaveProperty(k);
+  return (items as unknown as Group[]).filter((g) => g.vehicleCatalogId === CAT);
+}
+/** What the server keeps for a group (typed name, number, origins stay server-side). */
+function storedAsk(requestIds: string[]): { requestedName: string | null; requestedPartNumber: string | null; origins: string[] } {
+  const ids = requestIds.map((id) => `'${id}'`).join(",");
+  const [name, number, origins] = sql(`SELECT
+      coalesce((SELECT j.requested_name FROM public.parts_sourcing_requests r JOIN public.catalog_research_job j ON j.id = r.catalog_research_job_id
+                WHERE r.id IN (${ids}) AND j.requested_name IS NOT NULL LIMIT 1), '') || '|' ||
+      coalesce((SELECT j.requested_part_number FROM public.parts_sourcing_requests r JOIN public.catalog_research_job j ON j.id = r.catalog_research_job_id
+                WHERE r.id IN (${ids}) AND j.requested_part_number IS NOT NULL LIMIT 1), '') || '|' ||
+      coalesce((SELECT string_agg(DISTINCT r.origin, ',' ORDER BY r.origin) FROM public.parts_sourcing_requests r WHERE r.id IN (${ids})), '')`).split("|");
+  return { requestedName: name || null, requestedPartNumber: number || null, origins: origins ? origins.split(",") : [] };
 }
 const rearGroups = async () =>
   (await dominionGroups()).filter((g) => g.componentId === o2.id && (g.positionCodes ?? []).join(",") === REAR.place);
@@ -296,8 +310,14 @@ async function openDominionPendingParts(browser: Browser) {
   const dpage = await ctx.newPage();
   await seedMmP01Session(dpage);
   const admin = process.env.ADMIN_BASE_URL?.trim() || "http://127.0.0.1:5180";
-  await dpage.goto(`${admin}/?page=pending-motor-vehicles`);
-  await dpage.getByRole("button", { name: /Parts\s+\d/i }).click({ timeout: 60_000 });
+  await dpage.goto(`${admin}/?page=pending-motor-vehicles&tab=parts`);
+  await dpage.getByTestId("pending-tab-parts").click({ timeout: 60_000 });
+  await expect(dpage.getByTestId("research-parts-tab")).toBeVisible({ timeout: 60_000 });
+  // Nothing waiting for the owner → "You're all caught up"; show the whole list.
+  if (await dpage.getByTestId("all-caught-up").isVisible()) {
+    await dpage.getByTestId("see-whats-waiting").click();
+    await dpage.getByTestId("filter-all").click();
+  }
   return { ctx, dpage };
 }
 
@@ -422,14 +442,15 @@ test.describe("Log service — Roam shows the parts that fit (Slice C)", () => {
     const groups = await rearGroups();
     expect(groups).toHaveLength(1);
     expect(groups[0].requestIds).toEqual([rearRequestA]);
-    expect(groups[0].origins).toEqual(["find_parts"]);
+    expect(storedAsk(groups[0].requestIds).origins).toEqual(["find_parts"]);
 
     const { ctx, dpage } = await openDominionPendingParts(browser);
     try {
-      const row = dpage.getByRole("row").filter({ has: dpage.getByTestId("pending-part-detail-line").filter({ hasText: /(^| · )Rear$/ }) });
+      const row = dpage.getByTestId("parts-row").filter({ hasText: o2.name }).filter({ hasText: /Rear/ });
       await expect(row).toHaveCount(1, { timeout: 60_000 });
       await expect(row).toContainText("Toyota Roomy");
-      await expect(row.getByTestId("pending-part-source")).toHaveText("Find parts");
+      // Where the ask came from ("Find parts") stays server-side (RE-23).
+      await expect(row).not.toContainText("Find parts");
     } finally {
       await ctx.close();
     }
@@ -464,7 +485,7 @@ test.describe("Log service — Roam shows the parts that fit (Slice C)", () => {
     addPart(REAR);
     const { ctx, dpage } = await openDominionPendingParts(browser);
     try {
-      const row = dpage.getByRole("row").filter({ has: dpage.getByTestId("pending-part-detail-line").filter({ hasText: /(^| · )Rear$/ }) });
+      const row = dpage.getByTestId("parts-row").filter({ hasText: o2.name }).filter({ hasText: /Rear/ });
       await expect(row).toHaveCount(1, { timeout: 60_000 });
       await row.click();
       await dpage.getByTestId("added-pick-part-open").click({ timeout: 30_000 });
@@ -617,8 +638,7 @@ test.describe("Log service — Roam shows the parts that fit (Slice C)", () => {
     expect(reqId).toMatch(/^[0-9a-f-]{36}$/);
     const groups = (await dominionGroups()).filter((g) => g.requestIds.includes(reqId));
     expect(groups).toHaveLength(1);
-    expect(groups[0].requestedName).toBe("Exhaust clip");
-    expect(groups[0].requestedPartNumber ?? null).toBeNull();
+    expect(storedAsk(groups[0].requestIds)).toMatchObject({ requestedName: "Exhaust clip", requestedPartNumber: null });
   });
 
   test("C7 — switch off: today's screens exactly; Plan it and the bell's messages refuse", async ({ page }) => {

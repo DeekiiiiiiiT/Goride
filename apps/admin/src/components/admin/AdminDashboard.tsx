@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { useAuth } from '../auth/AuthContext';
 import { DominionError, DominionLoading } from './DominionStates';
+import { ResearchNoticeBanners } from './research-engine/ResearchNoticeBanners';
 
 interface AdminDashboardProps {
   onNavigate: (page: string) => void;
@@ -153,6 +154,8 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
 
   return (
     <div className="space-y-6">
+      {/* S8 (docs/research-engine-audit.md §4): open research notices; the rest of the Overview is unchanged. */}
+      <ResearchNoticeBanners />
       <div className="flex items-center justify-between pb-6">
         <div>
           <nav className="mb-1 flex items-center gap-1.5 text-xs font-normal text-slate-500" aria-label="Breadcrumb">

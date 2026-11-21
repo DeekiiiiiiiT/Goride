@@ -193,14 +193,28 @@ const requestsFor = (pn: string) =>
   Number(sql(`SELECT count(*) FROM public.parts_sourcing_requests WHERE old_part_number = '${pn}' AND kind = 'add_part_info'`));
 
 type Group = {
-  groupId: string; vehicleCatalogId: string | null; requestIds: string[]; origins: string[];
-  positionScheme: string | null; positionCodes: string[] | null; requestedName: string | null; requestedPartNumber: string | null;
-  componentId: string | null;
+  groupId: string; vehicleCatalogId: string | null; requestIds: string[];
+  positionScheme: string | null; positionCodes: string[] | null; componentId: string | null;
 };
+// Research engine RE-23: Dominion never shows who asked, what they typed or where they asked from.
+const DOMINION_PRIVATE = ["requestedName", "requestedPartNumber", "origins", "firstAsked", "lastAsked", "fleetCount"];
 async function dominionGroups(): Promise<{ groups: Group[]; raw: string }> {
   const res = await dominion("GET", "/make-server-37f42386/admin/pending-catalog/parts-queue");
   expect(res.status, JSON.stringify(res.json)).toBe(200);
-  return { groups: (res.json.items as Group[]).filter((g) => g.vehicleCatalogId === CAT), raw: JSON.stringify(res.json) };
+  const items = res.json.items as Array<Record<string, unknown>>;
+  for (const g of items) for (const k of DOMINION_PRIVATE) expect(g, `Dominion row shows ${k}`).not.toHaveProperty(k);
+  return { groups: (items as unknown as Group[]).filter((g) => g.vehicleCatalogId === CAT), raw: JSON.stringify(res.json) };
+}
+/** What the server keeps for a group's requests (the typed name, number and origins stay server-side). */
+function storedAsk(requestIds: string[]): { requestedName: string | null; requestedPartNumber: string | null; origins: string[] } {
+  const ids = requestIds.map((id) => `'${id}'`).join(",");
+  const [name, number, origins] = sql(`SELECT
+      coalesce((SELECT j.requested_name FROM public.parts_sourcing_requests r JOIN public.catalog_research_job j ON j.id = r.catalog_research_job_id
+                WHERE r.id IN (${ids}) AND j.requested_name IS NOT NULL LIMIT 1), '') || '|' ||
+      coalesce((SELECT j.requested_part_number FROM public.parts_sourcing_requests r JOIN public.catalog_research_job j ON j.id = r.catalog_research_job_id
+                WHERE r.id IN (${ids}) AND j.requested_part_number IS NOT NULL LIMIT 1), '') || '|' ||
+      coalesce((SELECT string_agg(DISTINCT r.origin, ',' ORDER BY r.origin) FROM public.parts_sourcing_requests r WHERE r.id IN (${ids})), '')`).split("|");
+  return { requestedName: name || null, requestedPartNumber: number || null, origins: origins ? origins.split(",") : [] };
 }
 async function groupsWithRequest(requestId: string): Promise<Group[]> {
   return (await dominionGroups()).groups.filter((g) => g.requestIds.includes(requestId));
@@ -336,8 +350,14 @@ async function openDominionPendingParts(browser: Browser, width = 1440) {
   const dpage = await ctx.newPage();
   await seedMmP01Session(dpage);
   const admin = process.env.ADMIN_BASE_URL?.trim() || "http://127.0.0.1:5180";
-  await dpage.goto(`${admin}/?page=pending-motor-vehicles`);
-  await dpage.getByRole("button", { name: /Parts\s+\d/i }).click({ timeout: 60_000 });
+  await dpage.goto(`${admin}/?page=pending-motor-vehicles&tab=parts`);
+  await dpage.getByTestId("pending-tab-parts").click({ timeout: 60_000 });
+  await expect(dpage.getByTestId("research-parts-tab")).toBeVisible({ timeout: 60_000 });
+  // Nothing waiting for the owner → "You're all caught up"; show the whole list.
+  if (await dpage.getByTestId("all-caught-up").isVisible()) {
+    await dpage.getByTestId("see-whats-waiting").click();
+    await dpage.getByTestId("filter-all").click();
+  }
   return { ctx, dpage };
 }
 
@@ -440,26 +460,27 @@ test.describe("Log service — unknown parts reach Dominion (Slice B)", () => {
                 FROM public.parts_sourcing_requests WHERE id = '${firstRequestA}'`))
       .toBe(`service_log||before_after_catalyst|before_cat|${CAT}`);
 
-    // One Dominion row: Roomy, the name, the position, "Service log" (no number was asked).
+    // One Dominion row: Roomy, the part type, the position. The server keeps the typed name and "service log"
+    // origin (no number was asked); Dominion's API and screen never show them (research engine RE-23).
     const groups = await groupsWithRequest(firstRequestA);
     expect(groups).toHaveLength(1);
-    expect(groups[0].requestedName).toBe("Front oxygen sensor");
-    expect(groups[0].requestedPartNumber ?? null).toBeNull();
     expect(groups[0].positionCodes).toEqual(["before_cat"]);
-    expect(groups[0].origins).toEqual(["service_log"]);
+    expect(storedAsk(groups[0].requestIds)).toEqual({ requestedName: "Front oxygen sensor", requestedPartNumber: null, origins: ["service_log"] });
 
     const { ctx, dpage } = await openDominionPendingParts(browser);
     try {
-      const row = dpage.getByRole("row").filter({ hasText: "Front oxygen sensor" });
+      const row = dpage.getByTestId("parts-row").filter({ hasText: o2.name }).filter({ hasText: "Front" });
       await expect(row).toHaveCount(1, { timeout: 60_000 });
       await expect(row).toContainText("Toyota Roomy");
-      await expect(row.getByTestId("pending-part-detail-line")).toHaveText("Front");
-      await expect(row.getByTestId("pending-part-source")).toHaveText("Service log");
+      await expect(dpage.locator("body")).not.toContainText("Front oxygen sensor");
+      await expect(dpage.locator("body")).not.toContainText("Service log");
       await shot(dpage, "D1-table");
       await row.click();
-      const details = dpage.getByTestId("pending-part-details");
-      await expect(details).toBeVisible({ timeout: 30_000 });
-      for (const t of ["Front", "Service log"]) await expect(details).toContainText(t);
+      const drawer = dpage.getByTestId("research-drawer");
+      await expect(drawer).toBeVisible({ timeout: 30_000 });
+      await expect(drawer.getByTestId("drawer-title")).toHaveText(o2.name);
+      await expect(drawer).toContainText("Toyota Roomy");
+      await expect(drawer).not.toContainText("Front oxygen sensor");
       await shot(dpage, "D2-drawer");
     } finally {
       await ctx.close();
@@ -510,8 +531,7 @@ test.describe("Log service — unknown parts reach Dominion (Slice B)", () => {
     const groups = await groupsWithRequest(ob.requestId);
     expect(groups).toHaveLength(1);
     expect(groups[0].componentId).toBe(ptId);
-    expect(groups[0].requestedName).toBe(ptName);
-    expect(groups[0].requestedPartNumber ?? null).toBeNull();
+    expect(storedAsk(groups[0].requestIds)).toMatchObject({ requestedName: ptName, requestedPartNumber: null });
     expect(groups[0].requestIds).toEqual([ob.requestId]);
   });
 
@@ -675,7 +695,7 @@ test.describe("Log service — unknown parts reach Dominion (Slice B)", () => {
     const { groups } = await dominionGroups();
     const rows = groups.filter((g) => obs.some((o) => g.requestIds.includes(o.requestId)));
     expect(rows).toHaveLength(2);
-    expect(rows.map((g) => g.requestedName).sort()).toEqual(["Exhaust gasket ring", "Sensor wiring clip"]);
+    expect(rows.map((g) => storedAsk(g.requestIds).requestedName).sort()).toEqual(["Exhaust gasket ring", "Sensor wiring clip"]);
   });
 
   test("done-test 18 — Find parts (A) + service log (B), same number and car: one row, both Source chips", async () => {
@@ -710,7 +730,7 @@ test.describe("Log service — unknown parts reach Dominion (Slice B)", () => {
     const both = await groupsWithRequest(findId);
     expect(both).toHaveLength(1);
     expect(both[0].requestIds).toContain(ob.requestId);
-    expect(both[0].origins).toEqual(["service_log", "find_parts"]);
+    expect(storedAsk(both[0].requestIds).origins).toEqual(["find_parts", "service_log"]);
 
     // Negative: the Find parts request without a number is its own row.
     const noNumber = await findPartsA("POST", "/make-server-37f42386/parts/request", {
@@ -750,29 +770,23 @@ test.describe("Log service — unknown parts reach Dominion (Slice B)", () => {
     expect(raw).not.toMatch(/fleet_?count/i);
     const { ctx, dpage } = await openDominionPendingParts(browser);
     try {
-      const table = dpage.locator("table").filter({ hasText: "Front oxygen sensor" });
-      await expect(table).toBeVisible({ timeout: 60_000 });
+      const row = dpage.getByTestId("parts-row").filter({ hasText: o2.name }).first();
+      await expect(row).toBeVisible({ timeout: 60_000 });
       await expect(dpage.locator("body")).not.toContainText(/\b\d+\s+(fleets?|companies|compan(y|ies) asked)\b/i);
-      await dpage.getByRole("row").filter({ hasText: "Front oxygen sensor" }).first().click();
-      const details = dpage.getByTestId("pending-part-details");
-      await expect(details).toBeVisible({ timeout: 30_000 });
+      await row.click();
+      await expect(dpage.getByTestId("research-drawer")).toBeVisible({ timeout: 30_000 });
       await expect(dpage.locator("body")).not.toContainText(/\b\d+\s+(fleets?|companies)\b/i);
     } finally {
       await ctx.close();
     }
     const narrow = await openDominionPendingParts(browser, 390);
     try {
-      // Stitch D4: phone cards carry the number · where, the Source chip, the status and Open.
-      // done-test 8's row (no number since Slice C): name, place only, Service log.
-      const card = narrow.dpage
-        .getByTestId("pending-part-card")
-        .filter({ hasText: "Front oxygen sensor" })
-        .filter({ has: narrow.dpage.getByTestId("pending-part-source").filter({ hasText: "Service log" }) })
-        .filter({ has: narrow.dpage.getByText("Front", { exact: true }) })
-        .first();
+      // Research engine screen 1 on a phone: each row is a card with the car, part · place, status and one button.
+      const card = narrow.dpage.getByTestId("parts-card").filter({ hasText: o2.name }).filter({ hasText: "Front" }).first();
       await expect(card).toBeVisible({ timeout: 60_000 });
-      await expect(card.getByTestId("pending-part-source")).toHaveText("Service log");
-      await expect(card.getByRole("button", { name: "Open" })).toBeVisible();
+      await expect(card).toContainText("Toyota Roomy");
+      await expect(card.locator("button")).not.toHaveCount(0);
+      await expect(narrow.dpage.locator("body")).not.toContainText(/\b\d+\s+(fleets?|companies)\b/i);
       await shot(narrow.dpage, "D4-narrow");
     } finally {
       await narrow.ctx.close();
