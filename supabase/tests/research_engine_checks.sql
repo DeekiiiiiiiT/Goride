@@ -517,3 +517,17 @@ BEGIN
 END;
 $$;
 ROLLBACK;
+
+-- Rev 5.5 (§21 RE-63): the remembered catalogue version table is locked like the other research tables.
+DO $$
+BEGIN
+  IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.research_car_site_version'::regclass) THEN
+    RAISE EXCEPTION 'RLS is off on research_car_site_version';
+  END IF;
+  IF has_table_privilege('anon', 'public.research_car_site_version', 'SELECT')
+     OR has_table_privilege('authenticated', 'public.research_car_site_version', 'SELECT') THEN
+    RAISE EXCEPTION 'anon/authenticated can still reach research_car_site_version';
+  END IF;
+  RAISE NOTICE 'car site version checks passed';
+END;
+$$;

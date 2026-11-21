@@ -1,6 +1,6 @@
 # Research engine (cars, specs, parts) — audit
 
-**Rev 5.4 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
+**Rev 5.5 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
 US$1.35/day.** What runs live is the **search-first** flow with the new proof (Gemini + Google search proposes
 numbers, recipes and trusted pages prove them); the planned catalogue-first flow is RE-49, not built yet (§13–14). Live database: migrations 1a/1b/2/3 (03:10 UTC) and `20261121100925_research_form_recipe` (10:25 UTC),
 all with logbook lines. Live code: main `0e00cd5b` (platform-catalog, catalog-research, Dominion). Branch
@@ -784,3 +784,34 @@ starts empty and is required; its address is saved as the proof (same trusted-si
 found, all fixed (empty page box, no engine guess, row-only value for unshaped specs, whole-token engine codes, more
 date formats, job-keyed reset, link without language part, siblings limited to overlapping years). Tests: Deno 154,
 admin 52, screens 17.
+
+## 21. Rev 5.5 — a browser check a non-mechanic can do alone (21 Nov, owner)
+
+Owner: "I cannot do any of this unless I ask you what to do… we are not mechanics." Agreed.
+
+**RE-63 · High · The browser check needed Claude to read the catalogue for the owner.** Fix (built):
+- **Five numbered steps** on the check: ① open the page; ② open your car's version — in the catalogue's own column words
+  (Engine **1KRFE** — not **1KRVET**, that's the turbo; Prod period covers **11.2016 – 08.2020**; the row mentions
+  **ROOMY**; grade Custom G, which catalogues often write as a short code); ③ find the part — what to type in the page's
+  search box and the row's name in Toyota/Daihatsu/Lexus catalogues (air cleaner → "ELEMENT SUB-ASSY, AIR CLEANER
+  FILTER", spark plug → "PLUG, SPARK", …; no row name when unsure), plus Roam's suggested numbers as hints;
+  ④ copy two lines (the bold title line with the dates, then the part's row); ⑤ copy the page's address.
+- **Roam remembers the version.** New table `research_car_site_version` (migration
+  `20261121154333_research_car_site_version.sql`, deny-all): on a fully successful Confirm, when the paste names exactly
+  one version (e.g. `M900A-AGBVE`), it is saved for the car + site with that version's page. Later checks say "Last time
+  you used M900A-AGBVE" and offer "Open M900A-AGBVE directly"; the main Open button stays on the version list so a
+  wrong memory can't lock the owner in (the next confirm replaces it).
+- Sister engines and "regular engine (not turbo)" come from Dominion's same-years rows (codes compared without
+  punctuation).
+
+**RE-64 · Medium · Dominion's model codes for the Roomy are wrong.** `vehicle_catalog.full_model_code` /
+`trim_suffix_code` say `DBA-M900A-GBME` for the Custom G; Toyota's catalogue names the Custom G `AGBVE` (`AGBME` is the
+X grade). The turbo row's `GBVE` is the regular-engine Custom G on Toyota's list (the turbo is `GBVJ`). These codes came
+from the CSV import. Fix: correct the Roomy rows from Toyota's version list (source link saved), and stop showing or
+using these two columns for catalogue lookups until each car's code is confirmed; RE-63's remembered version is the
+confirmed one.
+
+Code review (medium) on RE-63: 9 found, all fixed (turbo words from all same-years rows; version saved only after a
+successful confirm and only when one version is named; frames stored with prefixes or lists handled; remembered
+version found for any site; engine codes compared without punctuation; tighter part-name hints; Open button keeps the
+list link; first word of the model). Tests: Deno 157, admin 57, screens 17, SQL checks incl. the new table (local copy).

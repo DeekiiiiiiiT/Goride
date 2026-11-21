@@ -191,6 +191,10 @@ export type ResearchJobDetail = {
   partType: { id: string; name: string } | null;
   spec: { key: string; label: string; unit: string | null } | null;
   browserCheckUrl: string | null;
+  /** RE-63: the same model's other engines built in the same years (e.g. the turbo). */
+  sisterEngines?: Array<{ code: string; turbo: boolean }>;
+  /** RE-63: the catalogue's own name for this car's version, learned from an earlier confirmed check. */
+  knownVersion?: { domain: string; code: string; url: string | null } | null;
   reads: Array<{ id: string; domain: string | null; path: "direct" | "owner_browser"; read_at: string }>;
   proposals: PartProposal[];
   vehicleProposals: VehicleProposal[];

@@ -216,3 +216,30 @@ Deno.test("RE-60 review: an Amayama link without the language part is cut back t
     "https://www.amayama.com/genuine-catalogs/epc/toyota-japan/tank-roomy/m900a",
   );
 });
+
+// RE-63: remember the catalogue's version for the car.
+import { versionCodeOnLine, versionPageUrl } from "./research_browser_check.ts";
+
+Deno.test("RE-63: the version name is read from the pasted title line", () => {
+  assertEquals(versionCodeOnLine("Toyota Tank/Roomy, M900A-AGBVE 11.2016 - 09.2020\n17801-21060 ...", "M900A"), "M900A-AGBVE");
+  assertEquals(versionCodeOnLine("Frame DBA-M900A DBA-M910A 2016", "M900A"), null);
+  assertEquals(versionCodeOnLine("no version here", "M900A"), null);
+  assertEquals(versionCodeOnLine("M900A-AGBVE", null), null);
+});
+
+Deno.test("RE-63: the version's start page comes from the page the owner used", () => {
+  assertEquals(
+    versionPageUrl("https://www.amayama.com/en/genuine-catalogs/epc/toyota-japan/tank-roomy/m900a/147989/engine/1703"),
+    "https://www.amayama.com/en/genuine-catalogs/epc/toyota-japan/tank-roomy/m900a/147989",
+  );
+  assertEquals(versionPageUrl("https://www.amayama.com/en/genuine-catalogs/epc/toyota-japan/tank-roomy/m900a"), null);
+  assertEquals(versionPageUrl("https://partsouq.com/en/catalog/x"), null);
+});
+
+Deno.test("RE-63 review: frames stored with a prefix or a list still find the version; two versions → none", () => {
+  const title = "Toyota Tank/Roomy, M900A-AGBVE 11.2016 - 09.2020";
+  assertEquals(versionCodeOnLine(title, "DBA-M900A"), "M900A-AGBVE");
+  assertEquals(versionCodeOnLine(title, "M900A/M910A"), "M900A-AGBVE");
+  assertEquals(versionCodeOnLine("DBA-M900A-AGBVE 11.2016 - 09.2020", "M900A"), "M900A-AGBVE");
+  assertEquals(versionCodeOnLine("M900A-BGBVE 11.2016 - 09.2020\nM900A-AGBVE 11.2016 - 09.2020", "M900A"), null);
+});

@@ -34,6 +34,8 @@ import {
   browserCheckTarget,
   buildDates,
   plainVersion,
+  catalogueEngineCode,
+  partFinder,
   carLabel,
   gateReasonText,
   howSureLine,
@@ -528,6 +530,9 @@ function BrowserCheckCard({
   const url = detail.browserCheckUrl;
   const site = siteName(url);
   const target = browserCheckTarget(detail.car, itemName);
+  const finder = partFinder(itemName, detail.car?.make);
+  // Roam's open numbers for this part (first suggestion first), shown as hints; the page's number is what counts.
+  const suggested = [...new Set(detail.proposals.filter((p) => p.status === "open").map((p) => String(p.part_number ?? "").trim()).filter(Boolean))].slice(0, 5);
   const jobType = detail.job.job_type === "spec" ? "spec" : "part";
 
   // The server reads the line with the same rule Confirm uses (part → car + number; spec → car + a value of its shape).
@@ -586,24 +591,122 @@ function BrowserCheckCard({
             <span className={`text-[13px] ${D_MUTED}`}>Roam has no page link for this one.</span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        {/* RE-63: a guide a non-mechanic can follow alone — in the catalogue's own column words. */}
+        <div className="flex items-start gap-2">
           <StepDot n={2} />
-          <div className="flex flex-col gap-1 text-[14px] text-[#00174b] dark:text-[#dbe1ff]" data-testid="browser-check-instruction">
-            <p>
-              Make sure the page is for <span className="font-semibold">{plainVersion(detail.car)}</span>. If it shows a list of versions,
-              open the one{buildDates(detail.car) ? ` dated ${buildDates(detail.car)}` : ""} with that engine.
-            </p>
-            <p>Copy the line that names the version (with its dates), then the {target.item} row, and paste both below.</p>
+          <div className="flex flex-col gap-2 text-[14px] text-[#00174b] dark:text-[#dbe1ff]" data-testid="browser-check-instruction">
+            <p className="font-semibold">Open your car&apos;s version</p>
+            {detail.knownVersion ? (
+              <div className="flex flex-col gap-2" data-testid="guide-known-version">
+                <p>
+                  Last time you used{" "}
+                  <span className={`rounded bg-white/80 px-1.5 py-0.5 font-semibold ${D_MONO} dark:bg-[#0b1220]/60`}>{detail.knownVersion.code}</span>{" "}
+                  for this car. In {site}&apos;s list of versions, click that one.
+                </p>
+                {detail.knownVersion.url ? (
+                  <a
+                    href={detail.knownVersion.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="parts-btn parts-btn--secondary !min-h-[36px] w-full justify-center md:w-auto"
+                    data-testid="open-known-version"
+                  >
+                    Open {detail.knownVersion.code} directly <DIcon name="open_in_new" className="text-[16px]" />
+                  </a>
+                ) : null}
+                <p className="text-[13px] opacity-80">If that isn&apos;t your car&apos;s version, pick the right one: Roam remembers the one you confirm.</p>
+              </div>
+            ) : (
+              <>
+                <p>
+                  Your car: <span className="font-semibold">{plainVersion(detail.car)}</span>. If {site} shows a list of versions, click the row
+                  where:
+                </p>
+                <ul className="flex flex-col gap-1 pl-1" data-testid="guide-version-columns">
+                  {catalogueEngineCode(detail.car?.engine_code) ? (
+                    <li>
+                      • <span className="font-semibold">Engine</span> is{" "}
+                      <span className={`rounded bg-white/80 px-1 ${D_MONO} dark:bg-[#0b1220]/60`}>{catalogueEngineCode(detail.car?.engine_code)}</span>
+                      {(detail.sisterEngines ?? []).length ? (
+                        <>
+                          {" "}— not{" "}
+                          {(detail.sisterEngines ?? []).map((e, i) => (
+                            <span key={e.code}>
+                              {i > 0 ? " or " : ""}
+                              <span className={`rounded bg-white/80 px-1 ${D_MONO} dark:bg-[#0b1220]/60`}>{catalogueEngineCode(e.code)}</span>
+                              {e.turbo ? " (that's the turbo)" : ""}
+                            </span>
+                          ))}
+                        </>
+                      ) : null}
+                    </li>
+                  ) : null}
+                  {buildDates(detail.car) ? (
+                    <li>
+                      • <span className="font-semibold">Prod period</span> covers <span className="font-semibold">{buildDates(detail.car)}</span>
+                    </li>
+                  ) : null}
+                  {detail.car?.model ? (
+                    <li>
+                      • The row mentions <span className="font-semibold">{detail.car.model.trim().split(/\s+/)[0].toUpperCase()}</span>
+                    </li>
+                  ) : null}
+                  {detail.car?.catalog_trim ? (
+                    <li>
+                      • <span className="font-semibold">Grade</span>: {detail.car.catalog_trim} (catalogues often use a short code; if more than one row
+                      fits, pick the one that matches the grade)
+                    </li>
+                  ) : null}
+                </ul>
+                <p className="text-[13px] opacity-80">Roam remembers the version you use, so next time it tells you which one to click.</p>
+              </>
+            )}
           </div>
         </div>
         <div className="flex items-start gap-2">
           <StepDot n={3} />
+          <div className="flex flex-col gap-1 text-[14px] text-[#00174b] dark:text-[#dbe1ff]" data-testid="guide-find-part">
+            <p className="font-semibold">Find the {jobType === "spec" ? (detail.spec?.label ?? target.item).toLowerCase() : target.item}</p>
+            {jobType === "part" ? (
+              <>
+                <p>
+                  On the version&apos;s page, type <span className="font-semibold">&ldquo;{finder.search}&rdquo;</span> in the page&apos;s search box.
+                  {finder.rowName ? (
+                    <>
+                      {" "}The row you want is called <span className="font-semibold">{finder.rowName}</span>.
+                    </>
+                  ) : null}
+                </p>
+                {suggested.length ? (
+                  <p data-testid="guide-suggested-numbers">
+                    Roam thinks the number may be{" "}
+                    {suggested.map((n, i) => (
+                      <span key={n}>
+                        {i > 0 ? ", " : ""}
+                        <span className={`rounded bg-white/80 px-1 ${D_MONO} dark:bg-[#0b1220]/60`}>{n}</span>
+                      </span>
+                    ))}
+                    . The page&apos;s number is the one that counts.
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <p>Find the line on the page that gives it for your version.</p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-start gap-2">
+          <StepDot n={4} />
           <div className="flex w-full flex-col gap-2">
+            <div className="flex flex-col gap-1 text-[14px] text-[#00174b] dark:text-[#dbe1ff]">
+              <p className="font-semibold">Copy two lines and paste them here</p>
+              <p>① the bold line under the page title (it names the version and its dates), then ② the {target.item} row.</p>
+            </div>
             <textarea
               rows={4}
               value={pasted}
               onChange={(e) => setPasted(e.target.value)}
-              placeholder="Paste that line here"
+              placeholder="Paste the two lines here"
               data-testid="browser-check-paste"
               className="w-full resize-none rounded-lg bg-white p-4 text-[14px] text-[#30323b] shadow-sm outline-none placeholder:text-[#5d5f68] focus:ring-2 focus:ring-[#0153dc] dark:bg-[#0b1220] dark:text-[#e2e8f0]"
             />
@@ -616,6 +719,20 @@ function BrowserCheckCard({
               </PartsButton>
             </div>
           </div>
+        </div>
+        <div className="flex items-start gap-2">
+          <StepDot n={5} />
+          <label className="flex w-full flex-col gap-1 text-[14px] text-[#00174b] dark:text-[#dbe1ff]">
+            <span className="font-semibold">Copy the page&apos;s address</span>
+            <span>Click the address bar at the top of the {site} page, copy it, and paste it here. It&apos;s saved as the proof.</span>
+            <input
+              value={pageUrl}
+              onChange={(e) => setPageUrl(e.target.value)}
+              placeholder="https://"
+              data-testid="browser-check-page-url"
+              className={`h-10 w-full rounded-lg bg-white px-3 text-[13px] text-[#30323b] shadow-sm outline-none focus:ring-2 focus:ring-[#0153dc] dark:bg-[#0b1220] dark:text-[#e2e8f0] ${D_MONO}`}
+            />
+          </label>
         </div>
       </div>
 
@@ -638,20 +755,6 @@ function BrowserCheckCard({
             )}
           </div>
         </div>
-      ) : null}
-
-      {pasted.trim() ? (
-        <label className={`flex flex-col gap-1 text-[13px] ${D_MUTED}`}>
-          Address of the page you copied from
-          <input
-            value={pageUrl}
-            onChange={(e) => setPageUrl(e.target.value)}
-            placeholder="https://"
-            data-testid="browser-check-page-url"
-            className={`h-10 w-full rounded-lg border border-[#c5c6d0] bg-white px-3 text-[13px] text-[#30323b] outline-none focus:ring-2 focus:ring-[#0153dc] dark:border-[#334155] dark:bg-[#0b1220] dark:text-[#e2e8f0] ${D_MONO}`}
-          />
-          <span className="text-[12px]">Copy the address from the browser's address bar on the page you copied from. It's saved as the proof.</span>
-        </label>
       ) : null}
 
       {askNumber ? (
