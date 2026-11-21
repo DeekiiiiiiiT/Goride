@@ -742,7 +742,7 @@ function BrowserCheckCard({
           <div className="flex items-start gap-2" data-testid="q-change">
             <StepDot n={n++} />
             <div className="flex w-full flex-col gap-2 pt-0.5">
-              <p>Does it show one number, or a change by build date?</p>
+              <p>Under the part, how many different Period dates?</p>
               <div className="flex flex-wrap gap-2">
                 <PartsButton
                   variant={!changed ? "primary" : "secondary"}
@@ -750,7 +750,7 @@ function BrowserCheckCard({
                   onClick={() => setChanged(false)}
                   data-testid="q-change-one"
                 >
-                  One number
+                  One
                 </PartsButton>
                 <PartsButton
                   variant={changed ? "primary" : "secondary"}
@@ -758,12 +758,12 @@ function BrowserCheckCard({
                   onClick={() => setChanged(true)}
                   data-testid="q-change-split"
                 >
-                  Changed during the build
+                  Two
                 </PartsButton>
               </div>
               {changed ? (
                 <div className="flex flex-wrap items-center gap-2">
-                  <span>Changed in:</span>
+                  <span>The second Period starts:</span>
                   <select
                     value={changeMonth || ""}
                     onChange={(e) => setChangeMonth(Number(e.target.value) || 0)}
