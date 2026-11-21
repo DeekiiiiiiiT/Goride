@@ -177,28 +177,68 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
         : Promise.resolve({ data: null }),
       specKey ? supabase.from("spec_key").select("key, label, unit").eq("key", specKey).maybeSingle() : Promise.resolve({ data: null }),
     ]);
-    // RE-62: the engine in plain words, only when Dominion knows it — this car's own engine type, or "regular (not turbo)"
-    // when it has none but a sister version built in the same years is a turbo.
+    // RE-62 / RE-63: the engine in plain words (only when Dominion knows it), the sister engines of the same years (so
+    // the guide can say "not 1KRVET — that's the turbo"), and the catalogue version learned from an earlier check.
     let engineWords: string | null = null;
+    let sisterEngines: Array<{ code: string; turbo: boolean }> = [];
+    let knownVersion: { domain: string; code: string; url: string | null } | null = null;
     if (car) {
-      const cr = car as { make: string; model: string; engine_type?: string | null; production_start_year?: number | null; production_end_year?: number | null };
+      const cr = car as {
+        make: string;
+        model: string;
+        engine_code?: string | null;
+        engine_type?: string | null;
+        production_start_year?: number | null;
+        production_end_year?: number | null;
+      };
+      const y1 = cr.production_start_year ?? 0;
+      const y2 = cr.production_end_year ?? 9999;
+      const [{ data: sisters }, { data: versions }] = await Promise.all([
+        supabase.from("vehicle_catalog").select("engine_code, engine_type, production_start_year, production_end_year")
+          .eq("make", cr.make).eq("model", cr.model).limit(60),
+        supabase.from("research_car_site_version").select("domain, version_code, version_url, confirmed_at")
+          .eq("vehicle_catalog_id", vehicleId).order("confirmed_at", { ascending: false }),
+      ]);
+      type Sis = { engine_code: string | null; engine_type: string | null; production_start_year: number | null; production_end_year: number | null };
+      const sameYears = ((sisters ?? []) as Sis[])
+        .filter((x) => (x.production_start_year ?? 0) <= y2 && (x.production_end_year ?? 9999) >= y1);
+      const norm = (v: unknown) => String(v ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const ownCode = norm(cr.engine_code);
+      // A turbo sister counts even when its engine code isn't on file (for the "regular engine" words).
+      const turboSisterAny = sameYears.some((x) => /turbo/i.test(String(x.engine_type ?? "")) && norm(x.engine_code) !== ownCode);
+      const byCode = new Map<string, { code: string; turbo: boolean }>();
+      for (const x of sameYears) {
+        const code = String(x.engine_code ?? "").trim();
+        const k = norm(code);
+        if (!k || k === ownCode) continue;
+        const prev = byCode.get(k);
+        byCode.set(k, { code: prev?.code ?? code, turbo: (prev?.turbo ?? false) || /turbo/i.test(String(x.engine_type ?? "")) });
+      }
+      sisterEngines = [...byCode.values()];
       const own = String(cr.engine_type ?? "").trim().toLowerCase();
       if (/turbo/.test(own)) engineWords = "turbo engine";
       else if (/hybrid/.test(own)) engineWords = "hybrid engine";
       else if (/electric|\bev\b/.test(own)) engineWords = "electric";
-      else if (!own || /^(n\/?a|na|naturally aspirated)$/.test(own)) {
-        const { data: sisters } = await supabase.from("vehicle_catalog").select("engine_type, production_start_year, production_end_year")
-          .eq("make", cr.make).eq("model", cr.model).ilike("engine_type", "%turbo%").limit(20);
-        const y1 = cr.production_start_year ?? 0;
-        const y2 = cr.production_end_year ?? 9999;
-        const turboSister = ((sisters ?? []) as Array<{ production_start_year: number | null; production_end_year: number | null }>)
-          .some((s) => (s.production_start_year ?? 0) <= y2 && (s.production_end_year ?? 9999) >= y1);
-        if (turboSister) engineWords = "regular engine (not turbo)";
+      else if ((!own || /^(n\/?a|na|naturally aspirated)$/.test(own)) && turboSisterAny) {
+        engineWords = "regular engine (not turbo)";
       }
+      let linkDomain = "";
+      try {
+        linkDomain = browserCheckUrl ? new URL(browserCheckUrl).hostname.replace(/^www\./, "") : "";
+      } catch {
+        linkDomain = "";
+      }
+      // The version for the link's site, else the newest one confirmed for this car. The Open button keeps Roam's own
+      // (list) link; the remembered version is offered separately so a wrong one can't lock the owner in.
+      const vs = (versions ?? []) as Array<{ domain: string; version_code: string; version_url: string | null }>;
+      const v = vs.find((x) => x.domain === linkDomain) ?? vs[0];
+      if (v) knownVersion = { domain: v.domain, code: v.version_code, url: v.version_url };
     }
     return c.json({
       job,
       car: car ? { ...(car as Record<string, unknown>), engine_words: engineWords } : null,
+      sisterEngines,
+      knownVersion,
       partType: comp ?? null,
       spec: spec ?? null,
       browserCheckUrl,

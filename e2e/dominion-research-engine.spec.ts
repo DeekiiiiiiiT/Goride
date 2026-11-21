@@ -99,9 +99,16 @@ function detail(jobId: string) {
     case "job-auto":
       return { ...base, job: j("auto_added", { fit_descriptor: "front" }), partType: { id: "c-2", name: "Front brake pads" }, proposals: [proposal("p-2", jobId, { brand: "SB", part_number: "00000-T0001", position_key: "front", status: "promoted", trust_route: "c", checks: { trust: "confirmed" }, sources: [{ domain: "sbparts.jp", readId: "r-2", block: "M900A front pad 00000-T0001", url: "https://sbparts.jp/x" }] })] };
     case "job-bc":
-      return { ...base, job: j("browser_check", { job_type: "spec", spec_key: "battery_jis", maintenance_component_id: null, fit_descriptor: null }), spec: { key: "battery_jis", label: "Battery size", unit: null }, browserCheckUrl: "https://www.amayama.com/en/part/toyota/roomy-m900a" };
+      return { ...base, sisterEngines: [{ code: "1KR-VET", turbo: true }], job: j("browser_check", { job_type: "spec", spec_key: "battery_jis", maintenance_component_id: null, fit_descriptor: null }), spec: { key: "battery_jis", label: "Battery size", unit: null }, browserCheckUrl: "https://www.amayama.com/en/part/toyota/roomy-m900a" };
     case "job-bcp":
-      return { ...base, job: j("browser_check", { fit_descriptor: null }), partType: { id: "c-9", name: "Spark plugs" }, browserCheckUrl: "https://www.amayama.com/en/part/toyota/roomy-m900a-plugs", proposals: [proposal("p-9", jobId, { brand: "Toyota", part_number: "00000-T0009" })] };
+      return {
+        ...base,
+        job: j("browser_check", { fit_descriptor: null }),
+        partType: { id: "c-9", name: "Spark plugs" },
+        browserCheckUrl: "https://www.amayama.com/en/part/toyota/roomy-m900a-plugs",
+        knownVersion: { domain: "amayama.com", code: "M900A-AGBVE", url: "https://www.amayama.com/en/part/toyota/roomy-m900a-plugs" },
+        proposals: [proposal("p-9", jobId, { brand: "Toyota", part_number: "00000-T0009" })],
+      };
     case "job-cf":
       return {
         ...base,
@@ -366,6 +373,9 @@ test.describe("Research engine screens (layer 3)", () => {
     // RE-62: the car in plain words (dates, regular engine), never a frame code.
     await expect(d.getByTestId("browser-check-instruction")).toContainText("Toyota Roomy, built 2016 – 2020, regular engine (not turbo)");
     await expect(d.getByTestId("browser-check-instruction")).not.toContainText("M900A");
+    // RE-63: the version table in the catalogue's own column words.
+    await expect(d.getByTestId("guide-version-columns")).toContainText("Engine is 1KRFE — not 1KRVET (that's the turbo)");
+    await expect(d.getByTestId("guide-version-columns")).toContainText("The row mentions ROOMY");
     await expect(d.getByTestId("browser-check-counter")).toContainText("7 of 25");
     await expect(d.getByTestId("browser-check-confirm")).toBeDisabled();
     await d.getByTestId("browser-check-paste").fill("Roomy M900A battery");
@@ -396,6 +406,11 @@ test.describe("Research engine screens (layer 3)", () => {
     await openParts(page);
     await page.getByTestId("parts-row").filter({ hasText: "Spark plugs" }).getByTestId("row-open-browser-check").click();
     const d = page.getByTestId("research-drawer");
+    // RE-63: a remembered version is named; the part step says what to search, which row, and Roam's numbers.
+    await expect(d.getByTestId("guide-known-version")).toContainText("M900A-AGBVE");
+    await expect(d.getByTestId("guide-find-part")).toContainText("spark plug");
+    await expect(d.getByTestId("guide-find-part")).toContainText("PLUG, SPARK");
+    await expect(d.getByTestId("guide-suggested-numbers")).toContainText("00000-T0009");
     // Only the car line (with a sister frame code): no number, Confirm stays off, the typing box appears.
     await d.getByTestId("browser-check-paste").fill("Engine 1KR-FE Frame DBA-M900A DBA-M910A Production years 2016 2017 2018");
     await expect(d.getByTestId("browser-check-readback")).toContainText("None of Roam's suggested numbers is on this line");

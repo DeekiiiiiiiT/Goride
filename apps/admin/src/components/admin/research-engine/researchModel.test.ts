@@ -134,3 +134,40 @@ describe("money and goal", () => {
     expect(shortDate("2027-02-18")).toBe("18 Feb 2027");
   });
 });
+
+import { catalogueEngineCode, partFinder } from "./researchModel";
+
+describe("browser-check guide (RE-63)", () => {
+  it("writes engine codes the way catalogue version tables do", () => {
+    expect(catalogueEngineCode("1KR-FE")).toBe("1KRFE");
+    expect(catalogueEngineCode("1KR-VET")).toBe("1KRVET");
+    expect(catalogueEngineCode(null)).toBe("");
+  });
+
+  it("tells what to search and which row to look for in a Toyota / Daihatsu catalogue", () => {
+    expect(partFinder("Engine Air Filter", "Toyota")).toEqual({ search: "air cleaner", rowName: "ELEMENT SUB-ASSY, AIR CLEANER FILTER" });
+    expect(partFinder("Spark Plugs", "Toyota")).toEqual({ search: "spark plug", rowName: "PLUG, SPARK" });
+    expect(partFinder("Cabin A/C Filter", "Daihatsu").search).toBe("air filter");
+    expect(partFinder("Shock absorber", "Toyota").rowName).toBe("ABSORBER ASSY, SHOCK");
+  });
+
+  it("falls back to the part's own name for other makers and unknown parts", () => {
+    expect(partFinder("Engine Air Filter", "Honda")).toEqual({ search: "engine air filter", rowName: null });
+    expect(partFinder("Mystery part", "Toyota")).toEqual({ search: "mystery part", rowName: null });
+  });
+});
+
+describe("browser-check guide — no wrong row names (code review)", () => {
+  it("parts that only sit near a known part get no row name", () => {
+    expect(partFinder("Timing belt", "Toyota").rowName).toBeNull();
+    expect(partFinder("Strut mount", "Toyota").rowName).toBeNull();
+    expect(partFinder("Brake pad wear sensor", "Toyota").rowName).toBeNull();
+    expect(partFinder("Air con compressor belt", "Toyota").rowName).toBeNull();
+  });
+  it("the real core part names still get their rows", () => {
+    expect(partFinder("Drive / Serpentine Belt", "Toyota").rowName).toBe("BELT, V-RIBBED");
+    expect(partFinder("Brakes", "Toyota").rowName).toBeNull();
+    expect(partFinder("Front brake pads", "Toyota").rowName).toBe("PAD KIT, DISC BRAKE");
+    expect(partFinder("Wiper Blades", "Toyota").rowName).toBe("BLADE ASSY, WIPER");
+  });
+});

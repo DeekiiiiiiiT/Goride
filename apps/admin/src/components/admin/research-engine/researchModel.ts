@@ -393,3 +393,36 @@ export function onTrack(target: string | null | undefined, expected: string | nu
   if (!target || !expected) return null;
   return expected <= target;
 }
+
+// ------------------------------------------------------------------ browser-check guide (RE-63)
+
+/** An engine code the way catalogues list it in their version tables ("1KR-FE" → "1KRFE"). */
+export function catalogueEngineCode(code: string | null | undefined): string {
+  return String(code ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+export type PartFinder = { search: string; rowName: string | null };
+
+/**
+ * What to type in a Japanese maker catalogue's search box (Toyota / Daihatsu / Lexus parts catalogues), and the row's
+ * name there. Only names seen in those catalogues; other parts fall back to the part's own name.
+ */
+export function partFinder(itemName: string, make: string | null | undefined): PartFinder {
+  const n = itemName.toLowerCase();
+  const japanese = /toyota|daihatsu|lexus/i.test(String(make ?? ""));
+  const plain = { search: itemName.toLowerCase(), rowName: null };
+  if (!japanese) return plain;
+  // Parts that only sit near these (mounts, sensors, timing belts, A/C compressors…) get no row name: better none than wrong.
+  if (/mount|sensor|switch|timing|compressor|bearing|hose|cover|bracket|gasket/.test(n)) return plain;
+  if (/\bcabin\b|a\/c filter|air ?con(ditioning)? filter/.test(n)) return { search: "air filter", rowName: "ELEMENT, CLEAN AIR FILTER (or AIR REFINER)" };
+  if (/engine air filter|^air filter$|air cleaner/.test(n)) return { search: "air cleaner", rowName: "ELEMENT SUB-ASSY, AIR CLEANER FILTER" };
+  if (/spark plug/.test(n)) return { search: "spark plug", rowName: "PLUG, SPARK" };
+  if (/shock absorber|^shocks?$/.test(n)) return { search: "shock absorber", rowName: "ABSORBER ASSY, SHOCK" };
+  if (/thermostat/.test(n)) return { search: "thermostat", rowName: "THERMOSTAT" };
+  if (/brake pads?|^pads?$/.test(n)) return { search: "disc brake", rowName: "PAD KIT, DISC BRAKE" };
+  if (/brake shoes?/.test(n)) return { search: "brake shoe", rowName: "SHOE SET, BRAKE" };
+  if (/wiper blades?/.test(n)) return { search: "wiper", rowName: "BLADE ASSY, WIPER" };
+  if (/serpentine belt|drive belt|fan belt|v-?ribbed belt/.test(n)) return { search: "belt", rowName: "BELT, V-RIBBED" };
+  if (/oil filter/.test(n)) return { search: "oil filter", rowName: "FILTER SUB-ASSY, OIL" };
+  return plain;
+}

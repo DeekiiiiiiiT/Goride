@@ -75,6 +75,41 @@ export function periodsFitCar(line: string, car: CarBuild): boolean {
 }
 
 /**
+ * RE-63: the catalogue's own name for the version the owner pasted from — the car's frame followed by the
+ * catalogue's suffix, e.g. "M900A-AGBVE" on "Toyota Tank/Roomy, M900A-AGBVE 11.2016 - 09.2020". Null when absent.
+ */
+export function versionCodeOnLine(pasted: string, frame: string | null | undefined): string | null {
+  // The stored frame may be "M900A", "DBA-M900A" or "M900A/M910A": try each frame, without an emissions prefix.
+  const frames = String(frame ?? "")
+    .toUpperCase()
+    .split(/[\s/,;]+/)
+    .map((x) => x.replace(/^[A-Z0-9]{2,3}-(?=[A-Z])/, "").replace(/[^A-Z0-9]/g, ""))
+    .filter((x) => x.length >= 3);
+  const text = String(pasted ?? "").toUpperCase();
+  const found = new Set<string>();
+  for (const f of frames) {
+    // The page may write it with its emissions prefix too ("DBA-M900A-AGBVE").
+    const re = new RegExp(`(?<![A-Z0-9])(?:[A-Z0-9]{2,3}-)?(${f}-[A-Z0-9]{3,8})(?![A-Z0-9])`, "g");
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text))) found.add(m[1]);
+  }
+  // Only one version named → that's the one used; several (or none) → remember nothing.
+  return found.size === 1 ? [...found][0] : null;
+}
+
+/** RE-63: the version's own start page from the page the owner used (Amayama EPC `…/<frame>/<id>`), else null. */
+export function versionPageUrl(url: string | null | undefined): string | null {
+  try {
+    const u = new URL(String(url ?? ""));
+    if (u.protocol !== "https:" || u.hostname.replace(/^www\./, "") !== "amayama.com") return null;
+    const m = u.pathname.match(/^((?:\/[a-z]{2})?\/genuine-catalogs\/epc\/[^/]+\/[^/]+\/[^/]+\/\d+)(\/|$)/i);
+    return m ? `${u.origin}${m[1]}` : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * A catalogue link that points at one version of a frame (Amayama EPC `/genuine-catalogs/epc/<make>/<model>/<frame>/<id>/…`)
  * is cut back to that frame's version list, because Roam can't read the page to know the version fits (RE-60).
  * Other links are returned unchanged.

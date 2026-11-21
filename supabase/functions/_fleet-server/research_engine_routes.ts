@@ -7,7 +7,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { guardRead, guardWrite } from "./catalog_research_routes.ts";
 import { autoResolveFromBatch } from "./catalog_request_autoresolve.ts";
 import { closeJobNotFound } from "./catalog_research_not_found.ts";
-import { browserCheckGate, type CarBuild, versionListLink } from "./research_browser_check.ts";
+import { browserCheckGate, type CarBuild, versionCodeOnLine, versionListLink, versionPageUrl } from "./research_browser_check.ts";
 import { identityTokens } from "./research_part_job.ts";
 import { siteDomain } from "./research_page_reader.ts";
 import { type LookupRecipe, runRecipe } from "./research_recipes.ts";
@@ -264,6 +264,22 @@ export function registerResearchEngineRoutes(
     if (readErr) return c.json({ error: readErr.message }, 400);
     const readId = String((read as { id: string }).id);
 
+    // RE-63: once Confirm has fully worked, remember the catalogue's name and page for this car's version
+    // (only when the paste names exactly one version), so the next check says "click it".
+    const rememberVersion = async () => {
+      const versionCode = versionCodeOnLine(pasted, ctx.car.chassis_code);
+      if (!versionCode || !ctx.job.vehicle_catalog_id) return;
+      const { error: vErr } = await supabase.from("research_car_site_version").upsert({
+        vehicle_catalog_id: ctx.job.vehicle_catalog_id,
+        domain: host,
+        version_code: versionCode,
+        version_url: versionPageUrl(url),
+        confirmed_by: actor,
+        confirmed_at: new Date().toISOString(),
+      }, { onConflict: "vehicle_catalog_id,domain" });
+      if (vErr) console.warn("research_car_site_version upsert failed", vErr.message);
+    };
+
     if (ctx.job.job_type === "spec") {
       const { data: prop, error } = await supabase.from("catalog_spec_proposal").upsert({
         job_id: jobId,
@@ -279,6 +295,7 @@ export function registerResearchEngineRoutes(
       const { data, error: pErr } = await supabase.rpc("promote_spec_proposal", { p_proposal_id: (prop as { id: string }).id, p_actor: actor });
       if (pErr) return c.json({ error: pErr.message }, 400);
       await supabase.rpc("catalog_research_expire_browser_checks");
+      await rememberVersion();
       return c.json({ result: data, detected: gate.detected });
     }
 
@@ -312,6 +329,7 @@ export function registerResearchEngineRoutes(
     const batchId = (promoted as { batchId?: string } | null)?.batchId;
     if (batchId) await autoResolveFromBatch(supabase, batchId, actor);
     await supabase.rpc("catalog_research_expire_browser_checks");
+    await rememberVersion();
     return c.json({ result: promoted, detected: gate.detected });
   });
 
@@ -636,7 +654,7 @@ async function browserCheckContext(supabase: SupabaseClient, jobId: string): Pro
         .map((s) => String(s.engine_code ?? "").trim())
         .filter(Boolean),
     ),
-  ].filter((e) => e !== String(c0.engine_code ?? "").trim());
+  ].filter((e) => e.toUpperCase().replace(/[^A-Z0-9]/g, "") !== String(c0.engine_code ?? "").toUpperCase().replace(/[^A-Z0-9]/g, ""));
   const num = (v: unknown) => (v == null || v === "" ? null : Number(v));
   // Every open number Roam suggested, first suggestion first (RE-57: the line must hold one of them, or a typed one).
   const { data: open } = j.job_type === "part"
