@@ -181,7 +181,15 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
     // the guide can say "not 1KRVET — that's the turbo"), and the catalogue version learned from an earlier check.
     let engineWords: string | null = null;
     let sisterEngines: Array<{ code: string; turbo: boolean }> = [];
-    let knownVersion: { domain: string; code: string; url: string | null } | null = null;
+    let knownVersion: {
+      domain: string;
+      code: string;
+      url: string | null;
+      engine: string | null;
+      prodPeriod: string | null;
+      grade: string | null;
+      transmission: string | null;
+    } | null = null;
     if (car) {
       const cr = car as {
         make: string;
@@ -196,7 +204,7 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
       const [{ data: sisters }, { data: versions }] = await Promise.all([
         supabase.from("vehicle_catalog").select("engine_code, engine_type, production_start_year, production_end_year")
           .eq("make", cr.make).eq("model", cr.model).limit(60),
-        supabase.from("research_car_site_version").select("domain, version_code, version_url, confirmed_at")
+        supabase.from("research_car_site_version").select("domain, version_code, version_url, engine, prod_period, grade, transmission, confirmed_at")
           .eq("vehicle_catalog_id", vehicleId).order("confirmed_at", { ascending: false }),
       ]);
       type Sis = { engine_code: string | null; engine_type: string | null; production_start_year: number | null; production_end_year: number | null };
@@ -230,9 +238,28 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
       }
       // The version for the link's site, else the newest one confirmed for this car. The Open button keeps Roam's own
       // (list) link; the remembered version is offered separately so a wrong one can't lock the owner in.
-      const vs = (versions ?? []) as Array<{ domain: string; version_code: string; version_url: string | null }>;
+      type Ver = {
+        domain: string;
+        version_code: string;
+        version_url: string | null;
+        engine: string | null;
+        prod_period: string | null;
+        grade: string | null;
+        transmission: string | null;
+      };
+      const vs = (versions ?? []) as Ver[];
       const v = vs.find((x) => x.domain === linkDomain) ?? vs[0];
-      if (v) knownVersion = { domain: v.domain, code: v.version_code, url: v.version_url };
+      if (v) {
+        knownVersion = {
+          domain: v.domain,
+          code: v.version_code,
+          url: v.version_url,
+          engine: v.engine,
+          prodPeriod: v.prod_period,
+          grade: v.grade,
+          transmission: v.transmission,
+        };
+      }
     }
     return c.json({
       job,

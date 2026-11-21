@@ -97,6 +97,12 @@ export function versionCodeOnLine(pasted: string, frame: string | null | undefin
   return found.size === 1 ? [...found][0] : null;
 }
 
+/** RE-67: the first build period as the catalogue writes it ("11.2016 - 09.2020", "09.2020 - ..."), else null. */
+export function periodTextOnLine(pasted: string): string | null {
+  const m = String(pasted ?? "").match(/\b\d{1,2}[./]\d{4}\s*[-–—~]\s*(?:\d{1,2}[./]\d{4}|\.{2,3}|…)/);
+  return m ? m[0].replace(/\s+/g, " ").trim() : null;
+}
+
 /** RE-63: the version's own start page from the page the owner used (Amayama EPC `…/<frame>/<id>`), else null. */
 export function versionPageUrl(url: string | null | undefined): string | null {
   try {

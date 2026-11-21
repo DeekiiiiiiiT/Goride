@@ -441,3 +441,21 @@ export function versionRowWords(car: ResearchCar | null): string | null {
   const parts = [catalogueEngineCode(car.engine_code), start, (car.model ?? "").trim().split(/\s+/)[0]?.toUpperCase() ?? ""].filter(Boolean);
   return parts.length ? parts.join(" · ") : null;
 }
+
+/**
+ * RE-67: the version's row in the catalogue's own columns (Model · Engine · Prod period · Grade · Transm), from the
+ * stored catalogue words when Roam has them, else Dominion's own values; "—" when unknown.
+ */
+export function catalogueVersionRow(
+  car: ResearchCar | null,
+  known: { code?: string | null; engine?: string | null; prodPeriod?: string | null; grade?: string | null; transmission?: string | null } | null,
+): Array<{ label: string; value: string }> {
+  const or = (...v: Array<string | null | undefined>) => v.map((x) => String(x ?? "").trim()).find(Boolean) || "—";
+  return [
+    { label: "Model", value: or(known?.code) },
+    { label: "Engine", value: or(known?.engine, catalogueEngineCode(car?.engine_code)) },
+    { label: "Prod period", value: or(known?.prodPeriod, buildDates(car)) },
+    { label: "Grade", value: or(known?.grade, car?.catalog_trim) },
+    { label: "Transm", value: or(known?.transmission, car?.transmission) },
+  ];
+}

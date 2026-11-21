@@ -7,7 +7,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { guardRead, guardWrite } from "./catalog_research_routes.ts";
 import { autoResolveFromBatch } from "./catalog_request_autoresolve.ts";
 import { closeJobNotFound } from "./catalog_research_not_found.ts";
-import { browserCheckGate, type CarBuild, versionCodeOnLine, versionListLink, versionPageUrl } from "./research_browser_check.ts";
+import { browserCheckGate, type CarBuild, periodTextOnLine, versionCodeOnLine, versionListLink, versionPageUrl } from "./research_browser_check.ts";
 import { identityTokens } from "./research_part_job.ts";
 import { siteDomain } from "./research_page_reader.ts";
 import { type LookupRecipe, runRecipe } from "./research_recipes.ts";
@@ -269,11 +269,14 @@ export function registerResearchEngineRoutes(
     const rememberVersion = async () => {
       const versionCode = versionCodeOnLine(pasted, ctx.car.chassis_code);
       if (!versionCode || !ctx.job.vehicle_catalog_id) return;
+      // RE-67: the version's dates as the catalogue writes them, from the pasted title line (when there).
+      const period = periodTextOnLine(pasted);
       const { error: vErr } = await supabase.from("research_car_site_version").upsert({
         vehicle_catalog_id: ctx.job.vehicle_catalog_id,
         domain: host,
         version_code: versionCode,
         version_url: versionPageUrl(url),
+        ...(period ? { prod_period: period } : {}),
         confirmed_by: actor,
         confirmed_at: new Date().toISOString(),
       }, { onConflict: "vehicle_catalog_id,domain" });

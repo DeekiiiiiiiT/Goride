@@ -832,3 +832,12 @@ check (RE-63) or set by the owner/Claude when known (Roomy 2016–2020 Custom G 
 `…/tank-roomy/m900a/147989`); then step ① opens that version and step ② disappears; (2) RE-64 corrects
 `full_model_code` / `trim_suffix_code` from Toyota's list so new cars start right; (3) until a car has it, step ② adds
 the grade as the catalogue writes it when Dominion knows it, else says "if several rows match, pick your grade".
+
+**RE-67 · High · Step 2 must show the whole row (owner: "just put the full info: Model, Engine, Prod period, Grade,
+Transm").** Fix (built + live): step 2 is a one-row table in the catalogue's columns — Model · Engine · Prod period ·
+Grade · Transm — "Click this row:" (or "Check it's this one:" when step 1 opens the remembered version). Values come
+from the catalogue's own words stored with the remembered version (migration
+`20261121162224_research_car_site_version_row.sql`: `engine`, `prod_period`, `grade`, `transmission`; the dates are
+learned from the pasted title line on confirm), else Dominion's values, else "—". The Roomy's row (M900A-AGBVE · 1KRFE ·
+11.2016 - 09.2020 · CTMG · CVT) was saved by the owner in the SQL editor (the model on 21 Nov; the other four with the
+SQL handed over the same day).
