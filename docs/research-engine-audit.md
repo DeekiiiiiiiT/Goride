@@ -172,7 +172,15 @@ Reads need Dominion staff; writes need `catalog.write`; ★ = platform owner onl
 3. Trusted sources → add the first recipe (NiBK's catalogue form) → **Test on a car** on the Roomy M900A → **Fill this
    car** on the Roomy.
 4. Switch on for everyone (owner rule).
-5. Cleanup migration later: drop `catalog_trusted_source`, `catalog_trusted_source_fetch`, `part_fitment` (table, index,
+5. **Held back (21 Nov go-live): readiness counts only Confirmed specs (layer 1b §3).** Rebuilding
+   `variant_parts_readiness` takes longer than live's 2-minute limit — the nightly `catalog-demand-readiness` job has
+   failed on it every night since at least 16 Nov, so readiness on live is stale. Fix the slow rebuild first (separate
+   work), then run in a new migration: read `pg_get_viewdef('public.variant_parts_readiness')`, replace
+   `(COALESCE(btrim(sv.evidence_url), ''::text) <> ''::text)` with `(sv.trust = 'confirmed'::text)` (exactly once),
+   drop + recreate the view WITH DATA, recreate the unique index on `variant_id`, revoke from anon/authenticated
+   (the old block is in `git show 92b3cd21:supabase/migrations/20261120234117_research_engine_layer1b.sql`). Safe until
+   then: CSV specs have no evidence link, so today's rule already leaves them out.
+6. Cleanup migration later: drop `catalog_trusted_source`, `catalog_trusted_source_fetch`, `part_fitment` (table, index,
    writer) and `catalog_research_settings.daily_job_limit`; add a CI search so nothing references `part_fitment` again.
 
 ## 7. Follow-ups (outside this audit)
