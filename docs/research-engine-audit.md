@@ -1,6 +1,6 @@
 # Research engine (cars, specs, parts) — audit
 
-**Rev 4.5 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
+**Rev 4.6 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
 US$1.35/day.** Live database: migrations 1a/1b/2/3 (03:10 UTC) and `20261121100925_research_form_recipe` (10:25 UTC),
 all with logbook lines. Live code: main `0e00cd5b` (platform-catalog, catalog-research, Dominion). Branch
 `parts-auto-match` `fc2e2b85` holds the same research code. Held back: readiness counts only Confirmed specs (§6 step 5).
@@ -26,6 +26,7 @@ History (not needed to continue): the closed plan with all findings RE-01…RE-2
 | 21 Nov | Access decision: no robot of any kind on sites that forbid it; next round = screenshot browser checks, Chrome helper, honest browser reader (§10) | this file |
 | 21 Nov | Reviewer round on Rev 4.3: 9 findings RE-37…RE-45, one fix each; done-tests renumbered 37–46 (§11) | this file |
 | 21 Nov | Reviewer: coverage is a sources problem — more part makers (Spike 1), PDF catalogues, the distributor, licensed-feed rule (RE-46…RE-48, §12) | this file |
+| 21 Nov | Reviewer round on Rev 4.5: pace table with both rows, every job pays for a search today (RE-49), cap ceiling (RE-50), PDF rows with positions, TecDoc checks, R2/renderer checks (RE-51); free-search figure kept (§13) | this file |
 
 **What is proven**
 - Unit, SQL and screen tests: Deno 136, SQL checks (incl. 3 form-recipe checks), admin tsc 0 + vitest 45, screen
@@ -52,9 +53,11 @@ Because (2) fails first in the "Dominion places checks" job, the research screen
    - **Claude, right after:** write the measured cost per job, searches per job, jobs per day at the cap and the
      200-car finish date into §1 (RE-37).
    - **Claude, one small-fix round:** `GET /health` (RE-45), research screen test in its own CI job (RE-40), the two
-     master-data breaks (RE-41), jobs per day + finish date on Settings (RE-37).
+     master-data breaks (RE-41), jobs per day + finish date on Settings (RE-37), cap ceiling on Settings (RE-50).
+   - **Claude, after Spike 1 finds by-car lookups:** RE-49 (catalogue first by car, no search when a recipe proves it).
 3. **Claude: Spike 1 — more part makers (RE-46, §12).** Robots.txt + terms for the 12 brand sites in §12, recorded
-   exactly as Spike 0; one recipe for each site that passes and works without a browser; run the Roomy M900A against
+   exactly as Spike 0, plus whether each site offers a **by-car** lookup (what makes RE-49 cheap); one recipe for each
+   site that passes and works without a browser; sites are opened only as `RoamResearchBot/1.0` (§13); run the Roomy M900A against
    the 10 core part types → a real "N of 17" replaces Spike 0's "0 of 17". The result sets the order of steps 4–6.
 4. **Owner:** two asks, same week (Claude drafts both): (a) the Toyota/Daihatsu parts distributor in Jamaica — catalogue
    access, a parts data export or a dealer account (RE-46 (c)); (b) the permission emails to Masuma, Amayama, Megazip
@@ -118,10 +121,17 @@ what it could not prove.
 2,679 car versions (763 with no frame code); 0 cars "ready"; specs on 3 cars before the CSV backfill (2,471 tyre sizes
 become Needs checking in layer 1b). Research jobs ever: 3.
 
-**Pace (RE-37):** at US$0.075 a job (Spike 0) the US$1.35 cap buys 18 paid jobs a day, plus the free 5,000 Google
-searches a month (~960 jobs if nothing else in Roam uses them) → ~1,500 jobs a month → the 200 cars that matter
-(~3,400 lookups) in ~2.3 months, ~6 months without the free searches. **To replace with live measurements after §R
-step 2:** cost per job, searches per job, jobs per day, finish date.
+**Pace (RE-37, RE-49, RE-50).** Today every part job runs a Google search first (RE-49), so the first row is the pace now.
+
+| Job | Cost per job | Jobs per day | 3,400 lookups (200 cars that matter) |
+|---|---|---|---|
+| With a Google search (every job today) | ~US$0.075 (Spike 0: 5.2 searches × US$0.014 + tokens) | 18 paid (US$1.35 cap) + ~32 free (5,000 free searches a month, renewed monthly) | ~2.3 months; ~6.3 months with no free searches |
+| Proven by a by-car recipe, no search (only after RE-49 + by-car recipes from Spike 1) | ~US$0 | limited by the worker, ~1 a minute ≈ 1,440 | ~2.4 days |
+
+Conditions: the free searches are ours only while the engine is Roam's only grounded caller and the Gemini key's
+Google project isn't shared. Ceiling for raising the cap: ~288 grounded jobs a day ≈ US$21.60 if Google's 1,500-a-day
+limit counts searches, ~1,500 if it counts prompts (done-test 18 tells which; RE-50). **To replace with live
+measurements after §R step 2:** cost per job, searches per job, jobs per day, finish date against `fill_target_date`.
 
 ## 2. What is built (all live)
 
@@ -387,7 +397,8 @@ US$0, so they don't count against the cap; if nothing else in Roam uses them, th
 the ~3,400 lookups of the 200 cars that matter: **~1,500 jobs a month ≈ 2.3 months** with the free searches, **~6
 months** without them. Fix: after §R step 2, write into §1 the measured cost per job, searches per job, jobs per day at
 the cap and the 200-car finish date; Settings shows jobs per day and the finish date next to cost and cap (done-test 17
-now includes both). If the finish date is past the 90-day target (RE-24), the cap is raised to the figure that meets it.
+now includes both). If the finish date is past `catalog_research_settings.fill_target_date` (the 200-car target), the cap is raised to the
+figure that meets it, up to the RE-50 ceiling.
 
 **RE-38 · High · RE-36 had no place to run.** Edge functions have no browser. Fix: Cloudflare Browser Rendering,
 written into RE-36 (§10) with the checks to answer before building.
@@ -480,3 +491,72 @@ Spike 1 + the distributor + browser checks are cheaper (§8 keeps the feed outsi
 on the blocked sites are the §10 bypass, rented, and stay ruled out. A browser for an **allowed** site is RE-36. The
 difference is permission, not technology. The last mile is a person: ~3,400 lookups at 15–20 s each with RE-34/35 is
 ~15–20 hours, which matches Spike 0's ~17 hours of owner time.
+
+## 13. Rev 4.6 — reviewer round on Rev 4.5 (21 Nov)
+
+Each point checked in the code before writing it down.
+
+**On "2.3 months double-counts the free searches" — the figure stands.** Google's 5,000 free searches renew every
+calendar month (`api_pricing.ts`: "free monthly allowance"; `api_grounding_queries_this_month()` counts this month's
+logged searches; `logGroundingQueries` charges US$0 until 5,000, and every search if the count can't be read). So
+~960 free jobs + 540 paid jobs is the rate for **every** month, not only the first: 3,400 ÷ ~1,500 ≈ 2.3 months.
+Two conditions, now written into §1: (1) the engine is the only grounded caller in Roam today (`logGroundingQueries` is
+called only from `catalog_research_gemini.ts`), so the pool is ours unless another Roam feature starts grounding;
+(2) Google counts the allowance per Google Cloud project, so if the Gemini key's project is shared with other Digital
+Goodys apps, the pool is shared too. Without free searches: 3,400 ÷ 540 ≈ 6.3 months.
+
+**RE-49 · High · Every part job pays for a Google search, even where a recipe could answer.** The reviewer read RE-02
+as "Gemini runs only when no recipe exists". The code does the opposite: `catalog_research_worker.ts` first runs Gemini
+with Google search to get candidate numbers (a job with no candidates ends Couldn't find), then runs the recipes on
+those numbers. So today a recipe makes a job **more certain, not cheaper** — every part job costs ~US$0.075. Fix:
+catalogue first by car. Before Gemini, the worker runs every active recipe that looks a car up (one using `{chassis}`,
+`{model}` or `{engine}` rather than `{number}`) on a part-maker site whose makers cover the part type; when one proves
+a part with saved evidence, the job skips Gemini. Number-only recipes (like NiBK's form) still need Gemini's candidates.
+The cheap row of the pace table only appears for sites that offer a **by-car** lookup, so Spike 1 records that for each
+site. Done-tests: 52. a job whose car has a by-car recipe that proves the part makes no Gemini call and logs no
+search; 53. when the by-car recipe finds nothing, Gemini runs as today.
+
+**Pace table (§1) now has both rows**, with the second one marked as reachable only after RE-49 + by-car recipes:
+
+| Job | Cost per job | Jobs per day | 3,400 lookups |
+|---|---|---|---|
+| With a Google search (every job today) | ~US$0.075 | 18 paid + ~32 free | ~2.3 months (6.3 with no free searches) |
+| Proven by a by-car recipe, no search (after RE-49) | ~US$0 | limited by the worker, ~1 a minute ≈ 1,440 | ~2.4 days |
+
+**RE-50 · Medium · Raising the cap has a ceiling.** Google allows 1,500 grounded requests a day. If that limit counts
+searches (5.2 per job), the most the engine can run is ~288 grounded jobs a day ≈ **US$21.60 a day**; if it counts
+prompts, ~1,500 jobs a day. Above the ceiling, extra budget only buys `grounding_daily` pauses. Fix: the cap field on
+Settings refuses a value above the ceiling and shows it; done-test 18 (passing the limit once on a test key) records
+which way Google counts, and the ceiling is written into §1 from that.
+
+**RE-47 changed (PDF reader).** Catalogue PDFs are multi-column tables, not one line per part, and a 200 MB file can't
+be stored line by line or parsed inside one function call. Now: text is extracted **with positions**; runs on the same
+baseline are joined into rows in column order, and the model/frame header above a block of rows is carried down into
+each row, so the same-row proof (and the RE-31 cross-reference shape) runs on rebuilt rows, like the HTML `data-title`
+proof. Storage: the file (private R2) + its hash + a per-page search index; only a **matched row and its page** are
+saved as evidence. Parsing runs as a queue job per page range (e.g. 20 pages a job), never the whole file in one call.
+Done-tests 49–51 stand; added 54. a made-up two-column PDF page where "M900A" is a header and "Front · 04465-Z7001" a
+row below it → found, evidence = page + rebuilt row.
+
+**RE-48 changed (licensed feed).** Before any price: (1) ask TecAlliance for a coverage report on the exact frames that
+matter (M900A, M910A, the Tank's frames) — TecDoc is strongest on European and US cars and may miss JDM-only ones;
+(2) the contract must allow **storing** the fitment and serving it to the fleets, because that is what Dominion does; a
+lookup-only licence is no use here.
+
+**RE-51 · Medium · Three features assume Cloudflare R2 and Cloudflare's renderer.** Checked: the R2 code is on main
+(`supabase/functions/_shared/objectStorage/`, used by fleet-core for vehicle pictures since `3b9c9805`) and the
+`roam-private` bucket exists (R2 audit M1). Not there yet: storage purposes for research evidence (screenshots, PDFs,
+rendered pages) and their keep rules. Fix: one purpose per kind with "kept while the row exists" in the objectStorage
+purposes table, added in the first build round that needs it (RE-34 or RE-47). For RE-36, two checks added before
+building: Cloudflare's renderer must send `RoamResearchBot/1.0` on the page **and** every request the page makes; and
+**first** look for the JSON address SB's page calls (an Angular site loads its data from one) — if robots.txt and terms
+allow it, a plain recipe on that address replaces the browser reader for SB.
+
+**Small:** RE-37's "90-day target (RE-24)" now reads `catalog_research_settings.fill_target_date` (the live 200-car
+target). The free-search counter the reviewer asked for already exists (`api_grounding_queries_this_month()`).
+
+**Own mistake, recorded:** on 21 Nov Claude opened two sbparts.jp pages (home and catalogue) with `curl` using a
+browser name (`Mozilla/5.0`) while finding out how SB's search works. That breaks §0 (never disguised), and Spike 0
+found that sbparts.jp blocks ClaudeBot by name, so Claude should not have opened it at all. Nothing was saved or used.
+From now on, SB and any site that names ClaudeBot are only read by the engine's own reader as `RoamResearchBot/1.0`
+(the RE-51 JSON check included), and Claude never sends a browser name to any site.
