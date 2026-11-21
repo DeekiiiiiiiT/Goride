@@ -7,7 +7,6 @@ import {
   consecutive403PairShouldBlock,
   filterDomainsForCatalogPrompt,
 } from "./catalog_trusted_source_block.ts";
-import { maybeAutoBlockTrustedSourceAfterFetch } from "./catalog_research_worker.ts";
 
 Deno.test("R32: two consecutive 403s should block", () => {
   assertEquals(consecutive403PairShouldBlock([403, 403]), true);
@@ -32,52 +31,5 @@ Deno.test("R32: blocked domain omitted from Prefer catalogue prompt line", () =>
   assertEquals(prompt.includes("amayama.com"), true);
 });
 
-Deno.test("R32: maybeAutoBlockTrustedSourceAfterFetch sets blocked_at after two 403s", async () => {
-  let blockedPatch: Record<string, unknown> | null = null;
-  let logged: Record<string, unknown> | null = null;
-  const supabase = {
-    from: (table: string) => {
-      if (table === "catalog_trusted_source_fetch") {
-        return {
-          select: () => ({
-            eq: () => ({
-              order: () => ({
-                limit: () =>
-                  Promise.resolve({
-                    data: [{ http_status: 403 }, { http_status: 403 }],
-                    error: null,
-                  }),
-              }),
-            }),
-          }),
-        };
-      }
-      if (table === "catalog_trusted_source") {
-        return {
-          select: () => ({
-            eq: () => ({
-              maybeSingle: () => Promise.resolve({ data: { blocked_at: null }, error: null }),
-            }),
-          }),
-          update: (patch: Record<string, unknown>) => {
-            blockedPatch = patch;
-            return { eq: () => Promise.resolve({ error: null }) };
-          },
-        };
-      }
-      return {};
-    },
-    rpc: (fn: string, args: Record<string, unknown>) => {
-      if (fn === "catalog_research_log_event") logged = args;
-      return Promise.resolve({ data: null, error: null });
-    },
-  };
-
-  const blocked = await maybeAutoBlockTrustedSourceAfterFetch(supabase as never, {
-    domain: "partsouq.com",
-    jobId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-  });
-  assertEquals(blocked, true);
-  assertEquals(typeof blockedPatch?.blocked_at, "string");
-  assertEquals(logged?.p_outcome, "domain_blocked");
-});
+// The worker no longer auto-blocks through catalog_trusted_source: research_page_reader.ts blocks a site after
+// two 401/403 reads in a row (tested in research_page_reader.test.ts).

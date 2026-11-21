@@ -37,6 +37,11 @@ INSERT INTO public.vehicle_catalog (
 )
 ON CONFLICT DO NOTHING;
 
+-- trusted_source has an FK to trusted_site (research engine layer 1a): add the sites first.
+INSERT INTO public.trusted_site (domain)
+VALUES ('test-car.example'), ('test-pm.example'), ('test-pm-a.example'), ('test-pm-b.example')
+ON CONFLICT (domain) DO NOTHING;
+
 INSERT INTO public.trusted_source (kind, maker, domain)
 VALUES
   ('car_maker', 'Testmaker', 'test-car.example'),

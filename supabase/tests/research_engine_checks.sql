@@ -268,10 +268,11 @@ BEGIN
   SELECT count(*) INTO v_n FROM public.universal_parts_for_variant(v_vc) WHERE universal_part_id IS NOT NULL;
   IF v_n <> 1 THEN RAISE EXCEPTION 'a confirmed spec should match the universal part (got %)', v_n; END IF;
 
-  -- 3. Readiness counts only Confirmed specs.
-  IF pg_get_viewdef('public.variant_parts_readiness'::regclass) NOT LIKE '%sv.trust = ''confirmed''::text%'
-     OR pg_get_viewdef('public.variant_parts_readiness'::regclass) LIKE '%btrim(sv.evidence_url)%' THEN
-    RAISE EXCEPTION 'readiness still counts specs by evidence link instead of trust';
+  -- 3. Readiness: the Confirmed-only rule is held back (layer 1b section 3). Until then a Needs-checking CSV spec
+  --    has no evidence link, so today's rule (evidence link set) still leaves it out.
+  IF EXISTS (SELECT 1 FROM public.catalog_spec_value
+             WHERE trust_set_by = 'import' AND trust = 'needs_checking' AND btrim(coalesce(evidence_url, '')) <> '') THEN
+    RAISE EXCEPTION 'a CSV spec carries an evidence link — readiness would count it';
   END IF;
 
   -- 4. Promote: route c with two reads goes through the Add-parts save, keeps the engine verdict and both reads,

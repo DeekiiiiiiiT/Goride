@@ -1,8 +1,9 @@
 # Research engine (cars, specs, parts) — audit
 
-**Rev 4.0 · 21 Nov 2026 · Status: ALL THREE LAYERS BUILT + code-reviewed (10 findings fixed) on the local copy.
-NOT committed, NOT pushed, NOT live.** Next = finish the pre-push checks, commit + push the research engine files
-only (§2), then prove on real data (§5), then go live (§6).
+**Rev 4.1 · 21 Nov 2026 · Status: LIVE.** Migrations 1a/1b/2/3 applied to live 03:10 UTC 21 Nov (logbook lines in);
+main 8c63c773 deployed platform-catalog + catalog-research + Dominion; engine on, practice (shadow) mode, US$1.35/day.
+Held back: readiness counts only Confirmed specs (§6 step 5). Next = §6 step 3 (first recipe → Test on a car → Fill
+this car on the Roomy), which also proves §5.
 
 History (not needed to continue): the closed plan with all findings RE-01…RE-29 and the Spike 0 tables is
 `git show 6064a3f4:docs/research-engine-audit.md`. The 18-screen Keep / Drop / Add lists are in the Rev 3.2 version of
@@ -172,7 +173,15 @@ Reads need Dominion staff; writes need `catalog.write`; ★ = platform owner onl
 3. Trusted sources → add the first recipe (NiBK's catalogue form) → **Test on a car** on the Roomy M900A → **Fill this
    car** on the Roomy.
 4. Switch on for everyone (owner rule).
-5. Cleanup migration later: drop `catalog_trusted_source`, `catalog_trusted_source_fetch`, `part_fitment` (table, index,
+5. **Held back (21 Nov go-live): readiness counts only Confirmed specs (layer 1b §3).** Rebuilding
+   `variant_parts_readiness` takes longer than live's 2-minute limit — the nightly `catalog-demand-readiness` job has
+   failed on it every night since at least 16 Nov, so readiness on live is stale. Fix the slow rebuild first (separate
+   work), then run in a new migration: read `pg_get_viewdef('public.variant_parts_readiness')`, replace
+   `(COALESCE(btrim(sv.evidence_url), ''::text) <> ''::text)` with `(sv.trust = 'confirmed'::text)` (exactly once),
+   drop + recreate the view WITH DATA, recreate the unique index on `variant_id`, revoke from anon/authenticated
+   (the old block is in `git show 92b3cd21:supabase/migrations/20261120234117_research_engine_layer1b.sql`). Safe until
+   then: CSV specs have no evidence link, so today's rule already leaves them out.
+6. Cleanup migration later: drop `catalog_trusted_source`, `catalog_trusted_source_fetch`, `part_fitment` (table, index,
    writer) and `catalog_research_settings.daily_job_limit`; add a CI search so nothing references `part_fitment` again.
 
 ## 7. Follow-ups (outside this audit)

@@ -3,7 +3,7 @@
 --   2. specs_for_variant returns trust; "sourced" = Confirmed; no more catalog_note rows built from columns.
 --      universal_parts_for_variant (fits by size, parts_for_vehicle tier 3) already uses only sourced specs, so a
 --      Needs-checking spec now feeds no part match.
---   3. variant_parts_readiness counts only Confirmed specs.
+--   3. (held back) variant_parts_readiness counting only Confirmed specs — see section 3.
 --   4. save_self_serve_part_in_batch keeps an engine verdict: listing rows may carry trustSetBy = 'engine',
 --      evidenceReadIds and trustRoute (only with evidence reads that exist).
 --   5. promote_part_proposal saves through the Add-parts path (save_self_serve_part → batch, Undo works) and
@@ -84,25 +84,12 @@ AS $function$
 $function$;
 
 -- ---------------------------------------------------------------------------
--- 3. Readiness counts only Confirmed specs (RE-05)
+-- 3. Readiness counts only Confirmed specs (RE-05) — HELD BACK (21 Nov 2026)
 -- ---------------------------------------------------------------------------
-DO $patch$
-DECLARE
-  d text;
-  old_cond constant text := $q$(COALESCE(btrim(sv.evidence_url), ''::text) <> ''::text)$q$;
-  new_cond constant text := $q$(sv.trust = 'confirmed'::text)$q$;
-BEGIN
-  d := pg_get_viewdef('public.variant_parts_readiness'::regclass, false);
-  IF (length(d) - length(replace(d, old_cond, ''))) / length(old_cond) <> 1 THEN
-    RAISE EXCEPTION 'variant_parts_readiness: expected the spec evidence condition exactly once — not patched';
-  END IF;
-  d := replace(d, old_cond, new_cond);
-  DROP MATERIALIZED VIEW public.variant_parts_readiness;
-  EXECUTE 'CREATE MATERIALIZED VIEW public.variant_parts_readiness AS ' || rtrim(d, '; ' || chr(10)) || ' WITH DATA';
-  CREATE UNIQUE INDEX variant_parts_readiness_variant_id ON public.variant_parts_readiness (variant_id);
-  REVOKE ALL ON public.variant_parts_readiness FROM anon, authenticated;
-END
-$patch$;
+-- Rebuilding variant_parts_readiness takes longer than live's 2-minute statement limit (the nightly
+-- catalog-demand-readiness job has failed on it every night since at least 16 Nov), so it cannot run in this
+-- migration. The CSV specs copied in section 1 have no evidence_url, so today's rule (evidence_url set) already
+-- ignores them. The patch is in docs/research-engine-audit.md §6 — run it once the rebuild is fast.
 
 -- ---------------------------------------------------------------------------
 -- 4. Add-parts save keeps an engine verdict (RE-19)
