@@ -1,0 +1,189 @@
+ROAM DRIVER — DISPUTE A TOLL WITH UBER — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Driver - Tolls to dispute with Uber (Phone App, 390px, for drivers of fleet cars):
+
+Design high-fidelity phone screens for a new "Tolls to dispute" part of the Roam Driver app. When a driver goes through a toll during an Uber trip, the passenger owes the toll and Uber pays it back to the driver. Sometimes Uber pays back less than the toll cost (for example the Portmore toll costs J$390.00 and Uber paid back J$370.00, so J$20.00 is still owed). Uber only lets the driver ask for the rest from inside the Uber driver app, within 9 days of the trip. Roam spots each short toll by itself and shows the driver a card with everything needed: when and where the toll was, how much is still owed, and a ready-made message to paste into Uber. The driver taps "Copy text", taps "Open Uber App", finds the trip in Uber and pastes the message, then comes back and taps "Mark as sent". That is all: the fleet sees the result when Uber's refund arrives. Each card also says plainly what happens if the driver does nothing. The tone is friendly, short and reassuring, like a helpful reminder, never a telling-off. A driver should finish one dispute in under a minute while parked. The design must feel modern, calm and effortless, like the best consumer banking apps. Every screen is tall enough to show everything, with no inner scrolling.
+
+
+BRAND IDENTITY:
+- Match the existing Roam Driver app (do not redesign it):
+  - white cards on a light slate page, rounded corners, large touch targets (at least 48px tall)
+  - the app's top bar (menu button on the left, "Roam" in the middle, bell and profile on the right) and its bottom tab bar stay as they are
+  - this feature lives in two places: a card on the Home screen, and its own page "Tolls to dispute" opened from that card or from the menu under "My Expenses"
+- LIGHT MODE (default):
+  - Primary: Emerald 600 (#059669) — primary buttons, ticks, the active tab
+  - Background: Slate 100 (#f1f5f9)
+  - Surface cards: White (#ffffff) with a soft shadow (0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(15,23,42,0.06)) and a hairline border #e2e8f0
+  - Text primary: Slate 900 (#0f172a)
+  - Muted text: Slate 600 (#475569)
+  - Money still owed / to dispute: Amber 700 (#b45309) on a soft amber #fffbeb
+  - Sent, waiting on Uber: Blue 700 (#1d4ed8) on #eff6ff
+  - Last days / time is up: Red 600 (#dc2626) on #fef2f2
+  - Done: Emerald 600 (#059669) on #ecfdf5
+- DARK MODE:
+  - Background: #0f172a
+  - Surface: #1e293b
+  - Border: #334155
+  - Text primary: #f8fafc
+  - Muted text: #cbd5e1
+  - Primary: #10b981
+  - Amber #fbbf24 on #451a03; blue #60a5fa on #172554; red #f87171 on #450a0a
+- Shapes: cards 16px corner radius, buttons 12px, chips fully rounded.
+- Typography: Inter. Card title 17px semibold, body 15px, helper text 13px. Money uses tabular figures, always "J$" with 2 decimals (J$20.00). The plate is shown in a small grey rounded box.
+- Dates and times in plain words: "9 Nov, 7:15 AM", "by Mon 18 Nov". Never "2026-11-09", never codes or ids.
+- Status chips (rounded, small, always words):
+  - "Not sent yet" — amber
+  - "Sent · waiting on Uber" — blue
+  - "1 day left" — red
+  - "Time is up" — red
+- Buttons always look like buttons:
+  - Primary = solid emerald with white text ("Mark as sent").
+  - Secondary = white with a visible #cbd5e1 border and dark text ("Copy text", "Open Uber App").
+  - Never underlined text links, never grey text-only buttons. Every confirm is an in-app bottom sheet, never a browser pop-up.
+- No gradients, glassmorphism or 3D. No AI badges.
+- Sample data (REAL, from Roam's week of 9 Nov 2026, car Toyota Roomy · 5179KZ, driver Kenny Gregory Rattray):
+  - "9 Nov, 7:15 AM · Portmore toll · Toll J$390.00 · Uber paid back J$370.00 · J$20.00 still owed · Uber trip 6:55 AM–7:40 AM"
+  - "9 Nov, 12:24 PM · Portmore toll · J$390.00 · Uber paid back J$370.00 · J$20.00 still owed · Uber trip 12:05 PM–12:45 PM"
+  - "10 Nov, 12:55 PM · Spanish Town toll · J$280.00 · Uber paid back J$260.00 · J$20.00 still owed · Uber trip 12:30 PM–1:15 PM"
+  - "11 Nov, 7:11 AM · Portmore toll · J$390.00 · Uber paid back J$370.00 · J$20.00 still owed"
+  - 12 tolls like this in all, J$240.00 still owed.
+  - Uber gives 9 days from the trip. The card counts down: "8 of 9 days left".
+  - The message to copy (shown in full in a soft grey box): "Hi, on 9 Nov 2026 at 7:15 AM I drove through the Portmore toll during this trip. The toll cost J$390.00 and I was refunded J$370.00, so J$20.00 is still owed. Please refund the remaining J$20.00. Thank you."
+
+
+DESIGN PRINCIPLES:
+- One job per card: each short toll is one card with one clear next step.
+- The three steps are always in the same order on every card, numbered in small grey circles: "1 Copy the message", "2 Open Uber and paste it on this trip", "3 Mark as sent".
+- The amount still owed is the biggest number on the card; the toll and what Uber paid back sit under it in smaller text.
+- The days left are always visible; the chip turns red with 2 days or fewer left.
+- Every card says in one plain sentence what happens if the driver does nothing (see the screens for the exact wording). Never threatening.
+- After "Mark as sent" the card moves to "Sent · waiting on Uber" and the driver has nothing else to do. The driver never links refunds or closes disputes: the fleet does that.
+- No J$ totals for the whole fleet, no other drivers, no fleet prices, no internal words like "dispute id", "payback" or "allocation".
+- Calm, short, friendly wording. Large tap targets for one-handed use.
+- One view per screen.
+
+
+SCREEN 1: HOME — TOLLS TO DISPUTE CARD
+- The existing Roam Driver Home screen (keep its earnings card and its other cards as they are).
+- Near the top, a new card with an amber left edge:
+  - Title "12 tolls to dispute with Uber"
+  - Line: "Uber still owes J$240.00 on tolls from your trips. It takes about a minute each."
+  - Small red chip on the right: "1 day left on the oldest"
+  - Primary button "Start" (full width)
+- The bell in the top bar shows a small red dot.
+- Bottom tab bar as in the app.
+
+SCREEN 2: TOLLS TO DISPUTE — LIST
+- Top bar: back arrow, title "Tolls to dispute".
+- A short summary card at the top: "12 to send · J$240.00 still owed" and under it "Sent and waiting on Uber: 0".
+- One-line tip under it, muted: "Uber only accepts these within 9 days of the trip."
+- A list of compact cards, oldest first, one per toll:
+  - Line 1: "9 Nov, 7:15 AM · Portmore" and the plate box "5179KZ"
+  - Line 2: big amber "J$20.00 still owed"
+  - Line 3: chip "Not sent yet" and "8 of 9 days left" with a small clock icon
+  - A chevron on the right; the whole card opens Screen 3
+- Show 5 cards; the second card has a red chip "1 day left".
+- Bottom tab bar as in the app.
+
+SCREEN 3: ONE TOLL — READY TO SEND
+- Top bar: back arrow, title "Dispute this toll with Uber".
+- Top card:
+  - "9 Nov, 7:15 AM · Portmore toll" with the plate box "5179KZ"
+  - Big amber "J$20.00 still owed"
+  - Smaller: "Toll J$390.00 · Uber paid back J$370.00"
+  - A grey pill: "Uber trip 6:55 AM–7:40 AM"
+  - Chip "Not sent yet" and "8 of 9 days left · send by Mon 18 Nov"
+- Step 1 card "Copy the message":
+  - the full message in a soft grey rounded box (the sample text above)
+  - secondary button "Copy text" with a copy icon
+- Step 2 card "Open Uber and paste it on this trip":
+  - one helper line: "In the Uber Driver app, open Earnings, find the trip on 9 Nov at 6:55 AM, choose Help and paste the message."
+  - secondary button "Open Uber App" with an outward-arrow icon
+- Step 3 card "Mark as sent":
+  - helper line: "Tap this once you've sent it in Uber."
+  - primary emerald button "Mark as sent" (full width)
+- At the bottom, a muted sentence with an info icon: "If you don't send this by Mon 18 Nov, J$20.00 will be charged to you on your settlement."
+
+SCREEN 4: MESSAGE COPIED
+- Same as Screen 3, scrolled to Step 1.
+- The "Copy text" button now reads "Copied" with an emerald tick for 2 seconds.
+- A small dark toast at the bottom: "Message copied. Now open Uber and paste it."
+
+SCREEN 5: MARK AS SENT — CONFIRM SHEET
+- Screen 3 dimmed behind a bottom sheet with a grab handle.
+- Sheet title: "Did you send it in Uber?"
+- Body: "Portmore · 9 Nov, 7:15 AM · J$20.00. The fleet will see the refund when Uber pays it, usually in the next pay period or the one after."
+- Primary emerald button "Yes, I sent it" (full width), secondary button "Not yet" under it.
+
+SCREEN 6: SENT · WAITING ON UBER
+- The same toll page after "Yes, I sent it".
+- A green success strip at the top: "Sent on 11 Nov. Nothing else to do."
+- The top card now shows the blue chip "Sent · waiting on Uber" instead of the days left.
+- The three step cards are collapsed into one line each with an emerald tick.
+- No "Mark as sent" button any more.
+- Muted line at the bottom: "Refunds usually arrive in the next pay period or the one after."
+
+SCREEN 7: LAST DAY
+- The toll page for "10 Nov, 12:55 PM · Spanish Town toll · J$20.00 still owed · Toll J$280.00 · Uber paid back J$260.00".
+- The days chip is red: "1 day left · send by today, 11:59 PM".
+- A red-tinted banner at the top of the page: "Last day to send this one."
+- The three step cards and the "Mark as sent" button as in Screen 3.
+- The bottom sentence as in Screen 3 with "by today".
+
+SCREEN 8: TIME IS UP
+- The toll page for a toll whose 9 days have passed today.
+- A red chip "Time is up" instead of the days left.
+- A calm red-tinted card: "The 9 days to dispute this toll have passed." and under it "J$20.00 will be charged to you on your settlement."
+- No "Copy text", "Open Uber App" or "Mark as sent" buttons: the step cards are not shown.
+- One secondary button "Back to tolls".
+
+SCREEN 9: SHORT NOTICE — THE FLEET PAYS IF IT'S LATE
+- The toll page for a toll Roam only learned about with 2 days left (Uber's report came in late).
+- Same layout as Screen 3, days chip red "2 of 9 days left".
+- The bottom sentence instead reads, in a soft blue info box: "If this isn't sent in time, the fleet pays it, not you. If you send it and Uber refunds, the fleet gets the money back."
+
+SCREEN 10: NOTHING TO DISPUTE
+- The "Tolls to dispute" page with nothing in it.
+- A friendly empty state in the middle: an emerald tick in a soft green circle, title "No tolls to dispute", line "When Uber pays back less than a toll on one of your trips, it shows up here."
+- Under it, a muted line: "Sent and waiting on Uber: 3 · J$60.00" with a secondary button "See sent tolls".
+- Bottom tab bar as in the app.
+
+
+ADDITIONAL UI COMPONENTS:
+- Toll card (compact, for the list): time · place, plate box, big amber amount still owed, state chip, days left, chevron.
+- Toll page header card: time · place toll, plate box, big amount still owed, "Toll · Uber paid back" line, trip pill, state chip, days left with the send-by date.
+- Numbered step card: small grey number circle, step title, one helper line, one button.
+- Message box: soft grey (#f8fafc) rounded box, 15px text, the full message with no cut-off.
+- Consequence sentence: muted 13px text with an info icon; blue info box variant for "the fleet pays it, not you".
+- Bottom sheet: grab handle, title, body, primary and secondary buttons stacked full width.
+- Toast: dark, rounded, bottom of the screen, 2 seconds.
+- Chips: "Not sent yet" amber, "Sent · waiting on Uber" blue, "1 day left" / "Time is up" red.
+- Home card: amber left edge, title, one line, small red chip, full-width primary button.
+
+
+INTERACTIONS:
+- The Home card opens the "Tolls to dispute" list; a list card opens that toll's page.
+- "Copy text" copies the full message and shows "Copied" with a tick for 2 seconds and the toast.
+- "Open Uber App" opens the Uber Driver app. The driver finds the trip there and pastes; Roam cannot open the trip's help page directly.
+- "Mark as sent" opens the bottom sheet; "Yes, I sent it" saves it, closes the sheet and shows Screen 6; the list and the Home card counts go down by one at once.
+- If the 9 days run out while the page is open, the next tap on "Mark as sent" shows Screen 8's message instead of saving.
+- Pull down on the list to refresh.
+- A new toll to dispute shows the red dot on the bell and the Home card; no text messages are sent.
+- The keyboard and screen reader read each card as one sentence: "Portmore toll, 9 Nov 7:15 AM, J$20.00 still owed, 8 of 9 days left, not sent yet."
+
+
+Spec screens / Area
+| Screen | Area |
+| 1 | Home — "12 tolls to dispute with Uber" card |
+| 2 | Tolls to dispute — list of tolls |
+| 3 | One toll — ready to send (Copy text, Open Uber App, Mark as sent) |
+| 4 | Message copied |
+| 5 | Mark as sent — confirm sheet |
+| 6 | Sent · waiting on Uber |
+| 7 | Last day — red |
+| 8 | Time is up — no buttons |
+| 9 | Short notice — the fleet pays if it's late |
+| 10 | Nothing to dispute — empty state |

@@ -4,7 +4,7 @@
 
 ## START HERE (for a new chat)
 
-**Prompt to start a new chat:** "Continue the toll disputes build. Read `docs/toll-architecture-gap-audit.md` START HERE first. Data and server (D1–S3) are done and committed. UI1 (the six-part Tolls step) is done. Next step: round UI2 — first write the Stitch prompts for the Roam driver app dispute card, Driver Settlements → Disputes tab and Fleet Policy → Tolls (one file per app, owner format), then build them once the owner has made the screens. Keep me updated in short plain replies."
+**Prompt to start a new chat:** "Continue the toll disputes build. Read `docs/toll-architecture-gap-audit.md` START HERE first. Data and server (D1–S3) are done and committed. UI1 (the six-part Tolls step) is done and the UI2 Stitch prompts are written. Next step: build round UI2 from the Stitch screens in docs/stitch/toll-disputes-driver/ and docs/stitch/toll-disputes-fleet/ onto the S3 reads, following C3, with its tests. Keep me updated in short plain replies."
 
 **What this is:** every toll the fleet pays ends with the right person paying it. **First principle (owner):** on a trip the **passenger** always owes the toll, never the fleet.
 - **Uber** pays it back. If Uber pays short, the driver **disputes** it with Uber within 9 days; the refund comes in the next pay period or the one after.
@@ -65,7 +65,7 @@
 
 **Fleet Policy → Tolls (UI2): `public.toll_v2_toll_settings()`** → `switches`, `disputePolicy`, `platforms`, `plazas` (tag price and each platform's rate: current = valid today, plus history), `templates`, `seeded`, `missing` (the same list the matcher refuses on), `approvals`. **Save** sends `change_toll_settings` (`platform_settings.<platform>.<snake_case field>`, `dispute_policy.lost_bearer` / `expired_bearer`); **Add rate** sends `plaza_rates_add: [{plaza_id, platform, rate_minor, effective_from}]`. No command accepts a tag price yet, so Add rate covers platform rates only.
 
-**UI2 has no Stitch screens yet:** write the Stitch prompts first (one file per app, the owner's prompt format), and the owner makes the screens.
+**UI2 Stitch prompts written (21 Nov 2026):** `docs/stitch/toll-disputes-driver-prompt.txt` (Roam Driver: Home card, Tolls to dispute list, one toll with Copy text / Open Uber App / Mark as sent, sent, last day, time is up, short notice, empty — 10 screens) and `docs/stitch/toll-disputes-fleet-prompt.txt` (Driver Settlements → Disputes tab and Fleet Policy Configuration → Tolls tab, with Mark as sent, Lost, reason box, Add rate, price history, settings missing, phone — 12 screens). Waiting on the owner to make the screens; save them in `docs/stitch/toll-disputes-driver/` and `docs/stitch/toll-disputes-fleet/`.
 
 ### Rules the screens must respect (all enforced and tested on the server)
 - **Switches (per company, all off on live):** `toll_disputes`, `logged_trips`, `rider_pays_driver`. With a switch off, the screen must look exactly as today (the reads return empty lists).
