@@ -58,6 +58,16 @@ function csvEscape(value: unknown): string {
 }
 
 /** "vehicle:Toyota:Roomy:2019" / "model:Toyota:Roomy" → the car's make, model and year (never who asked). */
+/**
+ * RE-73: jobs closed on the owner's say-so are stored `failed` with a note ending "(owner)" ("replaced by front and
+ * rear checks (owner)"). Returns that note without the tag, else null (a real failure).
+ */
+export function ownerClosedNote(state: string | null | undefined, lastError: string | null | undefined): string | null {
+  if (state !== "failed") return null;
+  const m = String(lastError ?? "").trim().match(/^(.+?)\s*\(owner\)$/i);
+  return m ? m[1].trim() : null;
+}
+
 export function vehicleSubject(groupKey: string | null | undefined): { make: string; model: string; year: number | null } | null {
   const parts = String(groupKey ?? "").split(":");
   if (parts[0] !== "vehicle" && parts[0] !== "model") return null;
@@ -288,7 +298,7 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
     if (types.length) q = q.in("job_type", types);
     const { data: jobs, error } = await q;
     if (error) return c.json({ error: error.message }, 500);
-    type JobListRow = { group_key?: string; id: string; job_type: string; state: string; vehicle_catalog_id: string | null; maintenance_component_id: string | null; spec_key: string | null; fit_descriptor: string | null; updated_at: string };
+    type JobListRow = { group_key?: string; id: string; job_type: string; state: string; vehicle_catalog_id: string | null; maintenance_component_id: string | null; spec_key: string | null; fit_descriptor: string | null; last_error?: string | null; updated_at: string };
     const rows = (jobs || []) as JobListRow[];
     const ids = rows.map((j) => j.id);
     const carIds = [...new Set(rows.map((j) => j.vehicle_catalog_id).filter(Boolean))] as string[];
@@ -369,6 +379,8 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
         trustRoute: meta?.trustRoute ?? null,
         siteDomains: meta?.domains ?? [],
         conflictOpen: conflictJobs.has(row.id),
+        // RE-73: a job the owner had closed (e.g. "replaced by front and rear checks") shows as Closed with its note.
+        closedNote: ownerClosedNote(row.state, row.last_error),
         // Vehicle jobs: the car being researched (make / model / year only) and what the engine proposed.
         subject: row.job_type === "vehicle" || row.job_type === "vehicle_model" ? vehicleSubject(row.group_key) : null,
         vehicleProposals: row.job_type === "part" || row.job_type === "spec" ? undefined : (vPropsByJob.get(row.id) ?? []).map((p) => {

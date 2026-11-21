@@ -47,6 +47,7 @@ import {
   readOnLabel,
   siteName,
   statePill,
+  closedNoteOf,
 } from "./researchModel";
 
 export type DrawerOutcome = { message: string; undoJobId?: string };
@@ -99,7 +100,8 @@ export function ResearchJobDrawer({ token, jobId, group, fallbackTitle, fallback
   const place = placeLabel(job?.fit_descriptor);
   const carName = detail?.car ? carLabel(detail.car) : fallbackCar || "";
   const openConflict = (detail?.conflicts ?? []).find((c) => !c.closed_at) ?? null;
-  const pill = statePill(job?.state ?? null, Boolean(openConflict));
+  const closedNote = closedNoteOf(job?.state ?? null, job?.last_error ?? null);
+  const pill = statePill(job?.state ?? null, Boolean(openConflict), closedNote);
   const readAt = useMemo(() => new Map((detail?.reads ?? []).map((r) => [r.id, r.read_at])), [detail]);
 
   const shownProposals = useMemo(() => {
@@ -340,7 +342,9 @@ export function ResearchJobDrawer({ token, jobId, group, fallbackTitle, fallback
           ) : null}
           {shownProposals.length === 0 && !openSpec && !promotedSpec && !handOnly ? (
             <div className={`${D_CARD} p-5 text-[14px] ${D_MUTED}`} data-testid="nothing-found-yet">
-              {state === "not_found" || state === "failed"
+              {closedNote
+                ? `Closed: ${closedNote}.`
+                : state === "not_found" || state === "failed"
                 ? "Roam didn't find a trusted catalogue that lists this."
                 : state === "added"
                   ? "Added. Nothing more to do."
