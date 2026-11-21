@@ -860,3 +860,14 @@ be a year, frame or engine code; a spec value must have the spec's shape; a "No"
 (use Not on this page). Done-tests: 65. all four answered Yes + a suggested number → confirmed with that number and the
 version page as the link; 66. a typed frame code as the number → refused; 67. "No" on dates → Confirm stays off;
 68. a typed model name for the car's frame is remembered for the next check.
+
+**RE-68 built (21 Nov):** confirm accepts `answers` (`answersGate`), the paste path stays for older screens. Screen:
+① Open Amayama; ② "Does the top say M900A-AGBVE?" Yes/No (remembered version), or "Click the row with: Engine / Prod
+period / Grade / Transm" + "Type the Model shown at the top" (learned on confirm); ③ "Search air cleaner. Do you see
+ELEMENT SUB-ASSY, AIR CLEANER FILTER?" Yes/No; ④ "Its number:" Roam's numbers to tap, or type it — typed numbers are
+typed twice; ⑤ "Do its dates include 11.2016 – 08.2020?" Yes/No; (⑥ side). Any No → "Then press Not on this page."
+The proof link is the opened page (the remembered version's page, else Roam's link); the evidence text is built on
+the server from its own records (remembered version, build dates, suggestions). Code review (medium): 9 found, all
+fixed — incl. a real bug: the paste path saved an empty number (`detected` never set). Not changed: when no version is
+remembered yet, the link saved is the version list (the version name is in the evidence; the next check says "Click
+M900A-AGBVE in the list"). Tests: Deno 168, admin 60, screens 17.

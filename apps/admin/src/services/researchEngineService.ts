@@ -345,6 +345,22 @@ export type SiteRead = {
   readAt: string;
 };
 
+export type BrowserCheckAnswersPayload = {
+  url: string;
+  answers: {
+    versionOk: boolean | null;
+    versionCode: string | null;
+    partFound: boolean;
+    value: string;
+    valueAgain: string | null;
+    datesOk: boolean;
+    sideOk: boolean | null;
+  };
+  rowName: string | null;
+  buildText: string | null;
+  knownCode: string | null;
+};
+
 export type BrowserCheckGate =
   | { ok: true; detected: string }
   | { ok: false; reason: "no_car" | "no_number" | "number_not_on_line" | "wrong_years" | "wrong_engine" | "no_value" | "empty" };
@@ -407,6 +423,9 @@ export const researchApi = {
     send<{ gate: BrowserCheckGate }>(t, "POST", `/browser-checks/${encodeURIComponent(jobId)}/preview`, { pasted, number: number || undefined }).then((r) => r.gate),
   confirmBrowserCheck: (t: string, jobId: string, pasted: string, url: string, number?: string) =>
     send<{ detected: string }>(t, "POST", `/browser-checks/${encodeURIComponent(jobId)}/confirm`, { pasted, url, number: number || undefined }),
+  /** RE-68: the owner's answers to the check's questions (no pasted text). */
+  confirmBrowserCheckAnswers: (t: string, jobId: string, payload: BrowserCheckAnswersPayload) =>
+    send<{ detected: string }>(t, "POST", `/browser-checks/${encodeURIComponent(jobId)}/confirm`, payload),
   notOnPage: (t: string, jobId: string) => send(t, "POST", `/browser-checks/${encodeURIComponent(jobId)}/not-on-page`),
 
   resolveConflict: (t: string, id: string, body: { resolution: "picked" | "both_wrong"; proposalId?: string }) =>

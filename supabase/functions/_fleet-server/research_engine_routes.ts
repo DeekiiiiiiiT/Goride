@@ -7,7 +7,16 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { guardRead, guardWrite } from "./catalog_research_routes.ts";
 import { autoResolveFromBatch } from "./catalog_request_autoresolve.ts";
 import { closeJobNotFound } from "./catalog_research_not_found.ts";
-import { browserCheckGate, type CarBuild, periodTextOnLine, versionCodeOnLine, versionListLink, versionPageUrl } from "./research_browser_check.ts";
+import {
+  answersGate,
+  browserCheckGate,
+  type CarBuild,
+  type CheckAnswers,
+  periodTextOnLine,
+  versionCodeOnLine,
+  versionListLink,
+  versionPageUrl,
+} from "./research_browser_check.ts";
 import { identityTokens } from "./research_part_job.ts";
 import { siteDomain } from "./research_page_reader.ts";
 import { type LookupRecipe, runRecipe } from "./research_recipes.ts";
@@ -246,8 +255,47 @@ export function registerResearchEngineRoutes(
     });
     if (!allowed) return c.json({ error: "That page isn't on a trusted catalogue for this car. Use the Open page button." }, 400);
 
-    const gate = browserCheckGate({ ...ctx.gateInput, pasted, typedNumber: str(b.number, 40) || null });
-    if (!gate.ok) return c.json({ error: "Confirm needs the car and a value on the pasted line", gate }, 422);
+    // RE-68: the owner answers the check's questions (new screen); pasted text (older screen) still works.
+    let detected = "";
+    let evidenceText = pasted;
+    let answeredVersion: string | null = null;
+    if (b.answers && typeof b.answers === "object") {
+      const fit = String(ctx.job.fit_descriptor ?? "").toLowerCase();
+      const side = fit.includes("rear") ? "rear" : fit.includes("front") ? "front" : null;
+      const ans = answersGate({
+        jobType: ctx.gateInput.jobType,
+        answers: b.answers as CheckAnswers,
+        identity: ctx.gateInput.identity,
+        frame: ctx.car.chassis_code,
+        specKey: ctx.gateInput.specKey,
+        needsSide: side,
+        site: host,
+        rowName: str(b.rowName, 120) || null,
+        buildText: ctx.buildText,
+        knownCode: ctx.knownCode,
+        suggestions: ctx.gateInput.jobType === "part" ? ctx.gateInput.candidates : ctx.specSuggestions,
+      });
+      if (!ans.ok) {
+        const msg: Record<string, string> = {
+          version_no: "Answer the first question: is the page for this car?",
+          part_not_found: "If the part isn't on the page, press Not on this page.",
+          dates_no: "If the dates don't include this car, press Not on this page.",
+          side_no: "If it isn't for that side, press Not on this page.",
+          no_value: ctx.gateInput.jobType === "part" ? "Type the part number shown." : "That value doesn't look right for this item.",
+          bad_number: "That isn't a part number (it looks like a car code or a year).",
+          bad_version: "Type the full Model shown at the top, like M900A-AGBVE.",
+          retype_mismatch: "The two numbers you typed don't match.",
+        };
+        return c.json({ error: msg[ans.reason] ?? "Check your answers.", gate: ans }, 422);
+      }
+      detected = ans.detected;
+      evidenceText = ans.evidence;
+      answeredVersion = ans.versionCode;
+    } else {
+      const gate = browserCheckGate({ ...ctx.gateInput, pasted, typedNumber: str(b.number, 40) || null });
+      if (!gate.ok) return c.json({ error: "Confirm needs the car and a value on the pasted line", gate }, 422);
+      detected = gate.detected;
+    }
 
     const actor = actorOf(c);
     const { data: read, error: readErr } = await supabase.from("research_page_read").insert({
@@ -257,8 +305,8 @@ export function registerResearchEngineRoutes(
       domain: host,
       url,
       final_url: url,
-      block_text: pasted,
-      block_hash: await sha256(pasted),
+      block_text: evidenceText,
+      block_hash: await sha256(evidenceText),
       checked_by: actor,
     }).select("id").single();
     if (readErr) return c.json({ error: readErr.message }, 400);
@@ -267,7 +315,7 @@ export function registerResearchEngineRoutes(
     // RE-63: once Confirm has fully worked, remember the catalogue's name and page for this car's version
     // (only when the paste names exactly one version), so the next check says "click it".
     const rememberVersion = async () => {
-      const versionCode = versionCodeOnLine(pasted, ctx.car.chassis_code);
+      const versionCode = answeredVersion ?? versionCodeOnLine(pasted, ctx.car.chassis_code);
       if (!versionCode || !ctx.job.vehicle_catalog_id) return;
       // RE-67: the version's dates as the catalogue writes them, from the pasted title line (when there).
       const period = periodTextOnLine(pasted);
@@ -288,7 +336,7 @@ export function registerResearchEngineRoutes(
         job_id: jobId,
         vehicle_catalog_id: ctx.job.vehicle_catalog_id,
         spec_key: ctx.job.spec_key,
-        value: gate.detected,
+        value: detected,
         evidence_read_ids: [readId],
         trust_route: "owner_browser",
         route: "review",
@@ -299,11 +347,11 @@ export function registerResearchEngineRoutes(
       if (pErr) return c.json({ error: pErr.message }, 400);
       await supabase.rpc("catalog_research_expire_browser_checks");
       await rememberVersion();
-      return c.json({ result: data, detected: gate.detected });
+      return c.json({ result: data, detected: detected });
     }
 
     // Part: the number the owner saw on the car maker's catalogue (owner-checked, RE-29).
-    const norm = gate.detected.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const norm = detected.toUpperCase().replace(/[^A-Z0-9]/g, "");
     // The suggestion the owner confirmed keeps its own brand and kind (a part maker's number stays aftermarket).
     const { data: existingRows } = await supabase.from("catalog_part_proposal").select("id, brand, part_name, match_kind")
       .eq("job_id", jobId).eq("part_number_norm", norm).order("created_at").limit(1);
@@ -314,7 +362,7 @@ export function registerResearchEngineRoutes(
     const { data: prop, error } = await supabase.from("catalog_part_proposal").upsert({
       job_id: jobId,
       brand: existing?.brand ?? ctx.car.make ?? "OEM",
-      part_number: gate.detected,
+      part_number: detected,
       part_number_norm: norm,
       part_name: existing?.part_name ?? comp?.name ?? "Part",
       position_key: positionKey,
@@ -322,7 +370,7 @@ export function registerResearchEngineRoutes(
       trust_route: "owner_browser",
       evidence_read_ids: [readId],
       fits: { listings: [{ vehicleId: ctx.job.vehicle_catalog_id, position: positionKey || undefined }] },
-      sources: [{ url, domain: host, readId, block: pasted }],
+      sources: [{ url, domain: host, readId, block: evidenceText }],
       route: "review",
       status: "open",
     }, { onConflict: "job_id,part_number_norm,position_key" }).select("id").single();
@@ -333,7 +381,7 @@ export function registerResearchEngineRoutes(
     if (batchId) await autoResolveFromBatch(supabase, batchId, actor);
     await supabase.rpc("catalog_research_expire_browser_checks");
     await rememberVersion();
-    return c.json({ result: promoted, detected: gate.detected });
+    return c.json({ result: promoted, detected: detected });
   });
 
   app.post(`${PREFIX}/browser-checks/:jobId/not-on-page`, async (c: Context) => {
@@ -617,6 +665,10 @@ async function browserCheckContext(supabase: SupabaseClient, jobId: string): Pro
   | {
     job: JobRow;
     car: Record<string, string | null>;
+    /** RE-68: the version Roam remembers for this car, the build dates and suggested spec values (server's own records). */
+    knownCode: string | null;
+    buildText: string | null;
+    specSuggestions: string[];
     gateInput: {
       jobType: "part" | "spec";
       identity: string[];
@@ -659,6 +711,21 @@ async function browserCheckContext(supabase: SupabaseClient, jobId: string): Pro
     ),
   ].filter((e) => e.toUpperCase().replace(/[^A-Z0-9]/g, "") !== String(c0.engine_code ?? "").toUpperCase().replace(/[^A-Z0-9]/g, ""));
   const num = (v: unknown) => (v == null || v === "" ? null : Number(v));
+  const [{ data: kv }, { data: specProps }] = await Promise.all([
+    supabase.from("research_car_site_version").select("version_code").eq("vehicle_catalog_id", j.vehicle_catalog_id)
+      .order("confirmed_at", { ascending: false }).limit(1),
+    j.job_type === "spec"
+      ? supabase.from("catalog_spec_proposal").select("value").eq("job_id", jobId).eq("status", "open")
+      : Promise.resolve({ data: [] }),
+  ]);
+  const knownCode = ((kv ?? []) as Array<{ version_code: string }>)[0]?.version_code ?? null;
+  const specSuggestions = ((specProps ?? []) as Array<{ value: string | null }>).map((p) => String(p.value ?? "").trim()).filter(Boolean);
+  const p2 = (n: number | null) => (n == null ? "" : String(n).padStart(2, "0"));
+  const sy = num(c0.production_start_year);
+  const sm = num(c0.production_start_month);
+  const ey = num(c0.production_end_year);
+  const em = num(c0.production_end_month);
+  const buildText = sy ? `${sm ? `${p2(sm)}.` : ""}${sy} – ${ey ? `${em ? `${p2(em)}.` : ""}${ey}` : "now"}` : null;
   // Every open number Roam suggested, first suggestion first (RE-57: the line must hold one of them, or a typed one).
   const { data: open } = j.job_type === "part"
     ? await supabase.from("catalog_part_proposal").select("part_number").eq("job_id", jobId).eq("status", "open").order("created_at")
@@ -667,6 +734,9 @@ async function browserCheckContext(supabase: SupabaseClient, jobId: string): Pro
   return {
     job: j,
     car: (car ?? {}) as Record<string, string | null>,
+    knownCode,
+    buildText,
+    specSuggestions,
     gateInput: {
       jobType: j.job_type as "part" | "spec",
       identity: identityTokens((car ?? {}) as Record<string, string>),

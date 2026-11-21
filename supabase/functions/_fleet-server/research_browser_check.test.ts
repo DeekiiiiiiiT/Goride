@@ -251,3 +251,52 @@ Deno.test("RE-67: the version's dates are read as the catalogue writes them", ()
   assertEquals(periodTextOnLine("M900A-GBME 09.2020 - ..."), "09.2020 - ...");
   assertEquals(periodTextOnLine("no dates"), null);
 });
+
+// RE-68: answers instead of pasted text.
+import { answersGate } from "./research_browser_check.ts";
+
+const ANS_BASE = { jobType: "part" as const, identity: roomy, frame: "M900A", site: "amayama.com", rowName: "ELEMENT SUB-ASSY, AIR CLEANER FILTER", buildText: "11.2016 – 08.2020", knownCode: "M900A-AGBVE", suggestions: ["17801-21060", "04465-B1120"] };
+const YES = { versionOk: true, partFound: true, datesOk: true };
+
+Deno.test("RE-68: four Yes answers and a number → confirmed, with the answers as evidence", () => {
+  const r = answersGate({ ...ANS_BASE, answers: { ...YES, value: "17801-21060" } });
+  assertEquals(r.ok, true);
+  if (r.ok) {
+    assertEquals(r.detected, "17801-21060");
+    assertEquals(r.evidence, "Owner checked on amayama.com · M900A-AGBVE · ELEMENT SUB-ASSY, AIR CLEANER FILTER · 17801-21060 · dates include 11.2016 – 08.2020");
+  }
+});
+
+Deno.test("RE-68: any No stops Confirm; a frame code, year or engine code is never a number", () => {
+  assertEquals(answersGate({ ...ANS_BASE, answers: { ...YES, datesOk: false, value: "17801-21060" } }), { ok: false, reason: "dates_no" });
+  assertEquals(answersGate({ ...ANS_BASE, answers: { ...YES, versionOk: false, value: "17801-21060" } }), { ok: false, reason: "version_no" });
+  assertEquals(answersGate({ ...ANS_BASE, answers: { ...YES, partFound: false, value: "17801-21060" } }), { ok: false, reason: "part_not_found" });
+  for (const value of ["DBA-M910A", "2016", "1KR-FE", "M900A"]) {
+    assertEquals(answersGate({ ...ANS_BASE, answers: { ...YES, value } }), { ok: false, reason: "bad_number" }, value);
+  }
+});
+
+Deno.test("RE-68: a side is required when the job has one", () => {
+  assertEquals(answersGate({ ...ANS_BASE, needsSide: "front", answers: { ...YES, value: "04465-B1120" } }), { ok: false, reason: "side_no" });
+  assertEquals(answersGate({ ...ANS_BASE, needsSide: "front", answers: { ...YES, sideOk: true, value: "04465-B1120" } }).ok, true);
+});
+
+Deno.test("RE-68: a typed model for the car's frame is learned; another frame is refused", () => {
+  const r = answersGate({ ...ANS_BASE, knownCode: null, answers: { ...YES, versionOk: undefined, versionCode: "m900a-agbve", value: "17801-21060" } });
+  assertEquals(r.ok && r.versionCode, "M900A-AGBVE");
+  assertEquals(answersGate({ ...ANS_BASE, knownCode: null, answers: { ...YES, versionCode: "NCP10-XYZ", value: "17801-21060" } }), { ok: false, reason: "bad_version" });
+});
+
+Deno.test("RE-68: a spec value must have the spec's shape", () => {
+  const spec = { ...ANS_BASE, jobType: "spec" as const, specKey: "battery_jis", rowName: "Battery size", suggestions: ["M-42"] };
+  assertEquals(answersGate({ ...spec, answers: { ...YES, value: "M-42" } }).ok, true);
+  assertEquals(answersGate({ ...spec, answers: { ...YES, value: "see dealer" } }), { ok: false, reason: "no_value" });
+});
+
+Deno.test("RE-68 review: a number Roam didn't suggest must be typed twice; no frame on file keeps the typed model", () => {
+  assertEquals(answersGate({ ...ANS_BASE, answers: { ...YES, value: "17801-B1010" } }), { ok: false, reason: "retype_mismatch" });
+  assertEquals(answersGate({ ...ANS_BASE, answers: { ...YES, value: "17801-B1010", valueAgain: "17801B1010" } }).ok, true);
+  const r = answersGate({ ...ANS_BASE, frame: null, knownCode: null, answers: { ...YES, versionCode: "ab12-cdef", value: "17801-21060" } });
+  assertEquals(r.ok && r.versionCode, "AB12-CDEF");
+  assertEquals(answersGate({ ...ANS_BASE, knownCode: null, answers: { ...YES, value: "17801-21060" } }), { ok: false, reason: "version_no" });
+});

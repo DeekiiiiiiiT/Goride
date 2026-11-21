@@ -362,7 +362,7 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect.poll(() => calls.some((c) => c.path === "/jobs/job-auto/undo")).toBe(true);
   });
 
-  test("Screen 3 — browser check: Confirm waits for the gate, then confirms; Not on this page", async ({ page }) => {
+  test("Screen 3 — browser check (RE-68): unknown version → type the Model; answer, then Confirm; Not on this page", async ({ page }) => {
     const calls: Calls = [];
     await install(page, calls);
     await openParts(page);
@@ -370,65 +370,59 @@ test.describe("Research engine screens (layer 3)", () => {
     const d = page.getByTestId("research-drawer");
     await expect(d.getByTestId("open-catalogue-page")).toHaveAttribute("href", "https://www.amayama.com/en/part/toyota/roomy-m900a");
     await expect(d.getByTestId("open-catalogue-page")).toContainText("Open Amayama");
-    // RE-62: the car in plain words (dates, regular engine), never a frame code.
-    await expect(d.getByTestId("browser-check-instruction")).toContainText("Click this row:");
-    await expect(d.getByTestId("browser-check-instruction")).not.toContainText("M900A");
-    // RE-63: the version table in the catalogue's own column words.
-    await expect(d.getByTestId("browser-check-instruction")).toContainText("1KRFE");
-    await expect(d.getByTestId("guide-version-row")).toContainText("Prod period");
+    // No remembered version: the row to click in the catalogue's own column words, never a frame code to read.
+    await expect(d.getByTestId("browser-check-instruction")).toContainText("Click the row with:");
+    await expect(d.getByTestId("guide-version-row")).toContainText("Engine: 1KRFE");
+    await expect(d.getByTestId("guide-version-row")).toContainText("Prod period:");
     await expect(d.getByTestId("browser-check-counter")).toContainText("7 of 25");
     await expect(d.getByTestId("browser-check-confirm")).toBeDisabled();
-    await d.getByTestId("browser-check-paste").fill("Roomy M900A battery");
-    await expect(d.getByTestId("browser-check-readback")).toContainText("That line has no value of the right kind.");
+    await d.getByTestId("q-version-code").fill("M900A-AGBVE");
+    await d.getByTestId("q-part-yes").click();
+    await d.getByTestId("q-value").fill("M-42");
+    // Typed (not tapped) → typed twice.
+    await d.getByTestId("q-value-again").fill("M-42");
     await expect(d.getByTestId("browser-check-confirm")).toBeDisabled();
-    await d.getByTestId("browser-check-paste").fill("Roomy M900A battery M-42 EFB");
-    await expect(d.getByTestId("detected-value")).toHaveText("Detected: M-42");
-    await expect(d.getByText("Matched")).toBeVisible();
-    // RE-61: Confirm needs the address of the page the owner copied from (starts empty).
-    await expect(d.getByTestId("browser-check-page-url")).toHaveValue("");
+    // A "No" stops Confirm and says what to do.
+    await d.getByTestId("q-dates-no").click();
+    await expect(d.getByTestId("q-no-hint")).toHaveText("Then press Not on this page.");
     await expect(d.getByTestId("browser-check-confirm")).toBeDisabled();
-    await d.getByTestId("browser-check-page-url").fill("https://www.amayama.com/en/part/toyota/roomy-m900a");
+    await d.getByTestId("q-dates-yes").click();
+    await expect(d.getByTestId("q-no-hint")).toHaveCount(0);
     await shot(page, "03-request-drawer-browser-check");
     await noDropWords(page);
     await d.getByTestId("browser-check-confirm").click();
     await expect.poll(() => calls.find((c) => c.path === "/browser-checks/job-bc/confirm")?.body).toEqual({
-      pasted: "Roomy M900A battery M-42 EFB",
       url: "https://www.amayama.com/en/part/toyota/roomy-m900a",
+      answers: { versionOk: null, versionCode: "M900A-AGBVE", partFound: true, value: "M-42", valueAgain: "M-42", datesOk: true, sideOk: null },
+      rowName: "Battery size",
+      buildText: "2016 – 2020",
+      knownCode: null,
     });
     await page.getByTestId("parts-row").filter({ hasText: "Battery size" }).click();
     await page.getByTestId("not-on-page").click();
     await expect.poll(() => calls.some((c) => c.path === "/browser-checks/job-bc/not-on-page")).toBe(true);
   });
 
-  test("RE-57 — part browser check never guesses a number; a number the page shows can be typed", async ({ page }) => {
+  test("RE-68 — part check with a remembered version: Yes, Yes, tap Roam's number, Yes → Confirm", async ({ page }) => {
     const calls: Calls = [];
     await install(page, calls);
     await openParts(page);
     await page.getByTestId("parts-row").filter({ hasText: "Spark plugs" }).getByTestId("row-open-browser-check").click();
     const d = page.getByTestId("research-drawer");
-    // RE-63: a remembered version is named; the part step says what to search, which row, and Roam's numbers.
-    // RE-67: a remembered version opens directly; step 2 shows its catalogue row to check.
-    await expect(d.getByTestId("browser-check-instruction")).toContainText("Check it's this one:");
-    await expect(d.getByTestId("guide-version-row")).toContainText("M900A-AGBVE");
-    await expect(d.getByTestId("guide-find-part")).toContainText("spark plug");
-    await expect(d.getByTestId("guide-find-part")).toContainText("PLUG, SPARK");
-    // Only the car line (with a sister frame code): no number, Confirm stays off, the typing box appears.
-    await d.getByTestId("browser-check-paste").fill("Engine 1KR-FE Frame DBA-M900A DBA-M910A Production years 2016 2017 2018");
-    await expect(d.getByTestId("browser-check-readback")).toContainText("None of Roam's suggested numbers is on this line");
+    await expect(d.getByTestId("browser-check-instruction")).toContainText("Does the top say M900A-AGBVE?");
+    await expect(d.getByTestId("guide-find-part")).toContainText("Search spark plug. Do you see PLUG, SPARK?");
+    await d.getByTestId("q-version-yes").click();
+    await d.getByTestId("q-part-yes").click();
+    await d.getByTestId("q-suggestion").filter({ hasText: "00000-T0009" }).click();
     await expect(d.getByTestId("browser-check-confirm")).toBeDisabled();
-    await expect(d.getByTestId("browser-check-typed-number")).toBeVisible();
-    // The page shows another number: pasted with the car line and typed, it confirms with that number.
-    await d.getByTestId("browser-check-paste").fill("Frame DBA-M900A 00000-T0010 Plug, spark");
-    await d.getByTestId("browser-check-typed-number").fill("00000-T0010");
-    await expect(d.getByTestId("detected-value")).toHaveText("Detected: 00000-T0010");
-    // RE-61: the page the owner actually used is saved as the proof.
-    await expect(d.getByTestId("browser-check-page-url")).toHaveValue("");
-    await d.getByTestId("browser-check-page-url").fill("https://www.amayama.com/en/part/toyota/roomy-m900a-agbve-plugs");
+    await d.getByTestId("q-dates-yes").click();
     await d.getByTestId("browser-check-confirm").click();
     await expect.poll(() => calls.find((c) => c.path === "/browser-checks/job-bcp/confirm")?.body).toEqual({
-      pasted: "Frame DBA-M900A 00000-T0010 Plug, spark",
-      url: "https://www.amayama.com/en/part/toyota/roomy-m900a-agbve-plugs",
-      number: "00000-T0010",
+      url: "https://www.amayama.com/en/part/toyota/roomy-m900a-plugs",
+      answers: { versionOk: true, versionCode: null, partFound: true, value: "00000-T0009", valueAgain: null, datesOk: true, sideOk: null },
+      rowName: "PLUG, SPARK",
+      buildText: "2016 – 2020",
+      knownCode: "M900A-AGBVE",
     });
   });
 
@@ -439,8 +433,7 @@ test.describe("Research engine screens (layer 3)", () => {
     await page.getByTestId("parts-card").filter({ hasText: "Battery size" }).click();
     const d = page.getByTestId("research-drawer");
     await expect(d.getByTestId("open-catalogue-page")).toBeVisible();
-    await expect(d.getByRole("button", { name: "Paste" })).toBeVisible();
-    await expect(d.getByRole("button", { name: "Clear" })).toBeVisible();
+    await expect(d.getByTestId("q-part-yes")).toBeVisible();
     const box = await d.locator("aside").boundingBox();
     expect(box?.width).toBeGreaterThan(380);
     await shot(page, "18-phone-browser-check");

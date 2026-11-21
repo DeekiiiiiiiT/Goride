@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { toast } from "sonner";
 import {
   researchApi,
-  type BrowserCheckGate,
+  type BrowserCheckAnswersPayload,
   type PartProposal,
   type ResearchJobDetail,
   type SpecProposal,
@@ -31,13 +31,11 @@ import {
   ReStatePill,
 } from "./ReKit";
 import {
-  browserCheckTarget,
   buildDates,
   catalogueVersionRow,
   catalogueEngineCode,
   partFinder,
   carLabel,
-  gateReasonText,
   howSureLine,
   keptSources,
   placeLabel,
@@ -277,13 +275,12 @@ export function ResearchJobDrawer({ token, jobId, group, fallbackTitle, fallback
 
       {detail && !openConflict && state === "browser_check" ? (
         <BrowserCheckCard
-          token={token}
           detail={detail}
           itemName={itemName}
           browserChecks={browserChecks ?? null}
           busy={busy}
-          onConfirm={(pasted, url, number) =>
-            void run("Confirmed", () => researchApi.confirmBrowserCheck(token, jobId!, pasted, url, number), {
+          onConfirm={(payload) =>
+            void run("Confirmed", () => researchApi.confirmBrowserCheckAnswers(token, jobId!, payload), {
               message: `Confirmed ${itemName} for ${carName} from your browser check.`,
             })
           }
@@ -498,7 +495,6 @@ function EditAndAdd({
 // ------------------------------------------------------------------ Screen 3 / 18: browser check
 
 function BrowserCheckCard({
-  token,
   detail,
   itemName,
   browserChecks,
@@ -506,80 +502,87 @@ function BrowserCheckCard({
   onConfirm,
   onNotOnPage,
 }: {
-  token: string;
   detail: ResearchJobDetail;
   itemName: string;
   browserChecks: { open: number; max: number } | null;
   busy: boolean;
-  onConfirm: (pasted: string, url: string, number?: string) => void;
+  onConfirm: (payload: BrowserCheckAnswersPayload) => void;
   onNotOnPage: () => void;
 }) {
-  const [pasted, setPasted] = useState("");
-  // RE-57: when the page shows a different number than Roam suggested, the owner types it; it must be on the line.
-  const [typedNumber, setTypedNumber] = useState("");
-  // RE-61: the page the owner actually used is the proof link (pre-filled with Roam's link; same trusted-site rule).
-  // Starts empty: Roam's link may be the version list, which never shows the part (code review).
-  const [pageUrl, setPageUrl] = useState("");
-  // Another check opened in the same drawer starts clean (keyed on the job only, so a refetch keeps the work).
+  // RE-68: the owner looks and answers; nothing is copied (owner, 21 Nov).
+  const [versionOk, setVersionOk] = useState<boolean | null>(null);
+  const [versionCode, setVersionCode] = useState("");
+  const [partFound, setPartFound] = useState<boolean | null>(null);
+  const [picked, setPicked] = useState("");
+  const [typed, setTyped] = useState("");
+  const [typedAgain, setTypedAgain] = useState("");
+  const [datesOk, setDatesOk] = useState<boolean | null>(null);
+  const [sideOk, setSideOk] = useState<boolean | null>(null);
+  // Another check opened in the same drawer starts clean (keyed on the job only, so a refetch keeps the answers).
   useEffect(() => {
-    setPasted("");
-    setTypedNumber("");
-    setPageUrl("");
+    setVersionOk(null);
+    setVersionCode("");
+    setPartFound(null);
+    setPicked("");
+    setTyped("");
+    setTypedAgain("");
+    setDatesOk(null);
+    setSideOk(null);
   }, [detail.job.id]);
-  const [gate, setGate] = useState<BrowserCheckGate | null>(null);
+
   const url = detail.browserCheckUrl;
   const site = siteName(url);
-  const target = browserCheckTarget(detail.car, itemName);
-  const finder = partFinder(itemName, detail.car?.make);
-  // Step 1 opens the remembered version when Roam knows it, else Roam's (list) link.
   const openUrl = detail.knownVersion?.url || url;
-  // Step 2 (only when needed): the version's name if remembered, else the row in the catalogue's own words.
-  // Step 2 (RE-67): the version's row in the catalogue's own columns — the stored catalogue words when Roam knows them,
-  // else Dominion's values. Shown whenever any value is known.
-  const versionRow = catalogueVersionRow(detail.car, detail.knownVersion ?? null);
-  const versionStep = versionRow.some((c) => c.value !== "—") ? true : null;
   const jobType = detail.job.job_type === "spec" ? "spec" : "part";
+  const finder = partFinder(itemName, detail.car?.make);
+  const known = detail.knownVersion ?? null;
+  const versionRow = catalogueVersionRow(detail.car, known).filter((c) => c.label !== "Model" && c.value !== "—");
+  const dates = buildDates(detail.car);
+  const fit = String(detail.job.fit_descriptor ?? "").toLowerCase();
+  const side = fit.includes("rear") ? "rear" : fit.includes("front") ? "front" : null;
+  const specLabel = (detail.spec?.label ?? itemName).toLowerCase();
+  // Roam's suggestions to tap (part numbers, or a spec's suggested value).
+  const suggestions = [
+    ...new Set(
+      (jobType === "part"
+        ? detail.proposals.filter((p) => p.status === "open").map((p) => String(p.part_number ?? ""))
+        : detail.specProposals.filter((p) => p.status === "open").map((p) => String(p.value ?? ""))
+      ).map((v) => v.trim()).filter(Boolean),
+    ),
+  ].slice(0, 6);
 
-  // The server reads the line with the same rule Confirm uses (part → car + number; spec → car + a value of its shape).
-  useEffect(() => {
-    // Any edit clears the old reading, so Confirm never acts on a number the screen no longer shows.
-    setGate(null);
-    if (!pasted.trim()) return;
-    let cancelled = false;
-    const t = window.setTimeout(() => {
-      void researchApi
-        .previewBrowserCheck(token, detail.job.id, pasted, typedNumber.trim() || undefined)
-        .then((g) => {
-          if (!cancelled) setGate(g);
-        })
-        .catch(() => {
-          if (!cancelled) setGate(null);
-        });
-    }, 300);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(t);
-    };
-  }, [pasted, typedNumber, token, detail.job.id]);
+  // The value: a tapped suggestion, else what was typed — typed values are typed twice (no typo becomes a number).
+  const value = picked || typed.trim();
+  const needsAgain = !picked && Boolean(typed.trim());
+  const againOk = !needsAgain || typedAgain.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") === typed.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const frame = String(detail.car?.chassis_code ?? "").trim().toUpperCase().replace(/^[A-Z0-9]{2,3}-(?=[A-Z])/, "");
+  const typedModel = versionCode.trim().toUpperCase();
+  const modelOk = frame ? typedModel.startsWith(`${frame}-`) && typedModel.length > frame.length + 3 : typedModel.length >= 4;
+  const versionAnswered = known ? versionOk === true : modelOk;
+  const anyNo = versionOk === false || partFound === false || datesOk === false || sideOk === false;
+  const canConfirm = Boolean(
+    openUrl && versionAnswered && partFound === true && value && againOk && datesOk === true && (!side || sideOk === true),
+  );
 
-  const canConfirm = Boolean(gate?.ok && pageUrl.trim().startsWith("https://"));
-  const askNumber =
-    jobType === "part" && pasted.trim() !== "" && (typedNumber !== "" || (gate !== null && !gate.ok && (gate.reason === "no_number" || gate.reason === "number_not_on_line")));
-
-  async function pasteFromClipboard() {
-    try {
-      setPasted(await navigator.clipboard.readText());
-    } catch {
-      toast.error("Couldn't read the clipboard. Paste into the box instead.");
-    }
-  }
+  const yesNo = (v: boolean | null, set: (b: boolean) => void, id: string, noLabel = "No") => (
+    <div className="flex gap-2">
+      <PartsButton variant={v === true ? "primary" : "secondary"} className="!min-h-[32px]" onClick={() => set(true)} data-testid={`${id}-yes`}>
+        Yes
+      </PartsButton>
+      <PartsButton variant={v === false ? "danger" : "secondary"} className="!min-h-[32px]" onClick={() => set(false)} data-testid={`${id}-no`}>
+        {noLabel}
+      </PartsButton>
+    </div>
+  );
+  const input =
+    `h-10 w-full rounded-lg bg-white px-3 text-[14px] text-[#30323b] shadow-sm outline-none focus:ring-2 focus:ring-[#0153dc] dark:bg-[#0b1220] dark:text-[#e2e8f0] ${D_MONO}`;
+  let n = 1;
 
   return (
     <div className="flex flex-col gap-6" data-testid="browser-check-card">
-      {/* RE-65: five short steps, nothing else (owner, 21 Nov: "just give me the correct direction"). */}
       <div className="flex flex-col gap-4 rounded-2xl bg-[#dbe1ff] p-6 text-[14px] text-[#00174b] dark:bg-[#1e3a8a]/40 dark:text-[#dbe1ff]">
         <div className="flex items-center gap-2">
-          <StepDot n={1} />
+          <StepDot n={n++} />
           {openUrl ? (
             <a
               href={openUrl}
@@ -594,111 +597,135 @@ function BrowserCheckCard({
             <span className={D_MUTED}>No {site} link for this one. Use Not on this page.</span>
           )}
         </div>
-        {versionStep ? (
-          <div className="flex items-start gap-2" data-testid="browser-check-instruction">
-            <StepDot n={2} />
-            <div className="flex w-full flex-col gap-2 pt-0.5">
-              <p>{detail.knownVersion?.url ? "Check it's this one:" : "Click this row:"}</p>
-              {/* RE-67: the row as the catalogue lists it, one label per line (owner, 21 Nov). */}
-              <ul className="flex flex-col gap-0.5" data-testid="guide-version-row">
-                {versionRow.map((c) => (
-                  <li key={c.label}>
-                    {c.label}: <span className="font-semibold">{c.value}</span>
-                  </li>
+
+        <div className="flex items-start gap-2" data-testid="browser-check-instruction">
+          <StepDot n={n++} />
+          <div className="flex w-full flex-col gap-2 pt-0.5">
+            {known ? (
+              <>
+                <p>
+                  {known.url ? "Does the top say " : "Click "}
+                  <span className="font-semibold">{known.code}</span>
+                  {known.url ? "?" : " in the list. Does the top now say it?"}
+                </p>
+                {yesNo(versionOk, setVersionOk, "q-version")}
+              </>
+            ) : (
+              <>
+                <p>Click the row with:</p>
+                <ul className="flex flex-col gap-0.5" data-testid="guide-version-row">
+                  {versionRow.map((c) => (
+                    <li key={c.label}>
+                      {c.label}: <span className="font-semibold">{c.value}</span>
+                    </li>
+                  ))}
+                </ul>
+                <label className="flex flex-col gap-1">
+                  <span>Type the Model shown at the top:</span>
+                  <input value={versionCode} onChange={(e) => setVersionCode(e.target.value)} maxLength={40} className={input} data-testid="q-version-code" />
+                </label>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-start gap-2" data-testid="guide-find-part">
+          <StepDot n={n++} />
+          <div className="flex w-full flex-col gap-2 pt-0.5">
+            <p>
+              {jobType === "part" ? (
+                <>
+                  Search <span className="font-semibold">{finder.search}</span>. Do you see{" "}
+                  <span className="font-semibold">{finder.rowName ?? `the ${itemName.toLowerCase()}`}</span>?
+                </>
+              ) : (
+                <>
+                  Do you see the <span className="font-semibold">{specLabel}</span>?
+                </>
+              )}
+            </p>
+            {yesNo(partFound, setPartFound, "q-part")}
+          </div>
+        </div>
+
+        <div className="flex items-start gap-2">
+          <StepDot n={n++} />
+          <div className="flex w-full flex-col gap-2 pt-0.5">
+            <p>{jobType === "part" ? "Its number:" : "The value shown:"}</p>
+            {suggestions.length ? (
+              <div className="flex flex-wrap gap-2" data-testid="q-suggestions">
+                {suggestions.map((s) => (
+                  <PartsButton
+                    key={s}
+                    variant={picked === s ? "primary" : "secondary"}
+                    className={`!min-h-[32px] ${D_MONO}`}
+                    onClick={() => {
+                      setPicked(picked === s ? "" : s);
+                      setTyped("");
+                      setTypedAgain("");
+                    }}
+                    data-testid="q-suggestion"
+                  >
+                    {s}
+                  </PartsButton>
                 ))}
-              </ul>
+              </div>
+            ) : null}
+            <input
+              value={typed}
+              onChange={(e) => {
+                setTyped(e.target.value);
+                setPicked("");
+              }}
+              placeholder={suggestions.length ? "Or type it" : "Type it"}
+              maxLength={60}
+              className={input}
+              data-testid="q-value"
+            />
+            {needsAgain ? (
+              <>
+                <input
+                  value={typedAgain}
+                  onChange={(e) => setTypedAgain(e.target.value)}
+                  placeholder="Type it again"
+                  maxLength={60}
+                  className={input}
+                  data-testid="q-value-again"
+                />
+                {typedAgain.trim() && !againOk ? <p className="text-[#a83836]">They don&apos;t match.</p> : null}
+              </>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="flex items-start gap-2">
+          <StepDot n={n++} />
+          <div className="flex w-full flex-col gap-2 pt-0.5">
+            <p>
+              Do its dates include <span className="font-semibold">{dates || "your car's years"}</span>?
+            </p>
+            {yesNo(datesOk, setDatesOk, "q-dates")}
+          </div>
+        </div>
+
+        {side ? (
+          <div className="flex items-start gap-2">
+            <StepDot n={n++} />
+            <div className="flex w-full flex-col gap-2 pt-0.5">
+              <p>
+                Is it for the <span className="font-semibold">{side}</span>?
+              </p>
+              {yesNo(sideOk, setSideOk, "q-side")}
             </div>
           </div>
         ) : null}
-        <div className="flex items-start gap-2" data-testid="guide-find-part">
-          <StepDot n={versionStep ? 3 : 2} />
-          <p className="pt-0.5">
-            {jobType === "part" ? (
-              <>
-                Search <span className="font-semibold">{finder.search}</span>
-                {finder.rowName ? (
-                  <>
-                    {" "}→ find <span className="font-semibold">{finder.rowName}</span>
-                  </>
-                ) : null}
-              </>
-            ) : (
-              <>
-                Find the <span className="font-semibold">{(detail.spec?.label ?? target.item).toLowerCase()}</span>
-              </>
-            )}
+
+        {anyNo ? (
+          <p className="font-semibold text-[#a83836]" data-testid="q-no-hint">
+            Then press Not on this page.
           </p>
-        </div>
-        <div className="flex items-start gap-2">
-          <StepDot n={versionStep ? 4 : 3} />
-          <div className="flex w-full flex-col gap-2">
-            <p className="pt-0.5">Copy the bold title line and the part&apos;s row. Paste here:</p>
-            <textarea
-              rows={3}
-              value={pasted}
-              onChange={(e) => setPasted(e.target.value)}
-              data-testid="browser-check-paste"
-              className="w-full resize-none rounded-lg bg-white p-3 text-[14px] text-[#30323b] shadow-sm outline-none focus:ring-2 focus:ring-[#0153dc] dark:bg-[#0b1220] dark:text-[#e2e8f0]"
-            />
-            <div className="flex gap-2 md:hidden">
-              <PartsButton variant="secondary" onClick={() => void pasteFromClipboard()}>
-                <DIcon name="content_paste" className="text-[16px]" /> Paste
-              </PartsButton>
-              <PartsButton variant="danger" onClick={() => setPasted("")} disabled={!pasted}>
-                Clear
-              </PartsButton>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-start gap-2">
-          <StepDot n={versionStep ? 5 : 4} />
-          <label className="flex w-full flex-col gap-2">
-            <span className="pt-0.5">Copy the address bar. Paste here:</span>
-            <input
-              value={pageUrl}
-              onChange={(e) => setPageUrl(e.target.value)}
-              placeholder="https://"
-              data-testid="browser-check-page-url"
-              className={`h-10 w-full rounded-lg bg-white px-3 text-[13px] text-[#30323b] shadow-sm outline-none focus:ring-2 focus:ring-[#0153dc] dark:bg-[#0b1220] dark:text-[#e2e8f0] ${D_MONO}`}
-            />
-          </label>
-        </div>
+        ) : null}
       </div>
-
-      {pasted.trim() ? (
-        <div className="flex flex-col gap-1" data-testid="browser-check-readback">
-          <span className={RE_LABEL}>Roam read from pasted line</span>
-          <div className={`flex items-center justify-between gap-2 rounded-xl px-4 py-4 ${RE_SOFT}`}>
-            {gate?.ok ? (
-              <>
-                <div className="flex min-w-0 items-center gap-2">
-                  <DIcon name="check_circle" className="text-[18px] text-[#006e31] dark:text-[#4ade80]" />
-                  <span className={`truncate text-[13px] ${D_MONO} ${D_TXT}`} data-testid="detected-value">
-                    Detected: {gate.detected}
-                  </span>
-                </div>
-                <RePill tone="green">Matched</RePill>
-              </>
-            ) : (
-              <span className={`text-[13px] ${D_MUTED}`}>{gate ? gateReasonText(gate.reason, jobType, detail.car) : "Reading…"}</span>
-            )}
-          </div>
-        </div>
-      ) : null}
-
-      {askNumber ? (
-        <label className={`flex flex-col gap-1 text-[13px] ${D_MUTED}`}>
-          Number shown on the page
-          <input
-            value={typedNumber}
-            onChange={(e) => setTypedNumber(e.target.value)}
-            placeholder="Type the part number exactly as the page shows it"
-            maxLength={40}
-            data-testid="browser-check-typed-number"
-            className={`h-10 w-full rounded-lg border border-[#c5c6d0] bg-white px-3 text-[14px] text-[#30323b] outline-none focus:ring-2 focus:ring-[#0153dc] dark:border-[#334155] dark:bg-[#0b1220] dark:text-[#e2e8f0] ${D_MONO}`}
-          />
-        </label>
-      ) : null}
 
       <div className="sticky bottom-0 -mx-6 -mb-6 mt-auto flex flex-col gap-3 bg-white px-6 py-4 shadow-[0_-4px_16px_rgba(1,83,220,0.04)] dark:bg-[#111a2e]">
         {browserChecks ? (
@@ -713,7 +740,24 @@ function BrowserCheckCard({
             className="!min-h-[40px] flex-1"
             disabled={busy || !canConfirm}
             data-testid="browser-check-confirm"
-            onClick={() => onConfirm(pasted, pageUrl.trim(), typedNumber.trim() || undefined)}
+            onClick={() =>
+              openUrl &&
+              onConfirm({
+                url: openUrl,
+                answers: {
+                  versionOk: known ? versionOk === true : null,
+                  versionCode: known ? null : versionCode.trim(),
+                  partFound: partFound === true,
+                  value,
+                  valueAgain: needsAgain ? typedAgain.trim() : null,
+                  datesOk: datesOk === true,
+                  sideOk: side ? sideOk === true : null,
+                },
+                rowName: jobType === "part" ? finder.rowName : detail.spec?.label ?? null,
+                buildText: dates || null,
+                knownCode: known?.code ?? null,
+              })
+            }
           >
             <DIcon name="check" className="text-[18px]" /> Confirm
           </PartsButton>
