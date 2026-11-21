@@ -110,7 +110,8 @@ BEGIN
   ) ON CONFLICT (id) DO NOTHING;
 
   -- Since 3b-09 a part is Confirmed only from a trusted site for its maker:
-  -- make MK Kashiyama's own site trusted for this test.
+  -- make MK Kashiyama's own site trusted for this test (the site row first: trusted_source has an FK to it).
+  INSERT INTO public.trusted_site (domain) VALUES ('mk-kashiyama.co.jp') ON CONFLICT (domain) DO NOTHING;
   INSERT INTO public.trusted_source (kind, maker, domain)
   SELECT 'part_maker', 'MK Kashiyama', 'mk-kashiyama.co.jp'
   WHERE NOT EXISTS (
