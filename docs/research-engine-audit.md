@@ -896,3 +896,7 @@ one number for every corner, though Dominion marks shocks `four_corners` and Toy
   position) is joined instead of duplicated. SQL checks: "fill per axle", "fill join old job".
 Code review (medium): 7 found, all fixed (per-axle readiness, join old jobs, server place rules, partial-save report,
 proposal key, sided parts on the paste path, all results returned). Tests: Deno 166, admin 61, screens 18.
+
+**Copy icons (owner, 21 Nov):** the browser check has a copy icon next to the Model, the Engine, the search words, the
+row name, and every suggested number (in every place); one click puts it on the clipboard ("Copied …"). Screen test
+counts them (16 on the four-corner shock check).

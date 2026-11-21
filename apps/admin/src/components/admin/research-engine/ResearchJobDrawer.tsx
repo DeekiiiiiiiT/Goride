@@ -625,6 +625,7 @@ function BrowserCheckCard({
                   {catalogueVersionRow(detail.car, known).map((c) => (
                     <li key={c.label}>
                       {c.label}: <span className="font-semibold">{c.value}</span>
+                      {(c.label === "Model" || c.label === "Engine") && c.value !== "—" ? <CopyIcon text={c.value} /> : null}
                     </li>
                   ))}
                 </ul>
@@ -637,6 +638,7 @@ function BrowserCheckCard({
                   {versionRow.map((c) => (
                     <li key={c.label}>
                       {c.label}: <span className="font-semibold">{c.value}</span>
+                      {(c.label === "Model" || c.label === "Engine") && c.value !== "—" ? <CopyIcon text={c.value} /> : null}
                     </li>
                   ))}
                 </ul>
@@ -655,8 +657,10 @@ function BrowserCheckCard({
             <p>
               {jobType === "part" ? (
                 <>
-                  Search <span className="font-semibold">{finder.search}</span>. Do you see{" "}
-                  <span className="font-semibold">{finder.rowName ?? `the ${itemName.toLowerCase()}`}</span>?
+                  Search <span className="font-semibold">{finder.search}</span>
+                  <CopyIcon text={finder.search} />. Do you see{" "}
+                  <span className="font-semibold">{finder.rowName ?? `the ${itemName.toLowerCase()}`}</span>
+                  {finder.rowName ? <CopyIcon text={finder.rowName} /> : null}?
                 </>
               ) : (
                 <>
@@ -679,15 +683,17 @@ function BrowserCheckCard({
                   {suggestions.length ? (
                     <div className="flex flex-wrap gap-2">
                       {suggestions.map((sug) => (
-                        <PartsButton
-                          key={sug}
-                          variant={pv(p.key).picked === sug ? "primary" : "secondary"}
-                          className={`!min-h-[32px] ${D_MONO}`}
-                          onClick={() => setPv(p.key, { picked: pv(p.key).picked === sug ? "" : sug, typed: "", again: "" })}
-                          data-testid="q-position-suggestion"
-                        >
-                          {sug}
-                        </PartsButton>
+                        <span key={sug} className="inline-flex items-center gap-1">
+                          <PartsButton
+                            variant={pv(p.key).picked === sug ? "primary" : "secondary"}
+                            className={`!min-h-[32px] ${D_MONO}`}
+                            onClick={() => setPv(p.key, { picked: pv(p.key).picked === sug ? "" : sug, typed: "", again: "" })}
+                            data-testid="q-position-suggestion"
+                          >
+                            {sug}
+                          </PartsButton>
+                          <CopyIcon text={sug} />
+                        </span>
                       ))}
                     </div>
                   ) : null}
@@ -726,19 +732,21 @@ function BrowserCheckCard({
             {suggestions.length ? (
               <div className="flex flex-wrap gap-2" data-testid="q-suggestions">
                 {suggestions.map((s) => (
-                  <PartsButton
-                    key={s}
-                    variant={picked === s ? "primary" : "secondary"}
-                    className={`!min-h-[32px] ${D_MONO}`}
-                    onClick={() => {
-                      setPicked(picked === s ? "" : s);
-                      setTyped("");
-                      setTypedAgain("");
-                    }}
-                    data-testid="q-suggestion"
-                  >
-                    {s}
-                  </PartsButton>
+                  <span key={s} className="inline-flex items-center gap-1">
+                    <PartsButton
+                      variant={picked === s ? "primary" : "secondary"}
+                      className={`!min-h-[32px] ${D_MONO}`}
+                      onClick={() => {
+                        setPicked(picked === s ? "" : s);
+                        setTyped("");
+                        setTypedAgain("");
+                      }}
+                      data-testid="q-suggestion"
+                    >
+                      {s}
+                    </PartsButton>
+                    <CopyIcon text={s} />
+                  </span>
                 ))}
               </div>
             ) : null}
@@ -847,6 +855,27 @@ function BrowserCheckCard({
         </div>
       </div>
     </div>
+  );
+}
+
+/** A small copy icon: puts the text on the clipboard so the owner can paste it into the catalogue's search. */
+function CopyIcon({ text }: { text: string }) {
+  return (
+    <button
+      type="button"
+      aria-label={`Copy ${text}`}
+      title={`Copy ${text}`}
+      data-testid="copy-icon"
+      onClick={() => {
+        void navigator.clipboard
+          .writeText(text)
+          .then(() => toast.success(`Copied ${text}`))
+          .catch(() => toast.error("Couldn't copy"));
+      }}
+      className="ml-1 inline-flex h-6 w-6 items-center justify-center rounded align-middle text-[#0153dc] hover:bg-white/70 dark:text-[#93c5fd] dark:hover:bg-[#0b1220]/60"
+    >
+      <DIcon name="content_copy" className="text-[15px]" />
+    </button>
   );
 }
 
