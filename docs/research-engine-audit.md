@@ -871,3 +871,8 @@ the server from its own records (remembered version, build dates, suggestions). 
 fixed — incl. a real bug: the paste path saved an empty number (`detected` never set). Not changed: when no version is
 remembered yet, the link saved is the version list (the version name is in the evidence; the next check says "Click
 M900A-AGBVE in the list"). Tests: Deno 164, admin 60, screens 17.
+
+**Done-test 65 passed on live (21 Nov 17:04 UTC):** the owner did the air-filter check alone with the question screen
+(Yes · Yes · tapped 17801-21060 · Yes) → `part_listing` confirmed, route `owner_browser`, proof link
+`…/tank-roomy/m900a/147989`, evidence "Owner checked on amayama.com · M900A-AGBVE · ELEMENT SUB-ASSY, AIR CLEANER
+FILTER · 17801-21060 · dates include 11.2016 – 08.2020". Roomy browser checks left: shock absorber, cabin filter.
