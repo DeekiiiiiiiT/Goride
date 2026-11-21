@@ -9,7 +9,7 @@ import { containsToken } from "./research_recipes.ts";
 
 export type GateResult =
   | { ok: true; detected: string }
-  | { ok: false; reason: "no_car" | "no_number" | "number_not_on_line" | "no_value" | "empty" };
+  | { ok: false; reason: "no_car" | "no_number" | "number_not_on_line" | "wrong_years" | "wrong_engine" | "no_value" | "empty" };
 
 
 /** Value shapes per spec key; keys not listed accept any short text after the car is named. */
@@ -37,6 +37,61 @@ export const SPEC_VALUE_SHAPES: Record<string, RegExp> = {
 };
 
 const normNum = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+// ---------------------------------------------------------------- RE-60: right version of the car
+
+export type CarBuild = { startYear: number | null; startMonth?: number | null; endYear: number | null; endMonth?: number | null };
+
+/** Build periods a catalogue line states: "11.2016 - 09.2020", "09.2020 - ...", "Production years 2016 2017 2018". */
+export function periodsOnLine(line: string): Array<{ from: number; to: number }> {
+  const out: Array<{ from: number; to: number }> = [];
+  const re = /\b(\d{1,2})[./](\d{4})\s*[-–—~]\s*(?:(\d{1,2})[./](\d{4})|\.{2,3}|…|now|present)?/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(line))) {
+    const from = Number(m[2]) * 12 + Number(m[1]);
+    const to = m[4] ? Number(m[4]) * 12 + Number(m[3]) : Number.POSITIVE_INFINITY;
+    if (Number(m[1]) >= 1 && Number(m[1]) <= 12) out.push({ from, to });
+  }
+  // Year-only ranges: "2016-2020", "2020—2024", "2020 - now".
+  const yr = /(?<![\d./-])((?:19|20)\d{2})\s*[-–—~]\s*((?:19|20)\d{2}|now|present|\.{2,3}|…)(?![\d./-])/gi;
+  while ((m = yr.exec(line))) {
+    const end = /^\d{4}$/.test(m[2]) ? Number(m[2]) * 12 + 12 : Number.POSITIVE_INFINITY;
+    out.push({ from: Number(m[1]) * 12 + 1, to: end });
+  }
+  const years = line.match(/production\s+years?\s*:?\s*((?:(?:19|20)\d{2}[\s,]*)+)/i);
+  if (years) {
+    const ys = years[1].match(/(19|20)\d{2}/g)!.map(Number);
+    out.push({ from: Math.min(...ys) * 12 + 1, to: Math.max(...ys) * 12 + 12 });
+  }
+  return out;
+}
+
+/** True when every period on the line overlaps the car's build (months when on file, else the whole year). */
+export function periodsFitCar(line: string, car: CarBuild): boolean {
+  if (!car.startYear) return true;
+  const from = car.startYear * 12 + (car.startMonth ?? 1);
+  const to = car.endYear ? car.endYear * 12 + (car.endMonth ?? 12) : Number.POSITIVE_INFINITY;
+  return periodsOnLine(line).every((p) => p.from <= to && p.to >= from);
+}
+
+/**
+ * A catalogue link that points at one version of a frame (Amayama EPC `/genuine-catalogs/epc/<make>/<model>/<frame>/<id>/…`)
+ * is cut back to that frame's version list, because Roam can't read the page to know the version fits (RE-60).
+ * Other links are returned unchanged.
+ */
+export function versionListLink(url: string | null): string | null {
+  if (!url) return url;
+  try {
+    const u = new URL(url);
+    if (u.hostname.replace(/^www\./, "") === "amayama.com") {
+      const m = u.pathname.match(/^((?:\/[a-z]{2})?\/genuine-catalogs\/epc\/[^/]+\/[^/]+\/[^/]+)\/\d+(\/|$)/i);
+      if (m) return `${u.origin}${m[1]}`;
+    }
+    return url;
+  } catch {
+    return url;
+  }
+}
 
 /**
  * The number as the page writes it, when `number` is a whole number on the line: one token, or 2–3 neighbouring tokens
@@ -95,10 +150,23 @@ export function browserCheckGate(input: {
   candidates?: string[];
   /** The number the owner typed because the page shows a different one (part checks). */
   typedNumber?: string | null;
+  /** RE-60: when the car was built; dates on the pasted text must fit it. */
+  build?: CarBuild | null;
+  /** RE-60: this car's engine code, and the other engine codes of the same make + model (e.g. the turbo). */
+  engineCode?: string | null;
+  otherEngines?: string[];
 }): GateResult {
   const line = String(input.pasted ?? "").replace(/\s+/g, " ").trim().slice(0, 2000);
   if (!line) return { ok: false, reason: "empty" };
   if (!lineNamesCar(line, input.identity)) return { ok: false, reason: "no_car" };
+  // RE-60: the right version — dates that don't fit the car, or only a sister engine (the turbo), are refused.
+  if (input.build && !periodsFitCar(line, input.build)) return { ok: false, reason: "wrong_years" };
+  // Engine codes as whole tokens ("1KR-FE" = "1KRFE.."), never inside a part number or joined text.
+  const mine = String(input.engineCode ?? "").trim();
+  const others = (input.otherEngines ?? []).map((e) => e.trim()).filter((e) => normNum(e).length >= 4 && normNum(e) !== normNum(mine));
+  if (normNum(mine).length >= 4 && !containsToken(line, mine) && others.some((e) => containsToken(line, e))) {
+    return { ok: false, reason: "wrong_engine" };
+  }
 
   if (input.jobType === "part") {
     // RE-57: never guess a number from the line (a sister car's frame code, "DBA-M910A", was read as the part number).
@@ -126,6 +194,13 @@ export function browserCheckGate(input: {
     const m = valueText.match(shape);
     return m ? { ok: true, detected: m[0].trim() } : { ok: false, reason: "no_value" };
   }
-  const rest = input.identity.reduce((s, t) => (t ? s.split(t).join(" ") : s), line).replace(/\s+/g, " ").trim();
+  // No value shape: the value is the last pasted line (the row) — not the version line — without codes and dates.
+  const lines = String(input.pasted ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const row = lines.length > 1 ? lines[lines.length - 1] : line;
+  const rest = input.identity
+    .reduce((s, t) => (t ? s.split(t).join(" ") : s), row)
+    .replace(/\b\d{1,2}[./]\d{4}\s*[-–—~]\s*(?:\d{1,2}[./]\d{4}|\.{2,3}|…)?/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   return rest.length >= 2 ? { ok: true, detected: rest.slice(0, 120) } : { ok: false, reason: "no_value" };
 }

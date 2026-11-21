@@ -7,7 +7,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { guardRead, guardWrite } from "./catalog_research_routes.ts";
 import { autoResolveFromBatch } from "./catalog_request_autoresolve.ts";
 import { closeJobNotFound } from "./catalog_research_not_found.ts";
-import { browserCheckGate } from "./research_browser_check.ts";
+import { browserCheckGate, type CarBuild, versionListLink } from "./research_browser_check.ts";
 import { identityTokens } from "./research_part_job.ts";
 import { siteDomain } from "./research_page_reader.ts";
 import { type LookupRecipe, runRecipe } from "./research_recipes.ts";
@@ -570,7 +570,7 @@ export function registerResearchEngineRoutes(
       valuePattern: number ? undefined : /\S+/,
     }, { purpose: "recipe_test" });
     if (result.kind === "found") return c.json({ found: true, block: result.block, url: result.pageRead.finalUrl });
-    if (result.kind === "browser_check") return c.json({ found: false, browserCheckUrl: result.url });
+    if (result.kind === "browser_check") return c.json({ found: false, browserCheckUrl: versionListLink(result.url) });
     return c.json({ found: false, reason: result.kind === "unreadable" ? result.outcome.kind : result.reason });
   });
 }
@@ -596,7 +596,16 @@ async function browserCheckContext(supabase: SupabaseClient, jobId: string): Pro
   | {
     job: JobRow;
     car: Record<string, string | null>;
-    gateInput: { jobType: "part" | "spec"; identity: string[]; specKey?: string | null; expectedNumber?: string | null; candidates: string[] };
+    gateInput: {
+      jobType: "part" | "spec";
+      identity: string[];
+      specKey?: string | null;
+      expectedNumber?: string | null;
+      candidates: string[];
+      build: CarBuild | null;
+      engineCode: string | null;
+      otherEngines: string[];
+    };
   }
   | { error: string; status: 400 | 404 | 409 }
 > {
@@ -607,7 +616,28 @@ async function browserCheckContext(supabase: SupabaseClient, jobId: string): Pro
   const j = job as JobRow;
   if (j.state !== "browser_check") return { error: "Not an open browser check", status: 409 };
   if (j.job_type !== "part" && j.job_type !== "spec") return { error: "Browser checks are for parts and specs", status: 409 };
-  const { data: car } = await supabase.from("vehicle_catalog").select("make, model, chassis_code, engine_code").eq("id", j.vehicle_catalog_id).maybeSingle();
+  const { data: car } = await supabase.from("vehicle_catalog")
+    .select("make, model, chassis_code, engine_code, production_start_year, production_start_month, production_end_year, production_end_month")
+    .eq("id", j.vehicle_catalog_id).maybeSingle();
+  const c0 = (car ?? {}) as Record<string, string | number | null>;
+  // RE-60: the same model's other engines (e.g. the turbo) — a pasted line naming only one of those is the wrong version.
+  const { data: siblings } = c0.make && c0.model
+    ? await supabase.from("vehicle_catalog").select("engine_code, production_start_year, production_end_year")
+      .eq("make", String(c0.make)).eq("model", String(c0.model)).not("engine_code", "is", null).limit(60)
+    : { data: [] };
+  // Only versions built in overlapping years count as sisters (another generation's engines are not this page's).
+  const y1 = Number(c0.production_start_year ?? 0) || 0;
+  const y2 = Number(c0.production_end_year ?? 0) || 9999;
+  type Sib = { engine_code: string | null; production_start_year: number | null; production_end_year: number | null };
+  const otherEngines = [
+    ...new Set(
+      ((siblings ?? []) as Sib[])
+        .filter((s) => (s.production_start_year ?? 0) <= y2 && (s.production_end_year ?? 9999) >= y1)
+        .map((s) => String(s.engine_code ?? "").trim())
+        .filter(Boolean),
+    ),
+  ].filter((e) => e !== String(c0.engine_code ?? "").trim());
+  const num = (v: unknown) => (v == null || v === "" ? null : Number(v));
   // Every open number Roam suggested, first suggestion first (RE-57: the line must hold one of them, or a typed one).
   const { data: open } = j.job_type === "part"
     ? await supabase.from("catalog_part_proposal").select("part_number").eq("job_id", jobId).eq("status", "open").order("created_at")
@@ -622,6 +652,14 @@ async function browserCheckContext(supabase: SupabaseClient, jobId: string): Pro
       specKey: j.spec_key,
       expectedNumber: candidates[0] ?? null,
       candidates,
+      build: {
+        startYear: num(c0.production_start_year),
+        startMonth: num(c0.production_start_month),
+        endYear: num(c0.production_end_year),
+        endMonth: num(c0.production_end_month),
+      },
+      engineCode: c0.engine_code ? String(c0.engine_code) : null,
+      otherEngines,
     },
   };
 }

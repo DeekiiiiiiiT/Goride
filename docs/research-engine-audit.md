@@ -1,6 +1,6 @@
 # Research engine (cars, specs, parts) — audit
 
-**Rev 5.2 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
+**Rev 5.4 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
 US$1.35/day.** What runs live is the **search-first** flow with the new proof (Gemini + Google search proposes
 numbers, recipes and trusted pages prove them); the planned catalogue-first flow is RE-49, not built yet (§13–14). Live database: migrations 1a/1b/2/3 (03:10 UTC) and `20261121100925_research_form_recipe` (10:25 UTC),
 all with logbook lines. Live code: main `0e00cd5b` (platform-catalog, catalog-research, Dominion). Branch
@@ -747,3 +747,40 @@ that route.
 **RE-59 · Low · Pasted catalogue text keeps prices.** Amayama's row carries "21.56" (price) and the saved evidence keeps
 the pasted text as-is; Dominion never stores prices. Fix (with RE-34): before saving, the browser check keeps only the
 lines that name the car or the confirmed number, and drops currency-shaped amounts from the part line.
+
+## 20. Rev 5.3 — gaps seen in the air-filter browser check (21 Nov, owner asked "why manual?")
+
+Why it is manual at all: Amayama's terms forbid automated reading, so by the §0/§10 rule the engine may only hand the
+owner the page. That part is by design; RE-46 (more allowed part makers), the distributor and the permission emails
+are what shrink it. But the air-filter check showed three gaps in **our** part of the job:
+
+**RE-60 · High · The browser-check link opened the wrong version.** For the Roomy 2016–2020 (Custom G, 1KR-FE) the
+link went to Amayama's `M900A-GBME` page — built **09.2020 on** (the facelift). The owner had to go up to the M900A list
+and pick `M900A-AGBVE` (11.2016–09.2020, CTMG, 1KRFE, Roomy) by hand. Gemini supplied the link and nothing checked it
+against the car's years. Fix: before a browser check opens, the link must point at the frame's **model list page**
+(`…/tank-roomy/m900a`) unless the version page the engine found states a production period that covers the car's
+years; the check screen then tells the owner in plain words which row to open ("the one dated 11.2016 – 09.2020 with
+the regular engine, grade Custom G"). Done-test 63: a link whose page period starts after the car's last year is
+replaced by the model list page.
+
+**RE-61 · High · The saved proof link is Roam's link, not the page the owner used.** Confirm stores
+`detail.browserCheckUrl` as the evidence address, so the air filter would be "proven" by the 09.2020 page the owner
+did not use. Fix: the check screen shows a "Page address" box pre-filled with Roam's link; the owner pastes the page
+they actually used when it differs; it must be on the same trusted site (same rule as today). Done-test 64: confirm
+with a pasted address saves that address on the evidence read and the listing.
+
+**RE-62 · Medium · Step 2 says "Find the line that shows M900A".** The owner doesn't know frame codes (owner rule,
+21 Nov). Fix: step 2 names the car the way the catalogue's version list does, in plain words — years, regular / turbo
+engine, grade — and says which two things to copy (the version header line, then the part's row). Lands with RE-34.
+
+**RE-60/61/62 built (21 Nov):** the paste check refuses dates that don't fit the car's build (months when on file —
+the Roomy is 11.2016–08.2020, so "09.2020 – …" is refused) and a line naming only a sister engine of the same years
+(the turbo); formats read: `MM.YYYY – MM.YYYY/…`, `YYYY–YYYY` (hyphen, en or em dash), "Production years 2016 2017 2018".
+Amayama EPC links to one version are cut back to the frame's version list (`versionListLink`, job details and recipe
+tests). Step 2 describes the car in plain words ("Toyota Roomy, built 11.2016 – 08.2020, regular engine (not turbo),
+grade Custom G, 2WD"); the engine words come from the server and are said only when known (own turbo/hybrid type, or
+"regular (not turbo)" when a sister of the same years is a turbo). A new "Address of the page you copied from" box
+starts empty and is required; its address is saved as the proof (same trusted-site rule). Code review (medium): 8
+found, all fixed (empty page box, no engine guess, row-only value for unshaped specs, whole-token engine codes, more
+date formats, job-keyed reset, link without language part, siblings limited to overlapping years). Tests: Deno 154,
+admin 52, screens 17.

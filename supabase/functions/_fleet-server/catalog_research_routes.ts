@@ -7,12 +7,14 @@ import { assertPlatformStaffResponse } from "./rbac_middleware.ts";
 import { dominionCan } from "../../../packages/auth-client/src/dominionPermissions.ts";
 import { ENGINE_REV } from "./catalog_research_worker.ts";
 import { autoResolveFromBatch } from "./catalog_request_autoresolve.ts";
+import { versionListLink } from "./research_browser_check.ts";
 
 // RE-23: explicit columns only — never select("*") on research tables.
 const JOB_FIELDS = "id, job_type, state, vehicle_catalog_id, maintenance_component_id, fit_descriptor, match_type, spec_key, attempts, last_error, next_research_at, updated_at";
 const PROPOSAL_FIELDS = "id, job_id, brand, part_number, part_number_norm, part_name, match_type, match_kind, position_key, fits, sources, checks, route, status, trust_route, evidence_read_ids, promoted_part_id, rejected_reason";
 const VEHICLE_PROPOSAL_FIELDS = "id, job_id, make, model, production_start_year, production_end_year, chassis_code, engine_code, drivetrain, transmission, market, grade, chassis_serial_from, chassis_serial_to, existing_vehicle_catalog_id, action, status, rejected_reason, sources, checks, evidence_read_ids";
-const CAR_FIELDS = "id, make, model, production_start_year, production_end_year, chassis_code, engine_code, drivetrain, transmission, trim_series, catalog_trim";
+const CAR_FIELDS =
+  "id, make, model, production_start_year, production_start_month, production_end_year, production_end_month, chassis_code, engine_code, engine_type, drivetrain, transmission, trim_series, catalog_trim";
 const SPEC_PROPOSAL_FIELDS ="id, job_id, vehicle_catalog_id, spec_key, value, unit, evidence_read_ids, trust_route, route, status, rejected_reason";
 
 async function bumpStreak(supabase: SupabaseClient, wouldAuto: boolean, outcome: "approved" | "rejected" | "edited") {
@@ -161,7 +163,8 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
       .map((p) => ((p as { checks?: Record<string, unknown> }).checks?.browserCheckUrl))
       .find((u) => typeof u === "string" && u.startsWith("https://")) as string | undefined;
     const fromEvent = (linkEvent as { detail?: { url?: unknown } } | null)?.detail?.url;
-    const browserCheckUrl = fromProposal ?? (typeof fromEvent === "string" && fromEvent.startsWith("https://") ? fromEvent : null);
+    // RE-60: a link to one version of a frame is cut back to the frame's version list (Roam can't check the version).
+    const browserCheckUrl = versionListLink(fromProposal ?? (typeof fromEvent === "string" && fromEvent.startsWith("https://") ? fromEvent : null));
     const vehicleId = (job as { vehicle_catalog_id?: string | null }).vehicle_catalog_id;
     const componentId = (job as { maintenance_component_id?: string | null }).maintenance_component_id;
     const specKey = (job as { spec_key?: string | null }).spec_key;
@@ -174,9 +177,28 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
         : Promise.resolve({ data: null }),
       specKey ? supabase.from("spec_key").select("key, label, unit").eq("key", specKey).maybeSingle() : Promise.resolve({ data: null }),
     ]);
+    // RE-62: the engine in plain words, only when Dominion knows it — this car's own engine type, or "regular (not turbo)"
+    // when it has none but a sister version built in the same years is a turbo.
+    let engineWords: string | null = null;
+    if (car) {
+      const cr = car as { make: string; model: string; engine_type?: string | null; production_start_year?: number | null; production_end_year?: number | null };
+      const own = String(cr.engine_type ?? "").trim().toLowerCase();
+      if (/turbo/.test(own)) engineWords = "turbo engine";
+      else if (/hybrid/.test(own)) engineWords = "hybrid engine";
+      else if (/electric|\bev\b/.test(own)) engineWords = "electric";
+      else if (!own || /^(n\/?a|na|naturally aspirated)$/.test(own)) {
+        const { data: sisters } = await supabase.from("vehicle_catalog").select("engine_type, production_start_year, production_end_year")
+          .eq("make", cr.make).eq("model", cr.model).ilike("engine_type", "%turbo%").limit(20);
+        const y1 = cr.production_start_year ?? 0;
+        const y2 = cr.production_end_year ?? 9999;
+        const turboSister = ((sisters ?? []) as Array<{ production_start_year: number | null; production_end_year: number | null }>)
+          .some((s) => (s.production_start_year ?? 0) <= y2 && (s.production_end_year ?? 9999) >= y1);
+        if (turboSister) engineWords = "regular engine (not turbo)";
+      }
+    }
     return c.json({
       job,
-      car: car ?? null,
+      car: car ? { ...(car as Record<string, unknown>), engine_words: engineWords } : null,
       partType: comp ?? null,
       spec: spec ?? null,
       browserCheckUrl,
