@@ -425,7 +425,8 @@ test.describe("Research engine screens (layer 3)", () => {
     const d = page.getByTestId("research-drawer");
     await expect(d.getByTestId("browser-check-instruction")).toContainText("Check it's this one:");
     await expect(d.getByTestId("guide-version-row")).toContainText("Model: M900A-AGBVE");
-    await expect(d.getByTestId("guide-find-part")).toContainText("Search spark plug. Do you see PLUG, SPARK?");
+    await expect(d.getByTestId("guide-find-part")).toContainText("Search spark plug");
+    await expect(d.getByTestId("guide-find-part")).toContainText("Do you see PLUG, SPARK");
     await d.getByTestId("q-version-yes").click();
     await d.getByTestId("q-part-yes").click();
     await d.getByTestId("q-suggestion").filter({ hasText: "00000-T0009" }).click();
@@ -450,6 +451,10 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect(d.getByTestId("open-catalogue-page")).toContainText("Open Amayama");
     await expect(d.getByTestId("q-positions")).toContainText("Front left:");
     await expect(d.getByTestId("q-positions")).toContainText("Rear right:");
+    // Copy icons: Model, Engine, the search words, the row name, and every number in every place (3 × 4).
+    await expect(d.getByTestId("copy-icon")).toHaveCount(2 + 2 + 12);
+    await expect(d.getByRole("button", { name: "Copy M900A-AGBVE" })).toBeVisible();
+    await shot(page, "20-copy-icons");
     await d.getByTestId("q-version-yes").click();
     await d.getByTestId("q-part-yes").click();
     await d.getByTestId("q-position-front-left").getByTestId("q-position-suggestion").filter({ hasText: "00000-S0002" }).click();
