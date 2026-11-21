@@ -553,6 +553,24 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect.poll(() => calls.find((c) => c.path === "/recipes/rc-1")?.body).toEqual({ active: false });
     await r.getByTestId("add-recipe").click();
     await expect(r.getByTestId("recipe-form")).toBeVisible();
+
+    // Rev 4.2 (RE-30): a form recipe needs its form fields before it can be saved.
+    const f = r.getByTestId("recipe-form");
+    await f.getByLabel("Name").fill("Search by part number");
+    await f.getByLabel("How it looks things up").selectOption("form_then_page");
+    await f.getByLabel("Lookup address").fill("https://www.example-parts.test/catalogue/cars");
+    await expect(f.getByTestId("recipe-save")).toBeDisabled();
+    await f.getByTestId("recipe-form-fields").fill("txtPartNo={number}&txtClass=1");
+    await f.getByTestId("recipe-save").click();
+    await expect
+      .poll(() => calls.find((c) => c.method === "POST" && c.path.endsWith("/sbparts.jp/recipes"))?.body)
+      .toEqual({
+        name: "Search by part number",
+        kind: "form_then_page",
+        searchUrlTemplate: "https://www.example-parts.test/catalogue/cars",
+        formBodyTemplate: "txtPartNo={number}&txtClass=1",
+        resultLinkRule: "",
+      });
   });
 
   test("Screen 13 — car coverage tab: every tile state and its one action", async ({ page }) => {

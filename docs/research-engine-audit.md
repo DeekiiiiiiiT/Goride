@@ -1,42 +1,27 @@
 # Research engine (cars, specs, parts) — audit
 
-**Rev 4.1 · 21 Nov 2026 · Status: LIVE.** Migrations 1a/1b/2/3 applied to live 03:10 UTC 21 Nov (logbook lines in);
-main 8c63c773 deployed platform-catalog + catalog-research + Dominion; engine on, practice (shadow) mode, US$1.35/day.
-Held back: readiness counts only Confirmed specs (§6 step 5). Next = §6 step 3 (first recipe → Test on a car → Fill
-this car on the Roomy), which also proves §5.
+**Rev 4.2 · 21 Nov 2026 · Status: LIVE, plus one fix being built (§9 RE-30/RE-31).** Migrations 1a/1b/2/3 applied to
+live 03:10 UTC 21 Nov (logbook lines in); main 8c63c773 deployed platform-catalog + catalog-research + Dominion; engine
+on, practice (shadow) mode, US$1.35/day. Held back: readiness counts only Confirmed specs (§6 step 5).
+§6 step 3 could not work as written: the engine can only open a plain web address, NiBK only searches through a form,
+and NiBK's product pages never hold the factory number and the car in the same row. **Next = build §9, then §6 step 3.**
 
 History (not needed to continue): the closed plan with all findings RE-01…RE-29 and the Spike 0 tables is
-`git show 6064a3f4:docs/research-engine-audit.md`. The 18-screen Keep / Drop / Add lists are in the Rev 3.2 version of
-this file (in git once §2 is committed; until then the screens themselves are the record).
+`git show 6064a3f4:docs/research-engine-audit.md`. The 18-screen Keep / Drop / Add lists are in
+`git show 92b3cd21:docs/research-engine-audit.md`.
 
 ## START HERE (for a new chat)
 
 1. Read this file top to bottom. Follow `docs/how-we-build-playbook.md` and §0. Plain words to the owner, short replies.
-2. Run `git status` and confirm the files in §2b are there (modified / untracked). **Never `git stash`.**
-3. **Where we stopped (21 Nov):** the owner asked to commit and push. Push order (owner rule): build → code review →
-   local Playwright → push. Done: build, code review (high) + all 10 fixes (§2a), unit/server/SQL/screen tests green.
-   **Left before push:** re-run the two service-log Playwright tests on the test copy (they passed before the review
-   fixes; the "Couldn't find" changes touch their path):
-   - `pnpm testcopy` (if it times out on `/rest/v1/`: run
-     `alter role anon set statement_timeout='15s'; alter role authenticator set statement_timeout='15s';` on the local
-     DB and `docker restart supabase_rest_Goride`, then start again).
-   - PowerShell, from `C:\Roam\Goride`, with `$env:FLEET_BASE_URL="http://127.0.0.1:5181"` and
-     `$env:ADMIN_BASE_URL="http://127.0.0.1:5180"`:
-     `node node_modules/@playwright/test/cli.js test e2e/fleet-log-service-unknown-parts.spec.ts --project=fleet --reporter=list --max-failures=1 --retries=0`
-     (14 tests) and the same for `e2e/fleet-log-service-parts-that-fit.spec.ts` (7 tests).
-   - `pnpm testcopy:stop` afterwards.
-4. Then **commit only the files in §2b** (the branch `parts-auto-match` also holds other unsaved work — Add parts, Fleet
-   maintenance, other migrations — which must NOT go in). For shared files (`package.json`, the two workflow files,
-   `VehiclesStitchFlow.tsx`, `AdminDashboard.tsx`, `PartsDatabasePage.tsx`) check `git diff <file>` first: if a file
-   also holds other work, commit only the research hunks (`git add -p` is interactive and not available — write the
-   research-only version to a temp file and ask the owner if a split isn't clean). Push to `parts-auto-match`.
-5. Tell the owner plainly: a push does **not** make the screens appear at localhost — the owner's localhost app reads
-   the LIVE server, which has none of this until go-live (§6). To look at the screens before go-live, use the test copy
-   (`http://127.0.0.1:5180`) or the screen test with pictures (§3).
-6. The Overview page keeps its current look on purpose: §4b of Rev 3.2 kept only the two notice banners from that Stitch
-   screen, because every other card on it was invented (84.2%, 1,428 jobs, Verification Desk…). The owner was unhappy
-   with this on 21 Nov — if they want the Stitch Overview look, that is new work: first decide which real number fills
-   each card, then build.
+   **Never `git stash`.** Branch `parts-auto-match` also holds other unsaved work (toll, Fleet maintenance, trips, rides) —
+   commit only research files.
+2. **Where we are (21 Nov):** layers 1–3 are committed (92b3cd21, 07badfa1, d639e4b4) and live. Building §9 (NiBK form
+   recipe + cross-reference proof). Push order (owner rule): build → code review → local Playwright → push, then go live
+   from a worktree off origin/main (see memory "golive-worktree-recipe").
+3. After §9 is live, the owner does §6 step 3 with the exact values in §9 "Owner's recipe".
+4. A push does **not** change the owner's localhost screens — localhost reads the LIVE server. Only a go-live does.
+5. The Overview page keeps its current look on purpose (every other Stitch card was invented). If the owner wants the
+   Stitch Overview look, that is new work: first decide which real number fills each card.
 
 ## 0. Goal and the owner's rules
 
@@ -197,3 +182,71 @@ Reads need Dominion staff; writes need `catalog.write`; ★ = platform owner onl
 
 Service schedules research; prices / suppliers / stock; licensed TecDoc feeds; the parts auto-match engine (S3);
 `log-service-parts-gaps-audit.md` items.
+
+## 9. Rev 4.2 — NiBK form recipe and cross-reference proof (21 Nov)
+
+Found while preparing §6 step 3 (checked on the real site with `RoamResearchBot/1.0`; robots.txt and terms allowed it in
+Spike 0):
+
+- NiBK's part search (`https://www.jnbk-brakes.com/catalogue/cars`, form `frmProductSearch`) is a **form post**:
+  `txtPartNo=<number>&txtClass=1&btnProductSearch=Search`. A match answers `303` to the product page, for example
+  `04465-B1120` → `/catalogue/cars/brake/723409/PN5562`. No match answers `200` with the empty catalogue page. The same
+  search as a plain link shows the empty page. No session or CSRF value is needed; the product page opens as a plain link.
+- The product page has a cross-reference list (`div.str`: maker + number, e.g. `TOYOTA 04465-B1120`) and an
+  application table: one `<tr>` per car with `data-title` cells (`BODY` = frame code `M900A`, engine `1KR-FE`, and one
+  cell per position — `Front Brake`, `Rear Brake`, `Front rotor`… — each a link to that part's own page). On the PN5562
+  page the M900A rows have `Front Brake` → link to the PN5562 page itself.
+- SB Parts (sbparts.jp) builds its search in the browser (Angular, `ng-submit`), so neither a link nor a form post works.
+
+**RE-30 · High · Recipes can't use a search form.** The reader only sends GET; NiBK can only be searched by POST.
+Fix: new recipe kind `form_then_page` ("Fill the site's search form, then read the page it opens") with a new column
+`research_lookup_recipe.form_body_template` (e.g. `txtPartNo={number}&txtClass=1&btnProductSearch=Search`, values
+URL-encoded). The reader sends it as `application/x-www-form-urlencoded` POST with the same honest name, same site and
+address checks, same caps; a 301/302/303 answer is followed as a GET (no body), 307/308 are refused. The page it lands
+on is checked; when `result_link_rule` is set, the first matching link on it is opened first (as `search_then_page`).
+The saved read keeps the form address as `url` and the landing page as `final_url`, so the proof page opens as a link.
+
+**RE-31 · High · Same-row proof never passes on a product page.** The factory number is in the cross-reference list,
+the car is in a table row, and the row holds the site's own number in a cell named by position, so no single row has
+number + car + position. Fix: "cross-reference proof" in `research_recipes.ts`, used for recipe pages and for pages
+Google found, tried only when the same-row proof fails. It passes only when all three hold: (1) the factory number is
+on the page as a whole token inside a cross-reference block (not just anywhere in the text); (2) a table row names the
+car (whole-token frame code, model or engine, as today); (3) in that row, the cell whose `data-title`/`data-label`
+names the position (when the job has one) links to this same page (same host and path as the final address). The
+saved evidence text is `Cross-reference: <that block> · Fits: <row with cell labels>`. Same source-rule routing as
+today (NiBK = part maker, its own catalogue).
+
+**RE-32 · Low · SB Parts can't be read by a recipe.** Not fixed in this round: it needs a real browser. SB pages
+Google finds are still read as today. Done-test 1 (SB + NiBK agree) waits for this.
+
+**Files:** new migration (`npx supabase migration new research_form_recipe`: column + kind check), `research_page_reader.ts`
+(form input), `research_recipes.ts` (kind, cross-reference proof), `catalog_research_worker.ts` (select the column,
+use the shared proof on Google pages, a form read counts as 1 read), `research_engine_routes.ts` (kind, field, test),
+`TrustedSitesScreen.tsx` + `researchEngineService.ts` (kind option, "Form fields" box, recipe card steps), their tests.
+
+**Done-tests (made-up pages in unit tests, real NiBK page for the owner's run):**
+33. A form recipe posts the filled fields, follows the 303 and reads the product page; a 307 answer is refused.
+34. On a page shaped like NiBK's: number in the cross-reference list + M900A row + `Front Brake` cell linking to this page
+    → found; job wants **rear** → not found; number missing from the list → not found; only an M910A row while the car
+    is M900A → not found; the `Front Brake` cell links to another page → not found.
+35. The recipe form saves and edits a form recipe; the card shows its steps; **Test on a car** on the live NiBK recipe
+    with the Roomy M900A and `04465-B1120` shows the M900A row with `Front Brake PN5562`, saves nothing but the
+    `recipe_test` read.
+
+**Owner's recipe (after go-live), Trusted sources → jnbk-brakes.com → Add a recipe:** Name `Search by part number`;
+How it looks things up `Fill the site's search form, then read the page it opens`; Lookup address
+`https://www.jnbk-brakes.com/catalogue/cars`; Form fields `txtPartNo={number}&txtClass=1&btnProductSearch=Search`.
+Then **Test on a car**: car `Toyota Roomy M900A`, part number `04465-B1120`.
+
+**Built + tested (21 Nov):** migration `20261121100925_research_form_recipe.sql`; reader form post; `form_then_page` +
+`findCrossReferenceRow` / `findEvidenceOnPage`; worker + routes + Trusted sources form (kind, Form fields, part number
+box in Test on a car). Code review (high) fixes, all done: links only count as "this page" with the same query string
+(`#` and `javascript:` never); the factory number must stand on its own as an element's text (a search echo,
+"Similar:" line, heading, link or form control never counts; select/textarea/button are stripped); punctuation ignored;
+the site's own number in the position cell proves itself; a form answered in place (no redirect) is never evidence;
+the link rule is kept only for kinds that use it and clearing the box clears it; form fields over 1,000 characters are
+refused. Not changed: cookies are not carried across the form redirect (NiBK's product page opens without one).
+Checks: Deno 136 pass (`research_form_recipe.test.ts` new), SQL checks + 3 new form-recipe checks pass on the local
+copy, admin tsc 0 + vitest 45, screen test 16 pass (new: save a form recipe). Real run through the engine's own reader
+against jnbk-brakes.com (reads saved on the local copy only): `04465-B1120` + Roomy M900A front → found, row
+`BODY: M900A · Front Brake: PN5562`; rear → not found.

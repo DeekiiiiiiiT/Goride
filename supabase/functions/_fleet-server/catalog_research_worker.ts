@@ -26,7 +26,7 @@ import {
   saveBlockEvidence,
   siteDomain,
 } from "./research_page_reader.ts";
-import { fillTemplate, findEvidenceBlock, htmlToBlocks, type LookupRecipe, runRecipe } from "./research_recipes.ts";
+import { fillTemplate, findEvidenceOnPage, type LookupRecipe, runRecipe } from "./research_recipes.ts";
 import {
   brandNorm,
   buildPartPromptContext,
@@ -112,7 +112,7 @@ async function loadBrandAliases(supabase: SupabaseClient): Promise<Map<string, s
 
 async function loadActiveRecipes(supabase: SupabaseClient): Promise<LookupRecipe[]> {
   const { data, error } = await supabase.from("research_lookup_recipe")
-    .select("id, domain, kind, search_url_template, result_link_rule, block_rule").eq("active", true);
+    .select("id, domain, kind, search_url_template, form_body_template, result_link_rule, block_rule").eq("active", true);
   if (error) throw error;
   return (data ?? []) as LookupRecipe[];
 }
@@ -382,7 +382,7 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
       const shape = checkPartNumberShape(normalized.brand, normalized.partNumber);
       const passes: SourcePass[] = [];
       const verifiedSources: Array<Record<string, unknown>> = [];
-      const check = { number: normalized.partNumber, identity, position };
+      const check = { number: normalized.partNumber, identity, position, frame: vc?.chassis_code ?? null };
 
       // 1. Catalogue-first: every active by-part-number recipe on a readable site (RE-02).
       for (const recipe of recipes) {
@@ -401,7 +401,7 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
           continue;
         }
         if (site.automated_read !== "allowed" || pageReads >= MAX_READS_PER_JOB || Date.now() > deadline) continue;
-        pageReads += recipe.kind === "search_then_page" ? 2 : 1;
+        pageReads += recipe.kind === "search_then_page" || (recipe.kind === "form_then_page" && recipe.result_link_rule) ? 2 : 1;
         const result = await runRecipe(recipe, {
           number: normalized.partNumber,
           chassis: vc?.chassis_code,
@@ -462,7 +462,7 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
           verifiedSources.push({ url, domain, dropped: true, reason: page.kind === "refused" || page.kind === "failed" || page.kind === "blocked" ? page.reason : page.kind });
           continue;
         }
-        const hit = findEvidenceBlock(htmlToBlocks(page.body), check);
+        const hit = findEvidenceOnPage(page.body, page.finalUrl, check);
         if (!hit) {
           verifiedSources.push({ url, domain, readId: page.readId, dropped: true, reason: "no_block_with_number_and_car" });
           continue;

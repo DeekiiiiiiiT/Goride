@@ -487,3 +487,33 @@ BEGIN
 END;
 $$;
 ROLLBACK;
+
+-- Rev 4.2 (§9 RE-30): form recipes must say what they post; other kinds never post.
+BEGIN;
+DO $$
+DECLARE
+  v_ok boolean;
+BEGIN
+  INSERT INTO public.research_lookup_recipe (domain, name, kind, search_url_template, form_body_template)
+  VALUES ('jnbk-brakes.com', 'Form check', 'form_then_page', 'https://www.jnbk-brakes.com/catalogue/cars',
+          'txtPartNo={number}&txtClass=1');
+
+  v_ok := false;
+  BEGIN
+    INSERT INTO public.research_lookup_recipe (domain, name, kind, search_url_template)
+    VALUES ('jnbk-brakes.com', 'No fields', 'form_then_page', 'https://www.jnbk-brakes.com/catalogue/cars');
+  EXCEPTION WHEN check_violation THEN v_ok := true;
+  END;
+  IF NOT v_ok THEN RAISE EXCEPTION 'form recipe without form fields was accepted'; END IF;
+
+  v_ok := false;
+  BEGIN
+    INSERT INTO public.research_lookup_recipe (domain, name, kind, search_url_template, form_body_template)
+    VALUES ('jnbk-brakes.com', 'Link with fields', 'by_part_number', 'https://www.jnbk-brakes.com/s?q={number}', 'a=1');
+  EXCEPTION WHEN check_violation THEN v_ok := true;
+  END;
+  IF NOT v_ok THEN RAISE EXCEPTION 'a link recipe with form fields was accepted'; END IF;
+  RAISE NOTICE 'form recipe checks passed';
+END;
+$$;
+ROLLBACK;

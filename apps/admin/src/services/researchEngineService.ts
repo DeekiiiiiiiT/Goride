@@ -304,8 +304,10 @@ export type LookupRecipe = {
   domain: string;
   maker_norm: string | null;
   name: string;
-  kind: "by_part_number" | "search_then_page" | "browser_check_link";
+  kind: "by_part_number" | "search_then_page" | "browser_check_link" | "form_then_page";
   search_url_template: string | null;
+  /** form_then_page only: the fields posted to the form address. */
+  form_body_template?: string | null;
   result_link_rule: string | null;
   block_rule: string | null;
   active: boolean;
@@ -395,9 +397,9 @@ export const researchApi = {
   markSite: (t: string, domain: string, automatedRead: "allowed" | "blocked") =>
     send(t, "PATCH", `/trusted-sites/${encodeURIComponent(domain)}`, { automatedRead }),
   removeSite: (t: string, domain: string) => send(t, "POST", `/trusted-sites/${encodeURIComponent(domain)}/remove`),
-  addRecipe: (t: string, domain: string, body: { name: string; kind: LookupRecipe["kind"]; searchUrlTemplate: string; resultLinkRule?: string; maker?: string; notes?: string }) =>
+  addRecipe: (t: string, domain: string, body: { name: string; kind: LookupRecipe["kind"]; searchUrlTemplate: string; formBodyTemplate?: string; resultLinkRule?: string; maker?: string; notes?: string }) =>
     send(t, "POST", `/trusted-sites/${encodeURIComponent(domain)}/recipes`, body),
-  patchRecipe: (t: string, id: string, body: Partial<{ active: boolean; name: string; kind: LookupRecipe["kind"]; searchUrlTemplate: string; resultLinkRule: string; notes: string }>) =>
+  patchRecipe: (t: string, id: string, body: Partial<{ active: boolean; name: string; kind: LookupRecipe["kind"]; searchUrlTemplate: string; formBodyTemplate: string; resultLinkRule: string; notes: string }>) =>
     send(t, "PATCH", `/recipes/${encodeURIComponent(id)}`, body),
   testRecipe: (t: string, id: string, vehicleCatalogId: string, number?: string) =>
     send<{ found: boolean; block?: string; url?: string; browserCheckUrl?: string; reason?: string }>(

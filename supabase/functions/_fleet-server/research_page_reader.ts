@@ -6,6 +6,8 @@
  * - Identifies itself honestly (never a browser disguise) and never goes around a block.
  * - Refuses private / loopback / link-local / metadata addresses; re-checks every redirect hop (max 3).
  * - Caps: 2 MB body, 15 s.
+ * - A form recipe (RE-30) posts its fields once, as a normal form would; a 301/302/303 answer is then read with GET.
+ *   307/308 (which would re-post the form) are refused.
  * - 401/403 twice in a row → the site becomes 'blocked' (its items go to owner browser checks).
  * - 429 → back off (Retry-After, else 15 min); the read is deferred, the site stays allowed.
  * - Every completed read (and every recipe test) is saved append-only in research_page_read.
@@ -145,7 +147,14 @@ async function readCapped(res: Response): Promise<string> {
 // ---------------------------------------------------------------------------
 
 export async function readSourcePage(
-  input: { url: string; purpose: ReadPurpose; jobId?: string | null; recipeId?: string | null },
+  input: {
+    url: string;
+    purpose: ReadPurpose;
+    jobId?: string | null;
+    recipeId?: string | null;
+    /** Form fields to post to `url` (application/x-www-form-urlencoded, already encoded). */
+    form?: string | null;
+  },
   deps: ReaderDeps = defaultReaderDeps(),
 ): Promise<ReadOutcome> {
   const shape = checkUrlShape(input.url);
@@ -162,6 +171,8 @@ export async function readSourcePage(
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), READ_TIMEOUT_MS);
+  // Only the first request posts; every redirect after it is a plain GET.
+  let form: string | null = input.form ? input.form : null;
   try {
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
       // Every hop: https, an allowed trusted site, and only public addresses.
@@ -183,18 +194,25 @@ export async function readSourcePage(
       if (ips.length === 0) return { kind: "failed", reason: "dns_empty", httpStatus: 0 };
       if (ips.some(isPrivateAddress)) return { kind: "refused", reason: "private_address" };
 
+      const headers: Record<string, string> = {
+        "User-Agent": RESEARCH_USER_AGENT,
+        Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
+      };
+      if (form !== null) headers["Content-Type"] = "application/x-www-form-urlencoded";
       const res = await deps.fetchImpl(current.toString(), {
-        method: "GET",
+        method: form !== null ? "POST" : "GET",
         redirect: "manual",
         signal: ctrl.signal,
-        headers: {
-          "User-Agent": RESEARCH_USER_AGENT,
-          Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
-        },
+        headers,
+        ...(form !== null ? { body: form } : {}),
       });
 
       if (res.status >= 300 && res.status < 400 && res.headers.get("location")) {
         await res.body?.cancel();
+        if (form !== null && (res.status === 307 || res.status === 308)) {
+          return { kind: "refused", reason: "redirect_would_repost_form" };
+        }
+        form = null;
         current = new URL(res.headers.get("location")!, current);
         continue;
       }

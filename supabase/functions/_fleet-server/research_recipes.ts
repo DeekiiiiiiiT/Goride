@@ -5,7 +5,7 @@
  * factory number, the car identity and (when asked) the position appear in the SAME element. No model reads the
  * page: page text never goes to Gemini (RE-21).
  */
-import { readSourcePage, type ReaderDeps, type ReadOutcome, type ReadPurpose } from "./research_page_reader.ts";
+import { readSourcePage, type ReaderDeps, type ReadOutcome, type ReadPurpose, siteDomain } from "./research_page_reader.ts";
 
 export type BlockRule = {
   /** Element tags that make one evidence block. Default: tr, li, article. */
@@ -17,8 +17,11 @@ export type BlockRule = {
 export type LookupRecipe = {
   id: string;
   domain: string;
-  kind: "by_part_number" | "search_then_page" | "browser_check_link";
+  kind: "by_part_number" | "search_then_page" | "browser_check_link" | "form_then_page";
+  /** For form_then_page: the form's address (where the fields are posted). */
   search_url_template: string | null;
+  /** form_then_page only: the posted fields, e.g. "txtPartNo={number}&txtClass=1" (RE-30). */
+  form_body_template?: string | null;
   /** Text the result link's href must contain; may use {placeholders}. */
   result_link_rule: string | null;
   /** JSON BlockRule. */
@@ -32,6 +35,11 @@ export type BlockCheck = {
   number?: string | null;
   /** Any one of these must be in the block (frame code, model, engine code…). */
   identity: string[];
+  /**
+   * The car's frame code. The cross-reference proof (RE-31) needs it in the row when the car has one, because an
+   * engine code alone is shared by many frames (1KR-FE is in both M900A and M910A rows).
+   */
+  frame?: string | null;
   /** When given, one of these must be in the block too (e.g. "rear"). */
   position?: string[];
   /** Spec lookups: the block must contain a value matching this. */
@@ -69,7 +77,7 @@ export function htmlText(fragment: string): string {
 function stripNoise(html: string): string {
   return html
     .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/<(script|style|noscript|template|svg|head)\b[\s\S]*?<\/\1>/gi, " ");
+    .replace(/<(script|style|noscript|template|svg|head|select|textarea|button)\b[\s\S]*?<\/\1>/gi, " ");
 }
 
 /** Every element with this tag (nesting-aware), optionally only those whose class contains one of `classContains`. */
@@ -174,6 +182,125 @@ export function findEvidenceBlock(blocks: string[], check: BlockCheck): { block:
 }
 
 // ---------------------------------------------------------------------------
+// Cross-reference proof (RE-31)
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalised address for "does this link point at this page": host without www., path without a trailing slash,
+ * and the query string. Bare "#…" links and non-web links never count.
+ */
+function pageKey(href: string, base: string): string | null {
+  const raw = href.replace(/&amp;/g, "&").trim();
+  if (!raw || raw.startsWith("#")) return null;
+  try {
+    const u = new URL(raw, base);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+    return `${siteDomain(u.hostname)}${decodeURIComponent(u.pathname).replace(/\/+$/, "")}${u.search}`;
+  } catch {
+    return null;
+  }
+}
+
+type Cell = { label: string; text: string; links: string[] };
+
+function rowCells(rowHtml: string, base: string): Cell[] {
+  const out: Cell[] = [];
+  const cellRe = /<(td|th)\b([^>]*)>([\s\S]*?)<\/(?:td|th)>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = cellRe.exec(rowHtml))) {
+    const label = htmlText(m[2].match(/data-(?:title|label)\s*=\s*["']([^"']*)["']/i)?.[1] ?? "");
+    const links: string[] = [];
+    const linkRe = /<a\b[^>]*href\s*=\s*["']([^"']+)["']/gi;
+    let l: RegExpExecArray | null;
+    while ((l = linkRe.exec(m[3]))) {
+      const k = pageKey(l[1], base);
+      if (k) links.push(k);
+    }
+    out.push({ label, text: htmlText(m[3]), links });
+  }
+  return out;
+}
+
+/** Tags whose text is never a cross-reference value: headings, links, labels, the page title. */
+const NOT_A_VALUE = new Set(["h1", "h2", "h3", "h4", "h5", "h6", "a", "label", "title", "legend", "caption", "summary"]);
+
+/**
+ * The factory number standing on its own as an element's whole text — the way a cross-reference list shows it
+ * (`<div class="field">04465-B1120</div>`). A number inside a sentence ("Results for …", "Similar: PN7002 (…)"),
+ * a heading, a link or a form control does not count. Punctuation is ignored (04465B1120 = 04465-B1120).
+ * Returns the number as the page writes it, or null.
+ */
+function standaloneNumber(cleanHtml: string, number: string): string | null {
+  const want = normNumber(number);
+  if (!want) return null;
+  const re = /<([a-z][a-z0-9]*)\b[^>]*>([^<>]{1,80})</gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(cleanHtml))) {
+    if (NOT_A_VALUE.has(m[1].toLowerCase())) continue;
+    const text = htmlText(m[2]);
+    if (text && normNumber(text) === want && /^[A-Z0-9][A-Z0-9 .\-/]*$/i.test(text)) return text;
+  }
+  return null;
+}
+
+/** A short piece of page text ending at the number (the maker name usually sits just before it). */
+function numberContext(pageText: string, shown: string): string {
+  const at = pageText.indexOf(shown);
+  if (at < 0) return shown;
+  const before = pageText.slice(Math.max(0, at - 40), at);
+  return `${before.slice(before.indexOf(" ") + 1)}${shown}`.trim();
+}
+
+/**
+ * A part maker's product page: the factory number sits in its cross-reference list, and the car sits in an
+ * application table row whose position cell links back to this same page. Passes only when all three hold:
+ * 1. the factory number stands on its own as an element's text (see standaloneNumber) — or it is the very part
+ *    number in the row's position cell;
+ * 2. a table row names the car (its frame code when the car has one, otherwise model or engine);
+ * 3. in that row, the cell labelled with the position (data-title / data-label) links to this page —
+ *    any cell linking here when the job has no position.
+ */
+export function findCrossReferenceRow(html: string, finalUrl: string, check: BlockCheck): { block: string } | null {
+  if (!check.number || check.valuePattern) return null;
+  const self = pageKey(finalUrl, finalUrl);
+  if (!self) return null;
+  const clean = stripNoise(html);
+  const shown = standaloneNumber(clean, check.number);
+  const want = normNumber(check.number);
+
+  const frame = check.frame?.trim();
+  for (const row of extractElements(clean, "tr")) {
+    const text = htmlText(row);
+    if (frame ? !containsToken(text, frame) : !check.identity.some((id) => containsToken(text, id))) continue;
+    const cells = rowCells(row, finalUrl);
+    const here = cells.filter((c) => c.links.includes(self));
+    const hit = check.position?.length
+      ? here.find((c) => c.label && check.position!.some((p) => containsToken(c.label, p)))
+      : here[0];
+    if (!hit) continue;
+    const ownNumber = normNumber(hit.text) === want;
+    if (!shown && !ownNumber) continue;
+    const fits = cells
+      .filter((c) => c.text)
+      .map((c) => (c.label && c.label.toUpperCase() !== c.text.toUpperCase() ? `${c.label}: ${c.text}` : c.text))
+      .join(" · ");
+    const xref = shown ? numberContext(htmlText(clean), shown) : hit.text;
+    return { block: `Cross-reference: ${xref} · Fits: ${fits}`.slice(0, 2000) };
+  }
+  return null;
+}
+
+/** Same-row proof first (RE-03), then the cross-reference proof (RE-31). */
+export function findEvidenceOnPage(
+  html: string,
+  finalUrl: string,
+  check: BlockCheck,
+  rule: BlockRule = {},
+): { block: string; value?: string } | null {
+  return findEvidenceBlock(htmlToBlocks(html, rule), check) ?? findCrossReferenceRow(html, finalUrl, check);
+}
+
+// ---------------------------------------------------------------------------
 // Recipes (RE-02)
 // ---------------------------------------------------------------------------
 
@@ -219,22 +346,31 @@ export async function runRecipe(
   if (!first) return { kind: "not_found", reason: "missing_lookup_value" };
   if (recipe.kind === "browser_check_link") return { kind: "browser_check", url: first };
 
-  const read = (url: string) =>
-    readSourcePage({ url, purpose: ctx.purpose, jobId: ctx.jobId, recipeId: recipe.id }, ctx.readerDeps);
+  let form: string | null = null;
+  if (recipe.kind === "form_then_page") {
+    if (!recipe.form_body_template) return { kind: "not_found", reason: "recipe_has_no_form_fields" };
+    form = fillTemplate(recipe.form_body_template, vars);
+    if (!form) return { kind: "not_found", reason: "missing_lookup_value" };
+  }
 
-  let page = await read(first);
+  const read = (url: string, body: string | null = null) =>
+    readSourcePage({ url, purpose: ctx.purpose, jobId: ctx.jobId, recipeId: recipe.id, form: body }, ctx.readerDeps);
+
+  let page = await read(first, form);
   if (page.kind !== "ok") return { kind: "unreadable", outcome: page };
 
-  if (recipe.kind === "search_then_page") {
+  if (recipe.kind === "search_then_page" || (recipe.kind === "form_then_page" && recipe.result_link_rule)) {
     if (!recipe.result_link_rule) return { kind: "not_found", reason: "recipe_has_no_link_rule", pageRead: page };
     const link = pickResultLink(page.body, page.finalUrl, recipe.result_link_rule, vars);
     if (!link) return { kind: "not_found", reason: "no_matching_result", pageRead: page };
     page = await read(link);
     if (page.kind !== "ok") return { kind: "unreadable", outcome: page };
+  } else if (form !== null && pageKey(page.finalUrl, page.finalUrl) === pageKey(first, first)) {
+    // The site answered the form in place: that page can't be reopened as a link, so it is never evidence (RE-30).
+    return { kind: "not_found", reason: "form_answered_in_place", pageRead: page };
   }
 
-  const blocks = htmlToBlocks(page.body, parseBlockRule(recipe.block_rule));
-  const hit = findEvidenceBlock(blocks, check);
+  const hit = findEvidenceOnPage(page.body, page.finalUrl, check, parseBlockRule(recipe.block_rule));
   if (!hit) return { kind: "not_found", reason: "no_block_with_number_and_car", pageRead: page };
   return { kind: "found", block: hit.block, value: hit.value, pageRead: page };
 }

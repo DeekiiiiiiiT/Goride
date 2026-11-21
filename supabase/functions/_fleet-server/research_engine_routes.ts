@@ -492,7 +492,7 @@ export function registerResearchEngineRoutes(
     if (denied) return denied;
     const domain = c.req.param("domain");
     const { data, error } = await supabase.from("research_lookup_recipe")
-      .select("id, domain, maker_norm, name, kind, search_url_template, result_link_rule, block_rule, active, notes, updated_at")
+      .select("id, domain, maker_norm, name, kind, search_url_template, form_body_template, result_link_rule, block_rule, active, notes, updated_at")
       .eq("domain", domain).order("name");
     if (error) return c.json({ error: error.message }, 500);
     const ids = (data ?? []).map((r) => (r as { id: string }).id);
@@ -530,7 +530,7 @@ export function registerResearchEngineRoutes(
     if (!before) return c.json({ error: "Not found" }, 404);
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (typeof b.active === "boolean") patch.active = b.active;
-    if (b.name !== undefined || b.searchUrlTemplate !== undefined || b.kind !== undefined) {
+    if (b.name !== undefined || b.searchUrlTemplate !== undefined || b.kind !== undefined || b.formBodyTemplate !== undefined) {
       const row = recipeRow({ ...recipeToBody(before as Record<string, unknown>), ...b });
       if ("error" in row) return c.json({ error: row.error }, 400);
       Object.assign(patch, row);
@@ -549,7 +549,7 @@ export function registerResearchEngineRoutes(
     const carId = str(b.vehicleCatalogId, 40);
     if (!UUID.test(carId)) return c.json({ error: "Choose a car" }, 400);
     const [{ data: recipe }, { data: car }] = await Promise.all([
-      supabase.from("research_lookup_recipe").select("id, domain, kind, search_url_template, result_link_rule, block_rule").eq("id", c.req.param("id")).maybeSingle(),
+      supabase.from("research_lookup_recipe").select("id, domain, kind, search_url_template, form_body_template, result_link_rule, block_rule").eq("id", c.req.param("id")).maybeSingle(),
       supabase.from("vehicle_catalog").select("make, model, chassis_code, engine_code").eq("id", carId).maybeSingle(),
     ]);
     if (!recipe || !car) return c.json({ error: "Not found" }, 404);
@@ -563,6 +563,7 @@ export function registerResearchEngineRoutes(
     }, {
       number: number ?? undefined,
       identity: identityTokens(car as Record<string, string>),
+      frame: (car as { chassis_code?: string | null }).chassis_code ?? null,
       valuePattern: number ? undefined : /\S+/,
     }, { purpose: "recipe_test" });
     if (result.kind === "found") return c.json({ found: true, block: result.block, url: result.pageRead.finalUrl });
@@ -616,14 +617,20 @@ async function browserCheckContext(supabase: SupabaseClient, jobId: string): Pro
 }
 
 function recipeRow(b: Record<string, unknown>):
-  | { name: string; kind: string; search_url_template: string | null; result_link_rule: string | null; block_rule: string | null; maker_norm: string | null; notes: string | null }
+  | { name: string; kind: string; search_url_template: string | null; form_body_template: string | null; result_link_rule: string | null; block_rule: string | null; maker_norm: string | null; notes: string | null }
   | { error: string } {
   const name = str(b.name, 120);
   const kind = str(b.kind, 30);
   const url = str(b.searchUrlTemplate, 1000);
   if (!name) return { error: "Name the recipe" };
-  if (!["by_part_number", "search_then_page", "browser_check_link"].includes(kind)) return { error: "Choose the recipe kind" };
+  if (!["by_part_number", "search_then_page", "browser_check_link", "form_then_page"].includes(kind)) return { error: "Choose the recipe kind" };
   if (!/^https:\/\//.test(url)) return { error: "The lookup address must start with https://" };
+  // RE-30: a form recipe says which fields it posts; other kinds never post.
+  const formBody = kind === "form_then_page" ? str(b.formBodyTemplate, 1001) : "";
+  if (formBody.length > 1000) return { error: "The form fields are too long (1,000 characters at most)" };
+  if (kind === "form_then_page" && !/^[^=&\s]+=[^&]*(&[^=&\s]+=[^&]*)*$/.test(formBody)) {
+    return { error: "Add the form fields, like txtPartNo={number}&txtClass=1" };
+  }
   const blockRule = b.blockRule == null ? null : typeof b.blockRule === "string" ? b.blockRule : JSON.stringify(b.blockRule);
   if (blockRule) {
     try {
@@ -636,7 +643,9 @@ function recipeRow(b: Record<string, unknown>):
     name,
     kind,
     search_url_template: url,
-    result_link_rule: str(b.resultLinkRule, 300) || null,
+    form_body_template: formBody || null,
+    // Only the kinds that open a result link keep a link rule; clearing the box clears it.
+    result_link_rule: kind === "search_then_page" || kind === "form_then_page" ? str(b.resultLinkRule, 300) || null : null,
     block_rule: blockRule,
     maker_norm: str(b.maker, 80).toLowerCase() || null,
     notes: str(b.notes, 1000) || null,
@@ -648,6 +657,7 @@ function recipeToBody(r: Record<string, unknown>): Record<string, unknown> {
     name: r.name,
     kind: r.kind,
     searchUrlTemplate: r.search_url_template,
+    formBodyTemplate: r.form_body_template,
     resultLinkRule: r.result_link_rule,
     blockRule: r.block_rule,
     maker: r.maker_norm,
