@@ -2,7 +2,7 @@
  * Gemini catalog research (audit B3 step 1). Information only — no prices or stock.
  */
 import { GEMINI_TEXT_MODEL } from "./gemini_models.ts";
-import { trackedProviderCall } from "./api_usage_logger.ts";
+import { logGroundingQueries, trackedProviderCall } from "./api_usage_logger.ts";
 import { normalizePartNumberNorm } from "./catalog_research_number_shape.ts";
 
 export type ResearchSource = {
@@ -23,6 +23,7 @@ export type ResearchCandidate = {
 const MODEL = GEMINI_TEXT_MODEL;
 
 type GroundingMetadata = {
+  webSearchQueries?: string[];
   groundingChunks?: Array<{ web?: { uri?: string; title?: string } }>;
   groundingSupports?: Array<{
     segment?: { text?: string };
@@ -35,9 +36,24 @@ export type GeminiResponse = {
     content?: { parts?: Array<{ text?: string }> };
     groundingMetadata?: GroundingMetadata;
   }>;
-  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
   groundingMetadata?: GroundingMetadata;
 };
+
+/** Google Search queries a grounded call ran — the unit Google bills grounding by (RE-24). */
+export function countGroundingQueries(geminiJson: GeminiResponse): number {
+  let n = geminiJson?.groundingMetadata?.webSearchQueries?.length || 0;
+  for (const c of geminiJson?.candidates || []) {
+    n += c.groundingMetadata?.webSearchQueries?.length || 0;
+  }
+  return n;
+}
+
+/** Billed token usage: thinking tokens are billed as output. */
+export function geminiBilledUsage(r: GeminiResponse): { inputTokens?: number; outputTokens?: number } {
+  const out = (r?.usageMetadata?.candidatesTokenCount || 0) + (r?.usageMetadata?.thoughtsTokenCount || 0);
+  return { inputTokens: r?.usageMetadata?.promptTokenCount, outputTokens: out || undefined };
+}
 
 export function countGroundingChunks(geminiJson: GeminiResponse): number {
   let n = 0;
@@ -243,10 +259,12 @@ export async function runCatalogPartResearch(input: {
         }
         return await res.json();
       },
-      extractUsage: (r: GeminiResponse) => ({
-        inputTokens: r?.usageMetadata?.promptTokenCount,
-        outputTokens: r?.usageMetadata?.candidatesTokenCount,
-      }),
+      extractUsage: (r: GeminiResponse) => geminiBilledUsage(r),
+    }).then(async (r) => {
+      if (withSearch) {
+        await logGroundingQueries({ route, model: MODEL, queries: countGroundingQueries(r as GeminiResponse) });
+      }
+      return r;
     }) as GeminiResponse;
   };
 
@@ -312,11 +330,13 @@ Return ONLY valid JSON with keys: make, model, productionStartYear, productionEn
       if (!res.ok) throw new Error(`gemini_http_${res.status}`);
       return await res.json();
     },
-    extractUsage: (r: GeminiResponse) => ({
-      inputTokens: r?.usageMetadata?.promptTokenCount,
-      outputTokens: r?.usageMetadata?.candidatesTokenCount,
-    }),
+    extractUsage: (r: GeminiResponse) => geminiBilledUsage(r),
   }) as GeminiResponse;
+  await logGroundingQueries({
+    route: "catalog_research/runCatalogVehicleResearch",
+    model: MODEL,
+    queries: countGroundingQueries(result),
+  });
 
   const text = result?.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") || "{}";
   let proposal: Record<string, unknown> = {};
@@ -327,4 +347,94 @@ Return ONLY valid JSON with keys: make, model, productionStartYear, productionEn
     proposal = match ? JSON.parse(match[0]) : {};
   }
   return { model: MODEL, proposal };
+}
+
+/** One grounded call that returns JSON; logs tokens + grounding queries (RE-24). */
+async function groundedJson(route: string, prompt: string): Promise<{ json: unknown; raw: GeminiResponse }> {
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!apiKey) throw new Error("GEMINI_API_KEY missing");
+  const result = await trackedProviderCall({
+    provider: "gemini",
+    service: "text",
+    route,
+    model: MODEL,
+    run: async () => {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            tools: [{ google_search: {} }],
+            generationConfig: { temperature: 0.1 },
+          }),
+        },
+      );
+      if (!res.ok) {
+        const bodyText = await res.text();
+        throw new Error(`gemini_http_${res.status}: ${bodyText.slice(0, 300)}`);
+      }
+      return await res.json();
+    },
+    extractUsage: (r: GeminiResponse) => geminiBilledUsage(r),
+  }) as GeminiResponse;
+  await logGroundingQueries({ route, model: MODEL, queries: countGroundingQueries(result) });
+  const text = result?.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") || "";
+  let json: unknown = null;
+  const match = text.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
+  try {
+    json = match ? JSON.parse(match[0]) : null;
+  } catch {
+    json = null;
+  }
+  return { json, raw: result };
+}
+
+/** Grounding URLs Google used, so sources come from search, never from the model's own text. */
+export function groundingUrls(r: GeminiResponse): string[] {
+  const urls: string[] = [];
+  const push = (m?: GroundingMetadata) => {
+    for (const ch of m?.groundingChunks || []) if (ch.web?.uri) urls.push(ch.web.uri);
+  };
+  push(r?.groundingMetadata);
+  for (const c of r?.candidates || []) push(c.groundingMetadata);
+  return [...new Set(urls)];
+}
+
+/** RE-06: a suggested value for one spec of one car. The value is a suggestion until a page proves it. */
+export async function runCatalogSpecResearch(input: {
+  carLine: string;
+  specLabel: string;
+  unit?: string | null;
+}): Promise<{ model: string; value: string | null; sourceTitles: string[]; sourceUrls: string[] }> {
+  const prompt = [
+    "Use Google Search before answering.",
+    `Car: ${input.carLine}`,
+    `Find: ${input.specLabel}${input.unit ? ` (in ${input.unit})` : ""} as listed by the car maker or a catalogue.`,
+    'Return ONLY JSON: {"value": "<the value, or null if not found>"}. Do not guess.',
+  ].join("\n");
+  const { json, raw } = await groundedJson("catalog_research/runCatalogSpecResearch", prompt);
+  const value = json && typeof json === "object" && !Array.isArray(json)
+    ? String((json as { value?: unknown }).value ?? "").trim() || null
+    : null;
+  const titles = [...new Set((raw?.candidates || []).flatMap((c) => (c.groundingMetadata?.groundingChunks || []).map((g) => g.web?.title || "")).filter(Boolean))];
+  return { model: MODEL, value: value && value.toLowerCase() !== "null" ? value.slice(0, 120) : null, sourceTitles: titles, sourceUrls: groundingUrls(raw) };
+}
+
+/** RE-08: every version of a model (car facts only). */
+export async function runCatalogModelResearch(input: { make: string; model: string }): Promise<{
+  model: string;
+  versions: Array<Record<string, unknown>>;
+  sourceUrls: string[];
+}> {
+  const prompt = [
+    "Use Google Search before answering.",
+    `List every version of the ${input.make} ${input.model} sold new: one entry per frame (chassis) code + engine + drivetrain.`,
+    "Return ONLY a JSON array of objects with keys: productionStartYear, productionEndYear, chassisCode, engineCode, drivetrain, transmission, grade, market.",
+    "Use null for anything you could not find. Do not guess.",
+  ].join("\n");
+  const { json, raw } = await groundedJson("catalog_research/runCatalogModelResearch", prompt);
+  const versions = Array.isArray(json) ? (json as Array<Record<string, unknown>>).slice(0, 40) : [];
+  return { model: MODEL, versions, sourceUrls: groundingUrls(raw) };
 }

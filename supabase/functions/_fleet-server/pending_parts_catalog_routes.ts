@@ -184,10 +184,7 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
   const guard = (c: Context) => {
     const denied = assertPlatformStaffResponse(c);
     if (denied) return denied;
-    const user = c.get("rbacUser") as { resolvedRole?: string; role?: string } | undefined;
-    if (!dominionCan(user?.resolvedRole || user?.role, "catalog.read")) {
-      return c.json({ error: "Forbidden" }, 403);
-    }
+    // Reads: any Dominion staff (owner, support, analyst). Writes check catalog.write on their own.
     return null;
   };
 

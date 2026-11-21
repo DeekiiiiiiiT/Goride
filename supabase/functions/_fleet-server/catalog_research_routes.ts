@@ -6,6 +6,23 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { assertPlatformStaffResponse } from "./rbac_middleware.ts";
 import { dominionCan } from "../../../packages/auth-client/src/dominionPermissions.ts";
 import { ENGINE_REV } from "./catalog_research_worker.ts";
+import { autoResolveFromBatch } from "./catalog_request_autoresolve.ts";
+
+// RE-23: explicit columns only — never select("*") on research tables.
+const JOB_FIELDS = "id, job_type, state, vehicle_catalog_id, maintenance_component_id, fit_descriptor, match_type, spec_key, attempts, last_error, next_research_at, updated_at";
+const PROPOSAL_FIELDS = "id, job_id, brand, part_number, part_number_norm, part_name, match_type, match_kind, position_key, fits, sources, checks, route, status, trust_route, evidence_read_ids, promoted_part_id, rejected_reason";
+const VEHICLE_PROPOSAL_FIELDS = "id, job_id, make, model, production_start_year, production_end_year, chassis_code, engine_code, drivetrain, transmission, market, grade, chassis_serial_from, chassis_serial_to, existing_vehicle_catalog_id, action, status, rejected_reason, sources, checks, evidence_read_ids";
+const CAR_FIELDS = "id, make, model, production_start_year, production_end_year, chassis_code, engine_code, drivetrain, transmission, trim_series, catalog_trim";
+const SPEC_PROPOSAL_FIELDS ="id, job_id, vehicle_catalog_id, spec_key, value, unit, evidence_read_ids, trust_route, route, status, rejected_reason";
+
+async function bumpStreak(supabase: SupabaseClient, wouldAuto: boolean, outcome: "approved" | "rejected" | "edited") {
+  await supabase.rpc("catalog_research_streak_bump", { p_would_auto: wouldAuto, p_outcome: outcome });
+}
+
+async function resolveBatch(supabase: SupabaseClient, result: unknown, actor: string | null) {
+  const batchId = (result as { batchId?: string } | null)?.batchId;
+  if (batchId) await autoResolveFromBatch(supabase, batchId, actor);
+}
 
 const PREFIX = "/make-server-37f42386/admin/catalog-research";
 
@@ -38,17 +55,25 @@ function csvEscape(value: unknown): string {
   return s;
 }
 
-function guardRead(c: Context) {
+/** "vehicle:Toyota:Roomy:2019" / "model:Toyota:Roomy" → the car's make, model and year (never who asked). */
+export function vehicleSubject(groupKey: string | null | undefined): { make: string; model: string; year: number | null } | null {
+  const parts = String(groupKey ?? "").split(":");
+  if (parts[0] !== "vehicle" && parts[0] !== "model") return null;
+  const make = (parts[1] ?? "").trim();
+  const model = (parts[2] ?? "").trim();
+  if (!make && !model) return null;
+  const year = Number(parts[3]);
+  return { make, model, year: Number.isFinite(year) && year > 1900 ? year : null };
+}
+
+export function guardRead(c: Context) {
   const denied = assertPlatformStaffResponse(c);
   if (denied) return denied;
-  const user = c.get("rbacUser") as { resolvedRole?: string; role?: string } | undefined;
-  if (!dominionCan(user?.resolvedRole || user?.role, "catalog.read")) {
-    return c.json({ error: "Forbidden" }, 403);
-  }
+  // Reads: any Dominion staff (owner, support, analyst). There is no "catalog.read" action; writes check catalog.write.
   return null;
 }
 
-function guardWrite(c: Context) {
+export function guardWrite(c: Context) {
   const read = guardRead(c);
   if (read) return read;
   const user = c.get("rbacUser") as { resolvedRole?: string } | undefined;
@@ -85,6 +110,18 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
     if (typeof body.daily_job_limit === "number" && body.daily_job_limit >= 1 && body.daily_job_limit <= 500) {
       patch.daily_job_limit = Math.floor(body.daily_job_limit);
     }
+    if (typeof body.daily_spend_usd === "number" && body.daily_spend_usd >= 0 && body.daily_spend_usd <= 500) {
+      patch.daily_spend_usd = Math.round(body.daily_spend_usd * 100) / 100;
+    }
+    if (typeof body.max_open_browser_checks === "number" && body.max_open_browser_checks >= 0 && body.max_open_browser_checks <= 500) {
+      patch.max_open_browser_checks = Math.floor(body.max_open_browser_checks);
+    }
+    if (typeof body.claim_share_fleet === "number" && body.claim_share_fleet >= 0 && body.claim_share_fleet <= 1) {
+      patch.claim_share_fleet = body.claim_share_fleet;
+    }
+    if (typeof body.fill_target_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.fill_target_date)) {
+      patch.fill_target_date = body.fill_target_date;
+    }
     if (typeof body.paused === "boolean") {
       patch.paused = body.paused;
       if (!body.paused) {
@@ -103,48 +140,152 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
     if (denied) return denied;
     const jobId = c.req.param("jobId");
     const [{ data: job, error: jErr }, { data: proposals }, { data: events }] = await Promise.all([
-      supabase.from("catalog_research_job").select("*").eq("id", jobId).maybeSingle(),
-      supabase.from("catalog_part_proposal").select("*").eq("job_id", jobId).order("created_at"),
-      supabase.from("catalog_research_event").select("*").eq("job_id", jobId).order("at"),
+      supabase.from("catalog_research_job").select(JOB_FIELDS).eq("id", jobId).maybeSingle(),
+      supabase.from("catalog_part_proposal").select(PROPOSAL_FIELDS).eq("job_id", jobId).order("created_at"),
+      supabase.from("catalog_research_event").select("id, step, outcome, at").eq("job_id", jobId).order("at"),
     ]);
     if (jErr) return c.json({ error: jErr.message }, 500);
     if (!job) return c.json({ error: "Not found" }, 404);
-    const { data: vehicleProposals } = await supabase.from("catalog_vehicle_proposal").select("*").eq("job_id", jobId);
-    return c.json({ job, proposals: proposals || [], vehicleProposals: vehicleProposals || [], events: events || [] });
+    const [{ data: vehicleProposals }, { data: specProposals }, { data: conflicts }, { data: linkEvent }, { data: reads }] = await Promise.all([
+      supabase.from("catalog_vehicle_proposal").select(VEHICLE_PROPOSAL_FIELDS).eq("job_id", jobId),
+      supabase.from("catalog_spec_proposal").select(SPEC_PROPOSAL_FIELDS).eq("job_id", jobId),
+      supabase.from("research_number_conflict").select("id, proposal_ids, position, opened_at, closed_at, resolution").eq("job_id", jobId),
+      supabase.from("catalog_research_event").select("detail").eq("job_id", jobId).eq("step", "browser_check").eq("outcome", "link")
+        .order("at", { ascending: false }).limit(1).maybeSingle(),
+      // When each evidence page was read, and how (direct read or the owner's browser check). The text is in sources.
+      supabase.from("research_page_read").select("id, domain, path, read_at").eq("job_id", jobId).eq("purpose", "job")
+        .order("read_at", { ascending: false }).limit(50),
+    ]);
+    // Browser checks (S1 screen 3): the exact catalogue link — from a part proposal's checks or the spec job's event.
+    const fromProposal = (proposals || [])
+      .map((p) => ((p as { checks?: Record<string, unknown> }).checks?.browserCheckUrl))
+      .find((u) => typeof u === "string" && u.startsWith("https://")) as string | undefined;
+    const fromEvent = (linkEvent as { detail?: { url?: unknown } } | null)?.detail?.url;
+    const browserCheckUrl = fromProposal ?? (typeof fromEvent === "string" && fromEvent.startsWith("https://") ? fromEvent : null);
+    const vehicleId = (job as { vehicle_catalog_id?: string | null }).vehicle_catalog_id;
+    const componentId = (job as { maintenance_component_id?: string | null }).maintenance_component_id;
+    const specKey = (job as { spec_key?: string | null }).spec_key;
+    const [{ data: car }, { data: comp }, { data: spec }] = await Promise.all([
+      vehicleId
+        ? supabase.from("vehicle_catalog").select(CAR_FIELDS).eq("id", vehicleId).maybeSingle()
+        : Promise.resolve({ data: null }),
+      componentId
+        ? supabase.from("maintenance_service_categories").select("id, name").eq("id", componentId).maybeSingle()
+        : Promise.resolve({ data: null }),
+      specKey ? supabase.from("spec_key").select("key, label, unit").eq("key", specKey).maybeSingle() : Promise.resolve({ data: null }),
+    ]);
+    return c.json({
+      job,
+      car: car ?? null,
+      partType: comp ?? null,
+      spec: spec ?? null,
+      browserCheckUrl,
+      reads: reads || [],
+      proposals: proposals || [],
+      vehicleProposals: vehicleProposals || [],
+      specProposals: specProposals || [],
+      conflicts: conflicts || [],
+      events: events || [],
+    });
   });
 
   app.get(`${PREFIX}/jobs`, async (c: Context) => {
     const denied = guardRead(c);
     if (denied) return denied;
     const state = c.req.query("state");
-    let q = supabase.from("catalog_research_job").select("*").order("updated_at", { ascending: false }).limit(200);
+    const types = (c.req.query("types") || "").split(",").map((t) => t.trim()).filter(Boolean);
+    let q = supabase.from("catalog_research_job").select(`${JOB_FIELDS}, group_key`).order("updated_at", { ascending: false }).limit(500);
     if (state) q = q.eq("state", state);
+    if (types.length) q = q.in("job_type", types);
     const { data: jobs, error } = await q;
     if (error) return c.json({ error: error.message }, 500);
-    const ids = (jobs || []).map((j) => (j as { id: string }).id);
-    const { data: props } = ids.length
-      ? await supabase.from("catalog_part_proposal").select("job_id, part_number, sources, promoted_part_id, route").in("job_id", ids)
-      : { data: [] };
-    const propByJob = new Map<string, { partNumber: string; sourceCount: number }>();
-    for (const p of props || []) {
-      const row = p as { job_id: string; part_number?: string; sources?: unknown[]; promoted_part_id?: string | null };
-      if (row.promoted_part_id || row.part_number) {
-        propByJob.set(row.job_id, {
-          partNumber: row.part_number || "—",
-          sourceCount: Array.isArray(row.sources) ? row.sources.length : 0,
-        });
-      }
+    type JobListRow = { group_key?: string; id: string; job_type: string; state: string; vehicle_catalog_id: string | null; maintenance_component_id: string | null; spec_key: string | null; fit_descriptor: string | null; updated_at: string };
+    const rows = (jobs || []) as JobListRow[];
+    const ids = rows.map((j) => j.id);
+    const carIds = [...new Set(rows.map((j) => j.vehicle_catalog_id).filter(Boolean))] as string[];
+    const compIds = [...new Set(rows.map((j) => j.maintenance_component_id).filter(Boolean))] as string[];
+    const specKeys = [...new Set(rows.map((j) => j.spec_key).filter(Boolean))] as string[];
+    const vehicleJobIds = rows.filter((j) => j.job_type !== "part" && j.job_type !== "spec").map((j) => j.id);
+    const [{ data: props }, { data: specProps }, { data: cars }, { data: comps }, { data: specs }, { data: conflicts }, { data: vProps }] = await Promise.all([
+      ids.length
+        ? supabase.from("catalog_part_proposal").select("job_id, brand, part_number, sources, promoted_part_id, route, trust_route, status").in("job_id", ids)
+        : Promise.resolve({ data: [] }),
+      ids.length
+        ? supabase.from("catalog_spec_proposal").select("job_id, value, unit, trust_route, status").in("job_id", ids)
+        : Promise.resolve({ data: [] }),
+      carIds.length ? supabase.from("vehicle_catalog").select(CAR_FIELDS).in("id", carIds) : Promise.resolve({ data: [] }),
+      compIds.length ? supabase.from("maintenance_service_categories").select("id, name").in("id", compIds) : Promise.resolve({ data: [] }),
+      specKeys.length ? supabase.from("spec_key").select("key, label, unit").in("key", specKeys) : Promise.resolve({ data: [] }),
+      ids.length
+        ? supabase.from("research_number_conflict").select("job_id").in("job_id", ids).is("closed_at", null)
+        : Promise.resolve({ data: [] }),
+      vehicleJobIds.length
+        ? supabase.from("catalog_vehicle_proposal").select("job_id, make, model, production_start_year, production_end_year, chassis_code, engine_code, drivetrain, grade, market, action, status").in("job_id", vehicleJobIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+    const vPropsByJob = new Map<string, Array<Record<string, unknown>>>();
+    for (const p of vProps || []) {
+      const k = String((p as { job_id: string }).job_id);
+      vPropsByJob.set(k, [...(vPropsByJob.get(k) ?? []), p as Record<string, unknown>]);
     }
-    const items = (jobs || []).map((j) => {
-      const row = j as { id: string; state: string; group_key: string; fleet_count: number; updated_at: string };
+    type PropMeta = { result: string; sourceCount: number; trustRoute: string | null; domains: string[]; rank: number };
+    const propByJob = new Map<string, PropMeta>();
+    // The row shows the proposal that matters most: the one added, else the one open for review.
+    const rankOf = (r: { promoted_part_id?: string | null; status?: string }) => (r.promoted_part_id ? 3 : r.status === "open" ? 2 : 1);
+    for (const p of props || []) {
+      const row = p as { job_id: string; brand?: string; part_number?: string; sources?: Array<Record<string, unknown>>; promoted_part_id?: string | null; trust_route?: string | null; status?: string };
+      if (!row.part_number) continue;
+      const rank = rankOf(row);
+      const prev = propByJob.get(row.job_id);
+      if (prev && prev.rank >= rank) continue;
+      const kept = (Array.isArray(row.sources) ? row.sources : []).filter((s) => !s.dropped && typeof s.domain === "string");
+      propByJob.set(row.job_id, {
+        result: [row.brand, row.part_number].filter(Boolean).join(" "),
+        sourceCount: kept.length,
+        trustRoute: row.trust_route ?? null,
+        domains: [...new Set(kept.map((s) => String(s.domain)))],
+        rank,
+      });
+    }
+    for (const p of specProps || []) {
+      const row = p as { job_id: string; value?: string; unit?: string | null; trust_route?: string | null; status?: string };
+      if (!row.value || propByJob.has(row.job_id)) continue;
+      propByJob.set(row.job_id, {
+        result: [row.value, row.unit].filter(Boolean).join(" "),
+        sourceCount: 0,
+        trustRoute: row.trust_route ?? null,
+        domains: [],
+        rank: 1,
+      });
+    }
+    const carById = new Map((cars || []).map((v) => [(v as { id: string }).id, v]));
+    const compById = new Map((comps || []).map((v) => [(v as { id: string }).id, (v as { name: string }).name]));
+    const specByKey = new Map((specs || []).map((v) => [(v as { key: string }).key, v as { key: string; label: string; unit: string | null }]));
+    const conflictJobs = new Set((conflicts || []).map((v) => (v as { job_id: string }).job_id));
+    const items = rows.map((row) => {
       const meta = propByJob.get(row.id);
       return {
         jobId: row.id,
+        jobType: row.job_type,
         state: row.state,
-        groupKey: row.group_key,
-        fleetCount: row.fleet_count,
-        resultPartNumber: meta?.partNumber ?? (row.state === "queued" ? "—" : "—"),
+        vehicleCatalogId: row.vehicle_catalog_id,
+        car: row.vehicle_catalog_id ? carById.get(row.vehicle_catalog_id) ?? null : null,
+        partTypeId: row.maintenance_component_id,
+        partTypeName: row.maintenance_component_id ? compById.get(row.maintenance_component_id) ?? null : null,
+        specKey: row.spec_key,
+        specLabel: row.spec_key ? specByKey.get(row.spec_key)?.label ?? null : null,
+        fitDescriptor: row.fit_descriptor,
+        resultPartNumber: meta?.result ?? "—",
         sourceCount: meta?.sourceCount ?? 0,
+        trustRoute: meta?.trustRoute ?? null,
+        siteDomains: meta?.domains ?? [],
+        conflictOpen: conflictJobs.has(row.id),
+        // Vehicle jobs: the car being researched (make / model / year only) and what the engine proposed.
+        subject: row.job_type === "vehicle" || row.job_type === "vehicle_model" ? vehicleSubject(row.group_key) : null,
+        vehicleProposals: row.job_type === "part" || row.job_type === "spec" ? undefined : (vPropsByJob.get(row.id) ?? []).map((p) => {
+          const { job_id: _j, ...rest } = p;
+          return rest;
+        }),
         updatedAt: row.updated_at,
       };
     });
@@ -160,6 +301,7 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
       p_actor: user?.id ?? null,
     });
     if (error) return c.json({ error: error.message }, 400);
+    await resolveBatch(supabase, data, user?.id ?? null);
     return c.json({ result: data });
   });
 
@@ -225,27 +367,24 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
     });
   });
 
+  // RE-11: the one trusted list now lives in trusted_site + trusted_source (see /trusted-sites). This old read keeps the
+  // Research settings page working until its screen moves; writes are owner-only on /trusted-sites.
   app.get(`${PREFIX}/trusted-sources`, async (c: Context) => {
     const denied = guardRead(c);
     if (denied) return denied;
-    const { data, error } = await supabase.from("catalog_trusted_source").select("*").order("domain");
+    const { data, error } = await supabase.from("trusted_site")
+      .select("domain, automated_read, blocked_at, pages_confirmed").order("domain");
     if (error) return c.json({ error: error.message }, 500);
-    const { data: healthRaw, error: healthErr } = await supabase.rpc("catalog_trusted_source_fetch_health");
-    if (healthErr) return c.json({ error: healthErr.message }, 500);
-    const health = (healthRaw || {}) as Record<string, {
-      recentFetches?: Array<Record<string, unknown>>;
-      blocked?: boolean;
-      blocked_at?: string | null;
-    }>;
     const items = (data || []).map((row) => {
-      const r = row as { domain: string; blocked_at?: string | null };
-      const h = health[r.domain] || {};
-      const blockedAt = r.blocked_at ?? h.blocked_at ?? null;
+      const r = row as { domain: string; automated_read: string; blocked_at: string | null; pages_confirmed: number };
       return {
-        ...row,
-        recentFetches: h.recentFetches || [],
-        blocked: Boolean(blockedAt ?? h.blocked),
-        blocked_at: blockedAt,
+        domain: r.domain,
+        kind: "catalogue",
+        active: r.automated_read === "allowed",
+        pages_confirmed: r.pages_confirmed,
+        blocked: r.automated_read === "blocked",
+        blocked_at: r.blocked_at,
+        recentFetches: [],
       };
     });
     return c.json({ items });
@@ -254,42 +393,30 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
   app.post(`${PREFIX}/trusted-sources`, async (c: Context) => {
     const denied = guardWrite(c);
     if (denied) return denied;
-    const body = await c.req.json() as { domain?: string; kind?: string };
-    const domain = String(body.domain || "").trim().toLowerCase().replace(/^www\./, "");
-    if (!domain) return c.json({ error: "domain required" }, 400);
-    const kind = body.kind === "aftermarket_catalog" ? "aftermarket_catalog" : "oem_catalog";
-    const { error } = await supabase.from("catalog_trusted_source").upsert({ domain, kind, active: true });
-    if (error) return c.json({ error: error.message }, 400);
-    return c.json({ ok: true });
+    return c.json({ error: "Trusted sites moved to Parts database → Trusted sources (owner only)." }, 410);
   });
 
   app.patch(`${PREFIX}/trusted-sources/:domain`, async (c: Context) => {
     const denied = guardWrite(c);
     if (denied) return denied;
-    const domain = decodeURIComponent(c.req.param("domain"));
-    const body = await c.req.json() as { active?: boolean };
-    if (typeof body.active !== "boolean") return c.json({ error: "active required" }, 400);
-    const patch: Record<string, unknown> = { active: body.active };
-    if (body.active) patch.blocked_at = null;
-    const { error } = await supabase.from("catalog_trusted_source").update(patch).eq("domain", domain);
-    if (error) return c.json({ error: error.message }, 400);
-    return c.json({ ok: true });
+    return c.json({ error: "Trusted sites moved to Parts database → Trusted sources (owner only)." }, 410);
   });
 
   app.get(`${PREFIX}/export.csv`, async (c: Context) => {
     const denied = guardRead(c);
     if (denied) return denied;
-    const { data: jobs, error } = await supabase.from("catalog_research_job").select("id, job_type, state, group_key, fleet_count, match_type, updated_at").order("updated_at", { ascending: false }).limit(5000);
+    const { data: jobs, error } = await supabase.from("catalog_research_job").select("id, job_type, state, vehicle_catalog_id, maintenance_component_id, spec_key, match_type, updated_at").order("updated_at", { ascending: false }).limit(5000);
     if (error) return c.json({ error: error.message }, 500);
-    const lines = ["job_id,job_type,state,group_key,fleet_count,match_type,updated_at"];
+    const lines = ["job_id,job_type,state,vehicle_catalog_id,part_type_id,spec_key,match_type,updated_at"];
     for (const j of jobs || []) {
       const row = j as Record<string, unknown>;
       lines.push([
         csvEscape(row.id),
         csvEscape(row.job_type),
         csvEscape(row.state),
-        csvEscape(row.group_key),
-        csvEscape(row.fleet_count),
+        csvEscape(row.vehicle_catalog_id),
+        csvEscape(row.maintenance_component_id),
+        csvEscape(row.spec_key),
         csvEscape(row.match_type),
         csvEscape(row.updated_at),
       ].join(","));
@@ -306,13 +433,20 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
   app.post(`${PREFIX}/reprocess-queued`, async (c: Context) => {
     const denied = guardWrite(c);
     if (denied) return denied;
-    const { data: jobs, error } = await supabase.from("catalog_research_job").select("id").eq("state", "queued");
+    const actor = (c.get("rbacUser") as { id?: string } | undefined)?.id ?? null;
+    const since = new Date(Date.now() - 60_000).toISOString();
+    const { count: recent } = await supabase.from("dominion_audit_log").select("id", { count: "exact", head: true })
+      .eq("action", "reprocess_queued").eq("actor", actor).gte("at", since);
+    if ((recent ?? 0) > 0) return c.json({ error: "Wait a minute before re-running again" }, 429);
+    const { data: jobs, error } = await supabase.from("catalog_research_job").select("id").eq("state", "queued")
+      .order("updated_at").limit(50);
     if (error) return c.json({ error: error.message }, 500);
     let count = 0;
     for (const j of jobs || []) {
       await supabase.rpc("catalog_research_enqueue_job", { p_job_id: (j as { id: string }).id });
       count += 1;
     }
+    await supabase.from("dominion_audit_log").insert({ actor, action: "reprocess_queued", table_name: "catalog_research_job", row_id: null, after: { requeued: count } });
     return c.json({ requeued: count });
   });
 
@@ -368,23 +502,18 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
     });
     if (error) return c.json({ error: error.message }, 400);
     const checks = (prop?.checks || {}) as Record<string, unknown>;
-    if (checks.shadowWouldAuto === true) {
-      const { data: settings } = await supabase.from("catalog_research_settings").select("shadow_approve_streak, shadow_mode").eq("id", 1).single();
-      const streak = (settings?.shadow_approve_streak || 0) + 1;
-      const patch: Record<string, unknown> = { shadow_approve_streak: streak };
-      if (streak >= 20 && settings?.shadow_mode) {
-        patch.shadow_mode = false;
-        await supabase.rpc("catalog_research_log_event", {
-          p_job_id: jobId,
-          p_step: "shadow",
-          p_outcome: "graduated",
-          p_detail: { streak },
-          p_actor: user?.id ?? null,
-        });
-      }
-      await supabase.from("catalog_research_settings").update(patch).eq("id", 1);
-    } else {
-      await supabase.from("catalog_research_settings").update({ shadow_approve_streak: 0 }).eq("id", 1);
+    await resolveBatch(supabase, data, user?.id ?? null);
+    await bumpStreak(supabase, checks.shadowWouldAuto === true, "approved");
+    const { data: settings } = await supabase.from("catalog_research_settings").select("shadow_approve_streak, shadow_mode").eq("id", 1).single();
+    if (settings?.shadow_mode && Number(settings.shadow_approve_streak) >= 20) {
+      await supabase.from("catalog_research_settings").update({ shadow_mode: false }).eq("id", 1);
+      await supabase.rpc("catalog_research_log_event", {
+        p_job_id: jobId,
+        p_step: "shadow",
+        p_outcome: "graduated",
+        p_detail: { streak: settings.shadow_approve_streak },
+        p_actor: user?.id ?? null,
+      });
     }
     return c.json({ result: data });
   });
@@ -416,12 +545,15 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
       route: "review",
     }).select("id").single();
     if (insErr) return c.json({ error: insErr.message }, 400);
-    await supabase.from("catalog_research_settings").update({ shadow_approve_streak: 0 }).eq("id", 1);
+    const { data: wouldAuto } = await supabase.from("catalog_part_proposal").select("id").eq("job_id", jobId)
+      .eq("status", "open").contains("checks", { shadowWouldAuto: true }).limit(1);
+    await bumpStreak(supabase, (wouldAuto ?? []).length > 0, "edited");
     const { data, error } = await supabase.rpc("promote_part_proposal", {
       p_proposal_id: created.id,
       p_actor: user?.id ?? null,
     });
     if (error) return c.json({ error: error.message }, 400);
+    await resolveBatch(supabase, data, user?.id ?? null);
     return c.json({ result: data, proposalId: created.id });
   });
 
@@ -437,7 +569,9 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
       updated_at: new Date().toISOString(),
     }).eq("id", jobId);
     await supabase.rpc("catalog_research_enqueue_job", { p_job_id: jobId });
-    await supabase.from("catalog_research_settings").update({ shadow_approve_streak: 0 }).eq("id", 1);
+    const { data: wouldAutoNf } = await supabase.from("catalog_part_proposal").select("id").eq("job_id", jobId)
+      .eq("status", "open").contains("checks", { shadowWouldAuto: true }).limit(1);
+    await bumpStreak(supabase, (wouldAutoNf ?? []).length > 0, "rejected");
     await supabase.rpc("catalog_research_log_event", {
       p_job_id: jobId,
       p_step: "review",

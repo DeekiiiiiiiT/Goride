@@ -7,7 +7,9 @@ import {
   buildCatalogPartResearchPrompt,
   buildCatalogPartSearchPrompt,
   countGroundingChunks,
+  countGroundingQueries,
   domainFromGroundingTitle,
+  geminiBilledUsage,
   parseCandidatesFromGeminiText,
 } from "./catalog_research_gemini.ts";
 
@@ -102,4 +104,22 @@ Deno.test("R30: buildCatalogPartSearchPrompt requires search without JSON block"
 Deno.test("R30: countGroundingChunks sums candidate metadata", () => {
   assertEquals(countGroundingChunks({ candidates: [] }), 0);
   assertEquals(countGroundingChunks(recordedFixture), 3);
+});
+
+Deno.test("RE-24: countGroundingQueries counts Google search queries from root and candidates", () => {
+  assertEquals(countGroundingQueries({}), 0);
+  assertEquals(
+    countGroundingQueries({
+      groundingMetadata: { webSearchQueries: ["a", "b"] },
+      candidates: [{ groundingMetadata: { webSearchQueries: ["c", "d", "e"] } }],
+    }),
+    5,
+  );
+});
+
+Deno.test("RE-24: billed output includes thinking tokens", () => {
+  assertEquals(
+    geminiBilledUsage({ usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 40, thoughtsTokenCount: 60 } }),
+    { inputTokens: 100, outputTokens: 100 },
+  );
 });

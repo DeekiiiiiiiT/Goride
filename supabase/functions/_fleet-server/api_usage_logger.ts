@@ -13,7 +13,7 @@
 
 import * as kv from "./kv_store.tsx";
 import { getServiceClient } from "./service_client.ts";
-import { estimateCostUSD, type Provider, type UsageInput } from "./api_pricing.ts";
+import { estimateCostUSD, groundingCostUSD, type Provider, type UsageInput } from "./api_pricing.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -294,6 +294,41 @@ export async function logProviderCall(entry: ProviderCallEntry): Promise<void> {
     // Never break the primary call because of a logging failure.
     console.warn(`[ApiUsageLogger] Failed to log provider call: ${e.message}`);
   }
+}
+
+/**
+ * Log the Google Search grounding queries one Gemini call ran (RE-24). Its own line (service = 'grounding') so the
+ * spend guard and the cost-per-job figure include it. The free monthly allowance is applied from the month's count;
+ * if that count can't be read, every query is charged.
+ */
+export async function logGroundingQueries(entry: {
+  route?: string;
+  model?: string;
+  queries: number;
+  userId?: string;
+  orgId?: string | null;
+}): Promise<void> {
+  const queries = Math.max(0, Math.floor(entry.queries || 0));
+  if (queries === 0) return;
+  let used = Number.POSITIVE_INFINITY;
+  try {
+    const { data, error } = await getServiceClient().rpc("api_grounding_queries_this_month");
+    if (!error && data != null) used = Number(data);
+  } catch {
+    // keep "charge every query"
+  }
+  await logProviderCall({
+    provider: "gemini",
+    service: "grounding",
+    route: entry.route,
+    model: entry.model,
+    userId: entry.userId,
+    orgId: entry.orgId,
+    status: "success",
+    httpStatus: 200,
+    requests: queries,
+    costUSDOverride: groundingCostUSD(queries, used),
+  });
 }
 
 // ---------------------------------------------------------------------------
