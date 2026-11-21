@@ -1,194 +1,224 @@
 ROAM FLEET — TOLL DISPUTES IN DRIVER SETTLEMENTS AND FLEET POLICY — FULL DESIGN PROMPT (GOOGLE STITCH)
 
+HOW TO USE THIS FILE
+- First paste: everything from "FIRST PASTE" down to the end of SCREEN 2.
+- Then paste one SCREEN block at a time (SCREEN 3, SCREEN 4, …). Each block is complete on its own.
+- Never paste the section "FOR CLAUDE — DO NOT PASTE" at the bottom.
 
 
 
-Roam Fleet - Disputes tab in Driver Settlements, and the Tolls tab in Fleet Policy Configuration (Desktop Web App with a phone layout, for the fleet owner and fleet manager):
+==================== FIRST PASTE ====================
 
-Design two new areas of Roam Fleet for toll disputes. The rule behind them: on a trip, the passenger always owes the toll, never the fleet. Uber pays the toll back to the driver; when Uber pays short (the Portmore toll costs J$390.00 and Uber paid back J$370.00), the driver asks Uber for the remaining J$20.00 from the Uber driver app within 9 days of the trip. Roam opens these disputes by itself and the driver sees each one in the Roam Driver app. Area one is a new "Disputes" tab in Driver Settlements, next to "Cash desk", "Close Week" and "Restatements": the owner sees every open dispute of every driver, which ones are not sent yet, which are waiting on Uber, which are late, and can mark one as sent for a driver, close one as lost, or jump to the week the toll belongs to. Refunds are not linked here (that happens in Week Reconciliation). Area two is a new "Tolls" tab in Fleet Policy Configuration, next to "Rules" and "Schedule": the owner sets who pays when a dispute is lost or runs out of time, each platform's toll rules (does it pay tolls back, does it take disputes, how many days to dispute), and each toll plaza's price per platform with the date it starts. The person using this is not an accountant: every card says in plain words what it is for. The design must feel modern, calm and effortless, like the best business banking apps. Every screen is tall enough to show everything, with no inner scrolling.
+Roam Fleet - Disputes tab in Driver Settlements, and the Tolls tab in Fleet Policy Configuration (Desktop Web App, for the fleet owner and fleet manager):
+
+Design screens for toll disputes in Roam Fleet. On a trip, the passenger always owes the toll, never the fleet. Uber pays the toll back to the driver; when Uber pays short (the Portmore toll costs J$390.00 and Uber paid back J$370.00), the driver asks Uber for the remaining J$20.00 from the Uber driver app within 9 days of the trip. Roam opens these disputes by itself. Area one is a new "Disputes" tab in Driver Settlements: the owner sees every open dispute of every driver (not sent yet, waiting on Uber, late) and can mark one as sent for a driver, close one as lost, or open the week the toll belongs to. Area two is a new "Tolls" tab in Fleet Policy Configuration: who pays when a dispute is lost or runs out of time, each platform's toll rules, and each toll plaza's price per platform with the date it starts. The person using this is not an accountant: every card says in plain words what it is for. The design must feel modern, calm and effortless, like the best business banking apps. Every screen is tall enough to show everything, with no inner scrolling. Draw only the screens asked for in this message.
 
 
 BRAND IDENTITY:
 - Keep the existing Roam Fleet app frame exactly as it is today (do not redesign it):
   - Top: a white nav row with the black "Roam Fleet" app tile, then: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations, Delivery Operations, Analytics, Reports, Business Finance.
   - Dark bar below it: a dark navy strip with a search box "Switch vehicle or search hub…" on the left, and on the right "06:11:49 PM EST" and "America/Jamaica".
-- Driver Settlements keeps its page title "Driver Settlements", its "Past weeks" banner and its tab row; the new "Disputes" tab is added after "Restatements" with a small amber count badge ("12").
-- Fleet Policy Configuration keeps its page title and description; the new "Tolls" tab is added after "Rules" and "Schedule".
 - Theme: "Calm finance desk" — clear, trustworthy, quiet and modern. Not a spreadsheet, not a developer tool.
 - LIGHT MODE (default):
   - Primary: near-black #030213 — primary buttons, the active tab
   - Page wash: #f8fafc; cards: #FFFFFF with a soft shadow (0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(15,23,42,0.06)) and a hairline border rgba(0,0,0,0.06)
   - Text: #0b1c30; muted text: #47464c
-  - Done / Refunded: green #069669 on a soft green #ecfdf5
-  - Not sent yet / To dispute: amber #b45309 on a soft amber #fffbeb
+  - Done / Refunded: green #069669 on #ecfdf5
+  - Not sent yet / To dispute: amber #b45309 on #fffbeb
   - Sent, waiting on Uber: blue #1d4ed8 on #eff6ff
   - Late / Last days / Missing setting: red #ba1a1a on #fff1f2
   - Info: slate #475569 on #f1f5f9
 - DARK MODE:
-  - Page #1c1c1e, cards #2a2a2d, border #3a3a3d
-  - Text #fafafa, muted #a1a1aa, primary buttons white #fafafa with near-black text
+  - Page #1c1c1e, cards #2a2a2d, border #3a3a3d, text #fafafa, muted #a1a1aa, primary buttons white #fafafa with near-black text
   - Green #34d399 on #064e3b; amber #fbbf24 on #451a03; red #f87171 on #450a0a; blue #60a5fa on #172554
 - Shapes: cards 16px corner radius, buttons and inputs 12px, chips fully rounded.
-- Typography: Inter. Card title 20px semibold, subtitle 15px muted, body 15px, helper text 13px. Money uses tabular figures, right-aligned, always "J$" with 2 decimals (J$20.00). Plates in a small grey rounded box.
-- Dates in plain words: "9 Nov, 7:15 AM", "from 1 Dec 2026", "Week of 9 Nov 2026". Never "2026-11-09", never codes, ids or internal words.
+- Typography: Inter. Card title 20px semibold, subtitle 15px muted, body 15px, helper text 13px. Money uses tabular figures, right-aligned, always "J$" with 2 decimals (J$20.00).
+- Car plates are always in a small grey rounded box: "5179KZ".
+- Dates in plain words: "9 Nov, 7:15 AM", "from 1 Dec 2026", "Week of 9 Nov". Never "2026-11-09", never codes, ids or internal words.
 - Buttons always look like buttons:
-  - Primary = solid near-black with white text ("Save", "Add rate").
-  - Secondary = white with a visible #cbd5e1 border and dark text ("Mark as sent", "Open week").
-  - Danger ("Lost") = red border and red text.
-  - Never underlined text links, never grey text-only buttons. Every confirm is an in-app dialog, never a browser pop-up.
+  - Primary = solid near-black with white text.
+  - Secondary = white with a visible #cbd5e1 border and dark text.
+  - Danger = red border and red text.
+  - Never underlined text links, never grey text-only buttons. Confirms are in-app dialogs, never browser pop-ups.
+- The pieces used across these screens (draw them the same way every time):
+  - Summary tile: small uppercase label, a big count, and "· J$ amount" beside it; tinted amber, blue or red by its kind, calm grey when zero.
+  - Dispute row (white card): line 1 "time · place", the plate box, the driver name; line 2 "Toll J$… · Uber paid J$… ·" then an amber highlight "J$20.00 to dispute"; line 3 a grey pill with the Uber trip times, the state chip, the days left with a small clock icon, and a grey chip "Week of 9 Nov"; buttons on the right.
+  - Driver filter chip: driver name and count, fully rounded; the selected one is solid near-black.
+  - Centered in-app dialog: title, a soft grey summary box, a plain body sentence, buttons bottom right.
 - Sample data (REAL, from Roam's week of 9 Nov 2026, Rideshare, car Toyota Roomy · 5179KZ, driver Kenny Gregory Rattray):
-  - 12 tolls Uber paid J$20.00 short each, J$240.00 in all. Rows include: "9 Nov, 7:15 AM · Portmore · Toll J$390.00 · Uber paid J$370.00 · J$20.00 to dispute · Uber trip 6:55 AM–7:40 AM", "9 Nov, 12:24 PM · Portmore", "10 Nov, 12:55 PM · Spanish Town · Toll J$280.00 · Uber paid J$260.00", "11 Nov, 7:11 AM · Portmore", "12 Nov, 7:54 AM · Portmore".
-  - Second driver for the filter: "Marlon Andre Sterling · 8421LA" with 2 disputes, J$40.00.
-  - Platforms: Uber (pays tolls back on each trip, takes disputes, 9 days to dispute); InDrive (cash trips, the rider pays the driver, no disputes); Roam (Roam charges the rider itself).
-  - Plazas with prices: Portmore — tag price J$390.00, Uber pays J$370.00; Spanish Town — tag price J$280.00, Uber pays J$260.00; May Pen — tag price J$450.00, Uber pays J$430.00.
-  - The only manager is the owner, so changes that normally need a second person ask for a written reason instead.
+  - 12 tolls Uber paid J$20.00 short each, J$240.00 in all: "9 Nov, 7:15 AM · Portmore · Toll J$390.00 · Uber paid J$370.00 · Uber trip 6:55 AM–7:40 AM", "9 Nov, 12:24 PM · Portmore", "10 Nov, 12:55 PM · Spanish Town · Toll J$280.00 · Uber paid J$260.00 · Uber trip 12:30 PM–1:15 PM", "11 Nov, 7:11 AM · Portmore", "12 Nov, 7:54 AM · Portmore".
+  - Second driver: "Marlon Andre Sterling · 8421LA" with 2 disputes, J$40.00.
 
 
 DESIGN PRINCIPLES:
-- Each screen answers "what needs me now?" first: counts and amounts at the top, then the list, oldest and most urgent first.
-- The days left are always visible on a dispute; the chip turns red with 2 days or fewer left.
-- "Late" is a warning, not a loss: it means "not sent with 2 days or fewer left" or "sent, one pay period passed and no refund yet". A refund can still come, so "Lost" is never the main button.
-- Disputes are about money still owed by Uber; every row shows "Toll · Uber paid · amount to dispute" in that order.
+- Each screen answers "what needs me now?" first: counts and amounts at the top, then the list, most urgent first.
+- The days left are always visible on a dispute that is not sent; they turn red with 2 days or fewer left.
+- "Late" is a warning, not a loss. "Lost" is never the main button.
 - Settings read like plain questions with plain answers ("When a dispute is lost, who pays?" — "The fleet" / "The driver"), never field names.
-- Prices change over time: a new price never overwrites the old one; it is added with the date it starts, and the old prices stay listed underneath.
-- Nothing saves without the "Save" button; leaving with unsaved changes asks first, in-app.
-- Calm, not alarming: red only for late disputes and missing settings that stop disputes from opening.
+- Calm, not alarming: red only for late disputes and missing settings.
 - One view per screen.
 
 
 SCREEN 1: DRIVER SETTLEMENTS — DISPUTES TAB, ALL DRIVERS
-- Page title "Driver Settlements" with the tab row "Cash desk · Close Week · Restatements · Disputes (12)", "Disputes" active.
-- One sentence under the tabs, muted: "Tolls Uber paid short. The driver asks Uber for the rest from the Roam Driver app."
-- Three summary tiles in a row:
-  - "TO SEND" — big "10" and "· J$200.00" (amber label)
-  - "SENT, WAITING ON UBER" — big "2" and "· J$40.00" (blue)
-  - "LATE" — big "1" and "· J$20.00" (red, with a small warning icon)
-- A row of driver filter chips: "All drivers 14", "Kenny Gregory Rattray 12" (with a small red "1 late" dot), "Marlon Andre Sterling 2".
-- The list of dispute rows (white cards), most urgent first:
-  - Line 1: "10 Nov, 12:55 PM · Spanish Town", plate box "5179KZ", "Kenny Gregory Rattray"
-  - Line 2: "Toll J$280.00 · Uber paid J$260.00 ·" and an amber highlight "J$20.00 to dispute"
-  - Line 3: grey pill "Uber trip 12:30 PM–1:15 PM", amber chip "Not sent yet", red "1 of 9 days left", and a grey chip "Week of 9 Nov"
-  - Buttons on the right: "Mark as sent", "Open week"
-  - A sent row instead shows the blue chip "Sent 11 Nov · waiting on Uber" and the buttons "Lost", "Open week"
-- Show 6 rows, then a secondary button "Show all 14".
+- Page title "Driver Settlements" with the tab row "Cash desk · Close Week · Restatements · Disputes", "Disputes" active with a small amber count badge "12".
+- One muted sentence under the tabs: "Tolls Uber paid short. The driver asks Uber for the rest from the Roam Driver app."
+- Three summary tiles in a row: "TO SEND 10 · J$200.00" (amber), "SENT, WAITING ON UBER 2 · J$40.00" (blue), "LATE 1 · J$20.00" (red, with a small warning icon).
+- Driver filter chips: "All drivers 14" (selected), "Kenny Gregory Rattray 12" with a small red dot, "Marlon Andre Sterling 2".
+- Six dispute rows, most urgent first:
+  - "10 Nov, 12:55 PM · Spanish Town", "5179KZ", "Kenny Gregory Rattray"; "Toll J$280.00 · Uber paid J$260.00 · J$20.00 to dispute"; pill "Uber trip 12:30 PM–1:15 PM", amber chip "Not sent yet", red "1 of 9 days left", chip "Week of 9 Nov"; buttons "Mark as sent", "Open week"
+  - "9 Nov, 7:15 AM · Portmore", "5179KZ", "Kenny Gregory Rattray"; "Toll J$390.00 · Uber paid J$370.00 · J$20.00 to dispute"; pill "Uber trip 6:55 AM–7:40 AM", amber chip "Not sent yet", "8 of 9 days left", chip "Week of 9 Nov"; buttons "Mark as sent", "Open week"
+  - "9 Nov, 12:24 PM · Portmore", same driver and car, same money line; amber "Not sent yet", "8 of 9 days left"; buttons "Mark as sent", "Open week"
+  - "4 Nov, 8:10 AM · Portmore", "8421LA", "Marlon Andre Sterling"; "Toll J$390.00 · Uber paid J$370.00 · J$20.00 disputed"; blue chip "Sent 5 Nov · waiting on Uber", chip "Week of 2 Nov"; buttons "Lost" (red outline), "Open week"
+  - "11 Nov, 7:11 AM · Portmore", "5179KZ", "Kenny Gregory Rattray"; amber "Not sent yet", "9 of 9 days left"; buttons "Mark as sent", "Open week"
+  - "12 Nov, 7:54 AM · Portmore", "5179KZ", "Kenny Gregory Rattray"; amber "Not sent yet", "9 of 9 days left"; buttons "Mark as sent", "Open week"
+- Under the list, a white bordered button "Show all 14".
 
-SCREEN 2: DISPUTES TAB — ONE DRIVER
-- Same as Screen 1 with the chip "Kenny Gregory Rattray 12" selected.
-- A small driver header card above the list: driver name, plate "5179KZ", "12 open · J$240.00 still owed by Uber · 1 late".
-- The list shows only this driver's disputes, 6 rows visible: 4 "Not sent yet" rows with days left, 1 late row (red "1 of 9 days left"), 1 sent row (blue chip "Sent 11 Nov · waiting on Uber", red chip "No refund yet after 1 pay period", buttons "Lost", "Open week").
+SCREEN 2: DRIVER SETTLEMENTS — DISPUTES TAB, ONE DRIVER
+- Page title "Driver Settlements", tab row "Cash desk · Close Week · Restatements · Disputes" with "Disputes" active and the amber badge "12".
+- The same three summary tiles as Screen 1: "TO SEND 10 · J$200.00", "SENT, WAITING ON UBER 2 · J$40.00", "LATE 1 · J$20.00".
+- Driver filter chips with "Kenny Gregory Rattray 12" selected (solid near-black).
+- A small driver card above the list: "Kenny Gregory Rattray", plate box "5179KZ", line "12 open · J$240.00 still owed by Uber · 1 late".
+- Six dispute rows, all for this driver and car 5179KZ:
+  - "10 Nov, 12:55 PM · Spanish Town · Toll J$280.00 · Uber paid J$260.00 · J$20.00 to dispute", red "1 of 9 days left", amber "Not sent yet"; buttons "Mark as sent", "Open week"
+  - "9 Nov, 7:15 AM · Portmore · Toll J$390.00 · Uber paid J$370.00 · J$20.00 to dispute", "8 of 9 days left", amber "Not sent yet"; buttons "Mark as sent", "Open week"
+  - "9 Nov, 12:24 PM · Portmore", "8 of 9 days left", amber "Not sent yet"; buttons "Mark as sent", "Open week"
+  - "11 Nov, 7:11 AM · Portmore", "9 of 9 days left", amber "Not sent yet"; buttons "Mark as sent", "Open week"
+  - "12 Nov, 7:54 AM · Portmore", "9 of 9 days left", amber "Not sent yet"; buttons "Mark as sent", "Open week"
+  - "2 Nov, 4:02 PM · Portmore · J$20.00 disputed", blue chip "Sent 3 Nov · waiting on Uber", red chip "No refund yet after 1 pay period", chip "Week of 2 Nov"; buttons "Lost" (red outline), "Open week"
+
+==================== END OF FIRST PASTE ====================
+
+
 
 SCREEN 3: MARK AS SENT FOR THE DRIVER — DIALOG
-- Screen 1 dimmed behind a centered in-app dialog.
-- Title: "Mark this dispute as sent?"
-- A summary box: "9 Nov, 7:15 AM · Portmore · J$20.00 to dispute", "Kenny Gregory Rattray · 5179KZ".
-- Body: "Use this when the driver sent it in Uber but didn't tap Mark as sent in the Roam Driver app."
-- Buttons: secondary "Cancel", primary "Mark as sent".
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- Behind, dimmed: Driver Settlements with the "Disputes" tab active, the three summary tiles and a list of dispute rows.
+- In front, a centered white in-app dialog, 16px corners:
+  - Title "Mark this dispute as sent?"
+  - Soft grey summary box: "9 Nov, 7:15 AM · Portmore · J$20.00 to dispute" and under it "Kenny Gregory Rattray" with the plate box "5179KZ"
+  - Body: "Use this when the driver sent it in Uber but didn't tap Mark as sent in the Roam Driver app."
+  - Buttons bottom right: white bordered "Cancel", solid near-black "Mark as sent"
 
 SCREEN 4: CLOSE AS LOST — DIALOG
-- Screen 2 dimmed behind a centered in-app dialog.
-- Title: "Close this dispute as lost?"
-- Summary box: "9 Nov, 12:24 PM · Portmore · Toll J$390.00 · Uber paid J$370.00", bold "J$20.00 still owed by Uber".
-- Body: "Uber won't be asked for the J$20.00 any more. Under your toll policy, the fleet pays it. A refund can still come in the next pay period, so only close it if you know Uber said no."
-- Buttons: secondary "Keep waiting", red outline "Close as lost".
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- Behind, dimmed: Driver Settlements with the "Disputes" tab active and a list of dispute rows.
+- In front, a centered white in-app dialog, 16px corners:
+  - Title "Close this dispute as lost?"
+  - Soft grey summary box: "2 Nov, 4:02 PM · Portmore · Toll J$390.00 · Uber paid J$370.00" and bold "J$20.00 still owed by Uber"
+  - Body: "Uber won't be asked for the J$20.00 any more. Under your toll policy, the fleet pays it. A refund can still come in the next pay period, so only close it if you know Uber said no."
+  - Buttons bottom right: white bordered "Keep waiting", red outline "Close as lost"
 
 SCREEN 5: WHY ARE YOU MAKING THIS CHANGE — REASON DIALOG
-- A centered in-app dialog over the page.
-- Title: "Why are you making this change?"
-- Body: "This change normally needs a second manager. You are the only manager, so write why. It is kept with the change."
-- A text box labelled "Reason" with the placeholder "At least 8 characters", filled with "Uber support said no in writing".
-- Buttons: secondary "Cancel", primary "Approve and continue" (disabled until 8 characters are typed).
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- Behind, dimmed: Driver Settlements with the "Disputes" tab active.
+- In front, a centered white in-app dialog, 16px corners:
+  - Title "Why are you making this change?"
+  - Soft grey summary box: "Close as lost · 2 Nov, 4:02 PM · Portmore · J$20.00"
+  - Body: "This change normally needs a second manager. You are the only manager, so write why. It is kept with the change."
+  - A text box labelled "Reason", 3 lines tall, filled with "Uber support said no in writing"; small muted helper under it "At least 8 characters"
+  - Buttons bottom right: white bordered "Cancel", solid near-black "Approve and continue"
 
-SCREEN 6: DISPUTES TAB — NOTHING OPEN
-- The Disputes tab with no open disputes.
-- The three tiles all show "0 · J$0.00" in calm grey.
-- A friendly empty state: an emerald tick in a soft green circle, "No open disputes", "When Uber pays back less than a toll, a dispute opens here by itself and the driver sees it in the Roam Driver app."
+SCREEN 6: DRIVER SETTLEMENTS — DISPUTES TAB, NOTHING OPEN
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- Page title "Driver Settlements", tab row "Cash desk · Close Week · Restatements · Disputes" with "Disputes" active and no badge.
+- The three summary tiles all in calm grey: "TO SEND 0 · J$0.00", "SENT, WAITING ON UBER 0 · J$0.00", "LATE 0 · J$0.00".
+- Below, a friendly empty state centered in a white card: an emerald tick in a soft green circle, title "No open disputes", line "When Uber pays back less than a toll, a dispute opens here by itself and the driver sees it in the Roam Driver app."
 
 SCREEN 7: FLEET POLICY — TOLLS TAB
-- Page title "Fleet Policy Configuration" with the tab row "Rules · Schedule · Tolls", "Tolls" active.
-- A status strip at the top: "Toll disputes: On", "InDrive rider pays driver: On", "Hand-logged trips: Off" as small chips (read only), with the muted line "Switched on by Roam support."
-- Card 1 "When a dispute doesn't work out":
-  - "When a dispute is lost, who pays?" — a two-option segmented control "The fleet" (selected) / "The driver"
-  - "When the driver doesn't send it in time, who pays?" — "The fleet" / "The driver" (selected)
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- Page title "Fleet Policy Configuration" with the muted description "Company rules for fuel and tolls." and the tab row "Rules · Schedule · Tolls", "Tolls" active.
+- A slim status strip at the top with three small read-only chips: "Toll disputes: On" (green), "InDrive rider pays driver: On" (green), "Hand-logged trips: Off" (grey), and the muted line "Switched on by Roam support."
+- Card 1, title "When a dispute doesn't work out":
+  - Question "When a dispute is lost, who pays?" with a two-option segmented control "The fleet" (selected) / "The driver"
+  - Question "When the driver doesn't send it in time, who pays?" with "The fleet" / "The driver" (selected)
   - Muted helper: "If Roam learned about the toll too late for the driver to send it, the fleet always pays."
-- Card 2 "Platforms", one row per platform:
-  - "Uber" — "Pays tolls back: Yes", "How: on each trip", "Takes disputes: Yes", "Days to dispute: 9" (a small number box)
-  - "InDrive" — "Pays tolls back: No", "How: the rider pays the driver in cash", "Takes disputes: No"
-  - "Roam" — "Pays tolls back: Roam charges the rider", "Takes disputes: No"
-  - Yes / No are small switches; "How" is a dropdown with "On each trip", "In weekly adjustments", "The rider pays the driver", "Roam charges the rider", "Not paid back".
-- Card 3 "Toll prices", a clean table, one row per plaza:
+- Card 2, title "Platforms", three rows:
+  - "Uber": "Pays tolls back" switch On; "How" dropdown "On each trip"; "Takes disputes" switch On; "Days to dispute" small number box "9"
+  - "InDrive": "Pays tolls back" switch Off; "How" dropdown "The rider pays the driver"; "Takes disputes" switch Off
+  - "Roam": "How" dropdown "Roam charges the rider"; "Takes disputes" switch Off
+- Card 3, title "Toll prices", with a solid near-black button "Add rate" in its header, and a clean table:
   - columns "Plaza", "Tag price", "Uber pays", "InDrive", "Since"
   - "Portmore · J$390.00 · J$370.00 · — · from 1 Nov 2026"
   - "Spanish Town · J$280.00 · J$260.00 · — · from 1 Nov 2026"
   - "May Pen · J$450.00 · J$430.00 · — · from 1 Nov 2026"
-  - each row has a chevron to open its history (Screen 9) and the card header has a primary button "Add rate"
-- A sticky footer bar: muted "No changes" on the left, primary "Save" on the right (disabled until something changes).
+  - a chevron at the end of each row
+- A sticky footer bar across the bottom: muted "No changes" on the left, solid near-black "Save" on the right shown disabled.
 
 SCREEN 8: ADD RATE — DIALOG
-- Screen 7 dimmed behind a centered in-app dialog.
-- Title: "Add a new rate"
-- Fields, each with a clear label:
-  - "Plaza" dropdown — "Portmore"
-  - "Platform" dropdown — "Uber"
-  - "Amount the platform pays" — "J$ 380.00"
-  - "Starts on" date picker — "1 Dec 2026"
-- A soft blue info box: "The current rate J$370.00 stays for trips before 1 Dec 2026. Nothing already decided changes."
-- Buttons: secondary "Cancel", primary "Add rate".
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- Behind, dimmed: Fleet Policy Configuration with the "Tolls" tab active and the "Toll prices" table.
+- In front, a centered white in-app dialog, 16px corners:
+  - Title "Add a new rate"
+  - Field "Plaza", dropdown showing "Portmore"
+  - Field "Platform", dropdown showing "Uber"
+  - Field "Amount the platform pays", input showing "J$ 380.00"
+  - Field "Starts on", date picker showing "1 Dec 2026"
+  - A soft blue info box: "The current rate J$370.00 stays for trips before 1 Dec 2026. Nothing already decided changes."
+  - Buttons bottom right: white bordered "Cancel", solid near-black "Add rate"
 
 SCREEN 9: ONE PLAZA — PRICE HISTORY
-- A right-side panel over Screen 7 for "Portmore".
-- Section "Tag price": "J$390.00 from 1 Nov 2026" (current, with a green "Now" chip), under it "J$350.00 from 1 Jan 2025" in muted text.
-- Section "Uber pays": "J$380.00 from 1 Dec 2026" with a grey "Starts 1 Dec" chip, "J$370.00 from 1 Nov 2026" with the green "Now" chip, "J$330.00 from 1 Jan 2025" muted.
-- Section "InDrive": "Not paid back by the platform".
-- Primary button at the bottom: "Add rate".
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- Behind, dimmed: Fleet Policy Configuration with the "Tolls" tab active.
+- On the right, a white side panel, 440px wide, full height, title "Portmore" with a close (X) button:
+  - Section "Tag price": "J$390.00 from 1 Nov 2026" with a green "Now" chip; under it, muted, "J$350.00 from 1 Jan 2025"
+  - Section "Uber pays": "J$380.00 from 1 Dec 2026" with a grey "Starts 1 Dec" chip; "J$370.00 from 1 Nov 2026" with a green "Now" chip; muted "J$330.00 from 1 Jan 2025"
+  - Section "InDrive": muted "Not paid back by the platform"
+  - A solid near-black button "Add rate" at the bottom of the panel
 
-SCREEN 10: SETTINGS MISSING
-- Screen 7 with a red-tinted banner at the top of the Tolls tab:
+SCREEN 10: FLEET POLICY — TOLLS TAB, SETTINGS MISSING
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- Page title "Fleet Policy Configuration", tab row "Rules · Schedule · Tolls", "Tolls" active.
+- At the top of the tab, a red-tinted banner card:
   - Title "Disputes can't open until these are set"
-  - A short list: "Spanish Town — no Uber rate", "May Pen — no Uber rate".
-  - Each line has a secondary button "Add rate" that opens Screen 8 with that plaza and platform filled in.
-- The matching table cells show a red "Missing" chip instead of an amount.
+  - Two lines, each with a white bordered button "Add rate" on the right: "Spanish Town — no Uber rate", "May Pen — no Uber rate"
+- Below, the "Toll prices" card with its table: "Portmore · J$390.00 · J$370.00 · — · from 1 Nov 2026", "Spanish Town · J$280.00 ·" a red "Missing" chip "· — ·", "May Pen · J$450.00 ·" a red "Missing" chip "· — ·".
+- The sticky footer bar: muted "No changes", "Save" disabled.
 
 SCREEN 11: SAVE TOLL SETTINGS — REASON DIALOG
-- Screen 7 with one change made ("When a dispute is lost, who pays?" switched to "The driver"); the footer shows "1 change" and the "Save" button is active.
-- A centered in-app dialog over it:
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- Behind, dimmed: Fleet Policy Configuration, "Tolls" tab, with the footer bar showing "1 change" and an active "Save" button.
+- In front, a centered white in-app dialog, 16px corners:
   - Title "Save toll settings?"
-  - A summary line: "When a dispute is lost: The fleet → The driver"
+  - Soft grey summary box: "When a dispute is lost, who pays: The fleet → The driver"
   - Body: "Toll settings normally need a second manager. You are the only manager, so write why."
-  - A "Reason" text box, filled with "Drivers agreed in the November meeting".
-  - Buttons: secondary "Cancel", primary "Save".
+  - A text box labelled "Reason", 3 lines tall, filled with "Drivers agreed in the November meeting"; small muted helper "At least 8 characters"
+  - Buttons bottom right: white bordered "Cancel", solid near-black "Save"
 
 SCREEN 12: PHONE 390px — DISPUTES TAB
-- The Disputes tab on a 390px phone.
-- The tab row becomes a back button "Cash desk" and the title "Disputes".
-- The three tiles stack, each one row high.
-- The driver chips scroll sideways as one row.
-- Each dispute row is a full-width card; its buttons stack full width under the text ("Mark as sent", then "Open week").
+Same Roam Fleet app, colours, cards and style as the earlier screens in this project, on a 390px phone. Tall enough to show everything, no inner scrolling.
+- Top: the Roam Fleet phone header, then a white bordered back button "Cash desk" and the title "Disputes".
+- The three summary tiles stacked, each one row high: "TO SEND 10 · J$200.00" (amber), "SENT, WAITING ON UBER 2 · J$40.00" (blue), "LATE 1 · J$20.00" (red).
+- One row of driver chips that scrolls sideways: "All drivers 14" (selected), "Kenny Gregory Rattray 12", "Marlon Andre Sterling 2".
+- Three full-width dispute cards:
+  - "10 Nov, 12:55 PM · Spanish Town", "5179KZ", "Kenny Gregory Rattray"; "Toll J$280.00 · Uber paid J$260.00 · J$20.00 to dispute"; amber "Not sent yet", red "1 of 9 days left"; full-width buttons stacked: "Mark as sent", then "Open week"
+  - "9 Nov, 7:15 AM · Portmore", "5179KZ"; "Toll J$390.00 · Uber paid J$370.00 · J$20.00 to dispute"; amber "Not sent yet", "8 of 9 days left"; "Mark as sent", "Open week"
+  - "4 Nov, 8:10 AM · Portmore", "8421LA", "Marlon Andre Sterling"; "J$20.00 disputed"; blue "Sent 5 Nov · waiting on Uber"; "Lost" (red outline), "Open week"
 
+
+
+==================== FOR CLAUDE — DO NOT PASTE ====================
 
 ADDITIONAL UI COMPONENTS:
-- Summary tile: small uppercase label, big count, "· J$ amount" beside it, tinted by state (amber, blue, red, or grey when zero).
-- Dispute row: time · place, plate box, driver name, "Toll · Uber paid ·" line with the amber "to dispute" highlight, trip pill, state chip, days left, week chip, buttons on the right.
-- Driver filter chip: name, count, small red dot when one is late.
+- Summary tile, dispute row, driver filter chip, centered dialog: as in BRAND IDENTITY.
 - Segmented control (two options) for "The fleet" / "The driver".
-- Platform row: platform name, Yes/No switches, "How" dropdown, number box for days.
-- Price table with a "Now" chip, a "Starts <date>" chip and a red "Missing" chip.
+- Platform row: platform name, Yes/No switches, "How" dropdown (On each trip, In weekly adjustments, The rider pays the driver, Roam charges the rider, Not paid back), number box for days.
+- Price table with a "Now" chip, a "Starts <date>" chip and a red "Missing" chip. Tag price is read-only (no command accepts a tag price yet).
 - Side panel for one plaza's price history.
 - Sticky footer bar with change count and Save.
-- In-app dialogs: summary box, plain body, secondary and primary (or red) buttons.
-- Reason text box with a live "8 characters" minimum.
-
+- Reason text box with a live 8-character minimum.
 
 INTERACTIONS:
-- Clicking a driver chip filters the list; "All drivers" clears it. The tiles always count every driver.
-- "Mark as sent" opens Screen 3; confirming moves the row to "Sent · waiting on Uber" at once and updates the tiles and the tab badge.
-- "Lost" opens Screen 4; if the change needs a second person, Screen 5 appears next, then the row leaves the list.
-- "Open week" opens Week Reconciliation on the week the toll belongs to, at the Tolls step, part 3 "Disputes".
-- On the Tolls tab, any change shows "1 change" in the footer and enables "Save"; "Save" opens Screen 11; leaving with unsaved changes asks "Leave without saving?" in an in-app dialog.
-- "Add rate" opens Screen 8; a new rate is added with its start date and never replaces the old ones.
-- A row in the price table opens Screen 9.
-- A "Missing" line's "Add rate" opens Screen 8 filled in for that plaza and platform.
-- The keyboard works throughout: Tab moves between buttons, Enter confirms dialogs, Escape closes them.
-
+- Data: Disputes tab reads public.toll_v2_disputes(p_driver) → active rows + byDriver (toSend, sent, late, leftMinor) for the chips and badge. Tolls tab reads public.toll_v2_toll_settings().
+- Driver chips filter the list; tiles always count every driver.
+- "Mark as sent" → dialog → mark_dispute_sent {dispute_id, expected_dispute_version}; only on to_send rows that are not windowClosed.
+- "Lost" → dialog → close_dispute_lost; only on sent rows. A NEEDS_APPROVAL refusal opens the reason dialog and resends with self_approval_reason.
+- "Open week" opens Week Reconciliation on chargeWeekKey, Tolls step, part 3.
+- No "Refund received" here: refunds are linked on Week Reconciliation step 3 only.
+- Tolls tab: any change shows the change count and enables Save; Save → reason dialog (settings always need it) → change_toll_settings (platform_settings.<platform>.<snake_case field>, dispute_policy.lost_bearer / expired_bearer). Leaving with unsaved changes asks in an in-app dialog.
+- "Add rate" → plaza_rates_add [{plaza_id, platform, rate_minor, effective_from}]; never replaces old rates.
+- The "missing" list is the server's `missing` (same list the matcher refuses on); each line's Add rate opens the dialog prefilled.
+- Switches are shown read-only (no command changes them from this screen).
+- Keyboard: Tab between buttons, Enter confirms dialogs, Escape closes them.
 
 Spec screens / Area
 | Screen | Area |
@@ -201,6 +231,6 @@ Spec screens / Area
 | 7 | Fleet Policy — Tolls tab |
 | 8 | Add rate — dialog |
 | 9 | One plaza — price history |
-| 10 | Settings missing |
+| 10 | Tolls tab — settings missing |
 | 11 | Save toll settings — reason dialog |
 | 12 | Phone 390px — Disputes tab |
