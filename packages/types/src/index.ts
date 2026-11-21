@@ -35,6 +35,7 @@ export * from './vehicleVariantLabel';
 export * from './partsBestPick';
 export * from './findPartsParse';
 export * from './partsFitParam';
+export * from './partPositions';
 export * from './partsVehicleContext';
 export * from './frameNumberDecode';
 export * from './partsCatalogCsvImport';

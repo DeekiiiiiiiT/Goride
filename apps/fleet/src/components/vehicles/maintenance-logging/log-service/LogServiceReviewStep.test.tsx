@@ -173,3 +173,29 @@ describe("LogServiceReviewStep items (plan screen 4)", () => {
     expect(screen.queryByTestId("log-service-review-items-total")).toBeNull();
   });
 });
+
+describe("LogServiceReviewStep item line (LS-18, done-test 20)", () => {
+  const withItem: MaintenanceLogLine[] = [
+    {
+      categoryId: "o2",
+      categoryCode: "o2",
+      categoryName: "Oxygen sensor",
+      labor: 4000,
+      items: [
+        { source: "other", itemKind: "other", itemName: "Front oxygen sensor", partNumber: "89467-TEST1", brand: "Denso", qty: 1, unitCost: 9500, unitLabel: "piece" },
+      ],
+    } as MaintenanceLogLine,
+  ];
+
+  it("switch on: name · number · brand · qty, and the Roam line", () => {
+    render(<LogServiceReviewStep {...baseProps} lines={withItem} itemsEnabled gapsEnabled />);
+    expect(screen.getByText("Front oxygen sensor · 89467-TEST1 · Denso · 1 piece")).toBeTruthy();
+    expect(screen.getByTestId("roam-looks-it-up")).toBeTruthy();
+  });
+
+  it("switch off: name · qty as today, no Roam line", () => {
+    render(<LogServiceReviewStep {...baseProps} lines={withItem} itemsEnabled />);
+    expect(screen.getByText("Front oxygen sensor · 1 piece")).toBeTruthy();
+    expect(screen.queryByTestId("roam-looks-it-up")).toBeNull();
+  });
+});

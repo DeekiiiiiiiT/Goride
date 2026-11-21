@@ -28,6 +28,21 @@ on:
       - 'supabase/tests/service_items_save_db_test.sql'
       - 'supabase/tests/inspection_findings_checks.sql'
       - 'supabase/tests/inspection_findings_db_test.sql'
+      - 'supabase/tests/log_service_positions_checks.sql'
+      - 'supabase/tests/log_service_parts_outbox_checks.sql'
+      - 'supabase/migrations/20261118181439_log_service_positions.sql'
+      - 'supabase/migrations/20261118185817_found_work_positions.sql'
+      - 'supabase/migrations/20261118195343_log_service_parts_outbox.sql'
+      - 'supabase/migrations/20261119224647_parts_outbox_request_delete.sql'
+      - 'supabase/migrations/20261119012823_log_service_parts_that_fit.sql'
+      - 'supabase/tests/log_service_parts_that_fit_checks.sql'
+      - 'supabase/migrations/20261119211043_add_found_job_to_inspection.sql'
+      - 'supabase/migrations/20261119215824_found_job_garage_quote.sql'
+      - 'supabase/migrations/20261119222412_found_job_quote_detail.sql'
+      - 'supabase/migrations/20261120000402_found_job_edit_quote.sql'
+      - 'supabase/tests/add_found_job_to_inspection_checks.sql'
+      - 'supabase/migrations/20261120013338_battery_size_and_type.sql'
+      - 'supabase/tests/battery_size_and_type_checks.sql'
       - 'supabase/tests/service_items_completion_db_test.sql'
       - 'supabase/tests/powertrain_checks.sql'
       - 'supabase/tests/powertrain_db_test.sql'
@@ -103,6 +118,21 @@ on:
       - 'supabase/tests/service_items_save_db_test.sql'
       - 'supabase/tests/inspection_findings_checks.sql'
       - 'supabase/tests/inspection_findings_db_test.sql'
+      - 'supabase/tests/log_service_positions_checks.sql'
+      - 'supabase/tests/log_service_parts_outbox_checks.sql'
+      - 'supabase/migrations/20261118181439_log_service_positions.sql'
+      - 'supabase/migrations/20261118185817_found_work_positions.sql'
+      - 'supabase/migrations/20261118195343_log_service_parts_outbox.sql'
+      - 'supabase/migrations/20261119224647_parts_outbox_request_delete.sql'
+      - 'supabase/migrations/20261119012823_log_service_parts_that_fit.sql'
+      - 'supabase/tests/log_service_parts_that_fit_checks.sql'
+      - 'supabase/migrations/20261119211043_add_found_job_to_inspection.sql'
+      - 'supabase/migrations/20261119215824_found_job_garage_quote.sql'
+      - 'supabase/migrations/20261119222412_found_job_quote_detail.sql'
+      - 'supabase/migrations/20261120000402_found_job_edit_quote.sql'
+      - 'supabase/tests/add_found_job_to_inspection_checks.sql'
+      - 'supabase/migrations/20261120013338_battery_size_and_type.sql'
+      - 'supabase/tests/battery_size_and_type_checks.sql'
       - 'supabase/tests/service_items_completion_db_test.sql'
       - 'supabase/tests/powertrain_checks.sql'
       - 'supabase/tests/powertrain_db_test.sql'
@@ -238,6 +268,16 @@ jobs:
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/inspection_findings_checks.sql
           docker cp supabase/tests/inspection_findings_db_test.sql "$db_container":/tmp/inspection_findings_db_test.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/inspection_findings_db_test.sql
+          docker cp supabase/tests/log_service_positions_checks.sql "$db_container":/tmp/log_service_positions_checks.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/log_service_positions_checks.sql
+          docker cp supabase/tests/log_service_parts_outbox_checks.sql "$db_container":/tmp/log_service_parts_outbox_checks.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/log_service_parts_outbox_checks.sql
+          docker cp supabase/tests/log_service_parts_that_fit_checks.sql "$db_container":/tmp/log_service_parts_that_fit_checks.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/log_service_parts_that_fit_checks.sql
+          docker cp supabase/tests/add_found_job_to_inspection_checks.sql "$db_container":/tmp/add_found_job_to_inspection_checks.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/add_found_job_to_inspection_checks.sql
+          docker cp supabase/tests/battery_size_and_type_checks.sql "$db_container":/tmp/battery_size_and_type_checks.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/battery_size_and_type_checks.sql
           docker cp supabase/tests/service_items_completion_db_test.sql "$db_container":/tmp/service_items_completion_db_test.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/service_items_completion_db_test.sql
           docker cp supabase/tests/powertrain_checks.sql "$db_container":/tmp/powertrain_checks.sql

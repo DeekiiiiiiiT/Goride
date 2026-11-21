@@ -1,38 +1,84 @@
 /**
- * Dominion Pending catalog — group key helpers.
+ * Dominion Pending catalog — research group key v2 helpers.
  */
-export function pendingPartsGroupKey(row: Record<string, unknown>): string {
-  const catalogId = row.vehicle_catalog_id ? String(row.vehicle_catalog_id) : "";
-  const componentId = row.maintenance_component_id ? String(row.maintenance_component_id) : "";
-  const fit = row.fit_descriptor ? String(row.fit_descriptor) : "";
-  const side = fit ? "" : (row.install_side ? String(row.install_side) : "");
-  const matchType = row.match_type ? String(row.match_type) : "";
-  return `${catalogId}:${componentId}:${fit || side}:${matchType}`;
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+
+export type ResearchGroupKeyV2Input = {
+  vehicle_catalog_id?: string | null;
+  maintenance_component_id?: string | null;
+  fit_descriptor?: string | null;
+  install_side?: string | null;
+  match_type?: string | null;
+  position_scheme?: string | null;
+  position_codes?: string[] | null;
+  old_part_number?: string | null;
+  part_number?: string | null;
+  name?: string | null;
+  need_text?: string | null;
+};
+
+export async function researchGroupKeyV2(
+  supabase: SupabaseClient,
+  input: ResearchGroupKeyV2Input,
+): Promise<string> {
+  const name = input.name ?? input.need_text ?? "";
+  const partNumber = input.old_part_number ?? input.part_number ?? null;
+  const codes = input.position_codes?.length ? input.position_codes.map(String) : null;
+  const { data, error } = await supabase.rpc("catalog_research_research_group_key_v2", {
+    p_vehicle_catalog_id: input.vehicle_catalog_id ?? null,
+    p_component_id: input.maintenance_component_id ?? null,
+    p_fit_descriptor: input.fit_descriptor ?? null,
+    p_install_side: input.install_side ?? null,
+    p_match_type: input.match_type ?? null,
+    p_position_scheme: input.position_scheme ?? null,
+    p_position_codes: codes,
+    p_part_number: partNumber,
+    p_name: name,
+  });
+  if (error) throw error;
+  return String(data ?? "");
 }
 
-export function parsePendingPartsGroupId(groupId: string): {
+export function parseGroupKeyV2(key: string): {
   vehicleCatalogId: string;
   componentId: string;
   fitOrSide: string;
   matchType: string;
-} {
-  const [vehicleCatalogId = "", componentId = "", fitOrSide = "", matchType = ""] = groupId.split(":");
-  return { vehicleCatalogId, componentId, fitOrSide, matchType };
+  positionScheme: string;
+  positionCodes: string[];
+  identity: string;
+} | null {
+  if (!key.startsWith("v2|")) return null;
+  const parts = key.split("|");
+  if (parts.length < 8) return null;
+  const codesRaw = parts[6] ?? "";
+  const positionCodes = codesRaw ? codesRaw.split(",").filter(Boolean) : [];
+  const identity = parts.slice(7).join("|");
+  return {
+    vehicleCatalogId: parts[1] ?? "",
+    componentId: parts[2] ?? "",
+    fitOrSide: parts[3] ?? "",
+    matchType: parts[4] ?? "",
+    positionScheme: parts[5] ?? "",
+    positionCodes,
+    identity,
+  };
 }
 
-export function applyPendingPartsGroupFilters<T extends { eq: (col: string, val: string) => T; is: (col: string, val: null) => T }>(
+export function groupIdForRow(row: Record<string, unknown>): string {
+  const stored = row.research_group_key;
+  if (stored != null && String(stored).trim() !== "") {
+    return String(stored);
+  }
+  return `legacy:${String(row.id ?? "")}`;
+}
+
+export function applyPendingPartsGroupFilter<T extends { eq: (col: string, val: string) => T }>(
   query: T,
   groupId: string,
 ): T {
-  const { vehicleCatalogId, componentId, fitOrSide, matchType } = parsePendingPartsGroupId(groupId);
-  if (vehicleCatalogId) query.eq("vehicle_catalog_id", vehicleCatalogId);
-  else query.is("vehicle_catalog_id", null);
-  if (componentId) query.eq("maintenance_component_id", componentId);
-  else query.is("maintenance_component_id", null);
-  if (fitOrSide.includes(":")) query.eq("fit_descriptor", fitOrSide);
-  else if (fitOrSide) query.eq("install_side", fitOrSide);
-  else query.is("install_side", null);
-  if (matchType) query.eq("match_type", matchType);
-  else query.is("match_type", null);
-  return query;
+  if (groupId.startsWith("legacy:")) {
+    return query.eq("id", groupId.slice("legacy:".length));
+  }
+  return query.eq("research_group_key", groupId);
 }

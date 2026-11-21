@@ -20,6 +20,7 @@ import {
   type JobItem,
 } from "./itemsUsed";
 import type { JobItemsStatus } from "./useJobItems";
+import { isUnknownPart, RoamLooksItUpLine } from "./unknownParts";
 
 /** Stitch accents (service-items-fleet tailwind config). */
 export const ACCENT = {
@@ -74,7 +75,13 @@ type Props = {
   currency: string;
   /** The job's own charge (no items), for the total pill. */
   jobCharge: number;
+  /** LC-16: the form is the garage's quote — the total line reads "Quote total". */
+  quoteTotal?: boolean;
   onPickPart: (item: LineItemDraft) => void;
+  /** Shown between the items and the total pill (inspection jobs: "What the inspection found"). */
+  beforeTotal?: React.ReactNode;
+  /** Log service parts gaps switch (LS-18): Other item Part number box + "Roam will look this part up…". */
+  gapsEnabled?: boolean;
 };
 
 const labelSm = "text-[11px] leading-[14px] tracking-[0.02em] font-semibold";
@@ -153,7 +160,9 @@ function SuggestedRow({
   onToggle,
   onUpdate,
   onPickPart,
+  gapsEnabled,
 }: {
+  gapsEnabled?: boolean;
   job: JobItem;
   item: LineItemDraft | undefined;
   currency: string;
@@ -270,6 +279,7 @@ function SuggestedRow({
           </button>
         </div>
       ) : null}
+      {gapsEnabled && item && job.kind === "part_type" && isUnknownPart(item) ? <RoamLooksItUpLine className="ml-7" /> : null}
       {err ? <p className={`ml-7 ${labelMd} text-error`}>{err}</p> : null}
     </div>
   );
@@ -280,7 +290,9 @@ function OtherItemBlock({
   currency,
   onUpdate,
   onRemove,
+  gapsEnabled,
 }: {
+  gapsEnabled?: boolean;
   item: LineItemDraft;
   currency: string;
   onUpdate: (patch: Partial<LineItemDraft>) => void;
@@ -343,6 +355,8 @@ function OtherItemBlock({
           />
         </label>
       </div>
+      {/* Slice C (LC-04): no Part number box — Roam looks the item up by its name. An old saved number is kept. */}
+      {gapsEnabled ? <RoamLooksItUpLine /> : null}
       <div className="flex items-center justify-between gap-2">
         {err ? <p className={`${labelMd} text-error`}>{err}</p> : <span />}
         <span className="flex items-center gap-2">
@@ -374,7 +388,7 @@ function Skeleton() {
   );
 }
 
-export function ItemsUsedSection({ jobItems, status, onRetry, items, onChange, currency, jobCharge, onPickPart }: Props) {
+export function ItemsUsedSection({ jobItems, status, onRetry, items, onChange, currency, jobCharge, onPickPart, beforeTotal, gapsEnabled, quoteTotal = false }: Props) {
   const { usually, sometimes } = groupJobItems(jobItems);
   const itemsTotal = items.reduce((s, i) => s + itemAmount(i), 0);
   const others = items.map((it, idx) => ({ it, idx })).filter(({ it }) => it.source === "other");
@@ -408,6 +422,7 @@ export function ItemsUsedSection({ jobItems, status, onRetry, items, onChange, c
             currency={currency}
             onToggle={() => onChange(toggleSuggested(items, job))}
             onUpdate={(patch) => updateSuggested(job.linkId, patch)}
+            gapsEnabled={gapsEnabled}
             onPickPart={() => {
               const it = findSuggested(items, job.linkId);
               if (it) onPickPart(it);
@@ -488,6 +503,7 @@ export function ItemsUsedSection({ jobItems, status, onRetry, items, onChange, c
           currency={currency}
           onUpdate={(patch) => update(idx, patch)}
           onRemove={() => onChange(items.filter((_, i) => i !== idx))}
+          gapsEnabled={gapsEnabled}
         />
       ))}
 
@@ -498,6 +514,8 @@ export function ItemsUsedSection({ jobItems, status, onRetry, items, onChange, c
         </div>
       )}
 
+      {beforeTotal}
+
       <div
         className="self-end mt-1 bg-surface-container-low text-on-surface px-4 py-2 rounded-full text-sm font-semibold tabular-nums shadow-xs hidden sm:flex items-center gap-2"
         data-testid="items-used-total"
@@ -506,7 +524,7 @@ export function ItemsUsedSection({ jobItems, status, onRetry, items, onChange, c
           receipt_long
         </span>
         <span>
-          Job {money(currency, jobCharge)} + items {money(currency, itemsTotal)} ={" "}
+          {quoteTotal ? "Quote total: " : ""}Job {money(currency, jobCharge)} + items {money(currency, itemsTotal)} ={" "}
           <strong className="text-on-surface font-bold text-xl">{money(currency, jobCharge + itemsTotal)}</strong>
         </span>
       </div>

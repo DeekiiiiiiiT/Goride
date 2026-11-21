@@ -10,6 +10,7 @@ import {
   fetchPartsBrowseNameMap,
   fetchVehicleCatalogBriefs,
   formatPartLabel,
+  formatPartRequestExtras,
   formatVehicleHeadline,
   formatVehicleSubline,
   getPendingPartsGroupDetail,
@@ -40,8 +41,23 @@ function formatDate(iso: string | null | undefined): string {
   return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-function fleetCountLabel(n: number): string {
-  return n === 1 ? "1 fleet" : `${n} fleets`;
+/** Source chips (LS-17): "Service log" / "Find parts". Never a fleet count (gate 3). */
+function SourceChips({ sources }: { sources: string[] }) {
+  if (!sources.length) return <span className="font-mono-sm text-mono-sm text-secondary">—</span>;
+  return (
+    <span className="flex flex-wrap gap-1" data-testid="pending-part-source">
+      {sources.map((s) => (
+        <span
+          key={s}
+          className={`inline-flex rounded-full px-2 py-0.5 font-mono-sm text-mono-sm font-medium ${
+            s === "Service log" ? "bg-[#1d4ed8] text-[#ffffff]" : "bg-surface-container-high text-on-surface-variant"
+          }`}
+        >
+          {s}
+        </span>
+      ))}
+    </span>
+  );
 }
 
 type RowView = {
@@ -52,6 +68,11 @@ type RowView = {
   vehicleSubline: string;
   partTitle: string;
   partSubtitle: string;
+  /** "<part number> · <where on the car>", or "—" (Stitch D1). */
+  partDetailLine: string;
+  partNumber: string | null;
+  whereOnCar: string | null;
+  sources: string[];
   resultLabel: string;
   statusLabel: string;
 };
@@ -128,6 +149,7 @@ export function PendingPartsCatalogTab({ onSyncSeconds }: { onSyncSeconds?: (sec
           ? vehicles.get(group.platformId)
           : undefined;
       const part = formatPartLabel(group.componentId, group.side, partNames, group.matchType);
+      const extras = formatPartRequestExtras(group);
       const queuedResult = job?.state === "queued" ? "—" : job?.resultPartNumber || "—";
       return {
         group,
@@ -135,8 +157,13 @@ export function PendingPartsCatalogTab({ onSyncSeconds }: { onSyncSeconds?: (sec
         filter,
         vehicleHeadline: formatVehicleHeadline(v),
         vehicleSubline: formatVehicleSubline(v),
-        partTitle: part.title,
+        // LS-21: the name the fleet wrote comes first; the part type is the fallback.
+        partTitle: extras.requestedName || part.title,
         partSubtitle: part.subtitle,
+        partDetailLine: extras.detailLine,
+        partNumber: extras.partNumber,
+        whereOnCar: extras.whereOnCar,
+        sources: extras.sources,
         resultLabel: queuedResult,
         statusLabel: job ? formatResearchStateLabel(job.state) : "Queued",
       };
@@ -163,7 +190,7 @@ export function PendingPartsCatalogTab({ onSyncSeconds }: { onSyncSeconds?: (sec
     return rows.filter((row) => {
       if (statusFilter !== "all" && row.filter !== statusFilter) return false;
       if (!needle) return true;
-      const hay = `${row.vehicleHeadline} ${row.vehicleSubline} ${row.partTitle} ${row.partSubtitle} ${row.resultLabel}`.toLowerCase();
+      const hay = `${row.vehicleHeadline} ${row.vehicleSubline} ${row.partTitle} ${row.partSubtitle} ${row.partDetailLine} ${row.resultLabel}`.toLowerCase();
       return hay.includes(needle);
     });
   }, [rows, query, statusFilter]);
@@ -206,8 +233,10 @@ export function PendingPartsCatalogTab({ onSyncSeconds }: { onSyncSeconds?: (sec
       vehicleSubline: row?.vehicleSubline || "",
       statusLabel: row?.statusLabel || "Queued",
       firstAskedLabel: formatDate(drawerGroup.firstAsked),
-      fleetLabel: `Asked by ${fleetCountLabel(drawerGroup.fleetCount)}`,
       reqShortId,
+      partNumber: row?.partNumber ?? null,
+      whereOnCar: row?.whereOnCar ?? null,
+      sources: row?.sources ?? [],
     };
   }, [drawerGroup, rows]);
 
@@ -382,14 +411,60 @@ export function PendingPartsCatalogTab({ onSyncSeconds }: { onSyncSeconds?: (sec
         </div>
       ) : null}
 
-      <div className="flex flex-col overflow-hidden rounded-xl bg-surface-container-lowest shadow-sm">
+      {/* Stitch D4: on a phone each request is a card (car, part, number · where, Source, status, Open). */}
+      <div className="flex flex-col gap-space-sm md:hidden" data-testid="pending-parts-cards">
+        {loading && items.length === 0 ? (
+          <p className="rounded-xl bg-surface-container-lowest p-space-md text-center text-on-surface-variant shadow-sm">Loading…</p>
+        ) : pageRows.length === 0 ? (
+          <div className="rounded-xl bg-surface-container-lowest p-space-md shadow-sm">
+            <PendingPartsEmpty />
+          </div>
+        ) : (
+          pageRows.map((row) => (
+            <div
+              key={row.group.groupId}
+              className="flex flex-col gap-2 rounded-xl bg-surface-container-lowest p-space-md shadow-sm"
+              data-testid="pending-part-card"
+            >
+              <div className="flex min-w-0 flex-col">
+                <span className="font-body-sm text-body-sm font-semibold text-on-surface">{row.vehicleHeadline}</span>
+                {row.vehicleSubline ? (
+                  <span className="font-mono-sm text-mono-sm text-secondary">{row.vehicleSubline}</span>
+                ) : null}
+              </div>
+              <div className="flex min-w-0 flex-col">
+                <span className="font-medium text-on-surface">{row.partTitle}</span>
+                <span className="break-words font-mono-sm text-mono-sm text-secondary">{row.partDetailLine}</span>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="flex flex-wrap items-center gap-2">
+                  <SourceChips sources={row.sources} />
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-container px-2.5 py-0.5 font-mono-sm text-mono-sm font-semibold text-on-surface-variant">
+                    <span className="h-1.5 w-1.5 rounded-full bg-outline" />
+                    {row.statusLabel}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  className="rounded-lg bg-surface-container px-3 py-1 font-label-md text-label-md font-medium text-on-surface hover:bg-primary hover:text-on-primary"
+                  onClick={() => void openDrawer(row.group, row.job)}
+                >
+                  Open
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="hidden flex-col overflow-hidden rounded-xl bg-surface-container-lowest shadow-sm md:flex">
         <div className="w-full overflow-x-auto">
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="h-9 bg-surface-container-low font-label-xs text-label-xs font-semibold uppercase tracking-wider text-secondary">
                 <th className="px-space-md py-2">Car version</th>
                 <th className="px-space-md py-2">Part</th>
-                <th className="px-space-md py-2">Asked by</th>
+                <th className="px-space-md py-2">Source</th>
                 <th className="px-space-md py-2">First asked / Last asked</th>
                 <th className="px-space-md py-2">Status</th>
                 <th className="px-space-md py-2">Result</th>
@@ -424,11 +499,16 @@ export function PendingPartsCatalogTab({ onSyncSeconds }: { onSyncSeconds?: (sec
                         ) : null}
                       </div>
                     </td>
-                    <td className="px-space-md py-2 font-medium">{row.partTitle}</td>
                     <td className="px-space-md py-2">
-                      <span className="inline-flex rounded-full bg-primary-container px-2 py-0.5 font-mono-sm text-mono-sm font-medium text-on-primary">
-                        {fleetCountLabel(row.group.fleetCount)}
-                      </span>
+                      <div className="flex min-w-0 flex-col">
+                        <span className="truncate font-medium">{row.partTitle}</span>
+                        <span className="truncate font-mono-sm text-mono-sm text-secondary" data-testid="pending-part-detail-line">
+                          {row.partDetailLine}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-space-md py-2">
+                      <SourceChips sources={row.sources} />
                     </td>
                     <td className="px-space-md py-2 font-mono-sm text-mono-sm text-secondary">
                       {formatDate(row.group.firstAsked)} / {formatDate(row.group.lastAsked)}

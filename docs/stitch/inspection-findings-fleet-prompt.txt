@@ -1,0 +1,236 @@
+ROAM FLEET — INSPECTION FINDINGS ("FOUND, NOT DONE YET") — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Log service · What the inspection found (Desktop Web App with a phone layout, for fleet owners, fleet managers and their staff):
+
+Design the screens that let a fleet manager record what a garage inspection found on a car, and keep track of the jobs that weren't done yet. Often the fleet pays only for an inspection ("Inspection / diagnostic fee", J$8,000) to find out what the car needs. Today the existing "Log service" dialog of Fleet maintenance can only record that fee. Now, when the job is an inspection, the Details step gets a new section "What the inspection found". The person adds each job the garage said the car needs, picking from Roam's normal list of jobs, and marks each one "Done today" or "Not done yet". A "Done today" job is part of this service, with its own cost and parts. A "Not done yet" job costs J$0, can carry a short note ("rear left leaking"), and is kept on the car's list "Found by inspection". Later, from that list, each waiting job is closed in one of two ways: "Log it now", which opens Log service with that job already picked, or "Not needed", which removes it from the list but keeps it in history. The fleet page shows how many found jobs are waiting on each car. The dialog keeps its four steps: 1 Date & mileage, 2 Work done, 3 Details, 4 Review. The person using this is a normal fleet owner, not a mechanic: plain words, no codes. The design must feel modern, calm and effortless, like the best business banking apps. Draw each screen tall enough that every element is visible, with no inner scrolling and nothing cut off.
+
+
+BRAND IDENTITY:
+- Match the existing Roam Fleet web app and the existing Log service dialog exactly (do not redesign them):
+  - Top: a white nav row with the black "Roam Fleet" app tile, then: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations (active, underlined), Delivery Operations, Analytics, Reports, Business Finance, a bell with a red count, the avatar.
+  - Dark navy sub-bar below it: "Switch vehicle or search hub…" on the left; "07:02:14 PM EST · America/Jamaica · JM (JMD)" and an org chip "DE · Deeki T · platform_owner" on the right.
+  - Page "Fleet maintenance" with the orange wrench icon, a secondary "Refresh" button and a black primary "+ Log service" button on the right.
+  - Log service dialog: white, 720px wide, title "Log service" with a wrench icon in a round grey tile, subtitle "Vehicle maintenance & repair ledger entry", and a close X. Under the title, a black car bar: car icon, "Toyota Roomy (2019)", a grey plate chip "5179KZ", a green chip "Petrol"; on the right "198,807 km · 17 Nov 2026" and a small dark chip "fuel fill log".
+  - Step bar on a pale lavender strip: "✓ Date & mileage · ✓ Work done · 3 Details · 4 Review", done steps with green round checks, the current step with a black round number.
+  - Footer: a red "Cancel" button on the left; on the right a grey "← Back" and the black primary button.
+- LIGHT MODE (default):
+  - Primary: near-black #030213 — primary buttons, the current step, the selected half of a choice
+  - Background: white #FFFFFF; page wash: #f8fafc; pale lavender panels: #f4f3fb
+  - Cards: white, 1px border rgba(0,0,0,0.1), 12px corners, soft shadow
+  - Text: #0a0a0a; muted text: #717182
+  - Done today / Done: emerald #059669 on a soft green #ecfdf5
+  - Not done yet / Waiting: amber #b45309 on a soft amber #fffbeb
+  - Not needed / Closed: slate #475569 on #f1f5f9
+  - Error and danger: red #d4183d on #fff1f2
+  - Overdue (existing): red #d4183d
+  - Icon tiles: indigo #4f46e5 line icon on a #f1f5f9 rounded square
+- DARK MODE:
+  - Background #252525; surface #2e2e2e; border #444444
+  - Text #fafafa; muted #b4b4b4; primary buttons light #fafafa with dark text
+  - Green #34d399 on #064e3b; amber #fbbf24 on #451a03; slate #94a3b8 on #1e293b; red #f87171 on #450a0a
+- Status chips (fully rounded, icon + word, never colour alone):
+  - "Done today" (green check) · "Not done yet" (amber clock) · "Waiting" (amber clock) · "Done" (green check) · "Not needed" (slate minus) · "Closed · service deleted" (slate bin) · "From inspection" (indigo magnifying glass, outline)
+- Money is Jamaican dollars with tabular figures: "J$ 8,000", "J$ 0"; kilometres "198,807 km"; dates "17 Nov 2026"; ages "7 days waiting". Never codes, ids or words like "recommended", "declined" or "line".
+- Typography: Inter. Dialog title 20px semibold, section titles 15px semibold, body 14px, muted helper 13px. Plates, km and money in a mono font with tabular figures.
+- Icons: Lucide line icons, 20px. No gradients, glass or 3D. No AI badges, no percentages, no scores.
+- Buttons always look like buttons:
+  - Primary = solid near-black with white text. One primary per screen.
+  - Secondary = white with a visible #cbd5e1 border and dark text.
+  - Danger (Cancel, Remove) = red outline and red text; the dialog's "Cancel" stays as it is today.
+  - The two-way choice "Done today | Not done yet" is a segmented control: two joined buttons with a visible border; the selected half is filled (green for Done today, amber for Not done yet) with a check icon.
+  - Icon buttons are 32px with a visible border.
+  - Never underlined text links, never grey text-only buttons. Every confirm is an in-app overlay, never a browser pop-up.
+- Sample data (REAL jobs from Roam's job list):
+  - Car: Toyota Roomy (2019) · 5179KZ · Petrol · 198,807 km. Other cars: Honda Fit (2018) · 1505LM; Toyota C-HR (2018) · 5404LK.
+  - Service on 17 Nov 2026 at "Northside Auto, Spanish Town": "Inspection / diagnostic fee" J$ 8,000.
+  - Found by the inspection:
+    - "Wiper Blades" — Done today — job J$ 1,500 + item "Wiper blade 22 in" ×2 J$ 1,800 = J$ 3,300
+    - "Brake rotor" — Not done yet — note "Front rotors worn, replace within 2 weeks"
+    - "Shock absorber" — Not done yet — note "Rear left leaking"
+  - Bill for 17 Nov: inspection J$ 8,000 + Wiper Blades J$ 3,300 = J$ 11,300. Not done yet: 2 jobs, J$ 0.
+  - Earlier waiting job on Honda Fit 1505LM: "Cabin Air Filter", found 3 Nov 2026, 14 days waiting.
+  - The person: "Deeki T".
+
+
+DESIGN PRINCIPLES:
+- Capture, never block: the person can add found jobs or skip the section. Nothing is ticked for them.
+- The money adds up in front of them: "Not done yet" jobs always show "J$ 0 · not charged", and the bill only counts the inspection and the Done-today jobs.
+- One list, one place: everything the inspection found lives with the car under "Found by inspection" until it's done or marked not needed.
+- Every found job always shows three things: what it is, when it was found and by which inspection, and the button(s) that close it.
+- Nothing disappears silently: closed jobs stay in the inspection's history with their status.
+- Add to the existing screens, never take anything away: every part of today's Log service dialog, Due items drawer and fleet page stays as it is.
+- Calm, not alarming: amber for waiting, red only for Overdue, errors and Remove.
+- Desktop-first (1440px), with a phone layout. 8px spacing grid, hairline borders, soft shadows, skeleton loading.
+- One view per screen.
+
+
+SCREEN 1: STEP 3 DETAILS — INSPECTION JOB, NOTHING FOUND YET
+- The Log service dialog over the dimmed Fleet maintenance page. Step 3 "Details" is current. Above the card, muted text "Enter part details, costs and labour for each job (1 job)." and "STEP 3 OF 4" on the right.
+- The job card "Inspection / diagnostic fee" with the wrench icon tile and a small grey chip "Inspect".
+- A pale panel "Service charge" (muted helper "Not counting the items or consumables below") with an input "J$ 8000" and a checkbox "No charge (free)".
+- "Items used" with the muted note "Tick what was used. Nothing is ticked for you." and a pale panel: "No standard items suggested for this service. Add parts or supplies if any were used." with a secondary "+ Other item" button.
+- NEW section below, in a pale lavender panel with an indigo magnifying-glass icon tile: title "What the inspection found", muted helper "Add the jobs the garage said this car needs. Mark each one done today or not done yet."
+- Empty state inside it: a dashed-border box with "Nothing added yet." and a secondary button "+ Add job".
+- The job total pill: "Job J$ 8,000 + items J$ 0 = J$ 8,000", and a black "Save line →" button.
+- Below the card: the dashed "+ Add another job" row with "Save this job first, then add another."; the lavender "Subtotal summary" bar "JMD 0 (0 items)".
+- Footer: red "Cancel", grey "← Back", black "Continue to review →".
+
+
+SCREEN 2: ADD A FOUND JOB — PICK FROM THE JOB LIST
+- The same dialog, with an in-app overlay panel on top of the Details step titled "Add a job the inspection found", with a close X.
+- A search box "Search jobs, e.g. brakes, wipers…" with the text "brake" typed.
+- Results grouped by system with small grey group headings: "Brakes" — rows "Brake rotor", "Brake caliper", "Brake hose", "Brake shoes", "Brake Fluid". Each row has the job name, a muted line with its system, and a secondary "Add" button on the right.
+- "Brake rotor" row is highlighted on hover.
+- Below the results, a muted line "Can't find it? Use + Other item on the job instead."
+- Bottom of the panel: a secondary "Close" button.
+
+
+SCREEN 3: STEP 3 DETAILS — THREE JOBS FOUND
+- The same Details step as Screen 1, with the inspection card's "What the inspection found" section now holding three rows, each a white card with a hairline border:
+  - "Wiper Blades": the segmented control with "Done today" selected (green, check icon); muted text "Will be added as its own job below, with its cost and parts"; a red-outline "Remove" icon button.
+  - "Brake rotor": "Not done yet" selected (amber, clock icon); a note input showing "Front rotors worn, replace within 2 weeks"; on the right "J$ 0 · not charged" in muted mono text; a red-outline "Remove" icon button.
+  - "Shock absorber": "Not done yet" selected; note "Rear left leaking"; "J$ 0 · not charged"; "Remove".
+- Under the rows: a secondary "+ Add job" button and a muted summary line "1 done today · 2 not done yet (kept on the car's list)".
+- The job total pill stays "Job J$ 8,000 + items J$ 0 = J$ 8,000", then the black "Save line →" button.
+- Footer as in Screen 1.
+
+
+SCREEN 4: STEP 3 DETAILS — THE DONE-TODAY JOB FILLED IN
+- The Details step after the inspection job was saved. The inspection card is collapsed to one row: "Inspection / diagnostic fee · J$ 8,000" with a green check, a muted "2 found, not done yet", and a secondary "Edit" button.
+- Below it, the job card "Wiper Blades" opened, with an indigo outline chip "From inspection".
+- Its "Service charge" input shows "J$ 1500".
+- "Items used": one ticked row "Wiper blade 22 in" with a "Part" chip, quantity "2", cost each "J$ 900", amount "J$ 1,800" right-aligned; a secondary "+ Other item" button.
+- Job total pill "Job J$ 1,500 + items J$ 1,800 = J$ 3,300" and a black "Save line →" button.
+- The lavender "Subtotal summary" bar: "JMD 8,000 (1 job saved)".
+- Footer: red "Cancel", grey "← Back", black "Continue to review →".
+
+
+SCREEN 5: STEP 4 REVIEW — DONE JOBS AND FOUND JOBS
+- Step 4 "Review" current. Top: editable summary rows for "Date 17 Nov 2026", "Odometer 198,807 km", "Garage Northside Auto, Spanish Town", "Currency JMD", each with a secondary "Edit" button.
+- Group "Work done" with two job rows, each with the wrench icon tile, the name, the amount right-aligned and a secondary "Edit" button:
+  - "Inspection / diagnostic fee" — J$ 8,000
+  - "Wiper Blades" with the chip "From inspection" — J$ 3,300, with the muted line "Job J$ 1,500 + items J$ 1,800"
+- Group "Found, not done yet" in a soft amber panel with an amber clock icon, muted helper "These are not charged. They'll wait on the car's list until you do them or mark them not needed.":
+  - "Brake rotor" — note "Front rotors worn, replace within 2 weeks" — "J$ 0" — red-outline "Remove" button
+  - "Shock absorber" — note "Rear left leaking" — "J$ 0" — red-outline "Remove" button
+- A notes box "Notes" and an "Invoice" upload row, as in today's Review step.
+- Total card: "Total J$ 11,300" in large mono, muted line "2 found jobs not charged".
+- Footer: red "Cancel", grey "← Back", black "Save service".
+
+
+SCREEN 6: FLEET MAINTENANCE PAGE — FOUND JOBS WAITING
+- The Fleet maintenance page with no dialog.
+- KPI cards row, as today, with one new card added at the end:
+  - "OVERDUE SERVICE" — "1 unit (critical)" with the red bar
+  - "NO ODOMETER READING" — "0"
+  - "NEXT SCHEDULED WINDOW" — "1505LM · 10 days"
+  - NEW "FOUND BY INSPECTION" — "3 jobs waiting" in amber, muted line "on 2 cars · oldest 14 days", an amber bar.
+- Tabs as today: "Overview 1", "Service history", and the rest.
+- "Vehicle Service Ledger" card, "Sorted by urgency", filter chips "All · Roam policy · Car maker · Needs checking · Waiting for odometer", a "Filter plate or model…" box.
+- Table columns as today: Vehicle, Plate, Odometer, Status, Next due, Due items, Last service, Actions.
+- In the "Due items" column a new amber chip "2 to do" (clock icon) on the Toyota Roomy row and "1 to do" on the Honda Fit row; nothing on the Toyota C-HR row.
+- Actions as today: secondary "View due items", secondary "Log service", and a "⋯" icon button.
+- Footer line: "Showing 3 of 3 fleet registered assets".
+
+
+SCREEN 7: DUE ITEMS DRAWER — FOUND BY INSPECTION
+- A right-side drawer over the dimmed Fleet maintenance page, 480px wide, with a close X.
+- Header as today: "Toyota Roomy (2019)", plate chip "5179KZ", "198,807 km", and the "Hard use" chip.
+- NEW first section "Found by inspection" with an amber clock icon and a count chip "2", muted helper "Jobs a garage found that weren't done yet."
+- Two found-job cards, each with:
+  - Job name in semibold ("Brake rotor") with the amber "Waiting" chip
+  - The note in muted text: "Front rotors worn, replace within 2 weeks"
+  - A muted line: "Found 17 Nov 2026 · 0 days waiting · Inspection / diagnostic fee at Northside Auto"
+  - Two buttons on one row: black primary "Log it now" and secondary "Not needed"
+  - Second card: "Shock absorber" — "Rear left leaking" — same lines and buttons
+- Below, the existing sections as today: "Overdue" (red heading) with one schedule item "Engine Oil · 2,100 km over", then "Due soon" (amber heading) with "Cabin Air Filter · in 18 days".
+
+
+SCREEN 8: DUE ITEMS DRAWER — NOTHING WAITING
+- The same drawer for the Toyota C-HR (2018) · 5404LK.
+- The "Found by inspection" section stays visible with a green check and the line "Nothing waiting from inspections." — the same height as one row.
+- Below, the existing "Due soon" section with one item "Tyre Rotation · in 1,200 km".
+
+
+SCREEN 9: "NOT NEEDED" CONFIRM OVERLAY
+- The Screen 7 drawer, dimmed, with a small in-app overlay card in the middle.
+- Title "Mark Shock absorber as not needed?"
+- Body: "It leaves the car's list. It stays in the history of the 17 Nov inspection as Not needed."
+- Muted line: "Found 17 Nov 2026 · Rear left leaking".
+- Buttons: secondary "Cancel" and black primary "Mark not needed".
+
+
+SCREEN 10: LOG SERVICE OPENED FROM "LOG IT NOW"
+- The Log service dialog on step 3 "Details" for the Toyota Roomy 5179KZ, date 1 Dec 2026, odometer 200,140 km.
+- At the top of the step, an indigo-outlined banner with the magnifying-glass icon: "From inspection on 17 Nov 2026 · Inspection / diagnostic fee at Northside Auto", and below it the note "Front rotors worn, replace within 2 weeks".
+- The job card "Brake rotor", already picked, with the "From inspection" chip, the "Service charge" input "J$ 6000", "Items used" with a ticked row "Brake rotor (front)" ×2 at "J$ 7,500" each, and a secondary "+ Other item" button.
+- Job total pill "Job J$ 6,000 + items J$ 15,000 = J$ 21,000" and the black "Save line →" button.
+- Footer: red "Cancel", grey "← Back", black "Continue to review →".
+
+
+SCREEN 11: SERVICE HISTORY — THE INSPECTION AND WHAT IT FOUND
+- The Fleet maintenance page on the "Service history" tab, with a service detail panel open for "17 Nov 2026 · Toyota Roomy 5179KZ · Northside Auto, Spanish Town", total "J$ 11,300".
+- Section "Work done": "Inspection / diagnostic fee J$ 8,000"; "Wiper Blades J$ 3,300" with the "From inspection" chip and its item line "Wiper blade 22 in ×2 · J$ 1,800".
+- Section "What the inspection found", three rows, each with the job name, its note in muted text and a status chip:
+  - "Wiper Blades" — green "Done" chip — muted "Done the same day".
+  - "Brake rotor" — green "Done" chip — muted "Done 1 Dec 2026" and a secondary "Open that service" button.
+  - "Shock absorber" — slate "Not needed" chip; the job name struck through — muted "Marked not needed 2 Dec 2026 by Deeki T".
+- The panel's existing buttons stay as they are today.
+
+
+SCREEN 12: STATES
+- One board of four small cards in a 2 × 2 grid, each a state of the "Found by inspection" section, with an icon, a title, one muted line and, where shown, one button:
+  - Grey skeleton rows: "Loading found jobs…"
+  - Red: "Couldn't load found jobs" — "The rest of this page still works." — secondary "Try again".
+  - Amber: "Someone else already closed this job" — "Deeki T logged it a moment ago. The list has been refreshed." — secondary "OK".
+  - Slate bin: "Closed · service deleted" — "The 3 Nov inspection was deleted, so its waiting jobs were closed."
+
+
+SCREEN 13: PHONE 390px — FOUND BY INSPECTION
+- The Due items drawer of Screen 7 as a full-screen sheet on a 390px phone.
+- A compact header: back arrow, "Toyota Roomy · 5179KZ", "198,807 km".
+- Section "Found by inspection (2)" with the two found-job cards stacked; each card has the name, the "Waiting" chip, the note, the "Found 17 Nov 2026 · Inspection / diagnostic fee" line, and two full-width buttons stacked: black "Log it now" and secondary "Not needed".
+- Below, the existing "Overdue" and "Due soon" sections.
+
+
+ADDITIONAL UI COMPONENTS:
+- Found-job row (in the Log service dialog): job name, the "Done today | Not done yet" segmented control, a note input (only for Not done yet), "J$ 0 · not charged" (only for Not done yet), a red-outline Remove icon button.
+- Found-job card (in the drawer): name + status chip, note, "Found <date> · <N> days waiting · <inspection job> at <garage>", "Log it now" + "Not needed".
+- "From inspection" chip: indigo outline, magnifying-glass icon; shown on any job that came from an inspection.
+- "N to do" chip: amber, clock icon, same size and shape as the existing due-item chips.
+- Inspection banner (Screen 10): indigo outline, icon, one line of who/when/where, the note below.
+- Toast at the bottom right after "Mark not needed": "Shock absorber marked not needed".
+- Empty-section line: green check + "Nothing waiting from inspections.", same height as one row.
+
+
+INTERACTIONS:
+- "What the inspection found" appears only on inspection jobs (like "Inspection / diagnostic fee", "Leak Inspection", "Exhaust System Inspection"); other jobs look exactly as they do today.
+- "+ Add job" opens the Screen 2 overlay; "Add" puts the job in the list with "Not done yet" selected and the overlay closes. A job already in the list shows "Added" instead of the button.
+- Switching a job to "Done today" hides its note and "J$ 0"; after "Save line" on the inspection, the Done-today job opens as its own job card (Screen 4). Switching back to "Not done yet" removes that job card.
+- "Remove" takes the job off the list at once, with an "Undo" button inside the toast.
+- "Save service" saves everything once; the button shows a spinner and can't be pressed twice.
+- "N to do" chip and the "FOUND BY INSPECTION" card open the Due items drawer of that car (the card opens the car with the oldest waiting job).
+- "Log it now" closes the drawer and opens Log service on step 3 with the job picked and the banner (Screen 10). Saving it moves the job out of "Found by inspection" and marks it "Done" in the inspection's history.
+- "Not needed" opens the Screen 9 overlay; "Mark not needed" closes the job, shows the toast and updates the counts at once.
+- If someone else closed the job first, the action is refused politely (Screen 12 amber state), the list refreshes, nothing is lost.
+- On the phone, the buttons are full width and the drawer is a full-screen sheet.
+
+
+Spec screens / Area
+| Screen | Area |
+| 1 | Log service · Details — inspection job, "What the inspection found" empty |
+| 2 | Add a found job — pick from the job list |
+| 3 | Log service · Details — three found jobs, Done today / Not done yet |
+| 4 | Log service · Details — the Done-today job filled in |
+| 5 | Log service · Review — "Work done" and "Found, not done yet" |
+| 6 | Fleet maintenance page — "Found by inspection" card and "N to do" chips |
+| 7 | Due items drawer — "Found by inspection" with Log it now / Not needed |
+| 8 | Due items drawer — nothing waiting |
+| 9 | "Not needed" confirm overlay |
+| 10 | Log service opened from "Log it now" |
+| 11 | Service history — the inspection and what it found |
+| 12 | States of the "Found by inspection" section |
+| 13 | Phone 390px — Found by inspection |

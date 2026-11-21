@@ -18,6 +18,9 @@ import {
 } from "./maintenance_logging_helpers.ts";
 import { projectFromMaintenanceLog } from "./odometer_ledger.ts";
 import { commitPartsUsage } from "./parts_match.ts";
+import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
+import { PLANNED_JOB_CONFLICT, isPlannedWorkOrder } from "./log_service_planned_guard.ts";
+import { mapDbLineToApi } from "./service_items_save.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -36,8 +39,9 @@ export function maintenanceRecordAcceptsClientHint(
   return true;
 }
 
-function lineNeedsPartsUsage(row: Record<string, unknown>): boolean {
+export function lineNeedsPartsUsage(row: Record<string, unknown>): boolean {
   if (row.declined === true) return false;
+  if (row.recommended === true) return false;
   if (row.part_id && isUuid(String(row.part_id))) return true;
   const num = row.part_number != null ? String(row.part_number).trim() : "";
   return num.length > 0;
@@ -53,7 +57,7 @@ function usageFromCommit(usageResult: Record<string, unknown>): {
   };
 }
 
-function dbLinesToLedgerInputs(lines: Record<string, unknown>[]): LedgerLineInput[] {
+export function dbLinesToLedgerInputs(lines: Record<string, unknown>[]): LedgerLineInput[] {
   return lines.map((r) => ({
     categoryId: r.component_id != null ? String(r.component_id) : null,
     categoryCode: r.component_code != null ? String(r.component_code) : null,
@@ -63,25 +67,8 @@ function dbLinesToLedgerInputs(lines: Record<string, unknown>[]): LedgerLineInpu
     notes: r.notes != null ? String(r.notes) : null,
     workOrderLineId: r.id != null ? String(r.id) : null,
     declined: r.declined === true,
+    recommended: r.recommended === true,
   }));
-}
-
-function mapDbLineToApi(row: Record<string, unknown>): Record<string, unknown> {
-  return {
-    id: row.id,
-    sortOrder: row.sort_order,
-    componentId: row.component_id,
-    categoryId: row.component_id,
-    categoryCode: row.component_code,
-    categoryName: row.component_name,
-    action: row.action,
-    positions: row.positions,
-    partNumber: row.part_number,
-    partId: row.part_id,
-    notes: row.notes,
-    declined: row.declined === true,
-    lineTotal: row.line_total != null ? Number(row.line_total) : undefined,
-  };
 }
 
 export type CompletionSteps = {
@@ -93,6 +80,7 @@ export type CompletionSteps = {
   appendCanonicalMaintenance: () => Promise<{ posted: boolean; failed: boolean }>;
   projectFromMaintenanceLog: () => Promise<void>;
   fleetLogService: () => Promise<unknown>;
+  queueUnknownParts: () => Promise<unknown>;
   finishCompletion: (recordId: string) => Promise<Record<string, unknown>>;
 };
 
@@ -388,6 +376,8 @@ export function buildDefaultCompletionSteps(
       return finalizeResult;
     },
 
+    queueUnknownParts: () => queueUnknownPartsForWorkOrder(supabase, orgId, workOrderId),
+
     async finishCompletion(recordId: string) {
       const { data, error } = await supabase.rpc("fleet_finish_completion", {
         p_organization_id: orgId,
@@ -399,6 +389,35 @@ export function buildDefaultCompletionSteps(
       return data as Record<string, unknown>;
     },
   };
+}
+
+/**
+ * Puts the service's unknown parts on the Roam send list (LS-12). Only when the switch is on. Runs after the service is
+ * finished and never fails the save (gate 1, code review #3): an error is logged, and the next "finish" of the same
+ * service (a replay) tries again — the queue never adds a row twice.
+ */
+export async function queueUnknownPartsForWorkOrder(
+  supabase: SupabaseClient,
+  orgId: string,
+  workOrderId: string,
+): Promise<null> {
+  if (!(await isFeatureEnabled(FEATURE_FLAGS.LOG_SERVICE_PARTS_GAPS, orgId))) {
+    return null;
+  }
+  const { error } = await supabase.rpc("parts_sourcing_outbox_queue", {
+    p_work_order_id: workOrderId,
+  });
+  if (error) throw error;
+  return null;
+}
+
+async function queueUnknownPartsBestEffort(run: () => Promise<unknown>, workOrderId: string): Promise<void> {
+  try {
+    await run();
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[runCompletion] queueUnknownParts failed (service saved; retried on the next finish):", workOrderId, msg);
+  }
 }
 
 const STEP_SEQUENCE: Array<{ name: string; run: (steps: CompletionSteps) => Promise<unknown> }> = [
@@ -424,6 +443,10 @@ export async function runCompletion(
 ): Promise<CompletionHttpResult> {
   const { orgId, workOrderId, actorId, wo, lineRows, enrichLines, mapCompletedItem } = input;
 
+  if (isPlannedWorkOrder(wo)) {
+    return { status: PLANNED_JOB_CONFLICT.status, body: { ...PLANNED_JOB_CONFLICT.body } };
+  }
+
   const { data: claimRaw, error: claimErr } = await supabase.rpc("fleet_claim_completion", {
     p_organization_id: orgId,
     p_work_order_id: workOrderId,
@@ -437,6 +460,11 @@ export async function runCompletion(
   if (claim.claimed !== true) {
     const reason = String(claim.reason ?? "");
     if (reason === "completed") {
+      // A replay of a finished service puts back anything an earlier queue attempt missed (never twice).
+      await queueUnknownPartsBestEffort(
+        stepsOverride?.queueUnknownParts ?? (() => queueUnknownPartsForWorkOrder(supabase, orgId, workOrderId)),
+        workOrderId,
+      );
       // lineRows from the route are database-shaped; enrich only for the API response.
       const enrichedLines = await enrichLines(workOrderId, lineRows);
       const recordId = wo.maintenance_record_id != null ? String(wo.maintenance_record_id) : null;
@@ -649,6 +677,9 @@ export async function runCompletion(
       body: { code: "completion_failed", step: "finishCompletion", error: msg },
     };
   }
+
+  // After finishCompletion, so the drain never finds the service unfinished; best effort, never fails the save.
+  await queueUnknownPartsBestEffort(() => steps.queueUnknownParts(), workOrderId);
 
   const recordedAtIso = `${performed_at_date}T12:00:00.000Z`;
   let odometerAnomaly: Awaited<ReturnType<typeof assessOdometerAnomaly>> | null = null;

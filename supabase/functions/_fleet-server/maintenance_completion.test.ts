@@ -40,6 +40,7 @@ function stubSteps(): CompletionSteps & { calls: string[]; finishCalled: boolean
     appendCanonicalMaintenance: step("appendCanonicalMaintenance"),
     projectFromMaintenanceLog: step("projectFromMaintenanceLog"),
     fleetLogService: step("fleetLogService"),
+    queueUnknownParts: step("queueUnknownParts"),
     finishCompletion: async () => {
       finishCalled = true;
       calls.push("finishCompletion");
@@ -131,14 +132,35 @@ const baseInput = {
   mapCompletedItem: (wo: Record<string, unknown>, lines: Record<string, unknown>[]) => ({ ...wo, lines }),
 };
 
-Deno.test("claim completed replay — no completion steps", async () => {
+Deno.test("claim completed replay — no completion steps, only the unknown-parts queue retry", async () => {
   const releaseLog: string[] = [];
   const steps = stubSteps();
   const sb = mockSupabase({ claimed: false, reason: "completed" }, releaseLog);
   const r = await runCompletion(sb, baseInput, steps);
   assertEquals(r.status, 200);
   assertEquals(r.body.idempotentReplay, true);
-  assertEquals(steps.calls.length, 0);
+  assertEquals(steps.calls, ["queueUnknownParts"]);
+  assertEquals(releaseLog.length, 0);
+});
+
+Deno.test("unknown parts are queued after finishCompletion", async () => {
+  const steps = stubSteps();
+  const sb = mockSupabase({ claimed: true }, []);
+  const r = await runCompletion(sb, baseInput, steps);
+  assertEquals(r.status, 200);
+  assertEquals(steps.calls.slice(-2), ["finishCompletion", "queueUnknownParts"]);
+});
+
+Deno.test("a failed unknown-parts queue never fails the save (gate 1)", async () => {
+  const releaseLog: string[] = [];
+  const steps = stubSteps();
+  steps.queueUnknownParts = (async () => {
+    throw new Error("outbox down");
+  }) as never;
+  const sb = mockSupabase({ claimed: true }, releaseLog);
+  const r = await runCompletion(sb, baseInput, steps);
+  assertEquals(r.status, 200);
+  assertEquals(steps.calls.includes("finishCompletion"), true);
   assertEquals(releaseLog.length, 0);
 });
 

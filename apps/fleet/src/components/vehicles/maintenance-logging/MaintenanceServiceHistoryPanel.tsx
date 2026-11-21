@@ -25,6 +25,10 @@ import {
 import type { LineItemDraft } from "../../../types/maintenance";
 import { NotFinishedServices } from "./NotFinishedServices";
 import { itemsUsedText } from "./serviceHistoryItems";
+import { partPickFromValues, shownItems } from "./log-service/partPick";
+import { PartPickLines } from "./log-service/PartPickLines";
+import { warrantyFromValues, warrantyText } from "./log-service/warrantyPeriod";
+import type { AddToInspectionRequest } from "./FoundByInspection";
 
 type HistoryRow = Record<string, unknown>;
 
@@ -57,7 +61,14 @@ function formatDate(iso: unknown, dateUnknown?: boolean): string {
   return formatMaintenanceServiceDateLabel(String(iso ?? "").slice(0, 10) || null, false);
 }
 
-export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: VehicleOption[] }) {
+export function MaintenanceServiceHistoryPanel({
+  vehicles,
+  onAddToInspection,
+}: {
+  vehicles: VehicleOption[];
+  /** LC-14: "Add a job to this inspection" in Service details opens Log service in add mode. */
+  onAddToInspection?: (target: AddToInspectionRequest) => void;
+}) {
   const [vehicleFilter, setVehicleFilter] = useState<string>("all");
   const partFilter = "";
   /** Stitch 08 search box: filters the loaded services by job, part number or shop. */
@@ -355,7 +366,14 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
                                   const rowLabel = [formatDate(row.performed_at_date ?? row.performedAtDate, dateUnknown), gName]
                                     .filter(Boolean)
                                     .join(" · ");
-                                  const usedText = itemsUsedText(row.items as LineItemDraft[] | undefined, currency);
+                                  const rowValues = (row.values_json ?? null) as Record<string, string | number | boolean | null> | null;
+                                  // LC-21: the part picked by label / added (its hidden carrier item never shows).
+                                  const pick = partPickFromValues(rowValues, {
+                                    brand: row.brand as string | null,
+                                    partNumber: (row.part_number ?? row.partNumber) as string | null,
+                                  });
+                                  const warranty = warrantyFromValues(rowValues);
+                                  const usedText = itemsUsedText(shownItems(row.items as LineItemDraft[] | undefined, pick), currency);
                                   const notUsual = row.fit_at_log === "no" || row.fitAtLog === "no";
                                   const hv = row.is_high_voltage === true || row.isHighVoltage === true;
                                   const partLine = [row.brand, row.part_number ?? row.partNumber].filter(Boolean).join(" ");
@@ -382,6 +400,12 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
                                         <p className={`${LT.bodySm} ${LS.muted}`}>
                                           {String(row.action ?? "Service")}
                                         </p>
+                                        {pick ? <PartPickLines pick={pick} /> : null}
+                                        {warranty ? (
+                                          <p className={`${LT.bodySm} ${LS.muted}`} data-testid="service-history-warranty">
+                                            Warranty: <span className={`font-semibold ${LS.text}`}>{warrantyText(warranty)}</span>
+                                          </p>
+                                        ) : null}
                                         {usedText ? (
                                           <p className={`${LT.bodySm} ${LS.muted}`} data-testid="service-history-items-used">
                                             <span className={`font-semibold ${LS.text}`}>Items used:</span> {usedText}
@@ -495,6 +519,14 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
         workOrderId={viewing?.workOrderId ?? null}
         vehicleLabel={viewing?.label ?? ""}
         onClose={() => setViewing(null)}
+        onAddToInspection={
+          onAddToInspection
+            ? (t) => {
+                setViewing(null);
+                onAddToInspection(t);
+              }
+            : undefined
+        }
       />
       <ServiceHistoryDeleteDialog
         target={deleting}

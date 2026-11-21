@@ -1702,9 +1702,8 @@
   color: #a7f3d0;
 }
 
-body[data-fleet-find-parts-results] [data-maintenance-tab="work-orders"],
+body[data-fleet-find-parts-results] [data-maintenance-tab="not-done-yet"],
 body[data-fleet-find-parts-results] [data-maintenance-tab="requests"],
-body[data-fleet-find-parts-results] [data-maintenance-tab="inspections"],
 body[data-fleet-find-parts-results] [data-maintenance-tab="schedule"] {
   display: none;
 }

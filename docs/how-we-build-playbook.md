@@ -37,7 +37,11 @@ The plan file also holds two lists:
 
 Then go back and forth with the planner until it can't find a single gap. That back-and-forth is what makes a good blueprint, so don't rush it.
 
+The review happens in two rounds. **Round 1** settles what each screen must show. Then the screens are designed (Step 4). **Round 2** checks the plan against the screens and adds the Keep / Drop / Add lists. The plan closes only after round 2.
+
 ## Step 4 — Design the screens
+Start this after review round 1, not after the plan is closed. Seeing the screens often shows gaps the plan missed, and round 2 catches them before any building starts.
+
 1. The planner writes a design prompt from the blueprint: colours, principles, each screen, every button, and how things behave.
 2. You create the screens in the design tool.
 3. From then on, **the design is the spec for the look**: layout, section order, card and chip styles, spacing, colours, fonts, dark mode. Build that exactly; don't redesign during the build.
@@ -102,6 +106,7 @@ The app you open in your browser shows the **real** database, so a feature prove
 ## Copy-paste prompts
 - **Start a feature:** *"New feature: [one sentence]. Read the code and live data first, then write a plan file with Data / Server / Screens / Tests, every screen and button, numbered problems with one fix each, and done-tests. Don't build yet."*
 - **Tighten the plan:** *"Re-check the whole plan against the code, data, screens and tests. List anything missing and update the file."*
+- **After review round 1:** *"Round 1 is done. Write the Stitch prompt for the screens this plan changes, one file per app."*
 - **Design:** *"Write the design prompt for this plan: colours, principles, every screen and button, and how things behave."*
 - **Build one layer:** *"Write the builder prompt for the [Data / Server / Screens] layer only. Include updating the tests for every screen you change, and run them locally before saying done."*
 - **Check the builder:** *"The builder says it's done. Check the code, run the tests, and tell me what's really true."*

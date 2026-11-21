@@ -9,6 +9,7 @@ import {
 import { getCatalogParts } from "./catalog_api.ts";
 import { computeWoLineTotal, loadFleetVehicleForOrg } from "./maintenance_logging_helpers.ts";
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
+import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const WO_LINE_ACTIONS = new Set([
@@ -97,8 +98,10 @@ export function mapApiLineToDb(
   );
   const systemParsed = parseOptionalUuidField(raw.systemId ?? raw.system_id);
   const partParsed = parseOptionalUuidField(raw.partId ?? raw.part_id);
+  const fromFoundParsed = parseOptionalUuidField(raw.fromFoundLineId ?? raw.from_found_line_id);
   let action = String(raw.action ?? "replace").trim();
   if (!WO_LINE_ACTIONS.has(action)) action = "other";
+  const recommended = raw.recommended === true;
 
   const row: Record<string, unknown> = {
     sort_order: raw.sortOrder != null ? Number(raw.sortOrder) : (raw.sort_order != null ? Number(raw.sort_order) : sortOrder),
@@ -128,7 +131,6 @@ export function mapApiLineToDb(
     labor_hours: parseOptionalNumberField(raw.laborHours ?? raw.labor_hours),
     labor_rate: parseOptionalNumberField(raw.laborRate ?? raw.labor_rate),
     condition: raw.condition != null ? String(raw.condition) : null,
-    positions: Array.isArray(raw.positions) ? raw.positions.map(String) : null,
     brand: raw.brand != null ? String(raw.brand) : null,
     part_number: raw.partNumber != null
       ? String(raw.partNumber)
@@ -141,16 +143,117 @@ export function mapApiLineToDb(
       return offerParsed.ok ? offerParsed.value : null;
     })(),
     notes: raw.notes != null ? String(raw.notes) : null,
-    recommended: raw.recommended === true,
+    recommended,
     declined: raw.declined === true,
+    from_found_line_id: fromFoundParsed.ok ? fromFoundParsed.value : null,
     values_json: values,
   };
+  // Sent list → saved; sent null → cleared (code review #5); key left out → the server keeps what it has (LS-05).
+  if (Array.isArray(raw.positions)) {
+    row.positions = raw.positions.map(String);
+  } else if (Object.prototype.hasOwnProperty.call(raw, "positions") && raw.positions === null) {
+    row.positions = null;
+  }
   const itemsAmt = itemsAmount ?? raw.itemsAmount ?? raw.items_amount ?? 0;
   row.items_amount = Number(itemsAmt) || 0;
   row.line_total = computeWoLineTotal(row);
+  if (recommended) {
+    row.part_number = null;
+    row.part_id = null;
+    row.brand = null;
+    row.supplier_part_offer_id = null;
+    row.unit_price = null;
+    row.material = null;
+    row.labor_amount = null;
+    row.labor_rate = null;
+    row.items_amount = 0;
+    row.line_total = 0;
+  }
   if (workOrderId) row.work_order_id = workOrderId;
   if (raw.id != null && isUuid(String(raw.id))) row.id = String(raw.id);
   return row;
+}
+
+export type FindingMarks = { fromFound: string; foundByJob: string; foundToday: boolean };
+
+/** The inspection-finding marks on one line (request-shaped or database-shaped). */
+export function findingMarks(raw: Record<string, unknown>): FindingMarks {
+  const fromRaw = raw.fromFoundLineId ?? raw.from_found_line_id;
+  const valuesRaw = raw.values ?? raw.values_json;
+  const v = valuesRaw && typeof valuesRaw === "object" && !Array.isArray(valuesRaw)
+    ? valuesRaw as Record<string, unknown>
+    : {};
+  return {
+    fromFound: fromRaw != null ? String(fromRaw).trim() : "",
+    foundByJob: v.found_by_job != null ? String(v.found_by_job).trim() : "",
+    foundToday: v.found_today === true,
+  };
+}
+
+/**
+ * True when the save adds an inspection finding. A saved line that sends back the marks it already has is not new, so
+ * a service logged while the switch was on can still be edited after it is turned off (code review #4).
+ */
+export function inspectInspectionFindingsOffPayload(
+  rawLines: unknown[],
+  storedById?: Map<string, FindingMarks>,
+): boolean {
+  for (const raw of rawLines) {
+    if (!raw || typeof raw !== "object") continue;
+    const r = raw as Record<string, unknown>;
+    const m = findingMarks(r);
+    if (!m.fromFound && !m.foundByJob && !m.foundToday) continue;
+    const id = r.id != null ? String(r.id) : "";
+    const stored = id ? storedById?.get(id) : undefined;
+    if (
+      stored
+      && m.fromFound === stored.fromFound
+      && m.foundByJob === stored.foundByJob
+      && (!m.foundToday || stored.foundToday)
+    ) {
+      continue;
+    }
+    return true;
+  }
+  return false;
+}
+
+export type SourcingState = "pending" | "sent" | "merged" | "not_sent" | "cancelled";
+export type SourcingReason = "car_not_linked" | "daily_limit" | "error";
+
+export function sourcingFieldsFromOutbox(
+  row: { state?: string; reason_code?: string | null } | undefined,
+): { sourcingState: SourcingState | null; sourcingReason: SourcingReason | null } {
+  if (!row) return { sourcingState: null, sourcingReason: null };
+  const state = String(row.state ?? "");
+  const states: SourcingState[] = ["pending", "sent", "merged", "not_sent", "cancelled"];
+  const sourcingState = states.includes(state as SourcingState) ? (state as SourcingState) : null;
+  const reason = row.reason_code ? String(row.reason_code) : null;
+  const reasons: SourcingReason[] = ["car_not_linked", "daily_limit", "error"];
+  const sourcingReason = reason && reasons.includes(reason as SourcingReason)
+    ? (reason as SourcingReason)
+    : null;
+  return { sourcingState, sourcingReason };
+}
+
+export async function loadSourcingByLineItemForWorkOrder(
+  supabase: SupabaseClient,
+  workOrderId: string,
+): Promise<Map<string, { state: string; reason_code: string | null }>> {
+  const { data, error } = await supabase
+    .from("parts_sourcing_outbox")
+    .select("line_item_id, state, reason_code")
+    .eq("work_order_id", workOrderId);
+  if (error) throw error;
+  const map = new Map<string, { state: string; reason_code: string | null }>();
+  for (const row of data ?? []) {
+    const r = row as { line_item_id: string; state: string; reason_code?: string | null };
+    map.set(String(r.line_item_id), {
+      state: String(r.state),
+      reason_code: r.reason_code != null ? String(r.reason_code) : null,
+    });
+  }
+  return map;
 }
 
 export function mapDbLineItemToApi(row: Record<string, unknown>): Record<string, unknown> {
@@ -212,6 +315,14 @@ const SAVE_ERROR_MESSAGES: Record<string, { status: number; error: string }> = {
   immutable: { status: 409, error: "Completed services can't be changed — void it and log again." },
   line_work_order_mismatch: { status: 400, error: "That line belongs to another service." },
   line_items_on_declined: { status: 400, error: "Declined jobs cannot include items." },
+  line_items_on_found_job: { status: 400, error: "Jobs not done yet cannot include items." },
+  found_line_not_open: {
+    status: 409,
+    error: "This found job is already closed. The list has been refreshed.",
+  },
+  found_line_wrong_car: { status: 400, error: "That found job belongs to a different car." },
+  invalid_found_line_id: { status: 400, error: "Invalid found line id." },
+  position_invalid: { status: 400, error: "That position doesn't fit this job. Pick again." },
   status_invalid: { status: 400, error: "Invalid service status." },
   work_order_id_taken: { status: 409, error: "That service id is already in use." },
   actor_required: { status: 401, error: "Sign in again." },
@@ -322,6 +433,19 @@ export async function prepareWorkOrderLines(
   const knownIds = args.workOrderId
     ? await loadLineIdsForWorkOrder(supabase, args.workOrderId)
     : new Set<string>();
+  // Code review #4: Other-item part numbers follow the company's log_service_parts_gaps switch (looked up only if sent).
+  const sendsOtherPartNumber = args.rawLines.some((ln) => {
+    const its = (ln as Record<string, unknown> | null)?.items;
+    return Array.isArray(its) && its.some((it) => {
+      const o = (it ?? {}) as Record<string, unknown>;
+      const kind = String(o.itemKind ?? o.item_kind ?? "");
+      const pn = o.partNumber ?? o.part_number;
+      return kind === "other" && pn != null && String(pn).trim() !== "";
+    });
+  });
+  const otherPartNumberAllowed = sendsOtherPartNumber
+    ? await isFeatureEnabled(FEATURE_FLAGS.LOG_SERVICE_PARTS_GAPS, args.orgId)
+    : false;
 
   for (const raw of args.rawLines) {
     if (!raw || typeof raw !== "object") {
@@ -379,12 +503,44 @@ export async function prepareWorkOrderLines(
     }
     const r = raw as Record<string, unknown>;
     const declined = r.declined === true;
+    const recommended = r.recommended === true;
     const itemsRaw = Array.isArray(r.items) ? r.items : [];
+
+    const fromFoundRaw = r.fromFoundLineId ?? r.from_found_line_id;
+    const hasFromFound = fromFoundRaw !== undefined && fromFoundRaw !== null && String(fromFoundRaw).trim() !== "";
+    if (hasFromFound) {
+      const fp = parseOptionalUuidField(fromFoundRaw);
+      if (!fp.ok) {
+        return {
+          ok: false,
+          status: 400,
+          code: "invalid_found_line_id",
+          error: "Invalid found line id.",
+        };
+      }
+    }
+    if (recommended && hasFromFound) {
+      return {
+        ok: false,
+        status: 400,
+        code: "found_line_invalid",
+        error: "A job not done yet can't also close a found job.",
+      };
+    }
 
     const lineIdErr = checkClientLineId(args.workOrderId, r.id, knownIds, lineWoById);
     if (lineIdErr) return lineIdErr;
 
-  const parsed = parseLineItems(itemsRaw, { declined });
+    if (recommended && itemsRaw.length > 0) {
+      return {
+        ok: false,
+        status: 400,
+        code: "line_items_on_found_job",
+        error: "Jobs not done yet cannot include items.",
+      };
+    }
+
+    const parsed = parseLineItems(itemsRaw, { declined, otherPartNumberAllowed });
     if (!parsed.ok) {
       return {
         ok: false,
@@ -655,9 +811,15 @@ export async function prepareWorkOrderLines(
       delete row.id;
     }
 
-    row.items = dbItems;
-    row.items_amount = Number(itemsAmount) || 0;
-    row.line_total = computeWoLineTotal(row);
+    if (row.recommended === true) {
+      row.items = [];
+      row.items_amount = 0;
+      row.line_total = 0;
+    } else {
+      row.items = dbItems;
+      row.items_amount = Number(itemsAmount) || 0;
+      row.line_total = computeWoLineTotal(row);
+    }
     outLines.push(row);
   }
 
@@ -757,6 +919,30 @@ export async function loadWorkOrderLinesForRpc(
   });
 }
 
+/** Each line's job facts the line itself doesn't store, in one query: high voltage and position kind. */
+export async function loadJobMetaForLines(
+  supabase: SupabaseClient,
+  componentIds: unknown[],
+): Promise<Map<string, { is_high_voltage: boolean; position_scheme: string | null; position_aware: boolean | null }>> {
+  const ids = [...new Set(componentIds.map((id) => String(id ?? "")).filter((id) => UUID_RE.test(id)))];
+  const out = new Map<string, { is_high_voltage: boolean; position_scheme: string | null; position_aware: boolean | null }>();
+  if (!ids.length) return out;
+  const { data, error } = await supabase
+    .from("maintenance_service_categories")
+    .select("id, is_high_voltage, position_scheme, position_aware")
+    .in("id", ids);
+  if (error) throw error;
+  for (const row of data || []) {
+    const r = row as { id: string; is_high_voltage?: boolean; position_scheme?: string | null; position_aware?: boolean | null };
+    out.set(String(r.id), {
+      is_high_voltage: r.is_high_voltage === true,
+      position_scheme: r.position_scheme != null ? String(r.position_scheme) : null,
+      position_aware: r.position_aware === true ? true : (r.position_aware === false ? false : null),
+    });
+  }
+  return out;
+}
+
 export async function loadLineItemsForWorkOrders(
   supabase: SupabaseClient,
   workOrderIds: string[],
@@ -787,11 +973,16 @@ export function attachItemsToLines(
   return lines.map((line) => {
     const id = line.id != null ? String(line.id) : "";
     const items = id ? (itemsByLineId.get(id) ?? []) : [];
-    return { ...mapDbLineToApiShim(line), items };
+    return { ...mapDbLineToApi(line), items };
   });
 }
 
-function mapDbLineToApiShim(row: Record<string, unknown>): Record<string, unknown> {
+/**
+ * snake_case DB line → camelCase API. The one mapper for every work-order read, save and completion answer
+ * (code review #10). positionScheme / positionAware / isHighVoltage come from the line's job, merged in by
+ * loadJobMetaForLines.
+ */
+export function mapDbLineToApi(row: Record<string, unknown>): Record<string, unknown> {
   return {
     id: row.id,
     sortOrder: row.sort_order,
@@ -822,9 +1013,19 @@ function mapDbLineToApiShim(row: Record<string, unknown>): Record<string, unknow
     notes: row.notes,
     recommended: row.recommended === true,
     declined: row.declined === true,
+    fromFoundLineId: row.from_found_line_id ?? null,
+    closedAt: row.closed_at ?? null,
+    closedReason: row.closed_reason ?? null,
+    closedBy: row.closed_by ?? null,
     values: row.values_json,
     lineTotal: row.line_total != null ? Number(row.line_total) : undefined,
     itemsAmount: row.items_amount != null ? Number(row.items_amount) : 0,
     voidedAt: row.voided_at ?? null,
+    fitAtLog: row.fit_at_log != null ? String(row.fit_at_log) : null,
+    isHighVoltage: row.is_high_voltage === true,
+    positionScheme: row.position_scheme ?? null,
+    positionAware: row.position_aware === true
+      ? true
+      : (row.position_aware === false ? false : null),
   };
 }

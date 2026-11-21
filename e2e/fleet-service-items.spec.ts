@@ -321,7 +321,8 @@ test.describe("Fleet service items", () => {
 
     // Screen 9 (phone): compact header, thin step bars, total pinned above the footer.
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(page.getByTestId("log-service-step-caption")).toHaveText("Step 3 of 4 · Details");
+    // Since 15 Nov the caption also holds the desktop subtitle (hidden on phones); check the visible phone text.
+    await expect(page.getByTestId("log-service-step-caption").locator("span:visible")).toHaveText("Step 3 of 4 · Details");
     await expect(page.getByTestId("log-service-step-segments")).toBeVisible();
     const pinned = page.getByTestId("log-service-mobile-summary");
     await expect(pinned).toBeVisible();

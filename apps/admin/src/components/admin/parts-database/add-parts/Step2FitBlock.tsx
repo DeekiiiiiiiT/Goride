@@ -2,41 +2,15 @@
 import { useEffect, useState } from "react";
 import { MaterialIcon } from "../import/MaterialIcon";
 import { PartsButton } from "../PartsButton";
+import {
+  AXLE_POSITIONS,
+  catalystPositionsFor,
+  CORNER_SIDES,
+  DRIVER_PASSENGER_REAR,
+  FRONT_REAR_SIDE,
+  LOW_HIGH_BEAM,
+} from "@roam/types/partPositions";
 import type { AddPartsDraft, PartTypeRow } from "./addPartsTypes";
-
-const AXLE_POSITIONS = [
-  { id: "front", label: "Front Axle", icon: "adjust" as const },
-  { id: "rear", label: "Rear Axle", icon: "radio_button_unchecked" as const },
-];
-
-const CATALYST_POSITIONS = [
-  { id: "before_cat", label: "Before cat" },
-  { id: "after_cat", label: "After cat" },
-];
-
-const CORNER_SIDES = [
-  { pos: "front", side: "left", label: "Front left" },
-  { pos: "front", side: "right", label: "Front right" },
-  { pos: "rear", side: "left", label: "Rear left" },
-  { pos: "rear", side: "right", label: "Rear right" },
-];
-
-const DRIVER_PASSENGER_REAR = [
-  { id: "driver", label: "Driver" },
-  { id: "passenger", label: "Passenger" },
-  { id: "rear", label: "Rear" },
-];
-
-const LOW_HIGH_BEAM = [
-  { id: "low", label: "Low beam" },
-  { id: "high", label: "High beam" },
-];
-
-const FRONT_REAR_SIDE = [
-  { id: "front", label: "Front" },
-  { id: "rear", label: "Rear" },
-  { id: "side", label: "Side" },
-];
 
 export function TriplePositionRow({
   options,
@@ -258,13 +232,16 @@ export function AxlePositionButtons({
 export function CatalystPositionButtons({
   position,
   onPick,
+  opCode,
 }: {
   position: string;
   onPick: (pos: string, side: string) => void;
+  /** The part type's op code: the oxygen sensor shows Toyota's names in the brackets. */
+  opCode?: string | null;
 }) {
   return (
     <div className="grid grid-cols-2 gap-space-sm">
-      {CATALYST_POSITIONS.map((p) => {
+      {catalystPositionsFor({ opCode }).map((p) => {
         const active = position === p.id;
         return (
           <button
@@ -290,15 +267,17 @@ export function PositionChips({
   position,
   side,
   onPick,
+  opCode,
 }: {
   scheme: string;
   position: string;
   side: string;
   onPick: (pos: string, side: string) => void;
+  opCode?: string | null;
 }) {
   if (scheme === "none") return null;
   if (scheme === "before_after_catalyst") {
-    return <CatalystPositionButtons position={position} onPick={onPick} />;
+    return <CatalystPositionButtons position={position} onPick={onPick} opCode={opCode} />;
   }
   if (scheme === "axle" || scheme === "axle_inner_outer") {
     return <AxlePositionButtons position={position} onPick={onPick} />;

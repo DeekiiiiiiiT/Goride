@@ -34,6 +34,9 @@ import type {
   MaintenanceServiceLedgerEntry,
   MaintenanceWorkOrder,
   MaintenanceWorkOrderStatus,
+  FoundWorkCounts,
+  FoundWorkItem,
+  PartsNotice,
 } from '../types/maintenance';
 import { compressImage, OCR_COMPRESS_OPTS } from '../utils/compressImage';
 import { isTollCategory } from '../utils/tollCategoryHelper';
@@ -3099,6 +3102,42 @@ export const api = {
       }>;
   },
 
+  async listFoundWork(vehicleId?: string) {
+    const qs = vehicleId ? `?vehicleId=${encodeURIComponent(vehicleId)}` : "";
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetOps}/maintenance-found-work${qs}`,
+      { headers: await getHeaders(null) },
+    );
+    // A 404 (switch off: code inspection_findings_off) keeps its status and code; the body is read once (IF-23).
+    if (!response.ok) throw await maintenanceSaveErrorFrom(response, "Failed to load found work");
+    const json = await response.json() as { items?: FoundWorkItem[]; partsGapsEnabled?: boolean };
+    return { items: Array.isArray(json.items) ? json.items : [], partsGapsEnabled: typeof json.partsGapsEnabled === "boolean" ? json.partsGapsEnabled : null };
+  },
+
+  async foundWorkCounts() {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetOps}/maintenance-found-work/counts`,
+      { headers: await getHeaders(null) },
+    );
+    // A 404 (switch off: code inspection_findings_off) keeps its status and code; the body is read once (IF-23).
+    if (!response.ok) throw await maintenanceSaveErrorFrom(response, "Failed to load found work counts");
+    return (await response.json()) as FoundWorkCounts;
+  },
+
+  async markFoundWorkNotNeeded(lineId: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetOps}/maintenance-found-work/${encodeURIComponent(lineId)}/not-needed`,
+      { method: "POST", headers: await getHeaders() },
+    );
+    if (!response.ok) throw await maintenanceSaveErrorFrom(response, "Failed to mark found work not needed");
+    return response.json() as Promise<{
+      lineId?: string;
+      workOrderId?: string;
+      vehicleId?: string;
+      closedAt?: string;
+    }>;
+  },
+
   async listInspectionTemplates() {
       const response = await fetchWithRetry(
         `${API_ENDPOINTS.fleetOps}/maintenance-inspection-templates`,
@@ -3382,6 +3421,14 @@ export const api = {
       return response.json();
   },
 
+  /** LC-21: close matches for the part in your hand (one job, ≥4 letters, ≤5 hits). */
+  async partsMatch(vehicleId: string, componentId: string, q: string) {
+      const params = new URLSearchParams({ vehicleId, componentId, q });
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/match?${params}`, { headers: await getHeaders(null) });
+      if (!response.ok) throw new Error((await response.json().catch(() => ({})) as { error?: string }).error || "Could not search parts");
+      return response.json();
+  },
+
   async partsBrowse(variantId?: string) {
       const q = variantId ? `?variantId=${encodeURIComponent(variantId)}` : "";
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/browse${q}`, { headers: await getHeaders(null) });
@@ -3486,6 +3533,64 @@ export const api = {
       });
       if (!response.ok) throw new Error((await response.json().catch(() => ({})) as { error?: string }).error || "Could not send the request");
       return response.json();
+  },
+
+  /** LC-17: Add quote / Edit quote on a job that's still Not done yet (the quote + note only). */
+  async setFoundQuote(lineId: string, body: { quote: number | null; quoteDetail: unknown; note: string | null }) {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fleetOps}/maintenance-found-work/${encodeURIComponent(lineId)}/quote`,
+        { method: "PUT", headers: await getHeaders(), body: JSON.stringify(body) },
+      );
+      if (!response.ok) throw await maintenanceSaveErrorFrom(response, "Could not save the quote");
+      return response.json() as Promise<{ lineId: string; quoteAmount: number | null }>;
+  },
+
+  /** LC-14: add a job an inspection found to that saved inspection (J$ 0, not done yet). */
+  async addFoundJobToInspection(workOrderId: string, body: { jobId: string; places: string[]; note: string | null; quote?: number | null; quoteDetail?: unknown }) {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fleetOps}/maintenance-work-orders/${encodeURIComponent(workOrderId)}/found-jobs`,
+        { method: "POST", headers: await getHeaders(), body: JSON.stringify(body) },
+      );
+      if (!response.ok) throw await maintenanceSaveErrorFrom(response, "Could not add this job to the inspection");
+      return response.json() as Promise<{ workOrderId?: string; lineId?: string | null; created?: boolean; alreadyListed?: boolean }>;
+  },
+
+  /** Slice C: "Plan it — I'll buy it first" (fleet-ops). 404 log_service_parts_gaps_off when the switch is off. */
+  async planMaintenanceJob(body: {
+    vehicleId: string;
+    jobId: string;
+    places: string[];
+    partId: string | null;
+    note: string | null;
+    idempotencyKey: string;
+  }) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance-planned-jobs`, {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) throw await maintenanceSaveErrorFrom(response, "Could not plan this job");
+      return response.json() as Promise<{ workOrderId?: string; lineId?: string; created?: boolean; alreadyListed?: boolean }>;
+  },
+
+  /** Slice C: "Part on file" messages for the maintenance bell. 404 when the switch is off. */
+  async partsNotices() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/notices`, { headers: await getHeaders(null) });
+      if (response.status === 404) return { items: [], unreadCount: 0, off: true as const };
+      if (!response.ok) throw new Error("Could not load parts messages");
+      const json = await response.json() as { items?: PartsNotice[]; unreadCount?: number };
+      return { items: Array.isArray(json.items) ? json.items : [], unreadCount: Number(json.unreadCount ?? 0), off: false as const };
+  },
+
+  async markPartsNoticesRead(ids: string[]) {
+      if (!ids.length) return { marked: 0 };
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/notices/read`, {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify({ ids }),
+      });
+      if (!response.ok) throw new Error("Could not mark messages read");
+      return response.json() as Promise<{ marked: number }>;
   },
 
   async partsMyVehicles() {

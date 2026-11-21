@@ -1,7 +1,7 @@
 {
   "slug": "fleet-ops",
-  "generatedAt": "2026-11-15T22:27:03.559Z",
-  "routeCount": 155,
+  "generatedAt": "2026-11-20T00:14:47.779Z",
+  "routeCount": 161,
   "routes": [
     "DELETE ${ADMIN_CAT}/:id",
     "DELETE ${ADMIN}/:id",
@@ -53,6 +53,8 @@
     "GET /maintenance-driver-notifications",
     "GET /maintenance-due/:vehicleId",
     "GET /maintenance-fleet-summary",
+    "GET /maintenance-found-work",
+    "GET /maintenance-found-work/counts",
     "GET /maintenance-inspection-templates",
     "GET /maintenance-integrity-report",
     "GET /maintenance-job-runs/latest",
@@ -133,15 +135,18 @@
     "POST /admin/maintenance/supplies/:id/retire",
     "POST /admin/migrate-maintenance-from-kv",
     "POST /admin/vehicle-catalog/:catalogId/maintenance-templates",
+    "POST /maintenance-found-work/:lineId/not-needed",
     "POST /maintenance-inspection-findings",
     "POST /maintenance-log-number/reserve",
     "POST /maintenance-logs",
+    "POST /maintenance-planned-jobs",
     "POST /maintenance-requests",
     "POST /maintenance-schedule/:vehicleId/bootstrap",
     "POST /maintenance-service-ledger/backfill",
     "POST /maintenance-work-order-lines/:lineId/void",
     "POST /maintenance-work-orders",
     "POST /maintenance-work-orders/:id/complete",
+    "POST /maintenance-work-orders/:id/found-jobs",
     "POST /maintenance-work-orders/:id/triage",
     "POST /maintenance-work-orders/:id/void",
     "POST /maintenance/log-number",
@@ -157,6 +162,7 @@
     "PUT /admin/maintenance/jobs/:id/items/order",
     "PUT /admin/maintenance/section-groups/order",
     "PUT /admin/maintenance/sections/:id/members",
-    "PUT /admin/maintenance/sections/order"
+    "PUT /admin/maintenance/sections/order",
+    "PUT /maintenance-found-work/:lineId/quote"
   ]
 }

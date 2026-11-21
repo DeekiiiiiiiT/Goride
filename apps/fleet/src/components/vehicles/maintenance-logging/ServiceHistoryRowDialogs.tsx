@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { HighVoltageChip, NotUsualChip } from "./log-service/JobFitUi";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../../services/api";
 import { Button } from "../../ui/button";
@@ -17,6 +17,16 @@ import {
 import type { MaintenanceLogLine, MaintenanceWorkOrder } from "../../../types/maintenance";
 import { formatMaintenanceServiceDateLabel } from "../../../utils/maintenanceDisplayFormat";
 import { itemsUsedText } from "./serviceHistoryItems";
+import { FoundHistorySection } from "./FoundByInspection";
+import { ADD_TO_INSPECTION_COPY } from "./log-service/addToInspection";
+import type { AddToInspectionRequest } from "./FoundByInspection";
+import { FromInspectionChip } from "./log-service/FoundWorkSection";
+import { isFoundToday } from "./log-service/foundWork";
+import { linePositionsText } from "./log-service/positionChips";
+import { SourcingLine } from "./log-service/unknownParts";
+import { partPickFromValues, shownItems } from "./log-service/partPick";
+import { PartPickLines } from "./log-service/PartPickLines";
+import { warrantyFromValues, warrantyText } from "./log-service/warrantyPeriod";
 
 type ApiLine = MaintenanceLogLine;
 
@@ -65,12 +75,19 @@ export function ServiceHistoryViewDialog({
   workOrderId,
   vehicleLabel,
   onClose,
+  onAddToInspection,
 }: {
   workOrderId: string | null;
   vehicleLabel: string;
   onClose: () => void;
+  /** LC-14: "Add a job to this inspection" opens Log service in add mode (the host owns that window). */
+  onAddToInspection?: (target: AddToInspectionRequest) => void;
 }) {
-  const { wo, loading, error } = useWorkOrder(workOrderId);
+  // "Open that service" (inspection findings) shows the service that did a found job in this same window.
+  const [shownId, setShownId] = useState<string | null>(workOrderId);
+  useEffect(() => setShownId(workOrderId), [workOrderId]);
+  const { wo, loading, error } = useWorkOrder(shownId);
+  const canAddFound = (wo as { canAddFoundJobs?: boolean } | null)?.canAddFoundJobs === true;
   const lines = ((wo?.lines || []) as ApiLine[]).filter((l) => !l.recommended && !l.voidedAt);
   /** Deleted jobs keep their items, read-only (plan rule 6). */
   const voided = ((wo?.lines || []) as ApiLine[]).filter((l) => !l.recommended && l.voidedAt);
@@ -122,16 +139,21 @@ export function ServiceHistoryViewDialog({
                   <li key={l.id ?? i} className="px-3 py-2">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-medium">{l.categoryName || "—"}</p>
+                      {/* Stitch F8: "Oxygen sensor · Front (Air fuel ratio sensor)" (LS-07). */}
+                      <p className="font-medium" data-testid="service-details-job">
+                        {l.categoryName || "—"}
+                        {linePositionsText(l) ? ` · ${linePositionsText(l)}` : ""}
+                      </p>
                       {/* Stitch powertrain 08: the chips sit on their own line under the job name. */}
-                      {l.fitAtLog === "no" || l.isHighVoltage ? (
+                      {l.fitAtLog === "no" || l.isHighVoltage || isFoundToday(l) ? (
                         <span className="mt-1 flex flex-wrap gap-1">
                           {l.fitAtLog === "no" ? <NotUsualChip /> : null}
                           {l.isHighVoltage ? <HighVoltageChip /> : null}
+                          {isFoundToday(l) ? <FromInspectionChip /> : null}
                         </span>
                       ) : null}
                       <p className="text-xs text-stitch-secondary">
-                        {[l.systemName, l.positions?.length ? l.positions.join(" ") : null, l.brand, l.partNumber]
+                        {(partPickFromValues(l.values, l) ? [l.systemName] : [l.systemName, l.brand, l.partNumber])
                           .filter(Boolean)
                           .join(" · ") || " "}
                       </p>
@@ -140,15 +162,61 @@ export function ServiceHistoryViewDialog({
                       {l.complimentary && !l.itemsAmount ? "Free" : formatServiceMoney(wo.currency, l.lineTotal)}
                     </span>
                   </div>
-                  {itemsUsedText(l.items, wo.currency) ? (
-                    <p className="mt-1 text-xs text-on-surface-variant" data-testid="service-details-items-used">
-                      <span className="font-semibold text-on-surface">Items used:</span> {itemsUsedText(l.items, wo.currency)}
+                  {partPickFromValues(l.values, l) ? (
+                    <PartPickLines pick={partPickFromValues(l.values, l)!} className="mt-1" />
+                  ) : null}
+                  {l.warranty && warrantyFromValues(l.values) ? (
+                    <p className="mt-0.5 text-xs text-on-surface-variant" data-testid="service-details-warranty">
+                      Warranty: <span className="font-semibold text-on-surface">{warrantyText(warrantyFromValues(l.values)!)}</span>
                     </p>
                   ) : null}
+                  {itemsUsedText(shownItems(l.items, partPickFromValues(l.values, l)), wo.currency) ? (
+                    <p className="mt-1 text-xs text-on-surface-variant" data-testid="service-details-items-used">
+                      <span className="font-semibold text-on-surface">Items used:</span>{" "}
+                      {itemsUsedText(shownItems(l.items, partPickFromValues(l.values, l)), wo.currency)}
+                    </p>
+                  ) : null}
+                  {/* LS-16 / Stitch F8: what happened to each part Roam didn't have (an added part's carrier: never). */}
+                  {shownItems(l.items, partPickFromValues(l.values, l))
+                    .filter((it) => it.sourcingState)
+                    .map((it, k) => (
+                      <div key={it.id ?? k} className="mt-1 flex flex-col gap-0.5" data-testid="service-details-unknown-part">
+                        <span className="text-xs text-on-surface">
+                          {it.partNumber ? `${it.itemName} · ${it.partNumber}` : it.itemName}
+                        </span>
+                        <SourcingLine item={it} />
+                      </div>
+                    ))}
                   </li>
                 ))}
               </ul>
             </div>
+
+            <FoundHistorySection lines={(wo.lines || []) as ApiLine[]} onOpenService={(id) => setShownId(id)} />
+            {canAddFound && onAddToInspection && shownId ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full gap-1.5"
+                data-testid="service-details-add-found"
+                onClick={() =>
+                  onAddToInspection({
+                    workOrderId: shownId,
+                    vehicleId: String(wo.vehicleId ?? ""),
+                    inspectionLine: [
+                      (wo as { inspectionJobName?: string | null }).inspectionJobName || "Inspection",
+                      formatMaintenanceServiceDateLabel(String(wo.performedAtDate ?? "").slice(0, 10) || null, false),
+                      wo.provider,
+                    ]
+                      .filter(Boolean)
+                      .join(" · "),
+                  })
+                }
+              >
+                <Plus className="w-4 h-4" />
+                {ADD_TO_INSPECTION_COPY.buttonLong}
+              </Button>
+            ) : null}
 
             {voided.length ? (
               <div className="space-y-2" data-testid="service-details-voided">

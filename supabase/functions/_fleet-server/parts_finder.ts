@@ -10,11 +10,19 @@ import { assembleMatchSections, enrichFleetParts, getCatalogParts } from "./cata
 import { assertNoCustomerIdentity } from "./catalog_parts_shape.ts";
 import { groupFindSections } from "./parts_finder_group.ts";
 import type { PartsFitPair } from "../../../packages/types/src/partsFitParam.ts";
+import {
+  isKnownPositionListingCode,
+  NOT_SURE,
+  WHEEL_CODES,
+  wheelCodesToFitPairs,
+} from "../../../packages/types/src/partPositions.ts";
 
 const CANDIDATE_CAP = 6;
 
 export type PartPosition = "front" | "rear" | "both" | null;
 export type PartSide = "left" | "right" | "both" | null;
+
+export type FitLabel = "check_before_buying" | "made_for_car" | "also_fits" | "fits_by_size";
 
 export type FoundPart = {
   partId: string;
@@ -25,8 +33,11 @@ export type FoundPart = {
   tier: number;
   reason: string;
   position: PartPosition;
+  /** Raw listing place when it is a known job/listing code (e.g. before_cat, LF). */
+  listingPlace: string | null;
   side: PartSide;
   status: "verified" | "needs_checking";
+  fitLabel?: FitLabel;
   fitsVariantIds: string[];
   evidenceUrl: string | null;
   alsoKnownAs: string[];
@@ -73,6 +84,62 @@ type LoosePart = {
 function axis(value: string | null | undefined): PartPosition {
   if (value === "front" || value === "rear" || value === "both") return value;
   return null;
+}
+
+/** Preserve catalyst and other scheme codes; front/rear/both still use `position` for wheel filtering. */
+export function listingPlaceOf(value: string | null | undefined): string | null {
+  const v = String(value ?? "").trim();
+  if (!v) return null;
+  if (v === "front" || v === "rear" || v === "both") return v;
+  if (isKnownPositionListingCode(v)) return v;
+  return null;
+}
+
+/** Places from Log service: wheel codes become the wheel filter (fit pairs); the rest are place codes (LC-07). */
+export function splitPlacesForFind(places: string[]): { wheelPairs: ReturnType<typeof wheelCodesToFitPairs>; placeCodes: string[] | null } {
+  const wheelPairs = wheelCodesToFitPairs(places);
+  const rest = places.filter((p) => !(WHEEL_CODES as readonly string[]).includes(p));
+  return { wheelPairs, placeCodes: rest.length ? rest : null };
+}
+
+export function placeCodesFilterActive(placeCodes: string[] | null | undefined): boolean {
+  if (!placeCodes?.length) return false;
+  const distinct = [...new Set(placeCodes.map(String))];
+  return !(distinct.length === 1 && distinct[0] === NOT_SURE);
+}
+
+/** Job place filter for oxygen-style listings (after keepForPosition / fitPairs). */
+export function keepForPlaceCodes<T extends { listingPlace?: string | null }>(
+  items: T[],
+  placeCodes: string[] | null | undefined,
+): T[] {
+  if (!placeCodesFilterActive(placeCodes)) return items;
+  const wanted = new Set(placeCodes!.map(String));
+  return items.filter((item) => {
+    const place = item.listingPlace ?? null;
+    if (!place || place === "both") return true;
+    return wanted.has(place);
+  });
+}
+
+export function fitLabelForPart(item: { status: string; tier: number }): FitLabel {
+  if (item.status === "needs_checking") return "check_before_buying";
+  if (item.tier === 1) return "made_for_car";
+  // Tier 5 = matched on the car's size spec (battery, tyre, bulb, wiper…), owner 20 Nov.
+  if (item.tier === 5) return "fits_by_size";
+  return "also_fits";
+}
+
+export function attachFitLabelsToSections(
+  sections: Array<{ items: FoundPart[] }>,
+): Array<{ items: FoundPart[] }> {
+  return sections.map((section) => ({
+    ...section,
+    items: section.items.map((item) => ({
+      ...item,
+      fitLabel: fitLabelForPart(item),
+    })),
+  }));
 }
 
 function sideOf(value: string | null | undefined): PartSide {
@@ -131,6 +198,56 @@ type UniversalSpec = {
   items?: Array<{ id?: string; manufacturer?: string | null; partNumber?: string | null; name?: string | null }>;
 };
 
+/** The car's own size for this job (owner 20 Nov): what the car maker lists, shown above the parts. */
+export type CarSize = {
+  specKey: string;
+  label: string;
+  value: string;
+  unit: string | null;
+  /** Battery only: Standard / EFB / AGM from the car's battery_type spec. */
+  type: string | null;
+  /** The source is the car maker's own catalogue (or a trusted frame-number catalogue of it). */
+  fromCarMaker: boolean;
+};
+
+/** Frame-number catalogues that show the car maker's own parts book (owner's source rule). */
+const CAR_MAKER_SOURCE_HOSTS = ["amayama.com", "megazip.net", "partsouq.com", "toyota", "daihatsu", "honda", "nissan", "mazda", "suzuki", "mitsubishi", "subaru"];
+
+export function isCarMakerSource(url: string | null | undefined): boolean {
+  if (!url) return false;
+  let host = "";
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return CAR_MAKER_SOURCE_HOSTS.some((h) => (h.includes(".") ? host === h || host.endsWith(`.${h}`) : host.split(".").includes(h)));
+}
+
+type SpecRow = { spec_key?: string | null; value?: string | null; evidence_url?: string | null };
+
+/** The universal section's specs (this job only) → the car's sizes, with the source and the battery type. */
+export function carSizesFrom(universal: unknown, specRows: SpecRow[]): CarSize[] {
+  const rows = Array.isArray(universal) ? universal as UniversalSpec[] : [];
+  const byKey = new Map(specRows.map((row) => [String(row.spec_key ?? ""), row]));
+  const out: CarSize[] = [];
+  for (const spec of rows) {
+    const specKey = String(spec.specKey ?? "");
+    const value = String(spec.value ?? "").trim();
+    if (!specKey || !value || specKey === "battery_type") continue;
+    const type = specKey === "battery_jis" ? String(byKey.get("battery_type")?.value ?? "").trim() || null : null;
+    out.push({
+      specKey,
+      label: String(spec.label ?? specKey),
+      value,
+      unit: spec.unit ? String(spec.unit) : null,
+      type,
+      fromCarMaker: isCarMakerSource(byKey.get(specKey)?.evidence_url ?? null),
+    });
+  }
+  return out;
+}
+
 /** Universal rows become tier 5 parts so they show with the other match types. */
 export function universalsToFound(universal: unknown, variantId: string): FoundPart[] {
   const rows = Array.isArray(universal) ? universal as UniversalSpec[] : [];
@@ -149,6 +266,7 @@ export function universalsToFound(universal: unknown, variantId: string): FoundP
         tier: 5,
         reason,
         position: null,
+        listingPlace: null,
         side: null,
         status: "verified",
         fitsVariantIds: variantId ? [variantId] : [],
@@ -167,6 +285,7 @@ export function universalsToFound(universal: unknown, variantId: string): FoundP
         tier: 5,
         reason,
         position: null,
+        listingPlace: null,
         side: null,
         status: "verified",
         fitsVariantIds: variantId ? [variantId] : [],
@@ -198,6 +317,7 @@ function toFound(item: LoosePart, variantId: string): FoundPart {
       oem: item.referenceOem ?? undefined,
     }),
     position: axis(item.position),
+    listingPlace: listingPlaceOf(item.position),
     side: sideOf(item.side),
     catalogueNumber:
       item.catalogueNumber != null && Number.isFinite(Number(item.catalogueNumber))
@@ -282,6 +402,8 @@ export async function findParts(
     position?: string | null;
     side?: string | null;
     fitPairs?: PartsFitPair[] | null;
+    placeCodes?: string[] | null;
+    attachFitLabels?: boolean;
     orgId?: string | null;
     downtimePerDay?: number;
   },
@@ -340,7 +462,13 @@ export async function findParts(
   } else {
     merged = keepForPosition(merged, input.position, input.side);
   }
+  if (placeCodesFilterActive(input.placeCodes)) {
+    merged = keepForPlaceCodes(merged, input.placeCodes);
+  }
   const built = plainSections(merged, mode === "legacy");
+  if (input.attachFitLabels) {
+    built.sections = attachFitLabelsToSections(built.sections) as typeof built.sections;
+  }
   const bestPool: BestPickItem[] = merged.map((item) => ({
     id: item.partId,
     tier: mode === "legacy" ? 1 : item.tier,
@@ -354,10 +482,16 @@ export async function findParts(
   const pickedId = picked ? String(picked.id ?? "") : "";
   const mergedIds = new Set(merged.map((item) => item.partId).filter(Boolean));
   const catalogItems = loaded.flatMap((row) => (row.parts.items as LoosePart[]) || []);
-  const filteredCatalogItems = (input.fitPairs?.length
+  let positionFilteredCatalog = input.fitPairs?.length
     ? keepForFitPairs(catalogItems, input.fitPairs)
-    : keepForPosition(catalogItems, input.position, input.side)
-  ).filter((item) => {
+    : keepForPosition(catalogItems, input.position, input.side);
+  if (placeCodesFilterActive(input.placeCodes)) {
+    positionFilteredCatalog = keepForPlaceCodes(
+      positionFilteredCatalog.map((item) => ({ ...item, listingPlace: listingPlaceOf(item.position) })),
+      input.placeCodes,
+    );
+  }
+  const filteredCatalogItems = positionFilteredCatalog.filter((item) => {
     const id = String(item.part?.id ?? item.fitmentId ?? "");
     return id && mergedIds.has(id);
   });
@@ -371,6 +505,19 @@ export async function findParts(
     )
     : assembleMatchSections([], []);
   const sections = groupFindSections(rawSections);
+  // The size line is extra info: a failed source lookup still shows the size (as "Your car takes"), never blocks the parts.
+  let carSizes: CarSize[] = pickedId ? carSizesFrom(universalSource, []) : [];
+  if (carSizes.length && typeof (supabase as { rpc?: unknown }).rpc === "function") {
+    try {
+      const { data: specRows, error: specErr } = await supabase.rpc("specs_for_variant", {
+        p_catalog_id: pickedId,
+        p_vehicle_year: year,
+      });
+      if (!specErr && Array.isArray(specRows)) carSizes = carSizesFrom(universalSource, specRows as SpecRow[]);
+    } catch {
+      // keep the plain sizes
+    }
+  }
   let coverage = null;
   if (pickedId) {
     const [{ data: readyRow }, { data: specRows }, { data: listingRows }] = await Promise.all([
@@ -409,7 +556,14 @@ export async function findParts(
     sections,
     plainSections: built.sections,
     emptyTiers: built.emptyTiers,
-    bestPick: best ? merged.find((item) => item.partId === best.id) ?? null : null,
+    carSizes,
+    bestPick: best
+      ? (() => {
+        const hit = merged.find((item) => item.partId === best.id) ?? null;
+        if (!hit) return null;
+        return input.attachFitLabels ? { ...hit, fitLabel: fitLabelForPart(hit) } : hit;
+      })()
+      : null,
     ready: loaded[0]?.parts.ready ?? false,
     coverage,
     databaseNodeGroups,
@@ -420,23 +574,29 @@ export async function findParts(
   return body;
 }
 
-async function loadUniversalToleranceMm(
-  supabase: SupabaseClient,
-  componentId: string | null,
-): Promise<number | null> {
-  if (!componentId) return null;
-  // universal_part has no part-type column: it links to a part type through its spec key
-  // (spec_key.component_id / maintenance_component_id, or part_type_spec_field.part_type_id).
+/**
+ * The by-size spec keys of a part type. universal_part has no part-type column: it links to a part type through its
+ * spec key (spec_key.component_id / maintenance_component_id, or part_type_spec_field.part_type_id).
+ */
+export async function specKeysForComponent(supabase: SupabaseClient, componentId: string): Promise<string[]> {
   const [{ data: keyRows, error: keyErr }, { data: fieldRows, error: fieldErr }] = await Promise.all([
     supabase.from("spec_key").select("key").or(`component_id.eq.${componentId},maintenance_component_id.eq.${componentId}`),
     supabase.from("part_type_spec_field").select("spec_key").eq("part_type_id", componentId),
   ]);
   if (keyErr) throw keyErr;
   if (fieldErr) throw fieldErr;
-  const specKeys = [...new Set([
+  return [...new Set([
     ...(keyRows ?? []).map((r) => String((r as { key?: string }).key ?? "")),
     ...(fieldRows ?? []).map((r) => String((r as { spec_key?: string }).spec_key ?? "")),
   ].filter(Boolean))];
+}
+
+async function loadUniversalToleranceMm(
+  supabase: SupabaseClient,
+  componentId: string | null,
+): Promise<number | null> {
+  if (!componentId) return null;
+  const specKeys = await specKeysForComponent(supabase, componentId);
   if (!specKeys.length) return null;
   const { data, error } = await supabase
     .from("universal_part")

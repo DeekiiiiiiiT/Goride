@@ -1,6 +1,7 @@
 /**
  * Gemini catalog research (audit B3 step 1). Information only — no prices or stock.
  */
+import { GEMINI_TEXT_MODEL } from "./gemini_models.ts";
 import { trackedProviderCall } from "./api_usage_logger.ts";
 import { normalizePartNumberNorm } from "./catalog_research_number_shape.ts";
 
@@ -19,7 +20,7 @@ export type ResearchCandidate = {
   sources: ResearchSource[];
 };
 
-const MODEL = "gemini-2.5-flash";
+const MODEL = GEMINI_TEXT_MODEL;
 
 type GroundingMetadata = {
   groundingChunks?: Array<{ web?: { uri?: string; title?: string } }>;

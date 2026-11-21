@@ -59,6 +59,8 @@ export function PendingResearchJobPanel({
 
   const job = shownDetail?.job;
   const proposal = (shownDetail?.proposals || [])[0];
+  /** LC-21c: added by hand (Add parts or "Added — pick the part"): nothing for the robot to do here. */
+  const addedByHand = job?.state === "added" && !proposal;
   const checks = (proposal?.checks || {}) as Record<string, unknown>;
   const shadowWouldAuto = checks.shadowWouldAuto === true;
 
@@ -113,7 +115,9 @@ export function PendingResearchJobPanel({
               </ul>
             </div>
           ) : (
-            <p className="font-body-sm text-body-sm text-on-surface-variant">No proposal yet — queued or researching.</p>
+            <p className="font-body-sm text-body-sm text-on-surface-variant" data-testid="research-panel-note">
+              {addedByHand ? "Added by hand. Nothing for research to do." : "No proposal yet — queued or researching."}
+            </p>
           )}
           {(shownDetail?.events || []).length > 0 ? (
             <div className="max-h-28 overflow-y-auto font-mono-sm text-[10px] text-on-surface-variant">
@@ -124,6 +128,7 @@ export function PendingResearchJobPanel({
               ))}
             </div>
           ) : null}
+          {addedByHand ? null : (
           <div className="flex flex-wrap gap-2 pt-1">
             <button
               type="button"
@@ -158,6 +163,7 @@ export function PendingResearchJobPanel({
               Couldn&apos;t find it
             </button>
           </div>
+          )}
           {proposal ? (
             <div className="flex flex-col gap-1 pt-1">
               <input

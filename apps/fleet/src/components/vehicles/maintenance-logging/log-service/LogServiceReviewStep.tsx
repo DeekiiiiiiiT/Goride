@@ -20,6 +20,13 @@ import { formatMaintenanceLineLabel, lineItemsAmount } from "../../../../types/m
 import { formatMaintenanceServiceDateLabel } from "../../../../utils/maintenanceDisplayFormat";
 import { costRecorded, itemAmount, money, qtyWithUnit } from "./itemsUsed";
 import { actionLabel } from "./systemSections";
+import { FOUND_COPY, isFoundLine, isFoundToday } from "./foundWork";
+import { linePositionsText } from "./positionChips";
+import { isUnknownPart, RoamLooksItUpLine } from "./unknownParts";
+import { partPickFromValues, shownItems } from "./partPick";
+import { PartPickLines } from "./PartPickLines";
+import { warrantyFromValues, warrantyText } from "./warrantyPeriod";
+import { FromInspectionChip, ReviewFoundGroup } from "./FoundWorkSection";
 
 export type LogServiceReviewStepProps = {
   baySessionLabel: string;
@@ -59,7 +66,11 @@ export type LogServiceReviewStepProps = {
   whatHappensNext?: React.ReactNode;
   /** Show item lines and the Labor / Parts split (service items on, or lines already carry items). */
   itemsEnabled?: boolean;
+  /** LS-18: "Roam will look this part up…" under unknown parts (Stitch F7). */
+  gapsEnabled?: boolean;
   vehicleLabel?: string;
+  /** Inspection findings: remove a "Found, not done yet" job (with Undo in the dialog). */
+  onRemoveFoundLine?: (line: MaintenanceLogLine) => void;
 };
 
 function moneyLabel(currency: string, n: number): string {
@@ -99,14 +110,20 @@ export function LogServiceReviewStep({
   onMarkPackageCompleteChange,
   whatHappensNext,
   itemsEnabled = false,
+  gapsEnabled = false,
   vehicleLabel,
   lineFit,
+  onRemoveFoundLine,
 }: LogServiceReviewStepProps) {
   void vehicleLabel; // the car is in the top car card (Stitch 07)
   const discountInputRef = useRef<HTMLInputElement>(null);
   const showDiscountRow = discountRowOpen || discountAmount > 0;
   const showSubtotalBreakdown = discountAmount > 0;
-  const doneLines = lines.filter((l) => !l.declined);
+  // Found ("not done yet") jobs get their own amber group (Stitch inspection findings 5), never the job list.
+  // A declined recommendation (older inspection screen) keeps today's "Declined" row in the list.
+  const foundLines = lines.filter((l) => isFoundLine(l) && !l.declined);
+  const listLines = lines.filter((l) => !(isFoundLine(l) && !l.declined));
+  const doneLines = listLines.filter((l) => !l.declined);
   const itemsTotal = doneLines.reduce((s, l) => s + lineItemsAmount(l), 0);
   const jobsTotal = Math.round((subtotal - itemsTotal) * 100) / 100;
   const cur = currency || "JMD";
@@ -148,6 +165,11 @@ export function LogServiceReviewStep({
           <span className={`${LT.headlineMd} font-bold tracking-tight tabular-nums ${LS.text}`}>
             {moneyLabel(cur, showSubtotalBreakdown ? netTotal : subtotal)}
           </span>
+          {foundLines.length ? (
+            <span className={`${LT.bodySm} ${LS.muted}`} data-testid="review-found-not-charged">
+              {FOUND_COPY.reviewNotCharged(foundLines.length)} ({moneyLabel(cur, 0)})
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -157,10 +179,11 @@ export function LogServiceReviewStep({
           <span className={`${LT.labelSm} ${LS.muted}`}>Parts &amp; labour included</span>
         </div>
         <div className="flex flex-col gap-2" data-testid="log-service-review-jobs">
-          {lines.map((line, idx) => {
+          {listLines.map((line, idx) => {
             const declined = Boolean(line.declined);
             const total = lineTotalPreview(line);
-            const items = line.items ?? [];
+            const pick = partPickFromValues(line.values, line);
+            const items = shownItems(line.items, pick);
             const charge = Math.round((total - lineItemsAmount(line)) * 100) / 100;
             const pill = actionLabel(line.action);
             const fit = lineFit?.(line) ?? { notUsual: false, highVoltage: false };
@@ -183,9 +206,7 @@ export function LogServiceReviewStep({
                     ) : pill ? (
                       <span className={`px-2 py-0.5 rounded-full ${LT.labelSm} font-medium ${LS.highest} ${LS.text}`}>{pill}</span>
                     ) : null}
-                    {line.recommended && !declined ? (
-                      <span className="text-[11px] text-on-surface-variant">Recommended</span>
-                    ) : null}
+                    {isFoundToday(line) ? <FromInspectionChip /> : null}
                     {fit.notUsual ? <NotUsualChip /> : null}
                     {fit.highVoltage ? <HighVoltageChip /> : null}
                   </div>
@@ -206,6 +227,19 @@ export function LogServiceReviewStep({
                     ) : null}
                   </div>
                 </div>
+                {linePositionsText(line) ? (
+                  // Stitch F7: a muted "Where on the car:" line under the job name.
+                  <p className={`${LT.bodySm} ${LS.muted} pl-9`} data-testid="review-where-on-car">
+                    {LOG_SERVICE_COPY.whereOnCarReview}{" "}
+                    <span className={`font-semibold ${LS.text}`}>{linePositionsText(line)}</span>
+                  </p>
+                ) : null}
+                {pick && !declined ? <PartPickLines pick={pick} className="pl-9" /> : null}
+                {!declined && line.warranty && warrantyFromValues(line.values) ? (
+                  <p className={`${LT.bodySm} ${LS.muted} pl-9`} data-testid="review-warranty">
+                    Warranty: <span className={`font-semibold ${LS.text}`}>{warrantyText(warrantyFromValues(line.values)!)}</span>
+                  </p>
+                ) : null}
                 {declined ? (
                   <div className="mt-2 p-3 bg-surface-container rounded-lg flex items-center justify-between flex-wrap gap-2">
                     <span className="flex items-center gap-1.5 text-sm text-on-surface-variant">
@@ -237,7 +271,15 @@ export function LogServiceReviewStep({
                         <span className="flex items-center gap-2 min-w-0">
                           <span className="w-1.5 h-1.5 rounded-full bg-outline-variant shrink-0" />
                           <span className="truncate">
-                            {it.itemName || "Item"} · {qtyWithUnit(it)}
+                            {/* Stitch F7 (switch on): name · part number · brand · qty. Off: name · qty, as today. */}
+                            {[
+                              it.itemName || "Item",
+                              gapsEnabled ? it.partNumber || null : null,
+                              gapsEnabled ? it.brand || null : null,
+                              qtyWithUnit(it),
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
                           </span>
                         </span>
                         {costRecorded(it) ? (
@@ -250,13 +292,17 @@ export function LogServiceReviewStep({
                         )}
                       </li>
                     ))}
+                    {gapsEnabled && items.some(isUnknownPart) ? (
+                      <li>
+                        <RoamLooksItUpLine className="mt-1" />
+                      </li>
+                    ) : null}
                   </ul>
                 ) : (
                   <p className={`pl-9 ${LT.bodySm} ${LS.muted}`}>
                     {[
                       line.qty != null ? `Qty ${line.qty}` : null,
                       line.brand || null,
-                      line.positions?.length ? line.positions.join(" ") : null,
                     ]
                       .filter(Boolean)
                       .join(" · ")}
@@ -266,6 +312,7 @@ export function LogServiceReviewStep({
             );
           })}
         </div>
+        <ReviewFoundGroup lines={foundLines} currency={cur} onRemove={(l) => onRemoveFoundLine?.(l)} />
         <div className="border border-outline-variant/40 rounded-lg divide-y bg-surface-container-lowest empty:hidden">
           {showDiscountRow ? (
             <div className="flex items-center justify-between px-4 py-3 gap-3">

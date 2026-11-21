@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import { Loader2, Wrench, Car, History, Package, ClipboardList, Kanban, CalendarRange, ShieldCheck } from "lucide-react";
+import { Loader2, Wrench, Car, History, Package, ClipboardList, CalendarRange, Clock } from "lucide-react";
 import { api } from "../../services/api";
 import { Button } from "../ui/button";
 import {
@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "../ui/table";
-import { LogMaintenanceServiceDialog } from "./LogMaintenanceServiceDialog";
+import { LogMaintenanceServiceDialog, type AddToInspectionTarget } from "./LogMaintenanceServiceDialog";
 import { MaintenanceNightlyStatusLine } from "./maintenance-logging/MaintenanceNightlyStatusLine";
 import { MaintenanceDueItemsDrawer } from "./maintenance-logging/MaintenanceDueItemsDrawer";
 import { MaintenanceOverviewPanel } from "./maintenance-logging/MaintenanceOverviewPanel";
@@ -32,15 +32,16 @@ import {
 import { catalogOptionsFromScheduleRows } from "../../utils/maintenanceCatalogOptions";
 import type {
   CatalogMaintenanceTaskOption,
+  FoundWorkCounts,
+  FoundWorkItem,
   MaintenanceLog,
   VehicleMaintenanceScheduleRowApi,
 } from "../../types/maintenance";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { FindPartsTab } from "./find-parts/FindPartsTab";
-import { MaintenanceWorkOrdersTab } from "./maintenance-logging/MaintenanceWorkOrdersTab";
 import { MaintenanceRequestsTab } from "./maintenance-logging/MaintenanceRequestsTab";
-import { MaintenanceInspectionsTab } from "./maintenance-logging/MaintenanceInspectionsTab";
+import { FoundByInspectionSection, type AddToInspectionRequest } from "./maintenance-logging/FoundByInspection";
 import { MaintenanceScheduleTab } from "./maintenance-logging/MaintenanceScheduleTab";
 import { usePermissions } from "../../hooks/usePermissions";
 
@@ -164,19 +165,24 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const [catalogForLog, setCatalogForLog] = useState<CatalogMaintenanceTaskOption[]>([]);
   const [defaultOdoForLog, setDefaultOdoForLog] = useState<number | undefined>(undefined);
   const [initialLogForComplete, setInitialLogForComplete] = useState<Partial<MaintenanceLog> | null>(null);
+  /** Inspection findings: open found-job counts (null = switch off or not loaded) and the job "Log it now" opened. */
+  const [foundCounts, setFoundCounts] = useState<FoundWorkCounts | null>(null);
+  const [fromFoundWork, setFromFoundWork] = useState<FoundWorkItem | null>(null);
+  /** LC-14: Log service opened to add jobs to a saved inspection. */
+  const [addToInspection, setAddToInspection] = useState<AddToInspectionTarget | null>(null);
 
   const [driverRequests, setDriverRequests] = useState<DriverRequestRow[]>([]);
   const [requestsLoading, setRequestsLoading] = useState(false);
 
   const [hubTab, setHubTab] = useState<
-    "by-vehicle" | "service-ledger" | "find-parts" | "work-orders" | "requests" | "inspections" | "schedule"
+    "by-vehicle" | "service-ledger" | "find-parts" | "not-done-yet" | "requests" | "schedule"
   >(() => {
     const tab = new URLSearchParams(window.location.search).get("tab");
     if (tab === "find-parts") return "find-parts";
     if (tab === "service-ledger") return "service-ledger";
-    if (tab === "work-orders") return "work-orders";
+    // LC-11: Work orders and Inspections were replaced by Not done yet; old links land there.
+    if (tab === "not-done-yet" || tab === "work-orders" || tab === "inspections") return "not-done-yet";
     if (tab === "requests") return "requests";
-    if (tab === "inspections") return "inspections";
     if (tab === "schedule") return "schedule";
     return "by-vehicle";
   });
@@ -211,9 +217,19 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
     }
   }, []);
 
+  /** Found-job counts load on their own: a failure (or the switch off) only hides the card and chips. */
+  const loadFoundCounts = useCallback(async () => {
+    try {
+      setFoundCounts(await api.foundWorkCounts());
+    } catch {
+      setFoundCounts(null);
+    }
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    void loadFoundCounts();
     try {
       const res = await api.getMaintenanceFleetSummary();
       setNightlyRun((res as { nightlyRun?: Record<string, unknown> }).nightlyRun ?? null);
@@ -262,14 +278,19 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
     } finally {
       setLoading(false);
     }
-  }, [loadRequests]);
+  }, [loadRequests, loadFoundCounts]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   const prepareLogForVehicle = useCallback(
-    async (vehicleId: string, initial?: Partial<MaintenanceLog> | null) => {
+    async (
+      vehicleId: string,
+      initial?: Partial<MaintenanceLog> | null,
+      fromFound?: FoundWorkItem | null,
+      addTo?: AddToInspectionTarget | null,
+    ) => {
       if (!vehicleId) return;
       setScheduleLoading(true);
       try {
@@ -281,6 +302,8 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
         const odo = items.find((i) => i.vehicleId === vehicleId)?.odometer;
         setDefaultOdoForLog(initial?.odo ?? (Number.isFinite(odo) ? odo : undefined));
         setInitialLogForComplete(initial ?? null);
+        setFromFoundWork(fromFound ?? null);
+        setAddToInspection(addTo ?? null);
         setLogVehicleId(vehicleId);
         setLogDialogOpen(true);
       } catch (e: unknown) {
@@ -297,7 +320,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
     const params = new URLSearchParams(window.location.search);
     const vehicleId = params.get("vehicle_id");
     if (!vehicleId || loading || items.length === 0) return;
-    setHubTab("work-orders");
+    setHubTab("by-vehicle");
     void prepareLogForVehicle(vehicleId);
     params.delete("vehicle_id");
     const url = new URL(window.location.href);
@@ -357,9 +380,34 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
     [prepareLogForVehicle],
   );
 
+  /** Reloads the Not done yet tab after a save (Log it now takes a job off it). */
+  const [foundListKey, setFoundListKey] = useState(0);
   const handleLogSaved = useCallback(() => {
     void load();
+    setFoundListKey((k) => k + 1);
   }, [load]);
+  const carLabelOf = useCallback(
+    (vehicleId: string) => {
+      const v = items.find((i) => i.vehicleId === vehicleId);
+      if (!v) return null;
+      return [[v.make, v.model].filter(Boolean).join(" "), v.licensePlate].filter(Boolean).join(" · ") || null;
+    },
+    [items],
+  );
+
+
+  /** LC-14: "Add a job" on an inspection → the Log service window in add-to-inspection mode. */
+  const openAddToInspection = useCallback(
+    (t: AddToInspectionRequest) => {
+      setServicesDueView(null);
+      void prepareLogForVehicle(t.vehicleId, null, null, {
+        workOrderId: t.workOrderId,
+        inspectionLine: t.inspectionLine,
+        editLine: t.editLine ?? null,
+      });
+    },
+    [prepareLogForVehicle],
+  );
 
   const findPartsActive = hubTab === "find-parts";
 
@@ -453,6 +501,8 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           partsRequisition={partsRequisition}
           costPerKmApprox={kpiMonth?.costPerKmApprox}
           pmOnTimePct={kpiMonth?.pmOnTimePct}
+          foundByInspection={foundCounts}
+          onOpenFound={() => setHubTab("not-done-yet")}
         />
       ) : null}
 
@@ -506,10 +556,17 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
                 Find parts
               </TabsTrigger>
             ) : null}
-            <TabsTrigger value="work-orders" className="gap-1.5 px-3" data-maintenance-tab="work-orders">
-              <Kanban className="w-4 h-4" />
-              Work orders
-            </TabsTrigger>
+            {foundCounts ? (
+              <TabsTrigger value="not-done-yet" className="gap-1.5 px-3" data-maintenance-tab="not-done-yet">
+                <Clock className="w-4 h-4" />
+                Not done yet
+                {foundCounts.total > 0 ? (
+                  <span className="bg-amber-100 text-amber-900 font-mono text-[10px] px-1.5 py-0.5 rounded-full ml-0.5">
+                    {foundCounts.total}
+                  </span>
+                ) : null}
+              </TabsTrigger>
+            ) : null}
             <TabsTrigger value="requests" className="gap-1.5 px-3" data-maintenance-tab="requests">
               <ClipboardList className="w-4 h-4" />
               Requests
@@ -519,10 +576,6 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
                 </span>
               ) : null}
             </TabsTrigger>
-            <TabsTrigger value="inspections" className="gap-1.5 px-3" data-maintenance-tab="inspections">
-              <ShieldCheck className="w-4 h-4" />
-              Inspections
-            </TabsTrigger>
             <TabsTrigger value="schedule" className="gap-1.5 px-3" data-maintenance-tab="schedule">
               <CalendarRange className="w-4 h-4" />
               Schedule
@@ -531,7 +584,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
         </div>
 
         <TabsContent value="service-ledger" className="mt-0 space-y-4">
-          {loading ? <MaintenanceHubLoadingState /> : <MaintenanceServiceHistoryPanel vehicles={items} />}
+          {loading ? <MaintenanceHubLoadingState /> : <MaintenanceServiceHistoryPanel vehicles={items} onAddToInspection={openAddToInspection} />}
         </TabsContent>
 
         <TabsContent value="find-parts" className="mt-0">
@@ -549,17 +602,24 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           ) : null}
         </TabsContent>
 
-        <TabsContent value="work-orders" className="mt-0">
-          <MaintenanceWorkOrdersTab vehicles={items} onRefreshHub={() => void load()} />
+        <TabsContent value="not-done-yet" className="mt-0">
+          {foundCounts ? (
+            <FoundByInspectionSection
+              key={foundListKey}
+              canEdit={canEditMaintenance}
+              carLabel={carLabelOf}
+              phone={mobileCompact}
+              onLogItNow={(item) => void prepareLogForVehicle(item.vehicleId, null, item)}
+              onChanged={() => void loadFoundCounts()}
+              onAddToInspection={openAddToInspection}
+            />
+          ) : null}
         </TabsContent>
 
         <TabsContent value="requests" className="mt-0">
           <MaintenanceRequestsTab vehicles={items} onApproved={() => void loadRequests()} />
         </TabsContent>
 
-        <TabsContent value="inspections" className="mt-0">
-          <MaintenanceInspectionsTab />
-        </TabsContent>
 
         <TabsContent value="schedule" className="mt-0">
           <MaintenanceScheduleTab vehicles={items} />
@@ -589,6 +649,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
               }}
               onGoToVehicles={onNavigate ? () => onNavigate("vehicles") : undefined}
               canClearDoNotDrive={canClearDoNotDrive}
+              foundByVehicle={foundCounts?.byVehicle ?? null}
               onClearDoNotDrive={async (vehicleId, reason) => {
                 try {
                   await api.clearVehicleDoNotDrive(vehicleId, reason);
@@ -624,6 +685,12 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
         }}
         mobileCompact={mobileCompact}
         canEditMaintenance={canEditMaintenance}
+        onLogFoundWork={(item) => {
+          setServicesDueView(null);
+          void prepareLogForVehicle(item.vehicleId, null, item);
+        }}
+        onFoundChanged={() => void loadFoundCounts()}
+        onAddToInspection={openAddToInspection}
       />
 
       <OdometerHistoryDrawer
@@ -664,6 +731,8 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
             if (!o) {
               setLogVehicleId("");
               setInitialLogForComplete(null);
+              setFromFoundWork(null);
+              setAddToInspection(null);
             }
           }}
           vehicleId={logVehicleId}
@@ -673,6 +742,8 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           initialLog={initialLogForComplete}
           draftUserId={user?.id}
           onSaved={handleLogSaved}
+          fromFoundWork={fromFoundWork}
+          addToInspection={addToInspection}
         />
       ) : null}
     </div>

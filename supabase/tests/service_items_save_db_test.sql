@@ -322,6 +322,14 @@ BEGIN
   END IF;
 
   -- S2-fix: prepareWorkOrderLines-shaped lines (JSON null positions / values_json)
+  SELECT id INTO v_pos_job
+  FROM public.maintenance_service_categories
+  WHERE position_aware IS TRUE AND kind = 'component'
+  LIMIT 1;
+  IF v_pos_job IS NULL THEN
+    RAISE EXCEPTION 'position_aware component fixture required for S2 positions';
+  END IF;
+
   v_wo := 'f2111111-1111-4111-8111-111111111101';
   v_json := public.fleet_save_work_order(
     v_org,
@@ -350,12 +358,12 @@ BEGIN
       }'::jsonb,
       jsonb_build_object(
         'sort_order', 1,
-        'component_id', v_cat,
+        'component_id', v_pos_job,
         'action', 'other',
         'line_total', 0,
         'items_amount', 0,
         'items', '[]'::jsonb,
-        'positions', jsonb_build_array('FL', 'FR')
+        'positions', jsonb_build_array('LF', 'RF')
       )
     )
   );
@@ -368,8 +376,8 @@ BEGIN
     RAISE EXCEPTION 'S2 create: values_json must be SQL NULL';
   END IF;
   IF (SELECT positions FROM public.maintenance_work_order_lines WHERE id = v_line2)
-     IS DISTINCT FROM ARRAY['FL', 'FR']::text[] THEN
-    RAISE EXCEPTION 'S2 create: positions FL FR array mismatch';
+     IS DISTINCT FROM ARRAY['LF', 'RF']::text[] THEN
+    RAISE EXCEPTION 'S2 create: positions LF RF array mismatch';
   END IF;
 
   SELECT version INTO v_ver FROM public.maintenance_work_orders WHERE id = v_wo;

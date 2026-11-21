@@ -7,6 +7,7 @@ import {
   isContentEditBody,
   isMixedPatchBody,
   mapDbLineItemToApi,
+  sourcingFieldsFromOutbox,
   mapSaveWorkOrderError,
   prepareWorkOrderLines,
 } from "./service_items_save.ts";
@@ -65,6 +66,8 @@ Deno.test("mapSaveWorkOrderError table", () => {
   assertEquals(mapSaveWorkOrderError("version_required").status, 428);
   assertEquals(mapSaveWorkOrderError("actor_required").status, 401);
   assertEquals(mapSaveWorkOrderError("line_items_amount_mismatch").status, 500);
+  assertEquals(mapSaveWorkOrderError("position_invalid").status, 400);
+  assertEquals(mapSaveWorkOrderError("position_invalid").code, "position_invalid");
 });
 
 Deno.test("prepareWorkOrderLines service_items_off when flag off", async () => {
@@ -244,6 +247,18 @@ Deno.test("mapDbLineItemToApi returns partSource", () => {
   };
   const api = mapDbLineItemToApi(row);
   assertEquals(api.partSource, "typed");
+});
+
+Deno.test("sourcingFieldsFromOutbox maps state and reason", () => {
+  assertEquals(sourcingFieldsFromOutbox(undefined), { sourcingState: null, sourcingReason: null });
+  assertEquals(
+    sourcingFieldsFromOutbox({ state: "pending", reason_code: "daily_limit" }),
+    { sourcingState: "pending", sourcingReason: "daily_limit" },
+  );
+  assertEquals(
+    sourcingFieldsFromOutbox({ state: "sent", reason_code: null }),
+    { sourcingState: "sent", sourcingReason: null },
+  );
 });
 
 Deno.test("prepareWorkOrderLines passes part_source through", async () => {

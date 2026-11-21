@@ -9,6 +9,7 @@ import { MakerLogo } from "../../../vehicle-catalog/MakerLogo";
 import type { CatalogPageDraft, CatalogPartRow, PartTypeRow } from "../addPartsTypes";
 import { defaultPartNamePreview, PartTypeIcon } from "../addPartsShared";
 import { vehicleListingYearsLabel } from "./vehicleDiffLabel";
+import { catalystPositionsFor } from "@roam/types/partPositions";
 import { D_MONO, D_MUTED, D_TXT, DCode, DFooter, DPill } from "./dominionKit";
 
 export function CatalogStep4Save({
@@ -98,7 +99,10 @@ function PartReviewCard({
   const brand = row.brand || draft.catalogCarMaker || "Toyota";
   const genuine = draft.partKind === "oem" ? `Genuine ${brand}` : brand;
   const where = [
-    row.position ? row.position.charAt(0).toUpperCase() + row.position.slice(1) : null,
+    row.position
+      ? catalystPositionsFor({ opCode: type?.opCode }).find((p) => p.id === row.position)?.label ??
+        row.position.charAt(0).toUpperCase() + row.position.slice(1)
+      : null,
     row.side ? (row.side === "both" ? "Both sides" : row.side.charAt(0).toUpperCase() + row.side.slice(1)) : null,
     row.catalogueNumber ? `No.${row.catalogueNumber}` : null,
   ].filter(Boolean).join(" · ");

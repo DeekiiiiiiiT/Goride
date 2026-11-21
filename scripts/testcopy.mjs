@@ -143,13 +143,19 @@ async function main() {
   const ownerKeys = ownerKeysFromEnvLocal();
   writeFileSync(
     functionsEnvFile,
-    ['PLUG_USER_HASH_PEPPER=testcopy-local-only-pepper', ...localCronSecretLine(), ...ownerKeys].join('\n') + '\n',
+    [
+      'PLUG_USER_HASH_PEPPER=testcopy-local-only-pepper',
+      // parts-sourcing-drain refuses every call without its secret; the e2e drains with this test value.
+      'PARTS_SOURCING_DRAIN_SECRET=testcopy-local-drain-secret',
+      ...localCronSecretLine(),
+      ...ownerKeys,
+    ].join('\n') + '\n',
     'utf8',
   );
   if (ownerKeys.length) {
     console.error(`Using ${ownerKeys.map((l) => l.split('=')[0]).join(', ')} from .env.local (vehicle pictures).`);
   }
-  console.error('Serving edge functions (fleet-core, fleet-ops, driver, explorer, platform-catalog)…');
+  console.error('Serving edge functions (fleet-core, fleet-ops, driver, explorer, platform-catalog, parts-sourcing-drain)…');
   spawnBg('functions', npx, [
     'supabase',
     'functions',
@@ -159,6 +165,7 @@ async function main() {
     'driver',
     'explorer',
     'platform-catalog',
+    'parts-sourcing-drain',
     '--no-verify-jwt',
     '--env-file',
     functionsEnvFile,

@@ -5,6 +5,21 @@ import { PositionChips, SpecFieldsBlock } from "../Step2FitBlock";
 
 const CONNECTOR_OPTIONS = ["Standard hook", "Side pin", "Bayonet"];
 
+/** LC-19: battery types. EFB = for stop-start (Eco Idle) cars; AGM fits those too. */
+export const BATTERY_TYPE_OPTIONS = [
+  { value: "Standard", label: "Standard (no stop-start)" },
+  { value: "EFB", label: "EFB (for stop-start / Eco Idle)" },
+  { value: "AGM", label: "AGM" },
+];
+
+/** Which by-size boxes a part type gets: wipers (connector + blade) or batteries (type). */
+export function bySpecExtras(specKeys: string[]): { wiper: boolean; battery: boolean } {
+  return {
+    wiper: specKeys.some((k) => k.startsWith("wiper_")),
+    battery: specKeys.includes("battery_jis"),
+  };
+}
+
 export function Step2BySpec({
   draft,
   setDraft,
@@ -16,11 +31,30 @@ export function Step2BySpec({
 }) {
   if (!draft.partType) return null;
   const connector = (draft.specValues.connector as string | undefined) ?? "";
+  const extras = bySpecExtras((draft.partType.specFields ?? []).map((f) => f.specKey));
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-space-lg">
       <div className="lg:col-span-2 flex flex-col gap-space-md rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-space-lg shadow-sm">
         <h3 className="font-headline-md text-headline-md text-on-surface">Spec for {draft.partType.name}</h3>
         <SpecFieldsBlock partType={draft.partType} draft={draft} setDraft={setDraft} />
+        {extras.battery ? (
+          <label className="flex flex-col gap-1 font-body-sm max-w-md">
+            <span className="font-label-md text-label-md font-semibold text-on-surface">Battery type</span>
+            <select
+              data-testid="add-part-battery-type"
+              className="h-10 px-3 rounded-lg bg-surface-container-low border border-outline-variant/40 font-body-sm"
+              value={draft.batteryType ?? ""}
+              onChange={(e) => setDraft({ ...draft, batteryType: e.target.value })}
+            >
+              <option value="">Choose battery type…</option>
+              {BATTERY_TYPE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            <span className="font-label-xs text-outline">Cars set to EFB only get EFB or AGM batteries.</span>
+          </label>
+        ) : null}
+        {extras.wiper ? (
         <label className="flex flex-col gap-1 font-body-sm max-w-md">
           <span className="font-label-md text-label-md font-semibold text-on-surface">Connector type</span>
           <select
@@ -39,15 +73,19 @@ export function Step2BySpec({
             ))}
           </select>
         </label>
+        ) : null}
+        {extras.wiper ? (
         <div className="space-y-2">
           <p className="font-label-md text-label-md font-semibold text-on-surface">Which blade?</p>
           <PositionChips
             scheme={draft.partType.positionScheme}
+              opCode={draft.partType.opCode}
             position={draft.position}
             side={draft.side}
             onPick={(pos, side) => setDraft({ ...draft, position: pos, side })}
           />
         </div>
+        ) : null}
         <p className="font-label-xs text-outline italic">Spec-based parts skip the replaces step — you can still add factory numbers later from the part record.</p>
       </div>
       <aside className="rounded-xl border border-outline-variant/40 bg-surface-container-low p-space-lg flex flex-col gap-space-md h-fit shadow-sm">

@@ -105,6 +105,7 @@ export type AddPartInfoRequestInput = {
   position?: string | null;
   vehicleCatalogId?: string;
   photoUrl?: string;
+  positionCodes?: string[];
 };
 
 /** Body for fleet-core POST /find-parts/request (add_part_info). */
@@ -122,6 +123,7 @@ export function buildAddPartInfoRequestBody(input: AddPartInfoRequestInput): Rec
     photoUrl: input.photoUrl,
   };
   if (input.oldPartNumber?.trim()) body.old_part_number = input.oldPartNumber.trim();
+  if (input.positionCodes?.length) body.positionCodes = [...input.positionCodes];
   if (input.fitParam) body.fit = input.fitParam;
   if (position === "left" || position === "right") body.side = position;
   else if (position && !["left", "right", "both"].includes(position)) body.position = position;

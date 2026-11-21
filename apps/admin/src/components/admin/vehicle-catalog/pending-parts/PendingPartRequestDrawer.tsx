@@ -13,6 +13,7 @@ import {
   fetchCatalogResearchJob,
   partPlainName,
   postCatalogResearchJobAction,
+  uiStatusBucket,
 } from "../../../../services/pendingPartsCatalogService";
 import { buildPartSearchText } from "./buildPartSearchText";
 import {
@@ -25,6 +26,7 @@ import {
   type PartDrawerVariant,
 } from "./pendingCatalogViewModels";
 import { PendingResearchJobPanel } from "./PendingResearchJobPanel";
+import { AddedPickPartPanel } from "./AddedPickPartPanel";
 
 export type PendingPartDrawerDisplay = {
   partTitle: string;
@@ -32,8 +34,11 @@ export type PendingPartDrawerDisplay = {
   vehicleSubline: string;
   statusLabel: string;
   firstAskedLabel: string;
-  fleetLabel: string;
   reqShortId: string;
+  /** LS-21 / LS-23 details card (Stitch D2). */
+  partNumber: string | null;
+  whereOnCar: string | null;
+  sources: string[];
 };
 
 type PendingPartRequestDrawerProps = {
@@ -71,6 +76,11 @@ export function PendingPartRequestDrawer({
   const [researchBusy, setResearchBusy] = useState(false);
   const [jobDetail, setJobDetail] = useState<Awaited<ReturnType<typeof fetchCatalogResearchJob>> | null>(null);
   const [jobLoading, setJobLoading] = useState(false);
+  /** Slice C (LC-09): the "Added — pick the part" list is open. */
+  const [pickingAdded, setPickingAdded] = useState(false);
+  useEffect(() => {
+    setPickingAdded(false);
+  }, [group?.groupId, open]);
 
   const jobId = detail?.researchJobId || job?.jobId || null;
   const variant: PartDrawerVariant = partDrawerVariantFromJobState(job?.state ?? jobDetail?.job?.state as string);
@@ -115,6 +125,8 @@ export function PendingPartRequestDrawer({
     const row = (jobDetail?.proposals || [])[0] as Record<string, unknown> | undefined;
     return row ? parseProposalRow(row) : null;
   }, [jobDetail]);
+  /** LC-21c: added by hand (Add parts auto-close or "Added — pick the part"): no robot Undo / Looks right. */
+  const handAdded = (job?.state ?? jobDetail?.job?.state) === "added" && !proposal;
 
   const checks = useMemo(
     () => (proposal ? buildPartProposalChecks(proposal, detail?.onFile?.length ?? 0) : null),
@@ -209,23 +221,64 @@ export function PendingPartRequestDrawer({
             {display.vehicleHeadline}
             {display.vehicleSubline ? ` · ${display.vehicleSubline}` : ""}
           </p>
-          <div className="mt-space-md flex flex-wrap items-center gap-space-sm border-t border-surface-container-high pt-2">
-            <span className="inline-flex items-center gap-1.5 rounded-md bg-primary-fixed px-2.5 py-1 font-mono-sm text-mono-sm font-semibold text-primary">
-              {display.fleetLabel}
-            </span>
-            <span className="font-mono-sm text-mono-sm text-on-surface-variant">first asked {display.firstAskedLabel}</span>
-            <button
-              type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-outline-variant/60 px-2.5 font-label-md text-label-md font-semibold"
-              onClick={() => void copyForSearch()}
-            >
-              <span className="material-symbols-outlined text-[16px]">content_copy</span>
-              {copyButtonLabel}
-            </button>
-          </div>
         </div>
 
         <div className="flex-1 space-y-space-lg overflow-y-auto bg-surface p-space-lg">
+          {/* Stitch D2 details card: the part, where on the car, where it came from. No fleet names or counts (gate 3). */}
+          <section
+            className="overflow-hidden rounded-xl bg-surface-container-lowest shadow-sm"
+            data-testid="pending-part-details"
+          >
+            {[
+              {
+                label: "Part number",
+                value: (
+                  <span className="flex flex-wrap items-center justify-end gap-2">
+                    <span className="font-mono-sm text-mono-sm font-semibold text-on-surface">{display.partNumber || "—"}</span>
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-outline-variant/60 px-2.5 font-label-md text-label-md font-semibold"
+                      onClick={() => void copyForSearch()}
+                    >
+                      <span className="material-symbols-outlined text-[16px]">content_copy</span>
+                      {copyButtonLabel}
+                    </button>
+                  </span>
+                ),
+              },
+              { label: "Where on the car", value: <span className="font-body-sm text-body-sm text-on-surface">{display.whereOnCar || "—"}</span> },
+              {
+                label: "Source",
+                value: display.sources.length ? (
+                  <span className="flex flex-wrap justify-end gap-1">
+                    {display.sources.map((s) => (
+                      <span
+                        key={s}
+                        className={`inline-flex rounded-full px-2 py-0.5 font-mono-sm text-mono-sm font-medium ${
+                          s === "Service log" ? "bg-[#1d4ed8] text-[#ffffff]" : "bg-surface-container-high text-on-surface-variant"
+                        }`}
+                      >
+                        {s}
+                      </span>
+                    ))}
+                  </span>
+                ) : (
+                  <span className="font-mono-sm text-mono-sm text-on-surface-variant">—</span>
+                ),
+              },
+              { label: "First asked", value: <span className="font-mono-sm text-mono-sm text-on-surface">{display.firstAskedLabel}</span> },
+              { label: "Reference", value: <span className="font-mono-sm text-mono-sm text-on-surface">REQ-{display.reqShortId}</span> },
+            ].map((row, i) => (
+              <div
+                key={row.label}
+                className={`flex items-center justify-between gap-3 px-space-md py-2.5 ${i ? "border-t border-outline-variant/40" : ""}`}
+              >
+                <span className="font-label-md text-label-md font-semibold text-on-surface-variant">{row.label}</span>
+                {row.value}
+              </div>
+            ))}
+          </section>
+
           {variant === "needs_review" && proposal ? (
             <div className="flex items-start gap-space-sm rounded-xl bg-amber-50 p-space-md shadow-sm">
               <span className="material-symbols-outlined mt-0.5 text-[20px] text-amber-700">warning</span>
@@ -457,6 +510,8 @@ export function PendingPartRequestDrawer({
                 </button>
               </div>
             </div>
+          ) : handAdded ? (
+            <p className="text-center text-[13px] text-on-surface-variant" data-testid="drawer-hand-added">Added by hand. Nothing more to do.</p>
           ) : variant === "auto_added" ? (
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -476,8 +531,30 @@ export function PendingPartRequestDrawer({
                 Looks right
               </button>
             </div>
+          ) : pickingAdded && group ? (
+            <AddedPickPartPanel
+              accessToken={accessToken}
+              groupId={group.groupId}
+              onCancel={() => setPickingAdded(false)}
+              onDone={() => {
+                setPickingAdded(false);
+                void onReload();
+                onClose();
+              }}
+            />
           ) : (
             <div className="grid grid-cols-12 gap-2">
+              {group && !group.groupId.startsWith("legacy:") && uiStatusBucket(group.status) !== "added" ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  data-testid="added-pick-part-open"
+                  className="col-span-12 h-10 rounded-xl border border-[#1b192e]/30 dark:border-[#e4e1ec]/30 bg-white dark:bg-[#15161d] text-[13px] font-semibold text-[#1b192e] dark:text-[#e4e1ec] hover:bg-[#f4f2fd] dark:hover:bg-[#23242e]"
+                  onClick={() => setPickingAdded(true)}
+                >
+                  Added — pick the part
+                </button>
+              ) : null}
               <button
                 type="button"
                 disabled={busy}

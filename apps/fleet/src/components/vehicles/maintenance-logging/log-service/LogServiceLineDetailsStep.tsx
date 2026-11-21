@@ -41,6 +41,8 @@ export type LogServiceLineDetailsStepProps = {
   warranty: boolean;
   complimentary: boolean;
   onWarrantyChange: (v: boolean) => void;
+  /** LC-22: the warranty period under the box ("1 year · until 19 Nov 2027" + Edit). */
+  warrantyNote?: React.ReactNode;
   onComplimentaryChange: (v: boolean) => void;
   partsLoading: boolean;
   compatibleParts: CompatiblePartsItem[];
@@ -73,7 +75,59 @@ export type LogServiceLineDetailsStepProps = {
   hideHeading?: boolean;
   /** Powertrain job fit: picked from "Show all jobs" (doesn't fit this car). Saved as normal. */
   notUsual?: boolean;
+  /** Extra chip after the job name (inspection findings: "From inspection"). */
+  headerChip?: React.ReactNode;
+  /** "What the inspection found" when there is no Items used block to hold it (items switch off). */
+  foundSlot?: React.ReactNode;
+  /** "Where on the car" chips, right under the job name (Stitch F1). */
+  whereSlot?: React.ReactNode;
+  /**
+   * Slice C "Parts that fit this car" (parts gaps switch on, part jobs). Replaces the Brand / Part number boxes and
+   * the "Link part" list; labour and the rest stay (LC-01).
+   */
+  partsPanel?: React.ReactNode;
+  /** Log it now on a planned job (LC-05, Stitch 7): the two cost hints. */
+  plannedHints?: boolean;
+  /**
+   * LC-16 a job an inspection found, not done yet: the SAME form as Log service (charge / labour / parts boxes,
+   * Items used), but everything entered is the garage's QUOTE — saved as a quote, never spend. Adds a quote banner
+   * and a note, and the total reads "Quote total".
+   */
+  quoteMode?: { note: string; onNoteChange: (v: string) => void };
+  /** One labour amount for the job (replaces hours × rate). Shown where hours/rate were. */
+  laborAmount?: number | null;
+  onLaborAmountChange?: (v: number | null) => void;
+  /** "Also do" jobs for this job (e.g. Throttle Body Relearn after cleaning), each with an Add button. */
+  alsoDoSlot?: React.ReactNode;
 };
+
+export const LABOR_COPY = {
+  label: (currency: string) => `Labor (${currency === "JMD" ? "J$" : currency})`,
+  placeholder: "Cost for the job",
+} as const;
+
+export const QUOTE_MODE_COPY = {
+  banner: "Garage's quote — not paid yet",
+  bannerBody: "Enter what the garage says it will cost. It's saved as a quote and fills in the price when you mark the job Done.",
+  note: "Note (optional)",
+  notePlaceholder: "e.g. worn, replace within 2 weeks",
+  totalLabel: "Quote total",
+} as const;
+
+export const PLANNED_HINTS = {
+  fitting: "What did the garage charge for fitting it?",
+  part: "What you paid for the part",
+  partWhere: "What you paid for the part: add it under Items used below.",
+} as const;
+
+function PlannedHint({ text, testId }: { text: string; testId: string }) {
+  return (
+    <p className={`flex items-center gap-1 ${LT.bodySm} ${LS.muted}`} data-testid={testId}>
+      <span className="material-symbols-outlined text-[15px] text-[#4b41e1] dark:text-[#c3c0ff]" aria-hidden>info</span>
+      {text}
+    </p>
+  );
+}
 
 function PositionButtons({
   positions,
@@ -268,6 +322,8 @@ function ServiceJobForm(props: LogServiceLineDetailsStepProps & { serviceForm: N
         </Label>
       </div>
 
+      {props.foundSlot ?? null}
+
       <div className={`rounded-lg px-4 py-3 flex justify-between items-center ${LS.low}`}>
         <span className="text-sm text-stitch-secondary">{lineTotalLabel}</span>
         <span className="font-semibold text-on-surface">
@@ -310,6 +366,31 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
   } = props;
 
   const actionPill = actionLabel(action);
+  const positionsBlock = showPositions ? (
+    <div className="space-y-2">
+      <Label className={`${LT.labelMd} ${LS.muted}`}>{props.sideOptions ? "Side" : "Positions"}</Label>
+      <div className="flex flex-wrap gap-2">
+        {(props.sideOptions ?? TIRE_BRAKE_POSITIONS.map((p) => ({ value: p, label: p }))).map(({ value: pos, label: posLabel }) => {
+          const on = positions.includes(pos);
+          return (
+            <button
+              key={pos}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onTogglePosition(pos)}
+              className={`min-h-11 min-w-11 px-3 rounded-lg border text-sm font-semibold ${
+                on
+                  ? "border-primary bg-primary/10 text-on-surface"
+                  : "border-outline-variant/40 bg-surface-container-lowest text-on-surface-variant"
+              }`}
+            >
+              {posLabel}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  ) : null;
   return (
     <div className="space-y-5">
       {props.hideHeading ? null : (
@@ -329,6 +410,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
           {/* Stitch powertrain 06: the chips sit right after the name, before the action pill. */}
           {props.notUsual ? <NotUsualChip /> : null}
           {category.is_high_voltage ? <HighVoltageChip /> : null}
+          {props.headerChip ?? null}
           {actionPill ? (
             <span className={`px-2.5 py-0.5 rounded-full ${LT.labelMd} ${LS.high} ${LS.muted}`}>
               {actionPill}
@@ -346,6 +428,18 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
         >
           <Info className="h-4 w-4 shrink-0" aria-hidden />
           <p className={LT.bodySm}>You picked this from all jobs. It&apos;s saved as normal.</p>
+        </div>
+      ) : null}
+      {props.whereSlot ?? null}
+
+      {props.alsoDoSlot ?? null}
+      {props.quoteMode ? (
+        <div className="rounded-lg p-3 bg-[#fffbeb] dark:bg-[#451a03]/50 flex items-start gap-2" data-testid="quote-mode-banner">
+          <Info className="h-4 w-4 shrink-0 mt-0.5 text-[#b45309] dark:text-[#fbbf24]" aria-hidden />
+          <div>
+            <p className={`${LT.labelMd} font-semibold text-[#92400e] dark:text-[#fde68a]`}>{QUOTE_MODE_COPY.banner}</p>
+            <p className={`${LT.bodySm} text-[#92400e]/90 dark:text-[#fde68a]/90`}>{QUOTE_MODE_COPY.bannerBody}</p>
+          </div>
         </div>
       ) : null}
 
@@ -372,36 +466,26 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">{categoryFields}</div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {!props.hiddenFields?.includes("labor_hours") ? (
+        {/* Owner 20 Nov: garages bill labour as one amount — no hours × rate. */}
+        {props.onLaborAmountChange && !props.hiddenFields?.includes("labor_rate") ? (
         <div className="space-y-2">
-          <Label htmlFor="labor-hours" className={`${LT.labelMd} ${LS.muted}`}>Labor hours</Label>
+          <Label htmlFor="labor-amount" className={`${LT.labelMd} ${LS.muted}`}>{LABOR_COPY.label(currency)}</Label>
           <Input
-            id="labor-hours"
+            id="labor-amount"
             type="number"
-            step="0.1"
+            min={0}
+            step="0.01"
+            inputMode="decimal"
+            placeholder={LABOR_COPY.placeholder}
             className="h-10 rounded-lg border-0 bg-white shadow-sm focus-visible:ring-1 focus-visible:ring-[#c9c5cd] dark:bg-[#15161d]"
-            value={laborHours ?? ""}
+            value={props.laborAmount ?? ""}
             onChange={(e) =>
-              onLaborHoursChange(e.target.value === "" ? null : Number(e.target.value))
+              props.onLaborAmountChange?.(e.target.value === "" ? null : Number(e.target.value))
             }
           />
         </div>
         ) : null}
-        {!props.hiddenFields?.includes("labor_rate") ? (
-        <div className="space-y-2">
-          <Label htmlFor="labor-rate" className={`${LT.labelMd} ${LS.muted}`}>Labor rate</Label>
-          <Input
-            id="labor-rate"
-            type="number"
-            className="h-10 rounded-lg border-0 bg-white shadow-sm focus-visible:ring-1 focus-visible:ring-[#c9c5cd] dark:bg-[#15161d]"
-            value={laborRate ?? ""}
-            onChange={(e) =>
-              onLaborRateChange(e.target.value === "" ? null : Number(e.target.value))
-            }
-          />
-        </div>
-        ) : null}
-        {!props.hiddenFields?.includes("brand") ? (
+        {!props.partsPanel && !props.hiddenFields?.includes("brand") ? (
         <div className="space-y-2">
           <Label htmlFor="brand" className={`${LT.labelMd} ${LS.muted}`}>Brand</Label>
           <Input
@@ -412,7 +496,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
           />
         </div>
         ) : null}
-        {!props.hiddenFields?.includes("part_number") ? (
+        {!props.partsPanel && !props.hiddenFields?.includes("part_number") ? (
         <div className="space-y-2">
           <Label htmlFor="part-number" className={`${LT.labelMd} ${LS.muted}`}>Part number</Label>
           <Input
@@ -424,32 +508,13 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
         </div>
         ) : null}
       </div>
-
-      {showPositions ? (
-        <div className="space-y-2">
-          <Label className={`${LT.labelMd} ${LS.muted}`}>{props.sideOptions ? "Side" : "Positions"}</Label>
-          <div className="flex flex-wrap gap-2">
-            {(props.sideOptions ?? TIRE_BRAKE_POSITIONS.map((p) => ({ value: p, label: p }))).map(({ value: pos, label: posLabel }) => {
-              const on = positions.includes(pos);
-              return (
-                <button
-                  key={pos}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => onTogglePosition(pos)}
-                  className={`min-h-11 min-w-11 px-3 rounded-lg border text-sm font-semibold ${
-                    on
-                      ? "border-primary bg-primary/10 text-on-surface"
-                      : "border-outline-variant/40 bg-surface-container-lowest text-on-surface-variant"
-                  }`}
-                >
-                  {posLabel}
-                </button>
-              );
-            })}
-          </div>
+      {props.plannedHints && !props.hiddenFields?.includes("labor_rate") ? (
+        <div className="-mt-2">
+          <PlannedHint text={PLANNED_HINTS.fitting} testId="planned-hint-fitting" />
         </div>
       ) : null}
+
+      {positionsBlock}
 
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="flex items-center gap-3">
@@ -477,7 +542,9 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
           </Label>
         </div>
       </div>
+      {warranty && props.warrantyNote ? props.warrantyNote : null}
 
+      {props.partsPanel ? props.partsPanel : (
       <div className="space-y-2">
         <Label className={`${LT.labelMd} ${LS.muted}`}>Link part (optional)</Label>
         {partsLoading ? (
@@ -520,7 +587,10 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
           </Select>
         )}
       </div>
+      )}
 
+      {props.itemsSlot ? null : props.foundSlot ?? null}
+      {props.plannedHints && props.itemsSlot ? <PlannedHint text={PLANNED_HINTS.partWhere} testId="planned-hint-part" /> : null}
       {props.itemsSlot ?? (
         <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low px-4 py-3 flex justify-between items-center">
           <span className="text-sm text-stitch-secondary">{lineTotalLabel}</span>
@@ -531,6 +601,20 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
       )}
       </>
       )}
+      {props.quoteMode ? (
+        <div className="space-y-2">
+          <Label htmlFor="quote-mode-note" className={`${LT.labelMd} ${LS.muted}`}>{QUOTE_MODE_COPY.note}</Label>
+          <Input
+            id="quote-mode-note"
+            data-testid="quote-mode-note"
+            maxLength={500}
+            placeholder={QUOTE_MODE_COPY.notePlaceholder}
+            className="h-10 rounded-lg border-0 bg-white shadow-sm focus-visible:ring-1 focus-visible:ring-[#c9c5cd] dark:bg-[#15161d]"
+            value={props.quoteMode.note}
+            onChange={(e) => props.quoteMode?.onNoteChange(e.target.value)}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

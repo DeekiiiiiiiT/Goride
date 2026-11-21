@@ -25,6 +25,7 @@ import { analyzeMaintenanceScheduleRow } from "../../../packages/finance-core/sr
 import { upsertPendingFromKvVehicle } from "./vehicle_catalog_pending_queries.ts";
 import { loadVehiclePartsContextExtras, vehiclePlateFromKv } from "./vehicle_parts_context.ts";
 import { buildPartsSourcingInsert, normalizeMatchType } from "./parts_sourcing_request_build.ts";
+import { positionCodesProblem } from "../../../packages/types/src/partPositions.ts";
 import {
   countOrgRequestsToday,
   DAILY_LIMIT_MESSAGE,
@@ -38,6 +39,13 @@ import { resolvePartsFitPairs } from "../../../packages/types/src/partsFitParam.
 import { readFleetPartLookup } from "./fleet_parts_lookup.ts";
 import { readBrakesOverview } from "./read_brakes_overview.ts";
 import { publicMediaUrl } from "../_shared/objectStorage/index.ts";
+import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
+import { placeCodesFilterActive, splitPlacesForFind } from "./parts_finder.ts";
+export { splitPlacesForFind };
+import { loadFindPartsAskState, type FindPartsAskState } from "./log_service_find_ask.ts";
+import { listFleetPartsNotices, orgVehicleIdByCatalog } from "./log_service_parts_notices.ts";
+import { loadJobPositionMeta } from "./job_position_meta.ts";
+import { findPartMatches } from "./fleet_parts_match.ts";
 
 /** Maker logo key → media.roamfleet.co address (null when no logo). */
 export function makerLogoUrl(key: string | null): string | null {
@@ -273,6 +281,28 @@ export async function loadPartsActivity(supabase: SupabaseClient, orgId: string)
   };
 }
 
+export type RequestPositionJob = {
+  code: string | null;
+  position_aware: boolean | null;
+  position_scheme: string | null;
+};
+
+/**
+ * LS-08: positions on a Find parts request. `job` is the request's job (null when there is no job id or it
+ * wasn't found). The job's own scheme is stored; a scheme in the body is never trusted.
+ */
+export function resolveRequestPositions(
+  raw: unknown,
+  job: RequestPositionJob | null,
+): { ok: true; codes: string[] | null; scheme: string | null } | { ok: false } {
+  if (raw === undefined || raw === null) return { ok: true, codes: null, scheme: null };
+  if (!Array.isArray(raw)) return { ok: false };
+  const codes = raw.map(String);
+  if (!codes.length || !job) return { ok: true, codes: null, scheme: null };
+  if (positionCodesProblem(job, codes)) return { ok: false };
+  return { ok: true, codes, scheme: job.position_scheme != null ? String(job.position_scheme) : null };
+}
+
 export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseClient) {
   const view = [requireAuth(), requirePermission("vehicles.view")];
 
@@ -285,7 +315,11 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       const position = c.req.query("position") || c.req.query("pos") || "";
       const side = c.req.query("side") || "";
       const fit = c.req.query("fit") || "";
-      const fitPairs = resolvePartsFitPairs({ fit, position, side });
+      let fitPairs = resolvePartsFitPairs({ fit, position, side });
+      const orgId = String(getOrgId(c) || "");
+      const partsGapsOn = orgId
+        ? await isFeatureEnabled(FEATURE_FLAGS.LOG_SERVICE_PARTS_GAPS, orgId)
+        : false;
 
       const access = await verifiedCarForVehicle(c, supabase, vehicleId);
       if (access.status === 404) return c.json({ error: "Vehicle not found" }, 404);
@@ -307,6 +341,30 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
         });
       }
 
+      let job: RequestPositionJob | null = null;
+      let placeCodes: string[] | null = null;
+      /** Every picked place (wheel codes too): the "asked" key must match the one POST /parts/request stores. */
+      let askPlaces: string[] | null = null;
+      const placesRaw = c.req.query("places")?.trim() || "";
+      if (partsGapsOn && componentId) {
+        job = await loadJobPositionMeta(supabase, componentId);
+      }
+      if (partsGapsOn && placesRaw && componentId) {
+        const parsedPlaces = placesRaw.split(",").map((s) => s.trim()).filter(Boolean);
+        if (parsedPlaces.length) {
+          if (!job || positionCodesProblem(job, parsedPlaces)) {
+            return c.json({ code: "position_invalid", error: "That position doesn't fit this part." }, 400);
+          }
+          // Wheel places (LF/RF/LR/RR) go through the existing wheel filter (fit pairs), exactly as Find parts does;
+          // only the other places (before_cat, driver, low…) use the place-code filter. Otherwise a front brake pad
+          // listing ("front") would be dropped for LF.
+          const split = splitPlacesForFind(parsedPlaces);
+          if (split.wheelPairs.length && !fitPairs.length) fitPairs = split.wheelPairs as typeof fitPairs;
+          placeCodes = split.placeCodes;
+          askPlaces = parsedPlaces;
+        }
+      }
+
       const body = await findParts(supabase, {
         make: String(vehicle.make ?? ""),
         model: String(vehicle.model ?? ""),
@@ -316,9 +374,28 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
         position: fitPairs.length === 1 ? fitPairs[0].axle : (fitPairs.length ? null : (position || null)),
         side: fitPairs.length === 1 ? fitPairs[0].side : (fitPairs.length ? null : (side || null)),
         fitPairs: fitPairs.length ? fitPairs : null,
+        placeCodes: partsGapsOn && placeCodesFilterActive(placeCodes) ? placeCodes : undefined,
+        attachFitLabels: partsGapsOn,
         orgId: null,
         downtimePerDay: 0,
       });
+
+      let ask: FindPartsAskState | undefined;
+      if (partsGapsOn && componentId && catalogId && orgId) {
+        const positionResult = resolveRequestPositions(
+          askPlaces ?? undefined,
+          job,
+        );
+        if (positionResult.ok) {
+          ask = await loadFindPartsAskState(supabase, orgId, {
+            vehicleCatalogId: catalogId,
+            maintenanceComponentId: componentId,
+            positionScheme: positionResult.scheme,
+            positionCodes: positionResult.codes,
+          });
+        }
+      }
+
       return c.json({
         ...body,
         linked: true,
@@ -328,7 +405,28 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
           label: [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" "),
           plate: String(vehicle.licensePlate ?? vehicle.plate ?? ""),
         },
+        ...(ask !== undefined ? { ask } : {}),
       });
+    } catch (error) {
+      return c.json({ error: errorText(error) }, 500);
+    }
+  });
+
+  // LC-21: close matches for "I used a different …" (one kind of part, ≥4 letters, ≤5 hits, no car lists).
+  app.get(`${PREFIX}/match`, ...view, async (c: Context) => {
+    try {
+      const vehicleId = c.req.query("vehicleId")?.trim() || "";
+      const vehicleGate = rejectUnlessVehicleId(vehicleId);
+      if (vehicleGate) return c.json({ error: vehicleGate.error }, vehicleGate.status);
+      const componentId = c.req.query("componentId")?.trim() || "";
+      if (!UUID_RE.test(componentId)) return c.json({ error: "componentId is required" }, 400);
+      const q = (c.req.query("q") ?? "").slice(0, 80);
+      const access = await verifiedCarForVehicle(c, supabase, vehicleId);
+      if (access.status === 404) return c.json({ error: "Vehicle not found" }, 404);
+      if (access.status === 403) return c.json({ error: "Forbidden" }, 403);
+      // Same gate as Find parts: only a car verified on Roam gets parts info.
+      if (!access.catalogId) return c.json({ matches: [] });
+      return c.json({ matches: await findPartMatches(supabase, componentId, q) });
     } catch (error) {
       return c.json({ error: errorText(error) }, 500);
     }
@@ -462,7 +560,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       if (access.status === 404) return c.json({ error: "Vehicle not found" }, 404);
       if (access.status === 403) return c.json({ error: "Forbidden" }, 403);
       const catalogVariantId = access.catalogId;
-      const user = c.get("rbacUser") as { id?: string } | undefined;
+      const user = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
       const side = body.side ? String(body.side).slice(0, 20) : null;
       const position = body.position ? String(body.position).slice(0, 20) : null;
       const matchType = normalizeMatchType(body.matchType ?? body.match_type);
@@ -470,13 +568,28 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
         || [String(body.partName ?? "").trim(), side, position].filter(Boolean).join(" · ")
         || "Part info request";
       const sentAt = isAddPart ? new Date().toISOString() : null;
+
+      const componentId = body.maintenanceComponentId && UUID_RE.test(String(body.maintenanceComponentId))
+        ? String(body.maintenanceComponentId)
+        : (body.componentId && UUID_RE.test(String(body.componentId)) ? String(body.componentId) : null);
+
+      const positionCodesRaw = body.positionCodes;
+      let job: RequestPositionJob | null = null;
+      if (componentId && Array.isArray(positionCodesRaw) && positionCodesRaw.length) {
+        job = await loadJobPositionMeta(supabase, componentId);
+      }
+      const positionResult = resolveRequestPositions(positionCodesRaw, job);
+      if (!positionResult.ok) {
+        return c.json({ code: "position_invalid", error: "That position doesn't fit this part." }, 400);
+      }
+      const positionCodes = positionResult.codes;
+      const positionScheme = positionResult.scheme;
+
       const insertRow = await buildPartsSourcingInsert(supabase, {
         orgId,
         vehicleId,
         needText: composedNeed,
-        componentId: body.maintenanceComponentId && UUID_RE.test(String(body.maintenanceComponentId))
-          ? String(body.maintenanceComponentId)
-          : (body.componentId && UUID_RE.test(String(body.componentId)) ? String(body.componentId) : null),
+        componentId,
         engineFamilyId: body.engineFamilyId && UUID_RE.test(String(body.engineFamilyId)) ? String(body.engineFamilyId) : null,
         vehicleCatalogId: catalogVariantId,
         matchType: isAddPart ? matchType : null,
@@ -484,15 +597,17 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
         kind,
         urgency,
         qty,
-        userId: user?.id ?? null,
+        userId: user?.userId ?? user?.id ?? null,
         photoUrl: body.photoUrl ? String(body.photoUrl).slice(0, 2000) : null,
         sentAt,
         replyDueAt: urgency ? replyDueAt(urgency) : null,
         oldPartNumber: body.oldPartNumber ?? body.old_part_number ?? null,
+        positionScheme,
+        positionCodes,
       });
 
       if (isAddPart) {
-        const groupKey = researchGroupKeyFromRow(insertRow as Record<string, unknown>);
+        const groupKey = await researchGroupKeyFromRow(supabase, insertRow as Record<string, unknown>);
         const dup = await findDedupedOpenRequest(supabase, orgId, groupKey);
         if (dup) return c.json({ item: dup, deduped: true });
 
@@ -501,16 +616,23 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
           return c.json({ error: DAILY_LIMIT_MESSAGE }, 429);
         }
 
-        const jobId = await ensureCatalogResearchJob(supabase, {
-          vehicle_catalog_id: insertRow.vehicle_catalog_id as string | null,
-          maintenance_component_id: insertRow.maintenance_component_id as string | null,
-          fit_descriptor: insertRow.fit_descriptor as string | null,
-          install_side: insertRow.install_side as string | null,
-          match_type: insertRow.match_type as string | null,
-        }, groupKey);
+        const jobId = await ensureCatalogResearchJob(
+          supabase,
+          {
+            need_text: String(insertRow.need_text ?? ""),
+            old_part_number: insertRow.old_part_number as string | null,
+            vehicle_catalog_id: insertRow.vehicle_catalog_id as string | null,
+            maintenance_component_id: insertRow.maintenance_component_id as string | null,
+            fit_descriptor: insertRow.fit_descriptor as string | null,
+            install_side: insertRow.install_side as string | null,
+            match_type: insertRow.match_type as string | null,
+          },
+          groupKey,
+        );
 
         const rowToInsert = {
           ...insertRow,
+          origin: "find_parts",
           research_group_key: groupKey,
           catalog_research_job_id: jobId,
         };
@@ -815,13 +937,14 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
   app.get(`${PREFIX}/request-draft`, ...view, async (c: Context) => {
     try {
       const orgId = String(getOrgId(c) || "");
-      const user = c.get("rbacUser") as { id?: string } | undefined;
-      if (!orgId || !user?.id) return c.json({ error: "Organization required" }, 400);
+      const user = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+      const draftUserId = user?.userId ?? user?.id ?? "";
+      if (!orgId || !draftUserId) return c.json({ error: "Organization required" }, 400);
       const { data, error } = await supabase
         .from("fleet_parts_request_draft")
         .select("payload, updated_at")
         .eq("organization_id", orgId)
-        .eq("user_id", user.id)
+        .eq("user_id", draftUserId)
         .maybeSingle();
       if (error) throw error;
       return c.json({ draft: data?.payload ?? null, updatedAt: data?.updated_at ?? null });
@@ -830,18 +953,67 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
     }
   });
 
+  app.get(`${PREFIX}/notices`, ...view, async (c: Context) => {
+    try {
+      const orgId = String(getOrgId(c) || "");
+      if (!orgId) return c.json({ error: "Organization required" }, 400);
+      if (!(await isFeatureEnabled(FEATURE_FLAGS.LOG_SERVICE_PARTS_GAPS, orgId))) {
+        return c.json({ code: "log_service_parts_gaps_off" }, 404);
+      }
+      const payload = await listFleetPartsNotices(supabase, orgId);
+      // The bell opens Find parts for one of this fleet's cars of that model (LC-03); only this org's cars of those
+      // models are read (code review #8).
+      const byCatalog = await orgVehicleIdByCatalog(
+        supabase,
+        orgId,
+        payload.items.map((n) => n.vehicleCatalogId).filter((id): id is string => Boolean(id)),
+      );
+      return c.json({
+        ...payload,
+        items: payload.items.map((n) => ({
+          ...n,
+          vehicleId: n.vehicleCatalogId ? (byCatalog.get(n.vehicleCatalogId) ?? null) : null,
+        })),
+      });
+    } catch (error) {
+      return c.json({ error: errorText(error) }, 500);
+    }
+  });
+
+  app.post(`${PREFIX}/notices/read`, ...view, async (c: Context) => {
+    try {
+      const orgId = String(getOrgId(c) || "");
+      if (!orgId) return c.json({ error: "Organization required" }, 400);
+      if (!(await isFeatureEnabled(FEATURE_FLAGS.LOG_SERVICE_PARTS_GAPS, orgId))) {
+        return c.json({ code: "log_service_parts_gaps_off" }, 404);
+      }
+      const body = await c.req.json() as { ids?: unknown };
+      const ids = Array.isArray(body.ids) ? body.ids.map(String).filter((id) => UUID_RE.test(id)) : [];
+      if (!ids.length) return c.json({ marked: 0 });
+      const { data, error } = await supabase.rpc("fleet_parts_notices_mark_read", {
+        p_organization_id: orgId,
+        p_ids: ids,
+      });
+      if (error) throw error;
+      return c.json({ marked: Number(data ?? 0) });
+    } catch (error) {
+      return c.json({ error: errorText(error) }, 500);
+    }
+  });
+
   app.put(`${PREFIX}/request-draft`, ...view, async (c: Context) => {
     try {
       const orgId = String(getOrgId(c) || "");
-      const user = c.get("rbacUser") as { id?: string } | undefined;
-      if (!orgId || !user?.id) return c.json({ error: "Organization required" }, 400);
+      const user = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+      const draftUserId = user?.userId ?? user?.id ?? "";
+      if (!orgId || !draftUserId) return c.json({ error: "Organization required" }, 400);
       const body = await c.req.json() as { payload?: Record<string, unknown> };
       const payload = body.payload && typeof body.payload === "object" ? body.payload : {};
       const { data, error } = await supabase
         .from("fleet_parts_request_draft")
         .upsert({
           organization_id: orgId,
-          user_id: user.id,
+          user_id: draftUserId,
           payload,
           updated_at: new Date().toISOString(),
         }, { onConflict: "organization_id,user_id" })

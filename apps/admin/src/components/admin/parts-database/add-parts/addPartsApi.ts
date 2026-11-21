@@ -280,6 +280,14 @@ export async function saveFluidBundle(input: Record<string, unknown>) {
   return catalogPost<Record<string, unknown>>("parts/add/fluid-bundle", input);
 }
 
+/**
+ * LC-21: a fluid / size product saved with no cars ticked (e.g. a battery that is in a car but isn't what the car maker
+ * lists): the by-size save alone — no car spec is written or changed.
+ */
+export async function saveSizeProductOnly(input: Record<string, unknown>) {
+  return catalogPost<Record<string, unknown>>("parts/add", { ...input, fitMode: "spec" });
+}
+
 export async function saveSelfServePart(draft: AddPartsDraft) {
   const body: Record<string, unknown> = {
     partTypeId: draft.partType?.id,
@@ -313,6 +321,7 @@ export async function saveSelfServePart(draft: AddPartsDraft) {
   if (draft.fitMode === "spec") {
     body.specKey = draft.specKey || draft.partType?.specFields?.[0]?.specKey;
     body.specValue = draft.specValue || Object.values(draft.specValues)[0];
+    if (body.specKey === "battery_jis" && draft.batteryType) body.batteryType = draft.batteryType;
   }
   if (draft.factoryNumbers.length) body.factoryNumbers = draft.factoryNumbers;
   return catalogPost<Record<string, unknown>>("parts/add", body);

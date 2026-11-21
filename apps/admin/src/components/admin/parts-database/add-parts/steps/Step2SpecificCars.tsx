@@ -374,6 +374,7 @@ export function Step2SpecificCars({
               ) : (
                 <PositionChips
                   scheme={draft.partType.positionScheme}
+              opCode={draft.partType.opCode}
                   position={globalAxlePosition}
                   side={draft.side}
                   onPick={setAxlePosition}

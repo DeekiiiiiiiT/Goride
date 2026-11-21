@@ -14,6 +14,7 @@ import {
   vehicleContextSpecsForResponse,
   quoteInputError,
   replyDueAt,
+  resolveRequestPositions,
   scopedToOrg,
   sourcingRow,
   vehicleContextStatus,
@@ -291,4 +292,23 @@ Deno.test("route rule: /catalog-request without vehicleId is 400", () => {
 
 Deno.test("route rule: /request without vehicleId is 400", () => {
   assertEquals(rejectUnlessVehicleId("")?.status, 400);
+});
+
+Deno.test("LS-08 request positions: wrong code refused, job's own scheme stored", () => {
+  const o2 = { code: "oxygen_sensor", position_aware: false, position_scheme: "before_after_catalyst" };
+  const tire = { code: "tire_change", position_aware: true, position_scheme: "axle" };
+  // Refused
+  assertEquals(resolveRequestPositions(["LF"], o2).ok, false);
+  assertEquals(resolveRequestPositions(["unknown", "before_cat"], o2).ok, false);
+  assertEquals(resolveRequestPositions("LF", o2).ok, false);
+  assertEquals(resolveRequestPositions("LF", null).ok, false);
+  assertEquals(resolveRequestPositions(["unknown"], tire).ok, false);
+  // Accepted
+  assertEquals(resolveRequestPositions(["before_cat"], o2), { ok: true, codes: ["before_cat"], scheme: "before_after_catalyst" });
+  assertEquals(resolveRequestPositions(["LF", "RF"], tire), { ok: true, codes: ["LF", "RF"], scheme: "axle" });
+  // Nothing to store
+  assertEquals(resolveRequestPositions(undefined, o2), { ok: true, codes: null, scheme: null });
+  assertEquals(resolveRequestPositions(null, o2), { ok: true, codes: null, scheme: null });
+  assertEquals(resolveRequestPositions([], o2), { ok: true, codes: null, scheme: null });
+  assertEquals(resolveRequestPositions(["before_cat"], null), { ok: true, codes: null, scheme: null });
 });

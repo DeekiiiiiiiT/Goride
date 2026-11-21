@@ -93,6 +93,8 @@ jobs:
             fleet-toll
             fleet-toll-cron
             fleet-picture-cron
+            parts-sourcing-drain
+            catalog-research
             fleet-ops
             fleet-claims
             fleet-pay
@@ -190,7 +192,8 @@ jobs:
             # The fleet monolith also bundles these packages: a change there must redeploy it too
             # (a toll-core-only push used to deploy nothing and leave the old toll reader live).
             if echo "$CHANGED_FILES" | grep -qE '^supabase/functions/_fleet-server/|^packages/(auth-client|toll-core|fuel-core|finance-core|types)/'; then
-              for dep in fleet-core fleet-fuel fleet-toll fleet-ops fleet-claims fleet-pay evidence-cleanup; do
+              # platform-catalog (Dominion pending parts) and catalog-research (the research robot) import _fleet-server too.
+              for dep in fleet-core fleet-fuel fleet-toll fleet-ops fleet-claims fleet-pay evidence-cleanup parts-sourcing-drain platform-catalog catalog-research; do
                 already=false
                 for f in "${FNS[@]+"${FNS[@]}"}"; do
                   [ "$f" = "$dep" ] && already=true && break

@@ -28,6 +28,18 @@ BEGIN
     RAISE EXCEPTION 'D3 hints failed: %', v_hints;
   END IF;
 
+  -- Amayama's regional catalogue path (/toyota-japan/) still means Toyota (20261119155611).
+  v_hints := public.self_serve_link_hints(
+    'https://www.amayama.com/en/genuine-catalogs/epc/toyota-japan/tank-roomy/m900a/147983/electric/8401?frame_no=M900A0344862'
+  );
+  IF coalesce(v_hints->>'catalogMaker', '') <> 'Toyota' OR NOT ('M900A' = ANY (ARRAY(SELECT jsonb_array_elements_text(v_hints->'frameCodes')))) THEN
+    RAISE EXCEPTION 'D3 amayama regional path failed: %', v_hints;
+  END IF;
+  v_hints := public.self_serve_link_hints('https://www.amayama.com/en/genuine-catalogs/epc/lexus-europe/is/ase30/1/engine/1701');
+  IF coalesce(v_hints->>'catalogMaker', '') <> 'Lexus' THEN
+    RAISE EXCEPTION 'D3 lexus regional path failed: %', v_hints;
+  END IF;
+
   SELECT c.id INTO v_cable
   FROM public.maintenance_service_categories c
   WHERE c.is_part IS TRUE AND c.op_code = 'BRK-HB-CABL' AND c.part_type_status = 'active'

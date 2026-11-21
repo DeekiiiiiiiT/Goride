@@ -63,8 +63,8 @@ function fitDetailLines(draft: AddPartsDraft, preview: SelfServePreview | null):
     const scheme = draft.partType?.positionScheme;
     if (pos === "front" && (scheme === "axle" || scheme === "axle_inner_outer")) return "Front Axle";
     if (pos === "rear" && (scheme === "axle" || scheme === "axle_inner_outer")) return "Rear Axle";
-    if (pos === "before_cat") return "Before catalytic converter";
-    if (pos === "after_cat") return "After catalytic converter";
+    if (pos === "before_cat") return "Front";
+    if (pos === "after_cat") return "Rear";
     return pos;
   })();
   const yearsLabel = structured?.modelYearsLabel;

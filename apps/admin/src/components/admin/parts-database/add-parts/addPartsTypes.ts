@@ -55,6 +55,8 @@ export type AddPartsDraft = {
   specKey: string;
   specValue: string;
   specValues: Record<string, string>;
+  /** LC-19: battery type for a battery added by size (Standard / EFB / AGM). */
+  batteryType?: string;
   position: string;
   side: string;
   catalogueNumber?: number;

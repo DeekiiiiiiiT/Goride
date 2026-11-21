@@ -1,5 +1,6 @@
 import { API_ENDPOINTS } from "./apiConfig";
 import { publicAnonKey } from "../utils/supabase/info";
+import { positionsLabel } from "@roam/types/partPositions";
 
 const PARTS_QUEUE_BASE = `${API_ENDPOINTS.catalog}/make-server-37f42386/admin/pending-catalog/parts-queue`;
 const RESEARCH_BASE = `${API_ENDPOINTS.catalog}/make-server-37f42386/admin/catalog-research`;
@@ -21,12 +22,17 @@ export type PendingPartsQueueGroup = {
   side: string | null;
   fitDescriptor?: string | null;
   matchType?: string | null;
-  fleetCount: number;
   firstAsked: string | null;
   lastAsked: string | null;
   photoCount: number;
   status: string;
   requestIds: string[];
+  origins?: string[];
+  positionScheme?: string | null;
+  positionCodes?: string[] | null;
+  requestedName?: string | null;
+  requestedPartNumber?: string | null;
+  researchJobId?: string | null;
 };
 
 export type PendingPartsGroupNote = {
@@ -49,8 +55,12 @@ export type PendingPartsOnFileRow = {
 
 export type PendingPartsGroupDetail = {
   groupId: string;
-  fleetCount: number;
   researchJobId?: string | null;
+  requestedName?: string | null;
+  requestedPartNumber?: string | null;
+  positionScheme?: string | null;
+  positionCodes?: string[] | null;
+  origins?: string[];
   notes: PendingPartsGroupNote[];
   photos: PendingPartsGroupPhoto[];
   onFile?: PendingPartsOnFileRow[];
@@ -121,6 +131,44 @@ export async function patchPendingPartsGroup(
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(await readError(res));
+}
+
+/** Slice C (LC-09): parts on file for this group's car model + job + place, to answer the asks with. */
+export type PendingPartsCandidate = {
+  partId: string;
+  name: string;
+  brand: string;
+  number: string;
+  place: string | null;
+  fitLabel: "made_for_car" | "also_fits" | "fits_by_size" | "check_before_buying" | "not_listed";
+};
+
+export async function fetchPendingPartsCandidates(
+  accessToken: string,
+  groupId: string,
+): Promise<PendingPartsCandidate[]> {
+  const res = await fetch(`${PARTS_QUEUE_BASE}/${encodeURIComponent(groupId)}/candidates`, {
+    headers: edgeHeaders(accessToken),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  const data = (await res.json()) as { items?: PendingPartsCandidate[] };
+  return Array.isArray(data.items) ? data.items.filter((i) => i && i.partId) : [];
+}
+
+/** "Added — pick the part": answers every open ask in the group; each company gets "Part on file". */
+export async function resolvePendingPartsGroupAdded(
+  accessToken: string,
+  groupId: string,
+  partId: string,
+): Promise<{ resolved: number; companies: number }> {
+  const res = await fetch(`${PARTS_QUEUE_BASE}/${encodeURIComponent(groupId)}`, {
+    method: "PATCH",
+    headers: edgeHeaders(accessToken, "application/json"),
+    body: JSON.stringify({ action: "added", partId }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  const data = (await res.json()) as { resolved?: number; companies?: number };
+  return { resolved: Number(data.resolved ?? 0), companies: Number(data.companies ?? 0) };
 }
 
 export async function fetchVehicleCatalogBriefs(
@@ -230,6 +278,31 @@ export function formatPartLabel(
   }
   const subtitle = matchType ? `${baseName} · ${matchType} option` : (meta?.areaName || "Fleet part request");
   return { title, subtitle };
+}
+
+/** LS-21 / LS-23: what a group shows beyond the part type — the asked-for name, number, position and source. */
+export function formatPartRequestExtras(group: Pick<
+  PendingPartsQueueGroup,
+  "requestedName" | "requestedPartNumber" | "positionScheme" | "positionCodes" | "origins"
+>): { requestedName: string | null; partNumber: string | null; whereOnCar: string | null; detailLine: string; sources: string[] } {
+  const requestedName = group.requestedName?.trim() || null;
+  const partNumber = group.requestedPartNumber?.trim() || null;
+  const codes = (group.positionCodes || []).filter(Boolean);
+  const whereOnCar = codes.length
+    ? positionsLabel({ code: null, position_aware: null, position_scheme: group.positionScheme ?? null }, codes)
+    : null;
+  // Stitch D1: "89467-B1040 · Front", leaving out whichever is unknown; "—" when both are.
+  const detailLine = [partNumber, whereOnCar].filter(Boolean).join(" · ") || "—";
+  return { requestedName, partNumber, whereOnCar, detailLine, sources: sourceLabels(group.origins) };
+}
+
+/** Source chips, Service log first (LS-17). */
+export function sourceLabels(origins: string[] | null | undefined): string[] {
+  const set = new Set(origins || []);
+  const out: string[] = [];
+  if (set.has("service_log")) out.push("Service log");
+  if (set.has("find_parts")) out.push("Find parts");
+  return out;
 }
 
 export type CatalogResearchStrip = {

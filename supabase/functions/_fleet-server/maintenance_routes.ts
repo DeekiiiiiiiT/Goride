@@ -84,12 +84,41 @@ import {
   isContentEditBody,
   isMixedPatchBody,
   loadLineItemsForWorkOrders,
+  loadSourcingByLineItemForWorkOrder,
+  sourcingFieldsFromOutbox,
   loadWorkOrderLinesForRpc,
   mapApiLineToDb,
   prepareWorkOrderLines,
   buildClientPayloadLines,
+  loadJobMetaForLines,
+  mapDbLineToApi,
+  inspectInspectionFindingsOffPayload,
+  findingMarks,
+  type FindingMarks,
 } from "./service_items_save.ts";
 import { mapJobItemRowToApi } from "./maintenance_jobs_admin_helpers.ts";
+import {
+  buildFoundStatusForLine,
+  childWorkOrderClosesFoundLine,
+  enrichSectionsRecordsFindings,
+  mapFoundWorkCloseError,
+  type DoneByFoundLine,
+} from "./inspection_findings_helpers.ts";
+import { displayNamesFor } from "./recon_desk_reads.ts";
+import { verifiedCarForVehicle } from "./fleet_parts_access.ts";
+import {
+  isPlannedWorkOrder,
+  mapFleetAddFoundJobError,
+  mapFleetPlanJobError,
+  plannedJobConflictResponse,
+} from "./log_service_planned_guard.ts";
+import {
+  loadExistingLineParts,
+  partFitsVerifiedCar,
+  validateLinePartFitOnSave,
+} from "./log_service_part_fit.ts";
+import { positionCodesProblem } from "../../../packages/types/src/partPositions.ts";
+import { loadJobPositionMeta } from "./job_position_meta.ts";
 
 const assertVehicleCatalogPlatformAccess = assertPlatformStaffResponse;
 
@@ -100,6 +129,30 @@ function todayIso(): string {
 function rbacUserId(c: Context): string | null {
   const id = (c.get("rbacUser") as { userId?: string } | undefined)?.userId;
   return id && isUuid(String(id)) ? String(id) : null;
+}
+
+async function partsGapsLinePartFitGuard(
+  c: Context,
+  supabase: SupabaseClient,
+  orgId: string,
+  vehicleId: string,
+  workOrderId: string | null,
+  rawLines: unknown[],
+): Promise<Response | null> {
+  if (!(await isFeatureEnabled(FEATURE_FLAGS.LOG_SERVICE_PARTS_GAPS, orgId))) return null;
+  const existing = workOrderId ? await loadExistingLineParts(supabase, workOrderId) : undefined;
+  const fit = await validateLinePartFitOnSave(c, supabase, orgId, vehicleId, rawLines, existing);
+  if (!fit.ok) return c.json({ code: fit.code, error: fit.error }, fit.status);
+  return null;
+}
+
+function plannedWorkOrderGuardResponse(
+  c: Context,
+  wo: Record<string, unknown> | null | undefined,
+): Response | null {
+  if (!isPlannedWorkOrder(wo)) return null;
+  const { status, body } = plannedJobConflictResponse();
+  return c.json(body, status);
 }
 
 function aggregateFleetStatus(
@@ -126,6 +179,113 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 
 function isUuid(s: string): boolean {
   return UUID_RE.test(s.trim());
+}
+
+async function enrichApiLinesWithFound(
+  supabase: SupabaseClient,
+  orgId: string,
+  currentWorkOrderId: string,
+  apiLines: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  const foundLineIds = apiLines
+    .filter((l) => l.recommended === true && l.id != null)
+    .map((l) => String(l.id));
+  if (!foundLineIds.length) return apiLines;
+
+  const { data: childRows, error: childErr } = await supabase
+    .from("maintenance_work_order_lines")
+    .select("id, from_found_line_id, work_order_id")
+    .in("from_found_line_id", foundLineIds)
+    .is("voided_at", null);
+  if (childErr) throw childErr;
+
+  const childList = (childRows || []) as Record<string, unknown>[];
+  const woIds = [...new Set(childList.map((r) => String(r.work_order_id ?? "")).filter((id) => isUuid(id)))];
+  const woById = new Map<string, Record<string, unknown>>();
+  if (woIds.length) {
+    const { data: wos, error: woErr } = await supabase
+      .from("maintenance_work_orders")
+      .select("id, performed_at_date, voided_at, organization_id, status")
+      .in("id", woIds)
+      .eq("organization_id", orgId)
+      .is("voided_at", null);
+    if (woErr) throw woErr;
+    for (const wo of wos || []) {
+      woById.set(String((wo as { id: string }).id), wo as Record<string, unknown>);
+    }
+  }
+
+  const doneByFoundId = new Map<string, DoneByFoundLine>();
+  for (const row of childList) {
+    const fromId = row.from_found_line_id != null ? String(row.from_found_line_id) : "";
+    const woId = row.work_order_id != null ? String(row.work_order_id) : "";
+    if (!fromId || !woId || !woById.has(woId)) continue;
+    if (doneByFoundId.has(fromId)) continue;
+    const wo = woById.get(woId)!;
+    if (!childWorkOrderClosesFoundLine(wo)) continue;
+    const performed = wo.performed_at_date != null ? String(wo.performed_at_date).slice(0, 10) : null;
+    doneByFoundId.set(fromId, {
+      workOrderId: woId,
+      performedAtDate: performed,
+      sameWorkOrder: woId === currentWorkOrderId,
+    });
+  }
+
+  const closedByIds: string[] = [];
+  for (const line of apiLines) {
+    if (line.recommended !== true) continue;
+    const cb = line.closedBy;
+    if (cb != null && isUuid(String(cb))) closedByIds.push(String(cb));
+  }
+  const closedByNames = await displayNamesFor(closedByIds);
+
+  return apiLines.map((line) => {
+    if (line.recommended !== true || line.id == null) return line;
+    const lineId = String(line.id);
+    const found = buildFoundStatusForLine({
+      lineId,
+      currentWorkOrderId,
+      closedReason: line.closedReason != null ? String(line.closedReason) : null,
+      closedAt: line.closedAt != null ? String(line.closedAt) : null,
+      closedBy: line.closedBy != null ? String(line.closedBy) : null,
+      doneByFoundId,
+      closedByNames,
+    });
+    return { ...line, found };
+  });
+}
+
+async function inspectionFindingsOffResponse(
+  c: Context,
+  orgId: string,
+  rawLines: unknown[],
+  inspectionFindingsEnabled?: boolean,
+  editWorkOrderId?: string | null,
+  db?: SupabaseClient,
+): Promise<Response | null> {
+  if (!rawLines.length) return null;
+  const enabled = inspectionFindingsEnabled !== undefined
+    ? inspectionFindingsEnabled
+    : await isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId);
+  if (enabled) return null;
+  if (!inspectInspectionFindingsOffPayload(rawLines)) return null;
+  // An edit may send back marks its lines already have; only a new finding is refused (code review #4).
+  if (db && editWorkOrderId && isUuid(editWorkOrderId)) {
+    const { data: storedRows, error: storedErr } = await db
+      .from("maintenance_work_order_lines")
+      .select("id, from_found_line_id, values_json")
+      .eq("work_order_id", editWorkOrderId);
+    if (storedErr) throw storedErr;
+    const storedById = new Map<string, FindingMarks>();
+    for (const row of (storedRows || []) as Record<string, unknown>[]) {
+      storedById.set(String(row.id), findingMarks(row));
+    }
+    if (!inspectInspectionFindingsOffPayload(rawLines, storedById)) return null;
+  }
+  return c.json(
+    { code: "inspection_findings_off", error: "Inspection findings are not enabled for this fleet." },
+    400,
+  );
 }
 
 type JobFitAnswer = "yes" | "no" | "unknown";
@@ -396,73 +556,27 @@ function internalWorkOrderCompleteRequest(
   );
 }
 
-/** snake_case DB line → camelCase API. */
-function mapDbLineToApi(row: Record<string, unknown>): Record<string, unknown> {
-  return {
-    id: row.id,
-    sortOrder: row.sort_order,
-    systemId: row.system_id,
-    componentId: row.component_id,
-    systemCode: row.system_code,
-    systemName: row.system_name,
-    categoryId: row.component_id,
-    categoryCode: row.component_code,
-    categoryName: row.component_name,
-    componentCode: row.component_code,
-    componentName: row.component_name,
-    action: row.action,
-    qty: row.qty != null ? Number(row.qty) : undefined,
-    unitPrice: row.unit_price != null ? Number(row.unit_price) : undefined,
-    material: row.material != null ? Number(row.material) : undefined,
-    labor: row.labor_amount != null ? Number(row.labor_amount) : undefined,
-    laborAmount: row.labor_amount != null ? Number(row.labor_amount) : undefined,
-    laborHours: row.labor_hours != null ? Number(row.labor_hours) : undefined,
-    laborRate: row.labor_rate != null ? Number(row.labor_rate) : undefined,
-    condition: row.condition,
-    positions: row.positions,
-    brand: row.brand,
-    partNumber: row.part_number,
-    warranty: row.warranty === true,
-    complimentary: row.complimentary === true,
-    partId: row.part_id,
-    notes: row.notes,
-    recommended: row.recommended === true,
-    declined: row.declined === true,
-    values: row.values_json,
-    lineTotal: row.line_total != null ? Number(row.line_total) : undefined,
-    itemsAmount: row.items_amount != null ? Number(row.items_amount) : 0,
-    voidedAt: row.voided_at ?? null,
-    fitAtLog: row.fit_at_log != null ? String(row.fit_at_log) : null,
-    isHighVoltage: row.is_high_voltage === true,
-  };
-}
-
 async function enrichLinesWithItems(
   supabase: SupabaseClient,
   workOrderId: string,
   lines: Record<string, unknown>[],
 ): Promise<Record<string, unknown>[]> {
   const itemsByLine = await loadLineItemsForWorkOrders(supabase, [workOrderId]);
-  const compIds = [
-    ...new Set(
-      lines.map((l) => String(l.component_id ?? "")).filter((id) => isUuid(id)),
-    ),
-  ];
-  const hvByJob = new Map<string, boolean>();
-  if (compIds.length) {
-    const { data: cats } = await supabase
-      .from("maintenance_service_categories")
-      .select("id, is_high_voltage")
-      .in("id", compIds);
-    for (const row of cats || []) {
-      hvByJob.set(String((row as { id: string }).id), (row as { is_high_voltage?: boolean }).is_high_voltage === true);
-    }
+  const sourcingByItem = await loadSourcingByLineItemForWorkOrder(supabase, workOrderId);
+  for (const [lineId, items] of itemsByLine) {
+    itemsByLine.set(
+      lineId,
+      items.map((item) => ({
+        ...item,
+        ...sourcingFieldsFromOutbox(sourcingByItem.get(String(item.id))),
+      })),
+    );
   }
+  // One lookup for each line's job: high voltage and its position kind (code review #9).
+  const jobMeta = await loadJobMetaForLines(supabase, lines.map((l) => l.component_id));
   return lines.map((line) => {
-    const cid = String(line.component_id ?? "");
-    const merged = hvByJob.has(cid)
-      ? { ...line, is_high_voltage: hvByJob.get(cid) }
-      : line;
+    const meta = jobMeta.get(String(line.component_id ?? ""));
+    const merged = meta ? { ...line, ...meta } : line;
     return {
       ...mapDbLineToApi(merged),
       items: itemsByLine.get(String(line.id)) ?? [],
@@ -1694,19 +1808,25 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           allJobsById,
         );
         const withItems = await attachFleetJobItemsToSections(supabase, payload);
-        const serviceItemsEnabled = orgId
-          ? await isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId)
-          : false;
+        const [serviceItemsEnabled, inspectionFindingsEnabled, logServicePartsGapsEnabled] = orgId
+          ? await Promise.all([
+            isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId),
+            isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId),
+            isFeatureEnabled(FEATURE_FLAGS.LOG_SERVICE_PARTS_GAPS, orgId),
+          ])
+          : [false, false, false];
+        const withRecords = enrichSectionsRecordsFindings(withItems, inspectionFindingsEnabled);
         const fitCtx = orgId ? await loadJobFitContext(c, supabase, orgId) : { mode: "off" as const };
+        const flagPayload = { serviceItemsEnabled, inspectionFindingsEnabled, logServicePartsGapsEnabled };
         if (fitCtx instanceof Response) return fitCtx;
         if (fitCtx.mode === "off") {
-          return c.json({ ...withItems, serviceItemsEnabled });
+          return c.json({ ...withRecords, ...flagPayload });
         }
         if (fitCtx.mode === "error") {
-          return c.json({ ...withItems, serviceItemsEnabled, jobFit: fitCtx.jobFit });
+          return c.json({ ...withRecords, ...flagPayload, jobFit: fitCtx.jobFit });
         }
-        const enriched = enrichSectionsWithFit(withItems, fitCtx.fitMap);
-        return c.json({ ...enriched, serviceItemsEnabled, jobFit: fitCtx.jobFit });
+        const enriched = enrichSectionsWithFit(withRecords, fitCtx.fitMap);
+        return c.json({ ...enriched, ...flagPayload, jobFit: fitCtx.jobFit });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
@@ -2255,7 +2375,17 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
 
         const actorId = rbacUserId(c);
         if (!actorId) return c.json({ code: "actor_required", error: "Actor required" }, 401);
-        const itemsEnabled = await isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId);
+        const [inspectionFindingsEnabled, itemsEnabled] = await Promise.all([
+          isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId),
+          isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId),
+        ]);
+        const findingsBlocked = await inspectionFindingsOffResponse(
+          c,
+          orgId,
+          rawLines,
+          inspectionFindingsEnabled,
+        );
+        if (findingsBlocked) return findingsBlocked;
         const woId = crypto.randomUUID();
         const prepared = await prepareWorkOrderLines(supabase, {
           orgId,
@@ -2267,6 +2397,15 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (!prepared.ok) {
           return c.json({ code: prepared.code, error: prepared.error }, prepared.status);
         }
+        const partFitBlocked = await partsGapsLinePartFitGuard(
+          c,
+          supabase,
+          orgId,
+          vehicleId,
+          null,
+          rawLines,
+        );
+        if (partFitBlocked) return partFitBlocked;
         const discount = parseDiscount(log.discount ?? log.discount_amount) ?? 0;
         const logModeDb = logMode === "package" ? "package" : "quick_job";
         const packageComplete = logModeDb === "package" && !!templateId;
@@ -2529,7 +2668,19 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           const actorId = rbacUserId(c);
           if (!actorId) return c.json({ code: "actor_required", error: "Actor required" }, 401);
 
-          const itemsEnabled = await isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId);
+          const [inspectionFindingsEnabled, itemsEnabled] = await Promise.all([
+            isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId),
+            isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId),
+          ]);
+          const findingsBlocked = await inspectionFindingsOffResponse(
+            c,
+            orgId,
+            rawEditLines,
+            inspectionFindingsEnabled,
+            editWorkOrderId,
+            supabase,
+          );
+          if (findingsBlocked) return findingsBlocked;
           let workOrderId = editWorkOrderId;
           if (!isUuid(workOrderId) && rawEditLines.length) {
             workOrderId = crypto.randomUUID();
@@ -2547,6 +2698,18 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
 
           if (!prepared.ok) {
             return c.json({ code: prepared.code, error: prepared.error }, prepared.status);
+          }
+          // S5: editing a logged service checks a newly chosen part fits the car, like every other save.
+          if (rawEditLines.length) {
+            const partFitBlocked = await partsGapsLinePartFitGuard(
+              c,
+              supabase,
+              orgId,
+              vehicleId,
+              isUuid(editWorkOrderId) ? editWorkOrderId : null,
+              rawEditLines,
+            );
+            if (partFitBlocked) return partFitBlocked;
           }
 
           let storedDiscount = 0;
@@ -3582,6 +3745,377 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   // -------------------------------------------------------------------------
+  // Tenant — found work from inspections
+  // -------------------------------------------------------------------------
+  route.get(
+    "/maintenance-found-work",
+    requireAuth(),
+    requirePermission("vehicles.view"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const enabled = await isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId);
+        if (!enabled) return c.json({ code: "inspection_findings_off" }, 404);
+        const vehicleId = String(c.req.query("vehicleId") || "").trim() || null;
+        const { data, error } = await supabase.rpc("fleet_open_found_work", {
+          p_organization_id: orgId,
+          p_vehicle_id: vehicleId,
+        });
+        if (error) throw error;
+        const rows = (Array.isArray(data) ? data : (data ?? [])) as Array<Record<string, unknown>>;
+        // LC-10: the list shows "Parts to buy" on inspection-found jobs only while this switch is on, and names the
+        // place in the car maker's words, which needs the job's code (the oxygen sensor's "Front (Air fuel ratio sensor)").
+        const partsGapsEnabled = await isFeatureEnabled(FEATURE_FLAGS.LOG_SERVICE_PARTS_GAPS, orgId);
+        const jobIds = [...new Set(rows.map((r) => String(r.jobId ?? "")).filter(Boolean))];
+        const codeById = new Map<string, string>();
+        const isPartById = new Map<string, boolean>();
+        if (partsGapsEnabled && jobIds.length) {
+          const { data: jobs, error: jobsErr } = await supabase
+            .from("maintenance_service_categories")
+            .select("id, code, is_part")
+            .in("id", jobIds);
+          if (jobsErr) throw jobsErr;
+          for (const j of jobs ?? []) {
+            codeById.set(String(j.id), String(j.code ?? ""));
+            isPartById.set(String(j.id), j.is_part !== false);
+          }
+        }
+        // LC-15: each found job's garage quote (values_json.quote_amount; never part of any total).
+        const quoteByLine = new Map<string, number>();
+        const quoteDetailByLine = new Map<string, Record<string, unknown>>();
+        const lineIds = rows.map((r) => String(r.lineId ?? "")).filter((v) => isUuid(v));
+        if (lineIds.length) {
+          const { data: qRows, error: qErr } = await supabase
+            .from("maintenance_work_order_lines")
+            .select("id, values_json")
+            .in("id", lineIds);
+          if (qErr) throw qErr;
+          for (const q of qRows ?? []) {
+            const v = (q.values_json ?? {}) as Record<string, unknown>;
+            const n = Number(v.quote_amount);
+            if (Number.isFinite(n) && n > 0) quoteByLine.set(String(q.id), n);
+            if (v.quote && typeof v.quote === "object" && !Array.isArray(v.quote)) {
+              quoteDetailByLine.set(String(q.id), v.quote as Record<string, unknown>);
+            }
+          }
+        }
+        const items = rows.map((r) => ({
+          ...r,
+          jobCode: codeById.get(String(r.jobId ?? "")) ?? null,
+          jobIsPart: isPartById.get(String(r.jobId ?? "")) ?? null,
+          quoteAmount: quoteByLine.get(String(r.lineId ?? "")) ?? null,
+          quoteDetail: quoteDetailByLine.get(String(r.lineId ?? "")) ?? null,
+        }));
+        return c.json({ items, partsGapsEnabled });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.get(
+    "/maintenance-found-work/counts",
+    requireAuth(),
+    requirePermission("vehicles.view"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const enabled = await isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId);
+        if (!enabled) return c.json({ code: "inspection_findings_off" }, 404);
+        const { data, error } = await supabase.rpc("fleet_found_work_counts", {
+          p_organization_id: orgId,
+        });
+        if (error) throw error;
+        return c.json(data ?? {
+          total: 0,
+          cars: 0,
+          oldestDays: null,
+          byVehicle: {},
+          oldestVehicleId: null,
+        });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.post(
+    "/maintenance-found-work/:lineId/not-needed",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const enabled = await isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId);
+        if (!enabled) return c.json({ code: "inspection_findings_off" }, 404);
+        const lineId = c.req.param("lineId");
+        if (!isUuid(lineId)) return c.json({ error: "Invalid id" }, 400);
+        const actorId = rbacUserId(c);
+        if (!actorId) return c.json({ code: "actor_required", error: "Sign in again." }, 401);
+        const { data, error } = await supabase.rpc("fleet_close_found_work", {
+          p_organization_id: orgId,
+          p_actor_id: actorId,
+          p_line_id: lineId,
+        });
+        if (error) {
+          const mapped = mapFoundWorkCloseError(error.message || "");
+          if (mapped) {
+            return c.json({ code: mapped.code, error: mapped.error }, mapped.status);
+          }
+          throw error;
+        }
+        return c.json(data ?? {});
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.post(
+    "/maintenance-planned-jobs",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        if (!(await isFeatureEnabled(FEATURE_FLAGS.LOG_SERVICE_PARTS_GAPS, orgId))) {
+          return c.json({ code: "log_service_parts_gaps_off" }, 404);
+        }
+        // A planned job lives on the Not done yet list (found work): without that switch nobody could see, close or
+        // log it (code review #2).
+        if (!(await isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId))) {
+          return c.json({ code: "inspection_findings_off" }, 404);
+        }
+        const body = (await c.req.json()) as Record<string, unknown>;
+        const vehicleId = String(body.vehicleId ?? body.vehicle_id ?? "").trim();
+        const jobId = String(body.jobId ?? body.job_id ?? body.componentId ?? body.component_id ?? "").trim();
+        const actorId = rbacUserId(c);
+        if (!actorId) return c.json({ code: "actor_required", error: "Sign in again." }, 401);
+        if (!vehicleId || !jobId || !isUuid(jobId)) {
+          return c.json({ error: "vehicleId and jobId are required" }, 400);
+        }
+
+        const access = await verifiedCarForVehicle(c, supabase, vehicleId);
+        if (access.status === 404) return c.json({ error: "Not found" }, 404);
+        if (access.status === 403) return c.json({ error: "Forbidden" }, 403);
+
+        const partIdRaw = body.partId ?? body.part_id;
+        const partId = partIdRaw != null && String(partIdRaw).trim() !== ""
+          ? String(partIdRaw).trim()
+          : null;
+        if (partId) {
+          // Same rule as every save (partFitsVerifiedCar, code review #4).
+          const fits = await partFitsVerifiedCar(supabase, access.catalogId ?? null, partId);
+          if (!fits) {
+            return c.json({
+              code: "line_part_not_for_car",
+              error: "That part does not fit this car.",
+            }, 400);
+          }
+        }
+
+        const placesRaw = body.places ?? body.positions ?? body.positionCodes ?? body.position_codes;
+        let positions: string[] | null = null;
+        if (Array.isArray(placesRaw)) {
+          positions = placesRaw.map(String).filter(Boolean);
+        }
+        if (positions?.length) {
+          const jobRow = await loadJobPositionMeta(supabase, jobId);
+          if (jobRow && positionCodesProblem(jobRow, positions)) {
+            return c.json({ code: "position_invalid", error: "That position doesn't fit this job. Pick again." }, 400);
+          }
+        }
+
+        const note = body.note != null ? String(body.note) : null;
+        const idempotencyKey = body.idempotencyKey ?? body.idempotency_key; // gitleaks:allow (reads the request's idempotency key, not a secret)
+        const key = idempotencyKey != null ? String(idempotencyKey).trim() : "";
+
+        const { data, error } = await supabase.rpc("fleet_plan_job", {
+          p_organization_id: orgId,
+          p_actor_id: actorId,
+          p_vehicle_id: vehicleId,
+          p_component_id: jobId,
+          p_positions: positions ?? [],
+          p_part_id: partId,
+          p_note: note,
+          p_idempotency_key: key,
+        });
+        if (error) {
+          const mapped = mapFleetPlanJobError(error.message ?? String(error));
+          if (mapped) return c.json({ code: mapped.code, error: mapped.error }, mapped.status);
+          throw error;
+        }
+        const row = (data ?? {}) as Record<string, unknown>;
+        return c.json({
+          workOrderId: row.workOrderId ?? row.work_order_id,
+          lineId: row.lineId ?? row.line_id,
+          created: row.created === true,
+          alreadyListed: row.alreadyListed === true,
+        });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  /**
+   * LC-14: add a job an inspection found to that saved inspection ("Add a job to this inspection"). Only inserts a
+   * J$ 0 "not done yet" line (fleet_add_found_job); the saved service's date, total and other jobs never change.
+   */
+  route.post(
+    "/maintenance-work-orders/:id/found-jobs",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        if (!(await isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId))) {
+          return c.json({ code: "inspection_findings_off" }, 404);
+        }
+        const id = c.req.param("id");
+        if (!isUuid(id)) return c.json({ error: "Invalid id" }, 400);
+        const actorId = rbacUserId(c);
+        if (!actorId) return c.json({ code: "actor_required", error: "Sign in again." }, 401);
+        const body = (await c.req.json()) as Record<string, unknown>;
+        const jobId = String(body.jobId ?? body.job_id ?? body.componentId ?? body.component_id ?? "").trim();
+        if (!jobId || !isUuid(jobId)) return c.json({ error: "jobId is required" }, 400);
+
+        // The car must be one this person can open (same check as Plan it).
+        const { data: wo, error: woErr } = await supabase
+          .from("maintenance_work_orders")
+          .select("id, vehicle_id")
+          .eq("id", id)
+          .eq("organization_id", orgId)
+          .maybeSingle();
+        if (woErr) throw woErr;
+        if (!wo) return c.json({ code: "service_not_found", error: "That inspection was not found." }, 404);
+        const access = await verifiedCarForVehicle(c, supabase, String(wo.vehicle_id ?? ""));
+        if (access.status === 404) return c.json({ error: "Not found" }, 404);
+        if (access.status === 403) return c.json({ error: "Forbidden" }, 403);
+
+        const placesRaw = body.places ?? body.positions ?? body.positionCodes ?? body.position_codes;
+        const positions = Array.isArray(placesRaw) ? placesRaw.map(String).filter(Boolean) : [];
+        if (positions.length) {
+          const jobRow = await loadJobPositionMeta(supabase, jobId);
+          if (jobRow && positionCodesProblem(jobRow, positions)) {
+            return c.json({ code: "position_invalid", error: "That position doesn't fit this job. Pick again." }, 400);
+          }
+        }
+        const note = body.note != null ? String(body.note) : null;
+        // LC-15: the garage's quote (not paid) — stored on the found line only, never in totals.
+        const quoteRaw = body.quote ?? body.quoteAmount ?? body.quote_amount;
+        const quote = quoteRaw == null || quoteRaw === "" ? null : Number(quoteRaw);
+        if (quote != null && (!Number.isFinite(quote) || quote < 0)) {
+          return c.json({ code: "quote_invalid", error: "The quote must be a price from 0 up." }, 400);
+        }
+        // LC-16: the quote's full job form (boxes + items) — a snapshot to fill in Done; never a cost.
+        const detailRaw = body.quoteDetail ?? body.quote_detail;
+        const quoteDetail = detailRaw && typeof detailRaw === "object" && !Array.isArray(detailRaw) ? detailRaw : null;
+
+        const { data, error } = await supabase.rpc("fleet_add_found_job", {
+          p_organization_id: orgId,
+          p_actor_id: actorId,
+          p_work_order_id: id,
+          p_component_id: jobId,
+          p_positions: positions,
+          p_note: note,
+          p_quote: quote,
+          p_quote_detail: quoteDetail,
+        });
+        if (error) {
+          const mapped = mapFleetAddFoundJobError(error.message ?? String(error));
+          if (mapped) return c.json({ code: mapped.code, error: mapped.error }, mapped.status);
+          throw error;
+        }
+        const row = (data ?? {}) as Record<string, unknown>;
+        return c.json({
+          workOrderId: row.workOrderId ?? id,
+          lineId: row.lineId ?? null,
+          created: row.created === true,
+          alreadyListed: row.alreadyListed === true,
+        });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  /**
+   * LC-17: Add quote / Edit quote on a job that's still Not done yet (fleet_set_found_quote: only the found line's
+   * quote + note change; the saved service and its total never do).
+   */
+  route.put(
+    "/maintenance-found-work/:lineId/quote",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        if (!(await isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId))) {
+          return c.json({ code: "inspection_findings_off" }, 404);
+        }
+        const lineId = c.req.param("lineId");
+        if (!isUuid(lineId)) return c.json({ error: "Invalid id" }, 400);
+        const actorId = rbacUserId(c);
+        if (!actorId) return c.json({ code: "actor_required", error: "Sign in again." }, 401);
+        const body = (await c.req.json()) as Record<string, unknown>;
+
+        const { data: line, error: lineErr } = await supabase
+          .from("maintenance_work_order_lines")
+          .select("id, work_order_id, maintenance_work_orders!inner(vehicle_id, organization_id)")
+          .eq("id", lineId)
+          .eq("maintenance_work_orders.organization_id", orgId)
+          .maybeSingle();
+        if (lineErr) throw lineErr;
+        if (!line) return c.json({ code: "found_line_not_found", error: "That job was not found." }, 404);
+        const wo = (line as unknown as { maintenance_work_orders: { vehicle_id: string } }).maintenance_work_orders;
+        const access = await verifiedCarForVehicle(c, supabase, String(wo?.vehicle_id ?? ""));
+        if (access.status === 404) return c.json({ error: "Not found" }, 404);
+        if (access.status === 403) return c.json({ error: "Forbidden" }, 403);
+
+        const quoteRaw = body.quote ?? body.quoteAmount ?? body.quote_amount;
+        const quote = quoteRaw == null || quoteRaw === "" ? null : Number(quoteRaw);
+        if (quote != null && (!Number.isFinite(quote) || quote < 0)) {
+          return c.json({ code: "quote_invalid", error: "The quote must be a price from 0 up." }, 400);
+        }
+        const detailRaw = body.quoteDetail ?? body.quote_detail;
+        const quoteDetail = detailRaw && typeof detailRaw === "object" && !Array.isArray(detailRaw) ? detailRaw : null;
+        const note = body.note != null ? String(body.note) : null;
+
+        const { data, error } = await supabase.rpc("fleet_set_found_quote", {
+          p_organization_id: orgId,
+          p_actor_id: actorId,
+          p_line_id: lineId,
+          p_quote: quote,
+          p_quote_detail: quoteDetail,
+          p_note: note,
+        });
+        if (error) {
+          const mapped = mapFleetAddFoundJobError(error.message ?? String(error));
+          if (mapped) return c.json({ code: mapped.code, error: mapped.error }, mapped.status);
+          throw error;
+        }
+        const row = (data ?? {}) as Record<string, unknown>;
+        return c.json({ lineId, quoteAmount: row.quoteAmount ?? null });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
   // Tenant — work orders (job cards)
   // -------------------------------------------------------------------------
   route.get(
@@ -3606,6 +4140,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           if (statuses.length) q = q.in("status", statuses);
         } else if (board) {
           q = q.in("status", [...MAINTENANCE_WO_ACTIVE_STATUSES]);
+        } else {
+          q = q.neq("status", "planned");
         }
         const { data, error } = await q;
         if (error) throw error;
@@ -3645,11 +4181,38 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           id,
           (lines || []) as Record<string, unknown>[],
         );
+        const withFound = await enrichApiLinesWithFound(supabase, orgId, id, enrichedLines);
+        // LC-14: a saved, not deleted service with an inspection job can take more found jobs ("Add a job to this
+        // inspection" in the View window).
+        let canAddFoundJobs = false;
+        let inspectionJobName: string | null = null;
+        const w = wo as Record<string, unknown>;
+        if (String(w.status ?? "") === "completed" && w.voided_at == null) {
+          const doneIds = ((lines || []) as Record<string, unknown>[])
+            .filter((l) => l.voided_at == null && l.recommended !== true)
+            .map((l) => String(l.component_id ?? ""))
+            .filter((v) => isUuid(v));
+          if (doneIds.length && (await isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId))) {
+            const { data: insp, error: inspErr } = await supabase
+              .from("maintenance_service_categories")
+              .select("id, name")
+              .in("id", [...new Set(doneIds)])
+              .eq("records_findings", true);
+            if (inspErr) throw inspErr;
+            const inspIds = new Set((insp ?? []).map((r) => String(r.id)));
+            const first = ((lines || []) as Record<string, unknown>[]).find(
+              (l) => l.voided_at == null && l.recommended !== true && inspIds.has(String(l.component_id ?? "")),
+            );
+            canAddFoundJobs = Boolean(first);
+            inspectionJobName = first ? String(first.component_name ?? "") || null : null;
+          }
+        }
         return c.json({
-          item: mapDbWorkOrderToApi(
-            wo as Record<string, unknown>,
-            enrichedLines,
-          ),
+          item: {
+            ...mapDbWorkOrderToApi(w, withFound),
+            canAddFoundJobs,
+            inspectionJobName,
+          },
         });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -3702,10 +4265,16 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
                 String(existing.id),
                 (lines || []) as Record<string, unknown>[],
               );
+              const withFound = await enrichApiLinesWithFound(
+                supabase,
+                orgId,
+                String(existing.id),
+                enrichedLines,
+              );
               return c.json({
                 item: mapDbWorkOrderToApi(
                   existing as Record<string, unknown>,
-                  enrichedLines,
+                  withFound,
                 ),
                 idempotentReplay: true,
               });
@@ -3746,8 +4315,18 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const currencyRaw = body.currency != null ? String(body.currency).trim().toUpperCase() : "JMD";
         const currency = currencyRaw || "JMD";
         const woId = crypto.randomUUID();
-        const itemsEnabled = await isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId);
         const rawLines = Array.isArray(body.lines) ? body.lines : [];
+        const [inspectionFindingsEnabled, itemsEnabled] = await Promise.all([
+          isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId),
+          isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId),
+        ]);
+        const findingsBlocked = await inspectionFindingsOffResponse(
+          c,
+          orgId,
+          rawLines,
+          inspectionFindingsEnabled,
+        );
+        if (findingsBlocked) return findingsBlocked;
         const prepared = await prepareWorkOrderLines(supabase, {
           orgId,
           vehicleId,
@@ -3758,6 +4337,15 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (!prepared.ok) {
           return c.json({ code: prepared.code, error: prepared.error }, prepared.status);
         }
+        const partFitBlockedCreate = await partsGapsLinePartFitGuard(
+          c,
+          supabase,
+          orgId,
+          vehicleId,
+          null,
+          rawLines,
+        );
+        if (partFitBlockedCreate) return partFitBlockedCreate;
         const lineRows = prepared.lines;
         const discountParsed = parseDiscount(body.discount ?? body.discount_amount);
         const discount = discountParsed ?? 0;
@@ -3889,6 +4477,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .maybeSingle();
         if (fetchErr) throw fetchErr;
         if (!existing) return c.json({ error: "Not found" }, 404);
+        const plannedBlocked = plannedWorkOrderGuardResponse(c, existing as Record<string, unknown>);
+        if (plannedBlocked) return plannedBlocked;
 
         if (isMixedPatchBody(body)) {
           return c.json({ error: "Save the job details and the status separately." }, 400);
@@ -3923,10 +4513,22 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
               return c.json({ code: "status_invalid", error: "Invalid service status." }, 400);
             }
           }
-          const itemsEnabled = await isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId);
+          const [inspectionFindingsEnabled, itemsEnabled] = await Promise.all([
+            isFeatureEnabled(FEATURE_FLAGS.INSPECTION_FINDINGS, orgId),
+            isFeatureEnabled(FEATURE_FLAGS.SERVICE_ITEMS, orgId),
+          ]);
           const vehicleId = String(existing.vehicle_id ?? "");
           let linesForSave: Record<string, unknown>[];
           if (Array.isArray(body.lines)) {
+            const findingsBlocked = await inspectionFindingsOffResponse(
+              c,
+              orgId,
+              body.lines,
+              inspectionFindingsEnabled,
+              id,
+              supabase,
+            );
+            if (findingsBlocked) return findingsBlocked;
             const prepared = await prepareWorkOrderLines(supabase, {
               orgId,
               vehicleId,
@@ -3938,6 +4540,15 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
               return c.json({ code: prepared.code, error: prepared.error }, prepared.status);
             }
             linesForSave = prepared.lines;
+            const partFitBlocked = await partsGapsLinePartFitGuard(
+              c,
+              supabase,
+              orgId,
+              vehicleId,
+              id,
+              body.lines,
+            );
+            if (partFitBlocked) return partFitBlocked;
           } else {
             linesForSave = await loadWorkOrderLinesForRpc(supabase, id);
           }
@@ -4133,6 +4744,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .maybeSingle();
         if (fetchErr) throw fetchErr;
         if (!wo) return c.json({ error: "Not found" }, 404);
+        const plannedBlocked = plannedWorkOrderGuardResponse(c, wo as Record<string, unknown>);
+        if (plannedBlocked) return plannedBlocked;
         if (String(wo.status) === "cancelled") {
           return c.json({ error: "Cannot complete a cancelled work order" }, 400);
         }
@@ -4641,6 +5254,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .maybeSingle();
         if (fetchErr) throw fetchErr;
         if (!wo) return c.json({ error: "Not found" }, 404);
+        const plannedVoidBlocked = plannedWorkOrderGuardResponse(c, wo as Record<string, unknown>);
+        if (plannedVoidBlocked) return plannedVoidBlocked;
         if (String(wo.status) !== "completed") {
           return c.json({ error: "Only completed work orders can be voided" }, 400);
         }

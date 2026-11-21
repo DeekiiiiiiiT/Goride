@@ -90,8 +90,12 @@ export interface MaintenanceServiceCategory {
   default_action?: MaintenanceLineAction | null;
   /** Plain-English "what is this for" text; shown as the card tooltip in Log service. */
   description?: string | null;
+  /** When true, log service can record jobs the inspection found (not done yet). */
+  recordsFindings?: boolean;
   /** When true, Fleet tracks LF/RF/LR/RR separately for outstanding work. */
   position_aware?: boolean;
+  /** Dominion fit scheme for position chips (before_after_catalyst, four_corners, …). */
+  position_scheme?: string | null;
   /** Powertrain job fit: the job touches the high-voltage system (amber "High-voltage" chip). */
   is_high_voltage?: boolean;
   /** Powertrain job fit: only when the list was asked for a car (vehicleId) and the flag is on. */
@@ -212,7 +216,89 @@ export interface MaintenanceLogLine {
   fitAtLog?: "yes" | "no" | "unknown" | null;
   /** Read only: the line's job is high-voltage work. */
   isHighVoltage?: boolean;
+  fromFoundLineId?: string | null;
+  closedAt?: string | null;
+  closedReason?: string | null;
+  closedBy?: string | null;
+  /** Read only on completed inspection services — follow-up state for found (not done yet) jobs. */
+  found?: MaintenanceFoundLineStatus;
+  /** Read only: job position scheme from maintenance_service_categories. */
+  positionScheme?: string | null;
+  /** Read only: whether the job is position-aware. */
+  positionAware?: boolean | null;
+  /**
+   * Screen only, never sent: a position chip was tapped on this line. A saved line that was not tapped
+   * goes out with no `positions` key, so the server keeps what it has (LS-05, golden rule 10).
+   */
+  positionsTouched?: boolean;
 }
+
+export type MaintenanceFoundLineStatus = {
+  status: "waiting" | "done" | "not_needed" | "service_deleted";
+  doneWorkOrderId: string | null;
+  doneDate: string | null;
+  doneSameDay: boolean;
+  closedAt: string | null;
+  closedByName: string | null;
+};
+
+/** One open found job from GET /maintenance-found-work (database RPC keys). */
+export type FoundWorkItem = {
+  lineId: string;
+  workOrderId: string;
+  vehicleId: string;
+  jobId: string;
+  jobName: string;
+  systemName: string | null;
+  note: string | null;
+  foundDate: string;
+  daysWaiting: number;
+  garage: string | null;
+  inspectionJobName: string | null;
+  positions?: string[];
+  positionScheme?: string | null;
+  positionAware?: boolean | null;
+  /** LC-10: the job's code, so places read in the car maker's words ("Front (Air fuel ratio sensor)"). */
+  jobCode?: string | null;
+  /** False = a service, not a part (no "Parts to buy"). */
+  jobIsPart?: boolean | null;
+  /** LC-15: the garage's quote for this job (not paid; never in spend). */
+  quoteAmount?: number | null;
+  /** LC-16: the quote's full job form (boxes + items), filled in when the job is marked Done. */
+  quoteDetail?: Record<string, unknown> | null;
+  /** Slice C: "planned" = added with Plan it (bought first, logged later); else found by an inspection. */
+  source?: "planned" | "inspection";
+  /** Slice C: the part picked when it was planned. */
+  partId?: string | null;
+  partName?: string | null;
+  partBrand?: string | null;
+  partNumber?: string | null;
+};
+
+/** Slice C: a "Part on file" message in the maintenance bell (GET /parts/notices). */
+export type PartsNotice = {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  createdAt: string;
+  read: boolean;
+  carLabel: string | null;
+  /** One of the fleet's cars of that model (opens Find parts for it). */
+  vehicleId?: string | null;
+  jobId: string | null;
+  jobName: string | null;
+  places: string[] | null;
+};
+
+export type FoundWorkCounts = {
+  total: number;
+  cars: number;
+  oldestDays: number | null;
+  /** The car whose found job has waited longest (IF-26). */
+  oldestVehicleId?: string | null;
+  byVehicle: Record<string, number>;
+};
 
 /**
  * One item used on a job. Sent as-is to the server (it reads the LineItemInput keys);
@@ -243,6 +329,8 @@ export type LineItemDraft = {
   /** Blank = cost not recorded (counts as 0). */
   unitCost?: string | number | null;
   amount?: number;
+  sourcingState?: "pending" | "sent" | "merged" | "not_sent" | "cancelled" | null;
+  sourcingReason?: "car_not_linked" | "daily_limit" | "error" | null;
 };
 
 /** One item's amount in cents (qty × cost, rounded like the server), or null while it isn't valid. */
@@ -291,7 +379,7 @@ export function lineItemForWire(item: LineItemDraft): LineItemInput {
     partSource: partSourceForWire(item),
     itemName: isOther ? item.itemName : null,
     brand: item.brand?.toString().trim() ? item.brand.toString().trim() : null,
-    partNumber: item.itemKind === "part_type" && item.partNumber?.toString().trim()
+    partNumber: (item.itemKind === "part_type" || item.itemKind === "other") && item.partNumber?.toString().trim()
       ? item.partNumber.toString().trim()
       : null,
     qty: String(item.qty ?? "").trim(),
@@ -438,7 +526,8 @@ export function sumMaintenanceLogLines(lines: MaintenanceLogLine[] | undefined |
   if (!lines?.length) return 0;
   let total = 0;
   for (const line of lines) {
-    if (line.declined) continue;
+    // Declined and found ("not done yet") jobs are never charged.
+    if (line.declined || line.recommended) continue;
     const qty = Number(line.qty ?? line.values?.qty ?? 0) || 0;
     const unit = Number(line.unitPrice ?? line.values?.unit_price ?? 0) || 0;
     const material = Number(line.material ?? line.values?.material ?? 0) || 0;

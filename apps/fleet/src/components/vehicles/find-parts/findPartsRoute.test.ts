@@ -51,6 +51,24 @@ describe("buildAddPartInfoRequestBody", () => {
     expect(body.partName).toBe("Drive belt");
   });
 
+  it("omits positionCodes when not provided", () => {
+    const body = buildAddPartInfoRequestBody({
+      vehicleId: "veh-1",
+      componentId: "cmp",
+      partName: "Part",
+    });
+    expect(body.positionCodes).toBeUndefined();
+  });
+
+  it("passes positionCodes when provided", () => {
+    const body = buildAddPartInfoRequestBody({
+      vehicleId: "veh-1",
+      componentId: "cmp",
+      positionCodes: ["before_cat"],
+    });
+    expect(body.positionCodes).toEqual(["before_cat"]);
+  });
+
   it("includes fit and position for a brake pad request", () => {
     const body = buildAddPartInfoRequestBody({
       vehicleId: "veh-1",

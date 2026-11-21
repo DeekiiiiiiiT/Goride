@@ -101,7 +101,7 @@ export function positionSchemeLabel(scheme: string | undefined | null): string {
   if (scheme === "driver_passenger_rear") return "Driver · Passenger · Rear";
   if (scheme === "low_high_beam") return "Low · High beam";
   if (scheme === "front_rear_side") return "Front · Rear · Side";
-  if (scheme === "before_after_catalyst") return "Before · After cat";
+  if (scheme === "before_after_catalyst") return "Front · Rear";
   return scheme.replace(/_/g, " ");
 }
 
@@ -325,7 +325,8 @@ export function defaultPartNamePreview(
 ): string {
   const pos = (position ?? "").toLowerCase();
   const parts: string[] = [];
-  if (pos === "front" || pos === "rear") parts.push(pos === "front" ? "Front" : "Rear");
+  if (pos === "front" || pos === "before_cat") parts.push("Front");
+  else if (pos === "rear" || pos === "after_cat") parts.push("Rear");
   parts.push(plainName.toLowerCase());
   if (scheme === "axle_numbered" && catalogueNumber != null) {
     parts.push(`No.${catalogueNumber}`);
@@ -421,8 +422,8 @@ export function technicalProfileLines(draft: AddPartsDraft): string[] {
     let label = pos;
     if (pos === "front" && (scheme === "axle" || scheme === "axle_inner_outer")) label = "Front Axle";
     else if (pos === "rear" && (scheme === "axle" || scheme === "axle_inner_outer")) label = "Rear Axle";
-    else if (pos === "before_cat") label = "Before catalytic converter";
-    else if (pos === "after_cat") label = "After catalytic converter";
+    else if (pos === "before_cat") label = "Front";
+    else if (pos === "after_cat") label = "Rear";
     lines.push(`Position: ${label}`);
   }
   for (const f of draft.partType?.specFields ?? []) {

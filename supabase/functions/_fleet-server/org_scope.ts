@@ -67,6 +67,16 @@ export function isLegacyOrgPlaceholder(organizationId: unknown): boolean {
 }
 
 /**
+ * filterByOrg's rule for one record, usable without a request (e.g. the parts-sourcing drain):
+ * records with no organizationId or the legacy placeholder are visible (pre-backfill), otherwise it must match.
+ */
+export function recordVisibleToOrg(r: Record<string, unknown>, orgId: string): boolean {
+  if (!r.organizationId) return true;
+  if (isLegacyOrgPlaceholder(r.organizationId)) return true;
+  return r.organizationId === orgId;
+}
+
+/**
  * Extract the organizationId from the Hono context (set by requireAuth()).
  * Returns null if not available (anon passthrough or platform roles).
  */
@@ -202,17 +212,7 @@ export function filterByOrg<T extends Record<string, unknown>>(
     stats.outputCount = records.length;
   } else {
     result = records.filter((r) => {
-      if (!r.organizationId) {
-        // Legacy: include records without org (pre-backfill)
-        return true;
-      }
-      if (isLegacyOrgPlaceholder(r.organizationId)) {
-        // Legacy: include roam-default-org records
-        return true;
-      }
-      if (r.organizationId === orgId) {
-        return true;
-      }
+      if (recordVisibleToOrg(r, orgId)) return true;
       // Record belongs to different org - exclude
       stats.removedByReason.orgMismatch++;
       return false;

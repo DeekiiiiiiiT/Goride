@@ -2,6 +2,7 @@
  * F0 carve — full residual monolith body (helpers, nested registrars, inline routes).
  * Behavior unchanged. Boot file is kernel + this registrar + Deno.serve only.
  */
+import { GEMINI_TEXT_MODEL } from "./gemini_models.ts";
 import type { Hono } from "npm:hono@4.3.11";
 import type { Context, Next } from "npm:hono@4.3.11";
 import { streamText } from "npm:hono@4.3.11/streaming";
@@ -6448,7 +6449,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
 
       // Robust fallback strategy for model selection
       // Updated 2026-03-11: Use current Gemini model names (old -exp/-latest suffixes are deprecated/404)
-      const modelCandidates = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash"];
+      const modelCandidates = [GEMINI_TEXT_MODEL];
       let result = null;
       let lastError = null;
 
@@ -6742,7 +6743,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
           const genAI = new GoogleGenerativeAI(apiKey);
           
           // Robust model selection
-          const modelCandidates = ["gemini-1.5-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"];
+          const modelCandidates = [GEMINI_TEXT_MODEL];
           
           const arrayBuffer = await file.arrayBuffer();
           const base64Data = Buffer.from(arrayBuffer).toString('base64');
@@ -6833,7 +6834,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
           const genAI = new GoogleGenerativeAI(apiKey);
           
           // Robust model selection
-          const modelCandidates = ["gemini-1.5-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"];
+          const modelCandidates = [GEMINI_TEXT_MODEL];
           
           const arrayBuffer = await file.arrayBuffer();
           const base64Data = Buffer.from(arrayBuffer).toString('base64');

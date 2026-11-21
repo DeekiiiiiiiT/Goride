@@ -45,7 +45,8 @@ export function CatalogPartTypeSelect({
         <MaterialIcon name={open ? "expand_less" : "expand_more"} className="ml-auto text-[20px] text-on-surface-variant" />
       </button>
       {open ? (
-        <div className="absolute z-20 mt-1 w-full min-w-[240px] rounded-xl border border-outline-variant/40 bg-surface-container-lowest shadow-lg p-2 max-h-72 flex flex-col">
+        // In the page flow, not floating: the parts table scrolls sideways, which cut off a floating list (it looked empty).
+        <div className="relative z-20 mt-1 w-full min-w-[240px] rounded-xl border border-outline-variant/40 bg-surface-container-lowest shadow-lg p-2 max-h-72 flex flex-col">
           <input
             className="h-9 px-3 rounded-lg border border-outline-variant/40 mb-2"
             placeholder="Search types…"

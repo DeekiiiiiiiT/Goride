@@ -41,6 +41,7 @@ const OPENAI_IMAGE_PER_IMG: Record<string, number> = {
 // Google Gemini / Imagen — $/1K tokens for text, $/image for Imagen.
 // ---------------------------------------------------------------------------
 const GEMINI_TEXT: Record<string, { in: number; out: number }> = {
+  "gemini-3.8-flash":            { in: 0.000075, out: 0.0003 },
   "gemini-2.5-flash":            { in: 0.000075, out: 0.0003 },
   "gemini-2.0-flash":            { in: 0.000075, out: 0.0003 },
   "gemini-2.0-flash-lite":       { in: 0.000075, out: 0.0003 },
