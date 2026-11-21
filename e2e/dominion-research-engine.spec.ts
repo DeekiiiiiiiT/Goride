@@ -494,13 +494,16 @@ test.describe("Research engine screens (layer 3)", () => {
     await openParts(page);
     await page.getByTestId("parts-row").filter({ hasText: "Shock absorber" }).getByTestId("row-open-browser-check").click();
     const d = page.getByTestId("research-drawer");
-    await expect(d.getByTestId("q-change")).toContainText("Does it show one number, or a change by build date?");
+    await expect(d.getByTestId("q-change")).toContainText("Under the part, how many different Period dates?");
+    await expect(d.getByTestId("q-change-one")).toHaveText("One");
+    await expect(d.getByTestId("q-change-split")).toHaveText("Two");
     await d.getByTestId("q-version-yes").click();
     await d.getByTestId("q-part-yes").click();
     await d.getByTestId("q-change-split").click();
     await expect(d.getByTestId("q-positions")).toHaveCount(0);
     await d.getByTestId("q-change-month").selectOption("11");
     await d.getByTestId("q-change-year").selectOption("2018");
+    await expect(d.getByTestId("q-change")).toContainText("The second Period starts:");
     await expect(d.getByTestId("q-split-front-left|before")).toContainText("Front left, built before Nov 2018:");
     await expect(d.getByTestId("q-split-front-left|from")).toContainText("Front left, built from Nov 2018:");
     await d.getByTestId("q-split-front-left|before").getByTestId("q-split-suggestion").filter({ hasText: "00000-S0002" }).click();
