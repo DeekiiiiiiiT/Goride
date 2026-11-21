@@ -32,6 +32,8 @@ import {
 } from "./ReKit";
 import {
   browserCheckTarget,
+  buildDates,
+  plainVersion,
   carLabel,
   gateReasonText,
   howSureLine,
@@ -513,6 +515,15 @@ function BrowserCheckCard({
   const [pasted, setPasted] = useState("");
   // RE-57: when the page shows a different number than Roam suggested, the owner types it; it must be on the line.
   const [typedNumber, setTypedNumber] = useState("");
+  // RE-61: the page the owner actually used is the proof link (pre-filled with Roam's link; same trusted-site rule).
+  // Starts empty: Roam's link may be the version list, which never shows the part (code review).
+  const [pageUrl, setPageUrl] = useState("");
+  // Another check opened in the same drawer starts clean (keyed on the job only, so a refetch keeps the work).
+  useEffect(() => {
+    setPasted("");
+    setTypedNumber("");
+    setPageUrl("");
+  }, [detail.job.id]);
   const [gate, setGate] = useState<BrowserCheckGate | null>(null);
   const url = detail.browserCheckUrl;
   const site = siteName(url);
@@ -541,7 +552,7 @@ function BrowserCheckCard({
     };
   }, [pasted, typedNumber, token, detail.job.id]);
 
-  const canConfirm = Boolean(gate?.ok && url);
+  const canConfirm = Boolean(gate?.ok && pageUrl.trim().startsWith("https://"));
   const askNumber =
     jobType === "part" && pasted.trim() !== "" && (typedNumber !== "" || (gate !== null && !gate.ok && (gate.reason === "no_number" || gate.reason === "number_not_on_line")));
 
@@ -577,15 +588,13 @@ function BrowserCheckCard({
         </div>
         <div className="flex items-center gap-2">
           <StepDot n={2} />
-          <p className="text-[14px] text-[#00174b] dark:text-[#dbe1ff]" data-testid="browser-check-instruction">
-            Find the line that shows{" "}
-            {target.code ? (
-              <span className={`rounded bg-white/70 px-1.5 py-0.5 text-[13px] ${D_MONO} dark:bg-[#0b1220]/60`}>{target.code}</span>
-            ) : (
-              "this car"
-            )}{" "}
-            and the {target.item}
-          </p>
+          <div className="flex flex-col gap-1 text-[14px] text-[#00174b] dark:text-[#dbe1ff]" data-testid="browser-check-instruction">
+            <p>
+              Make sure the page is for <span className="font-semibold">{plainVersion(detail.car)}</span>. If it shows a list of versions,
+              open the one{buildDates(detail.car) ? ` dated ${buildDates(detail.car)}` : ""} with that engine.
+            </p>
+            <p>Copy the line that names the version (with its dates), then the {target.item} row, and paste both below.</p>
+          </div>
         </div>
         <div className="flex items-start gap-2">
           <StepDot n={3} />
@@ -625,10 +634,24 @@ function BrowserCheckCard({
                 <RePill tone="green">Matched</RePill>
               </>
             ) : (
-              <span className={`text-[13px] ${D_MUTED}`}>{gate ? gateReasonText(gate.reason, jobType) : "Reading…"}</span>
+              <span className={`text-[13px] ${D_MUTED}`}>{gate ? gateReasonText(gate.reason, jobType, detail.car) : "Reading…"}</span>
             )}
           </div>
         </div>
+      ) : null}
+
+      {pasted.trim() ? (
+        <label className={`flex flex-col gap-1 text-[13px] ${D_MUTED}`}>
+          Address of the page you copied from
+          <input
+            value={pageUrl}
+            onChange={(e) => setPageUrl(e.target.value)}
+            placeholder="https://"
+            data-testid="browser-check-page-url"
+            className={`h-10 w-full rounded-lg border border-[#c5c6d0] bg-white px-3 text-[13px] text-[#30323b] outline-none focus:ring-2 focus:ring-[#0153dc] dark:border-[#334155] dark:bg-[#0b1220] dark:text-[#e2e8f0] ${D_MONO}`}
+          />
+          <span className="text-[12px]">Copy the address from the browser's address bar on the page you copied from. It's saved as the proof.</span>
+        </label>
       ) : null}
 
       {askNumber ? (
@@ -658,7 +681,7 @@ function BrowserCheckCard({
             className="!min-h-[40px] flex-1"
             disabled={busy || !canConfirm}
             data-testid="browser-check-confirm"
-            onClick={() => url && onConfirm(pasted, url, typedNumber.trim() || undefined)}
+            onClick={() => onConfirm(pasted, pageUrl.trim(), typedNumber.trim() || undefined)}
           >
             <DIcon name="check" className="text-[18px]" /> Confirm
           </PartsButton>

@@ -55,8 +55,13 @@ export type ResearchCar = {
   model: string;
   production_start_year: number | null;
   production_end_year: number | null;
+  production_start_month?: number | null;
+  production_end_month?: number | null;
   chassis_code: string | null;
   engine_code: string | null;
+  engine_type?: string | null;
+  /** RE-62: the engine in plain words, only when known (server); null → not said. */
+  engine_words?: string | null;
   drivetrain: string | null;
   transmission: string | null;
   trim_series?: string | null;
@@ -329,7 +334,7 @@ export type SiteRead = {
 
 export type BrowserCheckGate =
   | { ok: true; detected: string }
-  | { ok: false; reason: "no_car" | "no_number" | "number_not_on_line" | "no_value" | "empty" };
+  | { ok: false; reason: "no_car" | "no_number" | "number_not_on_line" | "wrong_years" | "wrong_engine" | "no_value" | "empty" };
 
 // ------------------------------------------------------------------ reads
 

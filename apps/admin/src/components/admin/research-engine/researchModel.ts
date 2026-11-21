@@ -240,12 +240,52 @@ export function browserCheckTarget(car: ResearchCar | null, itemName: string): {
   return { code: car?.chassis_code || car?.model || null, item: itemName.toLowerCase() };
 }
 
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** "11.2016 – 08.2020" (months when on file, else years; "now" when still built) — the way catalogues date versions. */
+export function buildDates(car: ResearchCar | null): string {
+  if (!car?.production_start_year) return "";
+  const from = car.production_start_month ? `${pad2(car.production_start_month)}.${car.production_start_year}` : String(car.production_start_year);
+  const to = car.production_end_year
+    ? car.production_end_month
+      ? `${pad2(car.production_end_month)}.${car.production_end_year}`
+      : String(car.production_end_year)
+    : "now";
+  return `${from} – ${to}`;
+}
+
+/**
+ * RE-62: the car described the way a catalogue's version list shows it, in plain words — dates, regular / turbo /
+ * hybrid engine, grade, 2WD/4WD. No frame or engine codes.
+ */
+export function plainVersion(car: ResearchCar | null): string {
+  if (!car) return "this car";
+  // Only what Dominion knows: the server's plain words, else the car's own turbo / hybrid type; never a guess.
+  const kind = (car.engine_type ?? "").trim().toLowerCase();
+  const engine = car.engine_words ?? (/turbo/.test(kind) ? "turbo engine" : /hybrid/.test(kind) ? "hybrid engine" : "");
+  return [
+    `${car.make} ${car.model}`,
+    buildDates(car) ? `built ${buildDates(car)}` : "",
+    engine,
+    (car.catalog_trim ?? "").trim() ? `grade ${car.catalog_trim!.trim()}` : "",
+    (car.drivetrain ?? "").trim(),
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
 export function gateReasonText(
-  reason: "no_car" | "no_number" | "number_not_on_line" | "no_value" | "empty",
+  reason: "no_car" | "no_number" | "number_not_on_line" | "wrong_years" | "wrong_engine" | "no_value" | "empty",
   jobType: "part" | "spec",
+  car: ResearchCar | null = null,
 ): string {
   if (reason === "empty") return "Paste the line from the page.";
   if (reason === "no_car") return "That line doesn't name this car.";
+  if (reason === "wrong_years") {
+    const dates = buildDates(car);
+    return `Those dates are for a different version${dates ? ` — this car was built ${dates}` : ""}. Open the version for those dates.`;
+  }
+  if (reason === "wrong_engine") return "That's a different engine (for example the turbo). Open the version with this car's engine.";
   if (reason === "number_not_on_line") return "The number you typed isn't on the pasted line.";
   if (reason === "no_number" || jobType === "part") {
     return "None of Roam's suggested numbers is on this line. If the page shows a different number, type it below.";

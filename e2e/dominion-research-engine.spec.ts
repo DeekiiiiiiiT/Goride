@@ -88,7 +88,7 @@ function proposal(id: string, jobId: string, over: Record<string, unknown>) {
 
 function detail(jobId: string) {
   const base = {
-    car: roomy, partType: null as unknown, spec: null as unknown, browserCheckUrl: null as string | null,
+    car: { ...roomy, engine_words: "regular engine (not turbo)" }, partType: null as unknown, spec: null as unknown, browserCheckUrl: null as string | null,
     reads: [{ id: "r-1", domain: "masuma.parts", path: "direct", read_at: "2026-11-20T14:22:00Z" }, { id: "r-2", domain: "sbparts.jp", path: "direct", read_at: "2026-11-20T14:22:00Z" }],
     proposals: [] as unknown[], vehicleProposals: [] as unknown[], specProposals: [] as unknown[], conflicts: [] as unknown[], events: [],
   };
@@ -363,7 +363,9 @@ test.describe("Research engine screens (layer 3)", () => {
     const d = page.getByTestId("research-drawer");
     await expect(d.getByTestId("open-catalogue-page")).toHaveAttribute("href", "https://www.amayama.com/en/part/toyota/roomy-m900a");
     await expect(d.getByTestId("open-catalogue-page")).toContainText("Open the Amayama page");
-    await expect(d.getByTestId("browser-check-instruction")).toContainText("M900A");
+    // RE-62: the car in plain words (dates, regular engine), never a frame code.
+    await expect(d.getByTestId("browser-check-instruction")).toContainText("Toyota Roomy, built 2016 – 2020, regular engine (not turbo)");
+    await expect(d.getByTestId("browser-check-instruction")).not.toContainText("M900A");
     await expect(d.getByTestId("browser-check-counter")).toContainText("7 of 25");
     await expect(d.getByTestId("browser-check-confirm")).toBeDisabled();
     await d.getByTestId("browser-check-paste").fill("Roomy M900A battery");
@@ -372,6 +374,10 @@ test.describe("Research engine screens (layer 3)", () => {
     await d.getByTestId("browser-check-paste").fill("Roomy M900A battery M-42 EFB");
     await expect(d.getByTestId("detected-value")).toHaveText("Detected: M-42");
     await expect(d.getByText("Matched")).toBeVisible();
+    // RE-61: Confirm needs the address of the page the owner copied from (starts empty).
+    await expect(d.getByTestId("browser-check-page-url")).toHaveValue("");
+    await expect(d.getByTestId("browser-check-confirm")).toBeDisabled();
+    await d.getByTestId("browser-check-page-url").fill("https://www.amayama.com/en/part/toyota/roomy-m900a");
     await shot(page, "03-request-drawer-browser-check");
     await noDropWords(page);
     await d.getByTestId("browser-check-confirm").click();
@@ -399,10 +405,13 @@ test.describe("Research engine screens (layer 3)", () => {
     await d.getByTestId("browser-check-paste").fill("Frame DBA-M900A 00000-T0010 Plug, spark");
     await d.getByTestId("browser-check-typed-number").fill("00000-T0010");
     await expect(d.getByTestId("detected-value")).toHaveText("Detected: 00000-T0010");
+    // RE-61: the page the owner actually used is saved as the proof.
+    await expect(d.getByTestId("browser-check-page-url")).toHaveValue("");
+    await d.getByTestId("browser-check-page-url").fill("https://www.amayama.com/en/part/toyota/roomy-m900a-agbve-plugs");
     await d.getByTestId("browser-check-confirm").click();
     await expect.poll(() => calls.find((c) => c.path === "/browser-checks/job-bcp/confirm")?.body).toEqual({
       pasted: "Frame DBA-M900A 00000-T0010 Plug, spark",
-      url: "https://www.amayama.com/en/part/toyota/roomy-m900a-plugs",
+      url: "https://www.amayama.com/en/part/toyota/roomy-m900a-agbve-plugs",
       number: "00000-T0010",
     });
   });

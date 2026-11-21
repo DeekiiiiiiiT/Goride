@@ -131,3 +131,88 @@ Deno.test("RE-57 review: a leftover typed number never blocks one of Roam's sugg
 Deno.test("RE-57 review: a real part number shaped like a frame code (VCH16) can be typed", () => {
   assertEquals(browserCheckGate({ jobType: "part", pasted: "Roomy M900A Denso VCH16 plug", identity: roomy, typedNumber: "VCH16" }), { ok: true, detected: "VCH16" });
 });
+
+// RE-60 (21 Nov, live): the air-filter link opened the facelift Roomy (built 09.2020 on) for a car built 11.2016–08.2020.
+import { periodsFitCar, periodsOnLine, versionListLink } from "./research_browser_check.ts";
+
+const ROOMY_BUILD = { startYear: 2016, startMonth: 11, endYear: 2020, endMonth: 8 };
+const ENGINES = { engineCode: "1KR-FE", otherEngines: ["1KR-VET"] };
+const FACELIFT_PAGE = "Toyota Tank/Roomy, M900A-GBME 09.2020 - ...\n17801-21060\t1KRFE..M900,910\t09.2020 - ...\t01\t10.42";
+const RIGHT_PAGE = "Toyota Tank/Roomy, M900A-AGBVE 11.2016 - 09.2020\n17801-21060\t1KRFE..M900,910\t11.2016 - 09.2020\t01\t10.42";
+
+Deno.test("RE-60: catalogue periods are read in both formats", () => {
+  assertEquals(periodsOnLine("M900A-AGBVE 11.2016 - 09.2020").length, 1);
+  assertEquals(periodsOnLine("M900A-GBME 09.2020 - ...")[0].to, Number.POSITIVE_INFINITY);
+  assertEquals(periodsOnLine("Production years 2016 2017 2018"), [{ from: 2016 * 12 + 1, to: 2018 * 12 + 12 }]);
+  assertEquals(periodsFitCar("M900A-GBME 09.2020 - ...", ROOMY_BUILD), false);
+  assertEquals(periodsFitCar("M900A-AGBVE 11.2016 - 09.2020", ROOMY_BUILD), true);
+  assertEquals(periodsFitCar("no dates here", ROOMY_BUILD), true);
+});
+
+Deno.test("RE-60: the facelift page (09.2020 on) is refused for the 2016–2020 Roomy", () => {
+  assertEquals(
+    browserCheckGate({ jobType: "part", pasted: FACELIFT_PAGE, identity: roomy, candidates: ["17801-21060"], build: ROOMY_BUILD, ...ENGINES }),
+    { ok: false, reason: "wrong_years" },
+  );
+});
+
+Deno.test("RE-60: the right version (11.2016 – 09.2020) confirms the suggested number", () => {
+  assertEquals(
+    browserCheckGate({ jobType: "part", pasted: RIGHT_PAGE, identity: roomy, candidates: ["70017-AT123", "17801-21060"], build: ROOMY_BUILD, ...ENGINES }),
+    { ok: true, detected: "17801-21060" },
+  );
+});
+
+Deno.test("RE-60: a page naming only the turbo engine is refused for the regular-engine car", () => {
+  assertEquals(
+    browserCheckGate({
+      jobType: "part",
+      pasted: "Toyota Tank/Roomy, M900A-AGBVJ 11.2016 - 09.2020 Engine 1KRVET\n90048-51220 Plug, spark",
+      identity: roomy,
+      candidates: ["90048-51220"],
+      build: ROOMY_BUILD,
+      ...ENGINES,
+    }),
+    { ok: false, reason: "wrong_engine" },
+  );
+});
+
+Deno.test("RE-60: an Amayama link to one version is cut back to the frame's version list; others unchanged", () => {
+  assertEquals(
+    versionListLink("https://www.amayama.com/en/genuine-catalogs/epc/toyota-japan/tank-roomy/m900a/148005/engine/1703"),
+    "https://www.amayama.com/en/genuine-catalogs/epc/toyota-japan/tank-roomy/m900a",
+  );
+  const other = "https://www.amayama.com/en/catalogs/toyota/tank/1-hatchback-right-2016-3369/engine-fuel-system-and-tools-1/ignition-coil-spark-plug-33";
+  assertEquals(versionListLink(other), other);
+  assertEquals(versionListLink(null), null);
+});
+
+// Code review on RE-60 (21 Nov).
+Deno.test("RE-60 review: engine codes match as whole tokens, never inside a part number", () => {
+  // "1KRVET" inside a longer token is not the turbo engine.
+  assertEquals(
+    browserCheckGate({ jobType: "part", pasted: "Roomy M900A 11.2016 - 09.2020 X1KRVET9 17801-21060", identity: roomy, candidates: ["17801-21060"], build: ROOMY_BUILD, ...ENGINES }),
+    { ok: true, detected: "17801-21060" },
+  );
+});
+
+Deno.test("RE-60 review: year-only and em-dash ranges are read", () => {
+  assertEquals(periodsFitCar("Tank/Roomy M900A 2021—2024", ROOMY_BUILD), false);
+  assertEquals(periodsFitCar("Tank/Roomy M900A 2021-2024", ROOMY_BUILD), false);
+  assertEquals(periodsFitCar("Tank/Roomy M900A 2016-2020", ROOMY_BUILD), true);
+  assertEquals(periodsFitCar("part 17801-21060 fits", ROOMY_BUILD), true);
+});
+
+Deno.test("RE-60 review: a spec with no value shape takes the row, not the version line", () => {
+  assertEquals(
+    browserCheckGate({ jobType: "spec", pasted: "Toyota Tank/Roomy, M900A-AGBVE 11.2016 - 09.2020\nSpark plug DENSO K16R-U11", identity: roomy, specKey: "spark_plug_type", build: ROOMY_BUILD, ...ENGINES }),
+    { ok: true, detected: "Spark plug DENSO K16R-U11" },
+  );
+});
+
+Deno.test("RE-60 review: an Amayama link without the language part is cut back too", () => {
+  assertEquals(
+    versionListLink("https://www.amayama.com/genuine-catalogs/epc/toyota-japan/tank-roomy/m900a/148005/engine/1703"),
+    "https://www.amayama.com/genuine-catalogs/epc/toyota-japan/tank-roomy/m900a",
+  );
+});

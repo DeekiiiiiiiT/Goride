@@ -1,6 +1,6 @@
 # Research engine (cars, specs, parts) — audit
 
-**Rev 5.3 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
+**Rev 5.4 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
 US$1.35/day.** What runs live is the **search-first** flow with the new proof (Gemini + Google search proposes
 numbers, recipes and trusted pages prove them); the planned catalogue-first flow is RE-49, not built yet (§13–14). Live database: migrations 1a/1b/2/3 (03:10 UTC) and `20261121100925_research_form_recipe` (10:25 UTC),
 all with logbook lines. Live code: main `0e00cd5b` (platform-catalog, catalog-research, Dominion). Branch
@@ -772,3 +772,15 @@ with a pasted address saves that address on the evidence read and the listing.
 **RE-62 · Medium · Step 2 says "Find the line that shows M900A".** The owner doesn't know frame codes (owner rule,
 21 Nov). Fix: step 2 names the car the way the catalogue's version list does, in plain words — years, regular / turbo
 engine, grade — and says which two things to copy (the version header line, then the part's row). Lands with RE-34.
+
+**RE-60/61/62 built (21 Nov):** the paste check refuses dates that don't fit the car's build (months when on file —
+the Roomy is 11.2016–08.2020, so "09.2020 – …" is refused) and a line naming only a sister engine of the same years
+(the turbo); formats read: `MM.YYYY – MM.YYYY/…`, `YYYY–YYYY` (hyphen, en or em dash), "Production years 2016 2017 2018".
+Amayama EPC links to one version are cut back to the frame's version list (`versionListLink`, job details and recipe
+tests). Step 2 describes the car in plain words ("Toyota Roomy, built 11.2016 – 08.2020, regular engine (not turbo),
+grade Custom G, 2WD"); the engine words come from the server and are said only when known (own turbo/hybrid type, or
+"regular (not turbo)" when a sister of the same years is a turbo). A new "Address of the page you copied from" box
+starts empty and is required; its address is saved as the proof (same trusted-site rule). Code review (medium): 8
+found, all fixed (empty page box, no engine guess, row-only value for unshaped specs, whole-token engine codes, more
+date formats, job-keyed reset, link without language part, siblings limited to overlapping years). Tests: Deno 154,
+admin 52, screens 17.
