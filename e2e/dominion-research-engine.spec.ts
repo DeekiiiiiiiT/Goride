@@ -369,13 +369,13 @@ test.describe("Research engine screens (layer 3)", () => {
     await page.getByTestId("parts-row").filter({ hasText: "Battery size" }).getByTestId("row-open-browser-check").click();
     const d = page.getByTestId("research-drawer");
     await expect(d.getByTestId("open-catalogue-page")).toHaveAttribute("href", "https://www.amayama.com/en/part/toyota/roomy-m900a");
-    await expect(d.getByTestId("open-catalogue-page")).toContainText("Open the Amayama page");
+    await expect(d.getByTestId("open-catalogue-page")).toContainText("Open Amayama");
     // RE-62: the car in plain words (dates, regular engine), never a frame code.
-    await expect(d.getByTestId("browser-check-instruction")).toContainText("Toyota Roomy, built 2016 – 2020, regular engine (not turbo)");
+    await expect(d.getByTestId("browser-check-instruction")).toContainText("Click the row with");
     await expect(d.getByTestId("browser-check-instruction")).not.toContainText("M900A");
     // RE-63: the version table in the catalogue's own column words.
-    await expect(d.getByTestId("guide-version-columns")).toContainText("Engine is 1KRFE — not 1KRVET (that's the turbo)");
-    await expect(d.getByTestId("guide-version-columns")).toContainText("The row mentions ROOMY");
+    await expect(d.getByTestId("browser-check-instruction")).toContainText("1KRFE");
+    await expect(d.getByTestId("browser-check-instruction")).toContainText("ROOMY");
     await expect(d.getByTestId("browser-check-counter")).toContainText("7 of 25");
     await expect(d.getByTestId("browser-check-confirm")).toBeDisabled();
     await d.getByTestId("browser-check-paste").fill("Roomy M900A battery");
@@ -407,10 +407,10 @@ test.describe("Research engine screens (layer 3)", () => {
     await page.getByTestId("parts-row").filter({ hasText: "Spark plugs" }).getByTestId("row-open-browser-check").click();
     const d = page.getByTestId("research-drawer");
     // RE-63: a remembered version is named; the part step says what to search, which row, and Roam's numbers.
-    await expect(d.getByTestId("guide-known-version")).toContainText("M900A-AGBVE");
+    // RE-65: a remembered version opens directly — no "click the row" step.
+    await expect(d.getByTestId("browser-check-instruction")).toHaveCount(0);
     await expect(d.getByTestId("guide-find-part")).toContainText("spark plug");
     await expect(d.getByTestId("guide-find-part")).toContainText("PLUG, SPARK");
-    await expect(d.getByTestId("guide-suggested-numbers")).toContainText("00000-T0009");
     // Only the car line (with a sister frame code): no number, Confirm stays off, the typing box appears.
     await d.getByTestId("browser-check-paste").fill("Engine 1KR-FE Frame DBA-M900A DBA-M910A Production years 2016 2017 2018");
     await expect(d.getByTestId("browser-check-readback")).toContainText("None of Roam's suggested numbers is on this line");

@@ -171,3 +171,15 @@ describe("browser-check guide — no wrong row names (code review)", () => {
     expect(partFinder("Wiper Blades", "Toyota").rowName).toBe("BLADE ASSY, WIPER");
   });
 });
+
+import { versionRowWords } from "./researchModel";
+
+describe("short guide (RE-65)", () => {
+  it("names the version-list row in three words the catalogue shows", () => {
+    const car = { id: "x", make: "Toyota", model: "Roomy", production_start_year: 2016, production_start_month: 11, production_end_year: 2020,
+      production_end_month: 8, chassis_code: "M900A", engine_code: "1KR-FE", drivetrain: "2WD", transmission: "CVT" };
+    expect(versionRowWords(car)).toBe("1KRFE · 11.2016 · ROOMY");
+    expect(versionRowWords({ ...car, production_start_month: null })).toBe("1KRFE · 2016 · ROOMY");
+    expect(versionRowWords(null)).toBeNull();
+  });
+});

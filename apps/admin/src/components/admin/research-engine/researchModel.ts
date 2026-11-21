@@ -426,3 +426,18 @@ export function partFinder(itemName: string, make: string | null | undefined): P
   if (/oil filter/.test(n)) return { search: "oil filter", rowName: "FILTER SUB-ASSY, OIL" };
   return plain;
 }
+
+/**
+ * RE-65: the version-list row in three words the catalogue shows — engine code, first build month, model name
+ * (e.g. "1KRFE · 11.2016 · ROOMY"). Null when Dominion knows none of them.
+ */
+export function versionRowWords(car: ResearchCar | null): string | null {
+  if (!car) return null;
+  const start = car.production_start_year
+    ? car.production_start_month
+      ? `${String(car.production_start_month).padStart(2, "0")}.${car.production_start_year}`
+      : String(car.production_start_year)
+    : "";
+  const parts = [catalogueEngineCode(car.engine_code), start, (car.model ?? "").trim().split(/\s+/)[0]?.toUpperCase() ?? ""].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
+}
