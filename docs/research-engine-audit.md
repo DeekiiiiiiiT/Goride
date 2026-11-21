@@ -48,9 +48,23 @@ per place (or one pair for parts without places). Saved as `part_listing.year_to
 mid-year lists both numbers for that year; January → old number ends the year before). Fleet's parts lookup already
 filters by the car's year (`catalog_api.ts` `yearInRange`). The exact month stays in the evidence text.
 
+**Shocks split (21 Nov, owner):** `20261121171424_research_fill_per_axle.sql` applied on live (+ logbook line). The
+Roomy's one four-corner shock job `d6f9a45e…` closed as `failed` / "replaced by front and rear checks (owner)", its 5
+suggestions rejected with the same reason. Date question reworded (owner kept it): "Under the part, how many different
+Period dates? One / Two" → "The second Period starts:" (live main f4602c11).
+
+**RE-71 (21 Nov, fixed, owner OK):** Fill this car re-queued the Roomy's confirmed spark plugs + air filter: parts
+without positions were skipped only on `variant_parts_readiness = 'verified'`, which is stale (nightly rebuild failing,
+§3 item 5). `20261121193256_research_fill_skip_confirmed.sql` (live + logbook) also skips a part with a confirmed
+listing on the car. Dry run on live (rolled back): Roomy fill → 0 new jobs. The two re-queued jobs closed `failed` /
+"already confirmed (owner)".
+
+**Open (21 Nov, not decided):** the per-axle fill queued **rear brake pads** and a **rear brake rotor** for the Roomy,
+but the Roomy has rear **drums** (BRK-DRUM / BRK-SHOES rear confirmed). Fill doesn't know drum vs disc per axle.
+
 **Next for the owner, in Pending catalog → Parts (refresh first):**
-1. **Shock absorber** browser check: Open Amayama → "Front spring & shock absorber" and "Rear spring & shock absorber" →
-   **Changed during the build** → Nov 2018 → tap/type the before and from number for each place (table above) → Confirm.
+1. ~~Press **Fill this car**~~ (done 21 Nov) — wait for on the Roomy → a Front and a Rear shock check. Each: Open Amayama → its own page ("Front
+   spring & shock absorber" / "Rear …") → **Two** → Nov 2018 → before and from number per side (table above) → Confirm.
 2. **Cabin A/C Filter** browser check, same way.
 3. The **Needs review** rows (coolant, tyre size, H4 bulb, thermostat, wheel bearing, drive belt) have no source; they
    need a browser check or a reject — don't press "Looks right" on an unsourced row.
@@ -72,10 +86,8 @@ Confirm saves the number(s) as Confirmed, route `owner_browser`, proof = the pag
 
 ## 3. Open work, in order
 
-1. **Apply `20261121171424_research_fill_per_axle.sql` on live** (blocked by the safety check; ask the owner or give
-   them the file + logbook line). It makes Fill this car queue a front and a rear job for parts with positions, skip an
-   axle already confirmed, and join an older open job with no position. Until it's applied, CI's migration-parity check
-   may flag it.
+1. ~~Apply `20261121171424_research_fill_per_axle.sql` on live~~ — DONE 21 Nov (owner OK). CI parity still lists
+   live-only `20261117204932` (not research; someone else's hand-run change with no repo file).
 2. **Small fixes (one round):**
    - `GET /admin/catalog-research/health` — on/practice/paused, spend today vs cap, jobs waiting, open checks, newest
      worker step (RE-45).
