@@ -543,10 +543,34 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect(r.getByTestId("recipe-worked").nth(1)).toContainText("Not run yet");
     await expect(r).toContainText("Changes take effect on the next run.");
     await r.getByTestId("recipe-test").first().click();
-    await r.getByTestId("recipe-test-car").fill("Roomy");
-    await r.getByRole("button", { name: /Toyota Roomy 2016/ }).click();
+    // Make → Model → Year in plain words; the only version that year is picked for the person (no codes to type).
+    await expect(r.getByTestId("recipe-test-model")).toBeDisabled();
+    await r.getByTestId("recipe-test-make").click();
+    await page.getByRole("option", { name: "Toyota" }).click();
+    await r.getByTestId("recipe-test-model").click();
+    await page.getByRole("option", { name: "Roomy" }).click();
+    await r.getByTestId("recipe-test-year").click();
+    await page.getByRole("option", { name: "2018" }).click();
+    await expect(r.getByTestId("recipe-test-only-version")).toBeVisible();
+    await expect(r.getByTestId("recipe-test-panel")).not.toContainText("M900A");
     await r.getByTestId("recipe-test-run").click();
     await expect(r.getByTestId("saved-page-text")).toContainText("M900A front pad");
+
+    // Part-number recipe: the number is picked from the parts on file for that car (or typed).
+    await r.getByTestId("recipe-test").nth(1).click();
+    await expect(r.getByTestId("recipe-test-number")).toBeDisabled();
+    await r.getByTestId("recipe-test-make").click();
+    await page.getByRole("option", { name: "Toyota" }).click();
+    await r.getByTestId("recipe-test-model").click();
+    await page.getByRole("option", { name: "Roomy" }).click();
+    await r.getByTestId("recipe-test-year").click();
+    await page.getByRole("option", { name: "2018" }).click();
+    await r.getByTestId("recipe-test-number").click();
+    await page.getByRole("option", { name: /Brake pads/ }).click();
+    await r.getByTestId("recipe-test-run").click();
+    await expect
+      .poll(() => calls.find((c) => c.method === "POST" && c.path === "/recipes/rc-2/test")?.body)
+      .toEqual({ vehicleCatalogId: CAR, number: "00000-T0001" });
     await shot(page, "12-site-recipes");
     await noDropWords(page);
     await r.getByRole("button", { name: "Turn off" }).first().click();

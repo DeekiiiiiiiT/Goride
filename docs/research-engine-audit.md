@@ -1,6 +1,6 @@
 # Research engine (cars, specs, parts) — audit
 
-**Rev 4.8 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
+**Rev 4.9 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
 US$1.35/day.** What runs live is the **search-first** flow with the new proof (Gemini + Google search proposes
 numbers, recipes and trusted pages prove them); the planned catalogue-first flow is RE-49, not built yet (§13–14). Live database: migrations 1a/1b/2/3 (03:10 UTC) and `20261121100925_research_form_recipe` (10:25 UTC),
 all with logbook lines. Live code: main `0e00cd5b` (platform-catalog, catalog-research, Dominion). Branch
@@ -663,3 +663,19 @@ three are 1-read), and the first proof stops the rest.
 
 **Small:** every recorded finish date now carries its start date and the part/spec split (§1), because the free
 searches reset on the 1st and a mid-month spec batch changes the pace.
+
+## 16. Rev 4.9 — Test on a car picks the car in plain words (21 Nov, owner)
+
+**RE-54 · High · Test on a car asked for codes.** The car box searched by frame code ("M900A") and the part box wanted
+a typed factory number. The owner: no user knows what M900A means. Fix (built): **Make → Model → Year** searchable
+dropdowns filled from the Dominion cars, then **Version** only when that year has more than one, labelled in plain
+words (trim · 2WD/4WD · engine size, turbo · gearbox · years; body type, model update or "version N" added only to
+tell twins apart) — never a frame or engine code (`carPick.ts`, `SearchPick.tsx`). Rows with no build years appear
+under "Year not known". **Part number to look for** is a searchable dropdown of the numbers already on file for that
+car (its Coverage parts, unchecked ones marked "not checked yet"), and typing a new number offers "Look for …". The car
+list now sends the plain-words fields (`PICKER_SELECT` in `vehicle_catalog_schema_fallback.ts`, served by fleet-core).
+Code review (medium) fixes, all done: picker fields added (labels were empty without them); rows with no years kept out
+of real years; makes/models grouped whatever the capitals; a reply for an older car or number is ignored; "couldn't
+load the numbers" instead of "no numbers on file" when the load fails; a part's name is never sent as a number.
+Checks: admin tsc 0, vitest 52 (new `carPick.test.ts`), screen test 16 (Test on a car now goes Make → Model → Year,
+asserts no code on the panel, and a part-number recipe sends the picked number).
