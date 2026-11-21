@@ -132,12 +132,12 @@ export function ResearchPartsTab({ onCount }: { onCount?: (n: number) => void })
   const rows: Row[] = useMemo(() => {
     const groupByJob = new Map(groups.filter((g) => g.researchJobId).map((g) => [String(g.researchJobId), g]));
     const out: Row[] = jobs.map((j) => {
-      const pill = statePill(j.state, j.conflictOpen);
+      const pill = statePill(j.state, j.conflictOpen, j.closedNote);
       return {
         key: j.jobId,
         jobId: j.jobId,
         group: groupByJob.get(j.jobId) ?? null,
-        filter: j.conflictOpen && j.state !== "added" && j.state !== "auto_added" ? "needs_review" : filterForState(j.state),
+        filter: j.conflictOpen && j.state !== "added" && j.state !== "auto_added" ? "needs_review" : filterForState(j.state, j.closedNote),
         pill,
         routeLine: j.state === "added" || j.state === "auto_added" ? trustRouteLine(j.trustRoute) : null,
         car: carLabel(j.car),

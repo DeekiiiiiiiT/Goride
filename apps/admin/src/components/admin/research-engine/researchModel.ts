@@ -90,6 +90,7 @@ export type PartsFilter =
   | "auto_added"
   | "added"
   | "not_found"
+  | "closed"
   | "failed";
 
 export const PARTS_FILTERS: Array<{ id: PartsFilter; label: string; dot?: "amber" | "blue" | "pulse" }> = [
@@ -101,10 +102,13 @@ export const PARTS_FILTERS: Array<{ id: PartsFilter; label: string; dot?: "amber
   { id: "auto_added", label: "Added automatically" },
   { id: "added", label: "Added" },
   { id: "not_found", label: "Couldn't find" },
+  { id: "closed", label: "Closed" },
   { id: "failed", label: "Failed" },
 ];
 
-export function filterForState(state: ResearchJobState | null | undefined): Exclude<PartsFilter, "all"> {
+export function filterForState(state: ResearchJobState | null | undefined, closedNote?: string | null): Exclude<PartsFilter, "all"> {
+  // RE-73: a job the owner closed (stored as failed with a note) is Closed, not Failed.
+  if (state === "failed" && closedNote) return "closed";
   switch (state) {
     case "needs_review":
       return "needs_review";
@@ -130,7 +134,15 @@ export type PillTone = "green" | "green-outline" | "amber" | "blue" | "grey" | "
 
 export type StatePill = { label: string; tone: PillTone; icon?: string; pulse?: boolean };
 
-export function statePill(state: ResearchJobState | null | undefined, conflictOpen = false): StatePill {
+/** RE-73: the owner's note on a job closed on their say-so ("… (owner)", stored as failed), else null. */
+export function closedNoteOf(state: string | null | undefined, lastError: string | null | undefined): string | null {
+  if (state !== "failed") return null;
+  const m = String(lastError ?? "").trim().match(/^(.+?)\s*\(owner\)$/i);
+  return m ? m[1].trim() : null;
+}
+
+export function statePill(state: ResearchJobState | null | undefined, conflictOpen = false, closedNote?: string | null): StatePill {
+  if (state === "failed" && closedNote) return { label: "Closed", tone: "grey-outline" };
   if (conflictOpen && state !== "added" && state !== "auto_added") return { label: "Two makers disagree", tone: "red" };
   switch (state) {
     case "needs_review":

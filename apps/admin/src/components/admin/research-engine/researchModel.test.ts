@@ -209,3 +209,16 @@ describe("positions to ask (RE-69)", () => {
     expect(checkPositions(undefined, "front")).toBeNull();
   });
 });
+
+describe("RE-73: jobs the owner closed", () => {
+  it("show as Closed with their note; a real failure stays Failed", async () => {
+    const { closedNoteOf, filterForState, statePill } = await import("./researchModel");
+    const note = closedNoteOf("failed", "replaced by front and rear checks (owner)");
+    expect(note).toBe("replaced by front and rear checks");
+    expect(statePill("failed", false, note)).toEqual({ label: "Closed", tone: "grey-outline" });
+    expect(filterForState("failed", note)).toBe("closed");
+    expect(closedNoteOf("failed", "max_reads")).toBeNull();
+    expect(statePill("failed", false, null).label).toBe("Failed");
+    expect(filterForState("failed", null)).toBe("failed");
+  });
+});

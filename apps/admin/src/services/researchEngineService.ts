@@ -84,6 +84,8 @@ export type ResearchJobListItem = {
   trustRoute: TrustRoute | null;
   siteDomains: string[];
   conflictOpen: boolean;
+  /** RE-73: the owner's note when the job was closed on their say-so (shown as Closed), else null. */
+  closedNote?: string | null;
   updatedAt: string;
   /** Vehicle and model jobs: the car being researched. */
   subject?: { make: string; model: string; year: number | null } | null;
