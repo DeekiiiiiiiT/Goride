@@ -409,7 +409,8 @@ test.describe("Research engine screens (layer 3)", () => {
     await openParts(page);
     await page.getByTestId("parts-row").filter({ hasText: "Spark plugs" }).getByTestId("row-open-browser-check").click();
     const d = page.getByTestId("research-drawer");
-    await expect(d.getByTestId("browser-check-instruction")).toContainText("Does the top say M900A-AGBVE?");
+    await expect(d.getByTestId("browser-check-instruction")).toContainText("Check it's this one:");
+    await expect(d.getByTestId("guide-version-row")).toContainText("Model: M900A-AGBVE");
     await expect(d.getByTestId("guide-find-part")).toContainText("Search spark plug. Do you see PLUG, SPARK?");
     await d.getByTestId("q-version-yes").click();
     await d.getByTestId("q-part-yes").click();
