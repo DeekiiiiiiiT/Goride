@@ -599,29 +599,14 @@ function BrowserCheckCard({
             <StepDot n={2} />
             <div className="flex w-full flex-col gap-2 pt-0.5">
               <p>{detail.knownVersion?.url ? "Check it's this one:" : "Click this row:"}</p>
-              {/* RE-67: the row exactly as the catalogue lists it. */}
-              <div className="overflow-x-auto rounded-lg bg-white text-[13px] text-[#30323b] shadow-sm dark:bg-[#0b1220] dark:text-[#e2e8f0]">
-                <table className="w-full" data-testid="guide-version-row">
-                  <thead>
-                    <tr className="text-left text-[12px] text-[#5d5f68] dark:text-[#94a3b8]">
-                      {versionRow.map((c) => (
-                        <th key={c.label} className="px-3 pb-1 pt-2 font-medium">
-                          {c.label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className={`font-semibold ${D_MONO}`}>
-                      {versionRow.map((c) => (
-                        <td key={c.label} className="whitespace-nowrap px-3 pb-2">
-                          {c.value}
-                        </td>
-                      ))}
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+              {/* RE-67: the row as the catalogue lists it, one label per line (owner, 21 Nov). */}
+              <ul className="flex flex-col gap-0.5" data-testid="guide-version-row">
+                {versionRow.map((c) => (
+                  <li key={c.label}>
+                    {c.label}: <span className="font-semibold">{c.value}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         ) : null}
