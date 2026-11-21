@@ -243,6 +243,19 @@ export function browserCheckTarget(car: ResearchCar | null, itemName: string): {
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
 /** "11.2016 – 08.2020" (months when on file, else years; "now" when still built) — the way catalogues date versions. */
+/** RE-70: month names for "Changed in" (a number the car maker changed during the build). */
+export const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** RE-70: the years a change can fall in — the car's build years (else the last 30 years). */
+export function changeYearOptions(car: ResearchCar | null, now: Date = new Date()): number[] {
+  const thisYear = now.getFullYear();
+  const from = car?.production_start_year || thisYear - 30;
+  const to = Math.min(car?.production_end_year || thisYear, thisYear + 1);
+  const out: number[] = [];
+  for (let y = from; y <= to; y++) out.push(y);
+  return out;
+}
+
 export function buildDates(car: ResearchCar | null): string {
   if (!car?.production_start_year) return "";
   const from = car.production_start_month ? `${pad2(car.production_start_month)}.${car.production_start_year}` : String(car.production_start_year);

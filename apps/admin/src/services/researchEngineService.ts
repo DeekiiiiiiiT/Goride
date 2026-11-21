@@ -354,7 +354,19 @@ export type BrowserCheckAnswersPayload = {
     value: string;
     valueAgain: string | null;
     /** RE-69: one number per position, for parts that come in positions. */
-    positions?: Array<{ axle: "front" | "rear"; side: "left" | "right" | null; value: string; valueAgain: string | null }> | null;
+    positions?: Array<{
+      axle: "front" | "rear";
+      side: "left" | "right" | null;
+      value: string;
+      valueAgain: string | null;
+      /** RE-70: the number for cars built before / from `changeAt`. */
+      period?: "before" | "from" | null;
+    }> | null;
+    /** RE-70: the month the car maker changed the number during the build. */
+    changeAt?: { month: number; year: number } | null;
+    /** RE-70: the number for cars built from `changeAt` (parts without positions; `value` = before). */
+    valueFrom?: string | null;
+    valueFromAgain?: string | null;
     datesOk: boolean;
     sideOk: boolean | null;
   };
