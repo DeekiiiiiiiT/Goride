@@ -1,6 +1,6 @@
 # Research engine (cars, specs, parts) — audit
 
-**Rev 7.0 · 21 Nov 2026 · Status: LIVE, in practice mode** (engine on, shadow mode, US$1.35/day).
+**Rev 7.1 · 21 Nov 2026 · Status: LIVE, in practice mode** (engine on, shadow mode, US$1.35/day).
 Live: main `a6320fa7` (Dominion + platform-catalog + catalog-research). Branch `parts-auto-match` has the same research
 code. Every research migration up to `20261121193554` is on live with its logbook line.
 
@@ -63,6 +63,48 @@ purpose (banners on Pending catalog). The owner asked for a plan before any more
 4. Price out a licensed feed (TecDoc or similar). Check Japanese-car coverage and storage rights first.
 
 Recommended: 1 + 2 now, then 3. Nothing built yet. Wait for the owner's pick.
+
+## 1b. For the reviewer: what changed on 21 Nov and how it was checked
+
+**Why:** on the Roomy shock check the owner found that Toyota changed the shock numbers in Nov 2018 (Amayama: "To frame
+M900A-0255546 / From 0255547"). The check could hold only one number per place, and its date question passed any
+overlap, so the early numbers would have been saved for every Roomy, including 2019–2020 cars. Fixing that turned up
+three more fill problems.
+
+| # | What | Where (main) | Live data touched |
+|---|---|---|---|
+| RE-70 | Browser check takes a change month; each place gets a "before" and a "from" number, saved as `part_listing.year_to` / `year_from` | `2af1bc7c`; wording `f4602c11` | none |
+| RE-69 live | `20261121171424_research_fill_per_axle.sql` applied (written earlier, wasn't on live): fill makes a front and a rear job for parts with places | migration on main since `8590bd86` | Roomy's four-corner shock job `d6f9a45e…` closed, its 5 suggestions rejected ("replaced by front and rear checks") |
+| RE-71 | Fill skipped parts only when `variant_parts_readiness` said verified, which is stale, so it re-queued confirmed spark plugs + air filter. Now a confirmed listing also skips. `20261121193256_research_fill_skip_confirmed.sql` | `ef58d875` | 2 re-queued jobs closed ("already confirmed") |
+| RE-72 | Fill queued rear pads + rear rotor on the Roomy, which has rear drums. Now no pads/rotor on an axle with confirmed drum/shoes. `20261121193554_research_fill_skip_drum_axle.sql` | `7d93ec77` | 2 jobs closed (the worker had already run them), 9 suggestions rejected; checked: 0 promoted, 0 rear pad/rotor listings |
+| RE-73 | Jobs closed on the owner's say-so (stored `failed`, note ends "(owner)") show "Closed" + note instead of "Failed" and "didn't find a catalogue" | `a6320fa7` | none |
+
+**How it was checked:**
+- Tests: Deno 170 (new: change-date gate, Roomy shock before/from, part without places, closed note), admin tsc +
+  vitest 62, screen tests 19 (new RE-70 test, test picture looked at). All green before the code pushes. RE-71 and
+  RE-72 are SQL only, with no automated test; they were checked by the live dry runs below. Adding them to
+  `supabase/tests/research_engine_checks.sql` is still open.
+- Each fill migration was **dry-run on live** in a transaction that rolled itself back (fill the Roomy → list new jobs →
+  `RAISE EXCEPTION`): 0 new jobs both times. Then applied with its logbook line and verified (`pg_get_functiondef`
+  contains the change; logbook row present).
+- Fleet side: `catalog_api.ts` `yearInRange` already filters listings by the car's year, so a 2019 Roomy gets only the
+  "from" number; a 2018 car gets both (whole years only).
+- Deploys: edge + Vercel deploys green for each push.
+
+**Known limits / risks to look at:**
+- Years are whole years: a mid-year change shows both numbers for that year. The exact month and frame number are kept
+  only in the evidence text.
+- One change date per check: fine with front and rear as separate checks; a left/right split at different dates isn't
+  handled.
+- `ownerClosedNote` relies on the "(owner)" suffix convention in `last_error`. That's simple, but a real failure written
+  with that suffix would show as Closed.
+- The save step's existing-listing lookup ignores years: re-confirming the same number for the same place with
+  different years keeps the first row.
+- RE-72 assumes confirmed BRK-DRUM / BRK-SHOES listings carry the axle in `position`; a drum stored without a position
+  won't block pads.
+- The data closures were hand-run SQL on live (owner OK each time); they're recorded in `catalog_research_log_event`
+  (`replaced_by_axle_jobs`, `already_confirmed`, `drum_axle`).
+- CI is red on main for two reasons that are not research and were red before these changes (§3 item 9).
 
 ## 2. Browser check (live)
 
