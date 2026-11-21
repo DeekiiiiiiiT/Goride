@@ -1,10 +1,11 @@
 # Research engine (cars, specs, parts) — audit
 
-**Rev 4.6 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
-US$1.35/day.** Live database: migrations 1a/1b/2/3 (03:10 UTC) and `20261121100925_research_form_recipe` (10:25 UTC),
+**Rev 4.7 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
+US$1.35/day.** What runs live is the **search-first** flow with the new proof (Gemini + Google search proposes
+numbers, recipes and trusted pages prove them); the planned catalogue-first flow is RE-49, not built yet (§13–14). Live database: migrations 1a/1b/2/3 (03:10 UTC) and `20261121100925_research_form_recipe` (10:25 UTC),
 all with logbook lines. Live code: main `0e00cd5b` (platform-catalog, catalog-research, Dominion). Branch
 `parts-auto-match` `fc2e2b85` holds the same research code. Held back: readiness counts only Confirmed specs (§6 step 5).
-**Next = §R step 1: the owner adds the NiBK recipe and runs Test on a car on the Roomy.**
+**Next = §R step 1 (owner: NiBK recipe + Test on a car) and step 2 (Claude: honest_fetch + Spike 1 by-car check).**
 
 History (not needed to continue): the closed plan with all findings RE-01…RE-29 and the Spike 0 tables is
 `git show 6064a3f4:docs/research-engine-audit.md`. The 18-screen Keep / Drop / Add lists are in
@@ -27,6 +28,7 @@ History (not needed to continue): the closed plan with all findings RE-01…RE-2
 | 21 Nov | Reviewer round on Rev 4.3: 9 findings RE-37…RE-45, one fix each; done-tests renumbered 37–46 (§11) | this file |
 | 21 Nov | Reviewer: coverage is a sources problem — more part makers (Spike 1), PDF catalogues, the distributor, licensed-feed rule (RE-46…RE-48, §12) | this file |
 | 21 Nov | Reviewer round on Rev 4.5: pace table with both rows, every job pays for a search today (RE-49), cap ceiling (RE-50), PDF rows with positions, TecDoc checks, R2/renderer checks (RE-51); free-search figure kept (§13) | this file |
+| 21 Nov | Reviewer round on Rev 4.6: "LIVE" = search-first flow; RE-49 made buildable (parts per recipe, part words in the row, 3-recipe budget); RE-52 honest_fetch; Spike 1 by-car check moved up (§14) | this file |
 
 **What is proven**
 - Unit, SQL and screen tests: Deno 136, SQL checks (incl. 3 form-recipe checks), admin tsc 0 + vitest 45, screen
@@ -35,7 +37,7 @@ History (not needed to continue): the closed plan with all findings RE-01…RE-2
   front pads (NiBK `PN5562`); asking for rear was refused. The reads were saved on the local copy only (§9).
 - Live: both server parts start (401 without login = running), settings unchanged (on, practice, US$1.35, 0 failures).
 
-**What is not proven yet:** every real-run done-test in §5, and done-test 35 on live. None has run: no recipe exists on
+**What is not proven yet:** every real-run done-test in §5, and done-test 39 on live. None has run: no recipe exists on
 live yet, and no fill has been started.
 
 **CI on main `0e00cd5b`:** edge deploy, Vercel, Supabase function tests, Parts SQL checks, Parts auto-match e2e,
@@ -48,31 +50,36 @@ Because (2) fails first in the "Dominion places checks" job, the research screen
 **Next steps (in order)**
 1. **Owner:** Trusted sources → jnbk-brakes.com → Add a recipe with the values in §9 "Owner's recipe"; **Test on a car**
    with Roomy M900A + `04465-B1120` → expect the M900A row with `Front Brake: PN5562` (done-test 39).
-2. **Owner:** **Fill this car** on the Roomy M900A, still in practice mode → proves done-tests 5 and 4 (on Looks right).
+2. **Claude, at the same time:**
+   a. **RE-52** `scripts/honest_fetch.mjs` (§14) — first, because the next step fetches 12 sites by hand.
+   b. **Spike 1, part one — by-car lookups (RE-46, §12; moved up by §14):** for the 12 brand sites, robots.txt + terms
+      (allowed / blocked, the exact line) and how the catalogue is offered: **by car**, by part number, form,
+      browser-only or PDF. Only through `honest_fetch.mjs`. This decides whether RE-49 is cheap (days) or the pace stays
+      search-bound (months).
+3. **Owner:** **Fill this car** on the Roomy M900A, still in practice mode → proves done-tests 5 and 4 (on Looks right).
    Claude reads the results on live and records them here.
    - **Claude, right after:** write the measured cost per job, searches per job, jobs per day at the cap and the
      200-car finish date into §1 (RE-37).
    - **Claude, one small-fix round:** `GET /health` (RE-45), research screen test in its own CI job (RE-40), the two
      master-data breaks (RE-41), jobs per day + finish date on Settings (RE-37), cap ceiling on Settings (RE-50).
-   - **Claude, after Spike 1 finds by-car lookups:** RE-49 (catalogue first by car, no search when a recipe proves it).
-3. **Claude: Spike 1 — more part makers (RE-46, §12).** Robots.txt + terms for the 12 brand sites in §12, recorded
-   exactly as Spike 0, plus whether each site offers a **by-car** lookup (what makes RE-49 cheap); one recipe for each
-   site that passes and works without a browser; sites are opened only as `RoamResearchBot/1.0` (§13); run the Roomy M900A against
-   the 10 core part types → a real "N of 17" replaces Spike 0's "0 of 17". The result sets the order of steps 4–6.
-4. **Owner:** two asks, same week (Claude drafts both): (a) the Toyota/Daihatsu parts distributor in Jamaica — catalogue
+4. **Claude: Spike 1, part two:** one recipe for each allowed site that works with a link or a form; run the Roomy
+   M900A against the 10 core part types → a real "N of 17" replaces Spike 0's "0 of 17".
+5. **Build RE-49** (§13, made buildable in §14) when part one found by-car lookups: catalogue first by car, no Google
+   search when a recipe proves the part.
+6. **Owner:** two asks, same week (Claude drafts both): (a) the Toyota/Daihatsu parts distributor in Jamaica — catalogue
    access, a parts data export or a dealer account (RE-46 (c)); (b) the permission emails to Masuma, Amayama, Megazip
    and Partsouq.
-5. **Build RE-47** (§12) if Spike 1 finds part makers whose catalogue is a PDF: the PDF catalogue reader.
-6. **Build RE-34 + RE-35** (§10): screenshot drop and one-click Chrome helper for browser checks. Playbook order: audit
+7. **Build RE-47** (§12–13) if Spike 1 finds part makers whose catalogue is a PDF: the PDF catalogue reader.
+8. **Build RE-34 + RE-35** (§10): screenshot drop and one-click Chrome helper for browser checks. Playbook order: audit
    round 1 → Stitch prompt for the new parts of the browser check screen → screens → round 2 → build.
-7. **Build RE-36** (§10): honest browser reader for allowed sites that only work in a browser (SB Parts, and any
-   Spike 1 site that needs it) → done-tests 1 and 31.
-8. **Fix the nightly readiness rebuild** (separate audit; it has failed every night since at least 16 Nov), then run
-   §6 step 5.
-9. **Switch on for everyone** (leave practice mode) once steps 1–2 show correct results (owner rule: on for all companies).
-   With 0–2 of 17 parts automatic, this mostly grows the owner's browser-check queue, not coverage; the 25-open cap is
-   the brake (RE-42). Best done after RE-34/RE-35 are live, so each check takes seconds.
-10. Cleanup migration (§6 step 6) and the §7 follow-ups.
+9. **Build RE-36** (§10): honest browser reader for allowed sites that only work in a browser (SB Parts, and any
+   Spike 1 site that needs it) → done-tests 1 and 31. First the RE-51 check for a JSON address (§13–14).
+10. **Fix the nightly readiness rebuild** (separate audit; it has failed every night since at least 16 Nov), then run
+    §6 step 5.
+11. **Switch on for everyone** (leave practice mode) once steps 1 and 3 show correct results (owner rule: on for all
+    companies). With 0–2 of 17 parts automatic, this mostly grows the owner's browser-check queue, not coverage; the
+    25-open cap is the brake (RE-42). Best done after RE-34/RE-35 (and RE-49) are live.
+12. Cleanup migration (§6 step 6) and the §7 follow-ups.
 
 If Spike 1 reaches 6 or more of 17, the engine works without any blocked site and the EPC emails become a bonus. If it
 stays at about 2 of 17, the gap is a data source, not software: the distributor, or a licensed feed (RE-48).
@@ -86,6 +93,8 @@ stays at about 2 of 17, the gap is a data source, not software: the distributor,
    (memory "golive-worktree-recipe"). Apply a migration to live **before** pushing code that reads its columns; dry-run
    it as BEGIN … ROLLBACK first; add its logbook line.
 3. A push to the branch does **not** change the owner's localhost screens — localhost reads the LIVE server.
+3b. Third-party sites only through `scripts/honest_fetch.mjs` (RE-52) — never `curl`/`fetch` with a custom name.
+    Until that script exists, no hand fetches of third-party sites.
 4. The Overview page keeps its current look on purpose (every other Stitch card was invented). If the owner wants the
    Stitch Overview look, the first build step is naming the real number behind each card.
 
@@ -130,10 +139,15 @@ become Needs checking in layer 1b). Research jobs ever: 3.
 
 Conditions: the free searches are ours only while the engine is Roam's only grounded caller and the Gemini key's
 Google project isn't shared. Ceiling for raising the cap: ~288 grounded jobs a day ≈ US$21.60 if Google's 1,500-a-day
-limit counts searches, ~1,500 if it counts prompts (done-test 18 tells which; RE-50). **To replace with live
+limit counts searches, ~1,500 if it counts prompts (done-test 18 tells which; RE-50). The same limit caps how fast the
+free 5,000 can be used (~288 jobs a day), so the pace is lumpy within a month and the finish date depends on the start
+day; the 2.3-month average holds. **To replace with live
 measurements after §R step 2:** cost per job, searches per job, jobs per day, finish date against `fill_target_date`.
 
 ## 2. What is built (all live)
+
+Live flow today: Gemini + Google search first, then recipes and trusted pages prove its numbers (search-first).
+Catalogue-first (RE-02) is RE-49 (§13–14).
 
 | Layer | Main files | What it does |
 |---|---|---|
@@ -560,3 +574,52 @@ browser name (`Mozilla/5.0`) while finding out how SB's search works. That break
 found that sbparts.jp blocks ClaudeBot by name, so Claude should not have opened it at all. Nothing was saved or used.
 From now on, SB and any site that names ClaudeBot are only read by the engine's own reader as `RoamResearchBot/1.0`
 (the RE-51 JSON check included), and Claude never sends a browser name to any site.
+
+## 14. Rev 4.7 — reviewer round on Rev 4.6 (21 Nov)
+
+The reviewer agreed the free-search figure stands (2.3 months) and confirmed RE-49 in the code (Gemini with search at
+`catalog_research_worker.ts` ~line 304, recipes loaded at ~364 and run on Gemini's candidates at ~379). Checked here:
+`MAX_READS_PER_JOB = 4`, `TICK_BUDGET_MS = 90_000`; `research_lookup_recipe` and `trusted_source` carry no part type.
+
+**What "LIVE" means (now said in §R and §2):** the live engine is the search-first flow with the new proof — Gemini
+with Google search proposes numbers, recipes and trusted pages prove them. The planned catalogue-first flow (RE-02)
+is not built yet; RE-49 builds it. Until then every part job costs ~US$0.075 and **every part job depends on Google**:
+a spend-cap day, a `grounding_daily` pause or a Gemini outage stops work that a recipe could have answered.
+
+**RE-49 made buildable (three details):**
+1. **Which recipes a job may use.** New column `research_lookup_recipe.component_ids uuid[]` (the maintenance
+   components the recipe answers, e.g. NiBK's car page → front pads, rear pads, rotors). A by-car recipe with no
+   components is never used catalogue-first. The Trusted sources recipe form gets a "Parts it answers" picker.
+2. **A car page lists many parts.** Recipes are per part type: each by-car recipe also carries `row_words text[]`
+   (the words that name that part on the site, e.g. "Front Brake", "pads"), and the proof requires one of them **in the
+   matched row** (or in the row's position-cell label for the RE-31 shape), on top of number/car/position. A pads job
+   can then never prove itself from a rotor row.
+3. **Read budget.** Catalogue-first runs at most **3** by-car recipes per job, part-maker sites first, then by most
+   proofs in the last 30 days, and stops at the first proof. They share the job's 4-read budget and the 90-second tick
+   with everything else; when the budget is used, the job goes on to Gemini as today.
+Done-tests 52–53 stand; added 55. a pads job on a car page whose only matching row is a rotor row → not proven;
+56. with 5 eligible by-car recipes, at most 3 run and the first proof stops the rest.
+
+**RE-50 note:** at 5.2 searches a job, Google's 1,500-a-day limit also caps how fast the free 5,000 can be used
+(~288 jobs a day), so the pace is lumpy within a month — the 2.3-month average holds, but the finish date depends on
+where in the month the fill starts. Written into §1.
+
+**RE-51 note:** storage purposes are a typed list in code (`_shared/objectStorage/purposes.ts`), so each new purpose is a
+code change plus a bucket rule, shipped with the feature that needs it (RE-34 or RE-47).
+
+**RE-52 · Medium · The honest-name rule is remembered, not enforced.** §13's mistake happened because nothing stops a
+hand-run `curl` from sending a browser name. Fix: `scripts/honest_fetch.mjs` — the only way Claude (or anyone) fetches a
+third-party site by hand during research. It hard-codes `RoamResearchBot/1.0`, reads the site's robots.txt first and
+refuses paths it disallows for `RoamResearchBot` or `*`, refuses sites whose robots.txt names ClaudeBot or whose
+`trusted_site.automated_read` is `blocked`, and prints what it fetched. START HERE now says: third-party sites only
+through `honest_fetch.mjs`, never `curl`/`fetch` with a custom name. Done-tests: 57. a site whose robots.txt disallows
+the path → refused, no page request sent; 58. any `-A`/User-Agent option → refused.
+
+**On the SB observation from §13:** that fetch taught nothing about an SB data address — the page only showed
+Angular forms (`ng-submit`). The RE-51 check ("look for the JSON address SB's page calls") starts from zero and runs
+only through `honest_fetch.mjs` as `RoamResearchBot/1.0`; since SB's robots.txt names ClaudeBot, if `honest_fetch`
+refuses it, the check moves to the engine's own reader on a recipe test, or stops.
+
+**Order changed (§R):** whether each brand offers a **by-car** lookup decides whether RE-49 is cheap (days) or the pace
+stays search-bound (months), so that part of Spike 1 moves up to §R step 2, alongside the owner's NiBK test. RE-52
+comes first, because Spike 1 fetches 12 sites by hand.
