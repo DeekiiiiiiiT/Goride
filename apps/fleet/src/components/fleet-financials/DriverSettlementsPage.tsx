@@ -95,6 +95,9 @@ import {
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { DriverDisputesTab } from './recon/tolls-v2/disputes/DriverDisputesTab';
+import { useTollV2Disputes } from './recon/tolls-v2/disputes/useTollV2Disputes';
+import { useTollV2Switches } from './recon/tolls-v2/useTollV2Switches';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -155,7 +158,7 @@ const RestatementQueuePageLazy = lazy(() =>
 type MoneyDirection = 'collect' | 'pay';
 type DeskMode = MoneyDirection | 'reconciled';
 type DeskTab = 'outstanding' | 'awaiting' | 'done';
-export type SettlementsHubTab = 'cash' | 'close-week' | 'restatements';
+export type SettlementsHubTab = 'cash' | 'close-week' | 'restatements' | 'disputes';
 
 type SettlementsNavigateOpts =
   | { startYmd: string; endYmd?: string; driverId?: string }
@@ -483,6 +486,11 @@ export function DriverSettlementsPage({
     queryFn: listWeekStatementRestatements,
     staleTime: 60_000,
   });
+  // Toll disputes (UI2): the Disputes tab exists only while the company's toll_disputes switch is on.
+  const tollSwitchesQuery = useTollV2Switches();
+  const disputesOn = tollSwitchesQuery.data?.tollDisputes === true;
+  const disputesQuery = useTollV2Disputes(disputesOn);
+  const disputesToSend = (disputesQuery.data?.active ?? []).filter((d) => d.state === 'to_send').length;
   const restatementDraftCount = (restatementBadgeQuery.data || []).filter(
     (r) => String(r.status || 'draft').toLowerCase() === 'draft',
   ).length;
@@ -1721,6 +1729,16 @@ export function DriverSettlementsPage({
               </span>
             ) : null}
           </TabsTrigger>
+          {disputesOn ? (
+            <TabsTrigger value="disputes" className="gap-1.5" data-testid="settlements-tab-disputes">
+              Disputes
+              {disputesToSend > 0 ? (
+                <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-amber-900">
+                  {disputesToSend > 99 ? '99+' : disputesToSend}
+                </span>
+              ) : null}
+            </TabsTrigger>
+          ) : null}
         </TabsList>
 
         {hubTab !== 'cash' ? (
@@ -1730,7 +1748,7 @@ export function DriverSettlementsPage({
               Cash desk
             </Button>
             <p className="text-sm font-medium text-slate-700">
-              {hubTab === 'close-week' ? 'Close Week' : 'Restatements'}
+              {hubTab === 'close-week' ? 'Close Week' : hubTab === 'disputes' ? 'Disputes' : 'Restatements'}
             </p>
           </div>
         ) : null}
@@ -1772,6 +1790,14 @@ export function DriverSettlementsPage({
           </Suspense>
           )}
         </TabsContent>
+
+        {disputesOn ? (
+          <TabsContent value="disputes" className="mt-0 focus-visible:outline-none">
+            <DriverDisputesTab
+              onOpenWeek={(weekKey) => onNavigate?.('week-reconciliation', { weekKey, step: 'tolls', line: 'rideshare' })}
+            />
+          </TabsContent>
+        ) : null}
 
         <TabsContent value="restatements" className="mt-0 focus-visible:outline-none">
           <Suspense
@@ -1850,6 +1876,12 @@ export function DriverSettlementsPage({
                 Restatements
                 {restatementDraftCount > 0 ? ` (${restatementDraftCount})` : ''}
               </DropdownMenuItem>
+              {disputesOn ? (
+                <DropdownMenuItem onClick={() => setHubTab('disputes')}>
+                  Disputes
+                  {disputesToSend > 0 ? ` (${disputesToSend})` : ''}
+                </DropdownMenuItem>
+              ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

@@ -117,6 +117,52 @@ export function TollV2RefundReceivedDialog({
   );
 }
 
+/** Driver Settlements: mark as sent for a driver who sent it in Uber but didn't tap it in the app. */
+export function TollV2MarkSentDialog({
+  dispute,
+  busy,
+  onOpenChange,
+  onConfirm,
+}: {
+  dispute: TollV2DisputeRow | null;
+  busy: boolean;
+  onOpenChange: (o: boolean) => void;
+  onConfirm: () => void;
+}) {
+  if (!dispute) return null;
+  return (
+    <AlertDialog open onOpenChange={onOpenChange}>
+      <AlertDialogContent data-testid="toll-v2-mark-sent-dialog">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Mark this dispute as sent?</AlertDialogTitle>
+        </AlertDialogHeader>
+        <div className="rounded-xl border border-[#e5eeff] bg-[#f8f9ff] p-3 text-sm">
+          <p className="font-medium text-[#0b1c30]">
+            {disputeTitle(dispute)} · {fmtTollMinor(dispute.leftMinor)} to dispute
+          </p>
+          <p className="mt-1 flex items-center gap-2 text-[#47464c]">
+            {dispute.driverName ?? 'Driver'}
+            {dispute.plate ? (
+              <span className="rounded bg-[#dce9ff] px-2 py-0.5 text-[11px] font-semibold text-[#0b1c30]">{dispute.plate}</span>
+            ) : null}
+          </p>
+        </div>
+        <p className="text-sm text-[#47464c]">
+          Use this when the driver sent it in Uber but didn&apos;t tap Mark as sent in the Roam Driver app.
+        </p>
+        <AlertDialogFooter>
+          <TollV2SecondaryButton type="button" onClick={() => onOpenChange(false)}>
+            Cancel
+          </TollV2SecondaryButton>
+          <TollV2PrimaryButton type="button" disabled={busy} onClick={onConfirm} data-testid="toll-v2-mark-sent-confirm">
+            Mark as sent
+          </TollV2PrimaryButton>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 /** Lost: Uber will not pay the rest. Who pays it follows Fleet Policy → Tolls. */
 export function TollV2LostDialog({
   dispute,
@@ -202,6 +248,7 @@ const ASK_WHAT: Partial<Record<TollV2CommandIntent, string>> = {
   undo_decision: 'This undo',
   settle_dispute: 'Linking this refund',
   reopen_week: 'Reopening the week',
+  change_toll_settings: 'Changing toll settings',
 };
 
 /** B14: the only manager approves their own change with a reason (8+ characters). */

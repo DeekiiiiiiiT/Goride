@@ -5,15 +5,19 @@ import { DriverHomeDashboard } from './DriverHomeDashboard';
 import { FleetStartTripLauncher } from './FleetStartTripLauncher';
 import { loadMyFleetInvites } from '../../lib/driverRoamTagService';
 import type { VehicleCustodyStatus } from '../../hooks/useWeeklyCheckIn';
+import { TollDisputesHomeCard } from '../tolls/TollDisputesPage';
 
 type Props = {
   onOpenFleetInvites?: () => void;
+  /** Toll disputes (UI2): opens "Tolls to dispute". */
+  onOpenTollDisputes?: () => void;
   custodyStatus?: VehicleCustodyStatus;
   assignedVehicleId?: string | null;
 };
 
 export function DriverMintHome({
   onOpenFleetInvites,
+  onOpenTollDisputes,
   custodyStatus = 'none',
   assignedVehicleId = null,
 }: Props) {
@@ -74,6 +78,7 @@ export function DriverMintHome({
         </button>
       ) : null}
       {custodyBanner}
+      {isFleetDriver && !tripFlowActive && onOpenTollDisputes ? <TollDisputesHomeCard onOpen={onOpenTollDisputes} /> : null}
       <DriverHomeDashboard
         tripFlowActive={tripFlowActive}
         startTripSlot={

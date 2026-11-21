@@ -24,6 +24,7 @@ const drawerNavItems: NavItem[] = [
   { id: 'vehicle', label: 'My Vehicle', icon: Car },
   { id: 'expenses', label: 'Manage expenses', icon: Receipt },
   { id: 'fleet-settlement', label: 'Fleet Settlement', icon: Scale },
+  { id: 'toll-disputes', label: 'Tolls to dispute', icon: Receipt },
   { id: 'tax', label: 'Tax Center', icon: FileText },
   { id: 'insurance', label: 'Insurance', icon: Shield },
   { id: 'settings', label: 'Settings', icon: Settings },
@@ -35,10 +36,10 @@ export function getNavigationItems(mode?: DriverMode): NavItem[] {
   }
   if (mode === 'independent') {
     return drawerNavItems.filter(
-      (item) => item.id !== 'expenses' && item.id !== 'fleet-settlement',
+      (item) => item.id !== 'expenses' && item.id !== 'fleet-settlement' && item.id !== 'toll-disputes',
     );
   }
-  return drawerNavItems.filter((item) => item.id !== 'fleet-settlement');
+  return drawerNavItems.filter((item) => item.id !== 'fleet-settlement' && item.id !== 'toll-disputes');
 }
 
 export function getBottomNavItems(): NavItem[] {

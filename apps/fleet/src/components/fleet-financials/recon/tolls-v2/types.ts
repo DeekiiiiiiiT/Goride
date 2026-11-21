@@ -323,4 +323,5 @@ export type TollV2CommandIntent =
   | 'reverse_payback'
   | 'mark_dispute_sent'
   | 'settle_dispute'
-  | 'close_dispute_lost';
+  | 'close_dispute_lost'
+  | 'change_toll_settings';

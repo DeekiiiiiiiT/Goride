@@ -6,6 +6,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { RideDispatchProvider } from '../../contexts/RideDispatchContext';
 import { DispatchConfigProvider, RIDESHARE_DISPATCH_CONFIG } from '@roam/hauler-dispatch';
 import { getBottomNavItems, getNavigationItems } from '../../config/navigation';
+import { TollDisputesPage } from '../tolls/TollDisputesPage';
+import { useDriverTollDisputes } from '../tolls/driverTollDisputes';
 import {
   Menu,
   X,
@@ -83,7 +85,11 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
   const [cameraResume, setCameraResume] = useState<CaptureFlowId | null>(null);
   const cameraResumeRoutedRef = useRef(false);
   const bottomNavItems = getBottomNavItems();
-  const menuNavItems = getNavigationItems(mode);
+  // Toll disputes (UI2): the menu entry shows only while the company has disputes switched on.
+  const tollDisputesQuery = useDriverTollDisputes(isFleetDriver);
+  const menuNavItems = getNavigationItems(mode).filter(
+    (item) => item.id !== 'toll-disputes' || tollDisputesQuery.data?.enabled === true,
+  );
 
   useEffect(() => {
     syncCatalog('driver');
@@ -145,7 +151,8 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
     currentPage === 'settings' ||
     currentPage === 'documents' ||
     currentPage === 'fleet-invites' ||
-    currentPage === 'car-kit';
+    currentPage === 'car-kit' ||
+    currentPage === 'toll-disputes';
   const mintDriverLayout =
     mintHomeLayout ||
     mintEarningsLayout ||
@@ -216,6 +223,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
         return (
           <DriverMintHome
             onOpenFleetInvites={() => setCurrentPage('fleet-invites')}
+            onOpenTollDisputes={() => setCurrentPage('toll-disputes')}
             custodyStatus={custodyStatus}
             assignedVehicleId={custodyVehicleId || assignedVehicleId}
           />
@@ -250,6 +258,8 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
         );
       case 'vehicle':
         return <MyVehicle onOpenCarKit={() => setCurrentPage('car-kit')} />;
+      case 'toll-disputes':
+        return <TollDisputesPage onBack={() => setCurrentPage('dashboard')} />;
       case 'car-kit':
         return (
           <CarKitPage

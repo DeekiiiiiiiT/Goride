@@ -40,7 +40,7 @@ import { useServiceLineScope } from './contexts/ServiceLineScopeContext';
 
 import { isPassengerOnlyMetadataRole, TestCopyBar } from '@roam/auth-client';
 
-type SettlementsHubTab = 'cash' | 'close-week' | 'restatements';
+type SettlementsHubTab = 'cash' | 'close-week' | 'restatements' | 'disputes';
 type WeekReconciliationHubTab = 'fuel' | 'tolls';
 
 const DriversPage = lazy(() => import('./components/drivers/DriversPage'));

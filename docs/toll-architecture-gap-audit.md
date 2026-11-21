@@ -1,10 +1,10 @@
 # Toll architecture: disputes and InDrive (plan + build status)
 
-**Rev 31 · 21 Nov 2026 · Status: BUILDING (first build). Data, server (D1–S3) and screen round UI1 are DONE and committed. Next: UI2 (Stitch prompts first), then the proof (P).** Rev 30 removes everything already built: the server design, every round's review notes, the Cursor rules, the C4 rule list and the L2.4 state tables (all proven by the 26 toll SQL test files). They stay in git: `git log -- docs/toll-architecture-gap-audit.md` (Rev 29 is the last version with the build history, Rev 26 the last full one, Rev 19 the last full design).
+**Rev 32 · 21 Nov 2026 · Status: BUILDING (first build). Data, server (D1–S3) and screens (UI1, UI2) are DONE and committed. Next: the proof (P) on the local copy, then live with every switch off.**
 
 ## START HERE (for a new chat)
 
-**Prompt to start a new chat:** "Continue the toll disputes build. Read `docs/toll-architecture-gap-audit.md` START HERE first. Data and server (D1–S3) are done and committed. UI1 (the six-part Tolls step) is done and the UI2 Stitch prompts are written. Next step: build round UI2 from the Stitch screens in docs/stitch/toll-disputes-driver/ and docs/stitch/toll-disputes-fleet/ onto the S3 reads, following C3, with its tests. Keep me updated in short plain replies."
+**Prompt to start a new chat:** "Continue the toll disputes build. Read `docs/toll-architecture-gap-audit.md` START HERE first. Data, server and screens (D1–S3, UI1, UI2) are done and committed. Next step: round P — the Part D done-tests and the 9 Nov replay on the local copy (L2.6 step 0), then the live rollout plan with every switch off. Keep me updated in short plain replies."
 
 **What this is:** every toll the fleet pays ends with the right person paying it. **First principle (owner):** on a trip the **passenger** always owes the toll, never the fleet.
 - **Uber** pays it back. If Uber pays short, the driver **disputes** it with Uber within 9 days; the refund comes in the next pay period or the one after.
@@ -33,8 +33,8 @@
 |---|---|---|---|
 | D1–S3 | Cursor, reviewed by Claude | Data, dispute commands and money, four-eyes, settings, matcher, nightly sweep, "Uber report late" alert, InDrive trips, screen reads, driver dispute route | **Done** (last commit 574f0775) |
 | UI1 | Claude | The six-part Tolls step (C3) on `toll_v2_week_desk`, + tests | **Done** 21 Nov (see "UI1 as built") |
-| **UI2** | Claude | **NEXT.** Roam driver app dispute card, Driver Settlements → Disputes tab, Fleet Policy → Tolls (C3), + tests | — |
-| P | Claude + owner | Proof on the local copy (Part D done-tests, 9 Nov replay), then live with every switch off, settings seed and switch-on (L2.6), one real week with screenshots | — |
+| UI2 | Claude | Roam driver app dispute card, Driver Settlements → Disputes tab, Fleet Policy → Tolls (C3), + tests | **Done** 21 Nov (see "UI2 as built") |
+| **P** | Claude + owner | **NEXT.** Proof on the local copy (Part D done-tests, 9 Nov replay), then live with every switch off, settings seed and switch-on (L2.6), one real week with screenshots | — |
 
 **Owner to-dos:** push the local commits (through 574f0775). Commit the log-service work's migration `20261118181439_log_service_positions.sql` before pushing: its time is earlier than S3's, and a database push can refuse it once S3 is live.
 
@@ -66,6 +66,15 @@
 **Fleet Policy → Tolls (UI2): `public.toll_v2_toll_settings()`** → `switches`, `disputePolicy`, `platforms`, `plazas` (tag price and each platform's rate: current = valid today, plus history), `templates`, `seeded`, `missing` (the same list the matcher refuses on), `approvals`. **Save** sends `change_toll_settings` (`platform_settings.<platform>.<snake_case field>`, `dispute_policy.lost_bearer` / `expired_bearer`); **Add rate** sends `plaza_rates_add: [{plaza_id, platform, rate_minor, effective_from}]`. No command accepts a tag price yet, so Add rate covers platform rates only.
 
 **UI2 Stitch prompts written (21 Nov 2026):** `docs/stitch/toll-disputes-driver-prompt.txt` (Roam Driver: Home card, Tolls to dispute list, one toll with Copy text / Open Uber App / Mark as sent, sent, last day, time is up, short notice, empty — 10 screens) and `docs/stitch/toll-disputes-fleet-prompt.txt` (Driver Settlements → Disputes tab and Fleet Policy Configuration → Tolls tab, with Mark as sent, Lost, reason box, Add rate, price history, settings missing, phone — 12 screens). Screens made and saved 21 Nov 2026 (Keep / Drop / Fix below).
+
+### UI2 as built (21 Nov 2026)
+- **Fleet — Driver Settlements → Disputes tab:** `apps/fleet/src/components/fleet-financials/recon/tolls-v2/disputes/` (`DriverDisputesTab.tsx`, `useTollV2Disputes.ts`). Reads `toll_v2_disputes(null)` once; the driver chip filters on screen, so the tiles always count every driver (tile totals are summed from the server's rows: this read has no tiles). Mark as sent (dialog) → `mark_dispute_sent`; Lost (dialog) → `close_dispute_lost`, reason box on NEEDS_APPROVAL; Open week → Week Reconciliation, Tolls step of the charge's week (opens on the first part with work, not straight on part 3). The tab and its amber badge (tolls to send) show only with the `toll_disputes` switch on.
+- **Fleet — Fleet Policy Configuration → Tolls tab:** `tolls-v2/policy/` (`TollPolicyTab.tsx`, `tollPolicyLogic.ts`), added to `components/fuel/FuelConfiguration.tsx`. Shows once `seeded` (rollout step 2) or the switch is on; before that the page is unchanged. Save → in-app dialog with each change in words + reason → `change_toll_settings` with only the changed keys, `note` = the reason and `self_approval_reason` when sole manager. Add rate → `plaza_rates_add` (the generic reason box follows, because settings always need four-eyes). Tag price is read-only. Discard resets the draft. No browser "leave page?" prompt.
+- **Missing settings (Fix):** the server's `missing` list holds `dispute_policy`, `platform_settings`, `plaza_rules`, `coverage_source` — not missing rates. The red banner shows those in plain words ("Ask Roam support" for plaza rules and coverage source, which no screen command sets). The red "Missing" chip is separate: a plaza with no current rate for a platform that takes disputes; it opens Add rate filled in.
+- **Roam Driver app:** `apps/driver/src/components/tolls/` (`TollDisputesPage.tsx` with the Home card, `driverTollDisputes.ts`). Home card for fleet drivers with tolls to send; "Tolls to dispute" page (list → one toll → sheet); menu entry "Tolls to dispute" only while the server says `enabled`. Copy text, Open Uber App (`uberdriver://` through `openExternalUrl`), Mark as sent → `POST /toll/v2/driver/disputes/:id/sent`; `window_closed` → Time is up page. Consequence sentence from `bearerIfNotSent` / `openedLate` (B5, AG6).
+- **Driver Fix:** the server stores no sent date in the driver row, so the sent page says "Sent. Nothing else to do." and one ticked row "Marked as sent" (no date).
+- **Tests:** Fleet `DriverDisputesTab.test.tsx` (8) and `TollPolicyTab.test.tsx` (6); driver `driverTollDisputes.test.ts` (8: the calls, window_closed, wording). The driver app has no jsdom / Testing Library, so its screens were checked against Stitch instead of screen tests. All 247 Fleet and 61 driver tests and `pnpm check` pass.
+- **Screen check:** every new screen drawn with server-shaped sample data at desktop and 390 px and compared with the Stitch screens; no sideways scroll. Fixed on the way: the Fleet Policy Save bar is an in-page sticky card (a full-width fixed bar would cover the app's side menu).
 
 ### UI2 Stitch screens: Keep / Drop / Fix (21 Nov 2026)
 
