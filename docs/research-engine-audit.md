@@ -870,4 +870,29 @@ The proof link is the opened page (the remembered version's page, else Roam's li
 the server from its own records (remembered version, build dates, suggestions). Code review (medium): 9 found, all
 fixed — incl. a real bug: the paste path saved an empty number (`detected` never set). Not changed: when no version is
 remembered yet, the link saved is the version list (the version name is in the evidence; the next check says "Click
-M900A-AGBVE in the list"). Tests: Deno 168, admin 60, screens 17.
+M900A-AGBVE in the list"). Tests: Deno 164, admin 60, screens 17.
+
+**Done-test 65 passed on live (21 Nov 17:04 UTC):** the owner did the air-filter check alone with the question screen
+(Yes · Yes · tapped 17801-21060 · Yes) → `part_listing` confirmed, route `owner_browser`, proof link
+`…/tank-roomy/m900a/147989`, evidence "Owner checked on amayama.com · M900A-AGBVE · ELEMENT SUB-ASSY, AIR CLEANER
+FILTER · 17801-21060 · dates include 11.2016 – 08.2020". Roomy browser checks left: shock absorber, cabin filter.
+
+## 23. Rev 5.8 — parts that come in positions (21 Nov, owner)
+
+**RE-69 · High · "My app does not specify whether it is rear or front."** The Roomy's shock-absorber check could save
+one number for every corner, though Dominion marks shocks `four_corners` and Toyota lists front right 48510, front left
+48520 and rear 48530. Also the button said "Open Partsouq" while opening the remembered Amayama page. Fix (built):
+- **Check:** for part types with positions (`axle`, `four_corners`, `axle_left_right`, `axle_inner_outer`), step 4 asks
+  "Its number for each place:" — one row per place (Front left / Front right / Rear left / Rear right, or Front / Rear,
+  only the job's own axle when it has one); tap one of Roam's numbers or type it (typed twice); empty places are skipped.
+  The button names the site it really opens.
+- **Server:** `answersGate` checks the places against the part type (sided types need a side, axle-only types never
+  have one, the job's axle only, no place twice; a sided part sent as one number is refused); one proposal per number,
+  listing every place it was confirmed for (both sides of an axle → side "both"), keyed by the lookup's own axle so the
+  suggestion row is updated, not duplicated; if a later number fails, the reply says which were saved. Proven on the
+  local copy through `promote_part_proposal`: listings `front/left` and `rear/both`, both confirmed.
+- **Fill this car** (migration `20261121171424_research_fill_per_axle.sql`): those part types get a front job and a rear
+  job, an axle already confirmed on the car is skipped (not the whole part type), and an open job from before (no
+  position) is joined instead of duplicated. SQL checks: "fill per axle", "fill join old job".
+Code review (medium): 7 found, all fixed (per-axle readiness, join old jobs, server place rules, partial-save report,
+proposal key, sided parts on the paste path, all results returned). Tests: Deno 166, admin 61, screens 18.

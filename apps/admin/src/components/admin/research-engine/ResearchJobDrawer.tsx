@@ -33,6 +33,7 @@ import {
 import {
   buildDates,
   catalogueVersionRow,
+  checkPositions,
   catalogueEngineCode,
   partFinder,
   carLabel,
@@ -518,6 +519,8 @@ function BrowserCheckCard({
   const [typedAgain, setTypedAgain] = useState("");
   const [datesOk, setDatesOk] = useState<boolean | null>(null);
   const [sideOk, setSideOk] = useState<boolean | null>(null);
+  // RE-69: one number per position (shocks, bearings, brakes…): tapped or typed (typed twice).
+  const [posVals, setPosVals] = useState<Record<string, { picked: string; typed: string; again: string }>>({});
   // Another check opened in the same drawer starts clean (keyed on the job only, so a refetch keeps the answers).
   useEffect(() => {
     setVersionOk(null);
@@ -528,11 +531,13 @@ function BrowserCheckCard({
     setTypedAgain("");
     setDatesOk(null);
     setSideOk(null);
+    setPosVals({});
   }, [detail.job.id]);
 
   const url = detail.browserCheckUrl;
-  const site = siteName(url);
   const openUrl = detail.knownVersion?.url || url;
+  // The button names the site it really opens (RE-69: it said Partsouq while opening the remembered Amayama page).
+  const site = siteName(openUrl);
   const jobType = detail.job.job_type === "spec" ? "spec" : "part";
   const finder = partFinder(itemName, detail.car?.make);
   const known = detail.knownVersion ?? null;
@@ -559,9 +564,21 @@ function BrowserCheckCard({
   const typedModel = versionCode.trim().toUpperCase();
   const modelOk = frame ? typedModel.startsWith(`${frame}-`) && typedModel.length > frame.length + 3 : typedModel.length >= 4;
   const versionAnswered = known ? versionOk === true : modelOk;
+  const positions = jobType === "part" ? checkPositions(detail.partType?.position_scheme, detail.job.fit_descriptor) : null;
+  const pv = (k: string) => posVals[k] ?? { picked: "", typed: "", again: "" };
+  const setPv = (k: string, patch: Partial<{ picked: string; typed: string; again: string }>) =>
+    setPosVals((old) => ({ ...old, [k]: { ...(old[k] ?? { picked: "", typed: "", again: "" }), ...patch } }));
+  const posValue = (k: string) => pv(k).picked || pv(k).typed.trim();
+  const posAgainOk = (k: string) => Boolean(pv(k).picked) || !pv(k).typed.trim() || pv(k).again.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") === pv(k).typed.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const filledPositions = (positions ?? []).filter((p) => posValue(p.key));
+  const positionsOk = filledPositions.length > 0 && filledPositions.every((p) => posAgainOk(p.key));
   const anyNo = versionOk === false || partFound === false || datesOk === false || sideOk === false;
   const canConfirm = Boolean(
-    openUrl && versionAnswered && partFound === true && value && againOk && datesOk === true && (!side || sideOk === true),
+    openUrl &&
+      versionAnswered &&
+      partFound === true &&
+      datesOk === true &&
+      (positions ? positionsOk : Boolean(value) && againOk && (!side || sideOk === true)),
   );
 
   const yesNo = (v: boolean | null, set: (b: boolean) => void, id: string, noLabel = "No") => (
@@ -651,10 +668,61 @@ function BrowserCheckCard({
           </div>
         </div>
 
-        <div className="flex items-start gap-2">
-          <StepDot n={n++} />
-          <div className="flex w-full flex-col gap-2 pt-0.5">
-            <p>{jobType === "part" ? "Its number:" : "The value shown:"}</p>
+        {positions ? (
+          <div className="flex items-start gap-2" data-testid="q-positions">
+            <StepDot n={n++} />
+            <div className="flex w-full flex-col gap-3 pt-0.5">
+              <p>Its number for each place:</p>
+              {positions.map((p) => (
+                <div key={p.key} className="flex flex-col gap-1.5" data-testid={`q-position-${p.key}`}>
+                  <span className="font-semibold">{p.label}:</span>
+                  {suggestions.length ? (
+                    <div className="flex flex-wrap gap-2">
+                      {suggestions.map((sug) => (
+                        <PartsButton
+                          key={sug}
+                          variant={pv(p.key).picked === sug ? "primary" : "secondary"}
+                          className={`!min-h-[32px] ${D_MONO}`}
+                          onClick={() => setPv(p.key, { picked: pv(p.key).picked === sug ? "" : sug, typed: "", again: "" })}
+                          data-testid="q-position-suggestion"
+                        >
+                          {sug}
+                        </PartsButton>
+                      ))}
+                    </div>
+                  ) : null}
+                  <input
+                    value={pv(p.key).typed}
+                    onChange={(e) => setPv(p.key, { typed: e.target.value, picked: "" })}
+                    placeholder={suggestions.length ? "Or type it" : "Type it"}
+                    maxLength={60}
+                    className={input}
+                    data-testid="q-position-value"
+                  />
+                  {!pv(p.key).picked && pv(p.key).typed.trim() ? (
+                    <>
+                      <input
+                        value={pv(p.key).again}
+                        onChange={(e) => setPv(p.key, { again: e.target.value })}
+                        placeholder="Type it again"
+                        maxLength={60}
+                        className={input}
+                        data-testid="q-position-again"
+                      />
+                      {pv(p.key).again.trim() && !posAgainOk(p.key) ? <p className="text-[#a83836]">They don&apos;t match.</p> : null}
+                    </>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {positions ? null : (
+          <div className="flex items-start gap-2">
+            <StepDot n={n++} />
+            <div className="flex w-full flex-col gap-2 pt-0.5">
+              <p>{jobType === "part" ? "Its number:" : "The value shown:"}</p>
             {suggestions.length ? (
               <div className="flex flex-wrap gap-2" data-testid="q-suggestions">
                 {suggestions.map((s) => (
@@ -700,6 +768,7 @@ function BrowserCheckCard({
             ) : null}
           </div>
         </div>
+        )}
 
         <div className="flex items-start gap-2">
           <StepDot n={n++} />
@@ -711,7 +780,7 @@ function BrowserCheckCard({
           </div>
         </div>
 
-        {side ? (
+        {side && !positions ? (
           <div className="flex items-start gap-2">
             <StepDot n={n++} />
             <div className="flex w-full flex-col gap-2 pt-0.5">
@@ -751,10 +820,18 @@ function BrowserCheckCard({
                   versionOk: known ? versionOk === true : null,
                   versionCode: known ? null : versionCode.trim(),
                   partFound: partFound === true,
-                  value,
-                  valueAgain: needsAgain ? typedAgain.trim() : null,
+                  value: positions ? "" : value,
+                  valueAgain: positions ? null : needsAgain ? typedAgain.trim() : null,
+                  positions: positions
+                    ? filledPositions.map((p) => ({
+                      axle: p.axle,
+                      side: p.side,
+                      value: posValue(p.key),
+                      valueAgain: pv(p.key).picked ? null : pv(p.key).again.trim(),
+                    }))
+                    : null,
                   datesOk: datesOk === true,
-                  sideOk: side ? sideOk === true : null,
+                  sideOk: side && !positions ? sideOk === true : null,
                 },
                 rowName: jobType === "part" ? finder.rowName : detail.spec?.label ?? null,
                 buildText: dates || null,

@@ -531,3 +531,50 @@ BEGIN
   RAISE NOTICE 'car site version checks passed';
 END;
 $$;
+
+-- Rev 5.8 (§22 RE-69): Fill this car queues parts with positions once per axle.
+BEGIN;
+DO $$
+DECLARE
+  v_car uuid;
+  v_n integer;
+BEGIN
+  SELECT id INTO v_car FROM public.vehicle_catalog LIMIT 1;
+  IF v_car IS NULL THEN RAISE NOTICE 'fill per axle: no car on this copy, skipped'; RETURN; END IF;
+  UPDATE public.vehicle_catalog SET chassis_code = coalesce(nullif(btrim(chassis_code), ''), 'TST1') WHERE id = v_car;
+  PERFORM public.catalog_research_fill_car(v_car, 'owner_fill');
+  SELECT count(DISTINCT lower(coalesce(j.fit_descriptor, ''))) INTO v_n
+  FROM public.catalog_research_job j
+  JOIN public.maintenance_service_categories c ON c.id = j.maintenance_component_id
+  WHERE j.vehicle_catalog_id = v_car AND c.op_code = 'SUS-SHOCK' AND lower(coalesce(j.fit_descriptor, '')) IN ('front', 'rear');
+  IF EXISTS (SELECT 1 FROM public.maintenance_service_categories WHERE op_code = 'SUS-SHOCK' AND position_scheme = 'four_corners')
+     AND v_n <> 2 THEN
+    RAISE EXCEPTION 'fill per axle: expected a front and a rear shock job, got %', v_n;
+  END IF;
+  RAISE NOTICE 'fill per axle checks passed';
+END;
+$$;
+ROLLBACK;
+
+-- Rev 5.8 review: an open shock job from before per-axle filling (no position) is joined, not duplicated.
+BEGIN;
+DO $$
+DECLARE
+  v_car uuid;
+  v_comp uuid;
+  v_n integer;
+BEGIN
+  SELECT id INTO v_car FROM public.vehicle_catalog LIMIT 1;
+  SELECT id INTO v_comp FROM public.maintenance_service_categories WHERE op_code = 'SUS-SHOCK' AND kind = 'component' LIMIT 1;
+  IF v_car IS NULL OR v_comp IS NULL THEN RAISE NOTICE 'fill join old job: skipped'; RETURN; END IF;
+  UPDATE public.vehicle_catalog SET chassis_code = coalesce(nullif(btrim(chassis_code), ''), 'TST1') WHERE id = v_car;
+  INSERT INTO public.catalog_research_job (job_type, state, vehicle_catalog_id, maintenance_component_id, origin, group_key)
+  VALUES ('part', 'browser_check', v_car, v_comp, 'owner_fill', 'old-shock-' || gen_random_uuid());
+  PERFORM public.catalog_research_fill_car(v_car, 'owner_fill');
+  SELECT count(*) INTO v_n FROM public.catalog_research_job
+  WHERE vehicle_catalog_id = v_car AND maintenance_component_id = v_comp AND lower(coalesce(fit_descriptor, '')) IN ('front', 'rear');
+  IF v_n <> 0 THEN RAISE EXCEPTION 'fill join old job: expected no axle jobs next to the open one, got %', v_n; END IF;
+  RAISE NOTICE 'fill join old job checks passed';
+END;
+$$;
+ROLLBACK;

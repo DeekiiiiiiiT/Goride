@@ -12,6 +12,7 @@ import {
   browserCheckGate,
   type CarBuild,
   type CheckAnswers,
+  type PositionItem,
   periodTextOnLine,
   versionCodeOnLine,
   versionListLink,
@@ -259,6 +260,7 @@ export function registerResearchEngineRoutes(
     let detected = "";
     let evidenceText = pasted;
     let answeredVersion: string | null = null;
+    let positionItems: PositionItem[] | null = null;
     if (b.answers && typeof b.answers === "object") {
       const fit = String(ctx.job.fit_descriptor ?? "").toLowerCase();
       const side = fit.includes("rear") ? "rear" : fit.includes("front") ? "front" : null;
@@ -274,6 +276,8 @@ export function registerResearchEngineRoutes(
         buildText: ctx.buildText,
         knownCode: ctx.knownCode,
         suggestions: ctx.gateInput.jobType === "part" ? ctx.gateInput.candidates : ctx.specSuggestions,
+        positionScheme: ctx.positionScheme,
+        jobAxle: side as "front" | "rear" | null,
       });
       if (!ans.ok) {
         const msg: Record<string, string> = {
@@ -285,13 +289,19 @@ export function registerResearchEngineRoutes(
           bad_number: "That isn't a part number (it looks like a car code or a year).",
           bad_version: "Type the full Model shown at the top, like M900A-AGBVE.",
           retype_mismatch: "The two numbers you typed don't match.",
+          bad_position: "Those places don't fit this part. Refresh the page and answer again.",
+          needs_positions: "This part comes in left and right: give the number for each place.",
         };
         return c.json({ error: msg[ans.reason] ?? "Check your answers.", gate: ans }, 422);
       }
       detected = ans.detected;
       evidenceText = ans.evidence;
       answeredVersion = ans.versionCode;
+      positionItems = ans.items ?? null;
     } else {
+      if (ctx.gateInput.jobType === "part" && (ctx.positionScheme === "four_corners" || ctx.positionScheme === "axle_left_right")) {
+        return c.json({ error: "This part comes in left and right: refresh the page to give the number for each place." }, 422);
+      }
       const gate = browserCheckGate({ ...ctx.gateInput, pasted, typedNumber: str(b.number, 40) || null });
       if (!gate.ok) return c.json({ error: "Confirm needs the car and a value on the pasted line", gate }, 422);
       detected = gate.detected;
@@ -350,38 +360,78 @@ export function registerResearchEngineRoutes(
       return c.json({ result: data, detected: detected });
     }
 
-    // Part: the number the owner saw on the car maker's catalogue (owner-checked, RE-29).
-    const norm = detected.toUpperCase().replace(/[^A-Z0-9]/g, "");
-    // The suggestion the owner confirmed keeps its own brand and kind (a part maker's number stays aftermarket).
-    const { data: existingRows } = await supabase.from("catalog_part_proposal").select("id, brand, part_name, match_kind")
-      .eq("job_id", jobId).eq("part_number_norm", norm).order("created_at").limit(1);
-    const existing = (existingRows ?? [])[0] as { brand?: string; part_name?: string; match_kind?: string } | undefined;
+    // Part: the number(s) the owner saw on the car maker's catalogue (owner-checked, RE-29). RE-69: parts that come in
+    // positions save one entry per number, listing each position it was confirmed for.
     const { data: comp } = await supabase.from("maintenance_service_categories").select("name").eq("id", ctx.job.maintenance_component_id).maybeSingle();
     const fit = String(ctx.job.fit_descriptor ?? "").toLowerCase();
-    const positionKey = fit.includes("rear") ? "rear" : fit.includes("front") ? "front" : "";
-    const { data: prop, error } = await supabase.from("catalog_part_proposal").upsert({
-      job_id: jobId,
-      brand: existing?.brand ?? ctx.car.make ?? "OEM",
-      part_number: detected,
-      part_number_norm: norm,
-      part_name: existing?.part_name ?? comp?.name ?? "Part",
-      position_key: positionKey,
-      match_kind: existing?.match_kind ?? "oem",
-      trust_route: "owner_browser",
-      evidence_read_ids: [readId],
-      fits: { listings: [{ vehicleId: ctx.job.vehicle_catalog_id, position: positionKey || undefined }] },
-      sources: [{ url, domain: host, readId, block: evidenceText }],
-      route: "review",
-      status: "open",
-    }, { onConflict: "job_id,part_number_norm,position_key" }).select("id").single();
-    if (error) return c.json({ error: error.message }, 400);
-    const { data: promoted, error: pErr } = await supabase.rpc("promote_part_proposal", { p_proposal_id: (prop as { id: string }).id, p_actor: actor });
-    if (pErr) return c.json({ error: pErr.message }, 400);
-    const batchId = (promoted as { batchId?: string } | null)?.batchId;
-    if (batchId) await autoResolveFromBatch(supabase, batchId, actor);
+    const jobAxle = fit.includes("rear") ? "rear" : fit.includes("front") ? "front" : "";
+    type Group = { number: string; places: Array<{ axle: string; side: string | null }> };
+    const groups = new Map<string, Group>();
+    if (positionItems && positionItems.length) {
+      for (const it of positionItems) {
+        const k = it.detected.toUpperCase().replace(/[^A-Z0-9]/g, "");
+        const g = groups.get(k) ?? { number: it.detected, places: [] };
+        g.places.push({ axle: it.axle, side: it.side });
+        groups.set(k, g);
+      }
+    } else {
+      groups.set(detected.toUpperCase().replace(/[^A-Z0-9]/g, ""), { number: detected, places: [{ axle: jobAxle, side: null }] });
+    }
+    const results: Array<{ number: string; places: string[]; result: unknown }> = [];
+    const placeText = (g: Group) => g.places.map((p) => `${p.axle}${p.side ? ` ${p.side}` : ""}`.trim() || "this car");
+    const partial = (g: Group, why: string) => {
+      const saved = results.map((r) => `${r.places.join(", ")} ${r.number}`).join("; ");
+      return c.json({
+        error: saved
+          ? `Saved ${saved}. Couldn't save ${placeText(g).join(", ")} ${g.number}: ${why}`
+          : why,
+        saved: results,
+      }, 400);
+    };
+    for (const [norm, g] of groups) {
+      // Listings: one per axle; both sides of an axle on the same number → side "both".
+      const byAxle = new Map<string, Set<string>>();
+      for (const p of g.places) {
+        const s = byAxle.get(p.axle) ?? new Set<string>();
+        if (p.side) s.add(p.side);
+        byAxle.set(p.axle, s);
+      }
+      const listings = [...byAxle.entries()].map(([axle, sides]) => {
+        const side = sides.size === 2 ? "both" : sides.size === 1 ? [...sides][0] : undefined;
+        return { vehicleId: ctx.job.vehicle_catalog_id, position: axle || undefined, ...(side ? { side } : {}) };
+      });
+      // The proposal keeps the lookup's own axle as its key (the worker's suggestion row is updated, not duplicated);
+      // the exact places live in its listings.
+      const positionKey = jobAxle;
+      // The suggestion the owner confirmed keeps its own brand and kind (a part maker's number stays aftermarket).
+      const { data: existingRows } = await supabase.from("catalog_part_proposal").select("id, brand, part_name, match_kind")
+        .eq("job_id", jobId).eq("part_number_norm", norm).order("created_at").limit(1);
+      const existing = (existingRows ?? [])[0] as { brand?: string; part_name?: string; match_kind?: string } | undefined;
+      const { data: prop, error } = await supabase.from("catalog_part_proposal").upsert({
+        job_id: jobId,
+        brand: existing?.brand ?? ctx.car.make ?? "OEM",
+        part_number: g.number,
+        part_number_norm: norm,
+        part_name: existing?.part_name ?? comp?.name ?? "Part",
+        position_key: positionKey,
+        match_kind: existing?.match_kind ?? "oem",
+        trust_route: "owner_browser",
+        evidence_read_ids: [readId],
+        fits: { listings },
+        sources: [{ url, domain: host, readId, block: evidenceText }],
+        route: "review",
+        status: "open",
+      }, { onConflict: "job_id,part_number_norm,position_key" }).select("id").single();
+      if (error) return partial(g, error.message);
+      const { data: done, error: pErr } = await supabase.rpc("promote_part_proposal", { p_proposal_id: (prop as { id: string }).id, p_actor: actor });
+      if (pErr) return partial(g, pErr.message);
+      results.push({ number: g.number, places: placeText(g), result: done });
+      const batchId = (done as { batchId?: string } | null)?.batchId;
+      if (batchId) await autoResolveFromBatch(supabase, batchId, actor);
+    }
     await supabase.rpc("catalog_research_expire_browser_checks");
     await rememberVersion();
-    return c.json({ result: promoted, detected: detected });
+    return c.json({ result: results[results.length - 1]?.result ?? null, results, detected: detected });
   });
 
   app.post(`${PREFIX}/browser-checks/:jobId/not-on-page`, async (c: Context) => {
@@ -669,6 +719,8 @@ async function browserCheckContext(supabase: SupabaseClient, jobId: string): Pro
     knownCode: string | null;
     buildText: string | null;
     specSuggestions: string[];
+    /** RE-69: the part type's position scheme (shocks = four_corners…). */
+    positionScheme: string | null;
     gateInput: {
       jobType: "part" | "spec";
       identity: string[];
@@ -711,13 +763,17 @@ async function browserCheckContext(supabase: SupabaseClient, jobId: string): Pro
     ),
   ].filter((e) => e.toUpperCase().replace(/[^A-Z0-9]/g, "") !== String(c0.engine_code ?? "").toUpperCase().replace(/[^A-Z0-9]/g, ""));
   const num = (v: unknown) => (v == null || v === "" ? null : Number(v));
-  const [{ data: kv }, { data: specProps }] = await Promise.all([
+  const [{ data: kv }, { data: specProps }, { data: compRow }] = await Promise.all([
     supabase.from("research_car_site_version").select("version_code").eq("vehicle_catalog_id", j.vehicle_catalog_id)
       .order("confirmed_at", { ascending: false }).limit(1),
     j.job_type === "spec"
       ? supabase.from("catalog_spec_proposal").select("value").eq("job_id", jobId).eq("status", "open")
       : Promise.resolve({ data: [] }),
+    j.maintenance_component_id
+      ? supabase.from("maintenance_service_categories").select("position_scheme").eq("id", j.maintenance_component_id).maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
+  const positionScheme = (compRow as { position_scheme?: string | null } | null)?.position_scheme ?? null;
   const knownCode = ((kv ?? []) as Array<{ version_code: string }>)[0]?.version_code ?? null;
   const specSuggestions = ((specProps ?? []) as Array<{ value: string | null }>).map((p) => String(p.value ?? "").trim()).filter(Boolean);
   const p2 = (n: number | null) => (n == null ? "" : String(n).padStart(2, "0"));
@@ -737,6 +793,7 @@ async function browserCheckContext(supabase: SupabaseClient, jobId: string): Pro
     knownCode,
     buildText,
     specSuggestions,
+    positionScheme,
     gateInput: {
       jobType: j.job_type as "part" | "spec",
       identity: identityTokens((car ?? {}) as Record<string, string>),

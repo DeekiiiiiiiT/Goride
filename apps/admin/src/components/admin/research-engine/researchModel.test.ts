@@ -197,3 +197,15 @@ describe("version row (RE-67)", () => {
     expect(catalogueVersionRow(car, null).map((c) => c.value)).toEqual(["—", "1KRFE", "11.2016 – 08.2020", "Custom G", "CVT"]);
   });
 });
+
+import { checkPositions } from "./researchModel";
+
+describe("positions to ask (RE-69)", () => {
+  it("four corners → front/rear × left/right; one axle when the job has it", () => {
+    expect(checkPositions("four_corners", null)?.map((p) => p.label)).toEqual(["Front left", "Front right", "Rear left", "Rear right"]);
+    expect(checkPositions("four_corners", "rear")?.map((p) => p.label)).toEqual(["Rear left", "Rear right"]);
+    expect(checkPositions("axle", null)?.map((p) => p.label)).toEqual(["Front", "Rear"]);
+    expect(checkPositions("none", null)).toBeNull();
+    expect(checkPositions(undefined, "front")).toBeNull();
+  });
+});

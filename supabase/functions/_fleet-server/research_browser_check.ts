@@ -192,13 +192,30 @@ export type CheckAnswers = {
   datesOk?: boolean;
   /** "Is it for the front/rear?" — only asked when the job has a side. */
   sideOk?: boolean | null;
+  /**
+   * RE-69: parts that come in positions (shocks, bearings, brakes…) — one number per position the owner filled.
+   * When present, these replace `value`.
+   */
+  positions?: Array<{ axle: "front" | "rear"; side?: "left" | "right" | null; value?: string | null; valueAgain?: string | null }> | null;
 };
 
+export type PositionItem = { detected: string; axle: "front" | "rear"; side: "left" | "right" | null };
+
 export type AnswersResult =
-  | { ok: true; detected: string; versionCode: string | null; evidence: string }
+  | { ok: true; detected: string; versionCode: string | null; evidence: string; items?: PositionItem[] }
   | {
     ok: false;
-    reason: "version_no" | "part_not_found" | "dates_no" | "side_no" | "no_value" | "bad_number" | "bad_version" | "retype_mismatch";
+    reason:
+      | "version_no"
+      | "part_not_found"
+      | "dates_no"
+      | "side_no"
+      | "no_value"
+      | "bad_number"
+      | "bad_version"
+      | "retype_mismatch"
+      | "bad_position"
+      | "needs_positions";
   };
 
 /**
@@ -219,15 +236,23 @@ export function answersGate(input: {
   knownCode?: string | null;
   /** Roam's suggested values for this job (server's own record). */
   suggestions?: string[];
+  /** RE-69: the part type's position scheme and the job's own axle (server's own records). */
+  positionScheme?: string | null;
+  jobAxle?: "front" | "rear" | null;
 }): AnswersResult {
   const a = input.answers ?? {};
   // A remembered version is checked with Yes/No; otherwise the owner types the model shown at the top.
   if (input.knownCode ? a.versionOk !== true : !String(a.versionCode ?? "").trim()) return { ok: false, reason: "version_no" };
   if (a.partFound !== true) return { ok: false, reason: "part_not_found" };
   if (a.datesOk !== true) return { ok: false, reason: "dates_no" };
-  if (input.needsSide && a.sideOk !== true) return { ok: false, reason: "side_no" };
-  const raw = String(a.value ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
-  if (!raw) return { ok: false, reason: "no_value" };
+  const positioned = input.jobType === "part" && Array.isArray(a.positions) && a.positions.length > 0;
+  // RE-69: positions only for part types that have them; sided types (four corners, left/right) always need them.
+  const scheme = String(input.positionScheme ?? "");
+  const hasPositions = ["axle", "four_corners", "axle_left_right", "axle_inner_outer"].includes(scheme);
+  const sided = scheme === "four_corners" || scheme === "axle_left_right";
+  if (positioned && !hasPositions) return { ok: false, reason: "bad_position" };
+  if (!positioned && input.jobType === "part" && sided) return { ok: false, reason: "needs_positions" };
+  if (!positioned && input.needsSide && a.sideOk !== true) return { ok: false, reason: "side_no" };
 
   let versionCode: string | null = null;
   if (!input.knownCode && a.versionCode && String(a.versionCode).trim()) {
@@ -236,33 +261,66 @@ export function answersGate(input: {
     versionCode = input.frame ? versionCodeOnLine(typed, input.frame) : /^[A-Z0-9][A-Z0-9-]{3,39}$/.test(typed) ? typed : null;
     if (!versionCode) return { ok: false, reason: "bad_version" };
   }
-  let detected = raw;
-  if (input.jobType === "part") {
-    if (!typedLooksLikePartNumber(raw, "", input.identity)) return { ok: false, reason: "bad_number" };
-    detected = raw.toUpperCase();
-  } else {
-    const shape = input.specKey ? SPEC_VALUE_SHAPES[input.specKey] : undefined;
-    if (shape) {
-      const m = raw.match(shape);
-      if (!m) return { ok: false, reason: "no_value" };
-      detected = m[0].trim();
-    }
-  }
 
-  // A value that isn't one of Roam's suggestions is typed twice, so a typo can't become a confirmed number.
   const normV = (v: unknown) => String(v ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-  const suggested = (input.suggestions ?? []).some((x) => normV(x) && normV(x) === normV(raw));
-  if (!suggested && normV(a.valueAgain) !== normV(raw)) return { ok: false, reason: "retype_mismatch" };
+  const isSuggested = (raw: string) => (input.suggestions ?? []).some((x) => normV(x) && normV(x) === normV(raw));
+  // One value: its shape, then — when it isn't one of Roam's suggestions — typed twice (no typo becomes a number).
+  const check = (rawIn: unknown, again: unknown): { ok: true; detected: string } | { ok: false; reason: "no_value" | "bad_number" | "retype_mismatch" } => {
+    const raw = String(rawIn ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
+    if (!raw) return { ok: false, reason: "no_value" };
+    let detected = raw;
+    if (input.jobType === "part") {
+      if (!typedLooksLikePartNumber(raw, "", input.identity)) return { ok: false, reason: "bad_number" };
+      detected = raw.toUpperCase();
+    } else {
+      const shape = input.specKey ? SPEC_VALUE_SHAPES[input.specKey] : undefined;
+      if (shape) {
+        const m = raw.match(shape);
+        if (!m) return { ok: false, reason: "no_value" };
+        detected = m[0].trim();
+      }
+    }
+    if (!isSuggested(raw) && normV(again) !== normV(raw)) return { ok: false, reason: "retype_mismatch" };
+    return { ok: true, detected };
+  };
+
+  let detected = "";
+  let items: PositionItem[] | undefined;
+  let valueText = "";
+  if (positioned) {
+    // RE-69: one number per filled position; empty positions are simply not saved.
+    items = [];
+    for (const p of a.positions!) {
+      if (!String(p?.value ?? "").trim()) continue;
+      const axle = p.axle === "rear" ? "rear" : p.axle === "front" ? "front" : null;
+      if (!axle) return { ok: false, reason: "no_value" };
+      const side = p.side === "left" || p.side === "right" ? p.side : null;
+      if (input.jobAxle && axle !== input.jobAxle) return { ok: false, reason: "bad_position" };
+      if (sided ? !side : side) return { ok: false, reason: "bad_position" };
+      if (items.some((x) => x.axle === axle && x.side === side)) return { ok: false, reason: "bad_position" };
+      const r = check(p.value, p.valueAgain);
+      if (!r.ok) return { ok: false, reason: r.reason };
+      items.push({ detected: r.detected, axle, side });
+    }
+    if (!items.length) return { ok: false, reason: "no_value" };
+    detected = items[0].detected;
+    valueText = items.map((i) => `${i.axle}${i.side ? ` ${i.side}` : ""} ${i.detected}`).join(", ");
+  } else {
+    const r = check(a.value, a.valueAgain);
+    if (!r.ok) return { ok: false, reason: r.reason };
+    detected = r.detected;
+    valueText = detected;
+  }
 
   const evidence = [
     `Owner checked on ${input.site}`,
     versionCode ?? input.knownCode ?? null,
     input.rowName ?? null,
-    detected,
+    valueText,
     input.buildText ? `dates include ${input.buildText}` : "dates include the car's build",
-    input.needsSide ? `for the ${input.needsSide}` : null,
+    !positioned && input.needsSide ? `for the ${input.needsSide}` : null,
   ].filter(Boolean).join(" · ");
-  return { ok: true, detected, versionCode, evidence: evidence.slice(0, 2000) };
+  return { ok: true, detected, versionCode, evidence: evidence.slice(0, 2000), ...(items ? { items } : {}) };
 }
 
 export function lineNamesCar(line: string, identity: string[]): boolean {
