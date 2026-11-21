@@ -841,3 +841,33 @@ from the catalogue's own words stored with the remembered version (migration
 learned from the pasted title line on confirm), else Dominion's values, else "—". The Roomy's row (M900A-AGBVE · 1KRFE ·
 11.2016 - 09.2020 · CTMG · CVT) was saved by the owner in the SQL editor (the model on 21 Nov; the other four with the
 SQL handed over the same day).
+
+## 22. Rev 5.7 — the browser check asks questions instead of copy-paste (21 Nov, owner)
+
+**RE-68 · High · "The user will never know what to copy from any website."** Fix (owner agreed the list, 21 Nov):
+the check asks for the four things that prove a fit, and the owner only looks and answers —
+1. **The page is for your car** — "Does the top say **M900A-AGBVE**?" Yes / No (when Roam doesn't know the version yet:
+   the labelled list Engine / Prod period / Grade / Transm to find it, and a box for the model name shown at the top,
+   which Roam then remembers);
+2. **The right part** — "Search **air cleaner**. Do you see **ELEMENT SUB-ASSY, AIR CLEANER FILTER**?" Yes / Not on this page;
+3. **The number** — tap one of Roam's suggested numbers, or type the one shown;
+4. **The dates on that row include the car's build** — Yes / No;
+(5. for parts with a side: "Is it for the **front**?" Yes / No). Specs: page is for the car, find the spec, type the
+value shown (checked against the spec's shape). No copying text, no address bar: the proof link is the remembered
+version's page (or Roam's link), and the evidence text records the answers ("Owner checked on amayama.com: M900A-AGBVE ·
+ELEMENT SUB-ASSY, AIR CLEANER FILTER · 17801-21060 · dates include 11.2016 – 08.2020"). Checks kept: the number can't
+be a year, frame or engine code; a spec value must have the spec's shape; a "No" on the version or dates stops Confirm
+(use Not on this page). Done-tests: 65. all four answered Yes + a suggested number → confirmed with that number and the
+version page as the link; 66. a typed frame code as the number → refused; 67. "No" on dates → Confirm stays off;
+68. a typed model name for the car's frame is remembered for the next check.
+
+**RE-68 built (21 Nov):** confirm accepts `answers` (`answersGate`), the paste path stays for older screens. Screen:
+① Open Amayama; ② "Does the top say M900A-AGBVE?" Yes/No (remembered version), or "Click the row with: Engine / Prod
+period / Grade / Transm" + "Type the Model shown at the top" (learned on confirm); ③ "Search air cleaner. Do you see
+ELEMENT SUB-ASSY, AIR CLEANER FILTER?" Yes/No; ④ "Its number:" Roam's numbers to tap, or type it — typed numbers are
+typed twice; ⑤ "Do its dates include 11.2016 – 08.2020?" Yes/No; (⑥ side). Any No → "Then press Not on this page."
+The proof link is the opened page (the remembered version's page, else Roam's link); the evidence text is built on
+the server from its own records (remembered version, build dates, suggestions). Code review (medium): 9 found, all
+fixed — incl. a real bug: the paste path saved an empty number (`detected` never set). Not changed: when no version is
+remembered yet, the link saved is the version list (the version name is in the evidence; the next check says "Click
+M900A-AGBVE in the list"). Tests: Deno 168, admin 60, screens 17.

@@ -176,6 +176,95 @@ export function typedLooksLikePartNumber(typed: string, line: string, identity: 
   return true;
 }
 
+// ---------------------------------------------------------------- RE-68: answers instead of pasted text
+
+export type CheckAnswers = {
+  /** "Does the top say <model>?" (or the model typed when Roam didn't know it). */
+  versionOk?: boolean;
+  versionCode?: string | null;
+  /** "Do you see <row name>?" */
+  partFound?: boolean;
+  /** Part number tapped or typed (part jobs), or the value shown (spec jobs). */
+  value?: string | null;
+  /** The same value typed a second time — required when it isn't one of Roam's suggestions. */
+  valueAgain?: string | null;
+  /** "Do its dates include the car's build?" */
+  datesOk?: boolean;
+  /** "Is it for the front/rear?" — only asked when the job has a side. */
+  sideOk?: boolean | null;
+};
+
+export type AnswersResult =
+  | { ok: true; detected: string; versionCode: string | null; evidence: string }
+  | {
+    ok: false;
+    reason: "version_no" | "part_not_found" | "dates_no" | "side_no" | "no_value" | "bad_number" | "bad_version" | "retype_mismatch";
+  };
+
+/**
+ * The owner's answers to the check's questions → the value to save and the evidence text (RE-68). Every "No" stops
+ * Confirm; a part number can't be a year, frame or engine code; a spec value must have the spec's shape.
+ */
+export function answersGate(input: {
+  jobType: "part" | "spec";
+  answers: CheckAnswers;
+  identity: string[];
+  frame?: string | null;
+  specKey?: string | null;
+  needsSide?: string | null;
+  site: string;
+  rowName?: string | null;
+  buildText?: string | null;
+  /** The version Roam already remembers for this car (server's own record; named in the evidence). */
+  knownCode?: string | null;
+  /** Roam's suggested values for this job (server's own record). */
+  suggestions?: string[];
+}): AnswersResult {
+  const a = input.answers ?? {};
+  // A remembered version is checked with Yes/No; otherwise the owner types the model shown at the top.
+  if (input.knownCode ? a.versionOk !== true : !String(a.versionCode ?? "").trim()) return { ok: false, reason: "version_no" };
+  if (a.partFound !== true) return { ok: false, reason: "part_not_found" };
+  if (a.datesOk !== true) return { ok: false, reason: "dates_no" };
+  if (input.needsSide && a.sideOk !== true) return { ok: false, reason: "side_no" };
+  const raw = String(a.value ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
+  if (!raw) return { ok: false, reason: "no_value" };
+
+  let versionCode: string | null = null;
+  if (!input.knownCode && a.versionCode && String(a.versionCode).trim()) {
+    const typed = String(a.versionCode).trim().toUpperCase();
+    // With a frame on file the model must be "<frame>-<suffix>"; without one, any model-like text is kept as typed.
+    versionCode = input.frame ? versionCodeOnLine(typed, input.frame) : /^[A-Z0-9][A-Z0-9-]{3,39}$/.test(typed) ? typed : null;
+    if (!versionCode) return { ok: false, reason: "bad_version" };
+  }
+  let detected = raw;
+  if (input.jobType === "part") {
+    if (!typedLooksLikePartNumber(raw, "", input.identity)) return { ok: false, reason: "bad_number" };
+    detected = raw.toUpperCase();
+  } else {
+    const shape = input.specKey ? SPEC_VALUE_SHAPES[input.specKey] : undefined;
+    if (shape) {
+      const m = raw.match(shape);
+      if (!m) return { ok: false, reason: "no_value" };
+      detected = m[0].trim();
+    }
+  }
+
+  // A value that isn't one of Roam's suggestions is typed twice, so a typo can't become a confirmed number.
+  const normV = (v: unknown) => String(v ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const suggested = (input.suggestions ?? []).some((x) => normV(x) && normV(x) === normV(raw));
+  if (!suggested && normV(a.valueAgain) !== normV(raw)) return { ok: false, reason: "retype_mismatch" };
+
+  const evidence = [
+    `Owner checked on ${input.site}`,
+    versionCode ?? input.knownCode ?? null,
+    input.rowName ?? null,
+    detected,
+    input.buildText ? `dates include ${input.buildText}` : "dates include the car's build",
+    input.needsSide ? `for the ${input.needsSide}` : null,
+  ].filter(Boolean).join(" · ");
+  return { ok: true, detected, versionCode, evidence: evidence.slice(0, 2000) };
+}
+
 export function lineNamesCar(line: string, identity: string[]): boolean {
   const upper = line.toUpperCase();
   return identity.some((t) => t.trim().length >= 2 && containsToken(upper, t));
