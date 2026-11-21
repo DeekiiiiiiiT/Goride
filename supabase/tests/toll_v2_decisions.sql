@@ -444,7 +444,7 @@ BEGIN
   PERFORM pg_temp._dec_cmd('reopen_week', jsonb_build_object(
     'command_id', 'dec-k10', 'week_key', '2024-10-07',
     'expected_week_version', (r->'weeks'->0->>'week_version')::bigint,
-    'reason', 'decisions test reopen'));
+    'reason', 'decisions test reopen', 'self_approval_reason', 'only manager reopens the week (test)'));
 
   PERFORM pg_temp._dec_nightly_ok(v_org_a);  -- money ties after section 8 (Claude, P2-R4a check)
 

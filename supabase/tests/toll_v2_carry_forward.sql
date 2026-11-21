@@ -304,7 +304,7 @@ BEGIN
     'expected_payback_version', (pg_temp._cf_pb(v_org, 'trip:t-left')).version), 'WEEK_SEALED');
   PERFORM pg_temp._cf_cmd('reopen_week', jsonb_build_object(
     'command_id', 'cf-s1-reopen-tw', 'week_key', v_tw,
-    'expected_week_version', toll_system.week_version(v_org, v_tw), 'reason', 'cf s1'));
+    'expected_week_version', toll_system.week_version(v_org, v_tw), 'reason', 'cf s1', 'self_approval_reason', 'only manager reopens the week (test)'));
 
   PERFORM pg_temp._cf_refused('carry_forward', jsonb_build_object(
     'command_id', 'cf-s1-bad-tw', 'from_week', v_w, 'to_week', v_w, 'kind', 'charge',
@@ -743,7 +743,7 @@ BEGIN
   -- reopen to_week for section 9 replay (sealed week can't replay carry into it — use pre-seal carry id)
   PERFORM pg_temp._cf_cmd('reopen_week', jsonb_build_object(
     'command_id', 'cf-s8-reopen', 'week_key', v_tw,
-    'expected_week_version', (r->'weeks'->0->>'week_version')::bigint, 'reason', 'cf s8 replay prep'));
+    'expected_week_version', (r->'weeks'->0->>'week_version')::bigint, 'reason', 'cf s8 replay prep', 'self_approval_reason', 'only manager reopens the week (test)'));
 
   -- ── 9. replay ──
   PERFORM public.toll_sys_import(v_org, 'tag_statement', '[

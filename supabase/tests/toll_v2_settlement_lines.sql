@@ -227,7 +227,7 @@ BEGIN
     'command_id', 'toll-sl-reopen-1',
     'week_key', v_w,
     'expected_week_version', 1,
-    'reason', 'settlement test reopen'
+    'reason', 'settlement test reopen', 'self_approval_reason', 'only manager reopens the week (test)'
   ));
   RESET ROLE;
   SELECT count(*) INTO v_cnt FROM ledger.week_statements ws

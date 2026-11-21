@@ -479,15 +479,11 @@ BEGIN
   v_week := ledger.jamaica_week_start((now() AT TIME ZONE 'America/Jamaica')::timestamptz - interval '35 days');
   PERFORM set_config('s3rd.test_week', v_week::text, true);
 
-  -- settings before seed
-  DELETE FROM toll.platform_settings WHERE organization_id = v_org;
-  DELETE FROM toll.dispute_policy WHERE organization_id = v_org;
-  DELETE FROM toll.dispute_text_templates WHERE organization_id = v_org;
+  -- a new company comes with its toll settings already set up (no seed step)
   PERFORM pg_temp._s3rd_as(pg_temp._s3rd_mgr(), v_org);
   v_set := public.toll_v2_toll_settings();
   RESET ROLE;
-  IF coalesce((v_set ->> 'seeded')::boolean, true) THEN RAISE EXCEPTION '12 pre-seed seeded'; END IF;
-  IF jsonb_array_length(coalesce(v_set -> 'missing', '[]'::jsonb)) < 1 THEN RAISE EXCEPTION '12 pre-seed missing'; END IF;
+  IF NOT coalesce((v_set ->> 'seeded')::boolean, false) THEN RAISE EXCEPTION '12 new company not set up %', v_set; END IF;
 
   PERFORM pg_temp._s3rd_import('acc1', v_week);
   PERFORM pg_temp._s3rd_seed_settings(v_week);
@@ -867,7 +863,8 @@ BEGIN
   END IF;
   IF (v_exp ->> 'waitingOnUberMinor')::bigint = 0 THEN RAISE EXCEPTION 'R6 no open dispute money to check'; END IF;
 
-  -- R7. "Missing settings" on Fleet Policy is exactly what the matcher refuses on.
+  -- R7. A new plaza shows in Fleet Policy "missing" until the matcher next runs; the matcher then sets it up
+  --     itself (default plaza rule) and does not refuse.
   PERFORM public.toll_sys_import(pg_temp._s3rd_org(), 'tag_statement', format(
     '[{"source_ref":"r13-g-unknown-plaza","occurred_at":"%s","amount_minor":39000,"plaza_id":"r13-no-rules-plaza",
       "vehicle_id":"v1","driver_id":"s3rd-d1"}]', now() - interval '2 hours')::jsonb, 'r13-g-tag', 'smoke');
@@ -875,12 +872,13 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v_b) m WHERE m ->> 'kind' = 'plaza_rules' AND m ->> 'plaza_id' = 'r13-no-rules-plaza') THEN
     RAISE EXCEPTION 'R7 missing list lacks the plaza the matcher refuses on: %', v_b;
   END IF;
-  BEGIN
-    PERFORM toll_system.match_refuse_missing_settings(pg_temp._s3rd_org());
-    RAISE EXCEPTION 'R7 matcher should refuse';
-  EXCEPTION WHEN SQLSTATE 'P0001' THEN
-    IF SQLERRM <> 'SETTINGS_MISSING' THEN RAISE; END IF;
-  END;
+  PERFORM toll_system.match_refuse_missing_settings(pg_temp._s3rd_org());
+  IF NOT EXISTS (SELECT 1 FROM toll.plaza_rules WHERE plaza_id = 'r13-no-rules-plaza') THEN
+    RAISE EXCEPTION 'R7 matcher did not set up the new plaza';
+  END IF;
+  IF jsonb_array_length(coalesce(pg_temp._s3rd_settings() -> 'missing', '[]'::jsonb)) <> 0 THEN
+    RAISE EXCEPTION 'R7 still missing after the matcher: %', pg_temp._s3rd_settings() -> 'missing';
+  END IF;
   -- roll this probe back: the unknown plaza would block every later section
   RAISE EXCEPTION 'r13-probe-done';
 EXCEPTION WHEN raise_exception THEN

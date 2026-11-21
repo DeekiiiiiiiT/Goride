@@ -59,6 +59,11 @@ BEGIN
     (v_org_a, v_owner, 'Toll Commands Org A', 'toll-cmd-a', 'fleet', 'active'),
     (v_org_b, v_owner_b, 'Toll Commands Org B', 'toll-cmd-b', 'fleet', 'active')
   ON CONFLICT (id) DO NOTHING;
+  -- New companies start with disputes on; this file covers the core commands in the fall-back state
+  -- (disputes off), where reopen_week needs no second manager. Four-eyes is covered by
+  -- toll_four_eyes_settings_income_test.
+  UPDATE toll.switch_state SET toll_disputes = false, logged_trips = false, rider_pays_driver = false
+  WHERE organization_id IN (v_org_a, v_org_b);
 
   PERFORM toll_system.ensure_accounts(v_org_a);
   PERFORM toll_system.ensure_accounts(v_org_b);
@@ -558,10 +563,10 @@ BEGIN
     RAISE EXCEPTION 'test11: authenticated must not EXECUTE toll_write.intent_* or toll_system.*';
   END IF;
 
-  -- 12. Switch (as authenticated user; row inserted as postgres below)
+  -- 12. Switch: a new company has the toll system on from the moment it is created
   PERFORM pg_temp._toll_cmd_as(v_owner, v_org_a);
-  IF public.toll_v2_enabled() IS NOT FALSE THEN
-    RAISE EXCEPTION 'test12: enabled should be false without switch row';
+  IF public.toll_v2_enabled() IS NOT TRUE THEN
+    RAISE EXCEPTION 'test12: a new company should start with the toll system on';
   END IF;
 END;
 $$;
@@ -571,6 +576,8 @@ RESET ROLE;
 INSERT INTO toll.switch_state (organization_id, tolls_v2)
 VALUES ('d1111111-1111-4111-8111-111111111101'::uuid, true)
 ON CONFLICT (organization_id) DO UPDATE SET tolls_v2 = true;
+-- org B switched off by hand (the emergency off): it reads off
+UPDATE toll.switch_state SET tolls_v2 = false WHERE organization_id = 'd2222222-2222-4222-8222-222222222202'::uuid;
 
 DO $$
 DECLARE
@@ -601,7 +608,7 @@ BEGIN
     true
   );
   IF public.toll_v2_enabled() IS NOT FALSE THEN
-    RAISE EXCEPTION 'test12: enabled should stay false for org B';
+    RAISE EXCEPTION 'test12: a company switched off reads off (org B)';
   END IF;
   RAISE NOTICE 'toll_v2_commands: ok';
 END;

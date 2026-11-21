@@ -81,7 +81,8 @@ BEGIN
   ) VALUES (v_org, 'uber', v_trip, 'd1-driver', 'minute', 'card');
 
   INSERT INTO toll.dispute_text_templates (organization_id, platform, version, body)
-  VALUES (v_org, 'uber', 1, 'Hi {trip_date} {plaza} {toll} {paid} {owed} {trip_time}');
+  VALUES (v_org, 'uber', 1, 'Hi {trip_date} {plaza} {toll} {paid} {owed} {trip_time}')
+  ON CONFLICT (organization_id, platform, version) DO NOTHING;  -- new companies come with the Uber text
 
   -- provisional platform allocation with dispute_id, no payback: ok
   INSERT INTO toll.disputes (
@@ -270,12 +271,14 @@ BEGIN
     'active'
   ) ON CONFLICT (id) DO NOTHING;
 
+  -- A new fleet company is set up when it is created; a dry run then adds nothing.
+  SELECT count(*)::int INTO v_cnt FROM toll.platform_settings ps
+  WHERE ps.organization_id = 'd3111111-1111-4111-8111-111111111103';
+  IF v_cnt < 1 THEN RAISE EXCEPTION 'new company not set up on creation'; END IF;
   PERFORM toll_system.seed_dispute_setup('d3111111-1111-4111-8111-111111111103', true);
 
-  IF EXISTS (
-    SELECT 1 FROM toll.platform_settings ps
-    WHERE ps.organization_id = 'd3111111-1111-4111-8111-111111111103'
-  ) THEN
+  IF (SELECT count(*)::int FROM toll.platform_settings ps
+      WHERE ps.organization_id = 'd3111111-1111-4111-8111-111111111103') <> v_cnt THEN
     RAISE EXCEPTION 'dry_run seed wrote platform_settings';
   END IF;
 

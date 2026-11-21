@@ -76,19 +76,22 @@ async function company(name: string, opts: { lostBearer?: "fleet" | "driver"; ri
      VALUES ($1::uuid, $2::uuid, $3, $4, 'fleet', 'active')`,
     [org, owner, `Toll done-test ${name}`, `toll-dt-${tag}-${org.slice(0, 8)}`],
   );
+  // A new company is switched on and set up the moment it is created (20261121214215); the test only
+  // dates the switch-on two days back and, for one story, turns rider-pays-driver off.
+  check(
+    Number(await val(`SELECT count(*) FROM toll.switch_state WHERE organization_id = $1::uuid AND tolls_v2 AND toll_disputes AND logged_trips AND rider_pays_driver`, [org])) === 1,
+    "new company starts with every switch on",
+  );
   await q(
-    `INSERT INTO toll.switch_state (organization_id, tolls_v2, toll_disputes, logged_trips, rider_pays_driver, toll_disputes_on_at)
-     VALUES ($1::uuid, true, true, true, $2, now() - interval '2 days')`,
+    `UPDATE toll.switch_state SET rider_pays_driver = $2, toll_disputes_on_at = now() - interval '2 days' WHERE organization_id = $1::uuid`,
     [org, opts.riderPays ?? true],
   );
-  await q(`SELECT toll_system.ensure_accounts($1::uuid)`, [org]);
   await q(
     `INSERT INTO toll.plaza_rules (plaza_id, auto_duplicate_window_minutes, review_duplicate_window)
      VALUES ('dt-pz', 10, 'same_day') ON CONFLICT (plaza_id) DO NOTHING`,
   );
   const co = { org, owner, name, tag };
   made.push(co);
-  await cmd(co, "approve_settings_seed", { note: "done-test seed", self_approval_reason: "done-test company" });
   // Plaza prices are shared by every company: the first test company adds the Uber rate, the rest find it.
   const hasRate = Number(await val(
     `SELECT count(*) FROM toll.plaza_rates WHERE plaza_id = 'dt-pz' AND rate_kind = 'platform_refund' AND platform = 'uber'`,

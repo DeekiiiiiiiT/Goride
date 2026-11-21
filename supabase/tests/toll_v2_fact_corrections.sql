@@ -406,7 +406,7 @@ BEGIN
     'reference', 'tb-seal', 'paid_on', '2024-10-18'), 'WEEK_SEALED');
   PERFORM pg_temp._fc_cmd('reopen_week', jsonb_build_object(
     'command_id', 'fc-s3-reopen', 'week_key', v_w1,
-    'expected_week_version', (r->'weeks'->0->>'week_version')::bigint, 'reason', 'fc test'));
+    'expected_week_version', (r->'weeks'->0->>'week_version')::bigint, 'reason', 'fc test', 'self_approval_reason', 'only manager reopens the week (test)'));
   PERFORM pg_temp._fc_nightly(v_org, 's3');
 
   -- ── 4. after take-back ──
@@ -478,6 +478,11 @@ BEGIN
     'amount_minor', 33000, 'reason_code', 'fix'));
   IF pg_temp._fc_slices(v_org, 'fc-round') NOT LIKE '%driver=%' THEN
     RAISE EXCEPTION '6b rounding case'; END IF;
+
+  -- From here on the company runs with disputes switched off (the fall-back state): with them on, a J$200
+  -- Uber payback on a J$500 toll opens a J$300 dispute by itself, and these sections cover the hand path.
+  UPDATE toll.switch_state SET toll_disputes = false, logged_trips = false, rider_pays_driver = false
+  WHERE organization_id = v_org;
 
   c := pg_temp._fc_ch(v_org, 'c3');
   p := pg_temp._fc_pb(v_org, 'trip:t3');
@@ -571,7 +576,7 @@ BEGIN
   PERFORM pg_temp._fc_cmd('reopen_week', jsonb_build_object(
     'command_id', 'fc-s7-reopen', 'week_key', v_w,
     'expected_week_version', (r->'weeks'->0->>'week_version')::bigint,
-    'reason', 'fc s7 reopen'));
+    'reason', 'fc s7 reopen', 'self_approval_reason', 'only manager reopens the week (test)'));
 
   -- ── 8. correct_charge_week ──
   c := pg_temp._fc_ch(v_org, 'fc-2pb');

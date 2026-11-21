@@ -1,10 +1,10 @@
 # Toll architecture: disputes and InDrive (plan + build status)
 
-**Rev 35 · 21 Nov 2026 · Status: BUILDING (first build). Data, server and screens are DONE and committed (D1–S3, UI1, UI2). Round P: P-02 fixed; all 24 local Part D done-tests pass and every toll test is green. Next: the live rollout with every switch off (L2.6, step-by-step below), which starts with the owner's push.** Rev 35 fixes P-02 and writes out the rollout. Rev 34 removed everything already finished (UI1 / UI2 build notes, the Stitch Keep / Drop / Fix lists, the C3 screen table, the role matrix, the screen-read field lists). They stay in git: `git log -- docs/toll-architecture-gap-audit.md` (Rev 33 is the last version with them, Rev 26 the last full design).
+**Rev 36 · 21 Nov 2026 · Status: LIVE, ON FOR EVERY COMPANY.** Toll disputes, InDrive logged trips and "rider pays driver" are switched on for every company, and every new company starts with them on and its settings set up (migration `20261121214215_toll_on_for_everyone.sql`). Switching on surfaced 3 bugs, all fixed in that migration (L2.6 below). Left: watch the nightly money check and one real week. Rev 34 removed finished build notes; they stay in git.
 
 ## START HERE (for a new chat)
 
-**Prompt to start a new chat:** "Continue the toll disputes build. Read `docs/toll-architecture-gap-audit.md` START HERE first. Data, server and screens (D1–S3, UI1, UI2) are done and committed. Round P: all 24 local Part D done-tests pass (`scripts/toll-done-tests/run.ts`) and P-02 is fixed. Next step: the live rollout with every switch off (L2.6 R1–R6). Check first that the owner pushed and the toll migrations are live. Keep me updated in short plain replies."
+**Prompt to start a new chat:** "Continue the toll disputes build. Read `docs/toll-architecture-gap-audit.md` START HERE first. Everything is live and on for every company. Check the latest nightly money check (`toll.nightly_results`) and the owner's first real week of reconciling, and fix anything that comes up. Keep me updated in short plain replies."
 
 **What this is:** every toll the fleet pays ends with the right person paying it. **First principle (owner):** on a trip the **passenger** always owes the toll, never the fleet.
 - **Uber** pays it back. If Uber pays short, the driver **disputes** it with Uber within 9 days; the refund comes in the next pay period or the one after.
@@ -16,7 +16,7 @@
 **How we work (owner's playbook, `docs/how-we-build-playbook.md`):**
 - Layers in order: Data → Server → Screens → Tests, one round at a time. Claude builds, tests and commits only toll files; the owner pushes. No branches.
 - A server fix is a new migration named with the real current UTC time (`npx supabase migration new <name>`), never a future date (CLAUDE.md).
-- Never touch the live database. **Nothing of this build is live** (commits are local until the owner pushes; every switch is off on the live company).
+- The live database is changed only by migrations (`npx supabase db push`), never by hand.
 - The working copy also holds the owner's other unfinished work (maintenance, parts, log-service, research). Commit only toll files; if a shared file has other lines in it, stage only the toll lines.
 
 **Where the build is (21 Nov 2026):**
@@ -26,11 +26,11 @@
 | D1–S3 | Data, dispute commands and money, four-eyes, settings, matcher, nightly sweep, "Uber report late" alert, InDrive logged trips, screen reads, driver dispute route | **Done** (574f0775) |
 | UI1 | Week Reconciliation → Tolls step in six parts (`apps/fleet/.../recon/tolls-v2/`) | **Done** (98baf2fd) |
 | UI2 | Roam Driver "Tolls to dispute" (`apps/driver/src/components/tolls/`), Driver Settlements → Disputes tab (`tolls-v2/disputes/`), Fleet Policy Configuration → Tolls tab (`tolls-v2/policy/`) | **Done** (62acff92) |
-| **P** | Proof on the local copy, then live with every switch off, settings seed, switch-on, one real week | **RUNNING** — local proof done: done-tests 24 / 24, P-02 fixed; **next = L2.6 R1 (owner push)** |
+| **P** | Proof on the local copy, then live, switched on for every company | **LIVE** — 24 / 24 done-tests; on for every company (20261121214215) |
 
 **Owner to-dos:** push the local commits (through 4e70be07 and this audit). Commit the log-service work's migration `20261118181439_log_service_positions.sql` before pushing: its time is earlier than S3's, and a database push can refuse it once S3 is live.
 
-**Where the new screens show (all switch-gated, so pushing changes nothing on screen):** the six-part Tolls step and the Driver Settlements Disputes tab only with `toll_disputes` on; Fleet Policy → Tolls once the settings are seeded (L2.6 step 2) or the switch is on; the driver's Home card and menu entry only while the driver route says `enabled`.
+**Where the new screens show:** for every company: the six-part Tolls step, the Driver Settlements Disputes tab and Fleet Policy → Tolls. The driver's dispute card shows in the next Roam Driver app build.
 
 ---
 
@@ -69,7 +69,7 @@
 
 ## Rules the build must keep (enforced and tested on the server)
 
-- **Switches (per company, all off on live):** `toll_disputes`, `logged_trips`, `rider_pays_driver`. With a switch off, every screen looks exactly as before (the reads return empty lists).
+- **Switches (on for every company, and on from creation):** `tolls_v2`, `toll_disputes`, `logged_trips`, `rider_pays_driver`. They stay only as an emergency off: with one off, that company's screens look as before (the reads return empty lists).
 - **Dispute states:** `to_send`, `sent`, `won`, `part_won`, `lost`, `expired`. Only `to_send` can be marked sent; only `sent` can take Refund received or Lost; an `expired` dispute is settled by the matcher only. `won`, `part_won` and `lost` are final (an undo writes a new row). Undone rows never appear in any read.
 - The seal never waits on an open dispute: a disputed toll counts as decided for the seal and is shown in Disputes until it resolves.
 - **A sealed week's figures never change;** later results and reversals post in the week that is open then.
@@ -109,16 +109,17 @@
 
 ## L2.6 Rollout (round P)
 
-0. **Proof on the local copy: done (21 Nov).** 24 / 24 done-tests. Still to run: 11, 18 and the 9 Nov replay, on a copy of production data (Q13), never on production's real week. They must pass before step 3.
-1. **Deploy with every switch off.** Nothing live changes. In order (Claude tells the owner before each live write):
-   - **R1 — Owner commits and pushes.** First commit the log-service migration `20261118181439_log_service_positions.sql` (owner to-do above). Then push `parts-auto-match` to `main`; this push also carries the owner's research work. The pre-push check runs by itself.
-   - **R2 — Database.** Claude runs `npx supabase db push --dry-run` against production and shows the owner the list. It must show exactly the not-yet-live migrations: the 10 toll ones (`20261117204932_cash_tolls_driver_reported`, `20261117234730_toll_disputes_data`, `20261118000711_toll_sealed_week_guard`, `20261118001833_toll_dispute_commands`, `20261118060401_toll_four_eyes_settings_income`, `20261118122837_toll_matcher_disputes`, `20261118133523_toll_sweep_alert_logged_trips`, `20261118182336_toll_screen_reads_disputes`, `20261121202246_toll_open_late_bearer`, `20261121204321_toll_undo_sealed_result`), plus any of the owner's own that are not live yet. Then `npx supabase db push`. It records each version, so CI's version-parity check stays green. If any file is pasted into the SQL editor by hand instead, it needs its `schema_migrations` logbook line.
-   - **R3 — Server.** The push to `main` deploys the changed edge functions (`fleet-toll` and the bundles built from `_fleet-server`). In the deploy run log, check for `Deployed Functions on project: fleet-toll`. The Fleet web app deploys from the same push. The driver's dispute card ships only with the next Roam Driver build; it stays hidden while the driver route says `enabled: false`.
-   - **R4 — Live checks, read-only, switch still off.** `toll.switch_state.toll_disputes`, `logged_trips` and `rider_pays_driver` are false for every company. `toll_system.nightly_checks(<owner company>)` returns all `ok`, both right after R2 and after the next nightly run. `receivable_platform_dispute` = 0. The Week Reconciliation Tolls step and Driver Settlements look exactly as before (one screenshot each, not saved). CI is green.
-2. **Settings before switch-on (U1):** with the switch still off, `approve_settings_seed` for the live company (dry-run rows shown to the owner first; the owner self-approves with a reason); check `coverage_source_id` = `uber_bundle` for Uber; enter Uber's plaza rates (Fleet Policy → Tolls → Add rate, now on screen once seeded) from a checked list. Without them nothing opens by itself.
-3. **Switch on** `toll_disputes` (and, when ready, `logged_trips` and `rider_pays_driver`) for the owner's company. Right after: run `toll_system.record_legacy_kept` once; it must return **120000** (J$1,200.00). The nightly check must pass the next morning.
-4. **One real week with screenshots;** the nightly check and the receivable check stay at 0 differences for 14 nights.
-5. **Roll back by switching off:** no new disputes open; open ones keep their state and can be closed by hand.
+0. **Proof on the local copy: done (21 Nov).** 24 / 24 done-tests. Done-tests 11 and 18 (production-data copy) were not run: the owner chose to go live without them (21 Nov). The nightly money check is the guard instead.
+1. **Deployed (21 Nov):** push to `main` (f7680517); 9 toll migrations applied with `db push`; edge functions deployed (`fleet-toll` included); live checks: switches off at that point, no disputes, CI version check green, last nightly 20 / 20 ok.
+2. **Switched on for every company (21 Nov, migration `20261121214215_toll_on_for_everyone.sql`).** No per-company step remains:
+   - every switch defaults to on; every fleet company is switched fully on; a new fleet company is switched on and set up when it is created (trigger on `public.organizations`, `toll_system.setup_company`);
+   - settings (Uber / InDrive / Roam platform settings, dispute policy: Lost → fleet, Expired → driver, the Uber dispute text, plaza rules) are set up automatically, and the matcher sets up anything new (a new plaza) by itself instead of stopping with `SETTINGS_MISSING`; Fleet Policy shows "set up" when the settings exist;
+   - Uber refund rates at the 3 live plazas, read from what Uber actually paid on every linked trip: `b826e0b1…` J$370 (toll J$390), `f825d1d0…` J$275 (toll J$280), `9970b3af…` J$780;
+   - the J$1,200.00 already kept (`record_legacy_kept`, checked 120000 on live before the switch-on).
+   - **Bugs found by switching on, fixed in the same migration:** (a) an Uber take-back of a payback whose leftover was kept as income never reversed that income (books short by the kept amount); (b) linking a payback that opened a dispute answered with an out-of-date toll version, so the screen's next action was refused "changed"; (c) linking only part of an Uber payback opened a dispute against Uber though money was left on the payback. Dispute rules now: a dispute opens by itself only when the trip payback is used up and the toll is still not covered.
+   - Tests: the older toll files now run with every switch on (the live state), except where a file covers the hand path (`toll_v2_commands`, part of `toll_v2_fact_corrections`), which switch it off on purpose. 26 / 26 SQL, done-tests 24 / 24 (their companies now use the automatic setup), engine 74, Fleet screens 247, driver app 61, server 43.
+3. **Watch:** the nightly money check (`toll.nightly_results`, about 11:25 pm Jamaica) stays all ok; one real week of reconciling with the new Tolls step.
+4. **Emergency off:** set that company's switch to false; no new disputes open; open ones keep their state and can be closed by hand.
 
 ---
 
@@ -126,7 +127,7 @@
 
 | # | Question | Working default until answered |
 |---|---|---|
-| **Q13** | **Done-tests 11 and 18 and the 9 Nov replay need a read-only copy of the live toll data loaded into the local copy. OK to do that now, or wait for the staging copy (second build)?** | **Asked 21 Nov; not done until answered** |
+| Q13 | Production-data copy for done-tests 11 / 18 | **Answered 21 Nov: not needed; go live now** |
 | Q1 | Scale in 1 and 3 years: companies, drivers, cars, weekly tolls and trips | Design for 10× today (≈150 tolls / 800 trips a week) |
 | Q2 | Any audit, tax, insurer or data-residency rule on toll records? | Keep 7 years (second build); project stays in `us-east-1` |
 | Q3 | Who runs this day to day and who is on call? | The owner runs the weekly close; Claude plans, builds and reviews |

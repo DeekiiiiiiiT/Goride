@@ -572,25 +572,19 @@ BEGIN
     RAISE EXCEPTION '6 plaza_rates_add';
   END IF;
 
-  -- ── 7. Refuse to match without settings, then seed and claim ──
+  -- ── 7. Settings missing (a new plaza, settings deleted): the matcher sets them up itself and claims ──
   PERFORM pg_temp._s1b_import(v_org1, 'm7', v_week + 70, 39000, 37000, 's1b-pz-miss');
   DELETE FROM toll.platform_settings WHERE organization_id = v_org1;
   DELETE FROM toll.dispute_policy WHERE organization_id = v_org1;
   UPDATE toll.switch_state SET toll_disputes = true WHERE organization_id = v_org1;
-  v_queue := (SELECT count(*)::int FROM toll.match_queue WHERE organization_id = v_org1);
-  v_detail := pg_temp._s1b_match_refused(v_org1, 'SETTINGS_MISSING');
-  IF jsonb_array_length(coalesce(v_detail -> 'missing', '[]'::jsonb)) < 1 THEN
-    RAISE EXCEPTION '7 SETTINGS_MISSING empty list %', v_detail;
-  END IF;
-  IF (SELECT count(*)::int FROM toll.match_queue WHERE organization_id = v_org1) <> v_queue THEN
-    RAISE EXCEPTION '7 queue changed on refuse';
-  END IF;
-  PERFORM pg_temp._s1b_cmd(v_owner1, v_org1, 'approve_settings_seed', jsonb_build_object(
-    'command_id', 's1b-match-seed', 'note', 'for matcher',
-    'self_approval_reason', 'twelve chars'));
   v_r := toll_system.match_claim(v_org1, 50);
   IF v_r IS NULL OR (v_r ->> 'claim_id') IS NULL THEN
-    RAISE EXCEPTION '7 match after seed %', v_r;
+    RAISE EXCEPTION '7 match did not set up and claim %', v_r;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM toll.platform_settings WHERE organization_id = v_org1 AND platform = 'uber')
+     OR NOT EXISTS (SELECT 1 FROM toll.dispute_policy WHERE organization_id = v_org1)
+     OR NOT EXISTS (SELECT 1 FROM toll.plaza_rules WHERE plaza_id = 's1b-pz-miss') THEN
+    RAISE EXCEPTION '7 settings not set up by the matcher';
   END IF;
 
   -- ── 8. Toll income P25 + undo; carried P19 path ──

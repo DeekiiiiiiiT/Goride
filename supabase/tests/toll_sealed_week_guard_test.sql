@@ -208,7 +208,8 @@ BEGIN
   ) VALUES (v_org, 'uber', v_trip, 'd2-driver', 'minute', 'card');
 
   INSERT INTO toll.dispute_text_templates (organization_id, platform, version, body)
-  VALUES (v_org, 'uber', 1, 'D2 {trip_date}');
+  VALUES (v_org, 'uber', 1, 'D2 {trip_date}')
+  ON CONFLICT (organization_id, platform, version) DO NOTHING;  -- new companies come with the Uber text
 
   SELECT c.id INTO v_charge FROM toll.charges c
   WHERE c.organization_id = v_org AND c.source_ref = 'd2-charge-1';
@@ -242,7 +243,7 @@ BEGIN
     'command_id', 'd2-reopen',
     'week_key', v_week,
     'expected_week_version', toll_system.week_version(v_org, v_week),
-    'reason', 'd2 test reopen'
+    'reason', 'd2 test reopen', 'self_approval_reason', 'only manager reopens the week (test)'
   ));
 
   SELECT a.id INTO v_alloc FROM toll.allocations a

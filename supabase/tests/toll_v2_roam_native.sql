@@ -413,7 +413,7 @@ BEGIN
     'command_id', 'toll-rn-seal-11', 'week_key', v_week, 'expected_week_version', 0
   ));
   PERFORM public.toll_v2_command('reopen_week', jsonb_build_object(
-    'command_id', 'toll-rn-reopen-11', 'week_key', v_week, 'expected_week_version', 1, 'reason', 'cash arrived'
+    'command_id', 'toll-rn-reopen-11', 'week_key', v_week, 'expected_week_version', 1, 'reason', 'cash arrived', 'self_approval_reason', 'only manager reopens the week (test)'
   ));
   RESET ROLE;
   v_resp := toll_system.native_cash_settled(v_org_a, jsonb_build_object(
