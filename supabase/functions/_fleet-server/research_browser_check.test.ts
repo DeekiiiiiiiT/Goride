@@ -300,3 +300,60 @@ Deno.test("RE-68 review: a number Roam didn't suggest must be typed twice; no fr
   assertEquals(r.ok && r.versionCode, "AB12-CDEF");
   assertEquals(answersGate({ ...ANS_BASE, knownCode: null, answers: { ...YES, value: "17801-21060" } }), { ok: false, reason: "version_no" });
 });
+
+Deno.test("RE-69: one number per filled position; empty positions are skipped; typed ones twice", () => {
+  const shocks = { ...ANS_BASE, rowName: "ABSORBER ASSY, SHOCK", suggestions: ["48510-B9285", "48520-B9285", "48530-B9285"], positionScheme: "four_corners" };
+  const r = answersGate({
+    ...shocks,
+    answers: {
+      ...YES,
+      positions: [
+        { axle: "front", side: "left", value: "48520-B9285" },
+        { axle: "front", side: "right", value: "48510-B9285" },
+        { axle: "rear", side: "left", value: "" },
+        { axle: "rear", side: "right", value: "48530-Z0001", valueAgain: "48530Z0001" },
+      ],
+    },
+  });
+  assertEquals(r.ok, true);
+  if (r.ok) {
+    assertEquals(r.items, [
+      { detected: "48520-B9285", axle: "front", side: "left" },
+      { detected: "48510-B9285", axle: "front", side: "right" },
+      { detected: "48530-Z0001", axle: "rear", side: "right" },
+    ]);
+    assertEquals(r.evidence.includes("front left 48520-B9285, front right 48510-B9285, rear right 48530-Z0001"), true);
+  }
+  assertEquals(
+    answersGate({ ...shocks, answers: { ...YES, positions: [{ axle: "rear", side: "left", value: "48530-Z0001" }] } }),
+    { ok: false, reason: "retype_mismatch" },
+  );
+  assertEquals(answersGate({ ...shocks, answers: { ...YES, positions: [{ axle: "rear", side: "left", value: "" }] } }), { ok: false, reason: "no_value" });
+  assertEquals(
+    answersGate({ ...shocks, answers: { ...YES, positions: [{ axle: "front", side: "left", value: "DBA-M910A", valueAgain: "DBA-M910A" }] } }),
+    { ok: false, reason: "bad_number" },
+  );
+});
+
+Deno.test("RE-69 review: places must fit the part type and the job's axle", () => {
+  const base = { ...ANS_BASE, suggestions: ["48510-B9285", "48530-B9285"] };
+  const four = { ...base, positionScheme: "four_corners" };
+  // a rear place on a front job
+  assertEquals(answersGate({ ...four, jobAxle: "front", answers: { ...YES, positions: [{ axle: "rear", side: "left", value: "48530-B9285" }] } }),
+    { ok: false, reason: "bad_position" });
+  // a four-corner part needs a side; an axle-only part never has one
+  assertEquals(answersGate({ ...four, answers: { ...YES, positions: [{ axle: "front", side: null, value: "48510-B9285" }] } }),
+    { ok: false, reason: "bad_position" });
+  assertEquals(answersGate({ ...base, positionScheme: "axle", answers: { ...YES, positions: [{ axle: "front", side: "left", value: "48510-B9285" }] } }),
+    { ok: false, reason: "bad_position" });
+  // the same place twice
+  assertEquals(answersGate({ ...four, answers: { ...YES, positions: [
+    { axle: "front", side: "left", value: "48510-B9285" }, { axle: "front", side: "left", value: "48530-B9285" }] } }),
+    { ok: false, reason: "bad_position" });
+  // places on a part type without places; a sided part with one number
+  assertEquals(answersGate({ ...base, positionScheme: "none", answers: { ...YES, positions: [{ axle: "front", side: null, value: "48510-B9285" }] } }),
+    { ok: false, reason: "bad_position" });
+  assertEquals(answersGate({ ...four, answers: { ...YES, value: "48510-B9285" } }), { ok: false, reason: "needs_positions" });
+  // an axle-only part on its own axle
+  assertEquals(answersGate({ ...base, positionScheme: "axle", jobAxle: "front", answers: { ...YES, positions: [{ axle: "front", side: null, value: "48510-B9285" }] } }).ok, true);
+});

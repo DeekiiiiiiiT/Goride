@@ -173,7 +173,7 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
         ? supabase.from("vehicle_catalog").select(CAR_FIELDS).eq("id", vehicleId).maybeSingle()
         : Promise.resolve({ data: null }),
       componentId
-        ? supabase.from("maintenance_service_categories").select("id, name").eq("id", componentId).maybeSingle()
+        ? supabase.from("maintenance_service_categories").select("id, name, position_scheme").eq("id", componentId).maybeSingle()
         : Promise.resolve({ data: null }),
       specKey ? supabase.from("spec_key").select("key, label, unit").eq("key", specKey).maybeSingle() : Promise.resolve({ data: null }),
     ]);

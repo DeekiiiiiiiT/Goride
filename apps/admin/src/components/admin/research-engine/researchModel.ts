@@ -459,3 +459,27 @@ export function catalogueVersionRow(
     { label: "Transm", value: or(known?.transmission, car?.transmission) },
   ];
 }
+
+export type CheckPosition = { key: string; axle: "front" | "rear"; side: "left" | "right" | null; label: string };
+
+/**
+ * RE-69: the positions a browser check asks a number for, from the part type's position scheme and the job's axle.
+ * Null when the part has no positions (one number).
+ */
+export function checkPositions(scheme: string | null | undefined, fitDescriptor: string | null | undefined): CheckPosition[] | null {
+  const s = String(scheme ?? "").trim();
+  if (!["axle", "four_corners", "axle_left_right", "axle_inner_outer"].includes(s)) return null;
+  const fit = String(fitDescriptor ?? "").toLowerCase();
+  const axles: Array<"front" | "rear"> = fit.includes("rear") ? ["rear"] : fit.includes("front") ? ["front"] : ["front", "rear"];
+  const sided = s === "four_corners" || s === "axle_left_right";
+  const cap = (a: string) => a[0].toUpperCase() + a.slice(1);
+  const out: CheckPosition[] = [];
+  for (const axle of axles) {
+    if (sided) {
+      for (const side of ["left", "right"] as const) out.push({ key: `${axle}-${side}`, axle, side, label: `${cap(axle)} ${side}` });
+    } else {
+      out.push({ key: axle, axle, side: null, label: cap(axle) });
+    }
+  }
+  return out;
+}

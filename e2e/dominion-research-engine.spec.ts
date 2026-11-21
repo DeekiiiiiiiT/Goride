@@ -56,6 +56,7 @@ const PART_JOBS = [
   job({ jobId: "job-review", state: "needs_review", partTypeName: "Rear wheel bearing", fitDescriptor: "rear", resultPartNumber: "Masuma 00000-T0002", siteDomains: ["masuma.parts"] }),
   job({ jobId: "job-bc", jobType: "spec", state: "browser_check", partTypeId: null, partTypeName: null, specKey: "battery_jis", specLabel: "Battery size" }),
   job({ jobId: "job-bcp", state: "browser_check", partTypeName: "Spark plugs", resultPartNumber: "Toyota 00000-T0009" }),
+  job({ jobId: "job-bcs", state: "browser_check", partTypeName: "Shock absorber", resultPartNumber: "Toyota 00000-S0001" }),
   job({ jobId: "job-res", state: "researching", partTypeName: "Wiper blades" }),
   job({ jobId: "job-wait", state: "queued", partTypeName: "Air filter" }),
   job({ jobId: "job-cf", state: "needs_review", partTypeName: "Rear brake shoes", fitDescriptor: "rear", conflictOpen: true }),
@@ -108,6 +109,19 @@ function detail(jobId: string) {
         browserCheckUrl: "https://www.amayama.com/en/part/toyota/roomy-m900a-plugs",
         knownVersion: { domain: "amayama.com", code: "M900A-AGBVE", url: "https://www.amayama.com/en/part/toyota/roomy-m900a-plugs" },
         proposals: [proposal("p-9", jobId, { brand: "Toyota", part_number: "00000-T0009" })],
+      };
+    case "job-bcs":
+      return {
+        ...base,
+        job: j("browser_check", { fit_descriptor: null }),
+        partType: { id: "c-10", name: "Shock absorber", position_scheme: "four_corners" },
+        browserCheckUrl: "https://partsouq.com/en/catalog/toyota/roomy-shocks",
+        knownVersion: { domain: "amayama.com", code: "M900A-AGBVE", url: "https://www.amayama.com/en/part/toyota/roomy-m900a-agbve" },
+        proposals: [
+          proposal("p-s1", jobId, { brand: "Toyota", part_number: "00000-S0001" }),
+          proposal("p-s2", jobId, { brand: "Toyota", part_number: "00000-S0002" }),
+          proposal("p-s3", jobId, { brand: "Toyota", part_number: "00000-S0003" }),
+        ],
       };
     case "job-cf":
       return {
@@ -304,7 +318,7 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect(page.getByTestId("card-needs-review")).toContainText("2");
     await expect(page.getByTestId("card-browser-checks")).toContainText("7 of 25");
     await expect(page.getByTestId("card-researching")).toContainText("Toyota Roomy 2016–2020");
-    await expect(page.getByTestId("parts-row")).toHaveCount(7);
+    await expect(page.getByTestId("parts-row")).toHaveCount(8);
     await expect(page.getByTestId("row-route-line").first()).toContainText("Two makers agree");
     await expect(page.getByTestId("filter-browser_check")).toContainText("7 of 25 open");
     await expect(page.getByTestId("notice-engine_paused")).toContainText("Open research settings");
@@ -393,7 +407,7 @@ test.describe("Research engine screens (layer 3)", () => {
     await d.getByTestId("browser-check-confirm").click();
     await expect.poll(() => calls.find((c) => c.path === "/browser-checks/job-bc/confirm")?.body).toEqual({
       url: "https://www.amayama.com/en/part/toyota/roomy-m900a",
-      answers: { versionOk: null, versionCode: "M900A-AGBVE", partFound: true, value: "M-42", valueAgain: "M-42", datesOk: true, sideOk: null },
+      answers: { versionOk: null, versionCode: "M900A-AGBVE", partFound: true, value: "M-42", valueAgain: "M-42", positions: null, datesOk: true, sideOk: null },
       rowName: "Battery size",
       buildText: "2016 – 2020",
       knownCode: null,
@@ -420,8 +434,50 @@ test.describe("Research engine screens (layer 3)", () => {
     await d.getByTestId("browser-check-confirm").click();
     await expect.poll(() => calls.find((c) => c.path === "/browser-checks/job-bcp/confirm")?.body).toEqual({
       url: "https://www.amayama.com/en/part/toyota/roomy-m900a-plugs",
-      answers: { versionOk: true, versionCode: null, partFound: true, value: "00000-T0009", valueAgain: null, datesOk: true, sideOk: null },
+      answers: { versionOk: true, versionCode: null, partFound: true, value: "00000-T0009", valueAgain: null, positions: null, datesOk: true, sideOk: null },
       rowName: "PLUG, SPARK",
+      buildText: "2016 – 2020",
+      knownCode: "M900A-AGBVE",
+    });
+  });
+
+  test("RE-69 — a four-corner part asks a number per place; the button names the site it opens", async ({ page }) => {
+    const calls: Calls = [];
+    await install(page, calls);
+    await openParts(page);
+    await page.getByTestId("parts-row").filter({ hasText: "Shock absorber" }).getByTestId("row-open-browser-check").click();
+    const d = page.getByTestId("research-drawer");
+    await expect(d.getByTestId("open-catalogue-page")).toContainText("Open Amayama");
+    await expect(d.getByTestId("q-positions")).toContainText("Front left:");
+    await expect(d.getByTestId("q-positions")).toContainText("Rear right:");
+    await d.getByTestId("q-version-yes").click();
+    await d.getByTestId("q-part-yes").click();
+    await d.getByTestId("q-position-front-left").getByTestId("q-position-suggestion").filter({ hasText: "00000-S0002" }).click();
+    await d.getByTestId("q-position-front-right").getByTestId("q-position-suggestion").filter({ hasText: "00000-S0001" }).click();
+    await d.getByTestId("q-position-rear-left").getByTestId("q-position-value").fill("00000-S0009");
+    await d.getByTestId("q-dates-yes").click();
+    // A typed number needs typing twice before Confirm.
+    await expect(d.getByTestId("browser-check-confirm")).toBeDisabled();
+    await d.getByTestId("q-position-rear-left").getByTestId("q-position-again").fill("00000-S0009");
+    await shot(page, "19-four-corner-check");
+    await d.getByTestId("browser-check-confirm").click();
+    await expect.poll(() => calls.find((c) => c.path === "/browser-checks/job-bcs/confirm")?.body).toEqual({
+      url: "https://www.amayama.com/en/part/toyota/roomy-m900a-agbve",
+      answers: {
+        versionOk: true,
+        versionCode: null,
+        partFound: true,
+        value: "",
+        valueAgain: null,
+        positions: [
+          { axle: "front", side: "left", value: "00000-S0002", valueAgain: null },
+          { axle: "front", side: "right", value: "00000-S0001", valueAgain: null },
+          { axle: "rear", side: "left", value: "00000-S0009", valueAgain: "00000-S0009" },
+        ],
+        datesOk: true,
+        sideOk: null,
+      },
+      rowName: "ABSORBER ASSY, SHOCK",
       buildText: "2016 – 2020",
       knownCode: "M900A-AGBVE",
     });

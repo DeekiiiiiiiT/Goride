@@ -188,7 +188,7 @@ export type ResearchJobDetail = {
     updated_at: string;
   };
   car: ResearchCar | null;
-  partType: { id: string; name: string } | null;
+  partType: { id: string; name: string; position_scheme?: string | null } | null;
   spec: { key: string; label: string; unit: string | null } | null;
   browserCheckUrl: string | null;
   /** RE-63: the same model's other engines built in the same years (e.g. the turbo). */
@@ -353,6 +353,8 @@ export type BrowserCheckAnswersPayload = {
     partFound: boolean;
     value: string;
     valueAgain: string | null;
+    /** RE-69: one number per position, for parts that come in positions. */
+    positions?: Array<{ axle: "front" | "rear"; side: "left" | "right" | null; value: string; valueAgain: string | null }> | null;
     datesOk: boolean;
     sideOk: boolean | null;
   };
