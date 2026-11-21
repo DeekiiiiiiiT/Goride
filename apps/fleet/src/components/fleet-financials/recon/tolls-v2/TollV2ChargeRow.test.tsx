@@ -116,3 +116,27 @@ describe('Tolls with no trip header: offline crossings line', () => {
     expect(screen.getByTestId('toll-v2-offline-summary').textContent).toMatch(/^2 crossed while the driver was offline · J\$320\.00$/);
   });
 });
+
+describe('TollV2ChargeRow: a toll Uber paid only part of shows what is left', () => {
+  it('J$390 toll, Uber paid J$370 → "J$20.00 left"', () => {
+    const c: TollV2Charge = {
+      id: 'pp-1',
+      version: 1,
+      section: 'no_trip',
+      state: 'pending',
+      occurredAt: '2026-11-09T07:15:00-05:00',
+      amountMinor: 39000,
+      allocatedMinor: 37000,
+      openMinor: 2000,
+      plazaName: 'Portmore',
+      plate: '5179KZ',
+      driverName: 'Kenny Gregory Rattray',
+      suggestions: [],
+      decision: null,
+    };
+    render(<TollV2ChargeRow charge={c} actions={{}} />);
+    const line = screen.getByTestId('toll-v2-part-paid-line');
+    expect(line.textContent).toMatch(/paid back J\$370\.00/);
+    expect(line.textContent).toMatch(/J\$20\.00 left/);
+  });
+});

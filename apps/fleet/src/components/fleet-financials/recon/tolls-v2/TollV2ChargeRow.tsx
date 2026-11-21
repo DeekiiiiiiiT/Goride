@@ -203,7 +203,7 @@ export function TollV2ChargeRow({ charge, actions }: { charge: TollV2Charge; act
               No activity timeline for this day
             </p>
           ) : null}
-          {charge.section === 'part_paid' ? (
+          {charge.section === 'part_paid' || (charge.openMinor > 0 && charge.openMinor < charge.amountMinor) ? (
             <p className="text-sm text-[#0b1c30]" data-testid="toll-v2-part-paid-line">
               {fmtTollMinor(charge.amountMinor)} · paid back {fmtTollMinor(charge.allocatedMinor ?? charge.amountMinor - charge.openMinor)} ·{' '}
               <span className="font-semibold">{fmtTollMinor(charge.openMinor)} left</span>

@@ -1426,4 +1426,28 @@ BEGIN
 END;
 $$;
 
+-- ── P-03 (live 9 Nov week): a short-paid Uber trip matched while disputes were off gets its dispute
+--    from the catch-up (open_missing_disputes), once; the money checks stay clean.
+DO $$
+DECLARE
+  v_org uuid := pg_temp._s1_org();
+  v_charge uuid; v_pb uuid; v_week date; v_n int; d toll.disputes;
+BEGIN
+  UPDATE toll.switch_state SET toll_disputes = false WHERE organization_id = v_org;
+  SELECT * INTO v_charge, v_pb, v_week FROM pg_temp._s1_setup390('p03', 322);
+  IF toll_system.charge_open_minor(v_org, v_charge) <> 2000 THEN
+    RAISE EXCEPTION 'p03 setup open %', toll_system.charge_open_minor(v_org, v_charge);
+  END IF;
+  IF toll_system.open_missing_disputes(v_org) <> 0 THEN RAISE EXCEPTION 'p03 opened with disputes off'; END IF;
+  UPDATE toll.switch_state SET toll_disputes = true WHERE organization_id = v_org;
+  v_n := toll_system.open_missing_disputes(v_org);
+  IF v_n <> 1 THEN RAISE EXCEPTION 'p03 catch-up opened % disputes', v_n; END IF;
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND charge_id = v_charge;
+  IF d.owed_minor <> 2000 THEN RAISE EXCEPTION 'p03 owed %', d.owed_minor; END IF;
+  IF toll_system.charge_open_minor(v_org, v_charge) <> 0 THEN RAISE EXCEPTION 'p03 charge still open'; END IF;
+  IF toll_system.open_missing_disputes(v_org) <> 0 THEN RAISE EXCEPTION 'p03 opened twice'; END IF;
+  PERFORM pg_temp._s1_assert_nightly();
+END;
+$$;
+
 ROLLBACK;
