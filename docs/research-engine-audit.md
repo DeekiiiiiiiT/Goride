@@ -59,8 +59,11 @@ without positions were skipped only on `variant_parts_readiness = 'verified'`, w
 listing on the car. Dry run on live (rolled back): Roomy fill → 0 new jobs. The two re-queued jobs closed `failed` /
 "already confirmed (owner)".
 
-**Open (21 Nov, not decided):** the per-axle fill queued **rear brake pads** and a **rear brake rotor** for the Roomy,
-but the Roomy has rear **drums** (BRK-DRUM / BRK-SHOES rear confirmed). Fill doesn't know drum vs disc per axle.
+**RE-72 (21 Nov, fixed, owner OK):** the per-axle fill queued **rear brake pads** and a **rear brake rotor** for the
+Roomy, which has rear **drums** (BRK-DRUM / BRK-SHOES rear confirmed). `20261121193554_research_fill_skip_drum_axle.sql`
+(live + logbook): pads/rotor are not queued for an axle with a confirmed drum or shoes. Dry run (rolled back): 0 new
+jobs. The worker had already run both jobs (needs_review, 9 suggestions): closed `failed` / "Roomy has rear drums
+(owner)", suggestions rejected; none promoted, no rear pad/rotor listings.
 
 **Next for the owner, in Pending catalog → Parts (refresh first):**
 1. ~~Press **Fill this car**~~ (done 21 Nov) — wait for on the Roomy → a Front and a Rear shock check. Each: Open Amayama → its own page ("Front
