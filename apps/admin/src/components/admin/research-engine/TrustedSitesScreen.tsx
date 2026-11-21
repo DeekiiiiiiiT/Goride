@@ -3,7 +3,7 @@
  * The one trusted list (RE-11): trusted_site + trusted_source. Edits are the platform owner's alone (RE-21) and are
  * logged on the server. "Pages confirmed" = trusted_site.pages_confirmed; "Worked N times" = job reads with a row found.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "../../auth/AuthContext";
 import {
@@ -31,6 +31,8 @@ import {
   ReSkeleton,
 } from "./ReKit";
 import { shortDate, siteName } from "./researchModel";
+import { makesOf, modelsOf, partNumberOptions, type PickOption, versionLabels, versionsFor, yearOptions } from "./carPick";
+import { SearchPick } from "./SearchPick";
 
 const OWNER_ONLY = "Only the platform owner can change trusted sites.";
 type Kind = "part_maker" | "car_maker" | "reference";
@@ -777,8 +779,14 @@ function RecipeForm({
 /** Round 2 "Test on a car": runs once for a chosen car, shows the row found or "Nothing found", saves no data. */
 function RecipeTest({ token, recipe, onClose }: { token: string; recipe: LookupRecipe; onClose: () => void }) {
   const [cars, setCars] = useState<VehicleCatalogRecord[]>([]);
-  const [q, setQ] = useState("");
-  const [car, setCar] = useState<VehicleCatalogRecord | null>(null);
+  const [make, setMake] = useState("");
+  const [model, setModel] = useState("");
+  const [year, setYear] = useState("");
+  const [versionId, setVersionId] = useState("");
+  const [onFile, setOnFile] = useState<PickOption[]>([]);
+  const [onFileState, setOnFileState] = useState<"idle" | "loading" | "ok" | "failed">("idle");
+  // Each run gets a number; a reply for an older run (or an older car) is ignored.
+  const runId = useRef(0);
   const [number, setNumber] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ found: boolean; block?: string; reason?: string } | null>(null);
@@ -788,53 +796,131 @@ function RecipeTest({ token, recipe, onClose }: { token: string; recipe: LookupR
     void listVehicleCatalogPicker(token).then((r) => setCars(r.items)).catch(() => setCars([]));
   }, [token]);
 
-  const matches = useMemo(() => {
-    const n = q.trim().toLowerCase();
-    if (!n) return [];
-    return cars
-      .filter((c) => `${c.make} ${c.model} ${c.chassis_code ?? ""} ${c.engine_code ?? ""}`.toLowerCase().includes(n))
-      .slice(0, 8);
-  }, [cars, q]);
+  // Make → model → year → version, in plain words (owner rule: no frame or engine codes to type).
+  const makes = useMemo(() => makesOf(cars).map((m) => ({ value: m, label: m })), [cars]);
+  const models = useMemo(() => (make ? modelsOf(cars, make).map((m) => ({ value: m, label: m })) : []), [cars, make]);
+  const years = useMemo(() => (make && model ? yearOptions(cars, make, model) : []), [cars, make, model]);
+  const versions = useMemo(() => (make && model && year ? versionsFor(cars, make, model, year) : []), [cars, make, model, year]);
+  const versionOptions = useMemo(() => {
+    const labels = versionLabels(versions);
+    return versions.map((c) => ({ value: c.id, label: labels.get(c.id) ?? `${c.make} ${c.model}` }));
+  }, [versions]);
+  // One version that year → it is the car; several → the person picks one.
+  const car = versions.length === 1 ? versions[0] : versions.find((c) => c.id === versionId) ?? null;
+
+  // Part numbers already on file for this car, so a number can be picked instead of typed.
+  useEffect(() => {
+    setOnFile([]);
+    setOnFileState("idle");
+    if (!car || !needsNumber) return;
+    let live = true;
+    setOnFileState("loading");
+    void researchApi
+      .coverage(token, car.id)
+      .then((cov) => {
+        if (!live) return;
+        setOnFile(partNumberOptions(cov.parts ?? []));
+        setOnFileState("ok");
+      })
+      .catch(() => {
+        if (live) setOnFileState("failed");
+      });
+    return () => {
+      live = false;
+    };
+  }, [token, car, needsNumber]);
+
+  // Any change of car or number makes an older reply stale.
+  useEffect(() => {
+    runId.current += 1;
+    setBusy(false);
+  }, [car, number]);
 
   async function test() {
     if (!car) return;
+    const mine = ++runId.current;
     setBusy(true);
     setResult(null);
     try {
-      setResult(await researchApi.testRecipe(token, recipe.id, car.id, number.trim() || undefined));
+      const reply = await researchApi.testRecipe(token, recipe.id, car.id, number.trim() || undefined);
+      if (mine === runId.current) setResult(reply);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "The test didn't run");
+      if (mine === runId.current) toast.error(e instanceof Error ? e.message : "The test didn't run");
     } finally {
-      setBusy(false);
+      if (mine === runId.current) setBusy(false);
     }
   }
 
-  const input =
-    "h-9 w-full rounded-lg border border-[#c5c6d0] bg-white px-3 text-[13px] text-[#30323b] outline-none focus:ring-2 focus:ring-[#0153dc] dark:border-[#334155] dark:bg-[#0b1220] dark:text-[#e2e8f0]";
   return (
     <div className={`flex flex-col gap-2 rounded-xl p-4 ${RE_SOFT}`} data-testid="recipe-test-panel">
       <span className={`text-[13px] font-semibold ${D_TXT}`}>Test on a car — nothing is saved</span>
-      {car ? (
-        <div className="flex items-center justify-between gap-2">
-          <span className={`text-[13px] ${D_TXT}`}>
-            {car.make} {car.model} {car.chassis_code ? `· ${car.chassis_code}` : ""}
-          </span>
-          <PartsButton variant="secondary" className="!min-h-[28px]" onClick={() => { setCar(null); setResult(null); }}>
-            Change car
-          </PartsButton>
-        </div>
-      ) : (
-        <>
-          <input className={input} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a car: Toyota Roomy, M900A…" data-testid="recipe-test-car" />
-          {matches.map((c) => (
-            <PartsButton key={c.id} variant="secondary" className="!justify-start" onClick={() => setCar(c)}>
-              {c.make} {c.model} {c.production_start_year ?? ""} {c.chassis_code ? `· ${c.chassis_code}` : ""}
-            </PartsButton>
-          ))}
-        </>
-      )}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <SearchPick
+          label="Make"
+          placeholder="Choose a make"
+          options={makes}
+          value={make}
+          testId="recipe-test-make"
+          onChange={(v) => { setMake(v); setModel(""); setYear(""); setVersionId(""); setNumber(""); setResult(null); }}
+        />
+        <SearchPick
+          label="Model"
+          placeholder={make ? "Choose a model" : "Choose a make first"}
+          options={models}
+          value={model}
+          disabled={!make}
+          testId="recipe-test-model"
+          onChange={(v) => { setModel(v); setYear(""); setVersionId(""); setNumber(""); setResult(null); }}
+        />
+        <SearchPick
+          label="Year"
+          placeholder={model ? "Choose a year" : "Choose a model first"}
+          options={years}
+          value={year}
+          disabled={!model}
+          testId="recipe-test-year"
+          onChange={(v) => { setYear(v); setVersionId(""); setNumber(""); setResult(null); }}
+        />
+      </div>
+      {versions.length > 1 ? (
+        <SearchPick
+          label="Version"
+          placeholder="Choose the version"
+          options={versionOptions}
+          value={versionId}
+          testId="recipe-test-version"
+          onChange={(v) => { setVersionId(v); setNumber(""); setResult(null); }}
+        />
+      ) : null}
+      {car && versions.length === 1 ? (
+        <p className={`text-[12px] ${D_MUTED}`} data-testid="recipe-test-only-version">{versionOptions[0]?.label}</p>
+      ) : null}
       {needsNumber ? (
-        <input className={`${input} ${D_MONO}`} data-testid="recipe-test-number" value={number} onChange={(e) => setNumber(e.target.value)} placeholder="Part number to look for" />
+        <SearchPick
+          label="Part number to look for"
+          placeholder={
+            !car
+              ? "Choose the car first"
+              : onFileState === "loading"
+                ? "Loading the parts on file…"
+                : onFile.length
+                  ? "Choose a part on file, or type a number"
+                  : "Type the number to look for"
+          }
+          options={onFile}
+          value={number}
+          disabled={!car}
+          testId="recipe-test-number"
+          allowTyped="Look for"
+          emptyText={
+            onFileState === "failed"
+              ? "Couldn't load the numbers on file. Type one."
+              : onFileState === "loading"
+                ? "Loading the parts on file…"
+                : "No numbers on file for this car yet. Type one."
+          }
+          onChange={(v) => { setNumber(v); setResult(null); }}
+        />
       ) : null}
       <div className="flex justify-end gap-2">
         <PartsButton variant="secondary" onClick={onClose}>

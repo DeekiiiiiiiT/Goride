@@ -270,8 +270,10 @@ export async function listVehicleCatalogWithFallback(
 }
 
 /** Maintenance-master pickers: labels only — avoids multi-megabyte Sentry HTTP warnings. */
+// Plain-words version labels in Dominion pickers (trim, 2WD/4WD, engine size, gearbox, body) — research Test on a car.
+// One string literal: supabase-js parses it for types.
 const PICKER_SELECT =
-  "id,make,model,chassis_code,production_start_year,production_end_year,trim_series,status";
+  "id,make,model,chassis_code,production_start_year,production_end_year,trim_series,status,catalog_trim,drivetrain,engine_displacement_l,engine_type,transmission,body_type";
 
 export async function listVehicleCatalogPickerWithFallback(
   supabase: SupabaseClient,
