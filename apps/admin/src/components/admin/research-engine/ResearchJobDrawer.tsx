@@ -603,11 +603,14 @@ function BrowserCheckCard({
           <div className="flex w-full flex-col gap-2 pt-0.5">
             {known ? (
               <>
-                <p>
-                  {known.url ? "Does the top say " : "Click "}
-                  <span className="font-semibold">{known.code}</span>
-                  {known.url ? "?" : " in the list. Does the top now say it?"}
-                </p>
+                <p>{known.url ? "Check it's this one:" : "Click this one in the list:"}</p>
+                <ul className="flex flex-col gap-0.5" data-testid="guide-version-row">
+                  {catalogueVersionRow(detail.car, known).map((c) => (
+                    <li key={c.label}>
+                      {c.label}: <span className="font-semibold">{c.value}</span>
+                    </li>
+                  ))}
+                </ul>
                 {yesNo(versionOk, setVersionOk, "q-version")}
               </>
             ) : (
