@@ -1,6 +1,6 @@
 # Research engine (cars, specs, parts) — audit
 
-**Rev 4.7 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
+**Rev 4.8 · 21 Nov 2026 · Status: LIVE (layers 1–3 + Rev 4.2 NiBK form recipe). Engine on, practice (shadow) mode,
 US$1.35/day.** What runs live is the **search-first** flow with the new proof (Gemini + Google search proposes
 numbers, recipes and trusted pages prove them); the planned catalogue-first flow is RE-49, not built yet (§13–14). Live database: migrations 1a/1b/2/3 (03:10 UTC) and `20261121100925_research_form_recipe` (10:25 UTC),
 all with logbook lines. Live code: main `0e00cd5b` (platform-catalog, catalog-research, Dominion). Branch
@@ -29,6 +29,7 @@ History (not needed to continue): the closed plan with all findings RE-01…RE-2
 | 21 Nov | Reviewer: coverage is a sources problem — more part makers (Spike 1), PDF catalogues, the distributor, licensed-feed rule (RE-46…RE-48, §12) | this file |
 | 21 Nov | Reviewer round on Rev 4.5: pace table with both rows, every job pays for a search today (RE-49), cap ceiling (RE-50), PDF rows with positions, TecDoc checks, R2/renderer checks (RE-51); free-search figure kept (§13) | this file |
 | 21 Nov | Reviewer round on Rev 4.6: "LIVE" = search-first flow; RE-49 made buildable (parts per recipe, part words in the row, 3-recipe budget); RE-52 honest_fetch; Spike 1 by-car check moved up (§14) | this file |
+| 21 Nov | Reviewer round on Rev 4.7: specs never use recipes (RE-53), pace split parts/specs (~1 month after RE-49), one recipe per part type, read-budget wording (§15) | this file |
 
 **What is proven**
 - Unit, SQL and screen tests: Deno 136, SQL checks (incl. 3 form-recipe checks), admin tsc 0 + vitest 45, screen
@@ -64,8 +65,8 @@ Because (2) fails first in the "Dominion places checks" job, the research screen
      master-data breaks (RE-41), jobs per day + finish date on Settings (RE-37), cap ceiling on Settings (RE-50).
 4. **Claude: Spike 1, part two:** one recipe for each allowed site that works with a link or a form; run the Roomy
    M900A against the 10 core part types → a real "N of 17" replaces Spike 0's "0 of 17".
-5. **Build RE-49** (§13, made buildable in §14) when part one found by-car lookups: catalogue first by car, no Google
-   search when a recipe proves the part.
+5. **Build RE-49** (§13–15) when part one found by-car lookups: catalogue first by car, one recipe per part type, no
+   Google search when a recipe proves the part. Specs stay search-bound (RE-53); spec recipes come later.
 6. **Owner:** two asks, same week (Claude drafts both): (a) the Toyota/Daihatsu parts distributor in Jamaica — catalogue
    access, a parts data export or a dealer account (RE-46 (c)); (b) the permission emails to Masuma, Amayama, Megazip
    and Partsouq.
@@ -130,19 +131,27 @@ what it could not prove.
 2,679 car versions (763 with no frame code); 0 cars "ready"; specs on 3 cars before the CSV backfill (2,471 tyre sizes
 become Needs checking in layer 1b). Research jobs ever: 3.
 
-**Pace (RE-37, RE-49, RE-50).** Today every part job runs a Google search first (RE-49), so the first row is the pace now.
+**Pace (RE-37, RE-49, RE-50, RE-53).** Today every job runs a Google search first, parts and specs alike, so the first
+row is the pace now. A car has up to 10 core part types and up to 10 core spec keys
+(`catalog_research_core_spec_keys()`); a fill only queues what is missing, so the ~3,400 lookups split roughly in
+half (the Roomy's real split is measured at §R step 3).
 
-| Job | Cost per job | Jobs per day | 3,400 lookups (200 cars that matter) |
+| Job | Cost per job | Jobs per day | Time for its share of the ~3,400 lookups |
 |---|---|---|---|
-| With a Google search (every job today) | ~US$0.075 (Spike 0: 5.2 searches × US$0.014 + tokens) | 18 paid (US$1.35 cap) + ~32 free (5,000 free searches a month, renewed monthly) | ~2.3 months; ~6.3 months with no free searches |
-| Proven by a by-car recipe, no search (only after RE-49 + by-car recipes from Spike 1) | ~US$0 | limited by the worker, ~1 a minute ≈ 1,440 | ~2.4 days |
+| Any job today (parts and specs, search-first) | ~US$0.075 (Spike 0: 5.2 searches × US$0.014 + tokens) | 18 paid (US$1.35 cap) + ~32 free (5,000 free searches a month, renewed monthly) | all 3,400: ~2.3 months; ~6.3 months with no free searches |
+| Part proven by a by-car recipe, no search (after RE-49 + by-car recipes from Spike 1) | ~US$0 | limited by the worker, ~1 a minute ≈ 1,440 | parts (~1,400–2,000): ~1–1.5 days |
+| Spec (always searched: spec jobs never run recipes — RE-53) | ~US$0.075 | ~50 (once parts stop searching, all ~960 free + 540 paid a month go to specs) | specs (~1,400–2,000): ~1–1.3 months |
+
+So after RE-49 the fill is **spec-bound, about a month**; before it, ~2.3 months. Only spec recipes (RE-53, later)
+make the whole fill a matter of days.
 
 Conditions: the free searches are ours only while the engine is Roam's only grounded caller and the Gemini key's
 Google project isn't shared. Ceiling for raising the cap: ~288 grounded jobs a day ≈ US$21.60 if Google's 1,500-a-day
 limit counts searches, ~1,500 if it counts prompts (done-test 18 tells which; RE-50). The same limit caps how fast the
-free 5,000 can be used (~288 jobs a day), so the pace is lumpy within a month and the finish date depends on the start
-day; the 2.3-month average holds. **To replace with live
-measurements after §R step 2:** cost per job, searches per job, jobs per day, finish date against `fill_target_date`.
+free 5,000 can be used (~288 jobs a day), and the free searches reset on the 1st of each month (UTC), so the pace is
+lumpy: the finish date depends on the start day and on whether a spec batch is mid-month. **To replace with live
+measurements after §R step 3:** cost per job, searches per job, jobs per day, part/spec split, **start date** and
+finish date against `fill_target_date` — always recorded together.
 
 ## 2. What is built (all live)
 
@@ -587,7 +596,7 @@ is not built yet; RE-49 builds it. Until then every part job costs ~US$0.075 and
 a spend-cap day, a `grounding_daily` pause or a Gemini outage stops work that a recipe could have answered.
 
 **RE-49 made buildable (three details):**
-1. **Which recipes a job may use.** New column `research_lookup_recipe.component_ids uuid[]` (the maintenance
+1. **Which recipes a job may use.** (Changed in §15: one part per recipe, `component_id uuid`.) New column `research_lookup_recipe.component_ids uuid[]` (the maintenance
    components the recipe answers, e.g. NiBK's car page → front pads, rear pads, rotors). A by-car recipe with no
    components is never used catalogue-first. The Trusted sources recipe form gets a "Parts it answers" picker.
 2. **A car page lists many parts.** Recipes are per part type: each by-car recipe also carries `row_words text[]`
@@ -598,7 +607,8 @@ a spend-cap day, a `grounding_daily` pause or a Gemini outage stops work that a 
    proofs in the last 30 days, and stops at the first proof. They share the job's 4-read budget and the 90-second tick
    with everything else; when the budget is used, the job goes on to Gemini as today.
 Done-tests 52–53 stand; added 55. a pads job on a car page whose only matching row is a rotor row → not proven;
-56. with 5 eligible by-car recipes, at most 3 run and the first proof stops the rest.
+56. (as changed in §15) with 5 eligible by-car recipes, the number that runs equals what fits the 4-read budget in
+order, and the first proof stops the rest.
 
 **RE-50 note:** at 5.2 searches a job, Google's 1,500-a-day limit also caps how fast the free 5,000 can be used
 (~288 jobs a day), so the pace is lumpy within a month — the 2.3-month average holds, but the finish date depends on
@@ -623,3 +633,33 @@ refuses it, the check moves to the engine's own reader on a recipe test, or stop
 **Order changed (§R):** whether each brand offers a **by-car** lookup decides whether RE-49 is cheap (days) or the pace
 stays search-bound (months), so that part of Spike 1 moves up to §R step 2, alongside the owner's NiBK test. RE-52
 comes first, because Spike 1 fetches 12 sites by hand.
+
+## 15. Rev 4.8 — reviewer round on Rev 4.7 (21 Nov)
+
+Checked in the code: spec jobs leave the part flow at `catalog_research_worker.ts` ~line 272 (`runSpecJob`), and
+`research_other_jobs.ts` imports only `findEvidenceBlock` / `htmlToBlocks`, never `runRecipe`. The core lists are 10
+part types and **10** spec keys (`catalog_research_core_spec_keys()`: battery JIS + type, oil grade + capacity, both
+wiper lengths, low-beam bulb, tyre size, brake fluid, coolant), not 7.
+
+**RE-53 · High · The fast path can only ever cover parts.** RE-49 keys on maintenance components, and spec jobs never
+run recipes, so specs stay search-bound after RE-49. Fix now: the §1 pace table splits parts (fast after RE-49) from
+specs (search-bound), and gives the honest finish: ~2.3 months today, **about a month after RE-49** (spec-bound — the
+reviewer's 50–60 days left out that once parts stop searching, every free search goes to specs: ~1,500 spec jobs a
+month), days only with spec recipes. Spec recipes go on the later list, to be built when spec jobs queue in volume:
+`research_lookup_recipe.spec_key text` (one spec per recipe, like RE-49's one part per recipe) and a spec-shaped proof
+— the value matching `SPEC_VALUE_SHAPES[spec_key]`, its unit, and the car, in one row — reusing the shapes the browser
+check already uses (`research_browser_check.ts`). Done-tests (for that round): 59. a battery recipe row "M900A …
+M-42" proves `battery_jis = M-42` with no Gemini call; 60. a row with the value but another frame → not proven.
+
+**RE-49 changed — one recipe per part type.** `component_ids uuid[]` becomes **`component_id uuid`** (one maintenance
+component per recipe), so `row_words text[]` belongs to that one part. NiBK's car page gets three recipes (front pads,
+rear shoes, front rotor), each with its own words. The Trusted sources form stays simple: one "Part it answers"
+picker. A rotors job can never use the pads recipe's words.
+
+**RE-49 changed — read budget wording.** "Up to 3 by-car recipes, bounded by the job's 4-read budget": a link or form
+recipe that opens a result costs 2 reads, so a job may run only 2. Done-test 56 now reads: with 5 eligible recipes, the
+number that runs equals what fits the 4-read budget in order (e.g. 2 when both are 2-read recipes, 3 when the first
+three are 1-read), and the first proof stops the rest.
+
+**Small:** every recorded finish date now carries its start date and the part/spec split (§1), because the free
+searches reset on the 1st and a mid-month spec batch changes the pace.
