@@ -815,3 +815,12 @@ Code review (medium) on RE-63: 9 found, all fixed (turbo words from all same-yea
 successful confirm and only when one version is named; frames stored with prefixes or lists handled; remembered
 version found for any site; engine codes compared without punctuation; tighter part-name hints; Open button keeps the
 list link; first word of the model). Tests: Deno 157, admin 57, screens 17, SQL checks incl. the new table (local copy).
+
+**RE-65 · High · The RE-63 guide was full of noise (owner, 21 Nov: "the most confusing thing… just give me the correct
+direction").** Fix (built): the panel is five short lines and nothing else — ① **Open Amayama** (straight to the
+remembered version when Roam knows it); ② **Click the row with `1KRFE · 11.2016 · ROOMY`** (engine as the catalogue
+writes it, first build month, model name; or "Click M900A-AGBVE"; skipped when step ① opens the version directly);
+③ **Search air cleaner → find ELEMENT SUB-ASSY, AIR CLEANER FILTER**; ④ **Copy the bold title line and the part's row.
+Paste here**; ⑤ **Copy the address bar. Paste here**. Removed: the "doesn't let Roam read" line, the car description,
+the grade note, the "Roam remembers" note, the suggested-numbers list. Lesson: read every owner-facing panel as the
+owner would before shipping — one instruction per step, no explanations.
