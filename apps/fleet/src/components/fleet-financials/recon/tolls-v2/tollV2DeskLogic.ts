@@ -44,6 +44,20 @@ export const SECTION_ORDER = [
     emptyCopy: 'Nothing to review',
   },
   {
+    key: 'awaiting_cash',
+    title: "Waiting for the rider's cash",
+    id: 'toll-v2-section-awaiting-cash',
+    explanation: "A Roam cash trip: the rider's cash pays this toll. Nothing to do here.",
+    emptyCopy: 'Nothing waiting',
+  },
+  {
+    key: 'part_paid',
+    title: "Part-paid — platform doesn't take disputes",
+    id: 'toll-v2-section-part-paid',
+    explanation: 'The platform paid part of the toll and takes no disputes. Who pays the rest?',
+    emptyCopy: 'Nothing to decide',
+  },
+  {
     key: 'decided',
     title: 'Decided',
     id: 'toll-v2-section-decided',
@@ -93,7 +107,8 @@ export function sureSuggestions(
   for (const c of charges) {
     if (c.section !== 'suggested' || c.confidence !== 'sure') continue;
     const top = c.suggestions?.find((s) => s.top !== false) ?? c.suggestions?.[0];
-    if (top) out.push({ charge: c, suggestion: top });
+    // An InDrive rider-pays-driver suggestion has no payback: it is never confirmed with apply_suggestion (AG7).
+    if (top && top.kind !== 'rider_pays_driver') out.push({ charge: c, suggestion: top });
   }
   return out;
 }

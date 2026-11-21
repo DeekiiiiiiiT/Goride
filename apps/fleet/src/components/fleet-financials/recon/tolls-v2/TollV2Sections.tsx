@@ -30,6 +30,11 @@ const SECTION_ICONS: Record<string, React.ReactNode> = {
   decided: <Check className="h-5 w-5 text-[#47464c]" aria-hidden />,
 };
 
+/** Today's groups. The six-part layout (UI1) passes `only` to show some groups inside one part. */
+const TODAY_KEYS = ['suggested', 'pick', 'no_trip', 'receipts', 'duplicates', 'paybacks', 'decided'];
+/** Groups that hide when empty even in a part (they rarely have anything). */
+const HIDE_WHEN_EMPTY = new Set(['awaiting_cash', 'part_paid']);
+
 export function TollV2Sections({
   charges,
   paybacks,
@@ -38,6 +43,8 @@ export function TollV2Sections({
   onConfirmAllSure,
   sureCount,
   sealed,
+  only,
+  bare,
 }: {
   charges: TollV2Charge[];
   paybacks: TollV2Payback[];
@@ -47,12 +54,16 @@ export function TollV2Sections({
   sureCount: number;
   sealed: boolean;
   emptyPairSlot?: React.ReactNode;
+  only?: readonly string[];
+  /** Inside a part card whose title already names the group: no title or explanation line. */
+  bare?: boolean;
 }) {
+  const keys = only ?? TODAY_KEYS;
   const dupCount = chargesInSection(charges, 'duplicates').length;
   const pbCount = paybacks.length + kept.length;
 
   const compactEmptyCards =
-    !sealed && (dupCount === 0 || pbCount === 0) ? (
+    !only && !sealed && (dupCount === 0 || pbCount === 0) ? (
       <div className={dupCount === 0 && pbCount === 0 ? 'grid gap-4 md:grid-cols-2' : 'grid gap-4'}>
         {dupCount === 0 ? (
           <CompactEmptyReviewCard title="Possible duplicates" testId="toll-v2-compact-empty-duplicates" />
@@ -65,7 +76,7 @@ export function TollV2Sections({
 
   return (
     <div className="space-y-4">
-      {SECTION_ORDER.map((sec) => {
+      {SECTION_ORDER.filter((sec) => keys.includes(sec.key)).map((sec) => {
         const rows = sec.key === 'paybacks' ? [] : chargesInSection(charges, sec.key);
         const count = sectionRowCount(charges, sec.key, paybacks, kept);
         const totalMinor =
@@ -74,18 +85,11 @@ export function TollV2Sections({
               kept.reduce((n, k) => n + (k.amountMinor ?? 0), 0)
             : sectionTotalMinor(charges, sec.key);
 
-        if (sec.key === 'duplicates' && dupCount > 0) {
-          // full section below
-        } else if (sec.key === 'duplicates' && dupCount === 0) {
-          return null;
-        }
-        if (sec.key === 'paybacks' && pbCount > 0) {
-          // full section
-        } else if (sec.key === 'paybacks' && pbCount === 0) {
-          return null;
-        }
-
         const empty = count === 0;
+        // Today's layout shows empty duplicates / paybacks as compact cards; a part shows the green empty row.
+        if (!only && (sec.key === 'duplicates' || sec.key === 'paybacks') && empty) return null;
+        if (HIDE_WHEN_EMPTY.has(sec.key) && empty) return null;
+
         // Stitch sealed week: only what was decided is listed; empty work sections are hidden.
         if (sealed && empty) return null;
 
@@ -93,8 +97,8 @@ export function TollV2Sections({
           <section key={sec.key} id={sec.id} className="overflow-hidden rounded-[20px] border border-[#e5eeff] bg-white shadow-sm">
             <header className="border-b border-[#eff4ff] bg-[#f8f9ff] px-4 py-3">
               <div className="flex flex-wrap items-center gap-2">
-                {SECTION_ICONS[sec.key]}
-                <h4 className="text-sm font-semibold text-[#0b1c30]">{sec.title}</h4>
+                {bare ? null : SECTION_ICONS[sec.key]}
+                {bare ? null : <h4 className="text-sm font-semibold text-[#0b1c30]">{sec.title}</h4>}
                 <span className="rounded-full bg-[#d5e0f8] px-2.5 py-0.5 text-xs font-semibold text-[#0b1c30]">
                   {tollCountLabel(count, sec.key)}
                 </span>
@@ -102,7 +106,7 @@ export function TollV2Sections({
                   {fmtTollMinor(totalMinor)}
                 </span>
               </div>
-              <p className="mt-1 text-sm text-[#47464c]">{sec.explanation}</p>
+              {bare ? null : <p className="mt-1 text-sm text-[#47464c]">{sec.explanation}</p>}
               {sec.key === 'no_trip' ? <OfflineCrossingsLine rows={rows} /> : null}
             </header>
             {sec.key === 'suggested' && !sealed && sureCount > 0 && onConfirmAllSure ? (

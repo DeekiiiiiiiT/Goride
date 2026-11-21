@@ -1,10 +1,10 @@
 # Toll architecture: disputes and InDrive (plan + build status)
 
-**Rev 30 · 18 Nov 2026 · Status: BUILDING (first build). Data and server are DONE and committed (D1–S3). Next: the screens (UI1, then UI2; Claude builds them), then the proof (P).** Rev 30 removes everything already built: the server design, every round's review notes, the Cursor rules, the C4 rule list and the L2.4 state tables (all proven by the 26 toll SQL test files). They stay in git: `git log -- docs/toll-architecture-gap-audit.md` (Rev 29 is the last version with the build history, Rev 26 the last full one, Rev 19 the last full design).
+**Rev 31 · 21 Nov 2026 · Status: BUILDING (first build). Data, server (D1–S3) and screen round UI1 are DONE and committed. Next: UI2 (Stitch prompts first), then the proof (P).** Rev 30 removes everything already built: the server design, every round's review notes, the Cursor rules, the C4 rule list and the L2.4 state tables (all proven by the 26 toll SQL test files). They stay in git: `git log -- docs/toll-architecture-gap-audit.md` (Rev 29 is the last version with the build history, Rev 26 the last full one, Rev 19 the last full design).
 
 ## START HERE (for a new chat)
 
-**Prompt to start a new chat:** "Continue the toll disputes build. Read `docs/toll-architecture-gap-audit.md` START HERE first. Data and server (D1–S3) are done and committed. Next step: build round UI1, the six-part Tolls step of Week Reconciliation, from the Stitch screens in `docs/stitch/toll-step-slides/` onto the S3 desk read, following C3 (Keep / Drop / Fix), with its tests. Keep me updated in short plain replies."
+**Prompt to start a new chat:** "Continue the toll disputes build. Read `docs/toll-architecture-gap-audit.md` START HERE first. Data and server (D1–S3) are done and committed. UI1 (the six-part Tolls step) is done. Next step: round UI2 — first write the Stitch prompts for the Roam driver app dispute card, Driver Settlements → Disputes tab and Fleet Policy → Tolls (one file per app, owner format), then build them once the owner has made the screens. Keep me updated in short plain replies."
 
 **What this is:** every toll the fleet pays ends with the right person paying it. **First principle (owner):** on a trip the **passenger** always owes the toll, never the fleet.
 - **Uber** pays it back. If Uber pays short, the driver **disputes** it with Uber within 9 days; the refund comes in the next pay period or the one after.
@@ -32,11 +32,20 @@
 | Round | Who | What | Status |
 |---|---|---|---|
 | D1–S3 | Cursor, reviewed by Claude | Data, dispute commands and money, four-eyes, settings, matcher, nightly sweep, "Uber report late" alert, InDrive trips, screen reads, driver dispute route | **Done** (last commit 574f0775) |
-| **UI1** | Claude | **NEXT.** The six-part Tolls step (C3) on `toll_v2_week_desk`, + tests | — |
-| UI2 | Claude | Roam driver app dispute card, Driver Settlements → Disputes tab, Fleet Policy → Tolls (C3), + tests | — |
+| UI1 | Claude | The six-part Tolls step (C3) on `toll_v2_week_desk`, + tests | **Done** 21 Nov (see "UI1 as built") |
+| **UI2** | Claude | **NEXT.** Roam driver app dispute card, Driver Settlements → Disputes tab, Fleet Policy → Tolls (C3), + tests | — |
 | P | Claude + owner | Proof on the local copy (Part D done-tests, 9 Nov replay), then live with every switch off, settings seed and switch-on (L2.6), one real week with screenshots | — |
 
 **Owner to-dos:** push the local commits (through 574f0775). Commit the log-service work's migration `20261118181439_log_service_positions.sql` before pushing: its time is earlier than S3's, and a database push can refuse it once S3 is live.
+
+### UI1 as built (21 Nov 2026)
+- Files: `apps/fleet/src/components/fleet-financials/recon/tolls-v2/` — `TollV2PartsDesk.tsx` (pills, part card, part 1, parts 2/4/5 reuse today's groups), `TollV2DisputesPart.tsx`, `TollV2SealPart.tsx`, `dialogs/TollV2DisputeDialogs.tsx` (Refund received, Lost, Open trip, sole-manager reason box), `tollV2Parts.ts` (labels only; every figure is the server's), `useTollV2Switches.ts`.
+- **Shown only when the company's `toll_disputes` switch is on** (read from `toll_v2_toll_settings`). Switched off, step 3 is today's screen, unchanged (switch rule). So the six parts appear at switch-on (L2.6 step 3), not at deploy.
+- Sole manager: any command the server refuses with `NEEDS_APPROVAL` opens a reason box (8+ characters) and is sent again with `self_approval_reason`; with two managers it says a second manager must approve.
+- A refused seal redraws Still open from the refusal's `blocking` items (no error toast).
+- Fixed on the way: Confirm all sure matches and Confirm never send an InDrive rider-pays-driver suggestion to `apply_suggestion`.
+- Tests: `tollV2Parts.test.ts` (15) and `ReconTollsV2Parts.test.tsx` (10); all 140 Week Reconciliation screen tests pass. Run them from `apps/fleet` (`npx vitest run src/components/fleet-financials/recon`); from the repo root they stop on missing app settings.
+- Screen check: every part drawn from the test fixture at 820 px and 390 px against the Stitch screens; no sideways scroll.
 
 ### What the screens read (built in S3; use these, never work figures out in the browser)
 

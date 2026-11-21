@@ -11,6 +11,18 @@ import {
 } from '../../../../services/tollV2CommandError';
 import type { TollV2CommandIntent } from './types';
 
+/** A command the server refused with NEEDS_APPROVAL while this person is the only manager (B14): the screen asks
+ *  for a reason (8+ characters) and sends the same command again with `self_approval_reason`. */
+export type TollV2ApprovalAsk = {
+  intent: TollV2CommandIntent;
+  amountMinor: number | null;
+  resolve: (reason: string | null) => void;
+};
+
+export function isNeedsApproval(err: unknown): err is TollV2CommandError {
+  return err instanceof TollV2CommandError && err.code === 'NEEDS_APPROVAL';
+}
+
 type ClickState = {
   commandId: string;
   intent: TollV2CommandIntent;
@@ -22,13 +34,18 @@ export function useTollV2Commands(weekKey: string) {
   const pendingClick = useRef<ClickState | null>(null);
   const [versionConflict, setVersionConflict] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [approvalAsk, setApprovalAsk] = useState<TollV2ApprovalAsk | null>(null);
 
   const refetchDesk = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: ['toll-v2-desk', weekKey] });
   }, [queryClient, weekKey]);
 
   const runCommand = useCallback(
-    async (intent: TollV2CommandIntent, body: Record<string, unknown>, opts?: { reuseClick?: boolean }) => {
+    async (
+      intent: TollV2CommandIntent,
+      body: Record<string, unknown>,
+      opts?: { reuseClick?: boolean; /** refusal codes the caller shows itself (no toast) */ quiet?: string[] },
+    ): Promise<unknown> => {
       let commandId: string;
       if (opts?.reuseClick && pendingClick.current?.intent === intent) {
         commandId = pendingClick.current.commandId;
@@ -53,6 +70,22 @@ export function useTollV2Commands(weekKey: string) {
         if (isPaidWeekRefusal(err)) {
           throw err;
         }
+        if (isNeedsApproval(err) && body.self_approval_reason == null) {
+          pendingClick.current = null;
+          const sole = err.currentState?.sole_manager;
+          if (sole === false) {
+            toast.error('A second manager has to approve this one.');
+            throw err;
+          }
+          setBusy(false);
+          const amt = err.currentState?.amount_minor;
+          const reason = await new Promise<string | null>((resolve) =>
+            setApprovalAsk({ intent, amountMinor: typeof amt === 'number' ? amt : null, resolve }),
+          );
+          setApprovalAsk(null);
+          if (!reason) return null;
+          return runCommandRef.current!(intent, { ...body, self_approval_reason: reason });
+        }
         if (
           (intent === 'seal_week' || intent === 'reopen_week') &&
           isTollCommandTransportFailure(err)
@@ -69,7 +102,9 @@ export function useTollV2Commands(weekKey: string) {
             /* fall through */
           }
         }
-        toast.error(tollV2UserMessage(err, 'That toll command could not be completed.'));
+        if (!(err instanceof TollV2CommandError && opts?.quiet?.includes(err.code))) {
+          toast.error(tollV2UserMessage(err, 'That toll command could not be completed.'));
+        }
         throw err;
       } finally {
         setBusy(false);
@@ -77,12 +112,14 @@ export function useTollV2Commands(weekKey: string) {
     },
     [refetchDesk, weekKey],
   );
+  const runCommandRef = useRef<typeof runCommand | null>(null);
+  runCommandRef.current = runCommand;
 
   const clearVersionConflict = useCallback(() => {
     setVersionConflict(false);
   }, []);
 
-  return { runCommand, busy, versionConflict, clearVersionConflict, refetchDesk };
+  return { runCommand, busy, versionConflict, clearVersionConflict, refetchDesk, approvalAsk };
 }
 
 export type ConfirmAllSureCounts = { matched: number; changed: number; failed: number };

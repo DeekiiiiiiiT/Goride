@@ -76,7 +76,9 @@ function ChargeMeta({ charge }: { charge: TollV2Charge }) {
 export function TollV2ChargeRow({ charge, actions }: { charge: TollV2Charge; actions: TollV2RowActions }) {
   const sealed = actions.readOnly;
   const conf = confidenceLabel(charge.confidence);
-  const topSug = charge.suggestions?.find((x) => x.top !== false) ?? charge.suggestions?.[0];
+  const topSug =
+    charge.suggestions?.find((x) => x.top !== false && x.kind !== 'rider_pays_driver') ??
+    charge.suggestions?.find((x) => x.kind !== 'rider_pays_driver');
 
   if (charge.section === 'pick') {
     const whenLine = (
@@ -201,6 +203,12 @@ export function TollV2ChargeRow({ charge, actions }: { charge: TollV2Charge; act
               No activity timeline for this day
             </p>
           ) : null}
+          {charge.section === 'part_paid' ? (
+            <p className="text-sm text-[#0b1c30]" data-testid="toll-v2-part-paid-line">
+              {fmtTollMinor(charge.amountMinor)} · paid back {fmtTollMinor(charge.allocatedMinor ?? charge.amountMinor - charge.openMinor)} ·{' '}
+              <span className="font-semibold">{fmtTollMinor(charge.openMinor)} left</span>
+            </p>
+          ) : null}
           {charge.section === 'awaiting_cash' ? (
             <p className="text-xs font-medium text-amber-800">Waiting for the rider&apos;s cash</p>
           ) : null}
@@ -240,7 +248,7 @@ export function TollV2ChargeRow({ charge, actions }: { charge: TollV2Charge; act
             ) : null}
           </>
         ) : null}
-        {!sealed && charge.section === 'no_trip' ? (
+        {!sealed && (charge.section === 'no_trip' || charge.section === 'part_paid') ? (
           <>
             {actions.onDriverPays ? (
               charge.offlineFlag ? (

@@ -1,8 +1,8 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchTagAccountRollForward } from '../../../../services/reconApi';
 import { toast } from 'sonner';
-import { isPaidWeekRefusal } from '../../../../services/tollV2CommandError';
+import { isPaidWeekRefusal, TollV2CommandError } from '../../../../services/tollV2CommandError';
 import { useTollV2Desk } from './useTollV2Desk';
 import { formatConfirmAllSureToast, runConfirmAllSure, useTollV2Commands } from './useTollV2Commands';
 import { computeTiles, computeTileSubcounts, progressCounts } from './tollV2Tiles';
@@ -32,7 +32,27 @@ import { TollV2ReopenDialog } from './TollV2ReopenDialog';
 import { TollV2SealedRibbon } from './TollV2SealedRibbon';
 import { TollV2EmptyCard, TollV2ErrorCard, TollV2LoadingState } from './TollV2StateCards';
 import { TollV2MobileSealBar } from './TollV2MobileSealBar';
-import type { TollV2LateItem, TollV2TakeBack, TollV2TakeBackCandidate } from './types';
+import type {
+  TollV2Blocker,
+  TollV2DisputeResult,
+  TollV2DisputeRow,
+  TollV2LateItem,
+  TollV2PartNo,
+  TollV2RefundCandidate,
+  TollV2TakeBack,
+  TollV2TakeBackCandidate,
+} from './types';
+import { useTollV2Switches } from './useTollV2Switches';
+import { chargesInPart, deskHasParts, firstPartWithWork, settleDisputeBody, splitMatches, topSuggestion } from './tollV2Parts';
+import { TollV2MatchesPart, TollV2PartCard, TollV2PartsRow, TollV2SectionsPart } from './TollV2PartsDesk';
+import { TollV2DisputesPart } from './TollV2DisputesPart';
+import { TollV2SealPart } from './TollV2SealPart';
+import {
+  TollV2ApprovalReasonDialog,
+  TollV2LostDialog,
+  TollV2OpenTripDialog,
+  TollV2RefundReceivedDialog,
+} from './dialogs/TollV2DisputeDialogs';
 
 export function ReconTollsV2Step({
   weekKey,
@@ -63,7 +83,8 @@ export function ReconTollsV2Step({
         closingMinor: tagRollQuery.data.expectedClosingMinor,
       }
     : null;
-  const { runCommand, busy, versionConflict, clearVersionConflict, refetchDesk } = useTollV2Commands(weekKey);
+  const { runCommand, busy, versionConflict, clearVersionConflict, refetchDesk, approvalAsk } = useTollV2Commands(weekKey);
+  const switchesQuery = useTollV2Switches();
   const [sealing, setSealing] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
   const [reopenInstead, setReopenInstead] = useState<string | null>(null);
@@ -76,8 +97,29 @@ export function ReconTollsV2Step({
   const [dupPair, setDupPair] = useState<TollV2ReviewPair | null>(null);
   const [confirmAllOpen, setConfirmAllOpen] = useState(false);
   const [linkPayback, setLinkPayback] = useState<TollV2Payback | null>(null);
+  // UI1 — the six-part layout (C3). Only with the disputes switch on; switched off, the screen is today's.
+  const [part, setPart] = useState<TollV2PartNo | null>(null);
+  const [refusedBlockers, setRefusedBlockers] = useState<TollV2Blocker[] | null>(null);
+  const [refundFor, setRefundFor] = useState<TollV2DisputeRow | null>(null);
+  const [lostFor, setLostFor] = useState<TollV2DisputeRow | null>(null);
+  const [tripFor, setTripFor] = useState<TollV2DisputeRow | null>(null);
 
   const desk = deskQuery.data;
+  const partsLayout = switchesQuery.data?.tollDisputes === true && deskHasParts(desk);
+  useEffect(() => {
+    setPart(null);
+  }, [weekKey]);
+  useEffect(() => {
+    if (partsLayout && desk && part === null) setPart(firstPartWithWork(desk));
+  }, [partsLayout, desk, part]);
+  // A refused seal's list stands until the desk is read again (AD3).
+  useEffect(() => {
+    setRefusedBlockers(null);
+  }, [desk]);
+  const goToPart = useCallback((p: TollV2PartNo) => {
+    setPart(p);
+    document.getElementById('toll-v2-parts-top')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, []);
   const tiles = useMemo(
     () => (desk ? computeTiles(desk.result, desk.charges) : null),
     [desk],
@@ -248,10 +290,31 @@ export function ReconTollsV2Step({
     [runCommand],
   );
 
+  /** InDrive rider-pays-driver: Confirm Driver pays → driver_pays, Fleet pays → fleet_absorbs, both with the suggestion (AD5). */
+  const riderBear = useCallback(
+    async (charge: TollV2Charge, suggestionId: string, intent: 'driver_pays' | 'fleet_absorbs'): Promise<boolean> => {
+      try {
+        const res = await runCommand(intent, {
+          charge_id: charge.id,
+          expected_charge_version: charge.version,
+          suggestion_id: suggestionId,
+        });
+        if (res === null) return false;
+        const verb = intent === 'driver_pays' ? 'Driver pays' : 'Fleet pays';
+        await toastAfterTollDecision(queryClient, weekKey, charge.id, verb, undoFromToast);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [queryClient, runCommand, undoFromToast, weekKey],
+  );
+
   const applyTopSuggestion = useCallback(
     async (charge: TollV2Charge, suggestion?: TollV2Suggestion): Promise<boolean> => {
       const s = suggestion ?? charge.suggestions?.find((x) => x.top !== false) ?? charge.suggestions?.[0];
       if (!s) return false;
+      if (s.kind === 'rider_pays_driver') return riderBear(charge, s.suggestionId, 'driver_pays');
       try {
         const res = await runCommand('apply_suggestion', {
           suggestion_id: s.suggestionId,
@@ -265,7 +328,80 @@ export function ReconTollsV2Step({
         return false;
       }
     },
-    [queryClient, runCommand, undoFromToast, weekKey],
+    [queryClient, riderBear, runCommand, undoFromToast, weekKey],
+  );
+
+  const confirmAllRider = useCallback(async () => {
+    if (!desk) return;
+    let done = 0;
+    for (const c of splitMatches(desk.charges).rider) {
+      const s = topSuggestion(c);
+      if (!s) continue;
+      try {
+        const res = await runCommand('driver_pays', {
+          charge_id: c.id,
+          expected_charge_version: c.version,
+          suggestion_id: s.suggestionId,
+        });
+        if (res !== null) done += 1;
+      } catch {
+        /* error toast shown by runCommand; carry on with the next row */
+      }
+    }
+    if (done > 0) toast.success(String(done) + ' set to Driver pays — list refreshed');
+  }, [desk, runCommand]);
+
+  const markDisputeSent = useCallback(
+    async (d: TollV2DisputeRow) => {
+      try {
+        const res = await runCommand('mark_dispute_sent', { dispute_id: d.id, expected_dispute_version: d.version });
+        if (res !== null) toast.success('Marked as sent');
+      } catch {
+        /* error toast shown by runCommand */
+      }
+    },
+    [runCommand],
+  );
+
+  const settleDispute = useCallback(
+    async (d: TollV2DisputeRow, c: TollV2RefundCandidate) => {
+      try {
+        const res = await runCommand('settle_dispute', settleDisputeBody(d, c));
+        if (res === null) return;
+        setRefundFor(null);
+        toast.success('Refund linked to the dispute');
+      } catch {
+        /* error toast shown by runCommand */
+      }
+    },
+    [runCommand],
+  );
+
+  const closeDisputeLost = useCallback(
+    async (d: TollV2DisputeRow) => {
+      try {
+        const res = await runCommand('close_dispute_lost', { dispute_id: d.id, expected_dispute_version: d.version });
+        if (res === null) return;
+        setLostFor(null);
+        toast.success('Dispute closed as lost');
+      } catch {
+        /* error toast shown by runCommand */
+      }
+    },
+    [runCommand],
+  );
+
+  const undoDisputeResult = useCallback(
+    async (r: TollV2DisputeResult) => {
+      if (!r.undo?.decision_id) return;
+      try {
+        const res = await runCommand('undo_decision', { decision_id: r.undo.decision_id });
+        if (res !== null) toast.success('Undone — the dispute is open again');
+      } catch {
+        /* error toast shown by runCommand */
+      }
+    },
+    [runCommand],
   );
 
   const bear = useCallback(
@@ -291,20 +427,26 @@ export function ReconTollsV2Step({
     if (!desk) return;
     setSealing(true);
     try {
-      const res = await runCommand('seal_week', {
-        week_key: desk.weekKey,
-        expected_week_version: desk.weekVersion,
-      });
+      const res = await runCommand(
+        'seal_week',
+        { week_key: desk.weekKey, expected_week_version: desk.weekVersion },
+        partsLayout ? { quiet: ['PENDING_NOT_RESOLVED'] } : undefined,
+      );
       if (res === null) return;
       toast.success('Tolls sealed for this week');
       await refetchDesk();
       if (onPeriodFinished) await onPeriodFinished();
-    } catch {
-      /* error toast shown by runCommand */
+    } catch (err) {
+      if (partsLayout && err instanceof TollV2CommandError && err.code === 'PENDING_NOT_RESOLVED') {
+        const blocking = err.currentState?.blocking;
+        if (Array.isArray(blocking)) setRefusedBlockers(blocking as TollV2Blocker[]);
+        setPart(6);
+      }
+      /* other refusals: error toast shown by runCommand */
     } finally {
       setSealing(false);
     }
-  }, [desk, onPeriodFinished, runCommand, refetchDesk]);
+  }, [desk, onPeriodFinished, partsLayout, runCommand, refetchDesk]);
 
   const dupCharges = useMemo(() => {
     if (!desk || !dupPair) return { a: null, b: null };
@@ -388,6 +530,55 @@ export function ReconTollsV2Step({
         </div>
       ) : null}
 
+      {partsLayout && part !== null ? (
+        <div className="mt-4" id="toll-v2-parts-top" data-testid="toll-v2-parts-layout">
+          <TollV2PartsRow desk={desk} current={part} onGo={goToPart} />
+          <TollV2PartCard desk={desk} part={part} onGo={goToPart}>
+            {part === 1 ? (
+              <TollV2MatchesPart
+                charges={desk.charges}
+                rowActions={rowActions}
+                sureCount={sureRows.length}
+                onConfirmAllSure={desk.sealed ? undefined : () => setConfirmAllOpen(true)}
+                busy={busy}
+                rider={{
+                  onRiderDriverPays: (c, s) => void riderBear(c, s.suggestionId, 'driver_pays'),
+                  onRiderFleetPays: (c, s) => void riderBear(c, s.suggestionId, 'fleet_absorbs'),
+                  onConfirmAllRider: () => void confirmAllRider(),
+                }}
+              />
+            ) : part === 3 ? (
+              <TollV2DisputesPart
+                disputes={desk.disputes!}
+                results={desk.results ?? []}
+                busy={busy}
+                actions={{
+                  onMarkSent: (d) => void markDisputeSent(d),
+                  onRefundReceived: setRefundFor,
+                  onLost: setLostFor,
+                  onOpenTrip: setTripFor,
+                  onUndoResult: (r) => void undoDisputeResult(r),
+                }}
+              />
+            ) : part === 6 ? (
+              <TollV2SealPart
+                desk={desk}
+                decided={chargesInPart(desk.charges, 6)}
+                blockers={refusedBlockers ?? desk.blockers}
+                rowActions={rowActions}
+                sealing={sealing}
+                onSeal={() => void handleSeal()}
+                onGoTo={goToPart}
+                onGoToTagAccount={onGoToTagAccount}
+              />
+            ) : (
+              <TollV2SectionsPart part={part} desk={desk} rowActions={rowActions} />
+            )}
+          </TollV2PartCard>
+        </div>
+      ) : null}
+
+      {!partsLayout ? (
       <div className={desk.sealed ? 'hidden' : 'mt-4'}>
         <div className="mb-2 flex items-center justify-between text-sm text-[#47464c]">
           <span data-testid="toll-v2-progress">
@@ -402,10 +593,11 @@ export function ReconTollsV2Step({
           />
         </div>
       </div>
+      ) : null}
 
-      {showEmpty ? <TollV2EmptyCard /> : null}
+      {showEmpty && !partsLayout ? <TollV2EmptyCard /> : null}
 
-      {!showEmpty ? (
+      {!showEmpty && !partsLayout ? (
         <TollV2MainSection
           desk={desk}
           rowActions={rowActions}
@@ -415,6 +607,7 @@ export function ReconTollsV2Step({
         />
       ) : null}
 
+      {!partsLayout ? (
       <TollV2SealBox
         weekKey={weekKey}
         tiles={tiles}
@@ -426,6 +619,7 @@ export function ReconTollsV2Step({
         onSeal={() => void handleSeal()}
         onScrollTo={(id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })}
       />
+      ) : null}
 
       <TollV2SummaryPortal
         target={summaryTarget}
@@ -621,7 +815,26 @@ export function ReconTollsV2Step({
         left={progress.left}
         sealing={sealing || busy}
         onSeal={() => void handleSeal()}
-        hidden={desk.sealed}
+        hidden={desk.sealed || partsLayout}
+      />
+
+      <TollV2RefundReceivedDialog
+        dispute={refundFor}
+        busy={busy}
+        onOpenChange={(o) => !o && setRefundFor(null)}
+        onConfirm={(c) => refundFor && void settleDispute(refundFor, c)}
+      />
+      <TollV2LostDialog
+        dispute={lostFor}
+        busy={busy}
+        onOpenChange={(o) => !o && setLostFor(null)}
+        onConfirm={() => lostFor && void closeDisputeLost(lostFor)}
+      />
+      <TollV2OpenTripDialog dispute={tripFor} onOpenChange={(o) => !o && setTripFor(null)} />
+      <TollV2ApprovalReasonDialog
+        intent={approvalAsk?.intent ?? null}
+        amountMinor={approvalAsk?.amountMinor ?? null}
+        onDone={(reason) => approvalAsk?.resolve(reason)}
       />
 
       <TollV2LinkPaybackDialog

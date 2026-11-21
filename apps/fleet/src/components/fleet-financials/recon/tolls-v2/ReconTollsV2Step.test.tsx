@@ -55,6 +55,11 @@ const weeksOverview = vi.hoisted(() => ({
   weeks: [] as unknown[],
 }));
 
+// Today's layout: the disputes switch is off (the six-part layout is tested in ReconTollsV2Parts.test.tsx).
+vi.mock('./useTollV2Switches', () => ({
+  useTollV2Switches: () => ({ data: { tollDisputes: false, loggedTrips: false, riderPaysDriver: false } }),
+}));
+
 vi.mock('./useTollV2Weeks', () => ({
   useTollV2Weeks: () => ({ data: weeksOverview }),
 }));
