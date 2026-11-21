@@ -585,23 +585,21 @@ BEGIN
 END;
 $$;
 
-DO $$
-DECLARE
-  f text;
-BEGIN
-  FOREACH f IN ARRAY ARRAY[
-    'catalog_research_queue_item(uuid, uuid, text, text, text)',
-    'catalog_research_core_spec_keys()',
-    'catalog_research_fill_car(uuid, text)',
-    'catalog_research_queue_identity(uuid)',
-    'catalog_research_queue_model(text, text)',
-    'catalog_research_fill_model(text, text)',
-    'catalog_research_expire_browser_checks()',
-    'promote_spec_proposal(uuid, uuid)',
-    'approve_vehicle_proposal(uuid, uuid)'
-  ] LOOP
-    EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC, anon, authenticated', f);
-    EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO service_role', f);
-  END LOOP;
-END;
-$$;
+REVOKE ALL ON FUNCTION public.catalog_research_queue_item(uuid, uuid, text, text, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.catalog_research_core_spec_keys() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.catalog_research_fill_car(uuid, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.catalog_research_queue_identity(uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.catalog_research_queue_model(text, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.catalog_research_fill_model(text, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.catalog_research_expire_browser_checks() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.promote_spec_proposal(uuid, uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.approve_vehicle_proposal(uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.catalog_research_queue_item(uuid, uuid, text, text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.catalog_research_core_spec_keys() TO service_role;
+GRANT EXECUTE ON FUNCTION public.catalog_research_fill_car(uuid, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.catalog_research_queue_identity(uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.catalog_research_queue_model(text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.catalog_research_fill_model(text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.catalog_research_expire_browser_checks() TO service_role;
+GRANT EXECUTE ON FUNCTION public.promote_spec_proposal(uuid, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.approve_vehicle_proposal(uuid, uuid) TO service_role;
