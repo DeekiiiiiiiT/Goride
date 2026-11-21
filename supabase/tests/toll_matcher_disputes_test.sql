@@ -317,7 +317,9 @@ BEGIN
   PERFORM pg_temp._s2_assert_nightly();
 
   -- ── 2. Done-test 1: matcher links J$370 and opens J$20 to_send dispute; replay ──
-  PERFORM pg_temp._s2_import('dt1', v_week + 14);
+  -- The trip is 2 days ago (p_week + 1), so the 9-day window is open on any weekday (was v_week + 14: the trip
+  -- fell 6-12 days back and the dispute opened as expired from Thursday to Sunday).
+  PERFORM pg_temp._s2_import('dt1', (now() AT TIME ZONE 'America/Jamaica')::date - 3);
   c := pg_temp._s2_ch('s2a-ch-dt1');
   p := pg_temp._s2_pb('trip:s2a-trip-dt1');
   v_claim := pg_temp._s2_claim_only(c.id, p.id);

@@ -1,10 +1,10 @@
 # Toll architecture: disputes and InDrive (plan + build status)
 
-**Rev 32 · 21 Nov 2026 · Status: BUILDING (first build). Data, server (D1–S3) and screens (UI1, UI2) are DONE and committed. Next: the proof (P) on the local copy, then live with every switch off.**
+**Rev 33 · 21 Nov 2026 · Status: BUILDING (first build). D1–S3, UI1, UI2 done. Round P started: 23 of 24 local done-tests pass; one open server finding (P-02, undo of a dispute result after its week sealed). Next: fix P-02, then the live rollout with every switch off.**
 
 ## START HERE (for a new chat)
 
-**Prompt to start a new chat:** "Continue the toll disputes build. Read `docs/toll-architecture-gap-audit.md` START HERE first. Data, server and screens (D1–S3, UI1, UI2) are done and committed. Next step: round P — the Part D done-tests and the 9 Nov replay on the local copy (L2.6 step 0), then the live rollout plan with every switch off. Keep me updated in short plain replies."
+**Prompt to start a new chat:** "Continue the toll disputes build. Read `docs/toll-architecture-gap-audit.md` START HERE first. D1–S3, UI1 and UI2 are done; round P is running: 23 of 24 Part D done-tests pass on the local copy (`scripts/toll-done-tests/run.ts`). Next step: fix finding P-02 (undo of a dispute result whose week was sealed must post in the open week, R10 / done-test 15), with its tests, then rerun the done-tests and plan the live rollout with every switch off. Keep me updated in short plain replies."
 
 **What this is:** every toll the fleet pays ends with the right person paying it. **First principle (owner):** on a trip the **passenger** always owes the toll, never the fleet.
 - **Uber** pays it back. If Uber pays short, the driver **disputes** it with Uber within 9 days; the refund comes in the next pay period or the one after.
@@ -34,7 +34,7 @@
 | D1–S3 | Cursor, reviewed by Claude | Data, dispute commands and money, four-eyes, settings, matcher, nightly sweep, "Uber report late" alert, InDrive trips, screen reads, driver dispute route | **Done** (last commit 574f0775) |
 | UI1 | Claude | The six-part Tolls step (C3) on `toll_v2_week_desk`, + tests | **Done** 21 Nov (see "UI1 as built") |
 | UI2 | Claude | Roam driver app dispute card, Driver Settlements → Disputes tab, Fleet Policy → Tolls (C3), + tests | **Done** 21 Nov (see "UI2 as built") |
-| **P** | Claude + owner | **NEXT.** Proof on the local copy (Part D done-tests, 9 Nov replay), then live with every switch off, settings seed and switch-on (L2.6), one real week with screenshots | — |
+| **P** | Claude + owner | **RUNNING** (21 Nov): local done-tests 23 / 24, see "Round P". Proof on the local copy (Part D done-tests, 9 Nov replay), then live with every switch off, settings seed and switch-on (L2.6), one real week with screenshots | — |
 
 **Owner to-dos:** push the local commits (through 574f0775). Commit the log-service work's migration `20261118181439_log_service_positions.sql` before pushing: its time is earlier than S3's, and a database push can refuse it once S3 is live.
 
@@ -66,6 +66,17 @@
 **Fleet Policy → Tolls (UI2): `public.toll_v2_toll_settings()`** → `switches`, `disputePolicy`, `platforms`, `plazas` (tag price and each platform's rate: current = valid today, plus history), `templates`, `seeded`, `missing` (the same list the matcher refuses on), `approvals`. **Save** sends `change_toll_settings` (`platform_settings.<platform>.<snake_case field>`, `dispute_policy.lost_bearer` / `expired_bearer`); **Add rate** sends `plaza_rates_add: [{plaza_id, platform, rate_minor, effective_from}]`. No command accepts a tag price yet, so Add rate covers platform rates only.
 
 **UI2 Stitch prompts written (21 Nov 2026):** `docs/stitch/toll-disputes-driver-prompt.txt` (Roam Driver: Home card, Tolls to dispute list, one toll with Copy text / Open Uber App / Mark as sent, sent, last day, time is up, short notice, empty — 10 screens) and `docs/stitch/toll-disputes-fleet-prompt.txt` (Driver Settlements → Disputes tab and Fleet Policy Configuration → Tolls tab, with Mark as sent, Lost, reason box, Add rate, price history, settings missing, phone — 12 screens). Screens made and saved 21 Nov 2026 (Keep / Drop / Fix below).
+
+### Round P — proof on the local copy (21 Nov 2026)
+
+**Done-test runner:** `scripts/toll-done-tests/run.ts` (Deno, own `deno.json` with `nodeModulesDir: none`, so it never touches the Fleet app's node_modules). Local database only (refuses any other URL). Each Part D story runs on its own fresh test company: files through the real import (`toll_sys_import`), the **real matcher** (`runTollMatcher` → claim → engine → store → nightly sweep), buttons through `public.toll_v2_command` as the signed-in owner and the driver route's RPC, and after every step the ledger accounts, the week desk read and the nightly money checks. Time passing is stood in for in two plain ways only: files dated in the past, and moving a dispute's sent clock or deadline back (the deadline is part of a dispute's identity, so the trigger is lifted for that one update, as the SQL tests do). Run: `npx supabase start`, then `deno run --config scripts/toll-done-tests/deno.json --allow-net --allow-env --allow-read scripts/toll-done-tests/run.ts` (`TOLL_DT_ONLY=5c,14` for some). Test companies stay in the local database (their ledger rows hold them); `npx supabase db reset` clears them.
+
+**Result (21 Nov):** 23 of 24 pass — 1, 2, 3, 3b, 4, 5, 5b, 5c, 5d, 6, 7, 7b, 8, 8b, 9, 10, 12, 13, 14, 14b, 16, 17, 19. **15 fails (P-02).** 11 and 18 are staging-only (a copy of production data) and were not run. Done-test 4 is read with the C3 `settle_dispute` row: "the driver was charged" means an expiry with the driver as bearer (Lost is final), here with its week sealed before the refund — 5c is the same with the week open.
+
+**Findings:**
+- **P-01 (fixed, migration `20261121202246_toll_open_late_bearer.sql`):** a dispute that opens late (report after the 9 days) opened expired with the fleet's money but no `bearer` and no `posted_in_week_key`, so it never listed in Results this week, its chip read "Expired · decided", and the "earlier weeks: fleet pays" line left it out. `dispute_apply_fleet_open_late` now records `bearer = fleet` and the result week, as `dispute_expire` does. All 26 toll SQL files pass with it.
+- **P-02 (open):** undo of a dispute result whose money posted in a week that was sealed afterwards (a refund won while the charge's week was open, then the week sealed) is refused `WEEK_SEALED`: `intent_undo_dispute_result` moves its reversal to the open week only for carried-fact entries, and reversing the result's allocations would change the sealed week. The desk still offers **Undo** on that row. R10 / done-test 15 need it to post the reversal and the restored "owed by Uber" in the open week as a carried fact, leaving the sealed week's allocations untouched. Not reachable live (switch off everywhere).
+- **Test fix:** `toll_matcher_disputes_test.sql` section 2 dated its trip 6–12 days back depending on the weekday, so from Thursday to Sunday the dispute correctly opened expired and the file failed ("2 rpd got 0"). The trip is now 2 days back on any day.
 
 ### UI2 as built (21 Nov 2026)
 - **Fleet — Driver Settlements → Disputes tab:** `apps/fleet/src/components/fleet-financials/recon/tolls-v2/disputes/` (`DriverDisputesTab.tsx`, `useTollV2Disputes.ts`). Reads `toll_v2_disputes(null)` once; the driver chip filters on screen, so the tiles always count every driver (tile totals are summed from the server's rows: this read has no tiles). Mark as sent (dialog) → `mark_dispute_sent`; Lost (dialog) → `close_dispute_lost`, reason box on NEEDS_APPROVAL; Open week → Week Reconciliation, Tolls step of the charge's week (opens on the first part with work, not straight on part 3). The tab and its amber badge (tolls to send) show only with the `toll_disputes` switch on.

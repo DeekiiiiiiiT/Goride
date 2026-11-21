@@ -1,0 +1,5 @@
+{
+  "//": "Own config so this runner never puts Deno in node_modules mode (the root deno.json does, which breaks the local Fleet app's vite). Run: deno run --config scripts/toll-done-tests/deno.json --allow-net --allow-env --allow-read scripts/toll-done-tests/run.ts",
+  "nodeModulesDir": "none",
+  "compilerOptions": { "strict": true }
+}
