@@ -870,4 +870,4 @@ The proof link is the opened page (the remembered version's page, else Roam's li
 the server from its own records (remembered version, build dates, suggestions). Code review (medium): 9 found, all
 fixed — incl. a real bug: the paste path saved an empty number (`detected` never set). Not changed: when no version is
 remembered yet, the link saved is the version list (the version name is in the evidence; the next check says "Click
-M900A-AGBVE in the list"). Tests: Deno 168, admin 60, screens 17.
+M900A-AGBVE in the list"). Tests: Deno 164, admin 60, screens 17.
