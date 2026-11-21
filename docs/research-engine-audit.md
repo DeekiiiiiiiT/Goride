@@ -1,156 +1,131 @@
 # Research engine (cars, specs, parts) — audit
 
-**Rev 6.1 · 21 Nov 2026 · Status: LIVE, in practice mode.** RE-70 (number changed during the build) added. Engine on, practice (shadow) mode, US$1.35/day.
-Live code: main `c7df3041` (platform-catalog, catalog-research, fleet-core, Dominion). Branch `parts-auto-match` has the
-same research code. **One database change is written but NOT on live:** `20261121171424_research_fill_per_axle.sql` (§3).
+**Rev 7.0 · 21 Nov 2026 · Status: LIVE, in practice mode** (engine on, shadow mode, US$1.35/day).
+Live: main `a6320fa7` (Dominion + platform-catalog + catalog-research). Branch `parts-auto-match` has the same research
+code. Every research migration up to `20261121193554` is on live with its logbook line.
 
-Full history (every finding RE-01…RE-69, reviews, Spike 0, done-tests, how each fix was built):
-`git show 054d8fb1:docs/research-engine-audit.md` (Rev 5.8). This file keeps only what is open.
+History: `git show 24a6d17a:docs/research-engine-audit.md` (Rev 6.1: RE-70…RE-72 detail) and
+`git show 054d8fb1:docs/research-engine-audit.md` (Rev 5.8: RE-01…RE-69, reviews, Spike 0). This file keeps only what
+is open.
 
 ## START HERE (new chat)
 
-1. Read this file. Follow `docs/how-we-build-playbook.md`. The owner is not a coder: plain words, short replies.
-2. Owner rules learned the hard way (keep them):
-   - On-screen instructions: **one short line per step, no explanations**. Look at the screen-test picture before shipping.
-   - **Only change what the owner asks.** Keep everything they asked for before (e.g. the Model/Engine/Prod period/Grade/
-     Transm list in the browser check).
-   - **No codes for users to type** (frame/engine codes, factory numbers): pick from dropdowns or tap suggestions.
-   - Car pickers = Make → Model → Year (→ Version in plain words).
-   - Never fetch a third-party site with a browser name; sites that block ClaudeBot (sbparts.jp, rockauto) are not opened
-     by Claude at all.
-   - **Writes to the live database** (data or migrations) can be blocked by the auto-mode safety check: ask the owner
-     ("reply yes, apply …") or hand them the SQL for the Supabase SQL editor. Every hand-run migration needs its logbook
-     line (`INSERT INTO supabase_migrations.schema_migrations (version, name) …`).
-   - **Never `git stash`.** The branch holds other unsaved work (toll, Fleet maintenance, trips, rides): commit only
-     research files. Ship to main from a worktree off origin/main (memory "golive-worktree-recipe").
-   - Push order: build → code review → local Playwright → push. Kill leftover test servers on port 3018 if Playwright
-     says the port is busy.
-3. Tests to keep green: Deno (`deno test --no-check --allow-all supabase/functions/_fleet-server/catalog_research_*.test.ts
-   supabase/functions/_fleet-server/research_*.test.ts …listings_for_vehicle.test.ts api_pricing.test.ts
-   catalog_privacy.test.ts pending_parts_catalog_routes.test.ts` — 166), admin (`npx tsc --noEmit -p tsconfig.json`;
-   `npx vitest run src/components/admin/research-engine src/components/admin/vehicle-catalog
-   src/components/admin/parts-database` — 61), screens (`pnpm test:e2e:dominion:research-engine` — 18), SQL
-   (`supabase/tests/research_engine_checks.sql`, `catalog_research_claim_checks.sql` on the local copy).
+1. Read this file. Follow `docs/how-we-build-playbook.md`. The owner is not a coder: plain words, **short replies**.
+   When asked "what next?", answer in one line.
+2. Owner rules (keep them):
+   - **Nothing goes live without telling the owner first.** Commit on the branch; batch changes; say what is waiting
+     and wait for "yes". Exception: a change the owner's next step needs (say so).
+   - **Only change what the owner asks.** A question is a question, not a request to change the screen.
+   - On-screen text: one short line per step, in the **catalogue's own words** (e.g. Amayama's "Period").
+   - No codes for users to type: pick from dropdowns or tap suggestions. Car pickers = Make → Model → Year.
+   - Never fetch a third-party site with a browser name; never try to get around a site's block.
+   - Live database writes: ask the owner first; every hand-run migration gets its logbook line
+     (`INSERT INTO supabase_migrations.schema_migrations (version, name) …`). The Supabase MCP is often down; use
+     `npx supabase db query --remote` (`--read-only` for looks; dry-run risky changes inside a `DO` block that ends in
+     `RAISE EXCEPTION` so it rolls back).
+   - New migration files: `npx supabase migration new <name>` (real current UTC time).
+   - **Never `git stash`.** The branch holds other people's unsaved work (toll, Fleet, trips, rides): commit only
+     research files. Ship from a worktree off origin/main (memory "golive-worktree-recipe").
+   - `deno test` writes into `node_modules/.deno` and then breaks vitest/vite. Fix: `pnpm install --frozen-lockfile
+     --offline` at the repo root. Never delete `node_modules/.deno` by hand.
+3. Tests to keep green: Deno (`deno test --no-check --allow-all` on `catalog_research_*.test.ts research_*.test.ts
+   listings_for_vehicle.test.ts api_pricing.test.ts catalog_privacy.test.ts pending_parts_catalog_routes.test.ts` in
+   `supabase/functions/_fleet-server/` — 170), admin (`npx tsc --noEmit -p tsconfig.json`; `npx vitest run
+   src/components/admin/research-engine src/components/admin/vehicle-catalog src/components/admin/parts-database` — 62),
+   screens (`pnpm test:e2e:dominion:research-engine` — 19).
 
 ## 1. Where we stopped (21 Nov, evening)
 
-The owner was working through the **Toyota Roomy 2016–2020 2WD** (catalogue row `3cd9cbf3-a804-4817-82db-400cf6abf13a`,
-Amayama version `M900A-AGBVE`, remembered in `research_car_site_version`). Done on live for this car:
-- NiBK recipe added and tested (front pads PN5562 for `04465-B1120`).
-- Fill this car ran (8 lookups, 0 proven automatically, US$0.008).
-- Browser checks confirmed by the owner: **spark plugs Toyota 90048-51216**, **engine air filter Toyota 17801-21060**.
+The owner took a break while working through the **Toyota Roomy 2016–2020 2WD** (catalogue row
+`3cd9cbf3-a804-4817-82db-400cf6abf13a`, Amayama version `M900A-AGBVE`).
 
-**RE-70 (21 Nov, fixed):** Toyota changed the Roomy shocks at 11.2018 (frame M900A-0255547): front LH 48520-B9285 →
-B9115, front RH 48510-B9285 → B9115, rear (both) 48530-B9285 → B9165. The check could hold only one number per place and
-its date question passed any overlap, so the early numbers would have been saved for every Roomy. Now the number step has
-**One number / Changed during the build**: pick the change month + year, then a "built before" and a "built from" number
-per place (or one pair for parts without places). Saved as `part_listing.year_to` / `year_from` (whole years; a change
-mid-year lists both numbers for that year; January → old number ends the year before). Fleet's parts lookup already
-filters by the car's year (`catalog_api.ts` `yearInRange`). The exact month stays in the evidence text.
+**Confirmed so far:** spark plugs 90048-51216, engine air filter 17801-21060 (plus brakes from earlier work).
 
-**Shocks split (21 Nov, owner):** `20261121171424_research_fill_per_axle.sql` applied on live (+ logbook line). The
-Roomy's one four-corner shock job `d6f9a45e…` closed as `failed` / "replaced by front and rear checks (owner)", its 5
-suggestions rejected with the same reason. Date question reworded (owner kept it): "Under the part, how many different
-Period dates? One / Two" → "The second Period starts:" (live main f4602c11).
+**Next for the owner** (Pending catalog → Parts, refresh first). Three browser checks are open:
+1. **Shock absorber, Front.** Amayama "Front spring & shock absorber" → "how many Period dates?" **Two** → Nov 2018:
+   front left 48520-B9285 / 48520-B9115, front right 48510-B9285 / 48510-B9115 (before / from).
+2. **Shock absorber, Rear.** "Rear spring & shock absorber" → **Two** → Nov 2018: both sides 48530-B9285 / 48530-B9165.
+3. **Cabin A/C Filter** (one Period date → **One**).
+4. Then the 6 **Needs review** rows (coolant, tyre size, H4 bulb, thermostat, wheel bearing, drive belt): no source, so
+   browser check or reject. Never "Looks right" on an unsourced row.
 
-**RE-71 (21 Nov, fixed, owner OK):** Fill this car re-queued the Roomy's confirmed spark plugs + air filter: parts
-without positions were skipped only on `variant_parts_readiness = 'verified'`, which is stale (nightly rebuild failing,
-§3 item 5). `20261121193256_research_fill_skip_confirmed.sql` (live + logbook) also skips a part with a confirmed
-listing on the car. Dry run on live (rolled back): Roomy fill → 0 new jobs. The two re-queued jobs closed `failed` /
-"already confirmed (owner)".
+**Unchecked on live:** the owner's last screenshot still showed "Failed" on the 5 rows closed on 21 Nov; RE-73 should
+show them as "Closed" with a note. If a refresh doesn't fix it, check that the job list route
+(`catalog_research_routes.ts`, `closedNote`) is the deployed one.
 
-**RE-72 (21 Nov, fixed, owner OK):** the per-axle fill queued **rear brake pads** and a **rear brake rotor** for the
-Roomy, which has rear **drums** (BRK-DRUM / BRK-SHOES rear confirmed). `20261121193554_research_fill_skip_drum_axle.sql`
-(live + logbook): pads/rotor are not queued for an axle with a confirmed drum or shoes. Dry run (rolled back): 0 new
-jobs. The worker had already run both jobs (needs_review, 9 suggestions): closed `failed` / "Roomy has rear drums
-(owner)", suggestions rejected; none promoted, no rear pad/rotor listings.
+**Decision waiting on the owner: sources (no more scraping shops).** Amayama, Partsouq and SB Parts block robots on
+purpose (banners on Pending catalog). The owner asked for a plan before any more automatic reading. Proposed:
+1. Stop the robot reading shop sites at all: shops are browser-check only from the start (no try → block → banner).
+2. Permission emails (Claude drafts, owner sends): Amayama, Megazip, Partsouq, Masuma; and the Toyota/Daihatsu parts
+   distributor in Jamaica (catalogue access or a data file).
+3. "Spike 1": part makers whose rules allow robots (Denso, NGK, KYB, Aisin, Akebono, Advics, Mitsuboshi, Bando, NWB,
+   Sakura, Yuasa, Brembo). Check robots/terms first; a recipe per allowed site; PDF reader where they publish PDFs.
+4. Price out a licensed feed (TecDoc or similar). Check Japanese-car coverage and storage rights first.
 
-**Next for the owner, in Pending catalog → Parts (refresh first):**
-1. ~~Press **Fill this car**~~ (done 21 Nov) — wait for on the Roomy → a Front and a Rear shock check. Each: Open Amayama → its own page ("Front
-   spring & shock absorber" / "Rear …") → **Two** → Nov 2018 → before and from number per side (table above) → Confirm.
-2. **Cabin A/C Filter** browser check, same way.
-3. The **Needs review** rows (coolant, tyre size, H4 bulb, thermostat, wheel bearing, drive belt) have no source; they
-   need a browser check or a reject — don't press "Looks right" on an unsourced row.
+Recommended: 1 + 2 now, then 3. Nothing built yet. Wait for the owner's pick.
 
-## 2. How the browser check works now (live)
+## 2. Browser check (live)
 
-Pending catalog → Parts → a "Browser check" row → **Open browser check**. Five questions, nothing to copy:
-1. **Open Amayama** (the remembered version's page; the button names the site it opens).
-2. **Check it's this one:** Model / Engine / Prod period / Grade / Transm (catalogue's own words, with copy icons on
-   Model and Engine) → Yes / No. When Roam doesn't know the version yet: "Click the row with: …" + type the Model shown
-   (remembered after Confirm).
-3. **Search _x_. Do you see _ROW NAME_?** (copy icons) → Yes / No.
-4. **One number, or a change by build date?** (parts only; "One number" is the default). Changed → month + year.
-5. **Its number:** tap one of Roam's numbers (copy icons) or type it (typed twice). Parts that come in positions
-   (shocks, bearings, brakes, calipers) ask **a number for each place**; after a change, a before and a from number.
-6. **Do its dates include the car's build?** (after a change: "Do their dates together cover …?") → Yes / No. Any No →
-   "Then press Not on this page."
-Confirm saves the number(s) as Confirmed, route `owner_browser`, proof = the page link + the answers.
+Pending catalog → Parts → "Browser check" row → **Open browser check**:
+1. **Open Amayama** (the remembered version's page).
+2. **Check it's this one:** Model / Engine / Prod period / Grade / Transm → Yes / No (or type the Model when unknown).
+3. **Search _x_. Do you see _ROW NAME_?** → Yes / No.
+4. **Under the part, how many different Period dates? One / Two.** Two → "The second Period starts:" month + year.
+5. **Its number(s):** tap a suggestion or type it twice. Parts with places (shocks, brakes…) ask per place (front
+   checks: front left/right only; rear checks: rear only). After Two: a "built before" and a "built from" number.
+6. **Do its dates include / together cover the car's build?** → Yes / No. Any No → Not on this page.
+
+Confirm saves Confirmed listings (route `owner_browser`, proof = page link + answers). After Two, each number gets
+`part_listing.year_to` / `year_from` (whole years; the change year lists both). Fleet's parts lookup filters by the car's
+year (`catalog_api.ts` `yearInRange`).
+
+Fill this car now: one job per axle for parts with places; skips a part already confirmed on the car; no pads/rotor on
+an axle with confirmed drums/shoes. Jobs closed on the owner's say-so are stored `failed` with a note ending "(owner)"
+and show as **Closed**.
 
 ## 3. Open work, in order
 
-1. ~~Apply `20261121171424_research_fill_per_axle.sql` on live~~ — DONE 21 Nov (owner OK). CI parity still lists
-   live-only `20261117204932` (not research; someone else's hand-run change with no repo file).
-2. **Small fixes (one round):**
-   - `GET /admin/catalog-research/health` — on/practice/paused, spend today vs cap, jobs waiting, open checks, newest
-     worker step (RE-45).
-   - Research screen test in its own job in `.github/workflows/dominion-places-e2e.yml` (a stale find-parts test fails
-     first and skips it) (RE-40).
-   - Master-data breaks: `GET /admin/catalog/signals` returns fleet/vehicle counts to Dominion; the "Added. N companies
-     were told…" panel (RE-41).
-   - Settings shows jobs per day, finish date vs `fill_target_date`, and refuses a cap above the Google limit
-     (~US$21.60/day if the limit counts searches) (RE-37, RE-50).
-   - Cross-reference proof prefers the row with the car's own engine (RE-55).
-   - An owner's browser check is stored `trust_set_by = 'engine'` (needs a save-function change so evidence is kept for
-     `owner`) (RE-58).
-   - Pasted catalogue text keeps prices (only the old paste path) (RE-59).
-3. **Dominion data fix (RE-64):** `vehicle_catalog.full_model_code` / `trim_suffix_code` for the Roomy are wrong
-   (`GBME` is Toyota's X grade; the Custom G is `AGBVE`). Correct from Toyota's version list; don't use these columns for
-   catalogue lookups until confirmed.
-4. **More sources (the real unlock — "0 of 17 measures our list, not the engine"):**
-   - `scripts/honest_fetch.mjs` first: the only way to fetch a site by hand (honest `RoamResearchBot/1.0`, robots.txt
-     first, refuses ClaudeBot-blocked / blocked sites) (RE-52).
-   - **Spike 1:** robots/terms + "is there a by-car lookup / form / PDF" for Denso, NGK, Aisin, KYB, Akebono, Advics,
-     Mitsuboshi, Bando, NWB, Sakura, Yuasa, Brembo; a recipe per allowed site; run the Roomy → a real "N of 17" (RE-46).
-   - **Catalogue first by car (RE-49):** today every part job asks Gemini + Google first (~US$0.075/job). Recipes that
-     look a car up run first and skip Gemini when they prove the part; one recipe per part type (`component_id`,
-     `row_words`), at most 3 per job within the 4-read budget. Recipes also need part types so NiBK isn't tried for
-     spark plugs (RE-56).
-   - Spec lookups never use recipes (RE-53) — spec recipes later.
-   - PDF catalogue reader for part makers that publish PDFs (RE-47); SB Parts needs a browser reader (Cloudflare
-     Browser Rendering; check its JSON address first) (RE-36/RE-51).
-   - **Owner:** ask the Toyota/Daihatsu parts distributor in Jamaica for catalogue access / data export; send the
-     permission emails to Masuma, Amayama, Megazip, Partsouq (Claude drafts both).
-5. **Readiness rebuild held back:** "ready" should count only Confirmed specs, but rebuilding `variant_parts_readiness`
-   takes longer than live's 2-minute limit, and the nightly `catalog-demand-readiness` job has failed every night since
-   at least 16 Nov. Fix the slow rebuild first, then swap `(COALESCE(btrim(sv.evidence_url), '') <> '')` for
-   `(sv.trust = 'confirmed')` in a new migration (old block: `git show 92b3cd21:supabase/migrations/20261120234117_research_engine_layer1b.sql`).
-6. **Switch on for everyone** (leave practice mode) once the Roomy results look right — with 0–2 of 17 automatic this
-   mostly grows the browser-check queue (cap: 25 open).
-7. Cleanup migration: drop `catalog_trusted_source`, `catalog_trusted_source_fetch`, `part_fitment`,
-   `catalog_research_settings.daily_job_limit`; CI search so nothing uses `part_fitment` again.
+1. **Sources decision** (§1). Nothing else in the "more sources" area until the owner picks.
+2. **Known gap (not asked for yet):** step 3 asks "Do you see ABSORBER ASSY, SHOCK?" but Amayama calls the row
+   "ABSORBER SET, SHOCK, FRONT RH". Row names come from `partFinder` (`researchModel.ts`).
+3. **Known gap:** one change date covers every place in a check. Fine now that front and rear are separate checks;
+   left and right changing at different dates isn't handled.
+4. **Small fixes (one round):** health route `GET /admin/catalog-research/health` (RE-45); research screen test in its
+   own CI job (RE-40); `GET /admin/catalog/signals` + "Added. N companies were told…" panel (RE-41); Settings jobs/day,
+   finish date, cap above the Google limit refused (RE-37, RE-50); cross-reference proof prefers the car's own engine
+   (RE-55); owner browser checks stored `trust_set_by = 'engine'`, should be `owner` (RE-58); pasted text keeps prices
+   (old paste path, RE-59).
+5. **Dominion data fix (RE-64):** Roomy `vehicle_catalog.full_model_code` / `trim_suffix_code` are wrong (`GBME` is the
+   X grade; Custom G is `AGBVE`). Don't use them for lookups until fixed.
+6. **Readiness rebuild:** the nightly `catalog-demand-readiness` job has failed every night since at least 16 Nov
+   (rebuild of `variant_parts_readiness` exceeds live's 2-minute limit). Fix the slow rebuild, then count only Confirmed
+   specs (swap `(COALESCE(btrim(sv.evidence_url), '') <> '')` for `(sv.trust = 'confirmed')`; old block in
+   `git show 92b3cd21:supabase/migrations/20261120234117_research_engine_layer1b.sql`).
+7. **Switch on for everyone** (leave practice mode) once the Roomy looks right.
+8. Cleanup migration: drop `catalog_trusted_source`, `catalog_trusted_source_fetch`, `part_fitment`,
+   `catalog_research_settings.daily_job_limit`.
+9. CI red, not research: migration parity lists live-only `20261117204932` (someone's hand-run change with no repo
+   file); a stale find-parts screen test fails in "Dominion places checks".
 
-## 4. Pace and cost (for planning)
+## 4. Pace and cost
 
-Measured on the Roomy fill: ~2.9 Google searches per job, US$0.0082 for 8 jobs (inside the free 5,000 searches a month).
-Spike 0 estimate: US$0.075/job → the US$1.35 cap buys ~18 paid jobs/day + ~32 free → the 200 cars that matter
-(~3,400 lookups) in ~2.3 months today; about a month once parts use by-car recipes (specs stay search-bound).
+Roomy fill: ~2.9 Google searches per job, US$0.0082 for 8 jobs. Spike 0 estimate US$0.075/job → the US$1.35 cap buys
+~18 paid + ~32 free jobs/day.
 
 ## 5. Key places in the code
 
-- Server: `supabase/functions/_fleet-server/` — `catalog_research_worker.ts` (jobs), `research_page_reader.ts` (honest
-  reader, form posts), `research_recipes.ts` (recipes, same-row + cross-reference proof), `research_browser_check.ts`
-  (paste gate, `answersGate`, version/period helpers), `research_engine_routes.ts` (owner routes incl. browser-check
-  confirm), `catalog_research_routes.ts` (job details: known version, sister engines, engine words).
-- Dominion: `apps/admin/src/components/admin/research-engine/` — `ResearchJobDrawer.tsx` (browser check questions),
-  `TrustedSitesScreen.tsx` (recipes, Test on a car with Make → Model → Year pickers), `researchModel.ts`, `carPick.ts`.
-- Tables: `trusted_site`, `trusted_source`, `research_lookup_recipe`, `research_page_read` (append-only evidence),
-  `research_car_site_version` (remembered catalogue version + its row), `catalog_research_job`,
-  `catalog_part_proposal`, `catalog_spec_proposal`, `catalog_research_settings`.
-- Screen test: `e2e/dominion-research-engine.spec.ts`. Set `RE_SHOTS=<scratchpad folder>` for pictures; delete them after.
+- Server (`supabase/functions/_fleet-server/`): `catalog_research_worker.ts` (jobs), `research_page_reader.ts`
+  (honest reader), `research_recipes.ts`, `research_browser_check.ts` (`answersGate`, change dates `changeYears` /
+  `changeAtFits`), `research_engine_routes.ts` (browser-check confirm → listings with years),
+  `catalog_research_routes.ts` (job list/details, `ownerClosedNote`).
+- Dominion (`apps/admin/src/components/admin/research-engine/`): `ResearchJobDrawer.tsx` (browser check),
+  `ResearchPartsTab.tsx`, `researchModel.ts` (`statePill`, `closedNoteOf`, `checkPositions`, `partFinder`),
+  `TrustedSitesScreen.tsx`.
+- Fill: `catalog_research_fill_car` (latest body in `supabase/migrations/20261121193554_research_fill_skip_drum_axle.sql`).
+- Tables: `catalog_research_job`, `catalog_part_proposal`, `catalog_spec_proposal`, `research_page_read`,
+  `research_car_site_version`, `research_lookup_recipe`, `trusted_site`, `trusted_source`, `part_listing`.
+- Screen test: `e2e/dominion-research-engine.spec.ts` (`RE_SHOTS=<scratchpad>` for pictures; delete them after).
 
 ## 6. Not in this audit
 
-Service schedules research; prices / suppliers / stock; licensed TecDoc feeds (a licensed feed would count as the
-suppliers' own data, but check JDM coverage and storage rights first); the parts auto-match engine;
-`log-service-parts-gaps-audit.md` items.
+Service schedules research; prices / suppliers / stock; the parts auto-match engine; `log-service-parts-gaps-audit.md`.
