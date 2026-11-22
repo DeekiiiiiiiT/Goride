@@ -337,6 +337,7 @@ jobs:
           supabase/functions/_fleet-server/fuel_service_line_filters.test.ts
           supabase/functions/_fleet-server/fuel_service_line_allocation.test.ts
           supabase/functions/_fleet-server/fuel_rev2_phase1_controls.test.ts
+          supabase/functions/_fleet-server/fuel_reopen_guard.test.ts
           supabase/functions/_fleet-server/fuel_nightly_statement_ledger.test.ts
           supabase/functions/_fleet-server/fuel_week_seal_h7.test.ts
           supabase/functions/_fleet-server/fuel_week_category_loader.test.ts
