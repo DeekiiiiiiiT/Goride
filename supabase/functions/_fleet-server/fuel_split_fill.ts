@@ -267,6 +267,9 @@ export async function persistSplitFill(
     };
   }
 
+  const { stampFuelEntrySource } = await import("./fuel_entry_source.ts");
+  stampFuelEntrySource(cardEntry, { isNew: true, splitFillScan: true });
+
   // Write cash first, then card; compensate cash on card failure.
   await kv.set(`transaction:${cashTx.id}`, cashTx);
 

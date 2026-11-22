@@ -6,6 +6,7 @@
     "check": "node scripts/check-before-push.mjs",
     "prepare": "git config core.hooksPath .githooks || true",
     "test:toll": "node scripts/run-toll-tests.mjs",
+    "test:fuel": "node scripts/run-fuel-tests.mjs",
     "test:inventory": "node scripts/run-inventory-done-tests.mjs",
     "test:service-items": "node scripts/run-service-items-tests.mjs",
     "test:week-recon": "node scripts/run-week-recon-done-tests.mjs",

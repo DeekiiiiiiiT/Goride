@@ -3,6 +3,7 @@
  */
 import type { FleetDomain } from "./fleet_table_flags.ts";
 import { fleetCalendarDay } from "../../../packages/fuel-core/src/fleetTime.ts";
+import { isFuelEntrySource } from "./fuel_entry_source.ts";
 
 export type FleetDomainDef = {
   domain: FleetDomain;
@@ -366,6 +367,7 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
         service_line_source: str(v.service_line_source) ?? str(v.serviceLineSource),
         service_line_set_at: str(v.service_line_set_at) ?? str(v.serviceLineSetAt),
         service_line_set_by: str(v.service_line_set_by) ?? str(v.serviceLineSetBy),
+        source: isFuelEntrySource(v.source) ? v.source : null,
       });
     },
   },

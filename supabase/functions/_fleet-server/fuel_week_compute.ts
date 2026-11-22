@@ -339,6 +339,9 @@ export async function computeFuelWeekSnapshot(args: {
   }
   const version = (Number(latest?.version) || 0) + 1;
   const money = { reports: built.reports, totalSpend: built.totalSpend };
+  const { data: brainRows } = await sb.from("fuel_brain_policies").select("*").limit(1);
+  const brainPolicies = brainRows?.[0] || null;
+  // F-11 (policy version stamp) is built with the rules-table move, not here.
   const { data: inserted, error } = await sb
     .from("fuel_week_snapshot")
     .insert({
@@ -349,7 +352,11 @@ export async function computeFuelWeekSnapshot(args: {
       inputs_hash: plan.hash,
       money,
       blockers: [],
-      provenance: { engine: "generateDriverFleetReport", engineVersion: FUEL_ENGINE_VERSION },
+      provenance: {
+        engine: "generateDriverFleetReport",
+        engineVersion: FUEL_ENGINE_VERSION,
+        brainPolicies,
+      },
     })
     .select("id, version, inputs_hash, money")
     .single();

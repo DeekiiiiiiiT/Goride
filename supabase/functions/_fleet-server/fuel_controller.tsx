@@ -4796,6 +4796,14 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     // Re-stamp after mutations so platform/fleet org cannot be stripped mid-handler
     Object.assign(entry, stampFuelRecord(entry as Record<string, unknown>, c));
     stampPendingReconciliationStatus(entry as Record<string, unknown>);
+    if (isNewFuelEntry) {
+      const { stampFuelEntrySource } = await import("./fuel_entry_source.ts");
+      stampFuelEntrySource(entry as Record<string, unknown>, {
+        isNew: true,
+        isDriverSubmitter,
+        adminManual: !isDriverSubmitter && canFleetCreate,
+      });
+    }
     await kv.set(`fuel_entry:${entry.id}`, entry);
 
     // Unpaired JAA statement rows: merchant-heal when issuer alias exists (not only on pair link)

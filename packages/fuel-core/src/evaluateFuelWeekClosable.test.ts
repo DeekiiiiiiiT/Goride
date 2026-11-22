@@ -46,6 +46,23 @@ describe('evaluateFuelWeekClosable', () => {
     ).toContain('degraded_inputs');
   });
 
+  it('blocks F-04 gap charge recommended, F-09 awaiting statement, F-08 stretch flag', () => {
+    const b = evaluateFuelWeekClosable({
+      gapChargesPendingApproval: [
+        { vehicleLabel: '5179KZ', startYmd: '2026-11-10', endYmd: '2026-11-11' },
+      ],
+      awaitingCardStatementFills: [{ vehicleLabel: '5179KZ', dateYmd: '2026-11-18' }],
+      openPossibleFillNotScanned: [
+        { vehicleLabel: '5179KZ', startYmd: '2026-11-08', endYmd: '2026-11-10' },
+      ],
+    });
+    expect(b.map((x) => x.code)).toEqual([
+      'gap_charge_recommended',
+      'awaiting_card_statement',
+      'possible_fill_not_scanned',
+    ]);
+  });
+
   it('blocks on stop-to-stop conservation failures', () => {
     expect(
       evaluateFuelWeekClosable({ stopToStopVolumeFailed: true }).map((x) => x.code),

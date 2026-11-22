@@ -1773,7 +1773,21 @@ export function registerFuelPeriodRoutes(app: Hono) {
         })
         .select("*")
         .single();
-      if (error) return c.json({ error: error.message }, 500);
+      if (error) {
+        const code = String((error as { code?: string }).code || "");
+        if (code === "23505") {
+          const { data: raced } = await sb
+            .from("fuel_period_job")
+            .select("id, state")
+            .eq("org_id", orgId)
+            .eq("idempotency_key", idempotencyKey)
+            .maybeSingle();
+          if (raced) {
+            return c.json({ jobId: raced.id, state: raced.state, raced: true }, 202);
+          }
+        }
+        return c.json({ error: error.message }, 500);
+      }
       runFuelJobInBackground(job as Record<string, unknown>);
       return c.json({ jobId: job.id, state: "queued" }, 202);
     },
@@ -2198,24 +2212,18 @@ export function registerFuelPeriodRoutes(app: Hono) {
       }
       const actor = actorId(c);
       if (!actor) return c.json({ error: "actor required" }, 400);
-      const now = new Date().toISOString();
-      const sb = getServiceClient();
-      const row = {
-        org_id: orgId,
-        entry_id: entryId,
-        flag_code: flagCode,
-        action,
-        note: note || null,
-        period_id: periodId,
-        actor_id: actor,
-        at: now,
-      };
-      const { data, error } = await sb
-        .from("fuel_flag_disposition")
-        .upsert(row, { onConflict: "org_id,entry_id,flag_code" })
-        .select("*")
-        .maybeSingle();
-      if (error) return c.json({ error: error.message }, 500);
+      const { upsertFuelFlagDisposition } = await import("./fuel_flag_disposition_action.ts");
+      const saved = await upsertFuelFlagDisposition({
+        orgId,
+        entryId,
+        flagCode,
+        action: action as "accepted" | "corrected" | "escalated",
+        note,
+        periodId,
+        actorId: actor,
+        severity,
+      });
+      if (!saved.ok) return c.json({ error: saved.error }, saved.status);
       if (periodId) {
         await insertAudit(
           orgId,
@@ -2225,19 +2233,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
           actor,
         );
       }
-      return c.json({
-        ok: true,
-        disposition: {
-          entryId,
-          flagCode,
-          action,
-          note: note || null,
-          actorId: actor,
-          at: now,
-          periodId,
-          id: data?.id,
-        },
-      });
+      return c.json({ ok: true, disposition: saved.disposition });
     },
   );
 
@@ -2778,6 +2774,60 @@ export function registerFuelPeriodRoutes(app: Hono) {
         inputsVersion: Number(period.version) || 1,
         status: String(period.status || "open"),
       });
+    },
+  );
+
+  app.get(
+    `${BASE}/fuel/periods/:id/snapshot/brain`,
+    requirePermission("fuel.view"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "org required" }, 400);
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
+      const period = await loadPeriod(orgId, periodId);
+      if (!period) return c.json({ error: "Not found" }, 404);
+      const { data: latest, error: snapErr } = await getServiceClient()
+        .from("fuel_week_snapshot")
+        .select("version, provenance")
+        .eq("org_id", orgId)
+        .eq("period_id", periodId)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (snapErr) return c.json({ error: snapErr.message }, 500);
+      const prov = (latest?.provenance && typeof latest.provenance === "object"
+        ? latest.provenance
+        : {}) as Record<string, unknown>;
+      const brainPolicies = prov.brainPolicies ?? null;
+      return c.json({
+        periodId,
+        weekStart: ymd(period.week_start),
+        snapshotVersion: latest?.version ?? null,
+        locked: String(period.status) === "locked",
+        brainPolicies,
+      });
+    },
+  );
+
+  app.get(
+    `${BASE}/fuel/vehicles/:vehicleId/economy-weeks`,
+    requirePermission("fuel.view"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "org required" }, 400);
+      const vehicleId = String(c.req.param("vehicleId") || "").trim();
+      if (!vehicleId) return c.json({ error: "vehicleId required" }, 400);
+      const weekStart = String(c.req.query("weekStart") || "").slice(0, 10);
+      if (!weekStart) return c.json({ error: "weekStart query required" }, 400);
+      try {
+        const { loadVehicleEconomyWeeks } = await import("./fuel_vehicle_economy_weeks.ts");
+        const body = await loadVehicleEconomyWeeks(orgId, vehicleId, weekStart);
+        return c.json({ vehicleId, weekStart, ...body });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        return c.json({ error: message }, 500);
+      }
     },
   );
 

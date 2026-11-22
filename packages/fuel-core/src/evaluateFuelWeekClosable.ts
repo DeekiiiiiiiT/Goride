@@ -36,7 +36,13 @@ export type FuelWeekClosableBlocker = {
     /** Price or duplicate-odometer fills not yet accepted. */
     | 'implausible_fills_unreviewed'
     /** An earlier week was started and is not locked. */
-    | 'prior_weeks_open';
+    | 'prior_weeks_open'
+    /** Stop-to-stop gap charge recommended but not yet approved (F-04). */
+    | 'gap_charge_recommended'
+    /** Card fill waiting for its statement (F-09). */
+    | 'awaiting_card_statement'
+    /** Open possible-fill-not-scanned flag (F-08). */
+    | 'possible_fill_not_scanned';
   message: string;
 };
 
@@ -84,6 +90,23 @@ export type EvaluateFuelWeekClosableInput = {
   implausibleFillsUnreviewed?: boolean;
   /** Earlier weeks that have a period and are not locked. Oldest first. */
   openPriorWeekStarts?: string[];
+  /** Gap charges still at recommended status (F-04). */
+  gapChargesPendingApproval?: Array<{
+    vehicleLabel: string;
+    startYmd: string;
+    endYmd: string;
+  }>;
+  /** Fills awaiting card statement in this week (F-09). */
+  awaitingCardStatementFills?: Array<{
+    vehicleLabel: string;
+    dateYmd: string;
+  }>;
+  /** Unclosed possible-fill-not-scanned flags in this week (F-08). */
+  openPossibleFillNotScanned?: Array<{
+    vehicleLabel: string;
+    startYmd: string;
+    endYmd: string;
+  }>;
 };
 
 const FUEL_WEEK_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -282,6 +305,24 @@ export function evaluateFuelWeekClosable(
     blockers.push({
       code: 'prior_weeks_open',
       message: priorWeeksOpenMessage(openPrior),
+    });
+  }
+  for (const g of input.gapChargesPendingApproval || []) {
+    blockers.push({
+      code: 'gap_charge_recommended',
+      message: `Gap charge for ${g.vehicleLabel} (${g.startYmd} → ${g.endYmd}) is recommended but not approved.`,
+    });
+  }
+  for (const a of input.awaitingCardStatementFills || []) {
+    blockers.push({
+      code: 'awaiting_card_statement',
+      message: `${a.vehicleLabel} on ${a.dateYmd} is waiting for the card statement.`,
+    });
+  }
+  for (const f of input.openPossibleFillNotScanned || []) {
+    blockers.push({
+      code: 'possible_fill_not_scanned',
+      message: `Possible fill not scanned for ${f.vehicleLabel} (${f.startYmd} → ${f.endYmd}).`,
     });
   }
   return blockers;

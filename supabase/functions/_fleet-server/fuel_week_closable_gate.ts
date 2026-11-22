@@ -30,6 +30,11 @@ import {
   gasCardStatementDriftBlocks,
 } from "../../../packages/roam-shared/src/fuel/jaaUnlinkedCardCharge.ts";
 import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
+import type { GapChargeRecommendation } from "../../../packages/fuel-core/src/stopToStopGapCharge.ts";
+import {
+  detectPossibleFillNotScannedFlags,
+  type FillAnchor,
+} from "../../../packages/fuel-core/src/possibleFillNotScanned.ts";
 
 function ymd(v: unknown): string {
   return String(v || "").split("T")[0];
@@ -500,6 +505,187 @@ export type FuelWeekClosableBuildResult = EvaluateFuelWeekClosableInput & {
   implausibleFills: UnreviewedImplausibleFill[];
 };
 
+function snapshotVehicleLabel(
+  snaps: Record<string, unknown>[],
+  vehicleId: string,
+): string {
+  const vid = String(vehicleId || "").trim();
+  for (const s of snaps) {
+    if (String(s.vehicleId || "") !== vid) continue;
+    const plate = s.vehiclePlate || s.plate || (s.metadata as any)?.plate;
+    if (plate) return String(plate);
+    const name = s.vehicleName || s.vehicleLabel;
+    if (name) return String(name);
+  }
+  return vid || "Vehicle";
+}
+
+function bucketStretchFromSnapshots(
+  snaps: Record<string, unknown>[],
+  bucketId: string,
+): { startYmd: string; endYmd: string } | null {
+  for (const s of snaps) {
+    const buckets = Array.isArray(s.odometerBuckets)
+      ? (s.odometerBuckets as Array<Record<string, unknown>>)
+      : [];
+    for (const b of buckets) {
+      if (String(b.id || b.bucketId || "") !== bucketId) continue;
+      const start = String(b.startDate || b.startYmd || "").split("T")[0];
+      const end = String(b.endDate || b.endYmd || "").split("T")[0];
+      if (start && end) return { startYmd: start, endYmd: end };
+    }
+  }
+  return null;
+}
+
+export async function loadGapChargesPendingApproval(
+  orgId: string,
+  periodId: string,
+  snaps: Record<string, unknown>[],
+): Promise<NonNullable<EvaluateFuelWeekClosableInput["gapChargesPendingApproval"]>> {
+  const prefix = `gap_charge_rec:${orgId}:${periodId}:`;
+  const rows = ((await kv.getByPrefix(prefix)) || []) as GapChargeRecommendation[];
+  const out: NonNullable<EvaluateFuelWeekClosableInput["gapChargesPendingApproval"]> = [];
+  for (const rec of rows) {
+    if (!rec || typeof rec !== "object") continue;
+    if (String(rec.status || "") !== "recommended") continue;
+    const stretch = bucketStretchFromSnapshots(snaps, String(rec.bucketId || ""));
+    out.push({
+      vehicleLabel: snapshotVehicleLabel(snaps, String(rec.vehicleId || "")),
+      startYmd: stretch?.startYmd || "unknown",
+      endYmd: stretch?.endYmd || "unknown",
+    });
+  }
+  return out;
+}
+
+export function listAwaitingCardStatementFills(
+  entries: Record<string, unknown>[],
+  snaps: Record<string, unknown>[],
+  weekStart: string,
+  weekEnd: string,
+): NonNullable<EvaluateFuelWeekClosableInput["awaitingCardStatementFills"]> {
+  const out: NonNullable<EvaluateFuelWeekClosableInput["awaitingCardStatementFills"]> = [];
+  for (const raw of entries) {
+    const e = raw as Record<string, unknown>;
+    const date = ymd(e.date);
+    if (!isEntryInInclusiveYmdRange(date, weekStart, weekEnd)) continue;
+    const meta = (e.metadata && typeof e.metadata === "object"
+      ? e.metadata
+      : {}) as Record<string, unknown>;
+    if (meta.awaitingCardStatement !== true) continue;
+    const vid = String(e.vehicleId || e.vehicle_id || "");
+    out.push({
+      vehicleLabel: snapshotVehicleLabel(snaps, vid),
+      dateYmd: date,
+    });
+  }
+  return out;
+}
+
+function entryToFillAnchor(e: Record<string, unknown>): FillAnchor | null {
+  const meta = (e.metadata && typeof e.metadata === "object"
+    ? e.metadata
+    : {}) as Record<string, unknown>;
+  const odo = Number(e.odometer);
+  if (!Number.isFinite(odo) || odo <= 0) return null;
+  return {
+    id: String(e.id || ""),
+    date: ymd(e.date),
+    odometer: odo,
+    awaitingCardStatement: meta.awaitingCardStatement === true,
+  };
+}
+
+/** F-08 needs the car's prior 8 weeks of stretches plus the fill before the week. */
+export const F08_LOOKBACK_DAYS = 8 * 7 + 7;
+
+function addDaysYmd(day: string, n: number): string {
+  const d = new Date(`${day}T12:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Fills from (weekStart − F08_LOOKBACK_DAYS) to weekEnd for the org. Same SQL pushdown as
+ * loadWeekClosableKvBundle; falls back to a prefix scan if the pushdown fails.
+ */
+export async function loadFillsForStretchLookback(
+  orgId: string,
+  weekStart: string,
+  weekEnd: string,
+): Promise<Record<string, unknown>[]> {
+  const from = addDaysYmd(weekStart, -F08_LOOKBACK_DAYS);
+  const inOrg = (v: Record<string, unknown>) => rowOrgId(v) === orgId;
+  const inWindow = (v: Record<string, unknown>) => {
+    const d = ymd(v.date);
+    return Boolean(d) && d >= from && d <= weekEnd;
+  };
+  try {
+    const { fromKvStore } = await import("./fleet_sql_bridge.ts");
+    const orgOr =
+      `value->>organizationId.eq.${orgId},value->>orgId.eq.${orgId},value->>org_id.eq.${orgId}`;
+    const { data, error } = await fromKvStore()
+      .select("value")
+      .like("key", "fuel_entry:%")
+      .or(orgOr)
+      .gte("value->>date", from)
+      .lte("value->>date", `${weekEnd}T23:59:59.999Z`);
+    if (error) throw new Error(String((error as { message?: unknown }).message ?? error));
+    return valuesFromKvRows(data).filter((v) => inOrg(v) && inWindow(v));
+  } catch (err) {
+    console.warn("[fuel_closable] F-08 lookback pushdown failed; prefix scan", err);
+    const all = ((await kv.getByPrefix("fuel_entry:")) || []) as Record<string, unknown>[];
+    return all.filter((v) => v && inOrg(v) && inWindow(v));
+  }
+}
+
+export async function loadOpenPossibleFillNotScannedFlags(
+  orgId: string,
+  entries: Record<string, unknown>[],
+  weekStart: string,
+  weekEnd: string,
+  snaps: Record<string, unknown>[],
+): Promise<NonNullable<EvaluateFuelWeekClosableInput["openPossibleFillNotScanned"]>> {
+  const byVehicle = new Map<string, FillAnchor[]>();
+  for (const raw of entries) {
+    const e = raw as Record<string, unknown>;
+    const vid = String(e.vehicleId || e.vehicle_id || "").trim();
+    if (!vid) continue;
+    const anchor = entryToFillAnchor(e);
+    if (!anchor) continue;
+    const list = byVehicle.get(vid) || [];
+    list.push(anchor);
+    byVehicle.set(vid, list);
+  }
+
+  const flags = [];
+  for (const [vehicleId, anchors] of byVehicle) {
+    flags.push(
+      ...detectPossibleFillNotScannedFlags({
+        vehicleId,
+        anchors,
+        weekStart,
+        weekEnd,
+      }),
+    );
+  }
+  if (!flags.length) return [];
+
+  const entryIds = flags.map((f) => f.entryId);
+  const { pairs } = await loadDisposedEntryFlagPairs(orgId, entryIds);
+  const out: NonNullable<EvaluateFuelWeekClosableInput["openPossibleFillNotScanned"]> = [];
+  for (const f of flags) {
+    if (pairs.has(`${f.entryId}::possible_fill_not_scanned`)) continue;
+    out.push({
+      vehicleLabel: snapshotVehicleLabel(snaps, f.vehicleId),
+      startYmd: f.startDate,
+      endYmd: f.endDate,
+    });
+  }
+  return out;
+}
+
 export async function buildFuelWeekClosableInputForPeriod(
   orgId: string,
   period: Record<string, unknown>,
@@ -507,6 +693,7 @@ export async function buildFuelWeekClosableInputForPeriod(
 ): Promise<FuelWeekClosableBuildResult> {
   const weekStart = ymd(period.week_start);
   const weekEnd = ymd(period.week_end) || weekStart;
+  const periodId = String(period.id || "");
   // N-12a: never evaluate against a warm-isolate stale bundle.
   invalidateFuelWeekClosableKvCache(orgId, weekStart, weekEnd);
 
@@ -689,6 +876,23 @@ export async function buildFuelWeekClosableInputForPeriod(
         weekEntries as Parameters<typeof listUnreviewedImplausibleFills>[0],
       ),
     openPriorWeekStarts: (await loadPriorWeekCredit(getServiceClient(), orgId, weekStart)).openWeekStarts,
+    gapChargesPendingApproval: periodId
+      ? await loadGapChargesPendingApproval(orgId, periodId, snaps)
+      : [],
+    awaitingCardStatementFills: listAwaitingCardStatementFills(
+      weekEntries as Record<string, unknown>[],
+      snaps,
+      weekStart,
+      weekEnd,
+    ),
+    openPossibleFillNotScanned: await loadOpenPossibleFillNotScannedFlags(
+      orgId,
+      // F-08: the car's own prior 8 weeks, not only this week's fills.
+      await loadFillsForStretchLookback(orgId, weekStart, weekEnd),
+      weekStart,
+      weekEnd,
+      snaps,
+    ),
     ...(hasFrozenBuckets
       ? {
           stopToStopVolumeFailed: s2sApplied.stopToStopVolumeFailed,

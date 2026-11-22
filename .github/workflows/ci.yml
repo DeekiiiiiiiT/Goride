@@ -343,6 +343,14 @@ jobs:
           supabase/functions/_fleet-server/fuel_week_category_loader.test.ts
           supabase/functions/_fleet-server/fuel_week_category_loader_enforce.test.ts
           supabase/functions/_fleet-server/fuel_week_closable_gate_n12.test.ts
+          supabase/functions/_fleet-server/fuel_week_closable_gate_f04.test.ts
+          supabase/functions/_fleet-server/fuel_week_closable_f08.test.ts
+          supabase/functions/_fleet-server/fuel_finalize_race.test.ts
+          supabase/functions/_fleet-server/fuel_flag_disposition_f26.test.ts
+          supabase/functions/_fleet-server/fuel_scenario_org_f18.test.ts
+          supabase/functions/_fleet-server/fuel_snapshot_brain_f30.test.ts
+          supabase/functions/_fleet-server/fuel_entry_source.test.ts
+          supabase/functions/_fleet-server/fuel_vehicle_economy_weeks.test.ts
           supabase/functions/_fleet-server/fuel_week_n17_pa.test.ts
           supabase/functions/_fleet-server/fuel_week_phase4_server_cats.test.ts
           supabase/functions/_shared/directionsRoute.test.ts
