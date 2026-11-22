@@ -302,6 +302,14 @@ BEGIN
   IF NOT toll_system.week_is_sealed(v_org, v_week) THEN
     RAISE EXCEPTION '1 week not sealed';
   END IF;
+  -- the driver's toll statement carries what Uber still owes, so the close identity ties (live 9 Nov week)
+  IF (SELECT (ws.amounts_minor ->> 'disputed')::bigint FROM ledger.week_statements ws
+      WHERE ws.organization_id = v_org AND ws.kind = 'toll' AND ws.driver_id = 's1-d1' AND ws.week_key = v_week
+        AND ws.status = 'closed' ORDER BY ws.version DESC LIMIT 1) IS DISTINCT FROM 2000 THEN
+    RAISE EXCEPTION '1 statement disputed %', (SELECT ws.amounts_minor FROM ledger.week_statements ws
+      WHERE ws.organization_id = v_org AND ws.kind = 'toll' AND ws.driver_id = 's1-d1' AND ws.week_key = v_week
+      ORDER BY ws.version DESC LIMIT 1);
+  END IF;
   PERFORM pg_temp._s1_assert_nightly();
 
   v_hash_pre := pg_temp._s1_week_ledger_hash(v_week);

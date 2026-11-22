@@ -94,6 +94,7 @@ export function tollStatementForClose(
     chargedToDriver: minorToMajor(statement.amountsMinor.chargedToDriver),
     reimbursed: minorToMajor(statement.amountsMinor.reimbursed),
     netLoss: minorToMajor(statement.amountsMinor.netLoss),
+    disputed: minorToMajor((statement.amountsMinor as Record<string, unknown>).disputed),
     cashWashSpend: minorToMajor(statement.amountsMinor.cashWashSpend),
     tagSpend: minorToMajor(statement.amountsMinor.tagSpend),
     status: statementStatusForClose(statement, acceptRestatementDrafts),

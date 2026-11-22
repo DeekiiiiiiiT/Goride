@@ -108,6 +108,8 @@ export type CloseTollStatement = {
   chargedToDriver: number;
   reimbursed?: number;
   netLoss?: number;
+  /** Toll disputes: what Uber still owes for this driver-week when it sealed (provisional, not yet won or lost). */
+  disputed?: number;
   cashWashSpend?: number;
   tagSpend?: number;
   status?: 'draft' | 'closed' | 'restated';
@@ -331,7 +333,7 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
       'period.toll_charged_to_driver ≠ tollStatement.chargedToDriver',
       num(p.toll_charged_to_driver), num(input.tollStatement.chargedToDriver),
     );
-    // Toll four-card identity: Spend − Reimbursed − ChargedToDrivers − NetLoss ≈ 0
+    // Toll identity: Spend − Reimbursed − ChargedToDrivers − NetLoss − Disputed (still owed by Uber) ≈ 0
     if (
       input.tollStatement.reimbursed != null ||
       input.tollStatement.netLoss != null
@@ -340,12 +342,13 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
         num(input.tollStatement.totalSpend) -
           num(input.tollStatement.reimbursed) -
           num(input.tollStatement.chargedToDriver) -
-          num(input.tollStatement.netLoss),
+          num(input.tollStatement.netLoss) -
+          num(input.tollStatement.disputed),
       );
       pushIfDrift(
         out, eps, ctx,
         'TOLL_IDENTITY_UNBALANCED',
-        'Spend − Reimbursed − ChargedToDrivers − NetLoss ≠ 0',
+        'Spend − Reimbursed − ChargedToDrivers − NetLoss − Disputed ≠ 0',
         residual, 0,
       );
     }

@@ -76,6 +76,19 @@ describe('checkCloseInvariants (§6.4)', () => {
     expect(identity?.persisted).toBe(2580);
   });
 
+  it('toll identity counts what Uber still owes on open disputes (week of 9 Nov 2026)', () => {
+    const base = { totalSpend: 5920, chargedToDriver: 2340, reimbursed: 3430, netLoss: 0 };
+    // J$150 is waiting on Uber: without it the identity is J$150 short; with it, it ties.
+    expect(
+      checkCloseInvariants({ ...tyingWeek, tollStatement: base }).some((b) => b.code === 'TOLL_IDENTITY_UNBALANCED'),
+    ).toBe(true);
+    expect(
+      checkCloseInvariants({ ...tyingWeek, tollStatement: { ...base, disputed: 150 } }).some(
+        (b) => b.code === 'TOLL_IDENTITY_UNBALANCED',
+      ),
+    ).toBe(false);
+  });
+
   it('flags earnings_gross identity break', () => {
     const blockers = checkCloseInvariants({
       ...tyingWeek,
