@@ -1,6 +1,6 @@
 /**
  * Fuel Integrity desk — Fill flags + Stop-to-stop under one week-scoped home.
- * Telematics tab hidden until a provider is wired (R5-4); seam stays in telematicsEvidence.ts.
+ * Telematics tab hidden until a provider is wired (R5-4); the hook is the fill `source` field (fuel audit F-14).
  */
 import { useEffect } from 'react';
 import { Button } from '../../ui/button';

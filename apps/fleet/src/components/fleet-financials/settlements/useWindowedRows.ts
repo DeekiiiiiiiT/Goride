@@ -6,7 +6,7 @@ export const WINDOW_OVERSCAN = 12;
 export const WINDOW_THRESHOLD = 40;
 
 /**
- * Scroll-window slice (padTop / padBottom) — same pattern as fuel ReconciliationTable.
+ * Scroll-window slice (padTop / padBottom).
  * Enables when items.length > threshold (~40).
  */
 export function useWindowedRows<T>(

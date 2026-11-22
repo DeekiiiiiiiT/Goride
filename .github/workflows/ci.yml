@@ -82,6 +82,9 @@ jobs:
       - name: Check fuel-core parity
         run: node scripts/check-fuel-core-parity.mjs
 
+      - name: Check no unused fuel screen files (fuel audit F-27)
+        run: node scripts/check-unused-files.mjs
+
       - name: Check no naive date slice (one-week rule)
         run: node scripts/check-no-naive-date-slice.mjs
 

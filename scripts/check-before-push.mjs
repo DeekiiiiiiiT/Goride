@@ -47,6 +47,7 @@ const checks = [
   { name: 'Migration SQL (names, dates, syntax)', when: touched(MIGRATIONS), cmd: 'node scripts/validate-migration-sql.mjs' },
   { name: 'Migration files are UTF-8', when: touched(MIGRATIONS), cmd: 'node scripts/assert-migrations-utf8.mjs' },
   { name: 'New functions locked from anon', when: touched(MIGRATIONS), cmd: 'node scripts/assert-public-fn-revoke-anon.mjs' },
+  { name: 'No unused fuel screen files', when: touched(/^(apps|packages|e2e)\/|^scripts\/check-unused-files/), cmd: 'node scripts/check-unused-files.mjs' },
   { name: 'Server route list up to date', when: touched(EDGE), cmd: 'node scripts/edge-route-manifest.mjs --all --check' },
   { name: 'No duplicate server files', when: touched(EDGE), cmd: 'node scripts/check-fleet-edge-duplicates.mjs' },
   { name: 'Inventory: no fake text / dead buttons', when: touched(INVENTORY), cmd: 'node scripts/assert-inventory-gap-audit.mjs' },
