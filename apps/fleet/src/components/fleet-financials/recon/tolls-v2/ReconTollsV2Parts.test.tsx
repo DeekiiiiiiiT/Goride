@@ -144,6 +144,10 @@ describe('Tolls step — six parts (UI1)', () => {
     expect(within(sentRow).getByTestId('toll-v2-dispute-lost')).toBeTruthy();
     expect(within(sentRow).getByTestId('toll-v2-dispute-from-week').textContent).toBe('From week of 2 Nov');
 
+    // results sit behind their own tab at the top (owner 21 Nov)
+    expect(screen.queryByTestId('toll-v2-results')).toBeNull();
+    expect(screen.getByTestId('toll-v2-disputes-tab-open').textContent).toMatch(/Open disputes/);
+    fireEvent.click(screen.getByTestId('toll-v2-disputes-tab-results'));
     const results = screen.getByTestId('toll-v2-results');
     expect(within(results).getByText('Won · Uber paid J$20.00')).toBeTruthy();
     expect(within(results).getByText('Lost · fleet pays J$20.00')).toBeTruthy();
@@ -174,6 +178,7 @@ describe('Tolls step — six parts (UI1)', () => {
     await waitFor(() => expect(sent('close_dispute_lost')).toHaveLength(1));
     expect(sent('close_dispute_lost')[0]).toMatchObject({ dispute_id: 'dsp-sent', expected_dispute_version: 3 });
 
+    fireEvent.click(screen.getByTestId('toll-v2-disputes-tab-results'));
     fireEvent.click(within(screen.getByTestId('toll-v2-result-res-won')).getByTestId('toll-v2-result-undo'));
     await waitFor(() => expect(sent('undo_decision')).toHaveLength(1));
     expect(sent('undo_decision')[0]).toMatchObject({ decision_id: 'dec-won' });

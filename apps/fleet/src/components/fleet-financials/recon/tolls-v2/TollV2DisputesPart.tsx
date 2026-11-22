@@ -49,60 +49,116 @@ export function TollV2DisputesPart({
   const active = disputes.active ?? [];
   const rows = showAll ? active : active.slice(0, FIRST_ROWS);
   const { toSend, sent, late } = disputes.tiles;
+  // Owner 21 Nov: two tabs at the top, so the results are not at the bottom of a long list.
+  const [tab, setTab] = useState<'open' | 'results'>(() => (active.length === 0 && results.length > 0 ? 'results' : 'open'));
+  const openMinor = active.reduce((n, d) => n + (d.leftMinor ?? 0), 0);
 
   return (
     <div className="flex flex-col gap-5" data-testid="toll-v2-part-disputes">
-      {disputes.waitingMinor > 0 ? (
-        <div className="flex items-start gap-3 rounded-xl bg-blue-50/80 p-4" data-testid="toll-v2-disputes-waiting">
-          <Info className="mt-0.5 h-5 w-5 shrink-0 text-[#1d4ed8]" aria-hidden />
-          <p className="text-sm leading-relaxed text-[#0b1c30]">{waitingSentence(disputes.waitingMinor)}</p>
-        </div>
-      ) : null}
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Tile label="To send" count={toSend.count} amountMinor={toSend.amountMinor} tone={toSend.count ? 'amber' : 'none'} testId="toll-v2-tile-to-send" />
-        <Tile label="Sent, waiting on Uber" count={sent.count} amountMinor={sent.amountMinor} tone={sent.count ? 'blue' : 'none'} testId="toll-v2-tile-sent" />
-        <Tile label="Late" count={late.count} amountMinor={late.amountMinor} tone={late.count ? 'red' : 'none'} testId="toll-v2-tile-late" />
+      <div className="grid grid-cols-2 gap-1 rounded-xl bg-[#eff4ff] p-1" role="tablist" aria-label="Disputes">
+        <DisputeTab
+          selected={tab === 'open'}
+          onClick={() => setTab('open')}
+          label="Open disputes"
+          sub={active.length === 0 ? 'None' : `${active.length} · ${fmtTollMinor(openMinor)}`}
+          testId="toll-v2-disputes-tab-open"
+        />
+        <DisputeTab
+          selected={tab === 'results'}
+          onClick={() => setTab('results')}
+          label="Results this week"
+          sub={results.length === 0 ? 'None yet' : String(results.length)}
+          testId="toll-v2-disputes-tab-results"
+        />
       </div>
 
-      {active.length === 0 ? (
-        <p className="flex items-center gap-2 text-sm text-[#47464c]" data-testid="toll-v2-empty-disputes">
+      {tab === 'open' ? (
+        <>
+          {disputes.waitingMinor > 0 ? (
+            <div className="flex items-start gap-3 rounded-xl bg-blue-50/80 p-4" data-testid="toll-v2-disputes-waiting">
+              <Info className="mt-0.5 h-5 w-5 shrink-0 text-[#1d4ed8]" aria-hidden />
+              <p className="text-sm leading-relaxed text-[#0b1c30]">{waitingSentence(disputes.waitingMinor)}</p>
+            </div>
+          ) : null}
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Tile label="To send" count={toSend.count} amountMinor={toSend.amountMinor} tone={toSend.count ? 'amber' : 'none'} testId="toll-v2-tile-to-send" />
+            <Tile label="Sent, waiting on Uber" count={sent.count} amountMinor={sent.amountMinor} tone={sent.count ? 'blue' : 'none'} testId="toll-v2-tile-sent" />
+            <Tile label="Late" count={late.count} amountMinor={late.amountMinor} tone={late.count ? 'red' : 'none'} testId="toll-v2-tile-late" />
+          </div>
+
+          {active.length === 0 ? (
+            <p className="flex items-center gap-2 text-sm text-[#47464c]" data-testid="toll-v2-empty-disputes">
+              <Check className="h-4 w-4 shrink-0 text-[#069669]" aria-hidden />
+              Nothing to review
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {rows.map((d) => (
+                <DisputeRow key={d.id} d={d} busy={busy} actions={actions} />
+              ))}
+            </ul>
+          )}
+          {active.length > FIRST_ROWS && !showAll ? (
+            <div className="flex justify-center">
+              <TollV2SecondaryButton type="button" onClick={() => setShowAll(true)} data-testid="toll-v2-disputes-show-all">
+                Show all {active.length} disputes
+              </TollV2SecondaryButton>
+            </div>
+          ) : null}
+
+          {active.length > 0 ? (
+            <p className="flex items-center justify-center gap-2 py-1 text-center text-xs text-[#47464c] sm:text-sm">
+              <Smartphone className="h-4 w-4 shrink-0" aria-hidden />
+              The driver sees each dispute in the Roam driver app with the text to copy into Uber.
+            </p>
+          ) : null}
+        </>
+      ) : results.length === 0 ? (
+        <p className="flex items-center gap-2 text-sm text-[#47464c]" data-testid="toll-v2-results-empty">
           <Check className="h-4 w-4 shrink-0 text-[#069669]" aria-hidden />
-          Nothing to review
+          No disputes were won, lost or closed this week yet.
         </p>
       ) : (
-        <ul className="flex flex-col gap-3">
-          {rows.map((d) => (
-            <DisputeRow key={d.id} d={d} busy={busy} actions={actions} />
-          ))}
-        </ul>
-      )}
-      {active.length > FIRST_ROWS && !showAll ? (
-        <div className="flex justify-center">
-          <TollV2SecondaryButton type="button" onClick={() => setShowAll(true)} data-testid="toll-v2-disputes-show-all">
-            Show all {active.length} disputes
-          </TollV2SecondaryButton>
-        </div>
-      ) : null}
-
-      {results.length > 0 ? (
         <section className="flex flex-col gap-3" data-testid="toll-v2-results">
-          <h3 className="text-sm font-semibold text-[#0b1c30]">Results this week</h3>
           <ul className="flex flex-col gap-2">
             {results.map((r) => (
               <ResultRow key={r.id} r={r} busy={busy} onUndo={actions.onUndoResult} />
             ))}
           </ul>
         </section>
-      ) : null}
-
-      {active.length > 0 ? (
-        <p className="flex items-center justify-center gap-2 py-1 text-center text-xs text-[#47464c] sm:text-sm">
-          <Smartphone className="h-4 w-4 shrink-0" aria-hidden />
-          The driver sees each dispute in the Roam driver app with the text to copy into Uber.
-        </p>
-      ) : null}
+      )}
     </div>
+  );
+}
+
+function DisputeTab({
+  selected,
+  onClick,
+  label,
+  sub,
+  testId,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  label: string;
+  sub: string;
+  testId: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={selected}
+      onClick={onClick}
+      data-testid={testId}
+      className={`flex flex-col items-center rounded-lg px-3 py-2 text-sm font-semibold ${
+        selected ? 'bg-[#030213] text-white' : 'text-[#47464c] hover:bg-white'
+      }`}
+    >
+      {label}
+      <span className={`text-xs font-medium ${selected ? 'text-white/80' : 'text-[#47464c]'}`}>{sub}</span>
+    </button>
   );
 }
 
