@@ -686,6 +686,35 @@ export async function loadOpenPossibleFillNotScannedFlags(
   return out;
 }
 
+export async function loadFuelNightlyCheckFailures(
+  orgId: string,
+): Promise<NonNullable<EvaluateFuelWeekClosableInput["nightlyCheckFailures"]>> {
+  try {
+    const { data, error } = await getServiceClient().rpc("fuel_nightly_latest", { p_org: orgId });
+    if (error) {
+      console.warn("[fuel_week_closable] nightly latest failed", error.message);
+      return [];
+    }
+    const body = (data && typeof data === "object" ? data : {}) as {
+      failures?: Array<{ name?: unknown; week_start?: unknown; weekStart?: unknown; v3?: unknown }>;
+    };
+    const failures = Array.isArray(body.failures) ? body.failures : [];
+    return failures
+      // Only failures on weeks priced by v3 block a lock. v2.2 weeks (up to 9 Nov 2026) are
+      // history: their failures are shown by GET /fuel/nightly/latest, never used to block.
+      .filter((f) => f.v3 === true)
+      .map((f) => ({
+        name: String(f.name || "").trim(),
+        weekStart: String(f.week_start ?? f.weekStart ?? "").slice(0, 10),
+      }))
+      .filter((f) => f.name && f.weekStart);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn("[fuel_week_closable] nightly latest skipped", msg);
+    return [];
+  }
+}
+
 export async function buildFuelWeekClosableInputForPeriod(
   orgId: string,
   period: Record<string, unknown>,
@@ -893,6 +922,7 @@ export async function buildFuelWeekClosableInputForPeriod(
       weekEnd,
       snaps,
     ),
+    nightlyCheckFailures: await loadFuelNightlyCheckFailures(orgId),
     ...(hasFrozenBuckets
       ? {
           stopToStopVolumeFailed: s2sApplied.stopToStopVolumeFailed,

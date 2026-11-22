@@ -42,7 +42,9 @@ export type FuelWeekClosableBlocker = {
     /** Card fill waiting for its statement (F-09). */
     | 'awaiting_card_statement'
     /** Open possible-fill-not-scanned flag (F-08). */
-    | 'possible_fill_not_scanned';
+    | 'possible_fill_not_scanned'
+    /** Latest company nightly fuel check reported a failure (F-16). */
+    | 'nightly_check_failed';
   message: string;
 };
 
@@ -107,6 +109,8 @@ export type EvaluateFuelWeekClosableInput = {
     startYmd: string;
     endYmd: string;
   }>;
+  /** Failures from the company's latest fuel_system nightly run (F-16). */
+  nightlyCheckFailures?: Array<{ name: string; weekStart: string }>;
 };
 
 const FUEL_WEEK_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -142,6 +146,20 @@ export function openPriorWeeksCarryMessage(weekStarts: string[]): string | null 
 
 function fmtMoney(n: number): string {
   return `$${(Number(n) || 0).toFixed(2)}`;
+}
+
+const NIGHTLY_CHECK_LABELS: Record<string, string> = {
+  locked_week_recomputed_after_lock: 'worked out again after it locked',
+  v3_shares_vs_spend: 'shares vs spend',
+  v3_driver_fuel_statements: 'driver fuel statements',
+  v3_lines_vs_week_shares: 'lines vs week shares',
+  v3_no_duplicate_card_fill: 'duplicate card fill',
+};
+
+/** Plain label for a fuel_system.nightly_checks name (F-16 close gate). */
+export function nightlyCheckFailureLabel(name: string): string {
+  const key = String(name || '').trim();
+  return NIGHTLY_CHECK_LABELS[key] || key.replaceAll('_', ' ');
 }
 
 function cardStatementDriftMessage(
@@ -323,6 +341,14 @@ export function evaluateFuelWeekClosable(
     blockers.push({
       code: 'possible_fill_not_scanned',
       message: `Possible fill not scanned for ${f.vehicleLabel} (${f.startYmd} → ${f.endYmd}).`,
+    });
+  }
+  for (const f of input.nightlyCheckFailures || []) {
+    const ws = String(f.weekStart || '').slice(0, 10);
+    const label = nightlyCheckFailureLabel(f.name);
+    blockers.push({
+      code: 'nightly_check_failed',
+      message: `The nightly fuel check failed for the week of ${formatFuelWeekLabel(ws)} (${label}).`,
     });
   }
   return blockers;

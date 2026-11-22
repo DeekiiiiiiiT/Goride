@@ -302,14 +302,23 @@ export function fuelSnapshotWritePlan(args: {
   return { reuse: false, hash: args.afterHash };
 }
 
+export type ComputeFuelWeekSnapshotDeps = {
+  sb?: ReturnType<typeof getServiceClient>;
+  prepare?: typeof prepareFuelWeekReports;
+  hashInputs?: (orgId: string, weekStart: string, weekEnd: string) => Promise<string>;
+};
+
 export async function computeFuelWeekSnapshot(args: {
   orgId: string;
   periodId: string;
   weekStart: string;
   weekEnd: string;
+  deps?: ComputeFuelWeekSnapshotDeps;
 }) {
-  const sb = getServiceClient();
-  const beforeHash = await hashFuelWeekInputs(args.orgId, args.weekStart, args.weekEnd);
+  const sb = args.deps?.sb ?? getServiceClient();
+  const prepare = args.deps?.prepare ?? prepareFuelWeekReports;
+  const hashInputs = args.deps?.hashInputs ?? hashFuelWeekInputs;
+  const beforeHash = await hashInputs(args.orgId, args.weekStart, args.weekEnd);
   const { data: latest } = await sb
     .from("fuel_week_snapshot")
     .select("id, version, inputs_hash, money")
@@ -323,7 +332,7 @@ export async function computeFuelWeekSnapshot(args: {
     await rememberPeriodTotals(sb, args, latest.money);
     return { snapshot: latest, reused: true };
   }
-  const built = await prepareFuelWeekReports({
+  const built = await prepare({
     orgId: args.orgId,
     weekStart: args.weekStart,
     weekEnd: args.weekEnd,
@@ -331,7 +340,7 @@ export async function computeFuelWeekSnapshot(args: {
   if (!built.ok) {
     throw new Error(built.error || "fuel week compute failed");
   }
-  const afterHash = await hashFuelWeekInputs(args.orgId, args.weekStart, args.weekEnd);
+  const afterHash = await hashInputs(args.orgId, args.weekStart, args.weekEnd);
   const plan = fuelSnapshotWritePlan({
     latestHash: latest?.inputs_hash,
     beforeHash,

@@ -345,6 +345,7 @@ jobs:
           supabase/functions/_fleet-server/fuel_week_closable_gate_n12.test.ts
           supabase/functions/_fleet-server/fuel_week_closable_gate_f04.test.ts
           supabase/functions/_fleet-server/fuel_week_closable_f08.test.ts
+          supabase/functions/_fleet-server/fuel_week_closable_gate_n16.test.ts
           supabase/functions/_fleet-server/fuel_finalize_race.test.ts
           supabase/functions/_fleet-server/fuel_flag_disposition_f26.test.ts
           supabase/functions/_fleet-server/fuel_scenario_org_f18.test.ts

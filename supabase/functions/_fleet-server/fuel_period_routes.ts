@@ -117,6 +117,56 @@ export function fuelPeriodLockedBody(period: { locked_at?: unknown; version?: un
   };
 }
 
+/** POST /fuel/periods/:id/compute — locked weeks return the stored snapshot without recomputing (F-30). */
+export async function fuelPeriodComputeResponse(opts: {
+  orgId: string;
+  periodId: string;
+  period: Record<string, unknown>;
+  latestSnapshot: { version?: unknown; inputs_hash?: unknown; money?: unknown; provenance?: unknown } | null;
+  computeSnapshot?: typeof computeFuelWeekSnapshot;
+}): Promise<
+  | { kind: "locked_missing"; body: ReturnType<typeof fuelPeriodLockedBody> }
+  | { kind: "locked"; body: Record<string, unknown> }
+  | { kind: "open"; body: Record<string, unknown> }
+> {
+  if (isFuelPeriodLocked(opts.period)) {
+    if (!opts.latestSnapshot) {
+      return { kind: "locked_missing", body: fuelPeriodLockedBody(opts.period) };
+    }
+    const lockedMoney = (opts.latestSnapshot.money || {}) as { reports?: unknown[]; totalSpend?: number };
+    return {
+      kind: "locked",
+      body: {
+        version: opts.latestSnapshot.version ?? null,
+        inputsHash: opts.latestSnapshot.inputs_hash ?? null,
+        reused: true,
+        reports: lockedMoney.reports || [],
+        totalSpend: lockedMoney.totalSpend ?? null,
+        locked: true,
+        provenance: opts.latestSnapshot.provenance ?? null,
+      },
+    };
+  }
+  const run = opts.computeSnapshot ?? computeFuelWeekSnapshot;
+  const result = await run({
+    orgId: opts.orgId,
+    periodId: opts.periodId,
+    weekStart: ymd(opts.period.week_start),
+    weekEnd: ymd(opts.period.week_end) || ymd(opts.period.week_start),
+  });
+  const money = (result.snapshot?.money || {}) as { reports?: unknown[]; totalSpend?: number };
+  return {
+    kind: "open",
+    body: {
+      version: result.snapshot?.version ?? null,
+      inputsHash: result.snapshot?.inputs_hash ?? null,
+      reused: result.reused,
+      reports: money.reports || [],
+      totalSpend: money.totalSpend ?? null,
+    },
+  };
+}
+
 /** Fail closed: a snapshot with no org stamp is not this fleet's week. */
 function snapshotBelongsToOrg(snap: { orgId?: unknown; org_id?: unknown; organizationId?: unknown }, orgId: string): boolean {
   const snapOrg = String(snap?.orgId || snap?.org_id || snap?.organizationId || "").trim();
@@ -3038,6 +3088,18 @@ export function registerFuelPeriodRoutes(app: Hono) {
   );
 
   app.get(
+    `${BASE}/fuel/nightly/latest`,
+    requirePermission("fuel.view"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "org required" }, 400);
+      const { data, error } = await getServiceClient().rpc("fuel_nightly_latest", { p_org: orgId });
+      if (error) return c.json({ error: error.message }, 500);
+      return c.json(data ?? { runId: null, runAt: null, failures: [] });
+    },
+  );
+
+  app.get(
     `${BASE}/fuel/periods/:id/snapshot/brain`,
     requirePermission("fuel.view"),
     async (c: Context) => {
@@ -3142,34 +3204,18 @@ export function registerFuelPeriodRoutes(app: Hono) {
       if (!periodId) return c.json({ error: "period id required" }, 400);
       const period = await loadPeriod(orgId, periodId);
       if (!period) return c.json({ error: "Not found" }, 404);
-      if (isFuelPeriodLocked(period)) {
-        const latest = await loadLatestFuelWeekSnapshot(orgId, periodId);
-        if (!latest) return c.json(fuelPeriodLockedBody(period), 409);
-        const lockedMoney = (latest.money || {}) as { reports?: unknown[]; totalSpend?: number };
-        return c.json({
-          version: latest.version ?? null,
-          inputsHash: latest.inputs_hash ?? null,
-          reused: true,
-          reports: lockedMoney.reports || [],
-          totalSpend: lockedMoney.totalSpend ?? null,
-          locked: true,
-        });
-      }
       try {
-        const result = await computeFuelWeekSnapshot({
+        const latest = isFuelPeriodLocked(period)
+          ? await loadLatestFuelWeekSnapshot(orgId, periodId)
+          : null;
+        const out = await fuelPeriodComputeResponse({
           orgId,
           periodId,
-          weekStart: ymd(period.week_start),
-          weekEnd: ymd(period.week_end) || ymd(period.week_start),
+          period,
+          latestSnapshot: latest,
         });
-        const money = (result.snapshot?.money || {}) as { reports?: unknown[]; totalSpend?: number };
-        return c.json({
-          version: result.snapshot?.version ?? null,
-          inputsHash: result.snapshot?.inputs_hash ?? null,
-          reused: result.reused,
-          reports: money.reports || [],
-          totalSpend: money.totalSpend ?? null,
-        });
+        if (out.kind === "locked_missing") return c.json(out.body, 409);
+        return c.json(out.body);
       } catch (e: any) {
         console.warn("[fuel_period] compute failed", e);
         return c.json({ error: e?.message || "Could not prepare this week" }, 503);

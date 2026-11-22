@@ -129,7 +129,9 @@ BEGIN
       detail := jsonb_build_object(
         'period_id', r.period_id,
         'week_start', r.week_start,
-        'locked_at', r.locked_at
+        'locked_at', r.locked_at,
+        -- Lets the close gate block only on v3 weeks; v2.2 history is reported, never judged.
+        'engine', v_engine
       );
       RETURN NEXT;
     END IF;

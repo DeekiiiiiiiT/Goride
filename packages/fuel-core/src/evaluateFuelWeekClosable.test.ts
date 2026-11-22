@@ -150,4 +150,13 @@ describe('evaluateFuelWeekClosable', () => {
     expect(b.map((x) => x.code)).toContain('null_org_fill');
     expect(b[0] && b.find((x) => x.code === 'null_org_fill')?.message).toMatch(/missing its company/);
   });
+
+  it('F-16: nightly check failure names check and week', () => {
+    const b = evaluateFuelWeekClosable({
+      nightlyCheckFailures: [{ name: 'v3_lines_vs_week_shares', weekStart: '2026-11-16' }],
+    });
+    expect(b.map((x) => x.code)).toContain('nightly_check_failed');
+    expect(b[0]?.message).toMatch(/16 Nov/);
+    expect(b[0]?.message).toMatch(/lines vs week shares/);
+  });
 });
