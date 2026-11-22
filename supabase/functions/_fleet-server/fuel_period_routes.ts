@@ -449,6 +449,120 @@ async function persistFinalizedSnapshot(
   await stageFinalizedSnapshot(report, orgId, actor);
 }
 
+/** After a week's fuel statements are published: settlement units and the desk pick it up. */
+async function afterFuelStatementsPublished(orgId: string, weekKey: string) {
+  try {
+    const { enqueueDriverWeekUnitsForWeek } = await import("./recon_enqueue_driver_weeks.ts");
+    const queued = await enqueueDriverWeekUnitsForWeek(orgId, weekKey, "wra67_fuel_finalize");
+    if (queued.errors.length) {
+      console.warn(
+        "[fuel_period] post-seal driver_week enqueue partial errors",
+        weekKey,
+        queued.errors.slice(0, 8),
+      );
+    }
+  } catch (enqErr) {
+    console.warn(
+      "[fuel_period] post-seal driver_week enqueue failed",
+      weekKey,
+      enqErr instanceof Error ? enqErr.message : enqErr,
+    );
+  }
+  try {
+    const { queueWeekDeskRefresh } = await import("./recon_desk_queue.ts");
+    await queueWeekDeskRefresh(orgId, [weekKey], { heldLine: "rideshare" });
+  } catch (deskErr) {
+    console.warn(
+      "[fuel_period] post-seal desk refresh enqueue failed",
+      weekKey,
+      deskErr instanceof Error ? deskErr.message : deskErr,
+    );
+  }
+}
+
+/** Reverse the wallet + ledger posts of drivers committed in this run (compensating rows). */
+async function compensateCommittedFuelMoney(
+  snapshots: any[],
+  committedDriverIds: string[],
+  weekStart: string,
+  reason: string,
+) {
+  for (const committedId of committedDriverIds) {
+    const committedSnap =
+      snapshots.find((s: any) => String(s?.driverId || "") === committedId) || null;
+    try {
+      if (committedSnap) await reverseEnterpriseFuelSyncForSnapshot(committedSnap);
+      await reverseFuelFinancialEventsForWeek(committedId, weekStart, reason);
+    } catch (revErr) {
+      console.error("[fuel_period] compensating reverse failed", committedId, revErr);
+    }
+  }
+}
+
+/**
+ * F-03 + F-05: write the week's fuel lines (v3 weeks) and every driver's fuel statement BEFORE
+ * the period flips to locked. Returns the drivers that failed; the caller does not lock then.
+ */
+async function writeLinesAndStatementsBeforeLock(args: {
+  orgId: string;
+  periodId: string;
+  weekKey: string;
+  actor: string | null;
+  snapshots: any[];
+}): Promise<
+  | { ok: true; linesWritten: number; published: number; statementIds: string[] }
+  | { ok: false; phase: "lines" | "statements"; failures: Array<{ driverId: string; error: string }> }
+> {
+  const { snapshotsChargedByV3, buildFuelWeekLineRows, writeFuelWeekLines } = await import(
+    "./fuel_week_lines.ts"
+  );
+  let linesWritten = 0;
+  if (snapshotsChargedByV3(args.snapshots)) {
+    try {
+      const rows = buildFuelWeekLineRows(args.snapshots);
+      linesWritten = await writeFuelWeekLines({
+        orgId: args.orgId,
+        periodId: args.periodId,
+        weekStart: args.weekKey,
+        rows,
+      });
+    } catch (e) {
+      const driverId = String((e as { driverId?: unknown })?.driverId || "");
+      return {
+        ok: false,
+        phase: "lines",
+        failures: [{ driverId, error: e instanceof Error ? e.message : String(e) }],
+      };
+    }
+  }
+  try {
+    const sealed = await sealFuelWeek({
+      organizationId: args.orgId,
+      weekKey: args.weekKey,
+      actorId: args.actor ?? undefined,
+      force: true,
+      amountsByDriver: buildFuelSealAmountsByDriver(args.snapshots),
+      collectFailures: true,
+    });
+    if (sealed.failures.length) {
+      return { ok: false, phase: "statements", failures: sealed.failures };
+    }
+    return {
+      ok: true,
+      linesWritten,
+      published: sealed.published,
+      statementIds: sealed.statementIds,
+    };
+  } catch (e) {
+    // A failure before any driver (e.g. the periods read) names no driver.
+    return {
+      ok: false,
+      phase: "statements",
+      failures: [{ driverId: "", error: e instanceof Error ? e.message : String(e) }],
+    };
+  }
+}
+
 async function sealAndFinishFuelWeek(args: {
   sb: ReturnType<typeof getServiceClient>;
   orgId: string;
@@ -462,6 +576,10 @@ async function sealAndFinishFuelWeek(args: {
   version: number;
   now: string;
   failures?: Array<{ driverId: string; error: string }>;
+  /** Statements already written before the lock (F-05); the seal step is skipped. */
+  statementsPublished?: number;
+  /** Fuel lines written before the lock (F-03). */
+  linesWritten?: number;
 }): Promise<
   | { ok: true; version: number; fuelSealPublished?: number }
   | { ok: false; error: string; version: number }
@@ -482,7 +600,7 @@ async function sealAndFinishFuelWeek(args: {
   const failures = args.failures || [];
   const weekKey = ymd(period.week_start);
   const amountsByDriver = buildFuelSealAmountsByDriver(snapshots);
-  let fuelSealPublished: number | null = null;
+  let fuelSealPublished: number | null = args.statementsPublished ?? null;
   if (String(cursor.step || "") !== "rebuild" && String(cursor.step || "") !== "done") {
     try {
       const sealed = await sealFuelWeek({
@@ -504,33 +622,7 @@ async function sealAndFinishFuelWeek(args: {
         .update({ fuel_seal_error: null, close_receipt: closeReceipt, updated_at: now })
         .eq("id", periodId)
         .eq("org_id", orgId);
-      try {
-        const { enqueueDriverWeekUnitsForWeek } = await import("./recon_enqueue_driver_weeks.ts");
-        const queued = await enqueueDriverWeekUnitsForWeek(orgId, weekKey, "wra67_fuel_finalize");
-        if (queued.errors.length) {
-          console.warn(
-            "[fuel_period] post-seal driver_week enqueue partial errors",
-            weekKey,
-            queued.errors.slice(0, 8),
-          );
-        }
-      } catch (enqErr) {
-        console.warn(
-          "[fuel_period] post-seal driver_week enqueue failed",
-          weekKey,
-          enqErr instanceof Error ? enqErr.message : enqErr,
-        );
-      }
-      try {
-        const { queueWeekDeskRefresh } = await import("./recon_desk_queue.ts");
-        await queueWeekDeskRefresh(orgId, [weekKey], { heldLine: "rideshare" });
-      } catch (deskErr) {
-        console.warn(
-          "[fuel_period] post-seal desk refresh enqueue failed",
-          weekKey,
-          deskErr instanceof Error ? deskErr.message : deskErr,
-        );
-      }
+      await afterFuelStatementsPublished(orgId, weekKey);
     } catch (sealErr: unknown) {
       const fuelSealError = sealErr instanceof Error ? sealErr.message : String(sealErr);
       console.error("[fuel_period] post-lock sealFuelWeek failed", weekKey, sealErr);
@@ -577,6 +669,8 @@ async function sealAndFinishFuelWeek(args: {
       gapAccepted: Boolean(period.leakage_reviewed_at),
       moneyCommittedOnLock: true,
       fuelSealPublished,
+      statementsBeforeLock: args.statementsPublished != null,
+      ...(args.linesWritten != null ? { linesWritten: args.linesWritten } : {}),
     },
     actor,
   );
@@ -981,6 +1075,85 @@ async function processJobRow(job: Record<string, unknown>) {
         return { ok: false, error: "money_commit_failure", failures: moneyFailures };
       }
     }
+
+    // F-03 + F-05: lines and every driver's statement are written BEFORE the week locks. If any
+    // can't be written, nothing locks: this run's money is reversed, the lines are cleared, the
+    // week stays open, and the failed drivers are named (Stitch screen 11).
+    const weekKeyForLock = ymd(period.week_start);
+    const preLock = await writeLinesAndStatementsBeforeLock({
+      orgId,
+      periodId,
+      weekKey: weekKeyForLock,
+      actor,
+      snapshots,
+    });
+    if (!preLock.ok) {
+      await compensateCommittedFuelMoney(
+        snapshots,
+        moneyCommittedDriverIds,
+        weekKeyForLock,
+        "finalize_statement_failed",
+      );
+      try {
+        const { writeFuelWeekLines } = await import("./fuel_week_lines.ts");
+        await writeFuelWeekLines({ orgId, periodId, weekStart: weekKeyForLock, rows: [] });
+      } catch (clearErr) {
+        console.warn("[fuel_period] clearing unlocked lines failed", periodId, clearErr);
+      }
+      const named = preLock.failures.map((f) => f.driverId).filter(Boolean);
+      const sealError = preLock.phase === "lines"
+        ? `fuel_lines_failed${named.length ? `:${named.join(",")}` : ""}`
+        : `fuel_statement_failed${named.length ? `:${named.join(",")}` : ""}`;
+      await sb
+        .from("fuel_reconciliation_period")
+        .update({
+          status: "ready",
+          locked_at: null,
+          locked_by: null,
+          fuel_seal_error: sealError,
+          updated_at: now,
+          computed_at: now,
+        })
+        .eq("id", periodId)
+        .eq("org_id", orgId);
+      await insertAudit(
+        orgId,
+        periodId,
+        preLock.phase === "lines" ? "finalize_lines_failed" : "finalize_statement_failed",
+        { failures: preLock.failures, compensatedDrivers: moneyCommittedDriverIds },
+        actor,
+      );
+      await sb
+        .from("fuel_period_job")
+        .update({
+          state: "failed",
+          failures: preLock.failures.map((f) => ({ ...f, phase: preLock.phase })),
+          // Money was reversed, so a retry commits it again from scratch.
+          cursor: { ...cursor, moneyCommittedDriverIds: [], ledgerEventIds: [], step: "money", snapshots },
+          updated_at: now,
+        })
+        .eq("id", job.id);
+      return {
+        ok: false,
+        error: preLock.phase === "lines" ? "fuel_lines_failed" : "fuel_statement_failed",
+        failures: preLock.failures,
+        notLocked: true,
+      };
+    }
+    await sb
+      .from("fuel_reconciliation_period")
+      .update({
+        fuel_seal_error: null,
+        close_receipt: {
+          statementIds: preLock.statementIds,
+          ledgerEventIds: Array.isArray(cursor.ledgerEventIds) ? (cursor.ledgerEventIds as string[]) : [],
+          linesWritten: preLock.linesWritten,
+        },
+        updated_at: now,
+      })
+      .eq("id", periodId)
+      .eq("org_id", orgId);
+
     const { error: lockFlipErr } = await sb
       .from("fuel_reconciliation_period")
       .update({
@@ -1004,7 +1177,19 @@ async function processJobRow(job: Record<string, unknown>) {
         actor,
       );
     } else {
+      // The statements and lines are written; only the flip failed. Keep the cursor (money is
+      // committed) so a retry re-writes lines/statements idempotently and locks.
       console.warn("[fuel_period] lock flip failed", periodId, lockFlipErr.message);
+      await sb
+        .from("fuel_period_job")
+        .update({
+          state: "failed",
+          failures: [{ error: "lock_flip_failed", message: lockFlipErr.message }],
+          cursor: { ...cursor, step: "money", snapshots },
+          updated_at: now,
+        })
+        .eq("id", job.id);
+      return { ok: false, error: "lock_flip_failed", notLocked: true };
     }
 
     const cycleVehicleIds = [
@@ -1024,11 +1209,13 @@ async function processJobRow(job: Record<string, unknown>) {
       }
     }
 
-    cursor.step = "seal";
+    // Statements were written before the lock (F-05): go straight to the post-lock steps.
+    await afterFuelStatementsPublished(orgId, weekKeyForLock);
+    cursor.step = "rebuild";
     await sb
       .from("fuel_period_job")
       .update({
-        cursor: { ...cursor, step: "seal", snapshots },
+        cursor: { ...cursor, step: "rebuild", snapshots },
         updated_at: now,
       })
       .eq("id", job.id);
@@ -1046,6 +1233,8 @@ async function processJobRow(job: Record<string, unknown>) {
       version: nextVersion,
       now,
       failures,
+      statementsPublished: preLock.published,
+      linesWritten: preLock.linesWritten,
     });
   } else if (kind === "reopen") {
     const reason = String(cursor.reason || "");
@@ -1088,6 +1277,27 @@ async function processJobRow(job: Record<string, unknown>) {
       } catch {
         /* ignore */
       }
+    }
+    // F-03: the week's fuel lines are marked reversed (kept, never edited) before it unlocks;
+    // a re-lock writes new lines. v2.2 weeks have none, so this is a no-op for them.
+    try {
+      const { reverseFuelWeekLines } = await import("./fuel_week_lines.ts");
+      const reversedLines = await reverseFuelWeekLines({ orgId, periodId, reason });
+      if (reversedLines > 0) {
+        await insertAudit(orgId, periodId, "lines_reversed", { count: reversedLines, reason }, actor);
+      }
+    } catch (linesErr) {
+      const message = linesErr instanceof Error ? linesErr.message : String(linesErr);
+      await insertAudit(orgId, periodId, "reopen_lines_reverse_failed", { error: message }, actor);
+      await sb
+        .from("fuel_period_job")
+        .update({
+          state: "failed",
+          failures: [{ error: "lines_reverse_failed", message }],
+          updated_at: now,
+        })
+        .eq("id", job.id);
+      return { ok: false, error: "lines_reverse_failed" };
     }
     await sb
       .from("fuel_reconciliation_period")

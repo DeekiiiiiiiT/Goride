@@ -2107,6 +2107,13 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('fuel.
           console.warn("[FuelResetPeriod] SQL period load failed:", loadPeriodErr.message);
         } else if (existingPeriod?.id) {
           const nextVersion = Number(existingPeriod.version || 1) + 1;
+          // F-03: mark the week's fuel lines reversed before it unlocks (kept, never deleted).
+          try {
+            const { reverseFuelWeekLines } = await import("./fuel_week_lines.ts");
+            await reverseFuelWeekLines({ orgId, periodId: String(existingPeriod.id), reason: reopenReason });
+          } catch (linesErr: any) {
+            syncErrors.push(`reverse fuel lines: ${linesErr?.message || linesErr}`);
+          }
           const { error: unlockErr } = await supabase
             .from("fuel_reconciliation_period")
             .update({

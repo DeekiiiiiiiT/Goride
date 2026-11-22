@@ -199,7 +199,16 @@ export async function sealFuelWeek(opts: {
   asOf?: string;
   /** Optional per-driver overrides (major units) — e.g. Finalize snapshots / Consumption strip. */
   amountsByDriver?: Record<string, FuelCloseAmountOverride>;
-}): Promise<{ published: number; statementIds: string[] }> {
+  /**
+   * F-05: keep going past a driver whose statement can't be written and return every failure,
+   * so the lock can refuse and name each driver. Default: throw on the first failure.
+   */
+  collectFailures?: boolean;
+}): Promise<{
+  published: number;
+  statementIds: string[];
+  failures: Array<{ driverId: string; error: string }>;
+}> {
   const organizationId = String(opts.organizationId || "").trim();
   const weekKey = WEEK_KEY(opts.weekKey);
   if (!organizationId || !/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
@@ -230,7 +239,9 @@ export async function sealFuelWeek(opts: {
 
   let published = 0;
   const statementIds: string[] = [];
+  const failures: Array<{ driverId: string; error: string }> = [];
   for (const driverId of unionFuelSealDriverIds(periodRows, opts.amountsByDriver)) {
+   try {
     const p = periodByDriver.get(driverId) ?? {
       driver_id: driverId,
       fuel_deduction: null,
@@ -251,7 +262,8 @@ export async function sealFuelWeek(opts: {
       Math.abs(amounts.driverShare) > 0.005 ||
       Math.abs(amounts.companyShare) > 0.005 ||
       Math.abs(amounts.totalSpend) > 0.005;
-    if (!hasActivity && !p.fuel_finalized) continue;
+    // F-05: a driver with a finalized report for this week always gets a statement, even at J$0.
+    if (!hasActivity && !p.fuel_finalized && !opts.amountsByDriver?.[driverId]) continue;
 
     // Pass 3 / H-7 + C-2b: rebuild-only is draft until engine parity.
     // Only finalized_report KV or consumption_strip overrides may close fuel.
@@ -315,7 +327,14 @@ export async function sealFuelWeek(opts: {
       }
       throw e;
     }
+   } catch (driverErr) {
+    if (!opts.collectFailures) throw driverErr;
+    failures.push({
+      driverId,
+      error: driverErr instanceof Error ? driverErr.message : String(driverErr),
+    });
+   }
   }
 
-  return { published, statementIds };
+  return { published, statementIds, failures };
 }

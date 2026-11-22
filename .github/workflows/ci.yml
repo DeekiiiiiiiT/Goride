@@ -351,6 +351,7 @@ jobs:
           supabase/functions/_fleet-server/fuel_snapshot_brain_f30.test.ts
           supabase/functions/_fleet-server/fuel_entry_source.test.ts
           supabase/functions/_fleet-server/fuel_vehicle_economy_weeks.test.ts
+          supabase/functions/_fleet-server/fuel_week_lines.test.ts
           supabase/functions/_fleet-server/fuel_week_n17_pa.test.ts
           supabase/functions/_fleet-server/fuel_week_phase4_server_cats.test.ts
           supabase/functions/_shared/directionsRoute.test.ts
