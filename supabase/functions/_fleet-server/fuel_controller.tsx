@@ -3143,63 +3143,6 @@ app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
 });
 
 
-// Phase 8 Step 3: Chaos Seeder Endpoint
-app.post(`${BASE_PATH}/admin/chaos-seeder`, requirePlatformStaff(), async (c) => {
-    try {
-        const { count = 500, vehicleId } = await c.req.json();
-        console.log(`[Chaos] Generating ${count} synthetic entries...`);
-        
-        const vehicles = vehicleId ? [await kv.get(`vehicle:${vehicleId}`)] : await kv.getByPrefix("vehicle:");
-        if (!vehicles.length) throw new Error("No vehicles found to seed");
-
-        const entries = [];
-        const baseDate = new Date();
-
-        for (let i = 0; i < count; i++) {
-            const vehicle = vehicles[Math.floor(Math.random() * vehicles.length)];
-            const tankCapacity = Number(vehicle?.specifications?.tankCapacity) || Number(vehicle?.fuelSettings?.tankCapacity) || 40;
-            const date = new Date(baseDate);
-            date.setMinutes(date.getMinutes() - (i * 120)); // Every 2 hours
-            
-            // Randomly generate volume to trigger splits
-            // Some small fills, some large fills
-            const rand = Math.random();
-            let liters = 15 + (Math.random() * 10); // Normal fill 15-25L
-            if (rand > 0.8) liters = tankCapacity * 0.9; // Large fill (90% tank)
-            if (rand > 0.95) liters = tankCapacity * 1.2; // Overfill anomaly (120% tank)
-
-            entries.push({
-                id: crypto.randomUUID(),
-                date: date.toISOString(),
-                vehicleId: vehicle.id,
-                driverId: "chaos-driver-1",
-                amount: liters * 1.5,
-                liters: liters,
-                pricePerLiter: 1.5,
-                odometer: 100000 + (i * 50),
-                type: 'Card_Transaction',
-                entryMode: 'Floating',
-                paymentSource: 'Gas_Card',
-                metadata: {
-                    isSynthetic: true,
-                    chaosBatch: 'phase-4-threshold-test'
-                }
-            });
-        }
-
-        // Chunked write
-        for (let i = 0; i < entries.length; i += 50) {
-            const chunk = entries.slice(i, i + 50);
-            const keys = chunk.map(e => `fuel_entry:${e.id}`);
-            await kv.mset(keys, chunk);
-        }
-
-        return c.json({ success: true, count: entries.length });
-    } catch (e: any) {
-        return c.json({ error: e.message }, 500);
-    }
-});
-
 // Phase 8 Cleanup: Purge Synthetic Data
 app.post(`${BASE_PATH}/admin/purge-synthetic`, requirePlatformStaff(), async (c) => {
     try {

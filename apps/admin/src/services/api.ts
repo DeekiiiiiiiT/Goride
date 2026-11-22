@@ -1902,19 +1902,6 @@ export const api = {
     return checkIns.filter((c: any) => c.vehicleId === vehicleId);
   },
 
-  async runChaosSeeder(count: number, vehicleId?: string) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/chaos-seeder`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
-        body: JSON.stringify({ count, vehicleId })
-    });
-    if (!response.ok) throw new Error("Chaos seeder failed");
-    return response.json();
-  },
-
   async purgeSyntheticData() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/purge-synthetic`, {
         method: 'POST',

@@ -1,14 +1,11 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { Button } from "../ui/button";
-import { Input } from "../ui/input";
 import { Badge } from "../ui/badge";
-import { 
-    Zap, 
-    ShieldCheck, 
-    AlertTriangle, 
-    Database, 
-    Activity, 
+import {
+    ShieldCheck,
+    AlertTriangle,
+    Database,
     ChevronRight,
     Loader2,
     CheckCircle2,
@@ -39,35 +36,14 @@ export function SystemHardeningPanel() {
 
 function SystemHardeningPanelInner() {
     const { runExclusive } = useFleetBusy();
-    const [seeding, setSeeding] = useState(false);
     const [purging, setPurging] = useState(false);
     const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
-    const [seedCount, setSeedCount] = useState(500);
     const [stats, setStats] = useState({
         dbStatus: 'Healthy',
         latency: '42ms',
         throughput: '1.2k req/min',
         uptime: '99.98%'
     });
-
-    const handleChaosSeed = async () => {
-        setSeeding(true);
-        const locked = await runExclusive('Running chaos seeder…', async () => {
-            try {
-                const res = await api.runChaosSeeder(seedCount);
-                toast.success(`Chaos Seeder Successful: ${res.count} entries generated.`);
-                await api.backfillFuelIntegrity();
-                return true;
-            } catch (err) {
-                toast.error("Chaos Seeder failed to run");
-                return false;
-            }
-        });
-        setSeeding(false);
-        if (locked === undefined) {
-            toast.message('Another action is still running — try again when it finishes.');
-        }
-    };
 
     const handlePurge = async () => {
         setPurging(true);
@@ -116,58 +92,28 @@ function SystemHardeningPanelInner() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Chaos Seeder */}
+                {/* Test data (the chaos seeder was removed — fuel audit F-31) */}
                 <Card className="border-slate-200 shadow-sm overflow-hidden border-l-4 border-l-orange-500">
                     <CardHeader className="bg-slate-50/50">
                         <CardTitle className="text-base flex items-center gap-2">
-                            <Zap className="w-4 h-4 text-orange-600" />
-                            Chaos Seeder (Stress Test)
+                            <Trash2 className="w-4 h-4 text-orange-600" />
+                            Test data
                         </CardTitle>
                         <CardDescription>
-                            Generate synthetic traffic to test "Wait-and-See" logic at scale.
+                            Removes any leftover synthetic test fills.
                         </CardDescription>
                     </CardHeader>
-                    <CardContent className="pt-6 space-y-4">
-                        <div className="space-y-2">
-                            <label className="text-xs font-medium text-slate-600">Synthetic Entry Count</label>
-                            <div className="flex gap-2">
-                                <Input 
-                                    type="number" 
-                                    value={seedCount} 
-                                    onChange={(e) => setSeedCount(parseInt(e.target.value))}
-                                    className="flex-1"
-                                />
-                                <Button 
-                                    onClick={handleChaosSeed} 
-                                    disabled={seeding}
-                                    className="bg-orange-600 hover:bg-orange-700 text-white min-w-[140px]"
-                                >
-                                    {seeding ? (
-                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                    ) : (
-                                        <Activity className="w-4 h-4 mr-2" />
-                                    )}
-                                    Run Chaos
-                                </Button>
-                            </div>
-                        </div>
-                        <p className="text-[11px] text-slate-400 italic">
-                            * Note: This will generate synthetic fuel entries across all active vehicles to test threshold triggers and auto-resolution worker latency.
-                        </p>
-                        
-                        <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase">Test Data Lifecycle</span>
-                            <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50 h-8 text-xs font-bold"
-                                onClick={() => setShowPurgeConfirm(true)}
-                                disabled={purging || seeding}
-                            >
-                                {purging ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <Trash2 className="w-3 h-3 mr-2" />}
-                                Purge All Test Data
-                            </Button>
-                        </div>
+                    <CardContent className="pt-6">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 h-8 text-xs font-bold"
+                            onClick={() => setShowPurgeConfirm(true)}
+                            disabled={purging}
+                        >
+                            {purging ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <Trash2 className="w-3 h-3 mr-2" />}
+                            Purge All Test Data
+                        </Button>
                     </CardContent>
                 </Card>
 
@@ -183,7 +129,7 @@ function SystemHardeningPanelInner() {
                                 Confirm Data Purge
                             </AlertDialogTitle>
                             <AlertDialogDescription>
-                                Are you sure you want to delete all synthetic test data? This will remove all Chaos Seeder entries and recalculate vehicle integrity metrics. This action cannot be undone.
+                                Are you sure you want to delete all synthetic test data? This will remove all synthetic entries and recalculate vehicle integrity metrics. This action cannot be undone.
                             </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
