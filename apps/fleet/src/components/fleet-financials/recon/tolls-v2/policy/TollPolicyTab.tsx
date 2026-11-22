@@ -89,7 +89,7 @@ export function TollPolicyTab() {
         </div>
         <p className="mt-4 flex items-center gap-2 text-sm text-[#47464c]">
           <Info className="h-4 w-4 shrink-0" aria-hidden />
-          If Roam learned about the toll too late for the driver to send it, the fleet always pays.
+          This also applies when Roam only finds the short payment after Uber's 9 days.
         </p>
       </section>
 

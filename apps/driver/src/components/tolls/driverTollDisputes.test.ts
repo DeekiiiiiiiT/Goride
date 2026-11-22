@@ -109,11 +109,12 @@ describe('wording', () => {
     expect(consequence(row({ id: 'a', daysLeft: 0 })).text).toMatch(/by today,/);
   });
 
-  it('consequence: opened late or the fleet bears expiries → the fleet pays, never the driver (AG6)', () => {
+  it('consequence: the fleet setting decides, also when found late', () => {
     const fleetText =
       "If this isn't sent in time, the fleet pays it, not you. If you send it and Uber refunds, the fleet gets the money back.";
-    expect(consequence(row({ id: 'a', openedLate: true }))).toEqual({ tone: 'fleet', text: fleetText });
-    expect(consequence(row({ id: 'a', bearerIfNotSent: { bearer: 'fleet', amountMinor: 2000 } })).tone).toBe('fleet');
+    // found late: follows the fleet's setting, not automatically the fleet (owner, 21 Nov)
+    expect(consequence(row({ id: 'a', openedLate: true })).tone).toBe('driver');
+    expect(consequence(row({ id: 'a', bearerIfNotSent: { bearer: 'fleet', amountMinor: 2000 } }))).toEqual({ tone: 'fleet', text: fleetText });
   });
 
   it('Home summary: only tolls still to send, red chip with 2 days or fewer', () => {

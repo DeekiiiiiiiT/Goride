@@ -453,7 +453,7 @@ BEGIN
   IF d.state <> 'won' THEN RAISE EXCEPTION '4 won state %', d.state; END IF;
   PERFORM pg_temp._s1_alloc_ok(v_charge);
 
-  -- ── 5: late open → expired, fleet bears ──
+  -- ── 5: late open → expired; the "not sent in time" setting bears it (owner 21 Nov; here: driver) ──
   v_week := ledger.jamaica_week_start((now() AT TIME ZONE 'America/Jamaica')::timestamptz - interval '49 days');
   PERFORM pg_temp._s1_import390('late', v_week,
     ((v_week + 2) + time '10:00') AT TIME ZONE 'America/Jamaica',
@@ -475,8 +475,10 @@ BEGIN
   END IF;
   SELECT coalesce(sum(a.amount_minor), 0) INTO v_sum FROM toll.allocations a
   WHERE a.organization_id = v_org AND a.charge_id = c.id AND a.reversed_by IS NULL
-    AND a.bearer = 'fleet' AND a.dispute_id = v_dispute;
-  IF v_sum <> 2000 THEN RAISE EXCEPTION '5 fleet %', v_sum; END IF;
+    AND a.bearer = toll_system.late_found_bearer(v_org) AND a.dispute_id = v_dispute;
+  IF v_sum <> 2000 OR d.bearer IS DISTINCT FROM toll_system.late_found_bearer(v_org) THEN
+    RAISE EXCEPTION '5 late-found bearer % (%)', v_sum, d.bearer;
+  END IF;
   PERFORM pg_temp._s1_assert_nightly();
 
   -- ── 6: refusals ──

@@ -66,7 +66,10 @@ async function weekStart(n = 0): Promise<string> {
 type Co = { org: string; owner: string; name: string; tag: string };
 const made: Co[] = [];
 
-async function company(name: string, opts: { lostBearer?: "fleet" | "driver"; riderPays?: boolean } = {}): Promise<Co> {
+async function company(
+  name: string,
+  opts: { lostBearer?: "fleet" | "driver"; expiredBearer?: "fleet" | "driver"; riderPays?: boolean } = {},
+): Promise<Co> {
   const org = crypto.randomUUID();
   const owner = crypto.randomUUID();
   const tag = name.replace(/[^a-z0-9]/gi, "").toLowerCase();
@@ -100,7 +103,7 @@ async function company(name: string, opts: { lostBearer?: "fleet" | "driver"; ri
   );
   await cmd(co, "change_toll_settings", {
     note: "Done-test company settings",
-    dispute_policy: { lost_bearer: opts.lostBearer ?? "fleet" },
+    dispute_policy: { lost_bearer: opts.lostBearer ?? "fleet", expired_bearer: opts.expiredBearer ?? "driver" },
   });
   return co;
 }
@@ -427,18 +430,28 @@ story("5", "The driver never sends it; the 9 days pass → expired, the driver b
   return "expired by the nightly job; driver bears J$20";
 });
 
-story("5b", "The Uber report comes 10 days after the trip → the dispute opens expired (late), no card, the fleet bears it", async () => {
+story("5b", "The Uber report comes 10 days after the trip → opens expired (late), no card; the 'not sent in time' setting bears it (driver)", async () => {
   const co = await company("dt5b");
   await uberTripWithToll(co, "t5b", -10);
   await runMatcher(co);
   const d = await dispute(co, "t5b");
-  check(d.state === "expired" && d.opened_late && d.bearer === "fleet", "opened late, expired, fleet bears", d);
+  check(d.state === "expired" && d.opened_late && d.bearer === "driver", "opened late, expired, the setting (driver) bears", d);
   check(d.posted_in_week_key !== null, "result has its week (listed in Results this week)", d);
-  check((await money(co)).fleetExpense === 2000, "fleet bears J$20", await money(co));
+  check((await money(co)).driverOwes === 2000 && (await money(co)).fleetExpense === 0, "driver bears J$20", await money(co));
   check((await driverCards(co)).length === 0, "no driver card");
-  check((await money(co)).driverOwes === 0, "driver never charged", await money(co));
   await nightlyClean(co);
-  return "opened late → expired → fleet bears J$20; driver sees nothing";
+  return "opened late → expired → driver bears J$20 (the fleet's setting); no card";
+});
+
+story("5e", "Same, but the fleet's 'not sent in time' setting is The fleet → the fleet bears it", async () => {
+  const co = await company("dt5e", { expiredBearer: "fleet" });
+  await uberTripWithToll(co, "t5e", -10);
+  await runMatcher(co);
+  const d = await dispute(co, "t5e");
+  check(d.state === "expired" && d.opened_late && d.bearer === "fleet", "opened late, the setting (fleet) bears", d);
+  check((await money(co)).fleetExpense === 2000 && (await money(co)).driverOwes === 0, "fleet bears J$20", await money(co));
+  await nightlyClean(co);
+  return "opened late → the setting (fleet) bears J$20";
 });
 
 story("5c", "Expired with the driver bearing J$20; Uber's J$20 refund then arrives → won, the driver's J$20 reversed", async () => {
@@ -456,7 +469,7 @@ story("5c", "Expired with the driver bearing J$20; Uber's J$20 refund then arriv
   return "late refund on an expired dispute → won, driver back to J$0";
 });
 
-story("5d", "Opened late, expired, the fleet bore J$20; Uber refunds J$10 → part won; fleet keeps J$10; driver never charged", async () => {
+story("5d", "Opened late, expired, the driver bore J$20 (the setting); Uber refunds J$10 → part won; the driver's charge drops to J$10", async () => {
   const co = await company("dt5d");
   await uberTripWithToll(co, "t5d", -10);
   await runMatcher(co);
@@ -466,10 +479,10 @@ story("5d", "Opened late, expired, the fleet bore J$20; Uber refunds J$10 → pa
   const d = await dispute(co, "t5d");
   const after = await money(co);
   check(d.recovered_minor === 1000, "J$10 recovered", d);
-  check(after.fleetExpense === before.fleetExpense - 1000, "fleet's cost drops by J$10", { before, after });
-  check(after.driverOwes === 0, "driver never charged");
+  check(before.driverOwes === 2000 && after.driverOwes === 1000, "driver's charge drops by J$10", { before, after });
+  check(after.fleetExpense === 0, "fleet never charged", after);
   await nightlyClean(co);
-  return `state ${d.state}; fleet cost ${J(before.fleetExpense)} → ${J(after.fleetExpense)}`;
+  return `state ${d.state}; driver ${J(before.driverOwes)} → ${J(after.driverOwes)}`;
 });
 
 story("6", "Sent, no refund in either pay period → when the second report is in, lost by itself; the fleet bears J$20", async () => {

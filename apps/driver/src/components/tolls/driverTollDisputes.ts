@@ -163,7 +163,8 @@ export function uberHelpLine(d: DriverTollDispute): string {
 /** B5 / AG6: what happens if the driver does nothing. `fleet` → the blue box. */
 export function consequence(d: DriverTollDispute): { tone: 'driver' | 'fleet'; text: string } {
   const amount = fmtJmd(d.bearerIfNotSent?.amountMinor ?? d.leftMinor);
-  if (d.openedLate || d.bearerIfNotSent?.bearer === 'fleet') {
+  // Who pays if it isn't sent follows the fleet's setting, also when Roam found it late (owner, 21 Nov).
+  if (d.bearerIfNotSent?.bearer === 'fleet') {
     return {
       tone: 'fleet',
       text: "If this isn't sent in time, the fleet pays it, not you. If you send it and Uber refunds, the fleet gets the money back.",

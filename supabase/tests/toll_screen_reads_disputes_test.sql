@@ -787,7 +787,8 @@ BEGIN
   v_res := public.toll_sys_driver_disputes(pg_temp._s3rd_org(), 's3rd-d1');
   RESET ROLE;
   v_row := (SELECT x FROM jsonb_array_elements(v_res -> 'disputes') x WHERE (x ->> 'id')::uuid = d.id);
-  IF v_row -> 'bearerIfNotSent' ->> 'bearer' <> 'fleet' THEN RAISE EXCEPTION 'R3 opened late bearer %', v_row -> 'bearerIfNotSent'; END IF;
+  -- found late follows the setting (owner 21 Nov): here the driver
+  IF v_row -> 'bearerIfNotSent' ->> 'bearer' <> 'driver' THEN RAISE EXCEPTION 'R3 opened late bearer %', v_row -> 'bearerIfNotSent'; END IF;
   ALTER TABLE toll.disputes DISABLE TRIGGER USER;
   UPDATE toll.disputes SET opened_late = false WHERE organization_id = pg_temp._s3rd_org() AND id = d.id;
   ALTER TABLE toll.disputes ENABLE TRIGGER USER;
