@@ -25,6 +25,7 @@
     "./leftoverSplit": "./src/leftoverSplit.ts",
     "./fleetTime": "./src/fleetTime.ts",
     "./fuelEngine": "./src/fuelEngine.ts",
+    "./fuelEngineV3": "./src/fuelEngineV3.ts",
     "./tripGrossRevenue": "./src/tripGrossRevenue.ts",
     "./vehicleDriverAssignmentHistory": "./src/vehicleDriverAssignmentHistory.ts"
   },

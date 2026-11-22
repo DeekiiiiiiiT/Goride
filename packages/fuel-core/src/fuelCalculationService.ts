@@ -64,6 +64,7 @@ import { applyFillClocks, resolveFillAt, resolveFillChainSpan, tripBelongsToFill
 import { splitLeftoverFuel, normalizeLeftoverSplit, type LeftoverSplit } from './leftoverSplit.ts';
 import { rollingVarianceBill } from './rollingVariance.ts';
 import { FUEL_ENGINE_VERSION } from './fuelEngine.ts';
+import { combineFuelV3, priceFuelWeekV3, type FuelV3Result } from './fuelEngineV3.ts';
 import { addDaysYmd, fleetCalendarDay } from './fleetTime.ts';
 
 export {
@@ -278,6 +279,8 @@ export const FuelCalculationService = {
             /** Oldest first. Signed fuel difference from the previous 3 v2 weeks. */
             priorWeekVariances?: number[];
             routingHealth?: { ok: boolean; plainReason: string; message: string };
+            /** F-01 detail: the owner reviewed a chainless week (fuel v3 may then price it by km share). */
+            odometerChainReviewed?: boolean;
         }
     ): WeeklyFuelReport => {
         const startStr = FuelCalculationService.toLocalDateStr(weekStart);
@@ -708,6 +711,33 @@ export const FuelCalculationService = {
             };
         }
 
+        // 7b. Fuel engine v3, dual-run (audit Part D): the same km, priced from the fuel bought.
+        // Never changes the v2.2 numbers above; the platform switch decides which one is charged.
+        const spendNoOdometer = vehicleEntries
+            .filter((e) => !(Number(e.odometer) > 0))
+            .reduce((sum, e) => sum + fuelOpsSpendAmount(e), 0);
+        const fuelV3 = priceFuelWeekV3({
+            spendWithOdometer: Math.max(0, totalGasCardCost - spendNoOdometer),
+            spendNoOdometer,
+            odometerKm: priceSpanKm,
+            chainUsable: chain.useChain,
+            chainReviewed: !!options?.odometerChainReviewed,
+            km: {
+                trips: pricedPurpose.tripKm,
+                tripsReported: totalTripDistance,
+                pickups: deadheadDistance,
+                companyErrands: pricedPurpose.companyKm + refuelKm,
+                personal: personalDistance,
+                commute: commuteDistance,
+            },
+            personalAllowanceEarnedKm: allowanceSplit && !allowanceSplit.skip ? allowanceSplit.earnedKm : 0,
+            rule: fuelRule || null,
+            commuteCompanyPct,
+            leftover: leftoverPolicy,
+            blockLeftoverDriver: !!options?.degradedInputs,
+        });
+        for (const l of fuelV3.lines) l.vehicleId = vehicle.id;
+
         // 8. Health Status — cycle spine when FLEET_CYCLE_HEALTH (default ON)
         const priceSource = priceResolved.priceSource;
 
@@ -889,6 +919,8 @@ export const FuelCalculationService = {
                 personalAllowance: allowanceSplit
                   ? buildPersonalAllowanceMetadata(allowanceSplit, paCtx?.config)
                   : undefined,
+                // v3 preview (Part D). Charged only when the fuelEngineV3 platform switch is on.
+                fuelV3,
                 cycleHealth: FLEET_CYCLE_HEALTH
                   ? {
                       mode: 'cycles',
@@ -998,6 +1030,8 @@ export const FuelCalculationService = {
         personalAllowance?: PersonalAllowanceReconContext,
         /** H-8: ledger anchors keyed by vehicleId (same shape as Stop-to-Stop panel). */
         externalAnchorsByVehicleId?: Map<string, OdometerBucketAnchor[]>,
+        /** Fuel v3: the owner reviewed this chainless week's readings (F-01 detail). */
+        v3Options?: { odometerChainReviewed?: boolean },
     ): WeeklyFuelReport[] => {
         const startStr = FuelCalculationService.toLocalDateStr(weekStart);
         const endStr = FuelCalculationService.toLocalDateStr(weekEnd);
@@ -1111,6 +1145,7 @@ export const FuelCalculationService = {
                             ? { ...personalAllowance, driverWeekTrips: expandedTrips }
                             : undefined,
                         externalAnchors: externalAnchorsByVehicleId?.get(primaryVehicle.id),
+                        odometerChainReviewed: v3Options?.odometerChainReviewed,
                     },
                 );
                 // Restore: pending from original entries
@@ -1166,6 +1201,7 @@ export const FuelCalculationService = {
             merged.companyShare = 0;
             merged.driverShare = 0;
             let sliceMeta: any = null;
+            const v3Slices: Array<{ vehicleId: string; result: FuelV3Result }> = [];
 
             for (const vid of vehicleIds) {
                 const v = vehicleById.get(vid) || primaryVehicle;
@@ -1187,9 +1223,11 @@ export const FuelCalculationService = {
                         brainClassification: brainByDriverVehicle?.get(`${driverId}:${vid}`),
                         skipPersonalAllowance: true,
                         externalAnchors: externalAnchorsByVehicleId?.get(vid),
+                        odometerChainReviewed: v3Options?.odometerChainReviewed,
                     },
                 );
                 if (!sliceMeta && slice.metadata?.rideShareCalc) sliceMeta = slice.metadata;
+                if (slice.metadata?.fuelV3) v3Slices.push({ vehicleId: vid, result: slice.metadata.fuelV3 as FuelV3Result });
                 merged.totalGasCardCost += slice.totalGasCardCost;
                 merged.rideShareCost += slice.rideShareCost;
                 merged.companyUsageCost += slice.companyUsageCost;
@@ -1230,6 +1268,10 @@ export const FuelCalculationService = {
             merged.vehicleId = primaryVehicle.id;
             if (sliceMeta) {
                 merged.metadata = { ...merged.metadata, ...sliceMeta };
+            }
+            // v3 dual-run: every car's lines, not only the first car's (sliceMeta).
+            if (v3Slices.length) {
+                merged.metadata = { ...merged.metadata, fuelV3: combineFuelV3(v3Slices) };
             }
             if (personalAllowance) {
                 const resolvedPa = personalAllowance.resolveForDriver?.(driverId);
@@ -1278,6 +1320,15 @@ export const FuelCalculationService = {
                     personalAllowance,
                     expandedTrips,
                 );
+                const paEarnedKm = Number((merged.metadata as any)?.personalAllowance?.earnedKm) || 0;
+                if (paEarnedKm > 0 && merged.metadata?.fuelV3) {
+                    // Multi-car Personal Allowance is applied after the merge; v3 does not yet
+                    // split earned km across cars, so the preview says so rather than guess.
+                    merged.metadata = {
+                        ...merged.metadata,
+                        fuelV3: { ...(merged.metadata.fuelV3 as object), personalAllowanceNotApplied: true },
+                    };
+                }
                 }
                 }
             }

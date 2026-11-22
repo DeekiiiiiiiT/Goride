@@ -203,13 +203,13 @@ export async function hashFuelWeekInputs(orgId: string, weekStart: string, weekE
   }
   const period = await sb
     .from("fuel_reconciliation_period")
-    .select("leftover_split_override")
+    .select("leftover_split_override, odometer_chain_reviewed_at")
     .eq("org_id", orgId)
     .eq("week_start", weekStart)
     .maybeSingle();
   const leftoverOverride = period.error ? null : period.data?.leftover_split_override ?? null;
   const priorCredit = await loadPriorWeekCredit(sb, orgId, weekStart);
-  return hashParts(buildFuelWeekHashParts({
+  const parts = buildFuelWeekHashParts({
     entries: entries as unknown as Array<Record<string, unknown>>,
     trips,
     adjustments: weekAdjustments,
@@ -223,7 +223,16 @@ export async function hashFuelWeekInputs(orgId: string, weekStart: string, weekE
     anchors,
     leftoverOverride,
     priorWeeks: priorCredit.weeks,
-  }));
+  });
+  // Fuel v3 (F-01 detail): reviewing a chainless week's readings changes how v3 prices it, so it
+  // is an input. Added only when set, so every other week's fingerprint is unchanged.
+  const chainReviewedAt = period.error ? null : period.data?.odometer_chain_reviewed_at ?? null;
+  if (chainReviewedAt) parts.push(`odometer_chain_reviewed:${String(chainReviewedAt)}`);
+  // Flipping the fuelEngineV3 switch changes what an open week is charged, so it is an input.
+  // Only added when on, so no fingerprint moves while it stays off.
+  const { FEATURE_FLAGS, isFeatureEnabled } = await import("./feature_flags.ts");
+  if (await isFeatureEnabled(FEATURE_FLAGS.FUEL_ENGINE_V3, orgId)) parts.push("fuel_engine:v3");
+  return hashParts(parts);
 }
 
 /**
@@ -354,7 +363,12 @@ export async function computeFuelWeekSnapshot(args: {
       blockers: [],
       provenance: {
         engine: "generateDriverFleetReport",
-        engineVersion: FUEL_ENGINE_VERSION,
+        // The engine that charged this week (F-06, F-16: nightly v3 checks key off this).
+        engineVersion: built.reports.some(
+            (r) => (r.metadata as Record<string, unknown> | undefined)?.chargedBy === "fuel-chain-v3",
+          )
+          ? "fuel-chain-v3"
+          : FUEL_ENGINE_VERSION,
         brainPolicies,
       },
     })

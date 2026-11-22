@@ -2223,7 +2223,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
         actorId: actor,
         severity,
       });
-      if (!saved.ok) return c.json({ error: saved.error }, saved.status);
+      if (!saved.ok) return c.json({ error: saved.error }, saved.status as 400 | 422 | 500);
       if (periodId) {
         await insertAudit(
           orgId,
@@ -2773,6 +2773,56 @@ export function registerFuelPeriodRoutes(app: Hono) {
         implausibleFills: input.implausibleFills || [],
         inputsVersion: Number(period.version) || 1,
         status: String(period.status || "open"),
+      });
+    },
+  );
+
+  /**
+   * Fuel v3 "New pricing preview" (audit Part D, Stitch screens 1–3, 17). Reads the saved
+   * snapshot only: per driver the charge now vs v3, what moved most, and v3's lines per car.
+   * `charged` says which engine the week is charged by (the fuelEngineV3 switch at compute time).
+   */
+  app.get(
+    `${BASE}/fuel/periods/:id/v3-preview`,
+    requirePermission("fuel.view"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "org required" }, 400);
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
+      const period = await loadPeriod(orgId, periodId);
+      if (!period) return c.json({ error: "Not found" }, 404);
+      const { data: latest, error: snapErr } = await getServiceClient()
+        .from("fuel_week_snapshot")
+        .select("version, money, provenance")
+        .eq("org_id", orgId)
+        .eq("period_id", periodId)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (snapErr) return c.json({ error: snapErr.message }, 500);
+      const reports = ((latest?.money as { reports?: unknown[] } | null)?.reports || []) as Array<
+        Record<string, unknown> & { metadata?: Record<string, unknown> }
+      >;
+      const { fuelV3PreviewRows } = await import("../../../packages/fuel-core/src/fuelEngineV3.ts");
+      const engineVersion = String(
+        (latest?.provenance as { engineVersion?: unknown } | null)?.engineVersion || "",
+      );
+      return c.json({
+        periodId,
+        weekStart: ymd(period.week_start),
+        snapshotVersion: latest?.version ?? null,
+        locked: String(period.status) === "locked",
+        engineVersion,
+        charged: engineVersion.includes("v3") ? "v3" : "v2.2",
+        drivers: fuelV3PreviewRows(reports),
+        cars: reports
+          .filter((r) => r.metadata?.fuelV3)
+          .map((r) => ({
+            driverId: String(r.driverId || ""),
+            vehicleId: String(r.vehicleId || ""),
+            fuelV3: r.metadata!.fuelV3,
+          })),
       });
     },
   );

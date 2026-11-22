@@ -118,6 +118,13 @@ export const FEATURE_FLAGS = {
   PARTS_AUTO_MATCH_ENABLED: "parts_auto_match_enabled",
   /** Live supplier price/stock adapter. Default off until a vendor feed exists. */
   PARTS_SUPPLIER_API: "parts_supplier_api",
+  /**
+   * Fuel engine v3 (fuel enterprise audit Part D): open weeks are charged from the fuel bought
+   * (cost per km = spend ÷ odometer km). Default OFF: v2.2 is charged and v3 is a preview.
+   * Turned on for every company at once; locked weeks keep the engine they were locked with.
+   * Do not turn on before the fuel-lines writer and statements-before-lock (F-03, F-05) ship.
+   */
+  FUEL_ENGINE_V3: "fuel_engine_v3",
   /** Roam rider-app funnel on Trip Analytics. Off until requests can be tied to a fleet before accept. */
   TRIP_ANALYTICS_ROAM_FUNNEL: "trip_analytics_roam_funnel",
 } as const;
@@ -438,6 +445,11 @@ export async function initializeDefaultFlags(): Promise<void> {
       name: FEATURE_FLAGS.RECON_V2,
       enabled: false,
       description: "Week Reconciliation rebuild: every week is done inside Week Reconciliation (off = old close path)",
+    },
+    {
+      name: FEATURE_FLAGS.FUEL_ENGINE_V3,
+      enabled: false,
+      description: "Fuel priced from the fuel bought (cost per km = spend ÷ odometer km). Off = old pricing charged, new shown as a preview",
     },
     {
       name: FEATURE_FLAGS.TOLL_SEAL_BEFORE_PAY,

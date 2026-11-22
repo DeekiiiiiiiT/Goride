@@ -572,6 +572,14 @@ export async function prepareFuelWeekReports(args: {
 
     const weekStartDate = new Date(`${weekStart}T12:00:00`);
     const weekEndDate = new Date(`${weekEnd}T12:00:00`);
+    // Fuel v3 (F-01 detail): a reviewed chainless week may be priced by share of km.
+    const chainReview = await getServiceClient()
+      .from("fuel_reconciliation_period")
+      .select("odometer_chain_reviewed_at")
+      .eq("org_id", orgId)
+      .eq("week_start", weekStart)
+      .maybeSingle();
+    const odometerChainReviewed = !chainReview.error && Boolean(chainReview.data?.odometer_chain_reviewed_at);
     const reports = FuelCalculationService.generateDriverFleetReport(
       scopedVehicles as never,
       drivers.map((driver) => ({
@@ -590,7 +598,17 @@ export async function prepareFuelWeekReports(args: {
       brain as never,
       personalAllowance as never,
       anchors.size > 0 ? (anchors as never) : undefined,
+      { odometerChainReviewed },
     );
+    // Fuel v3 (Part D): with the platform switch on, open weeks are charged from v3. Off, v3
+    // stays in metadata.fuelV3 as the preview and v2.2 is charged, exactly as before.
+    const { FEATURE_FLAGS, isFeatureEnabled } = await import("./feature_flags.ts");
+    if (await isFeatureEnabled(FEATURE_FLAGS.FUEL_ENGINE_V3, orgId)) {
+      const { applyFuelV3ToReport } = await import("../../../packages/fuel-core/src/fuelEngineV3.ts");
+      for (let i = 0; i < reports.length; i++) {
+        reports[i] = applyFuelV3ToReport(reports[i] as never) as typeof reports[number];
+      }
+    }
     for (const report of reports) {
       if (Array.isArray(report.odometerBuckets) && report.odometerBuckets.length > 0) {
         report.odometerBuckets = selectOdometerBucketsClosingInWeek(
