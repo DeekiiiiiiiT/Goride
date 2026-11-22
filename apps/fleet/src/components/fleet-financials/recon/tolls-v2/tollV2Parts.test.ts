@@ -110,7 +110,7 @@ describe('pills', () => {
 
 describe('dispute rows', () => {
   it('state chip: not sent, red, window closed, sent, late', () => {
-    expect(disputeStateChip(disputeRow({ id: 'a' }))).toEqual({ text: 'Not sent yet', tone: 'amber' });
+    expect(disputeStateChip(disputeRow({ id: 'a' }))).toEqual({ text: 'Waiting on driver to dispute', tone: 'amber' });
     expect(disputeStateChip(disputeRow({ id: 'a', red: true })).tone).toBe('red');
     expect(disputeStateChip(disputeRow({ id: 'a', windowClosed: true })).text).toBe('Window closed — expires tonight');
     expect(disputeStateChip(disputeRow({ id: 'a', state: 'sent' })).text).toBe('Sent, waiting on Uber');

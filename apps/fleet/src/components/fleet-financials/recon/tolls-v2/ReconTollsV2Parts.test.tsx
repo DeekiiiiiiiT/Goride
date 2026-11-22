@@ -126,7 +126,8 @@ describe('Tolls step — six parts (UI1)', () => {
     expect(screen.getByTestId('toll-v2-tile-late').textContent).toMatch(/Late2· J\$40\.00/);
 
     const toSend = screen.getByTestId('toll-v2-dispute-dsp-send');
-    expect(within(toSend).getByTestId('toll-v2-dispute-mark-sent')).toBeTruthy();
+    expect(within(toSend).queryByTestId('toll-v2-dispute-mark-sent')).toBeNull();
+    expect(within(toSend).getByTestId('toll-v2-dispute-state').textContent).toBe('Waiting on driver to dispute');
     expect(within(toSend).queryByTestId('toll-v2-dispute-refund')).toBeNull();
     expect(within(toSend).queryByTestId('toll-v2-dispute-lost')).toBeNull();
     expect(within(toSend).getByText('8 of 9 days left')).toBeTruthy();
@@ -150,12 +151,9 @@ describe('Tolls step — six parts (UI1)', () => {
     expect(within(screen.getByTestId('toll-v2-result-res-lost')).queryByTestId('toll-v2-result-undo')).toBeNull();
   });
 
-  it('part 3: Mark as sent, Refund received, Lost and result Undo send their commands', async () => {
+  it('part 3: Refund received, Lost and result Undo send their commands', async () => {
     wrap();
     goTo(3);
-    fireEvent.click(within(screen.getByTestId('toll-v2-dispute-dsp-send')).getByTestId('toll-v2-dispute-mark-sent'));
-    await waitFor(() => expect(sent('mark_dispute_sent')).toHaveLength(1));
-    expect(sent('mark_dispute_sent')[0]).toMatchObject({ dispute_id: 'dsp-send', expected_dispute_version: 1 });
 
     fireEvent.click(within(screen.getByTestId('toll-v2-dispute-dsp-sent')).getByTestId('toll-v2-dispute-refund'));
     const dialog = await screen.findByTestId('toll-v2-refund-dialog');

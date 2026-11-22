@@ -15,7 +15,7 @@ import {
 } from '../tollV2Parts';
 import { useTollV2Commands } from '../useTollV2Commands';
 import { TollV2DangerOutlineButton, TollV2PrimaryButton, TollV2SecondaryButton } from '../TollV2Buttons';
-import { TollV2ApprovalReasonDialog, TollV2LostDialog, TollV2MarkSentDialog } from '../dialogs/TollV2DisputeDialogs';
+import { TollV2ApprovalReasonDialog, TollV2LostDialog } from '../dialogs/TollV2DisputeDialogs';
 import { disputeTiles, TOLL_V2_DISPUTES_KEY, useTollV2Disputes } from './useTollV2Disputes';
 
 const TONE: Record<DisputeChip['tone'], string> = {
@@ -43,7 +43,6 @@ export function DriverDisputesTab({ onOpenWeek }: { onOpenWeek: (weekKey: string
   const { runCommand, busy, approvalAsk } = useTollV2Commands('');
   const [driver, setDriver] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
-  const [sentFor, setSentFor] = useState<TollV2DisputeRow | null>(null);
   const [lostFor, setLostFor] = useState<TollV2DisputeRow | null>(null);
 
   const active = query.data?.active ?? [];
@@ -55,17 +54,6 @@ export function DriverDisputesTab({ onOpenWeek }: { onOpenWeek: (weekKey: string
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: TOLL_V2_DISPUTES_KEY });
 
-  const markSent = async (d: TollV2DisputeRow) => {
-    try {
-      const res = await runCommand('mark_dispute_sent', { dispute_id: d.id, expected_dispute_version: d.version });
-      await refresh();
-      if (res === null) return;
-      setSentFor(null);
-      toast.success('Marked as sent');
-    } catch {
-      /* error toast shown by runCommand */
-    }
-  };
   const closeLost = async (d: TollV2DisputeRow) => {
     try {
       const res = await runCommand('close_dispute_lost', { dispute_id: d.id, expected_dispute_version: d.version });
@@ -144,7 +132,6 @@ export function DriverDisputesTab({ onOpenWeek }: { onOpenWeek: (weekKey: string
                 key={d.id}
                 d={d}
                 busy={busy}
-                onMarkSent={() => setSentFor(d)}
                 onLost={() => setLostFor(d)}
                 onOpenWeek={() => d.chargeWeekKey && onOpenWeek(d.chargeWeekKey)}
               />
@@ -160,12 +147,6 @@ export function DriverDisputesTab({ onOpenWeek }: { onOpenWeek: (weekKey: string
         </>
       )}
 
-      <TollV2MarkSentDialog
-        dispute={sentFor}
-        busy={busy}
-        onOpenChange={(o) => !o && setSentFor(null)}
-        onConfirm={() => sentFor && void markSent(sentFor)}
-      />
       <TollV2LostDialog
         dispute={lostFor}
         busy={busy}
@@ -243,13 +224,11 @@ function DriverChip({
 function DisputeRow({
   d,
   busy,
-  onMarkSent,
   onLost,
   onOpenWeek,
 }: {
   d: TollV2DisputeRow;
   busy: boolean;
-  onMarkSent: () => void;
   onLost: () => void;
   onOpenWeek: () => void;
 }) {
@@ -302,11 +281,6 @@ function DisputeRow({
         <TollV2SecondaryButton type="button" onClick={onOpenWeek} data-testid="toll-v2-tab-open-week">
           Open week
         </TollV2SecondaryButton>
-        {d.canMarkSent ? (
-          <TollV2PrimaryButton type="button" disabled={busy} onClick={onMarkSent} data-testid="toll-v2-tab-mark-sent">
-            Mark as sent
-          </TollV2PrimaryButton>
-        ) : null}
         {d.canLost ? (
           <TollV2DangerOutlineButton type="button" disabled={busy} onClick={onLost} data-testid="toll-v2-tab-lost">
             Lost

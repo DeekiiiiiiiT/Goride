@@ -219,7 +219,7 @@ export type DisputeChip = { text: string; tone: 'amber' | 'blue' | 'red' | 'gree
 /** The state chip of an active dispute row. */
 export function disputeStateChip(d: TollV2DisputeRow): DisputeChip {
   if (d.windowClosed) return { text: 'Window closed — expires tonight', tone: 'red' };
-  if (d.state === 'to_send') return { text: 'Not sent yet', tone: d.red ? 'red' : 'amber' };
+  if (d.state === 'to_send') return { text: 'Waiting on driver to dispute', tone: d.red ? 'red' : 'amber' };
   if (d.state === 'sent') {
     // AE2: a sent dispute one refund period in with nothing back is Late (a warning, not a loss).
     if (d.late) return { text: 'No refund yet after 1 pay period', tone: 'red' };

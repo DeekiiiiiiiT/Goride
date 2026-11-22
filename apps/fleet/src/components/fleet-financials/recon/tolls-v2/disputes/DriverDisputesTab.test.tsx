@@ -82,7 +82,9 @@ describe('Driver Settlements — Disputes tab (UI2)', () => {
   it('each row has only the buttons its state allows; never Refund received', async () => {
     wrap();
     const toSend = await screen.findByTestId('toll-v2-tab-dispute-b');
-    expect(within(toSend).getByTestId('toll-v2-tab-mark-sent')).toBeTruthy();
+    // the driver marks it sent in Roam Driver; Fleet shows the status only (owner 21 Nov)
+    expect(within(toSend).queryByTestId('toll-v2-tab-mark-sent')).toBeNull();
+    expect(toSend.textContent).toMatch(/Waiting on driver to dispute/);
     expect(within(toSend).queryByTestId('toll-v2-tab-lost')).toBeNull();
     const sentRow = screen.getByTestId('toll-v2-tab-dispute-c');
     expect(within(sentRow).queryByTestId('toll-v2-tab-mark-sent')).toBeNull();
@@ -98,13 +100,6 @@ describe('Driver Settlements — Disputes tab (UI2)', () => {
     expect(screen.getByTestId('toll-v2-tab-dispute-c')).toBeTruthy();
     expect(screen.getByTestId('toll-v2-disputes-driver-card').textContent).toMatch(/1 open · J\$20\.00 still owed by Uber/);
     expect(screen.getByTestId('toll-v2-tab-tile-to-send').textContent).toMatch(/2· J\$40\.00/);
-  });
-
-  it('Mark as sent asks first, then sends mark_dispute_sent with the version', async () => {
-    wrap();
-    fireEvent.click(within(await screen.findByTestId('toll-v2-tab-dispute-b')).getByTestId('toll-v2-tab-mark-sent'));
-    fireEvent.click(await screen.findByTestId('toll-v2-mark-sent-confirm'));
-    await waitFor(() => expect(tollV2Command).toHaveBeenCalledWith('mark_dispute_sent', expect.objectContaining({ dispute_id: 'b', expected_dispute_version: 1 })));
   });
 
   it('Lost needing a second person asks the only manager for a reason and resends', async () => {

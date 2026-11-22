@@ -198,11 +198,7 @@ function DisputeRow({ d, busy, actions }: { d: TollV2DisputeRow; busy: boolean; 
         ) : null}
       </div>
       <div className="flex shrink-0 flex-col gap-2 self-stretch sm:flex-row sm:items-center lg:self-center">
-        {d.canMarkSent ? (
-          <TollV2SecondaryButton type="button" disabled={busy} onClick={() => actions.onMarkSent(d)} data-testid="toll-v2-dispute-mark-sent">
-            Mark as sent
-          </TollV2SecondaryButton>
-        ) : null}
+        {/* Owner 21 Nov: the driver files it with Uber and marks it in Roam Driver; the fleet only sees the status. */}
         {d.canRefundReceived ? (
           <TollV2PrimaryButton type="button" disabled={busy} onClick={() => actions.onRefundReceived(d)} data-testid="toll-v2-dispute-refund">
             Refund received
