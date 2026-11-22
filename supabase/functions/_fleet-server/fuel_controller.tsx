@@ -9,6 +9,7 @@ import {
   PLATFORM_RESOLVED_ROLES,
 } from "./rbac_middleware.ts";
 import { appendCanonicalFuelExpenseIfEligible } from "./canonical_from_ops.ts";
+import { checkFuelReopenReason, fuelWeekSettled, FUEL_WEEK_SETTLED_MESSAGE } from "./fuel_reopen_guard.ts";
 import { deleteCanonicalLedgerBySource, canonicalEventExistsByIdemKey } from "./ledger_canonical.ts";
 import {
   getFuelReconciliationSettings,
@@ -1429,12 +1430,22 @@ app.post(`${BASE_PATH}/finalized-reports/cleanup-orphaned-settlements`, requireP
   }
 });
 
-app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:identityId`, requirePermission('transactions.edit'), async (c) => {
+// F-32a: deleting a driver's saved week report unwinds its fuel money, so it gets the
+// same permission and settled-week refusal as Reset period and Reopen.
+app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:identityId`, requirePermission('fuel.reopen'), async (c) => {
   try {
     // identityId = driverId (preferred) or legacy vehicleId; try both KV keys
     const weekStartRaw = decodeURIComponent(c.req.param("weekStart"));
     const identityId = decodeURIComponent(c.req.param("identityId"));
     const weekKey = weekStartRaw.split("T")[0];
+    const guardOrgId = getOrgId(c);
+    if (!guardOrgId) {
+      return c.json({ error: "org_required", message: "Choose a company before removing a fuel report." }, 400);
+    }
+    const settled = await fuelWeekSettled(guardOrgId, weekKey, null);
+    if (settled.settled) {
+      return c.json({ error: "week_settled", settledBy: settled.by, message: FUEL_WEEK_SETTLED_MESSAGE }, 409);
+    }
     const driverKey = finalizedReportKey(weekKey, identityId);
     const legacyVehicleKey = `finalized_report:${weekKey}:${identityId}`;
 
@@ -1685,6 +1696,36 @@ app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:identityId`, requirePermi
       syncErrors.push(String(syncErr?.message || syncErr));
     }
 
+    // F-32a: every unlock of a week's fuel money leaves an audit row (who, when, what).
+    try {
+      const rbacDel = c.get("rbacUser") as RbacUser | undefined;
+      const actorRaw = String(rbacDel?.userId || "");
+      const actorUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(actorRaw)
+        ? actorRaw
+        : "00000000-0000-0000-0000-000000000000";
+      const { data: periodsForWeek } = await supabase
+        .from("fuel_reconciliation_period")
+        .select("id")
+        .eq("org_id", guardOrgId)
+        .eq("week_start", weekKey);
+      for (const p of periodsForWeek || []) {
+        await supabase.from("fuel_period_audit").insert({
+          period_id: (p as { id: string }).id,
+          org_id: guardOrgId,
+          actor_id: actorUuid,
+          action: "report_delete",
+          payload: {
+            source: "finalized-reports/delete",
+            identityId,
+            deletedTransactions: txIdsToDelete.size,
+            resetFuelEntries: entriesReset,
+          },
+        });
+      }
+    } catch (auditErr: any) {
+      console.warn("[FinalizedReports] audit insert failed (non-fatal):", auditErr?.message || auditErr);
+    }
+
     return c.json({
       success: true,
       deletedTransactions: txIdsToDelete.size,
@@ -1705,7 +1746,8 @@ app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:identityId`, requirePermi
  * Body: { weekStart: "YYYY-MM-DD" } (Monday period id).
  * Reverses ALL fuel credit/deduction legs for the week (Approve + Finalize eras).
  */
-app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('transactions.edit'), async (c) => {
+// F-32a: same permission as the reversal reopen (fuel.reopen), not transactions.edit.
+app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('fuel.reopen'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const weekKey = String(body.weekStart || "").split("T")[0];
@@ -1713,11 +1755,33 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
       return c.json({ error: "weekStart (YYYY-MM-DD Monday) is required" }, 400);
     }
     const dryRun = body.dryRun === true;
-    const reopenReason = String(body.reopenReason || body.reason || "").trim();
+    let reopenReason = String(body.reopenReason || body.reason || "").trim();
 
     // C1: fleet callers must have an org — never scan/delete across tenants
     if (!isPlatformCaller(c) && !getOrgId(c)) {
       return c.json({ error: "Forbidden — organization context required to reopen a week" }, 403);
+    }
+
+    // F-32a: a real reset needs a company (to check its settlement), a real reason,
+    // and a week whose settlement is still open. The dry-run preview needs none of these.
+    let settledBy: string | null = null;
+    const guardOrgId = getOrgId(c);
+    if (guardOrgId) {
+      const settled = await fuelWeekSettled(guardOrgId, weekKey, null);
+      if (settled.settled) settledBy = settled.by;
+    }
+    if (!dryRun) {
+      if (!guardOrgId) {
+        return c.json({ error: "org_required", message: "Choose a company before resetting a fuel week." }, 400);
+      }
+      const reasonCheck = checkFuelReopenReason(reopenReason);
+      if (!reasonCheck.ok) {
+        return c.json({ error: reasonCheck.error, minLength: reasonCheck.minLength, message: reasonCheck.message }, 422);
+      }
+      reopenReason = reasonCheck.reason;
+      if (settledBy) {
+        return c.json({ error: "week_settled", settledBy, message: FUEL_WEEK_SETTLED_MESSAGE }, 409);
+      }
     }
 
     const startUtc = new Date(`${weekKey}T12:00:00.000Z`);
@@ -1879,6 +1943,8 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
         deletedTransactions: txIdsToDelete.size,
         driverIds: [...driverIds],
         vehicleIds: [...vehicleIds],
+        weekSettled: settledBy != null,
+        settledBy,
       });
     }
 

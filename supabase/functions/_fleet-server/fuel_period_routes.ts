@@ -38,6 +38,7 @@ import { isSettlementPeriodEnded } from "../../../packages/finance-core/src/sett
 import { listUnapprovedFuelTxInWindow } from "../../../packages/fuel-core/src/fuelReviewQueue.ts";
 import { evaluateFuelWeekClosable } from "../../../packages/fuel-core/src/evaluateFuelWeekClosable.ts";
 import { loadPriorWeekCredit } from "./fuel_week_prepare.ts";
+import { checkFuelReopenReason, fuelWeekSettled, FUEL_WEEK_SETTLED_MESSAGE } from "./fuel_reopen_guard.ts";
 import { validateDisposition } from "../../../packages/fuel-core/src/fuelResidualDisposition.ts";
 import {
   upsertStopToStopGapAccepts,
@@ -980,7 +981,7 @@ async function processJobRow(job: Record<string, unknown>) {
         return { ok: false, error: "money_commit_failure", failures: moneyFailures };
       }
     }
-    await sb
+    const { error: lockFlipErr } = await sb
       .from("fuel_reconciliation_period")
       .update({
         status: "locked",
@@ -993,6 +994,18 @@ async function processJobRow(job: Record<string, unknown>) {
       })
       .eq("id", periodId)
       .eq("org_id", orgId);
+    // F-32a: the moment the week flips to locked is recorded, not only the job's end.
+    if (!lockFlipErr) {
+      await insertAudit(
+        orgId,
+        periodId,
+        "lock",
+        { version: nextVersion, source: "finalize_job", jobId: String(job.id), drivers: snapshots.length },
+        actor,
+      );
+    } else {
+      console.warn("[fuel_period] lock flip failed", periodId, lockFlipErr.message);
+    }
 
     const cycleVehicleIds = [
       ...new Set(
@@ -1366,6 +1379,13 @@ export function registerFuelPeriodRoutes(app: Hono) {
         }
         const money = aggregateFinalizedForWeek(snaps);
         const id = periodIdFor(orgId, weekStart);
+        const { data: before } = await sb
+          .from("fuel_reconciliation_period")
+          .select("status")
+          .eq("id", id)
+          .eq("org_id", orgId)
+          .maybeSingle();
+        const wasLocked = String((before as { status?: unknown } | null)?.status || "") === "locked";
         const { error } = await sb.from("fuel_reconciliation_period").upsert(
           {
             id,
@@ -1383,6 +1403,16 @@ export function registerFuelPeriodRoutes(app: Hono) {
         );
         if (!error) {
           upserted += 1;
+          // F-32a: the old finalize path locks weeks here; record the flip once.
+          if (!wasLocked) {
+            await insertAudit(
+              orgId,
+              id,
+              "lock",
+              { source: "periods/backfill", drivers: snaps.length },
+              actorId(c),
+            );
+          }
           const driverIds = snaps.map((s) => String(s?.driverId || "")).filter(Boolean);
           await rebuildExpensesForFuelWeek(weekStart, driverIds);
           for (const d of driverIds) rebuiltDriverIds.add(d);
@@ -1758,10 +1788,26 @@ export function registerFuelPeriodRoutes(app: Hono) {
       const periodId = periodIdParam(c);
       if (!periodId) return c.json({ error: "period id required" }, 400);
       const body = await c.req.json().catch(() => ({}));
-      const reason = String(body.reason || "").trim();
-      if (!reason) return c.json({ error: "reason required" }, 400);
+      // F-32a: a real reason, checked here, not only in the browser.
+      const reasonCheck = checkFuelReopenReason(body.reason);
+      if (!reasonCheck.ok) {
+        return c.json(
+          { error: reasonCheck.error, minLength: reasonCheck.minLength, message: reasonCheck.message },
+          422,
+        );
+      }
+      const reason = reasonCheck.reason;
       const period = await loadPeriod(orgId, periodId);
       if (!period) return c.json({ error: "Not found" }, 404);
+      // F-32a: never reopen a week whose settlement is closed.
+      const settled = await fuelWeekSettled(
+        orgId,
+        ymd(period.week_start),
+        period.service_line ? String(period.service_line) : null,
+      );
+      if (settled.settled) {
+        return c.json({ error: "week_settled", settledBy: settled.by, message: FUEL_WEEK_SETTLED_MESSAGE }, 409);
+      }
       const ifMatch = c.req.header("If-Match");
       if (ifMatch != null && ifMatch !== "" && Number(ifMatch) !== Number(period.version)) {
         return c.json({ error: "version_conflict", currentVersion: period.version }, 409);

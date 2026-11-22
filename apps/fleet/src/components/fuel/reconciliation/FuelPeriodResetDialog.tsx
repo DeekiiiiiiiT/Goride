@@ -23,6 +23,7 @@ import { DRIVER_FINANCIAL_PERIODS_KEY } from '../../../hooks/useDriverFinancialP
 import { FUEL_PERIODS_KEY, FUEL_PERIOD_KEY } from '../../../hooks/useFuelPeriods';
 import { clearFuelLeakageReview } from '../../../utils/fuelLeakageReviewStore';
 import { runBackgroundJobToast } from '../../shared/runBackgroundJobToast';
+import { FUEL_REOPEN_REASON_MIN } from '../../../utils/fuelReopenReason';
 
 interface FuelPeriodResetDialogProps {
   open: boolean;
@@ -40,6 +41,8 @@ type ServerPreview = {
   deletedTransactions: number;
   driverIds: string[];
   vehicleIds: string[];
+  /** Server says this week's settlement is closed (F-32a) — reset will be refused. */
+  weekSettled: boolean;
 };
 
 export function FuelPeriodResetDialog({
@@ -63,7 +66,9 @@ export function FuelPeriodResetDialog({
   } = useLockedDialog(open, onOpenChange, lockBusy);
 
   const labelOk = periodConfirmLabelsMatch(confirmText, period.label);
-  const reasonOk = reopenReason.trim().length >= 3;
+  // Same minimum the server enforces (fuel audit F-32a).
+  const reasonOk = reopenReason.trim().length >= FUEL_REOPEN_REASON_MIN;
+  const weekSettled = preview?.weekSettled === true;
 
   useEffect(() => {
     if (!open) {
@@ -87,6 +92,7 @@ export function FuelPeriodResetDialog({
           deletedTransactions: Number(data.deletedTransactions ?? 0),
           driverIds: Array.isArray(data.driverIds) ? data.driverIds : [],
           vehicleIds: Array.isArray(data.vehicleIds) ? data.vehicleIds : [],
+          weekSettled: (data as { weekSettled?: boolean }).weekSettled === true,
         });
       })
       .catch((e: any) => {
@@ -108,7 +114,7 @@ export function FuelPeriodResetDialog({
       return;
     }
     if (!reasonOk) {
-      toast.error('Add a short reason for reopening this week');
+      toast.error(`Give a reason of at least ${FUEL_REOPEN_REASON_MIN} characters`);
       return;
     }
     setExecuting(true);
@@ -246,7 +252,14 @@ export function FuelPeriodResetDialog({
             className="min-h-[72px]"
             disabled={lockBusy}
           />
+          <p className="text-xs text-slate-500">At least {FUEL_REOPEN_REASON_MIN} characters.</p>
         </div>
+
+        {weekSettled && (
+          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+            This week's settlement is closed, so its fuel can't be reset or reopened.
+          </p>
+        )}
 
         <div className="space-y-2">
           <Label htmlFor="confirm-week">Type the week label to confirm</Label>
@@ -276,7 +289,7 @@ export function FuelPeriodResetDialog({
           <Button
             type="button"
             variant="destructive"
-            disabled={lockBusy || !labelOk || !reasonOk || !!previewError || previewLoading}
+            disabled={lockBusy || !labelOk || !reasonOk || weekSettled || !!previewError || previewLoading}
             onClick={() => void handleExecute()}
           >
             {executing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

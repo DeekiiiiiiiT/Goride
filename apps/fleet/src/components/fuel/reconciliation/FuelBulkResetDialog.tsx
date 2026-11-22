@@ -1,6 +1,6 @@
 /**
  * Bulk reopen finalized fuel weeks — thin wrapper over BulkWeekActionDialog.
- * Calls resetFuelPeriod per week; falls back to per-snapshot delete.
+ * Calls resetFuelPeriod per week with the reason the owner typed.
  */
 import { RotateCcw } from 'lucide-react';
 import { api } from '../../../services/api';
@@ -18,6 +18,7 @@ import { FUEL_PERIODS_KEY, FUEL_PERIOD_KEY } from '../../../hooks/useFuelPeriods
 import { clearFuelLeakageReview } from '../../../utils/fuelLeakageReviewStore';
 import { BulkWeekActionDialog, type BulkWeekActionResult } from './BulkWeekActionDialog';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
+import { FUEL_REOPEN_REASON_MIN } from '../../../utils/fuelReopenReason';
 
 export type FinalizedWeekOption = {
   weekStart: string;
@@ -36,22 +37,13 @@ export type FuelBulkResetDialogProps = {
   onComplete: () => void;
 };
 
-async function resetOneWeek(week: FinalizedWeekOption): Promise<void> {
+/**
+ * One server path, with the reason (fuel audit F-32a). No client fallback: a refusal
+ * (settled week, short reason, no permission) shows as a failed week, never worked around.
+ */
+async function resetOneWeek(week: FinalizedWeekOption, reason: string): Promise<void> {
   const weekKey = String(week.weekStart).split('T')[0];
-  try {
-    await api.resetFuelPeriod(weekKey);
-    return;
-  } catch {
-    const ids = week.driverIds.length > 0 ? week.driverIds : [];
-    if (ids.length === 0) throw new Error('No snapshots to reopen for this week');
-    for (const id of ids) {
-      try {
-        await api.deleteFinalizedReport(weekKey, id);
-      } catch (e: any) {
-        if (!/404|not found/i.test(String(e?.message || ''))) throw e;
-      }
-    }
-  }
+  await api.resetFuelPeriod(weekKey, { reopenReason: reason });
 }
 
 type ResetItem = FinalizedWeekOption & { id: string };
@@ -93,14 +85,15 @@ export function FuelBulkResetDialog({
           <p>Failed weeks do not undo weeks that already succeeded.</p>
         </div>
       )}
-      execute={async (selected, onProgress) => {
+      reasonMinLength={FUEL_REOPEN_REASON_MIN}
+      execute={async (selected, onProgress, reason) => {
         const toReset = [...selected].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
         const weekResults: BulkWeekActionResult[] = [];
         for (let i = 0; i < toReset.length; i++) {
           const week = toReset[i];
           onProgress(formatFuelBulkResetProgress(i + 1, toReset.length, week.label));
           try {
-            await resetOneWeek(week);
+            await resetOneWeek(week, reason);
             weekResults.push({
               id: week.weekStart,
               label: week.label,

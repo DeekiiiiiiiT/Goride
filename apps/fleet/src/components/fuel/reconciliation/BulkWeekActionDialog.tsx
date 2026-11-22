@@ -12,6 +12,7 @@ import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
+import { Textarea } from '../../ui/textarea';
 import { toast } from 'sonner';
 import { useLockedDialog } from '../../shared/useLockedDialog';
 import { useFuelReconBusy } from './fuelReconBusyLock';
@@ -42,6 +43,7 @@ export function BulkWeekActionDialog<T extends { id: string; label: string }>({
   renderItemMeta,
   execute,
   icon,
+  reasonMinLength,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -62,8 +64,11 @@ export function BulkWeekActionDialog<T extends { id: string; label: string }>({
   execute: (
     selected: T[],
     onProgress: (label: string) => void,
+    reason: string,
   ) => Promise<BulkWeekActionResult[]>;
   icon?: React.ReactNode;
+  /** When set, a reason box is shown and must hold at least this many characters. */
+  reasonMinLength?: number;
 }) {
   const { runExclusive, setMessage, busy: fleetBusy } = useFuelReconBusy();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -72,6 +77,7 @@ export function BulkWeekActionDialog<T extends { id: string; label: string }>({
   const [progressLabel, setProgressLabel] = useState('');
   const [results, setResults] = useState<BulkWeekActionResult[] | null>(null);
   const [ack, setAck] = useState(false);
+  const [reason, setReason] = useState('');
 
   const lockBusy = executing || fleetBusy;
   const { onOpenChange: lockedOpenChange, contentProps: lockedContentProps } = useLockedDialog(
@@ -87,6 +93,7 @@ export function BulkWeekActionDialog<T extends { id: string; label: string }>({
     setProgressLabel('');
     setResults(null);
     setAck(false);
+    setReason('');
   }, [open]);
 
   const selected = useMemo(
@@ -99,7 +106,8 @@ export function BulkWeekActionDialog<T extends { id: string; label: string }>({
     selected.length > 0 &&
     !overCap &&
     confirmText.trim().toUpperCase() === phrase &&
-    (!extraAck || ack);
+    (!extraAck || ack) &&
+    (reasonMinLength == null || reason.trim().length >= reasonMinLength);
 
   const toggle = (id: string) => {
     setSelectedIds((prev) => {
@@ -116,10 +124,14 @@ export function BulkWeekActionDialog<T extends { id: string; label: string }>({
     setExecuting(true);
     setResults(null);
     const outcome = await runExclusive(busyMessage, async () =>
-      execute(weeks, (label) => {
-        setProgressLabel(label);
-        setMessage(label);
-      }),
+      execute(
+        weeks,
+        (label) => {
+          setProgressLabel(label);
+          setMessage(label);
+        },
+        reason.trim(),
+      ),
     );
     setExecuting(false);
     setProgressLabel('');
@@ -213,6 +225,20 @@ export function BulkWeekActionDialog<T extends { id: string; label: string }>({
                 <Checkbox checked={ack} disabled={executing} onCheckedChange={(v) => setAck(!!v)} className="mt-0.5" />
                 {extraAckLabel}
               </label>
+            )}
+            {reasonMinLength != null && selected.length > 0 && (
+              <div className="space-y-2">
+                <Label htmlFor="bulk-week-reason" className="text-sm">Reason</Label>
+                <Textarea
+                  id="bulk-week-reason"
+                  value={reason}
+                  disabled={executing}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="e.g. Corrected odometer gap for plate 5179KZ"
+                  className="min-h-[64px]"
+                />
+                <p className="text-xs text-slate-500">At least {reasonMinLength} characters. Saved on every week.</p>
+              </div>
             )}
             {executing && (
               <div className="flex items-center gap-2 rounded-md border border-indigo-100 bg-indigo-50 px-3 py-2 text-sm text-indigo-800">

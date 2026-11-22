@@ -5951,6 +5951,9 @@ export const api = {
     vehicleIds?: string[];
     /** Present when fuel ledger reverse / Expenses rebuild had non-fatal failures. */
     syncErrors?: string[];
+    /** Dry run: the week's settlement is closed, so a real reset will be refused (F-32a). */
+    weekSettled?: boolean;
+    settledBy?: string | null;
     error?: string;
   }> {
     const weekKey = String(weekStart).split('T')[0];
@@ -5968,7 +5971,8 @@ export const api = {
     );
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error((data as { error?: string }).error || 'Failed to reset fuel period');
+      const d = data as { error?: string; message?: string };
+      throw new Error(d.message || d.error || 'Failed to reset fuel period');
     }
     return data;
   },
