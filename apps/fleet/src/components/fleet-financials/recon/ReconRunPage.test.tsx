@@ -14,6 +14,8 @@ import {
 } from '../../../services/reconWeekContext';
 import {
   WATCH_EVERY_MS,
+  WATCH_IDLE_MS,
+  WATCH_SETTLE_MS,
   reconRunSaveWatchRefetchInterval,
 } from './reconRunSaveWatch';
 
@@ -97,17 +99,17 @@ describe('reconRunSaveWatchRefetchInterval (WRA-69)', () => {
     ).toBe(WATCH_EVERY_MS);
     expect(
       reconRunSaveWatchRefetchInterval(baseRun({ version: 75, pendingUnits: 0 }), atSave, now),
-    ).toBe(false);
+    ).toBe(WATCH_SETTLE_MS);
   });
 
-  it('stops polling on final publish (version +1, pending 0)', () => {
+  it('after the publish it keeps a slower look for a second round (version +1, pending 0)', () => {
     const data = baseRun({
       version: 75,
       settlementStatus: 'complete',
       lastComputedAt: '2026-11-17T19:05:38.000Z',
       pendingUnits: 0,
     });
-    expect(reconRunSaveWatchRefetchInterval(data, ctx, now)).toBe(false);
+    expect(reconRunSaveWatchRefetchInterval(data, ctx, now)).toBe(WATCH_SETTLE_MS);
   });
 
   it('still polls while pendingUnits > 0 even after version moved', () => {
@@ -115,10 +117,12 @@ describe('reconRunSaveWatchRefetchInterval (WRA-69)', () => {
     expect(reconRunSaveWatchRefetchInterval(data, ctx, now)).toBe(WATCH_EVERY_MS);
   });
 
-  it('stops when the 3-minute watch window has ended', () => {
+  it('after the watch window an open week still refreshes slowly; a closed week stops', () => {
     const data = baseRun({ version: 74 });
+    const past = { watchUntilMs: now - 1, versionAtSave: 74 };
+    expect(reconRunSaveWatchRefetchInterval(data, past, now)).toBe(WATCH_IDLE_MS);
     expect(
-      reconRunSaveWatchRefetchInterval(data, { watchUntilMs: now - 1, versionAtSave: 74 }, now),
+      reconRunSaveWatchRefetchInterval({ ...data, run: { ...data.run, state: 'closed' } }, past, now),
     ).toBe(false);
   });
 });
