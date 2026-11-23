@@ -49,6 +49,8 @@ async function listDriverTransactions(driverId: string): Promise<any[]> {
 /** Reverse Enterprise_Fuel_Sync wallet rows + reset Verified entries for this driver-week. */
 export async function reverseEnterpriseFuelSyncForSnapshot(
   report: Record<string, any>,
+  /** F-32b: told about each fill returned to Pending (reopen reinstates its P&L offset). */
+  onEntryUnmarked?: (entry: Record<string, any>) => void,
 ): Promise<number> {
   const driverId = String(report.driverId || "").trim();
   if (!driverId) return 0;
@@ -132,6 +134,7 @@ export async function reverseEnterpriseFuelSyncForSnapshot(
     };
     delete (updated as { transactionId?: string }).transactionId;
     await kv.set(`fuel_entry:${entry.id}`, updated);
+    onEntryUnmarked?.(entry);
   }
 
   return reversed;

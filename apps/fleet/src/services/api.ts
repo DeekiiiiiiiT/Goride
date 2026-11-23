@@ -5914,68 +5914,7 @@ export const api = {
     return response.json();
   },
 
-  /** Delete by driverId (preferred) or legacy vehicleId — same path param. */
-  async deleteFinalizedReport(weekStart: string, identityId: string): Promise<{
-    success?: boolean;
-    eventsReversed?: number;
-    periodsRebuilt?: number;
-  }> {
-    const weekKey = String(weekStart).split('T')[0];
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/finalized-reports/${encodeURIComponent(weekKey)}/${encodeURIComponent(identityId)}`, {
-      method: 'DELETE',
-      headers: await requireAuthHeaders(null)
-    });
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Failed to delete finalized report: ${errText}`);
-    }
-    return response.json().catch(() => ({ success: true }));
-  },
 
-  /** Re-open a consumption week: wipe snapshots, reverse settlements, return logs to Pending. */
-  async resetFuelPeriod(
-    weekStart: string,
-    opts?: { dryRun?: boolean; reopenReason?: string },
-  ): Promise<{
-    success: boolean;
-    dryRun?: boolean;
-    snapshotsDeleted?: number;
-    snapshots?: number;
-    deletedTransactions?: number;
-    resetFuelEntries?: number;
-    eventsReversed?: number;
-    periodsRebuilt?: number;
-    /** True when fuel_reconciliation_period was cleared from locked → reopened. */
-    periodUnlocked?: boolean;
-    driverIds?: string[];
-    vehicleIds?: string[];
-    /** Present when fuel ledger reverse / Expenses rebuild had non-fatal failures. */
-    syncErrors?: string[];
-    /** Dry run: the week's settlement is closed, so a real reset will be refused (F-32a). */
-    weekSettled?: boolean;
-    settledBy?: string | null;
-    error?: string;
-  }> {
-    const weekKey = String(weekStart).split('T')[0];
-    const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fuel}/finalized-reports/reset-period`,
-      {
-        method: 'POST',
-        headers: await requireAuthHeaders(),
-        body: JSON.stringify({
-          weekStart: weekKey,
-          dryRun: opts?.dryRun === true,
-          reopenReason: opts?.reopenReason || undefined,
-        }),
-      },
-    );
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const d = data as { error?: string; message?: string };
-      throw new Error(d.message || d.error || 'Failed to reset fuel period');
-    }
-    return data;
-  },
 
   /**
    * Heal Consumption Reconciliation ↔ Driver Fuel Expense drift.

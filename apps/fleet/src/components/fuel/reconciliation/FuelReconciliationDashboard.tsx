@@ -2,9 +2,8 @@ import { useState, useMemo, useEffect, type Dispatch, type SetStateAction } from
 import { FuelPeriodLandingPage } from './FuelPeriodLandingPage';
 import { FuelPeriodWizard } from './FuelPeriodWizard';
 import { FuelWeekLockedReceipt } from './FuelWeekLockedReceipt';
-import { FuelPeriodResetDialog } from './FuelPeriodResetDialog';
+import { FuelPeriodReopenDialog } from './FuelPeriodReopenDialog';
 import { FuelBulkFinalizeDialog } from './FuelBulkFinalizeDialog';
-import { FuelBulkResetDialog, finalizedWeekOptionsFromGroups } from './FuelBulkResetDialog';
 import { FinalizedReportsTab } from '../FinalizedReportsTab';
 import type { FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
 import { FUEL_STEP_ORDER, type FuelStepId } from '../../../utils/fuelPeriodGating';
@@ -179,12 +178,10 @@ function FuelReconciliationWizardView({
         onDeskFinalized={onDeskFinalized}
       />
       {resetPeriod && (
-        <FuelPeriodResetDialog
+        <FuelPeriodReopenDialog
           open={!!resetPeriod}
           onOpenChange={(open) => !open && setResetPeriod(null)}
           period={resetPeriod}
-          finalizedReports={finalizedReports}
-          fuelEntries={week.fuelEntries}
           onComplete={() => {
             setResetPeriod(null);
             setWizardSession((n) => n + 1);
@@ -291,7 +288,6 @@ export function FuelReconciliationDashboard({
   const [view, setView] = useState<View>({ kind: 'landing' });
   const [resetPeriod, setResetPeriod] = useState<FuelReconciliationPeriod | null>(null);
   const [bulkFinalizeOpen, setBulkFinalizeOpen] = useState(false);
-  const [bulkReopenOpen, setBulkReopenOpen] = useState(false);
   const [wizardSession, setWizardSession] = useState(0);
   const [deepLinkConsumed, setDeepLinkConsumed] = useState(false);
 
@@ -398,12 +394,10 @@ export function FuelReconciliationDashboard({
             onReopen={() => setResetPeriod(period)}
           />
           {resetPeriod && (
-            <FuelPeriodResetDialog
+            <FuelPeriodReopenDialog
               open={!!resetPeriod}
               onOpenChange={(open) => !open && setResetPeriod(null)}
               period={resetPeriod}
-              finalizedReports={finalizedReports}
-              fuelEntries={fuelEntries}
               onComplete={() => {
                 setResetPeriod(null);
                 setWizardSession((n) => n + 1);
@@ -452,18 +446,6 @@ export function FuelReconciliationDashboard({
     );
   }
 
-  const bulkReopenWeeks = finalizedWeekOptionsFromGroups(
-    completed.map((p) => ({
-      weekStart: p.startDate,
-      weekEnd: p.endDate,
-      vehicleCount: p.vehicleCount,
-      totalSpend: p.totalSpend,
-      reports: finalizedReports.filter(
-        (f) => String(f.weekStart || '').split('T')[0] === p.startDate,
-      ),
-    })),
-  );
-
   if (hideLanding && view.kind === 'landing' && initialWeekStart) {
     return (
       <div className="flex h-40 items-center justify-center text-sm text-slate-500">
@@ -496,7 +478,6 @@ export function FuelReconciliationDashboard({
         onResetPeriod={(p) => setResetPeriod(p)}
         onOpenArchive={() => setView({ kind: 'archive' })}
         onBulkFinalize={() => setBulkFinalizeOpen(true)}
-        onBulkReopen={() => setBulkReopenOpen(true)}
         dataTruncated={dataTruncated}
         secondApproverThreshold={secondApproverThreshold}
         autoCloseDualApprovalMode={autoCloseDualApprovalMode}
@@ -517,19 +498,11 @@ export function FuelReconciliationDashboard({
         transactions={transactions}
         onComplete={onRefresh}
       />
-      <FuelBulkResetDialog
-        open={bulkReopenOpen}
-        onOpenChange={setBulkReopenOpen}
-        weeks={bulkReopenWeeks}
-        onComplete={onRefresh}
-      />
       {resetPeriod && (
-        <FuelPeriodResetDialog
+        <FuelPeriodReopenDialog
           open={!!resetPeriod}
           onOpenChange={(open) => !open && setResetPeriod(null)}
           period={resetPeriod}
-          finalizedReports={finalizedReports}
-          fuelEntries={fuelEntries}
           onComplete={() => {
             setResetPeriod(null);
             onRefresh();

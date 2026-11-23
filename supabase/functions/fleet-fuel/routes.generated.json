@@ -1,10 +1,9 @@
 {
   "slug": "fleet-fuel",
-  "generatedAt": "2026-11-22T17:47:12.343Z",
-  "routeCount": 147,
+  "generatedAt": "2026-11-23T01:10:22.160Z",
+  "routeCount": 145,
   "routes": [
     "DELETE ${BASE_PATH}/admin/evidence-inbox/gate-held/:transactionId",
-    "DELETE ${BASE_PATH}/finalized-reports/:weekStart/:identityId",
     "DELETE ${BASE_PATH}/fuel-cards/:id",
     "DELETE ${BASE_PATH}/fuel-entries/:id",
     "DELETE ${BASE_PATH}/jaa-csv-imports/:id",
@@ -90,7 +89,6 @@
     "POST ${BASE_PATH}/finalized-reports",
     "POST ${BASE_PATH}/finalized-reports/cleanup-orphaned-settlements",
     "POST ${BASE_PATH}/finalized-reports/migrate-driver-keys",
-    "POST ${BASE_PATH}/finalized-reports/reset-period",
     "POST ${BASE_PATH}/finalized-reports/sync-expenses",
     "POST ${BASE_PATH}/fuel-cards",
     "POST ${BASE_PATH}/fuel-entries",

@@ -16,7 +16,6 @@ import {
   FileCheck,
   ChevronDown,
   ChevronRight,
-  Trash2,
   Loader2,
   CheckCircle2,
   RefreshCw,
@@ -27,24 +26,7 @@ import { reportWeekYmdBounds } from '../../utils/fuelWeekPeriod';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
 import { downloadCSV } from '../../utils/export';
-import { useQueryClient } from '@tanstack/react-query';
-import { DRIVER_FINANCIAL_PERIODS_KEY } from '../../hooks/useDriverFinancialPeriods';
-import { runBackgroundJobToast } from '../shared/runBackgroundJobToast';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '../ui/alert-dialog';
 import { formatFuelMoney } from '../../utils/formatFuelMoney';
-import {
-  FuelBulkResetDialog,
-  finalizedWeekOptionsFromGroups,
-} from './reconciliation/FuelBulkResetDialog';
 
 interface WeekGroup {
   key: string;
@@ -59,19 +41,10 @@ interface WeekGroup {
 }
 
 export function FinalizedReportsTab() {
-  const queryClient = useQueryClient();
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedWeek, setExpandedWeek] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<{
-    weekStart: string;
-    vehicleId: string;
-    driverId?: string;
-    label: string;
-  } | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [bulkResetOpen, setBulkResetOpen] = useState(false);
 
   const loadReports = async () => {
     setLoading(true);
@@ -123,53 +96,6 @@ export function FinalizedReportsTab() {
     return groups;
   }, [reports]);
 
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-    setIsDeleting(true);
-    const weekKey = String(deleteTarget.weekStart).split('T')[0];
-    const driverId = deleteTarget.driverId || deleteTarget.vehicleId;
-    try {
-      await api.deleteFinalizedReport(weekKey, driverId);
-      setReports((prev) =>
-        prev.filter(
-          (r) =>
-            !(
-              r.weekStart === deleteTarget.weekStart &&
-              (r.driverId === deleteTarget.driverId ||
-                (!deleteTarget.driverId && r.vehicleId === deleteTarget.vehicleId))
-            )
-        )
-      );
-      toast.success(`Reset ${deleteTarget.label} for this week — wallet/fuel posts unwound`);
-      // Expenses Fuel Status reads driver_financial_periods — refresh like toll reset.
-      void queryClient.invalidateQueries({ queryKey: [DRIVER_FINANCIAL_PERIODS_KEY] });
-      if (deleteTarget.driverId) {
-        void runBackgroundJobToast(
-          async () => {
-            await api.rebuildDriverFinancialPeriods(deleteTarget.driverId!, weekKey);
-            await api.processDriverFinancialOutbox(50).catch(() => undefined);
-            return 1;
-          },
-          {
-            loading: 'Updating Driver Fuel Expense…',
-            success: () => 'Driver Fuel Expense refreshed',
-            error: 'Could not refresh Driver Fuel Expense — try Admin rebuild if needed',
-          },
-        );
-      }
-    } catch (err: any) {
-      console.error('[FinalizedReportsTab] Delete error:', err);
-      toast.error(`Failed to delete: ${err.message}`);
-    } finally {
-      setIsDeleting(false);
-      setDeleteTarget(null);
-    }
-  };
-
-  const bulkResetWeeks = useMemo(
-    () => finalizedWeekOptionsFromGroups(weekGroups),
-    [weekGroups],
-  );
 
   const formatWeekRange = (weekStart: string, weekEnd: string): string => {
     try {
@@ -247,17 +173,6 @@ export function FinalizedReportsTab() {
           {weekGroups.length} finalized week{weekGroups.length !== 1 ? 's' : ''}
         </p>
         <div className="flex items-center gap-2">
-          {weekGroups.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-rose-700 border-rose-200 hover:bg-rose-50 hover:text-rose-800"
-              onClick={() => setBulkResetOpen(true)}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Reopen weeks
-            </Button>
-          )}
           <Button variant="outline" size="sm" onClick={loadReports} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
@@ -358,7 +273,6 @@ export function FinalizedReportsTab() {
                         <TableHead className="text-right font-semibold">Paid by Driver</TableHead>
                         <TableHead className="text-right font-semibold text-red-700">Deduction</TableHead>
                         <TableHead className="text-right font-semibold">Net Pay</TableHead>
-                        <TableHead className="w-10" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -398,25 +312,6 @@ export function FinalizedReportsTab() {
                           </TableCell>
                           <TableCell className="text-right font-medium">
                             {formatFuelMoney(r.netPay || 0)}
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0 text-slate-400 hover:text-red-600"
-                              title="Remove this finalized report"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteTarget({
-                                  weekStart: r.weekStart,
-                                  vehicleId: r.vehicleId,
-                                  driverId: r.driverId,
-                                  label: `${r.driverName || r.vehiclePlate || r.driverId || r.vehicleId}`,
-                                });
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -463,7 +358,6 @@ export function FinalizedReportsTab() {
                         <TableCell className="text-right">
                           {formatFuelMoney(group.totalNetPay)}
                         </TableCell>
-                        <TableCell />
                       </TableRow>
                     </TableFooter>
                   </Table>
@@ -489,44 +383,7 @@ export function FinalizedReportsTab() {
       })
       )}
 
-      {/* Delete confirmation dialog */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reopen this driver week?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Reopens <strong>{deleteTarget?.label}</strong> for this driver only: removes their
-              finalized snapshot and reverses wallet fuel credits, fuel deductions, and linked fuel
-              log finalization. Other drivers in the same week stay finalized.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              disabled={isDeleting}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              {isDeleting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Reopening…
-                </>
-              ) : (
-                'Reopen driver week'
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
-      <FuelBulkResetDialog
-        open={bulkResetOpen}
-        onOpenChange={setBulkResetOpen}
-        weeks={bulkResetWeeks}
-        onComplete={() => {
-          void loadReports();
-        }}
-      />
     </div>
   );
 }

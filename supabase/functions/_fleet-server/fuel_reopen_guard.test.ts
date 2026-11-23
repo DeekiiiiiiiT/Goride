@@ -56,14 +56,10 @@ Deno.test("settled: each closed record refuses, and names itself", async () => {
   });
 });
 
-Deno.test("routes: reset, delete and reopen use fuel.reopen and the guard", () => {
+Deno.test("routes: F-32b — Reset and report delete are gone; reopen uses fuel.reopen and the guard", () => {
   const ctl = read("fuel_controller.tsx");
-  assert(ctl.includes("app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('fuel.reopen')"));
-  assert(ctl.includes("app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:identityId`, requirePermission('fuel.reopen')"));
-  assert(!/finalized-reports\/reset-period`, requirePermission\('transactions\.edit'\)/.test(ctl));
-  const reset = ctl.slice(ctl.indexOf("/finalized-reports/reset-period`, requirePermission"));
-  assert(reset.indexOf("checkFuelReopenReason(") > 0 && reset.indexOf("checkFuelReopenReason(") < reset.indexOf("kv.del("));
-  assert(reset.indexOf("fuelWeekSettled(") > 0 && reset.indexOf("fuelWeekSettled(") < reset.indexOf("kv.del("));
+  assert(!ctl.includes("/finalized-reports/reset-period`"), "reset-period route removed");
+  assert(!ctl.includes("/finalized-reports/:weekStart/:identityId`"), "report delete route removed");
 
   const routes = read("fuel_period_routes.ts");
   const reopen = routes.slice(routes.indexOf("`${BASE}/fuel/periods/:id/reopen`"));
@@ -72,6 +68,13 @@ Deno.test("routes: reset, delete and reopen use fuel.reopen and the guard", () =
   const reopenBody = reopen.slice(0, reopen.indexOf("fuel_period_job"));
   assert(reopenBody.includes("checkFuelReopenReason(body.reason)"));
   assert(reopenBody.includes("fuelWeekSettled("));
+
+  // The reopen job reverses (never deletes) and reinstates the P&L offsets of fills it unmarks.
+  const src = routes.replace(/\r\n/g, "\n");
+  const job = src.slice(src.indexOf("} else if (kind === \"reopen\") {"));
+  assert(job.includes("reverseEnterpriseFuelSyncForSnapshot(snap, (entry) => unmarkedFills.push(entry))"));
+  assert(job.indexOf("reinstateFuelPnlOffsetsForEntries") > 0 && job.indexOf("reinstateFuelPnlOffsetsForEntries") < job.indexOf("status: \"reopened\""));
+  assert(!job.slice(0, job.indexOf("status: \"reopened\"")).includes("kv.del(`transaction:"), "reopen never deletes money rows");
 });
 
 Deno.test("lock: the finalize job and the backfill write a `lock` audit row", () => {

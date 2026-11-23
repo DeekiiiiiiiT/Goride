@@ -2086,18 +2086,6 @@ export const api = {
     return response.json();
   },
 
-  async deleteFinalizedReport(weekStart: string, vehicleId: string): Promise<void> {
-    // Same date key as POST/snapshot: YYYY-MM-DD only (avoids colons in URL path + matches KV key)
-    const weekKey = String(weekStart).split('T')[0];
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/finalized-reports/${encodeURIComponent(weekKey)}/${encodeURIComponent(vehicleId)}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
-    });
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Failed to delete finalized report: ${errText}`);
-    }
-  },
 
   /**
    * One-time maintenance: delete fuel settlement transactions that no longer have a matching

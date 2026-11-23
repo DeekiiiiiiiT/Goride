@@ -499,6 +499,19 @@ async function persistFinalizedSnapshot(
   await stageFinalizedSnapshot(report, orgId, actor);
 }
 
+/**
+ * A request-like context that stamps this company on ledger rows written by a background job
+ * (no signed-in user there). Same shape as fixed_expense_nightly's orgContext.
+ */
+function fuelOrgContext(organizationId: string): Context {
+  return {
+    get(key: string) {
+      if (key !== "rbacUser") return undefined;
+      return { userId: "fuel-period-job", resolvedRole: "fleet_owner", organizationId };
+    },
+  } as unknown as Context;
+}
+
 /** After a week's fuel statements are published: settlement units and the desk pick it up. */
 async function afterFuelStatementsPublished(orgId: string, weekKey: string) {
   try {
@@ -1291,13 +1304,15 @@ async function processJobRow(job: Record<string, unknown>) {
     const weekStart = ymd(period.week_start);
     const snaps = ((await kv.getByPrefix(`finalized_report:${weekStart}:`)) || []) as any[];
     const reopenDriverIds: string[] = [];
+    // F-32b: fills this reopen returns to Pending — their fuel P&L offsets are reinstated below.
+    const unmarkedFills: Record<string, any>[] = [];
     for (const snap of snaps) {
       if (snap?.orgId && snap.orgId !== orgId && snap.org_id && snap.org_id !== orgId) continue;
       const did = String(snap?.driverId || "");
       if (did) reopenDriverIds.push(did);
       // H-13: only delete KV after confirmed reversal — keep evidence on failure.
       try {
-        await reverseEnterpriseFuelSyncForSnapshot(snap);
+        await reverseEnterpriseFuelSyncForSnapshot(snap, (entry) => unmarkedFills.push(entry));
         await reverseFuelFinancialEventsForWeek(
           String(snap.driverId),
           weekStart,
@@ -1326,6 +1341,29 @@ async function processJobRow(job: Record<string, unknown>) {
         await kv.del(finalizedReportKey(weekStart, String(snap.driverId)));
       } catch {
         /* ignore */
+      }
+    }
+    // F-32b: Business Finance shows these fills' full cost again (the job Reset used to do).
+    // Only fills with an active offset marker change; a failure is recorded, never silent.
+    if (unmarkedFills.length) {
+      try {
+        const { reinstateFuelPnlOffsetsForEntries } = await import("./fuel_pnl_offset.ts");
+        const reinstated = await reinstateFuelPnlOffsetsForEntries(unmarkedFills, fuelOrgContext(orgId));
+        await insertAudit(
+          orgId,
+          periodId,
+          "pnl_offsets_reinstated",
+          { fills: unmarkedFills.length, reinstated },
+          actor,
+        );
+      } catch (pnlErr) {
+        await insertAudit(
+          orgId,
+          periodId,
+          "pnl_reinstate_failed",
+          { fills: unmarkedFills.length, error: pnlErr instanceof Error ? pnlErr.message : String(pnlErr) },
+          actor,
+        );
       }
     }
     // F-03: the week's fuel lines are marked reversed (kept, never edited) before it unlocks;
