@@ -13,14 +13,45 @@ import { periodEndForAnchor } from "../../../packages/finance-core/src/periodKey
 import { buildFuelPeriodSnapshots } from "./fuel_period_build_snapshots.ts";
 import * as kv from "./kv_store.tsx";
 import {
+  amountsFromFuelLines,
+  currentFuelLines,
   pickFuelCloseAmounts,
   type FuelCloseAmountOverride,
   type FuelCloseAmounts,
+  type FuelWeekLineAmounts,
 } from "./fuel_close_amounts.ts";
 import { unionFuelSealDriverIds } from "./fuel_week_seal_driver_union.ts";
 import { logReconPhase } from "./recon_phase_log.ts";
 
 export type { FuelCloseAmountOverride, FuelCloseAmounts } from "./fuel_close_amounts.ts";
+
+/**
+ * F-24: the week's current fuel lines, across its periods (one per service line).
+ * Non-empty = a v3 week, whose statements come from the lines only. Throws on a read error:
+ * a v3 week must never fall back to the old sources because the lines couldn't be read.
+ */
+export async function loadCurrentFuelWeekLines(
+  organizationId: string,
+  weekKey: string,
+): Promise<FuelWeekLineAmounts[]> {
+  const { data: periods, error } = await getServiceClient()
+    .from("fuel_reconciliation_period")
+    .select("id")
+    .eq("org_id", organizationId)
+    .eq("week_start", weekKey);
+  if (error) throw new Error(`fuel periods read failed: ${error.message}`);
+  const out: FuelWeekLineAmounts[] = [];
+  for (const p of periods || []) {
+    const { data, error: listErr } = await getServiceClient().rpc("fuel_week_lines_list", {
+      p_org: organizationId,
+      p_period_id: String(p.id),
+      p_driver_id: null,
+    });
+    if (listErr) throw new Error(`fuel lines read failed: ${listErr.message}`);
+    out.push(...currentFuelLines((Array.isArray(data) ? data : []) as FuelWeekLineAmounts[]));
+  }
+  return out;
+}
 export {
   buildFuelSealAmountsByDriver,
   isSuspiciousFuelRebuild,
@@ -44,6 +75,8 @@ export async function loadFuelCloseRebuildMap(
   organizationId: string,
   weekKey: string,
 ): Promise<Map<string, FuelCloseAmounts>> {
+  // F-24: a v3 week is never rebuilt; its amounts come from its lines.
+  if ((await loadCurrentFuelWeekLines(organizationId, WEEK_KEY(weekKey))).length) return new Map();
   return amountsFromRebuild(organizationId, weekKey);
 }
 
@@ -152,10 +185,21 @@ export async function resolveFuelCloseAmounts(opts: {
     fuel_finalized?: boolean | null;
   } | null;
   fromRebuild?: FuelCloseAmounts | null;
+  /** F-24: the week's current lines. Omit to load them; seal passes them once per week. */
+  weekLines?: FuelWeekLineAmounts[];
 }): Promise<FuelCloseAmounts> {
   const organizationId = String(opts.organizationId || "").trim();
   const weekKey = WEEK_KEY(opts.weekKey);
   const driverId = String(opts.driverId || "").trim();
+
+  // F-24: a v3 week (it has lines) takes the lines and nothing else — no KV, no rebuild.
+  const weekLines = opts.weekLines ?? await loadCurrentFuelWeekLines(organizationId, weekKey);
+  if (weekLines.length) {
+    return pickFuelCloseAmounts({
+      fromLines: amountsFromFuelLines(weekLines, driverId),
+      periodFallback: amountsFromFuelLines(weekLines, driverId),
+    });
+  }
 
   const fromKv = await amountsFromFinalizedKv(organizationId, weekKey, driverId);
   const fromConsumption = await amountsFromConsumptionHistory(organizationId, driverId, weekKey);
@@ -229,18 +273,31 @@ export async function sealFuelWeek(opts: {
     if (driverId) periodByDriver.set(driverId, p);
   }
 
+  // F-24: lines decide a v3 week. A read error stops the seal (never falls back to old sources).
+  const weekLines = await loadCurrentFuelWeekLines(organizationId, weekKey);
+  const v3Week = weekLines.length > 0;
+
   // P-4: one rebuild map per sealFuelWeek — resolveFuelCloseAmounts reads fromRebuild per driver.
+  // F-24: never run for a v3 week.
   let rebuilt = new Map<string, FuelCloseAmounts>();
-  try {
-    rebuilt = await amountsFromRebuild(organizationId, weekKey);
-  } catch (e) {
-    console.warn("[sealFuelWeek] rebuild failed — falling back to KV/period", e);
+  if (!v3Week) {
+    try {
+      rebuilt = await amountsFromRebuild(organizationId, weekKey);
+    } catch (e) {
+      console.warn("[sealFuelWeek] rebuild failed — falling back to KV/period", e);
+    }
+  }
+
+  const driverIds = unionFuelSealDriverIds(periodRows, opts.amountsByDriver);
+  for (const l of weekLines) {
+    const id = String(l.driver_id || "").trim();
+    if (id && !driverIds.includes(id)) driverIds.push(id);
   }
 
   let published = 0;
   const statementIds: string[] = [];
   const failures: Array<{ driverId: string; error: string }> = [];
-  for (const driverId of unionFuelSealDriverIds(periodRows, opts.amountsByDriver)) {
+  for (const driverId of driverIds) {
    try {
     const p = periodByDriver.get(driverId) ?? {
       driver_id: driverId,
@@ -256,6 +313,7 @@ export async function sealFuelWeek(opts: {
       override: opts.amountsByDriver?.[driverId] ?? null,
       period: p,
       fromRebuild: rebuilt.get(driverId) || null,
+      weekLines,
     });
 
     const hasActivity =
@@ -268,6 +326,7 @@ export async function sealFuelWeek(opts: {
     // Pass 3 / H-7 + C-2b: rebuild-only is draft until engine parity.
     // Only finalized_report KV or consumption_strip overrides may close fuel.
     const verifiedSources = new Set([
+      "fuel_week_lines",
       "finalized_report",
       "consumption_strip",
     ]);

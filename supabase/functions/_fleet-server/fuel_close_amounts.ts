@@ -27,17 +27,58 @@ export function isSuspiciousFuelRebuild(a: FuelCloseAmounts): boolean {
   );
 }
 
+/** One current (not reversed) fuel line, as `fuel_week_lines_list` returns it. */
+export type FuelWeekLineAmounts = {
+  driver_id?: string | null;
+  driver_amount_minor?: number | null;
+  company_amount_minor?: number | null;
+  reversed_at?: string | null;
+};
+
+/** Lines that still count: a reopen marks the old ones reversed (F-03). */
+export function currentFuelLines<T extends FuelWeekLineAmounts>(lines: T[]): T[] {
+  return (lines || []).filter((l) => l && !l.reversed_at);
+}
+
 /**
- * Preference order: override → consumption_strip → finalized KV (real driver share)
- * → rebuild → period columns. Seal and probe must use the same order.
+ * F-24: a v3 week's statement for one driver = the sum of that driver's current lines, and
+ * nothing else. A driver with no line in a v3 week had no fuel cost: J$0.
+ */
+export function amountsFromFuelLines(
+  lines: FuelWeekLineAmounts[],
+  driverId: string,
+): FuelCloseAmounts {
+  let driverMinor = 0;
+  let companyMinor = 0;
+  for (const l of currentFuelLines(lines)) {
+    if (String(l.driver_id || "") !== driverId) continue;
+    driverMinor += Math.round(Number(l.driver_amount_minor) || 0);
+    companyMinor += Math.round(Number(l.company_amount_minor) || 0);
+  }
+  return {
+    driverShare: driverMinor / 100,
+    companyShare: companyMinor / 100,
+    totalSpend: (driverMinor + companyMinor) / 100,
+    miscellaneousCost: 0,
+    source: "fuel_week_lines",
+  };
+}
+
+/**
+ * Preference order: lines (v3 weeks, F-24: the only source) → override → consumption_strip
+ * → finalized KV (real driver share) → rebuild → period columns. The chain after `fromLines`
+ * runs only for weeks locked under v2.2. Seal and probe must use the same order.
  */
 export function pickFuelCloseAmounts(input: {
+  fromLines?: FuelCloseAmounts | null;
   override?: FuelCloseAmountOverride | null;
   fromConsumption?: FuelCloseAmounts | null;
   fromKv?: FuelCloseAmounts | null;
   fromRebuild?: FuelCloseAmounts | null;
   periodFallback: FuelCloseAmounts;
 }): FuelCloseAmounts {
+  if (input.fromLines) return input.fromLines;
+
   let amounts: FuelCloseAmounts | null = null;
 
   if (input.override) {
