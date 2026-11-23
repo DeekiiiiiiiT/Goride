@@ -5,7 +5,9 @@ import { FuelPeriodStepper } from './FuelPeriodStepper';
 import { createPortal } from 'react-dom';
 import { FuelDeskFinalizeBar } from './FuelDeskSection';
 import { FuelDeskSlides, FuelStillOpenList, openParts, type FuelSlidePart } from './FuelDeskSlides';
-import { FuelDisputesEmpty, FuelDistanceSummary, FuelPolicyBars } from './FuelSlideParts';
+import { FuelDisputesEmpty, FuelPolicyBars } from './FuelSlideParts';
+import { FuelWhoPaysSection } from './FuelWhoPays';
+import { buildWhoPaysWeek } from '../../../utils/fuelWhoPaysModel';
 import { FuelWeekMoneyStrip } from './FuelWeekMoneyStrip';
 import {
   FuelWizardOverflowMenu,
@@ -30,6 +32,9 @@ import {
   findStopToStopGapAccept,
   inventoryStopToStopWeekBlockers,
   selectOdometerBucketsClosingInWeek,
+  fuelOpsSpendAmount,
+  isFuelOpsLogEntry,
+  isGasCardFuelEntry,
   type FuelResidualDisposition,
   type OdometerBucket,
   type StopToStopGapAccept,
@@ -989,6 +994,43 @@ function FuelPeriodWizardInner({
 
   const stopToStopSummary = useMemo(() => weekS2sInventory.weekSummary, [weekS2sInventory]);
 
+  // Part E screen 1 / Part J 1, 3, 9, 12: one card per car, from the week's own report.
+  const whoPaysWeeks = useMemo(() => {
+    const fills = weekFuelEntries
+      .filter((e) => isFuelOpsLogEntry(e) && fuelOpsSpendAmount(e) > 0)
+      .map((e) => ({
+        vehicleId: e.vehicleId,
+        driverId: e.driverId,
+        amount: fuelOpsSpendAmount(e),
+        gasCard: isGasCardFuelEntry(e),
+      }));
+    const nameOf = (id: string) => {
+      const d = drivers.find((x) => x.id === id || x.driverId === id);
+      return d?.name || [d?.firstName, d?.lastName].filter(Boolean).join(' ') || undefined;
+    };
+    return liveReports.map((report) =>
+      buildWhoPaysWeek({ report, vehicles, fills, driverName: nameOf(report.driverId) }),
+    );
+  }, [liveReports, weekFuelEntries, vehicles, drivers]);
+  const whoPaysStopToStop = useCallback(
+    (vehicleId: string) => {
+      const windows = weekOdometerBuckets.filter((b) => b.vehicleId === vehicleId);
+      if (!windows.length) return null;
+      const open = [...weekS2sInventory.chainWindows, ...weekS2sInventory.unacceptedOverLog].filter(
+        (b) => b.vehicleId === vehicleId,
+      ).length;
+      return {
+        windows: windows.length,
+        open,
+        summary: stopToStopSummary,
+        onFix: periodLocked ? undefined : () => openStopToStopRemediation({ vehicleId }),
+      };
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [weekOdometerBuckets, weekS2sInventory, stopToStopSummary, periodLocked],
+  );
+  const leakageReviewRef = useRef<HTMLDivElement | null>(null);
+
   const openStopToStopRemediation = (opts?: {
     vehicleId?: string;
     focusBucketId?: string | null;
@@ -1712,15 +1754,30 @@ function FuelPeriodWizardInner({
         description: 'How the car was driven this week, and how the fuel cost is split.',
         status: slideStatus.distance,
         testId: 'recon-fuel-section-distance',
-        content: (
+        content: ({ goTo }) => (
           <div className="space-y-5">
-            <FuelDistanceSummary
-              reports={liveReports}
-              totalSpend={strip.totalSpend}
-              company={strip.company}
-              driver={strip.driver}
+            <FuelWhoPaysSection
+              weeks={whoPaysWeeks}
+              review={
+                periodLocked
+                  ? null
+                  : {
+                      needed: Boolean(leakageStepHero.showDispositionForm && !leakageReviewed),
+                      onMarkReviewed: () =>
+                        leakageReviewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+                    }
+              }
+              chainReview={
+                periodLocked
+                  ? null
+                  : {
+                      needed: needsOdometerChainAck && !odometerChainReviewed,
+                      onMarkReadingsReviewed: () => goTo('checks'),
+                    }
+              }
+              stopToStopFor={whoPaysStopToStop}
             />
-            {leakageStepNode}
+            <div ref={leakageReviewRef}>{leakageStepNode}</div>
           </div>
         ),
       },

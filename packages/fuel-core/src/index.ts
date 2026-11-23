@@ -408,3 +408,19 @@ export {
   type OdometerBucket,
   type OdometerBucketAnchor,
 } from './fuelTypes.ts';
+
+// Fuel engine v3 (fuel enterprise audit F-01): priced from the fuel bought.
+export {
+  FUEL_ENGINE_V3_VERSION,
+  applyFuelV3ToReport,
+  applyMultiCarPersonalAllowance,
+  combineFuelV3,
+  fuelV3PreviewRows,
+  priceFuelWeekV3,
+  type FuelV3Combined,
+  type FuelV3Input,
+  type FuelV3Line,
+  type FuelV3PreviewRow,
+  type FuelV3Purpose,
+  type FuelV3Result,
+} from './fuelEngineV3.ts';
