@@ -115,6 +115,12 @@ import type { Vehicle } from '../../../types/vehicle';
 import { FUEL_STEP_ICONS } from '../../../utils/fuelStepIcons';
 import type { FuelWeekChecksResponse } from '../../../utils/fuelChecksModel';
 import { FuelChecksSection, type FuelChecksCar } from './FuelChecks';
+import { FuelFinalizeStillOpen, FuelSealRefusedBox } from './FuelFinalizeParts';
+import {
+  parseSealRefusal,
+  sealRefusalTitle,
+  stillOpenRows,
+} from '../../../utils/fuelFinalizeModel';
 import { loadFuelLeakageReview } from '../../../utils/fuelLeakageReviewStore';
 import {
   parseDataQualityVehicleReviews,
@@ -1263,7 +1269,9 @@ function FuelPeriodWizardInner({
     liveReports.length === 0 ||
     serverBlockers == null ||
     serverBlockMessages.length > 0 ||
-    (!!gateResult.hasBlockingWarnings && !financeWarningAcknowledged) ||
+    (deskSections
+      ? !financeWarningAcknowledged
+      : !!gateResult.hasBlockingWarnings && !financeWarningAcknowledged) ||
     (needsHumanSecondApprover(
       strip.totalSpend,
       secondApproverThreshold,
@@ -1279,7 +1287,7 @@ function FuelPeriodWizardInner({
     if (liveReports.length === 0) return 'No fuel spend for this week yet.';
     if (serverBlockers == null) return 'Checking whether this week can be locked.';
     if (serverBlockMessages.length > 0) return serverBlockMessages[0];
-    if (gateResult.hasBlockingWarnings && !financeWarningAcknowledged) {
+    if ((deskSections || gateResult.hasBlockingWarnings) && !financeWarningAcknowledged) {
       return 'Check the review box above before Finalize.';
     }
     if (
@@ -1684,6 +1692,21 @@ function FuelPeriodWizardInner({
   // Week Reconciliation step 5 (WRA-01): same data, gates and actions, laid out as
   // sections. No inner stepper, no coach card, no second "Settlement preview".
   if (deskSections) {
+    // Part J screen 11: the last Finalize was refused (F-05) and nothing locked.
+    const sealRefusal = periodLocked ? null : parseSealRefusal(period.fuelSealError);
+    const refusedDrivers = (sealRefusal?.driverIds || []).map((id) => {
+      const d = drivers.find((x) => x.id === id || x.driverId === id);
+      const full = d?.name || [d?.firstName, d?.lastName].filter(Boolean).join(' ') || 'A driver';
+      return { full, first: d?.firstName || full.split(/s+/)[0] };
+    });
+    // Part J screen 10: every blocker the lock check returns, in plain words.
+    const finalizeRows =
+      periodLocked || serverBlockers == null
+        ? null
+        : stillOpenRows(serverBlockers, {
+            checks: weekChecks,
+            plateOf: (id) => plateByVehicleId[id] || id,
+          });
     const checkCount =
       exceptionBlockers.length +
       unapprovedFuelTxBlockers.length +
@@ -1718,7 +1741,9 @@ function FuelPeriodWizardInner({
           : { text: 'Done', tone: 'done' as const },
       finalize: periodLocked
         ? { text: 'Locked', tone: 'done' as const }
-        : finalizeBlockedReason
+        : sealRefusal
+          ? { text: 'Not locked', tone: 'fix' as const }
+          : finalizeBlockedReason
           ? { text: 'Not ready', tone: 'locked' as const }
           : { text: 'Ready', tone: 'done' as const },
     };
@@ -1867,7 +1892,26 @@ function FuelPeriodWizardInner({
         testId: 'recon-fuel-section-finalize',
         content: ({ goTo }) => (
           <div className="space-y-5">
-            {periodLocked ? null : (
+            {sealRefusal ? (
+              <FuelSealRefusedBox
+                title={sealRefusalTitle(
+                  sealRefusal,
+                  refusedDrivers.map((d) => d.first),
+                )}
+                driverLines={
+                  sealRefusal.phase === 'statement'
+                    ? refusedDrivers.map((d) => `${d.full}: the fuel statement was not written`)
+                    : []
+                }
+                totals={{ fuelBought: strip.totalSpend, driverPays: strip.driver, companyKeeps: strip.company }}
+                canRetry={!finalizeDisabled}
+                retrying={finalizing}
+                onTryAgain={() => void handleFinalizeClick()}
+              />
+            ) : null}
+            {periodLocked ? null : finalizeRows ? (
+              <FuelFinalizeStillOpen rows={finalizeRows} onGo={goTo} />
+            ) : (
               <FuelStillOpenList
                 items={openParts([
                   { id: 'checks' as const, title: 'Fuel checks', status: slideStatus.checks },
@@ -1885,6 +1929,8 @@ function FuelPeriodWizardInner({
               finalizing={finalizing}
               locked={periodLocked}
               onFinalize={() => void handleFinalizeClick()}
+              openCount={finalizeRows?.length ?? 0}
+              refused={Boolean(sealRefusal)}
             />
           </div>
         ),

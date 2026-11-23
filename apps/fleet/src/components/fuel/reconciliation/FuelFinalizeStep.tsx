@@ -129,49 +129,7 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
     (implausibleFills.length > 0 || hasImplausibleBlock);
   const fixStopToStop = onFixStopToStop || onOpenStopToStopGapDetail;
 
-  return (
-    <div className="space-y-3">
-      {/* Desk: the "Still open" list (with Go to) and the Fuel seal reason already say what blocks. */}
-      {closableBlockMessages.length > 0 && !desk && (
-        <div className="space-y-2 text-sm text-[#0b1c30]" role="alert">
-          <p className="text-[12px] font-semibold uppercase tracking-wider text-[#ba1a1a]">Finalize is blocked</p>
-          {stopToStopSummary &&
-          hasStopToStopBlock &&
-          !/is clear/i.test(stopToStopSummary) ? (
-            <p className="text-[#47464c]">{stopToStopSummary}</p>
-          ) : null}
-          <ul className="space-y-2">
-            {closableBlockMessages.map((m) => (
-              <li key={m} className="flex items-start gap-3 rounded-2xl bg-[#eff4ff] px-4 py-3 text-[15px]">
-                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#ba1a1a]" aria-hidden />
-                {m}
-              </li>
-            ))}
-          </ul>
-          {hasStopToStopBlock && (fixStopToStop || onOpenIntegrityStopToStop) ? (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {fixStopToStop ? (
-                <Button
-                  type="button"
-                  className="min-h-11 bg-rose-700 text-white hover:bg-rose-800"
-                  onClick={fixStopToStop}
-                >
-                  Fix stop-to-stop blockers
-                </Button>
-              ) : null}
-              {onOpenIntegrityStopToStop ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="min-h-11 text-rose-950 hover:bg-rose-100"
-                  onClick={onOpenIntegrityStopToStop}
-                >
-                  Open in Fuel Integrity (advanced)
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
-          {showImplausibleAccept ? (
+  const implausibleAcceptNode = showImplausibleAccept ? (
             <div className="mt-3 space-y-2 rounded-md border border-rose-300 bg-white px-3 py-3 text-slate-900">
               <p className="font-semibold">Accept unusual fills</p>
               {implausibleFills.length > 0 ? (
@@ -225,9 +183,54 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
                 {implausibleBusy ? 'Saving…' : 'Accept unusual fills'}
               </Button>
             </div>
+  ) : null;
+
+  return (
+    <div className="space-y-3">
+      {/* Desk: the "Still open" list (with Go to) and the Fuel seal reason already say what blocks. */}
+      {closableBlockMessages.length > 0 && !desk && (
+        <div className="space-y-2 text-sm text-[#0b1c30]" role="alert">
+          <p className="text-[12px] font-semibold uppercase tracking-wider text-[#ba1a1a]">Finalize is blocked</p>
+          {stopToStopSummary &&
+          hasStopToStopBlock &&
+          !/is clear/i.test(stopToStopSummary) ? (
+            <p className="text-[#47464c]">{stopToStopSummary}</p>
           ) : null}
+          <ul className="space-y-2">
+            {closableBlockMessages.map((m) => (
+              <li key={m} className="flex items-start gap-3 rounded-2xl bg-[#eff4ff] px-4 py-3 text-[15px]">
+                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#ba1a1a]" aria-hidden />
+                {m}
+              </li>
+            ))}
+          </ul>
+          {hasStopToStopBlock && (fixStopToStop || onOpenIntegrityStopToStop) ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {fixStopToStop ? (
+                <Button
+                  type="button"
+                  className="min-h-11 bg-rose-700 text-white hover:bg-rose-800"
+                  onClick={fixStopToStop}
+                >
+                  Fix stop-to-stop blockers
+                </Button>
+              ) : null}
+              {onOpenIntegrityStopToStop ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="min-h-11 text-rose-950 hover:bg-rose-100"
+                  onClick={onOpenIntegrityStopToStop}
+                >
+                  Open in Fuel Integrity (advanced)
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+          {implausibleAcceptNode}
         </div>
       )}
+      {desk ? implausibleAcceptNode : null}
       {provenance && (
         <div className="space-y-2" role="status" aria-live="polite">
           <p className="text-[12px] font-semibold uppercase tracking-wider text-[#47464c]">What this week used</p>
@@ -273,7 +276,7 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
           />
         </>
       )}
-      {hasBlockingWarnings && !hasExceptionBlockers && !hasUnapprovedFuelTxBlockers && (
+      {(desk ? !periodLocked : hasBlockingWarnings && !hasExceptionBlockers && !hasUnapprovedFuelTxBlockers) && (
         <label className="flex items-center gap-3 rounded-2xl bg-[#f8f9ff] px-4 py-4 text-[15px] text-[#0b1c30]">
           <Checkbox
             checked={financeWarningAcknowledged}

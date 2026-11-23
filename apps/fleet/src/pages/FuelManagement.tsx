@@ -1978,6 +1978,9 @@ function FuelManagementInner({
       }
 
       const result = await runExclusive('Finalizing week…', async () => {
+      // Declared outside the try so the catch can use it (it was out of scope there: a finalize
+      // error crashed the error handler instead of showing "Finalization failed").
+      let recoverIfAlreadyLocked: () => Promise<boolean> = async () => false;
       try {
           setIsRefreshing(true);
           setMessage('Finalizing week…');
@@ -2031,7 +2034,7 @@ function FuelManagementInner({
             (s, r) => s + (Number(r.totalGasCardCost) || 0),
             0,
           );
-          const recoverIfAlreadyLocked = async (): Promise<boolean> => {
+          recoverIfAlreadyLocked = async (): Promise<boolean> => {
             const fresh = await api.getFuelReconciliationPeriod(periodRow.id).catch(() => null);
             const locked =
               fresh &&
