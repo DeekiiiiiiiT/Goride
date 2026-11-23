@@ -88,6 +88,8 @@ export type FuelV3Result = {
   totalSpend: number;
   driverShare: number;
   companyShare: number;
+  /** The inputs this car-week was priced from — lets a multi-car week re-price with its share of Personal Allowance. */
+  input?: FuelV3Input;
 };
 
 const toMinor = (j: number) => Math.round((Number(j) || 0) * 100);
@@ -297,9 +299,31 @@ export function applyFuelV3ToReport<T extends ReportLike>(report: T): T {
 export type FuelV3Combined = Omit<FuelV3Result, 'costPerKm' | 'odometerKm' | 'cap' | 'pricing'> & {
   pricing: FuelV3Result['pricing'] | 'mixed';
   byVehicle: Array<{ vehicleId: string; result: FuelV3Result }>;
-  /** Personal Allowance is applied after the multi-car merge in v2.2; v3 does not re-split it yet. */
+  /** Kept for old snapshots: true meant v3 had not split a multi-car Personal Allowance. Never set now. */
   personalAllowanceNotApplied?: boolean;
 };
+
+/**
+ * Multi-car Personal Allowance: the earned km (worked out once on the driver's combined week)
+ * are shared across the cars by each car's personal km, then each car is priced again from its
+ * own fills. Each car still adds up to its own fuel bought, so the week does too.
+ * Cars priced before this (`input` missing) are left as they are.
+ */
+export function applyMultiCarPersonalAllowance(
+  parts: Array<{ vehicleId: string; result: FuelV3Result }>,
+  earnedKm: number,
+): Array<{ vehicleId: string; result: FuelV3Result }> {
+  const totalPersonal = parts.reduce((s, p) => s + nonNeg(p.result.input?.km.personal), 0);
+  const earned = Math.min(nonNeg(earnedKm), totalPersonal);
+  if (!(earned > 0) || parts.some((p) => !p.result.input)) return parts;
+  return parts.map((p) => {
+    const input = p.result.input!;
+    const share = earned * (nonNeg(input.km.personal) / totalPersonal);
+    const result = priceFuelWeekV3({ ...input, personalAllowanceEarnedKm: share });
+    for (const l of result.lines) l.vehicleId = p.vehicleId;
+    return { vehicleId: p.vehicleId, result };
+  });
+}
 
 export function combineFuelV3(parts: Array<{ vehicleId: string; result: FuelV3Result }>): FuelV3Combined {
   const lines = parts.flatMap((p) => p.result.lines.map((l) => ({ ...l, vehicleId: l.vehicleId || p.vehicleId })));
@@ -469,5 +493,6 @@ export function priceFuelWeekV3(input: FuelV3Input): FuelV3Result {
     totalSpend: totalMinor / 100,
     driverShare: driverMinor / 100,
     companyShare: companyMinor / 100,
+    input,
   };
 }

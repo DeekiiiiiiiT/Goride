@@ -65,7 +65,12 @@ import { applyFillClocks, resolveFillAt, resolveFillChainSpan, tripBelongsToFill
 import { splitLeftoverFuel, normalizeLeftoverSplit, type LeftoverSplit } from './leftoverSplit.ts';
 import { rollingVarianceBill } from './rollingVariance.ts';
 import { FUEL_ENGINE_VERSION } from './fuelEngine.ts';
-import { combineFuelV3, priceFuelWeekV3, type FuelV3Result } from './fuelEngineV3.ts';
+import {
+    applyMultiCarPersonalAllowance,
+    combineFuelV3,
+    priceFuelWeekV3,
+    type FuelV3Result,
+} from './fuelEngineV3.ts';
 import { addDaysYmd, fleetCalendarDay } from './fleetTime.ts';
 
 export {
@@ -1330,12 +1335,12 @@ export const FuelCalculationService = {
                     expandedTrips,
                 );
                 const paEarnedKm = Number((merged.metadata as any)?.personalAllowance?.earnedKm) || 0;
-                if (paEarnedKm > 0 && merged.metadata?.fuelV3) {
-                    // Multi-car Personal Allowance is applied after the merge; v3 does not yet
-                    // split earned km across cars, so the preview says so rather than guess.
+                if (paEarnedKm > 0 && v3Slices.length) {
+                    // Multi-car Personal Allowance: the earned km are shared across the cars by
+                    // their personal km, and each car is priced again from its own fills.
                     merged.metadata = {
                         ...merged.metadata,
-                        fuelV3: { ...(merged.metadata.fuelV3 as object), personalAllowanceNotApplied: true },
+                        fuelV3: combineFuelV3(applyMultiCarPersonalAllowance(v3Slices, paEarnedKm)),
                     };
                 }
                 }
