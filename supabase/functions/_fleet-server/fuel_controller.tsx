@@ -3710,6 +3710,12 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
       }
       const vehicle = entry.vehicleId ? await kv.get(`vehicle:${entry.vehicleId}`) : null;
       const tank = Number(vehicle?.fuelSettings?.tankCapacity) || Number(vehicle?.specifications?.tankCapacity) || 0;
+      // A card statement line is money the card was really charged: it is always recorded.
+      // Odd price / odometer shows in Fuel checks for review, never refuses the line
+      // (23 Nov: an 18 Nov diesel line was dropped as "price off the typical price").
+      // Staff imports only — a driver can't skip the check by marking a fill jaa_raw.
+      const statementLine =
+        !isDriverSubmitter && String(entry.metadata?.importSource || "") === "jaa_raw";
       const accepted = entry.metadata?.plausibilityAccepted === true;
       let previousOdometer = 0;
       const peerPrices: number[] = [];
@@ -3733,7 +3739,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
           if (liters > 0 && amount > 0) peerPrices.push(amount / liters);
         }
       }
-      const issues = assessFillPlausibility({
+      const issues = statementLine ? [] : assessFillPlausibility({
         amount: Number(entry.amount) || 0,
         liters: Number(entry.liters) || 0,
         odometer: Number(entry.odometer) || 0,
