@@ -164,6 +164,15 @@ $set$;
 CREATE OR REPLACE FUNCTION pg_temp._s1_org() RETURNS uuid
 LANGUAGE sql IMMUTABLE AS $$ SELECT 'f1111111-1111-4111-8111-111111111101'::uuid; $$;
 
+CREATE OR REPLACE FUNCTION pg_temp._s1_driver_owes(p_week date, p_driver text) RETURNS bigint
+LANGUAGE sql AS $ow$
+  SELECT coalesce((
+    SELECT (d ->> 'owesFleetMinor')::bigint
+    FROM jsonb_array_elements(toll_system.week_result_live(pg_temp._s1_org(), p_week) -> 'drivers') d
+    WHERE d ->> 'driverId' IS NOT DISTINCT FROM p_driver
+    LIMIT 1), -1);
+$ow$;
+
 CREATE OR REPLACE FUNCTION pg_temp._s1_assert_nightly() RETURNS void
 LANGUAGE plpgsql AS $n$
 DECLARE r record;
@@ -629,6 +638,104 @@ BEGIN
   PERFORM pg_temp._s1_assert_nightly();
 
   RAISE NOTICE 'toll_dispute_commands_test: ok';
+END;
+$$;
+
+-- carried-expire-owes: dispute on a sealed charge week expires → P23 in the posting week; week_result_live
+-- owesFleetMinor tracks P23 / P24 carried legs (undo expire, refund, undo settle).
+DO $$
+DECLARE
+  v_org uuid := pg_temp._s1_org();
+  v_owner uuid := 'f0111111-1111-4111-8111-111111111111'::uuid;
+  v_charge uuid;
+  v_pb uuid;
+  v_week date;
+  v_post date;
+  v_owes bigint;
+  c toll.charges;
+  p toll.paybacks;
+  d toll.disputes;
+  v_dispute uuid;
+  v_r jsonb;
+  v_expire uuid;
+  v_settle uuid;
+BEGIN
+  SELECT * INTO v_charge, v_pb, v_week FROM pg_temp._s1_setup390('p-owe', 336);
+  c := pg_temp._s1_ch('s1-ch-p-owe');
+  p := pg_temp._s1_pb('trip:s1-trip-p-owe');
+  v_r := pg_temp._s1_cmd('open_dispute', jsonb_build_object(
+    'command_id', 's1-p-owe-open', 'charge_id', c.id, 'payback_id', p.id,
+    'expected_charge_version', c.version, 'expected_payback_version', p.version));
+  v_dispute := (v_r ->> 'dispute_id')::uuid;
+
+  PERFORM pg_temp._s1_cmd('seal_week', jsonb_build_object(
+    'command_id', 's1-p-owe-seal', 'week_key', v_week,
+    'expected_week_version', toll_system.week_version(v_org, v_week)));
+
+  ALTER TABLE toll.disputes DISABLE TRIGGER USER;
+  UPDATE toll.disputes SET deadline = now() - interval '2 hours'
+  WHERE organization_id = v_org AND id = v_dispute;
+  ALTER TABLE toll.disputes ENABLE TRIGGER USER;
+
+  INSERT INTO toll.decisions (organization_id, command_id, intent, actor, actor_user_id)
+  VALUES (v_org, 's1-p-owe-exp', 'dispute_expire', 'user', v_owner) RETURNING id INTO v_expire;
+  PERFORM toll_system.dispute_expire(v_org, v_dispute, v_expire, 's1-p-owe-exp');
+
+  v_post := toll_system.posting_week(v_org);
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  IF d.posted_in_week_key IS DISTINCT FROM v_post THEN
+    RAISE EXCEPTION 'carried-expire-owes posted in % not posting week %', d.posted_in_week_key, v_post;
+  END IF;
+  IF d.state <> 'expired' THEN RAISE EXCEPTION 'carried-expire-owes state %', d.state; END IF;
+
+  v_owes := pg_temp._s1_driver_owes(v_post, 's1-d1');
+  IF v_owes <> 2000 THEN RAISE EXCEPTION 'carried-expire-owes owesFleetMinor got % want 2000', v_owes; END IF;
+
+  IF coalesce((public.toll_sys_driver_week_tolls(v_org, v_post, 's1-d1') -> 'line' ->> 'owesFleetMinor')::bigint, -1)
+     <> 2000 THEN
+    RAISE EXCEPTION 'carried-expire-owes toll_sys_driver_week_tolls line';
+  END IF;
+
+  PERFORM pg_temp._s1_cmd('undo_decision', jsonb_build_object(
+    'command_id', 's1-p-owe-undo-expire', 'decision_id', v_expire));
+  v_owes := pg_temp._s1_driver_owes(v_post, 's1-d1');
+  IF v_owes <> 0 THEN RAISE EXCEPTION 'carried-expire-owes after undo expire owes %', v_owes; END IF;
+
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND reopens_id = v_dispute
+    ORDER BY created_at DESC LIMIT 1;
+  IF d.id IS NULL THEN RAISE EXCEPTION 'carried-expire-owes no reopened dispute'; END IF;
+  v_dispute := d.id;
+
+  ALTER TABLE toll.disputes DISABLE TRIGGER USER;
+  UPDATE toll.disputes SET deadline = now() - interval '2 hours'
+  WHERE organization_id = v_org AND id = v_dispute;
+  ALTER TABLE toll.disputes ENABLE TRIGGER USER;
+  INSERT INTO toll.decisions (organization_id, command_id, intent, actor, actor_user_id)
+  VALUES (v_org, 's1-p-owe-exp2', 'dispute_expire', 'user', v_owner) RETURNING id INTO v_expire;
+  PERFORM toll_system.dispute_expire(v_org, v_dispute, v_expire, 's1-p-owe-exp2');
+  v_owes := pg_temp._s1_driver_owes(v_post, 's1-d1');
+  IF v_owes <> 2000 THEN RAISE EXCEPTION 'carried-expire-owes after re-expire owes %', v_owes; END IF;
+
+  PERFORM public.toll_sys_import(v_org, 'uber', format(
+    '[{"row_type":"adjustment","reference":"s1-adj-p-owe","driver_id":"s1-d1","paid_on":"%s","amount_minor":2000}]',
+    (now() AT TIME ZONE 'America/Jamaica')::date)::jsonb, 's1-adj-p-owe', 'smoke');
+  p := pg_temp._s1_pb('s1-adj-p-owe');
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  INSERT INTO toll.decisions (organization_id, command_id, intent, actor, actor_job)
+  VALUES (v_org, 's1-p-owe-settle', 'settle_dispute', 'system', 'matcher:system') RETURNING id INTO v_settle;
+  PERFORM toll_write.intent_settle_dispute(v_org, v_settle, 's1-p-owe-settle', jsonb_build_object(
+    'dispute_id', v_dispute, 'payback_id', p.id,
+    'expected_dispute_version', d.version, 'expected_payback_version', p.version), true);
+
+  v_owes := pg_temp._s1_driver_owes(v_post, 's1-d1');
+  IF v_owes <> 0 THEN RAISE EXCEPTION 'carried-expire-owes after refund owes %', v_owes; END IF;
+
+  PERFORM pg_temp._s1_cmd('undo_decision', jsonb_build_object(
+    'command_id', 's1-p-owe-undo-settle', 'decision_id', v_settle));
+  v_owes := pg_temp._s1_driver_owes(v_post, 's1-d1');
+  IF v_owes <> 2000 THEN RAISE EXCEPTION 'carried-expire-owes after undo refund owes %', v_owes; END IF;
+
+  PERFORM pg_temp._s1_assert_nightly();
 END;
 $$;
 

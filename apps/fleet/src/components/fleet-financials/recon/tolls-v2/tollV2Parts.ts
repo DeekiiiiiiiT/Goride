@@ -178,10 +178,6 @@ export function earlierResultsText(e: TollV2Desk['earlierResults']): string | nu
   )} · fleet pays ${fmtTollMinor(e.toFleetMinor)}`;
 }
 
-/** AE3: the one sentence in the blue box on Disputes. */
-export function waitingSentence(waitingMinor: number): string {
-  return `${fmtTollMinor(waitingMinor)} is waiting on Uber. It doesn't stop you sealing this week. Refunds usually arrive in the next pay period or the one after.`;
-}
 
 /** "9 Nov, 7:15 AM · Portmore" */
 export function disputeTitle(d: Pick<TollV2DisputeRow, 'occurredAt' | 'plazaName'>): string {

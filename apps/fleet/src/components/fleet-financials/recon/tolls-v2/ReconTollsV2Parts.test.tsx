@@ -115,12 +115,10 @@ describe('Tolls step — six parts (UI1)', () => {
     expect(screen.getByTestId('toll-v2-confirm-all-open').textContent).toMatch(/\(5\)/);
   });
 
-  it('part 3: blue box, tiles and the right buttons per dispute state', () => {
+  it('part 3: no blue box (owner removed it 23 Nov), tiles and the right buttons per dispute state', () => {
     wrap();
     goTo(3);
-    expect(screen.getByTestId('toll-v2-disputes-waiting').textContent).toBe(
-      "J$80.00 is waiting on Uber. It doesn't stop you sealing this week. Refunds usually arrive in the next pay period or the one after.",
-    );
+    expect(screen.queryByTestId('toll-v2-disputes-waiting')).toBeNull();
     expect(screen.getByTestId('toll-v2-tile-to-send').textContent).toMatch(/3· J\$60\.00/);
     expect(screen.getByTestId('toll-v2-tile-sent').textContent).toMatch(/1· J\$20\.00/);
     expect(screen.getByTestId('toll-v2-tile-late').textContent).toMatch(/Late2· J\$40\.00/);

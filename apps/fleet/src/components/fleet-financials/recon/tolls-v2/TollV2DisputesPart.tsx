@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, Check, Clock, Info, Smartphone, Undo2 } from 'lucide-react';
+import { AlertTriangle, Check, Clock, Smartphone, Undo2 } from 'lucide-react';
 import type { TollV2DisputeResult, TollV2DisputeRow, TollV2DisputesBlock } from './types';
 import { fmtTollMinor, formatDecidedAt } from './tollV2Format';
 import {
@@ -11,7 +11,6 @@ import {
   disputeTripPill,
   fromWeekChip,
   resultChip,
-  waitingSentence,
   type DisputeChip,
 } from './tollV2Parts';
 import { TollV2DangerOutlineButton, TollV2PrimaryButton, TollV2SecondaryButton } from './TollV2Buttons';
@@ -74,13 +73,6 @@ export function TollV2DisputesPart({
 
       {tab === 'open' ? (
         <>
-          {disputes.waitingMinor > 0 ? (
-            <div className="flex items-start gap-3 rounded-xl bg-blue-50/80 p-4" data-testid="toll-v2-disputes-waiting">
-              <Info className="mt-0.5 h-5 w-5 shrink-0 text-[#1d4ed8]" aria-hidden />
-              <p className="text-sm leading-relaxed text-[#0b1c30]">{waitingSentence(disputes.waitingMinor)}</p>
-            </div>
-          ) : null}
-
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Tile label="To send" count={toSend.count} amountMinor={toSend.amountMinor} tone={toSend.count ? 'amber' : 'none'} testId="toll-v2-tile-to-send" />
             <Tile label="Sent, waiting on Uber" count={sent.count} amountMinor={sent.amountMinor} tone={sent.count ? 'blue' : 'none'} testId="toll-v2-tile-sent" />

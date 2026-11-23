@@ -14,7 +14,6 @@ import {
   splitMatches,
   stillOpenLines,
   sumLineText,
-  waitingSentence,
 } from './tollV2Parts';
 import { deskPartsFixture, disputeRow } from './fixtures/deskPartsFixture';
 import { sureSuggestions } from './tollV2DeskLogic';
@@ -139,12 +138,6 @@ describe('dispute rows', () => {
       payback_id: 'p',
       expected_payback_version: 7,
     });
-  });
-
-  it('blue box sentence (AE3)', () => {
-    expect(waitingSentence(24000)).toBe(
-      "J$240.00 is waiting on Uber. It doesn't stop you sealing this week. Refunds usually arrive in the next pay period or the one after.",
-    );
   });
 });
 
