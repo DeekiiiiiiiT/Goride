@@ -3103,6 +3103,20 @@ export function registerFuelPeriodRoutes(app: Hono) {
   );
 
   /**
+   * Fleet Policy → Rules, "How Roam sorts the km" (Part J screen 15, F-30): the Brain values that
+   * sort km between trips. Read only; a locked week keeps the values on its snapshot.
+   */
+  app.get(`${BASE}/fuel/brain-policy`, requirePermission("fuel.view"), async (c: Context) => {
+    const { data, error } = await getServiceClient()
+      .from("fuel_brain_policies")
+      .select("deadhead_gap_max_minutes, personal_gap_min_minutes, peak_hours_start, peak_hours_end, prefer_odo_gaps, updated_at")
+      .eq("is_default", true)
+      .maybeSingle();
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ policy: data || null });
+  });
+
+  /**
    * Driver Settlements → a driver's fuel lines for one week (Part J screens 13, 14): current and
    * reversed lines, the fuel statement they must add up to, and who reopened the week. Read only.
    */

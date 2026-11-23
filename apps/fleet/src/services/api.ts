@@ -5114,6 +5114,18 @@ export const api = {
     return response.json();
   },
 
+  /** Fleet Policy → "How Roam sorts the km" (Part J screen 15, F-30). */
+  async getFuelBrainPolicy(): Promise<{ policy: import('../utils/fuelPolicyRulesModel').BrainPolicy | null }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel/brain-policy`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Could not load how Roam sorts the km');
+    }
+    return response.json();
+  },
+
   /** Driver Settlements: a driver's fuel lines for one week (Part J screens 13, 14). */
   async getDriverWeekFuelLines(
     driverId: string,

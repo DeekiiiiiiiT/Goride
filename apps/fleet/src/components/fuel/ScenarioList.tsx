@@ -9,7 +9,6 @@ import { fuelService } from '../../services/fuelService';
 import { api } from '../../services/api';
 import { FuelScenario, FuelRule, FuelEntry, FinalizedFuelReport } from '../../types/fuel';
 import { ScenarioEditor } from './ScenarioEditor';
-import { FuelCoverageMatrix } from './FuelCoverageMatrix';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,6 +42,18 @@ import {
   type ResolvedFuelPolicyRow,
 } from '../../utils/fuelScenarioServiceLine';
 import { fuelServiceLineUiLabel } from '../../utils/vocabulary';
+import { weekCloseApi } from '../../services/weekCloseApi';
+import { mondayYmdForDate } from '../../utils/fuelPolicyVersion';
+import { fleetYmd } from '../../utils/fuelChecksModel';
+import { splitRows, type BrainPolicy } from '../../utils/fuelPolicyRulesModel';
+import { VersionScheduleEditor } from './VersionScheduleEditor';
+import {
+  AddFuelVersionDialog,
+  HowRoamSortsKm,
+  PolicySplitRows,
+  PolicyVersionsSection,
+} from './FuelPolicyVersions';
+import type { FuelScenarioVersion } from '../../types/fuel';
 
 function vehiclePlate(v: any): string {
   return v.licensePlate || v.plate || v.name || v.id?.slice(0, 8) || 'Vehicle';
@@ -89,6 +100,43 @@ export function ScenarioList({
     const [editingScenario, setEditingScenario] = useState<FuelScenario | null>(null);
     const [deleteId, setDeleteId] = useState<string | null>(null);
     const [deleteGuard, setDeleteGuard] = useState<FuelPolicyDeleteGuardResult | null>(null);
+    // Part J screens 15, 16: versions on the Rules tab.
+    const [frozenMondays, setFrozenMondays] = useState<string[]>([]);
+    const [brainPolicy, setBrainPolicy] = useState<BrainPolicy | null>(null);
+    const [addVersionFor, setAddVersionFor] = useState<FuelScenario | null>(null);
+    const [editVersion, setEditVersion] = useState<{ scenario: FuelScenario; version: FuelScenarioVersion } | null>(null);
+    const thisMonday = useMemo(() => mondayYmdForDate(new Date(), fleetTz || undefined), [fleetTz]);
+    const todayYmd = fleetYmd(new Date().toISOString());
+    const versionWeekOptions = useMemo(() => {
+      const out: string[] = [];
+      const base = Date.parse(`${thisMonday}T12:00:00Z`);
+      for (let w = -8; w <= 16; w++) out.push(new Date(base + w * 7 * 86_400_000).toISOString().slice(0, 10));
+      return out;
+    }, [thisMonday]);
+
+    useEffect(() => {
+      const year = Number(thisMonday.slice(0, 4)) || new Date().getFullYear();
+      void Promise.all([
+        weekCloseApi.listClosed(year - 1).catch(() => []),
+        weekCloseApi.listClosed(year).catch(() => []),
+      ]).then(([prior, current]) => {
+        const keys = [...prior, ...current].map((w) => String(w.weekKey || '').slice(0, 10)).filter(Boolean);
+        setFrozenMondays([...new Set(keys)]);
+      });
+      void api.getFuelBrainPolicy().then((r) => setBrainPolicy(r.policy)).catch(() => setBrainPolicy(null));
+    }, [thisMonday]);
+
+    /** Save from a version dialog: keeps the dialog open (throws) when the server refuses. */
+    const saveVersionChange = async (next: FuelScenario) => {
+      try {
+        const saved = await fuelService.saveFuelScenario(next);
+        commitScenarios(scenarios.map((s) => (s.id === saved.id ? saved : s)));
+        toast.success('Version saved');
+      } catch (e: any) {
+        toast.error(e?.message || 'Failed to save version');
+        throw e;
+      }
+    };
 
     const weekOptions = useMemo(
       () => generateFuelWeekOptions(16, fleetTz || undefined),
@@ -331,7 +379,7 @@ export function ScenarioList({
                     No fuel policies yet. Create a Default policy to get started.
                 </div>
             ) : (
-                <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <div className="grid grid-cols-1 gap-6">
                     {policyRows.map((row) => {
                         const scenario = row.scenario;
                         const normalized = normalizeScenarioVersions(scenario);
@@ -398,7 +446,7 @@ export function ScenarioList({
                                     </div>
                                 </CardHeader>
                                 <CardContent className="space-y-4 pt-4">
-                                    <FuelCoverageMatrix rule={rule} compact />
+                                    <PolicySplitRows rows={splitRows(rule)} />
                                     <p className="text-xs text-slate-500">
                                       Editing this template applies to new periods only.
                                     </p>
@@ -528,12 +576,54 @@ export function ScenarioList({
                                           </>
                                         ) : null}
                                     </div>
+                                    <PolicyVersionsSection
+                                      scenario={scenario}
+                                      frozenMondays={frozenMondays}
+                                      thisMonday={thisMonday}
+                                      todayYmd={todayYmd}
+                                      onAdd={row.kind === 'inherited' ? undefined : () => setAddVersionFor(scenario)}
+                                      onEdit={row.kind === 'inherited' ? undefined : (version) => setEditVersion({ scenario, version })}
+                                    />
                                 </CardContent>
                             </Card>
                         );
                     })}
                 </div>
             )}
+
+            <HowRoamSortsKm policy={brainPolicy} />
+
+            <AddFuelVersionDialog
+                open={addVersionFor != null}
+                onOpenChange={(open) => !open && setAddVersionFor(null)}
+                scenario={addVersionFor}
+                allScenarios={scenarios}
+                frozenMondays={frozenMondays}
+                thisMonday={thisMonday}
+                weekOptions={versionWeekOptions}
+                onSave={saveVersionChange}
+            />
+
+            {editVersion ? (
+              <VersionScheduleEditor
+                isOpen
+                onClose={() => setEditVersion(null)}
+                onSave={async (next) => {
+                  try {
+                    await saveVersionChange(next);
+                    setEditVersion(null);
+                  } catch {
+                    /* refused: the error is shown and the editor stays open */
+                  }
+                }}
+                scenario={editVersion.scenario}
+                allScenarios={scenarios}
+                editingVersion={editVersion.version}
+                drivers={drivers}
+                vehicles={vehicles}
+                frozenMondays={frozenMondays}
+              />
+            ) : null}
 
             <ScenarioEditor
                 isOpen={isEditorOpen}
