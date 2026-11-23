@@ -32,11 +32,30 @@ Deno.test("WRA-68: toll seal/reopen queues only — no inline rebuild or publish
   assert(!block.includes("rush_delivery"), "not once per service line");
 });
 
+/** F-05 moved the two queue calls into one helper, called after statements publish on both lock paths. */
+function sliceQueueHelper(src: string): string {
+  const marker = "async function afterFuelStatementsPublished(";
+  const start = src.indexOf(marker);
+  assert(start >= 0, "afterFuelStatementsPublished helper");
+  const end = src.indexOf("\nasync function ", start + marker.length);
+  assert(end > start, "helper end");
+  return src.slice(start, end);
+}
+
 Deno.test("WRA-68: fuel finalize seal step queues only", async () => {
   const src = await Deno.readTextFile(new URL("./fuel_period_routes.ts", import.meta.url));
   const block = sliceFuelPostSeal(src);
-  assert(block.includes("enqueueDriverWeekUnitsForWeek"), "enqueues driver weeks");
-  assert(block.includes("queueWeekDeskRefresh"), "queues desk refresh");
+  const helper = sliceQueueHelper(src);
+  assert(block.includes("afterFuelStatementsPublished("), "seal block calls the queue helper");
+  assert(
+    src.split("await afterFuelStatementsPublished(").length - 1 >= 2,
+    "both lock paths (post-lock seal + statements-before-lock) queue",
+  );
+  assert(helper.includes("enqueueDriverWeekUnitsForWeek"), "enqueues driver weeks");
+  assert(helper.includes("queueWeekDeskRefresh"), "queues desk refresh");
+  assert(!helper.includes("runSealSideEffects"), "no runSealSideEffects in helper");
+  assert(!helper.includes("rebuildPeriodsForAnchors"), "no period rebuild in helper");
+  assert(!helper.includes("publishWeekDesk"), "no inline desk publish in helper");
   assert(!block.includes("runSealSideEffects"), "no runSealSideEffects");
   assert(!block.includes("rebuildPeriodsForAnchors"), "no period rebuild in seal block");
   assert(!block.includes("publishWeekDesk"), "no inline desk publish in seal block");
