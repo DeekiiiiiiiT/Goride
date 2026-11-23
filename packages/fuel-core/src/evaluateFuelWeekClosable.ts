@@ -159,7 +159,7 @@ const NIGHTLY_CHECK_LABELS: Record<string, string> = {
 /** Plain label for a fuel_system.nightly_checks name (F-16 close gate). */
 export function nightlyCheckFailureLabel(name: string): string {
   const key = String(name || '').trim();
-  return NIGHTLY_CHECK_LABELS[key] || key.replaceAll('_', ' ');
+  return NIGHTLY_CHECK_LABELS[key] || key.replace(/_/g, ' ');
 }
 
 function cardStatementDriftMessage(

@@ -820,7 +820,7 @@ async function processJobRow(job: Record<string, unknown>) {
         if (!sealFinish.ok) {
           return { ok: false, error: sealFinish.error, version: sealFinish.version, alreadyLocked: true };
         }
-        return { ok: true, version: sealFinish.version, alreadyLocked: true, ...sealFinish };
+        return { alreadyLocked: true, ...sealFinish };
       }
       await sb
         .from("fuel_period_job")

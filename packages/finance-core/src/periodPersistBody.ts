@@ -50,6 +50,8 @@ export type DerivedPeriodStatusLike = {
 };
 
 export type FinanceCoreMetaInput = {
+  /** Which toll source the week read (toll rebuild, 12 Nov). */
+  tollSource?: string;
   tips?: number;
   tipsPaidToDriver?: number;
   tipsWithheld?: number;
