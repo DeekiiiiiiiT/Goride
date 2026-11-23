@@ -2,7 +2,7 @@
  * Prepare one fuel week with the same engine the screen uses.
  * Distances are saved first. This function does not close tank cycles or lock the week.
  */
-import * as kv from "./kv_store.tsx";
+import { listFuelPoliciesForOrg } from "./fuel_policy_store.ts";
 import { filterFuelScenariosForOrg } from "./fuel_scenario_scope.ts";
 import { getServiceClient } from "./service_client.ts";
 import { queryFleet } from "./repos/baseRepo.ts";
@@ -333,7 +333,7 @@ export async function prepareFuelWeekReports(args: {
       loadDomain("fuel_adjustments", orgId),
       loadDomain("trips", orgId, { dateFrom: tripFrom, dateTo: weekEnd }),
       loadDomain("earnings_policies", orgId),
-      kv.getByPrefix("fuel_scenario:"),
+      listFuelPoliciesForOrg(orgId),
       loadOrgPreferences(orgId),
     ]);
     const scenarios = filterFuelScenariosForOrg(

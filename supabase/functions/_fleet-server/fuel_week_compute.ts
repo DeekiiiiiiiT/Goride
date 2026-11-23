@@ -2,7 +2,7 @@
  * Server week compute: shared fuel-core snapshots + saved distances.
  * The screen reviews this result. It does not recompute the week.
  */
-import * as kv from "./kv_store.tsx";
+import { listFuelPoliciesForOrg } from "./fuel_policy_store.ts";
 import { getServiceClient } from "./service_client.ts";
 import { loadPriorWeekCredit, prepareFuelWeekReports } from "./fuel_week_prepare.ts";
 import type { PriorWeekFact } from "../../../packages/fuel-core/src/priorWeekCredit.ts";
@@ -151,7 +151,7 @@ export async function hashFuelWeekInputs(orgId: string, weekStart: string, weekE
       loadOrgRows("earnings_policies", orgId),
       loadOrgRows("drivers", orgId),
       loadOrgRows("vehicles", orgId),
-      kv.getByPrefix("fuel_scenario:"),
+      listFuelPoliciesForOrg(orgId),
       loadOrgPreferences(orgId),
       orgVersion(orgId),
       weekSummary({

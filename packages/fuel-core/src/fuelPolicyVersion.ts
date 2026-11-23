@@ -820,3 +820,45 @@ export function validateScenarioSchedule(
   }
   return null;
 }
+
+/** F-11: which rule and which version a week was priced with — stamped on the week's snapshot. */
+export type AppliedFuelPolicyVersion = {
+  scenarioId: string;
+  /** The version window's id; `template-…` when the rule has no schedule yet; null when none applies. */
+  versionId: string | null;
+  effectiveFrom: string | null;
+};
+
+/**
+ * Mirrors the engine's choice exactly: a driver's version assignment wins
+ * (pickScenarioForDriverMembership); otherwise the rule by id → default → first, resolved for
+ * the week (pickScenarioForDriverWeek).
+ */
+export function resolveAppliedFuelPolicyVersion(
+  scenarios: FuelScenario[],
+  driverId: string | undefined | null,
+  fuelScenarioId: string | undefined,
+  weekStartYmd: string,
+): AppliedFuelPolicyVersion | null {
+  const key = String(weekStartYmd).split('T')[0];
+  if (driverId) {
+    const hit = resolveDriverVersionForWeek(scenarios, driverId, key);
+    if (!hit) return null;
+    return {
+      scenarioId: hit.scenario.id,
+      versionId: hit.version.id || null,
+      effectiveFrom: hit.version.effectiveFrom || null,
+    };
+  }
+  const raw =
+    scenarios.find((s) => s.id === fuelScenarioId) ||
+    scenarios.find((s) => s.isDefault) ||
+    scenarios[0];
+  if (!raw) return null;
+  const version = resolveVersionForWeek(raw, key);
+  return {
+    scenarioId: raw.id,
+    versionId: version?.id || null,
+    effectiveFrom: version?.effectiveFrom || null,
+  };
+}

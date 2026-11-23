@@ -40,6 +40,15 @@ export function snapshotsChargedByV3(snapshots: Snap[]): boolean {
 
 const cents = (j: unknown) => Math.round((Number(j) || 0) * 100);
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** F-11: the rule version that priced this report (a real version window id), else null. */
+export function policyVersionIdOf(snap: Snap): string | null {
+  const v = (snap?.metadata?.fuelPolicyVersion as { versionId?: unknown } | undefined)?.versionId;
+  const id = typeof v === "string" ? v.trim() : "";
+  return UUID_RE.test(id) ? id : null;
+}
+
 /**
  * Lines for every v3-charged report. Throws FUEL_LINES_MISMATCH (naming the driver) when a
  * driver's lines don't add up to the report's driver share and company share — the amounts the
@@ -52,6 +61,7 @@ export function buildFuelWeekLineRows(snapshots: Snap[]): FuelWeekLineRow[] {
     const driverId = String(snap.driverId || "").trim();
     const v3 = snap.metadata?.fuelV3 as { lines?: V3Line[]; engineVersion?: string } | undefined;
     const lines = Array.isArray(v3?.lines) ? v3!.lines : [];
+    const policyVersionId = policyVersionIdOf(snap);
     let driverSum = 0;
     let companySum = 0;
     for (const l of lines) {
@@ -67,7 +77,7 @@ export function buildFuelWeekLineRows(snapshots: Snap[]): FuelWeekLineRow[] {
         driver_pct: Math.max(0, Math.min(100, Number(l.driverPct) || 0)),
         driver_amount_minor: l.driverMinor,
         company_amount_minor: l.companyMinor,
-        policy_version_id: null,
+        policy_version_id: policyVersionId,
         engine_version: String(v3?.engineVersion || FUEL_V3_ENGINE),
       });
     }

@@ -20,6 +20,7 @@ import {
 import {
   pickScenarioForDriverMembership,
   pickScenarioForDriverWeek,
+  resolveAppliedFuelPolicyVersion,
   resolveDriverVersionForWeek,
 } from './fuelPolicyVersion.ts';
 import { resolveFuelFillDriver } from './resolveFuelFillDriver.ts';
@@ -294,6 +295,13 @@ export const FuelCalculationService = {
                 options?.fuelScenarioId ?? vehicle.fuelScenarioId,
                 startStr,
               );
+        // F-11: which rule version priced this week — stamped on the snapshot and the fuel lines.
+        const fuelPolicyVersion = resolveAppliedFuelPolicyVersion(
+            scenarios,
+            options?.driverId,
+            options?.fuelScenarioId ?? vehicle.fuelScenarioId,
+            startStr,
+        );
 
         // Helper to get rule for a specific category
         const fuelRule = activeScenario?.rules.find(r => r.category === 'Fuel');
@@ -860,6 +868,7 @@ export const FuelCalculationService = {
             metadata: {
                 scenarioName: activeScenario?.name || 'Standard (Fallback)',
                 scenarioId: activeScenario?.id,
+                fuelPolicyVersion,
                 engineVersion: FUEL_ENGINE_VERSION,
                 chainStart: chain.chainStart,
                 spanStartOdometer: chain.spanStartOdometer,
