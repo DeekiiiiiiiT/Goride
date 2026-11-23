@@ -1843,7 +1843,7 @@ function FuelPeriodWizardInner({
       {
         id: 'policy',
         title: 'Fuel policy',
-        short: 'Policy',
+        short: 'Fuel policy',
         description: 'Who pays for each kind of driving.',
         status: slideStatus.policy,
         testId: 'recon-fuel-section-policy',
@@ -1852,7 +1852,7 @@ function FuelPeriodWizardInner({
       {
         id: 'distance',
         title: 'Distance and who pays',
-        short: 'Distance',
+        short: 'Distance and who pays',
         description: 'How the car was driven this week, and how the fuel cost is split.',
         status: slideStatus.distance,
         testId: 'recon-fuel-section-distance',
