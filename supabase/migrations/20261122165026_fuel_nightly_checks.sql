@@ -212,17 +212,54 @@ BEGIN
     );
     RETURN NEXT;
 
+    -- Check 4 (F-07): no fill counted twice. The engine skips card statement rows
+    -- (isJaaStatementLedgerRow: metadata.importSource jaa_raw / jaa_statement_details /
+    -- fuel_statement, or a jaaRowKind not from the driver portal). A fill is counted twice
+    -- only if (a) a Card_Transaction WITHOUT that marker has a scanned twin (same car, day,
+    -- amount), or (b) two counted rows share a transaction id.
     check_no := 4;
     name := 'v3_no_duplicate_card_fill';
     ok := NOT EXISTS (
+      SELECT 1
+      FROM fleet.fuel_entries c
+      JOIN fleet.fuel_entries m
+        ON m.organization_id = c.organization_id
+       AND m.vehicle_id = c.vehicle_id
+       AND m.date = c.date
+       AND m.amount = c.amount
+       AND m.id <> c.id
+       AND COALESCE(m.type, m.payload_json ->> 'type') IN ('Manual_Entry', 'Fuel_Manual_Entry')
+      WHERE c.organization_id = p_org
+        AND c.date >= r.week_start
+        AND c.date <= r.week_start + 6
+        AND COALESCE(c.amount, 0) > 0
+        AND COALESCE(c.type, c.payload_json ->> 'type') = 'Card_Transaction'
+        AND NOT (
+          COALESCE(c.payload_json -> 'metadata' ->> 'importSource', '')
+            IN ('jaa_raw', 'jaa_statement_details', 'fuel_statement')
+          OR (
+            c.payload_json -> 'metadata' ->> 'jaaRowKind' IS NOT NULL
+            AND COALESCE(c.payload_json ->> 'entrySource', '') <> 'driver-portal'
+          )
+        )
+    )
+    AND NOT EXISTS (
       SELECT 1
       FROM fleet.fuel_entries fe
       WHERE fe.organization_id = p_org
         AND fe.date >= r.week_start
         AND fe.date <= r.week_start + 6
-        AND fe.type = 'Card_Transaction'
         AND fe.transaction_id IS NOT NULL
-      GROUP BY fe.vehicle_id, fe.date, fe.amount, fe.transaction_id
+        AND COALESCE(fe.amount, 0) > 0
+        AND NOT (
+          COALESCE(fe.payload_json -> 'metadata' ->> 'importSource', '')
+            IN ('jaa_raw', 'jaa_statement_details', 'fuel_statement')
+          OR (
+            fe.payload_json -> 'metadata' ->> 'jaaRowKind' IS NOT NULL
+            AND COALESCE(fe.payload_json ->> 'entrySource', '') <> 'driver-portal'
+          )
+        )
+      GROUP BY fe.transaction_id
       HAVING count(*) > 1
     );
     detail := jsonb_build_object('period_id', v_period_id, 'week_start', r.week_start);
