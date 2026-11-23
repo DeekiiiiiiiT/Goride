@@ -424,3 +424,13 @@ export {
   type FuelV3Purpose,
   type FuelV3Result,
 } from './fuelEngineV3.ts';
+
+// Fuel checks part (fuel enterprise audit Part J screens 4, 5).
+export {
+  buildFuelWeekChecks,
+  type AwaitingCardFill,
+  type FuelWeekChecks,
+  type PossibleFillCheck,
+  type WeekChecksDisposition,
+  type WeekStretch,
+} from './fuelWeekChecks.ts';

@@ -135,6 +135,7 @@ export function FuelManagement(props: {
   deskSections?: boolean;
   summaryTarget?: HTMLElement | null;
   onDeskFinalized?: () => void | Promise<void>;
+  onUploadCardStatement?: () => void;
 }) {
   return (
     <FuelReconBusyProvider>
@@ -156,6 +157,7 @@ function FuelManagementInner({
   deskSections,
   summaryTarget,
   onDeskFinalized,
+  onUploadCardStatement,
 }: {
   defaultTab?: string;
   onViewDriverLedger?: (driverId: string) => void;
@@ -168,6 +170,7 @@ function FuelManagementInner({
   deskSections?: boolean;
   summaryTarget?: HTMLElement | null;
   onDeskFinalized?: () => void | Promise<void>;
+  onUploadCardStatement?: () => void;
 }) {
   const queryClient = useQueryClient();
   const { can } = usePermissions();
@@ -2317,6 +2320,7 @@ function FuelManagementInner({
           deskSections={deskSections}
           summaryTarget={summaryTarget}
           onDeskFinalized={onDeskFinalized}
+          onUploadCardStatement={onUploadCardStatement}
           dispositions={flagDispositions}
           onOpenIntegrityStopToStop={({ weekStart, vehicleId }) => {
             setFlagsWeekStart(weekStart);

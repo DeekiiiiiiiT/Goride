@@ -847,6 +847,7 @@ export function ReconRunPage({
                     deskSections
                     summaryTarget={stepSummaryEl}
                     onDeskFinalized={handleFuelFinalized}
+                    onUploadCardStatement={() => setStep('sources')}
                   />
                 </Suspense>
               ) : null}

@@ -80,6 +80,7 @@ function FuelReconciliationWizardView({
   deskSections,
   summaryTarget,
   onDeskFinalized,
+  onUploadCardStatement,
 }: {
   period: FuelReconciliationPeriod;
   wizardSession: number;
@@ -127,6 +128,7 @@ function FuelReconciliationWizardView({
   deskSections?: boolean;
   summaryTarget?: HTMLElement | null;
   onDeskFinalized?: () => void | Promise<void>;
+  onUploadCardStatement?: () => void;
 }) {
   const dateRange: DateRange = {
     from: ymdToLocalDate(period.startDate),
@@ -176,6 +178,7 @@ function FuelReconciliationWizardView({
         deskSections={deskSections}
         summaryTarget={summaryTarget}
         onDeskFinalized={onDeskFinalized}
+        onUploadCardStatement={onUploadCardStatement}
       />
       {resetPeriod && (
         <FuelPeriodReopenDialog
@@ -230,6 +233,7 @@ export function FuelReconciliationDashboard({
   deskSections,
   summaryTarget,
   onDeskFinalized,
+  onUploadCardStatement,
 }: {
   outstanding: FuelReconciliationPeriod[];
   inProgress: FuelReconciliationPeriod[];
@@ -284,6 +288,7 @@ export function FuelReconciliationDashboard({
   deskSections?: boolean;
   summaryTarget?: HTMLElement | null;
   onDeskFinalized?: () => void | Promise<void>;
+  onUploadCardStatement?: () => void;
 }) {
   const [view, setView] = useState<View>({ kind: 'landing' });
   const [resetPeriod, setResetPeriod] = useState<FuelReconciliationPeriod | null>(null);
@@ -442,6 +447,7 @@ export function FuelReconciliationDashboard({
         deskSections={deskSections}
         summaryTarget={summaryTarget}
         onDeskFinalized={onDeskFinalized}
+        onUploadCardStatement={onUploadCardStatement}
       />
     );
   }

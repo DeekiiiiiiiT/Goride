@@ -113,6 +113,8 @@ import type {
 import type { FinancialTransaction, Trip } from '../../../types/data';
 import type { Vehicle } from '../../../types/vehicle';
 import { FUEL_STEP_ICONS } from '../../../utils/fuelStepIcons';
+import type { FuelWeekChecksResponse } from '../../../utils/fuelChecksModel';
+import { FuelChecksSection, type FuelChecksCar } from './FuelChecks';
 import { loadFuelLeakageReview } from '../../../utils/fuelLeakageReviewStore';
 import {
   parseDataQualityVehicleReviews,
@@ -172,6 +174,8 @@ interface FuelPeriodWizardProps {
   summaryTarget?: HTMLElement | null;
   /** Called after Finalize fuel succeeds inside Week Reconciliation. */
   onDeskFinalized?: () => void | Promise<void>;
+  /** Fuel checks → "Upload card statement": go to Week Reconciliation step 1. */
+  onUploadCardStatement?: () => void;
 }
 
 function FuelPeriodWizardInner({
@@ -205,6 +209,7 @@ function FuelPeriodWizardInner({
   deskSections = false,
   summaryTarget,
   onDeskFinalized,
+  onUploadCardStatement,
 }: FuelPeriodWizardProps) {
   const { user } = useAuth();
   const [leakageReviewed, setLeakageReviewed] = useState(false);
@@ -274,6 +279,37 @@ function FuelPeriodWizardInner({
       ),
     [fuelEntries, period.startDate, period.endDate],
   );
+
+  // Fuel checks part (audit Part J screens 4–8): the server's waiting / missed-fill lists.
+  const [weekChecks, setWeekChecks] = useState<FuelWeekChecksResponse | null>(null);
+  const [checksReloadKey, setChecksReloadKey] = useState(0);
+  useEffect(() => {
+    setChecksReloadKey((k) => k + 1);
+  }, [fuelEntries]);
+  /** Driver/admin fills this week (card statement rows are money, not fills — F-07). */
+  const weekFillCount = useMemo(
+    () => weekFuelEntries.filter((e) => isFuelOpsLogEntry(e as never)).length,
+    [weekFuelEntries],
+  );
+  const checksCars = useMemo((): FuelChecksCar[] => {
+    const ids = [...new Set(weekFuelEntries.map((e) => String(e.vehicleId || '')).filter(Boolean))];
+    return ids.map((vehicleId) => {
+      const v = vehicles.find((x) => x.id === vehicleId) as
+        | { licensePlate?: string; make?: string; model?: string }
+        | undefined;
+      const fill = weekFuelEntries.find((e) => e.vehicleId === vehicleId && e.driverId);
+      const driverId = fill?.driverId ? String(fill.driverId) : undefined;
+      const d = driverId ? drivers.find((x) => x.id === driverId || x.driverId === driverId) : undefined;
+      return {
+        vehicleId,
+        plate: v?.licensePlate || vehicleId,
+        makeModel: [v?.make, v?.model].filter(Boolean).join(' ') || undefined,
+        driverId,
+        driverName:
+          d?.name || [d?.firstName, d?.lastName].filter(Boolean).join(' ') || undefined,
+      };
+    });
+  }, [weekFuelEntries, vehicles, drivers]);
 
   const refreshServerClosable = useCallback(async () => {
     if (!serverPeriodId || periodLocked) return;
@@ -1341,6 +1377,13 @@ function FuelPeriodWizardInner({
     priorMedian,
     liveReports,
     scenarios,
+    checks: weekChecks
+      ? {
+          waiting: weekChecks.awaiting.length,
+          totalFills: Math.max(weekFillCount, weekChecks.awaiting.length),
+          possibleFills: weekChecks.possibleFills.filter((p) => !p.closed).length,
+        }
+      : undefined,
   };
 
   const statusLabel = fuelWeekStatusLabel({
@@ -1641,7 +1684,11 @@ function FuelPeriodWizardInner({
   // Week Reconciliation step 5 (WRA-01): same data, gates and actions, laid out as
   // sections. No inner stepper, no coach card, no second "Settlement preview".
   if (deskSections) {
-    const checkCount = exceptionBlockers.length + unapprovedFuelTxBlockers.length;
+    const checkCount =
+      exceptionBlockers.length +
+      unapprovedFuelTxBlockers.length +
+      (weekChecks ? weekChecks.possibleFills.filter((p) => !p.closed).length : 0);
+    const waitingCount = weekChecks?.awaiting.length ?? 0;
     // Owner 15 Nov 2026: one part at a time (FuelDeskSlides). Status of each part:
     const flaggedCarsLeft = qualityRows.filter(
       (r) =>
@@ -1653,7 +1700,9 @@ function FuelPeriodWizardInner({
       checks:
         checkCount > 0
           ? { text: `${checkCount} to fix`, tone: 'fix' as const }
-          : flaggedCarsLeft > 0 || chainAckLeft
+          : waitingCount > 0
+            ? { text: `${waitingCount} waiting`, tone: 'review' as const }
+            : flaggedCarsLeft > 0 || chainAckLeft
             ? { text: 'Review', tone: 'review' as const }
             : { text: 'Done', tone: 'done' as const },
       disputes:
@@ -1673,6 +1722,32 @@ function FuelPeriodWizardInner({
           ? { text: 'Not ready', tone: 'locked' as const }
           : { text: 'Ready', tone: 'done' as const },
     };
+    const wrapFuelChecks = (children: React.ReactNode) =>
+      serverPeriodId ? (
+        <FuelChecksSection
+          periodId={serverPeriodId}
+          weekStart={period.startDate}
+          locked={periodLocked}
+          cars={checksCars}
+          otherFills={{
+            count: Math.max(0, weekFillCount - (weekChecks?.awaiting.length ?? 0)),
+            total: strip.totalSpend,
+          }}
+          reloadKey={checksReloadKey}
+          fuelCards={fuelCards}
+          actorId={user?.id}
+          onUploadCardStatement={onUploadCardStatement}
+          onChanged={() => {
+            void prepareWeek();
+            onRefresh();
+          }}
+          onChecksLoaded={setWeekChecks}
+        >
+          {children}
+        </FuelChecksSection>
+      ) : (
+        <div className="space-y-4">{children}</div>
+      );
     const slideParts: FuelSlidePart[] = [
       {
         id: 'checks',
@@ -1682,7 +1757,8 @@ function FuelPeriodWizardInner({
         status: slideStatus.checks,
         testId: 'recon-fuel-section-checks',
         content: (
-          <div className="space-y-4">
+          wrapFuelChecks(
+            <>
             <FuelUnapprovedTxBlockersPanel blockers={unapprovedFuelTxBlockers} onOpenReviewQueue={onOpenReviewQueue} />
             <FuelExceptionBlockersPanel
               blockers={exceptionBlockers}
@@ -1716,7 +1792,8 @@ function FuelPeriodWizardInner({
               weekEndYmd={period.endDate}
               dispositions={dispositions}
             />
-          </div>
+            </>,
+          )
         ),
       },
       {

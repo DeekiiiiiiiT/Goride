@@ -3076,6 +3076,89 @@ export function registerFuelPeriodRoutes(app: Hono) {
   );
 
   /**
+   * Fuel checks part (audit Part J screens 4, 5): card fills waiting for the statement and the
+   * "possible fill not scanned" stretches, with their close notes. Read only.
+   */
+  app.get(
+    `${BASE}/fuel/periods/:id/checks`,
+    requirePermission("fuel.view"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "org required" }, 400);
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
+      const period = await loadPeriod(orgId, periodId);
+      if (!period) return c.json({ error: "Not found" }, 404);
+      const weekStart = String(period.week_start || "").slice(0, 10);
+      const weekEnd = String(period.week_end || "").slice(0, 10) || weekStart;
+      try {
+        const { loadFuelWeekChecks } = await import("./fuel_week_checks_route.ts");
+        const body = await loadFuelWeekChecks(orgId, weekStart, weekEnd);
+        return c.json({ periodId, weekStart, weekEnd, locked: isFuelPeriodLocked(period), ...body });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        return c.json({ error: message }, 500);
+      }
+    },
+  );
+
+  /**
+   * Reopen a check closed with a note (Part J screen 5 "Reopen"): deletes the close so the
+   * check blocks the lock again. Only the note-closed checks (F-08/F-09/F-13), only while
+   * the week is open; the audit row keeps who reopened it and the note that was removed.
+   */
+  app.post(
+    `${BASE}/fuel/flags/disposition/reopen`,
+    requirePermission("fuel.edit_entry"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "org required" }, 400);
+      const body = await c.req.json().catch(() => ({}));
+      const entryId = String(body.entryId || "").trim();
+      const flagCode = String(body.flagCode || "").trim();
+      const periodId = String(body.periodId || "").trim();
+      if (!entryId || !flagCode || !periodId) {
+        return c.json({ error: "entryId, flagCode and periodId required" }, 400);
+      }
+      const { FUEL_FLAG_CODES_WITH_NOTE } = await import("./fuel_flag_disposition_action.ts");
+      if (!FUEL_FLAG_CODES_WITH_NOTE.has(flagCode)) {
+        return c.json({ error: "This check can't be reopened here" }, 400);
+      }
+      const period = await loadPeriod(orgId, periodId);
+      if (!period) return c.json({ error: "Not found" }, 404);
+      if (isFuelPeriodLocked(period)) {
+        return c.json({ error: "The week is locked. Reopen the week first." }, 409);
+      }
+      const actor = actorId(c);
+      if (!actor) return c.json({ error: "actor required" }, 400);
+      const { data, error } = await getServiceClient()
+        .from("fuel_flag_disposition")
+        .delete()
+        .eq("org_id", orgId)
+        .eq("entry_id", entryId)
+        .eq("flag_code", flagCode)
+        .select("note, actor_id, at");
+      if (error) return c.json({ error: error.message }, 500);
+      const removed = (data || [])[0] as { note?: string | null; actor_id?: string; at?: string } | undefined;
+      if (!removed) return c.json({ error: "Nothing to reopen" }, 404);
+      await insertAudit(
+        orgId,
+        periodId,
+        "flag_reopened",
+        {
+          entryId,
+          flagCode,
+          removedNote: removed.note ?? null,
+          closedBy: removed.actor_id ?? null,
+          closedAt: removed.at ?? null,
+        },
+        actor,
+      );
+      return c.json({ ok: true });
+    },
+  );
+
+  /**
    * Fuel v3 "New pricing preview" (audit Part D, Stitch screens 1–3, 17). Reads the saved
    * snapshot only: per driver the charge now vs v3, what moved most, and v3's lines per car.
    * `charged` says which engine the week is charged by (the fuelEngineV3 switch at compute time).

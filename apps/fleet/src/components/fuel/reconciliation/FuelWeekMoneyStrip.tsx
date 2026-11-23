@@ -40,7 +40,10 @@ export function FuelWeekMoneyStrip({
   variant = 'collapsed',
   liveReports = [],
   scenarios = [],
+  checks,
 }: {
+  /** Fuel checks part (Part J screens 4, 5): fills still waiting and open missed-fill checks. */
+  checks?: { waiting: number; totalFills: number; possibleFills: number };
   gasCard: number;
   cashFromEarnings: number;
   totalSpend: number;
@@ -312,9 +315,28 @@ export function FuelWeekMoneyStrip({
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Total fuel bought
             </p>
-            <p className="mt-1 text-3xl font-extrabold tracking-tight text-slate-900 tabular-nums">
+            <p className="mt-1 flex items-baseline gap-2 text-3xl font-extrabold tracking-tight text-slate-900 tabular-nums">
               {formatFuelMoney(totalSpend)}
+              {checks && (checks.waiting > 0 || checks.possibleFills > 0) ? (
+                <span className="text-xs font-medium tracking-normal text-slate-500">so far</span>
+              ) : null}
             </p>
+            {checks && checks.waiting > 0 ? (
+              <div className="mt-2 space-y-1.5" data-testid="money-check-waiting">
+                <p className="text-sm text-slate-600 tabular-nums">
+                  {checks.totalFills - checks.waiting} of {checks.totalFills} fills priced
+                </p>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff8eb] px-2.5 py-0.5 text-[12px] font-semibold text-[#b45309]">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#d97706]" aria-hidden />
+                  {checks.waiting} {checks.waiting === 1 ? 'fill' : 'fills'} waiting
+                </span>
+              </div>
+            ) : null}
+            {checks && checks.possibleFills > 0 ? (
+              <p className="mt-2 text-[13px] font-semibold text-[#ba1a1a]" data-testid="money-check-possible-fill">
+                {checks.possibleFills} possible {checks.possibleFills === 1 ? 'fill' : 'fills'} not scanned
+              </p>
+            ) : null}
           </div>
 
           <div className="space-y-3">

@@ -1,7 +1,7 @@
 {
   "slug": "fleet-fuel",
-  "generatedAt": "2026-11-23T01:10:22.160Z",
-  "routeCount": 145,
+  "generatedAt": "2026-11-23T11:07:35.456Z",
+  "routeCount": 147,
   "routes": [
     "DELETE ${BASE_PATH}/admin/evidence-inbox/gate-held/:transactionId",
     "DELETE ${BASE_PATH}/fuel-cards/:id",
@@ -48,6 +48,7 @@
     "GET ${BASE}/fuel/nightly/latest",
     "GET ${BASE}/fuel/periods",
     "GET ${BASE}/fuel/periods/:id",
+    "GET ${BASE}/fuel/periods/:id/checks",
     "GET ${BASE}/fuel/periods/:id/closable",
     "GET ${BASE}/fuel/periods/:id/evidence-pack",
     "GET ${BASE}/fuel/periods/:id/gap-charges",
@@ -121,6 +122,7 @@
     "POST ${BASE_PATH}/stations/migrate-status",
     "POST ${BASE_PATH}/stations/promote-learnt",
     "POST ${BASE}/fuel/flags/disposition",
+    "POST ${BASE}/fuel/flags/disposition/reopen",
     "POST ${BASE}/fuel/period-jobs/process",
     "POST ${BASE}/fuel/period-jobs/sweep",
     "POST ${BASE}/fuel/periods/:id/build-snapshots",

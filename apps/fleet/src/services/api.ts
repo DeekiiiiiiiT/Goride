@@ -5101,6 +5101,50 @@ export const api = {
     return response.json();
   },
 
+  /** Fuel checks part (audit Part J screens 4, 5): waiting card fills + possible missed fills. */
+  async getFuelWeekChecks(periodId: string): Promise<import('../utils/fuelChecksModel').FuelWeekChecksResponse> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(periodId)}/checks`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Could not load the fuel checks');
+    }
+    return response.json();
+  },
+
+  /** Undo a "Close with a note" while the week is open (Part J screen 5 "Reopen"). */
+  async reopenFuelFlagDisposition(args: { entryId: string; flagCode: string; periodId: string }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel/flags/disposition/reopen`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify(args),
+    });
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Could not reopen this check');
+    }
+    return response.json();
+  },
+
+  /** F-13: a car's km per litre for the 8 weeks ending with `weekStart`. */
+  async getVehicleEconomyWeeks(
+    vehicleId: string,
+    weekStart: string,
+  ): Promise<import('../utils/fuelChecksModel').VehicleEconomyResponse> {
+    const qs = new URLSearchParams({ weekStart });
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/vehicles/${encodeURIComponent(vehicleId)}/economy-weeks?${qs.toString()}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Could not load the car economy');
+    }
+    return response.json();
+  },
+
   async getFuelWeekSnapshot(periodId: string): Promise<{
     version: number | null;
     reports: any[];
