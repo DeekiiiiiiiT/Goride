@@ -434,3 +434,12 @@ export {
   type WeekChecksDisposition,
   type WeekStretch,
 } from './fuelWeekChecks.ts';
+
+// Driver Settlements fuel lines (fuel enterprise audit Part J screens 13, 14).
+export {
+  buildDriverWeekFuel,
+  type DriverWeekFuel,
+  type DriverWeekFuelLine,
+  type DriverWeekFuelState,
+  type DriverWeekLineRow,
+} from './driverWeekFuelLines.ts';

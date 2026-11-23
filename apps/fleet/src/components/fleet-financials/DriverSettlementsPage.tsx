@@ -2591,6 +2591,7 @@ export function DriverSettlementsPage({
         loading={reconciledDetailLoading}
         partialData={reconciledDetailPartial}
         transactions={overlayTxsQuery.data || []}
+        onViewWeek={(weekKey) => onNavigate?.('week-reconciliation', { weekKey, step: 'fuel' })}
       />
 
       <AlertDialog

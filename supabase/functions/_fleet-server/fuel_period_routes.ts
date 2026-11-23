@@ -3103,6 +3103,31 @@ export function registerFuelPeriodRoutes(app: Hono) {
   );
 
   /**
+   * Driver Settlements → a driver's fuel lines for one week (Part J screens 13, 14): current and
+   * reversed lines, the fuel statement they must add up to, and who reopened the week. Read only.
+   */
+  app.get(
+    `${BASE}/fuel/driver-week-lines`,
+    requirePermission("fuel.view"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "org required" }, 400);
+      const driverId = String(c.req.query("driverId") || "").trim();
+      const weekStart = String(c.req.query("weekStart") || "").slice(0, 10);
+      if (!driverId || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
+        return c.json({ error: "driverId and weekStart (YYYY-MM-DD) required" }, 400);
+      }
+      try {
+        const { loadDriverWeekFuel } = await import("./fuel_driver_week_lines_route.ts");
+        return c.json(await loadDriverWeekFuel(orgId, driverId, weekStart));
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        return c.json({ error: message }, 500);
+      }
+    },
+  );
+
+  /**
    * Reopen a check closed with a note (Part J screen 5 "Reopen"): deletes the close so the
    * check blocks the lock again. Only the note-closed checks (F-08/F-09/F-13), only while
    * the week is open; the audit row keeps who reopened it and the note that was removed.

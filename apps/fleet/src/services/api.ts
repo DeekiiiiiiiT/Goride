@@ -5114,6 +5114,22 @@ export const api = {
     return response.json();
   },
 
+  /** Driver Settlements: a driver's fuel lines for one week (Part J screens 13, 14). */
+  async getDriverWeekFuelLines(
+    driverId: string,
+    weekStart: string,
+  ): Promise<import('../utils/driverFuelLinesModel').DriverWeekFuelResponse> {
+    const qs = new URLSearchParams({ driverId, weekStart });
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel/driver-week-lines?${qs.toString()}`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || "Could not load this week's fuel lines");
+    }
+    return response.json();
+  },
+
   /** Undo a "Close with a note" while the week is open (Part J screen 5 "Reopen"). */
   async reopenFuelFlagDisposition(args: { entryId: string; flagCode: string; periodId: string }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel/flags/disposition/reopen`, {

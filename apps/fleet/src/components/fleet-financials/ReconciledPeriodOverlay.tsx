@@ -18,6 +18,7 @@ import type { FinancialTransaction } from '../../types/data';
 import { cn } from '../ui/utils';
 import { OCT12_CORRECTION_AMOUNT } from '@roam/finance-core';
 import { OVERPAID_BADGE_TOOLTIP, overpaidBadgeLabel } from '../../utils/settlementDeskUx';
+import { DriverWeekFuelCard } from './DriverWeekFuelCard';
 
 /** Closed Oct 12 shows frozen fuel credit; claw-back lives on Oct 19. */
 const OCT12_ANCHOR = '2026-10-12';
@@ -67,6 +68,8 @@ type Props = {
   partialData?: boolean;
   /** Kept for call-site compatibility; payments list no longer shown in overlay. */
   transactions?: FinancialTransaction[];
+  /** Fuel card "View week": Week Reconciliation on that week, step 5. */
+  onViewWeek?: (weekStart: string) => void;
 };
 
 const fmt = (n: number) =>
@@ -158,6 +161,7 @@ export function ReconciledPeriodOverlay({
   detail,
   loading,
   partialData,
+  onViewWeek,
 }: Props) {
   const periodLabel = useMemo(() => {
     if (!detail) return '';
@@ -281,11 +285,6 @@ export function ReconciledPeriodOverlay({
                   </div>
                   <Line label="Driver share" value={fmt(detail.driverShare)} tone="driver" bold />
                   <Line
-                    label="Fuel deduction"
-                    value={detail.fuelDeduction > 0.005 ? `−${fmt(detail.fuelDeduction)}` : '$0.00'}
-                    tone={detail.fuelDeduction > 0.005 ? 'warn' : 'muted'}
-                  />
-                  <Line
                     label="Charged to driver"
                     value={fmt(detail.tollChargedToDriver)}
                     hint="Personal tag tolls"
@@ -295,6 +294,14 @@ export function ReconciledPeriodOverlay({
                 </div>
               </div>
             </div>
+
+            {/* Part J screens 13, 14: the fuel lines replace the single "Fuel deduction" row. */}
+            <DriverWeekFuelCard
+              driverId={detail.driverId}
+              weekStart={detail.periodAnchor}
+              fallbackDeduction={detail.fuelDeduction}
+              onViewWeek={onViewWeek}
+            />
 
             <Separator />
 

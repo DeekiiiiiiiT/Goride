@@ -36,7 +36,7 @@ export function displayNameFromAuthUser(user: {
   return email ? email.split("@")[0] : null;
 }
 
-async function loadActorNames(ids: string[]): Promise<Record<string, string>> {
+export async function loadActorNames(ids: string[]): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   const sb = getServiceClient();
   await Promise.all(
