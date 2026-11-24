@@ -23,7 +23,7 @@ kill only `service_role`. So every app that uses `anon` moves too.
 | Where | Uses | Count |
 |---|---|---|
 | Edge functions | `SUPABASE_SERVICE_ROLE_KEY` env | 242 files read it; 45 live functions |
-| Edge functions with `verify_jwt = true` | gateway checks a legacy JWT | **done — off everywhere this repo deploys**; only the 5 legacy functions remain `true` (see phase 3) |
+| Edge functions with `verify_jwt = true` | gateway checks a legacy JWT | **done — zero functions on the project require one** (all flipped off; the 5 legacy ones were deleted from prod, see phase 3) |
 | DB webhook `notify-merchant-new-order` | ~~service_role JWT hard-coded in trigger args~~ → fleet cron secret (**done: phase 0**) | 1 |
 | Web apps (Vercel) | `VITE_SUPABASE_ANON_KEY` | 12 apps |
 | Driver app (Android/iOS, Capacitor) | anon key baked in at build | needs a store release |
@@ -390,12 +390,17 @@ re-checked by hand for the sections above; the tables record what the route actu
 | `POST /` | `requireInternalSecret(["FLEET_CRON_SECRET","SUPABASE_SERVICE_ROLE_KEY"])` |
 | Callers | none found in `pg_cron` or apps (rush-settings scripts reference it) |
 
-#### Legacy functions also on `verify_jwt = true`
-`admin-operations`, `ai-services`, `financial-operations`, `fleet-management`,
-`fuel-maintenance` are live but their source sits under `apps/fleet/src/supabase/functions/`,
-not `supabase/functions/`, so they are outside `ALL_FNS` and the normal deploy path.
-They cannot be reviewed or redeployed from this repo. They must be deactivated or left alone
-deliberately — do not assume they are current.
+#### Legacy functions — DELETED from prod (24 Nov ~14:25 UTC)
+
+`admin-operations`, `ai-services`, `financial-operations`, `fleet-management` and
+`fuel-maintenance` were **deleted from the project** by Claude at the owner's request. They no
+longer exist as functions: a call to any of them now answers **404**. Their source stays in
+`apps/fleet/src/supabase/functions/`, outside `supabase/functions/` and outside `ALL_FNS`, so it is
+not deployed by the normal path and nothing in this repo recreates them.
+
+Before deletion they were the only functions left on `verify_jwt = true`. With them gone,
+**no function on the project has `verify_jwt = true`** — confirmed against the API: 39 live
+functions, 0 requiring a login at the gateway.
 
 ### Fix stage — code done, nothing deployed (24 Nov 2026)
 
@@ -534,11 +539,13 @@ Order, and **stop at the first failure**:
 | 2 | `order-chat-retention`, `notifications` | **done** |
 | 3 | `toll-brain`, `fuel-brain`, `matching`, `logistics`, `identity` | **done** |
 | 4 | `fleet-claims`, `fleet-pay`, `fleet-ops`, `fleet-toll`, `fleet-fuel` | **done** |
-| 5 | `haul`, `freight`, `explorer`, `driver`, `rides`, `platform-catalog` | next |
-| 6 | `fleet-core`, `delivery` (busiest — quiet hour) | after 5 |
+| 5 | `haul`, `freight`, `explorer`, `driver`, `rides`, `platform-catalog` | **done** |
+| 6 | `fleet-core`, `delivery` (busiest — quiet hour) | **done** |
 
-Never touched: `admin-operations`, `ai-services`, `financial-operations`, `fleet-management`,
-`fuel-maintenance` — they had 0 calls in 24 h and get their own decision.
+Never flipped: `admin-operations`, `ai-services`, `financial-operations`, `fleet-management`,
+`fuel-maintenance` — they had 0 calls in 24 h, so they were **deleted from the project instead**
+(~14:25 UTC, owner's request). They now 404; their source stays in
+`apps/fleet/src/supabase/functions/`.
 
 **After every flip**, all four must hold before the next function:
 
@@ -669,9 +676,10 @@ Two probe errors of my own, corrected rather than counted as failures: `rides /v
 
 #### Phase 3 result
 
-`verify_jwt` is off for **every function this repo deploys**. The only five still `true` are the
-legacy functions that had 0 calls in 24 h and get their own decision: `admin-operations`,
-`ai-services`, `financial-operations`, `fleet-management`, `fuel-maintenance`.
+`verify_jwt` is off for **every function this repo deploys**, and the five legacy functions that
+were the last ones holding it `true` were deleted from the project at ~14:25 UTC (see the phase 3
+review). **No function on the project has `verify_jwt = true`** — confirmed against the API:
+39 live functions, 0 requiring a login at the gateway.
 
 That means the gateway no longer requires a legacy JWT anywhere the apps call, which is the
 precondition for phases 7 and 8 (revoking the JWT secret / deactivating the legacy keys).
@@ -694,8 +702,9 @@ logbook row in `supabase_migrations.schema_migrations` (version `20261124132804`
 **Not fixed here — this is the gate in front of phase 8.** A grep over source files (bundles and
 tests excluded) finds **106 files / 185 occurrences**, not the ~35 first estimated. **67 of
 them build a database client** — that is the part that stops working when the legacy key dies.
-The rest only put the legacy JWT in an `Authorization` header, which is now redundant because every
-non-legacy function has `verify_jwt` off.
+Ten of those files belong to the five legacy functions that were deleted from prod, so they are now
+dead code; **the live count is 96 files, 57 of them DB clients.** The rest only put the legacy JWT
+in an `Authorization` header, which is now redundant because no function has `verify_jwt` on.
 
 Move every DB client onto `_shared/serviceKey.ts`, and bump the `jsr:@supabase/supabase-js@2.49.8`
 pin at the same time — that version predates the new key format and would send an `sb_secret_…` key
@@ -757,7 +766,7 @@ the rides fare clients, the delivery merchant files, and `orderToFleetTrip.ts` /
 - `supabase/functions/rides/matchingBrainClient.ts`
 - `supabase/functions/rush-cron/index.ts`
 
-#### Legacy function sources, not deployed from this repo (10)
+#### Legacy function sources — dead code now, the functions were deleted from prod (10)
 - `apps/fleet/src/supabase/functions/admin-operations/index.ts` — DB client
 - `apps/fleet/src/supabase/functions/admin-operations/kv_store.tsx` — DB client
 - `apps/fleet/src/supabase/functions/ai-services/index.ts` — DB client
