@@ -5,13 +5,14 @@
  * Run before SETTLEMENT_TX_TABLE_READ=true.
  */
 import { createClient } from "@supabase/supabase-js";
+import { serverKey } from "./lib/serverKey.mjs";
 import {
   isSettlementParticipantTransaction,
   resolveTransactionPeriodAnchor,
 } from "./lib/settlementParticipant.mjs";
 
 const url = process.env.SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const key = serverKey();
 const tz = process.env.FLEET_TZ || "America/Jamaica";
 if (!url || !key) {
   console.error("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");

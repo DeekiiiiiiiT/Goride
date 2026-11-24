@@ -1,5 +1,5 @@
 import { assertEquals, assertExists } from "jsr:@std/assert@1";
-import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
+import { createClient } from "jsr:@supabase/supabase-js@2.119.2";
 import {
   createInventoryTestApp,
   INVENTORY_API_PREFIX,

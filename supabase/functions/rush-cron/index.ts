@@ -33,15 +33,16 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "Unknown job" }), { status: 400 });
   }
   const base = (Deno.env.get("SUPABASE_URL") || "").replace(/\/$/, "");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-  if (!base || !key) {
+  if (!base) {
     return new Response(JSON.stringify({ error: "server_misconfigured" }), { status: 500 });
   }
   const res = await fetch(`${base}/functions/v1/delivery${path}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${key}`,
+      // delivery's /internal/* accepts the cron secret (authorizeCronOrServiceRole). No JWT is
+      // needed: verify_jwt is off for delivery, and the legacy service key is on its way out.
+      "X-Fleet-Cron-Secret": expected,
     },
     body: "{}",
   });

@@ -5,6 +5,7 @@ import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { serverKey } from "./../lib/serverKey.mjs";
 
 export const PROJECT_REF = 'csfllzzastacofsvcdsc';
 export const SUPABASE_URL = `https://${PROJECT_REF}.supabase.co`;
@@ -95,9 +96,9 @@ function writeCachedApiKeys(keys) {
 
 /** Fetch keys once; prefer env so pack runners avoid Windows CLI telemetry file locks. */
 export function getApiKeys() {
-  if (process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() && process.env.SUPABASE_ANON_KEY?.trim()) {
+  if (serverKey()?.trim() && process.env.SUPABASE_ANON_KEY?.trim()) {
     return {
-      serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY.trim(),
+      serviceKey: serverKey().trim(),
       anonKey: process.env.SUPABASE_ANON_KEY.trim(),
     };
   }

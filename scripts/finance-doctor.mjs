@@ -5,9 +5,10 @@
  * Exit 0 when every class is empty (C5 may be 0 forever).
  */
 import { createClient } from "@supabase/supabase-js";
+import { serverKey } from "./lib/serverKey.mjs";
 
 const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const key = serverKey();
 if (!url || !key) {
   console.error("Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
   process.exit(1);

@@ -10,6 +10,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mapVehicleColor } from "./vehicle-pictures-reset-color.mjs";
+import { serverKey } from "./lib/serverKey.mjs";
 
 export { mapVehicleColor } from "./vehicle-pictures-reset-color.mjs";
 
@@ -120,7 +121,7 @@ async function backupFiles(sb, paths, backupDir) {
 async function main() {
   const { apply, allowRemote } = parseArgs(process.argv.slice(2));
   const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const key = serverKey();
   if (!url || !key) throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
   assertLocal(url, allowRemote);
 

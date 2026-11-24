@@ -4,8 +4,10 @@
  *   PowerShell: load keys then:
  *   deno run -A --config deno.json scripts/rev6-reheal-g5-aliases.ts
  */
+import { serverKey } from "./lib/serverKey.mjs";
+
 const url = (Deno.env.get("SUPABASE_URL") || "https://csfllzzastacofsvcdsc.supabase.co").trim();
-const key = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
+const key = (serverKey() || "").trim();
 if (!key) {
   console.error("Need SUPABASE_SERVICE_ROLE_KEY");
   Deno.exit(1);

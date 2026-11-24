@@ -1,42 +1,20 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { timingSafeEqual } from "./timingSafeEqual.ts";
+import { secretKeyCandidates } from "./serviceKey.ts";
 
 /**
  * Cron / internal auth for Edge Functions.
- * Edge often injects new-format sb_secret_* keys while GitHub Actions still
- * stores the legacy eyJ service_role JWT — exact string match alone fails.
- * Accept: cron header/Bearer match, exact service key match, or verified legacy JWT.
+ *
+ * Accepts only credentials that survive the key rotation:
+ *   - the cron secret, as `x-fleet-cron-secret` / `x-cron-secret` header or as a Bearer, and
+ *   - one of the current secret keys, as `x-service-role` / `x-service-key` / `apikey` / Bearer.
+ *
+ * The legacy service_role JWT and the legacy `SUPABASE_SERVICE_ROLE_KEY` value are NOT accepted.
+ * Those are what phase 8 switches off, and anything still sending them has to move to the new
+ * secret key or the cron secret first.
  */
 export type CronAuthResult =
   | { ok: true }
   | { ok: false; status: 403 | 500; error: string };
-
-function decodeJwtRole(jwt: string): string {
-  try {
-    const part = jwt.split(".")[1];
-    if (!part) return "";
-    const json = atob(part.replace(/-/g, "+").replace(/_/g, "/"));
-    const payload = JSON.parse(json) as { role?: string };
-    return typeof payload.role === "string" ? payload.role : "";
-  } catch {
-    return "";
-  }
-}
-
-async function verifyLegacyServiceRoleJwt(jwt: string): Promise<boolean> {
-  if (decodeJwtRole(jwt) !== "service_role") return false;
-  const url = (Deno.env.get("SUPABASE_URL") || "").trim();
-  if (!url) return false;
-  try {
-    const client = createClient(url, jwt, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { error } = await client.auth.admin.listUsers({ page: 1, perPage: 1 });
-    return !error;
-  } catch {
-    return false;
-  }
-}
 
 export async function authorizeCronOrServiceRole(req: Request): Promise<CronAuthResult> {
   const cronSecret = (
@@ -45,8 +23,13 @@ export async function authorizeCronOrServiceRole(req: Request): Promise<CronAuth
     ""
   ).trim();
   const bearer = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
-  const serviceHeader = (req.headers.get("x-service-role") || "").trim();
-  const token = serviceHeader || bearer;
+  const serviceHeader = (
+    req.headers.get("x-service-role") ||
+    req.headers.get("x-service-key") ||
+    req.headers.get("apikey") ||
+    ""
+  ).trim();
+  const supplied = serviceHeader || bearer;
 
   const expectedCron = (
     Deno.env.get("FLEET_CRON_SECRET") ||
@@ -54,9 +37,9 @@ export async function authorizeCronOrServiceRole(req: Request): Promise<CronAuth
     Deno.env.get("CRON_SECRET") ||
     ""
   ).trim();
-  const expectedService = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
+  const candidates = secretKeyCandidates();
 
-  if (!expectedCron && !expectedService) {
+  if (!expectedCron && candidates.length === 0) {
     return { ok: false, status: 500, error: "server_misconfigured" };
   }
 
@@ -66,12 +49,8 @@ export async function authorizeCronOrServiceRole(req: Request): Promise<CronAuth
   if (expectedCron && bearer && timingSafeEqual(bearer, expectedCron)) {
     return { ok: true };
   }
-  if (expectedService && token && timingSafeEqual(token, expectedService)) {
-    return { ok: true };
-  }
-
-  if (token.startsWith("eyJ") && decodeJwtRole(token) === "service_role") {
-    if (await verifyLegacyServiceRoleJwt(token)) return { ok: true };
+  for (const candidate of candidates) {
+    if (supplied && timingSafeEqual(supplied, candidate)) return { ok: true };
   }
 
   return { ok: false, status: 403, error: "Forbidden" };

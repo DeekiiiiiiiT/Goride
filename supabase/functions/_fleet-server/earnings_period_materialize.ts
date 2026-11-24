@@ -4,7 +4,7 @@
  * History API already prefers mode=periods for weekly grain.
  */
 
-import { createClient } from "jsr:@supabase/supabase-js@^2.49.8";
+import { createClient } from "jsr:@supabase/supabase-js@2.119.2";
 import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 function sb() {

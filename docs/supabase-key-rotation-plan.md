@@ -777,6 +777,88 @@ already accepts the cron secret, so the fix is one header in `rush-cron` (send
 Left alone on purpose: the **26 local scripts** and `recon-worker` (Phase 4), and the ten files of
 the deleted legacy functions (dead code).
 
+### Phase 3.5 cleanup — exact pin, Rush relay, legacy acceptors removed (24 Nov 2026)
+
+#### 1. SDK pinned to the exact live version
+
+`jsr:@supabase/supabase-js@^2.49.8` → **`@2.119.2`** in **18 files** (10 runtime + 8 test). A caret
+range would have let the next deploy pull an untested version; the exact pin is the version running
+now. The six Fleet bundles were rebuilt (each carries 3–8 specifiers, all exactly `2.119.2`) and
+redeployed: `fleet-core`, `fleet-fuel`, `fleet-pay`, `fleet-ops`, `fleet-toll`, `fleet-claims` —
+`/health` **200** on all six. No non-exact jsr specifier remains under `supabase/functions`.
+
+*(The dead `apps/fleet/src/supabase/functions/*/kv_store.tsx` copies still say 2.49.8; they belong
+to the deleted functions and are never deployed.)*
+
+#### 2. `rush-cron` no longer needs the legacy key
+
+It sent `Authorization: Bearer <legacy key>` to `delivery`. It now sends **`X-Fleet-Cron-Secret`**
+(the configured cron secret) and sends no JWT at all.
+
+Proven through the real relay:
+`private.invoke_rush_delivery('/internal/geo/reconcile')` → `22314` → **200** `{"healed":0}`,
+`('/internal/in-house/sweep')` → `22315` → **200** `{"released":0,…}`.
+
+#### 3. Nothing accepts the legacy key value any more
+
+| Where | Before | Now |
+|---|---|---|
+| `_shared/authorizeCronOrServiceRole.ts` (delivery's 9 `/internal/*` routes, fleet fuel-period and vehicle-pictures routes) | cron secret **or** the legacy key **or** a verified legacy `service_role` JWT | cron secret **or** a current secret key (`x-service-role` / `x-service-key` / `apikey` / Bearer). Legacy key and legacy JWT are **refused** |
+| `delivery` `/courier/offers/redispatch` | compared the header to the legacy key | cron secret or a current secret key |
+| `petrojam-prices` `/cron/sync-latest` | legacy key match, plus a legacy JWT fallback | cron secret or a current secret key; the JWT decode/verify helpers are deleted |
+
+Negative proof (an arbitrary Bearer must not pass): `delivery /internal/geo/reconcile` → **403**,
+`delivery /courier/offers/redispatch` → **403**, `petrojam /cron/sync-latest` → **401**.
+
+Positive proof with only the cron secret: redispatch `22323` → **200** `{"ok":true,"expired":0,
+"redispatched":0}`; petrojam `22324` → **200** with real refinery runs; fleet fuel sweep `22321` →
+**200** `{"processed":0}`; fleet-core drift `22322` → **200**.
+
+#### 4. The remaining senders were switched
+
+- `_shared/orderToFleetTrip.ts` — `apikey` + `x-service-key` = current secret key; the legacy Bearer is gone
+- `_shared/rideToFleetTrip.ts` — same (and its `ANON_KEY || SERVICE_ROLE_KEY` fallback is gone)
+- `platform-catalog/geoRoutes.ts` — `apikey` + `x-service-key`; no Bearer
+- `delivery/courierConsumerRoutes.ts` — the three `notifications` calls dropped the legacy Bearer and
+  keep `x-service-role` = current secret key
+
+Deployed with their targets in one pass: the six fleet bundles, then `delivery`, `rides`,
+`platform-catalog`, `petrojam-prices` — all `/health` **200**.
+
+**Health across the cleanup:** 29 × **200** in `net._http_response` over 20 minutes; the only non-200
+is the pre-existing `vehicle-pictures/run` 500 at 14:23 (before this step); no failed
+`cron.job_run_details` rows.
+
+**Typecheck unchanged:** `geoRoutes.ts` 11 errors at HEAD and 11 now, `petrojam-prices` 2 and 2,
+`recon-worker.ts` 58 and 58 — all pre-existing.
+
+### Phase 4 (part) — local scripts and the recon worker (24 Nov 2026)
+
+**Scripts.** New `scripts/lib/serverKey.mjs` resolves the key as
+`SUPABASE_SECRET_KEYS.default` → `SUPABASE_SECRET_KEY` → legacy `SUPABASE_SERVICE_ROLE_KEY`, and works
+under both Node and Deno. **39 script files** that read the key directly now call `serverKey()`; no
+`process.env.SUPABASE_SERVICE_ROLE_KEY` or `Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")` read remains in
+`scripts/`. Seven files only *pass the variable name* to a child process (`smoke-*-all`, `run-week-recon-done-tests`,
+`seed-week-recon-done-tests`, `vehicle-pictures-preprod*`); their children resolve through the helper and
+fall back to the name the parent sets, so they keep working either way. `node --check` is clean on
+every changed script.
+
+**recon-worker (Cloud Run).** Its code never reads the key — it is a pure week calculator. The only
+link is the Cloud Run secret mount, now switched in `cloudbuild.recon-worker.yaml` to
+`SUPABASE_SECRET_KEYS`. One-time step before the next worker deploy, or Cloud Run refuses the revision:
+
+```
+gcloud secrets create SUPABASE_SECRET_KEYS --replication-policy=automatic
+printf '%s' "$SUPABASE_SECRET_KEYS" | gcloud secrets versions add SUPABASE_SECRET_KEYS --data-file=-
+```
+
+**Left for the owner on purpose:** the two places that need the key *value* written somewhere, which
+the rotation rules forbid the agent from doing — adding `SUPABASE_SECRET_KEYS=…` to the local
+git-ignored env files (`apps/fleet/.env.local`, `apps/fleet/.env.testcopy`, `apps/admin/.env.testcopy`,
+`apps/driver/.env.testcopy`, `apps/plug/.env.testcopy`) and updating the GitHub repo secret
+(`gh secret set SUPABASE_SECRET_KEYS`). Until then every script falls back to the legacy key, so
+nothing is broken.
+
 ### Pre-phase-8 item: files still reading `SUPABASE_SERVICE_ROLE_KEY`
 
 **Not fixed here — this is the gate in front of phase 8.** This is the **original audit from before

@@ -6,7 +6,7 @@ CREATE TABLE kv_store_37f42386 (
 */
 // Permanent fleet cutover: mapped domains read/write fleet.* tables; KV left for ephemeral keys only.
 
-import { createClient } from "jsr:@supabase/supabase-js@^2.49.8";
+import { createClient } from "jsr:@supabase/supabase-js@2.119.2";
 import { serviceKey } from "../_shared/serviceKey.ts";
 
 /** Raw client — ephemeral KV keys only; mapped domains use readMappedKvKey / dual-write. */

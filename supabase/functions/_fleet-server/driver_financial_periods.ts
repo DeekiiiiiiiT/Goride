@@ -2,7 +2,7 @@
  * Shared weekly driver financial period projection.
  * One rebuild path feeds Expenses / Settlement / Payout / Reconciliation.
  */
-import { createClient } from "jsr:@supabase/supabase-js@^2.49.8";
+import { createClient } from "jsr:@supabase/supabase-js@2.119.2";
 import { format, addDays } from "npm:date-fns";
 import * as kv from "./kv_store.tsx";
 import { getFleetTimezone, fleetCalendarDay } from "./timezone_helper.tsx";

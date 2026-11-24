@@ -6,6 +6,7 @@
  *   deno run -A scripts/import-codab-via-sql.ts --dir "<Mapping/Jamaica>" --levels 0,1 --dry-run
  */
 import { walk } from "jsr:@std/fs@1/walk";
+import { serverKey } from "./lib/serverKey.mjs";
 
 function flag(name: string, fallback = ""): string {
   const i = Deno.args.indexOf(`--${name}`);
@@ -16,7 +17,7 @@ function flag(name: string, fallback = ""): string {
 const args = {
   dir: flag("dir"),
   url: flag("url", Deno.env.get("SUPABASE_URL") ?? "https://csfllzzastacofsvcdsc.supabase.co"),
-  key: flag("key", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""),
+  key: flag("key", serverKey() ?? ""),
   levels: flag("levels", "0,1,2,3"),
   "dry-run": Deno.args.includes("--dry-run"),
   help: Deno.args.includes("--help"),

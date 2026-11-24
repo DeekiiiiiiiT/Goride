@@ -12,6 +12,7 @@
  */
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { serverKey } from "./lib/serverKey.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -38,7 +39,7 @@ const base =
 
 const token =
   process.env.FUEL_HEAL_TOKEN ||
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  serverKey() ||
   process.env.VITE_SUPABASE_SERVICE_ROLE_KEY ||
   "";
 

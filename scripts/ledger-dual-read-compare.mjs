@@ -23,10 +23,12 @@
  * Requires LEDGER_READ_MODEL=1 (or feature flag) on the edge function for /ledger/*.
  * Does not flip production defaults — keep flag/env off until promote checklist passes.
  */
+import { serverKey } from "./lib/serverKey.mjs";
+
 const orgId = process.env.LEDGER_COMPARE_ORG;
 const base = process.env.SUPABASE_URL;
 const anonOrService =
-  process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  process.env.SUPABASE_ANON_KEY || serverKey() || "";
 const jwt = process.env.LEDGER_COMPARE_JWT || "";
 /** Bearer: explicit JWT, else ANON/service key used as token. */
 const bearer = jwt || anonOrService;

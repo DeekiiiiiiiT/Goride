@@ -7,9 +7,10 @@
  *     node scripts/cleanup-sync-restatement-drafts.mjs [--dry]
  */
 import { createClient } from "@supabase/supabase-js";
+import { serverKey } from "./lib/serverKey.mjs";
 
 const url = process.env.SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const key = serverKey();
 const orgId = process.env.ORGANIZATION_ID || "8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823";
 const dry = process.argv.includes("--dry");
 

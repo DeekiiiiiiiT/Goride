@@ -1,7 +1,7 @@
 /**
  * Fleet edge — unified ledger dual-write (mirrors supabase/functions/_shared/unifiedLedger).
  */
-import { createClient } from "jsr:@supabase/supabase-js@^2.49.8";
+import { createClient } from "jsr:@supabase/supabase-js@2.119.2";
 import { dualWriteTollLedgerKv } from "../_shared/unifiedLedger/dualWriteToll.ts";
 import { logDualWriteMetric } from "../_shared/unifiedLedger/metrics.ts";
 

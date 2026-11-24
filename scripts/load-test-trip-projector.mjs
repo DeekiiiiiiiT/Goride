@@ -3,6 +3,8 @@
  * Load-test Rush trip projector — records timing for ops sign-off.
  * Usage: node scripts/load-test-trip-projector.mjs [iterations]
  */
+import { serverKey } from "./lib/serverKey.mjs";
+
 const iterations = Number(process.argv[2] || 50);
 const sampleTrip = {
   id: `load-test-${Date.now()}`,
@@ -16,7 +18,7 @@ const sampleTrip = {
 const url =
   process.env.FLEET_INTERNAL_TRIPS_URL ||
   `${process.env.SUPABASE_URL?.replace(/\/$/, "")}/functions/v1/fleet-server/make-server-37f42386/internal/trips/project`;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const key = serverKey();
 
 if (!url || !key) {
   console.error("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");

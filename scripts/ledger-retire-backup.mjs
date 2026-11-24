@@ -11,9 +11,10 @@
 import { createClient } from "@supabase/supabase-js";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { serverKey } from "./lib/serverKey.mjs";
 
 const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const key = serverKey();
 const write = process.argv.includes("--write");
 
 if (!url || !key) {

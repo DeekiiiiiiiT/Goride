@@ -10,6 +10,7 @@ import {
   listActiveFuelEventsForWeek,
 } from "../supabase/functions/_fleet-server/fuel_financial_reset.ts";
 import { sealFuelWeek } from "../supabase/functions/_fleet-server/fuel_week_seal.ts";
+import { serverKey } from "./lib/serverKey.mjs";
 
 const ORG = "8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823";
 const WEEK = "2026-08-24";
@@ -27,7 +28,7 @@ const STMT = {
 
 function sb() {
   const url = Deno.env.get("SUPABASE_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const key = serverKey();
   if (!url || !key) throw new Error("Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
   return createClient(url, key);
 }

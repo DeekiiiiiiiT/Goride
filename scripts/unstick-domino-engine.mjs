@@ -4,9 +4,10 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import { convertMerchantMenu } from '../packages/menu-engine/src/convertLegacy.ts';
+import { serverKey } from "./lib/serverKey.mjs";
 
 const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+const key = serverKey() || process.env.SUPABASE_SERVICE_KEY;
 if (!url || !key) {
   console.error('Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY');
   process.exit(1);

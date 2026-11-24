@@ -13,8 +13,10 @@
  * Or:
  *   deno run -A --config deno.json scripts/heal-week-close-sync.ts
  */
+import { serverKey } from "./lib/serverKey.mjs";
+
 const url = (Deno.env.get("SUPABASE_URL") || "").trim();
-const key = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
+const key = (serverKey() || "").trim();
 if (!url || !key) {
   console.error(
     "Need non-empty SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY before imports.\n" +

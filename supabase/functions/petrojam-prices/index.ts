@@ -10,7 +10,7 @@ import { requirePlatformAdmin } from "../_shared/platformAdmin.ts";
 import { dominionCan } from "../../../packages/auth-client/src/dominionPermissions.ts";
 import { PETROJAM_PRICE_URL, type PetrojamSyncMode } from "./scrape.ts";
 import { syncActiveRefineries, syncOneRefinery, writeRefinerySnapshot, type ActiveRefinery } from "./refinerySync.ts";
-import { serviceKey } from "../_shared/serviceKey.ts";
+import { secretKeyCandidates, serviceKey } from "../_shared/serviceKey.ts";
 
 const app = new Hono().basePath("/petrojam-prices");
 
@@ -253,43 +253,23 @@ app.patch("/admin/refinery-products/:code", async (c) => {
 app.post("/cron/sync-latest", async (c) => {
   const authHeader = c.req.header("Authorization") || "";
   const cronSecret = (Deno.env.get("CRON_SECRET") || Deno.env.get("FLEET_CRON_SECRET") || "").trim();
-  const serviceKey = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
   const token = authHeader.replace(/^Bearer\s+/i, "").trim();
   const headerCron = (c.req.header("x-fleet-cron-secret") || c.req.header("x-cron-secret") || "").trim();
+  const serviceHeader = (
+    c.req.header("x-service-key") ||
+    c.req.header("x-service-role") ||
+    c.req.header("apikey") ||
+    ""
+  ).trim();
 
-  const decodeRole = (jwt: string): string => {
-    try {
-      const part = jwt.split(".")[1];
-      if (!part) return "";
-      const json = atob(part.replace(/-/g, "+").replace(/_/g, "/"));
-      const payload = JSON.parse(json) as { role?: string };
-      return typeof payload.role === "string" ? payload.role : "";
-    } catch {
-      return "";
-    }
-  };
-
-  const verifyLegacyServiceRoleJwt = async (jwt: string): Promise<boolean> => {
-    if (decodeRole(jwt) !== "service_role") return false;
-    const url = (Deno.env.get("SUPABASE_URL") || "").trim();
-    if (!url) return false;
-    try {
-      const client = createClient(url, jwt, { auth: { persistSession: false, autoRefreshToken: false } });
-      const { error } = await client.auth.admin.listUsers({ page: 1, perPage: 1 });
-      return !error;
-    } catch {
-      return false;
-    }
-  };
-
-  const serviceMatch = !!token && !!serviceKey && token === serviceKey;
+  // Accept the cron secret or a current secret key. The legacy service-role JWT is not accepted —
+  // it is what phase 8 switches off.
+  const candidates = secretKeyCandidates();
+  const supplied = serviceHeader || token;
+  const serviceMatch = !!supplied && candidates.some((k) => k === supplied);
   const cronMatch = !!cronSecret && (token === cronSecret || headerCron === cronSecret);
-  let legacyJwtOk = false;
-  if (!serviceMatch && !cronMatch && token.startsWith("eyJ") && decodeRole(token) === "service_role") {
-    legacyJwtOk = await verifyLegacyServiceRoleJwt(token);
-  }
-  if (!serviceKey && !cronSecret) return c.json({ error: "server_misconfigured" }, 500);
-  if (!(serviceMatch || cronMatch || legacyJwtOk)) return c.json({ error: "unauthorized" }, 401);
+  if (!cronSecret && candidates.length === 0) return c.json({ error: "server_misconfigured" }, 500);
+  if (!(serviceMatch || cronMatch)) return c.json({ error: "unauthorized" }, 401);
 
   try {
     const db = svc();

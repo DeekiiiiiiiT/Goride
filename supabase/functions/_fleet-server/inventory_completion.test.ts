@@ -1,6 +1,6 @@
 // Fleet Inventory completion audit — server done-tests (docs/fleet-inventory-completion-audit.md).
 import { assertEquals } from "jsr:@std/assert@1";
-import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
+import { createClient } from "jsr:@supabase/supabase-js@2.119.2";
 import { isStoredAlertId } from "./inventory_controller_extended.ts";
 import { countBlockedComplianceRows } from "./inventory_road_clearance_gate.ts";
 import {

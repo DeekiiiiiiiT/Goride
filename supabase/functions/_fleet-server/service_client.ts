@@ -8,7 +8,7 @@
  *
  * KV mapped domains: use fromKvStore() / kv.* — not client.from("kv_store_*").
  */
-import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@^2.49.8";
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2.119.2";
 import { serviceKey } from "../_shared/serviceKey.ts";
 
 let _cachedClient: SupabaseClient | null = null;

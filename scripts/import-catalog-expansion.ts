@@ -8,6 +8,7 @@ import { createClient } from "@supabase/supabase-js";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
+import { serverKey } from "./lib/serverKey.mjs";
 import {
   collectUnknownCatalogCsvHeaders,
   parseVehicleCatalogRowsFromRecords,
@@ -80,7 +81,7 @@ loadEnvFile(resolve(process.cwd(), "supabase/.env"));
 
 const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
 const key =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  serverKey() ||
   process.env.SUPABASE_SERVICE_KEY ||
   "";
 

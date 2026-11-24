@@ -4,8 +4,10 @@
  *
  * Does not place real orders — hammers health + redispatch with concurrency.
  */
+import { serverKey } from "./lib/serverKey.mjs";
+
 const base = process.env.DELIVERY_URL || process.env.VITE_SUPABASE_URL;
-const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SERVICE_ROLE;
+const serviceRole = serverKey() || process.env.SERVICE_ROLE;
 const concurrency = Number(process.env.CONCURRENCY || 10);
 const rounds = Number(process.env.ROUNDS || 5);
 

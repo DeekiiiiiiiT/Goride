@@ -5,6 +5,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { serverKey } from "./lib/serverKey.mjs";
 
 function loadEnvFile(path: string) {
   try {
@@ -38,7 +39,7 @@ async function main() {
 
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
   const key =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    serverKey() ||
     process.env.SUPABASE_SERVICE_KEY ||
     "";
 

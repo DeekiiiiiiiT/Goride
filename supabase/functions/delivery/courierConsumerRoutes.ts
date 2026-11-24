@@ -12,7 +12,7 @@ import { courierAssignmentFields } from "./courierFleetAttribution.ts";
 import { assertRoadClearForDispatch } from "./inventoryRoadClearanceGate.ts";
 import { processDispute, logCourierUnassignRedispatch } from "./disputeResolution/processDispute.ts";
 import { notifyCustomerOrderStatus } from "../_shared/dashOrderSms.ts";
-import { requireServiceKey } from "../_shared/serviceKey.ts";
+import { requireServiceKey, secretKeyCandidates } from "../_shared/serviceKey.ts";
 
 type Sb = ReturnType<typeof createClient>;
 
@@ -489,7 +489,6 @@ async function dispatchOffersForOrder(
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
             "x-service-role": requireServiceKey(),
           },
           body: JSON.stringify({
@@ -682,12 +681,13 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
   // Cron/internal: expire stale offers and re-dispatch stranded ready orders
   app.post("/courier/offers/redispatch", async (c) => {
     const cronSecret = c.req.header("x-fleet-cron-secret") || c.req.header("x-rides-cron-secret") || "";
-    const serviceKey = c.req.header("x-service-role") || "";
+    const serviceHeader =
+      c.req.header("x-service-role") || c.req.header("x-service-key") || c.req.header("apikey") || "";
     const expectedCron = Deno.env.get("FLEET_CRON_SECRET") || Deno.env.get("RIDES_CRON_SECRET") || "";
-    const expectedService = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    // Accept the cron secret or a current secret key. The legacy service key is not accepted.
     const ok =
       (expectedCron && cronSecret && cronSecret === expectedCron) ||
-      (expectedService && serviceKey && serviceKey === expectedService);
+      (serviceHeader && secretKeyCandidates().some((k) => k === serviceHeader));
     if (!ok) return c.json({ error: "Forbidden" }, 403);
 
     const serviceSb = getServiceSupabase();
@@ -821,7 +821,6 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
           "x-service-role": requireServiceKey(),
         },
         body: JSON.stringify({
@@ -1740,7 +1739,6 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
           "x-service-role": requireServiceKey(),
         },
         body: JSON.stringify({

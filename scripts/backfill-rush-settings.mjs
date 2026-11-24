@@ -24,9 +24,10 @@
  * Skip KV unless a future admin export is provided; registry defaults already match live behaviour.
  */
 import { createClient } from "@supabase/supabase-js";
+import { serverKey } from "./lib/serverKey.mjs";
 
 const url = process.env.SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const key = serverKey();
 if (!url || !key) {
   console.error("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
   process.exit(1);

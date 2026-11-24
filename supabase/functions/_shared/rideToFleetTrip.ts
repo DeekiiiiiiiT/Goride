@@ -128,9 +128,9 @@ export async function loadLedgerLinesForRide(
 
 export async function syncRideToFleetKv(ride: Record<string, unknown>): Promise<void> {
   const base = Deno.env.get("SUPABASE_URL") ?? "";
-  const anon = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  if (!base || !anon) {
-    console.warn("[rideToFleetTrip] Missing SUPABASE_URL or key — skip fleet sync");
+  const fleetKey = serviceKey();
+  if (!base || !fleetKey) {
+    console.warn("[rideToFleetTrip] Missing SUPABASE_URL or server key — skip fleet sync");
     return;
   }
 
@@ -186,8 +186,9 @@ export async function syncRideToFleetKv(ride: Record<string, unknown>): Promise<
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${anon}`,
-      apikey: anon,
+      // New secret key on apikey / x-service-key; the legacy anon-or-service Bearer is gone.
+      apikey: fleetKey,
+      "x-service-key": fleetKey,
     },
     body: JSON.stringify([trip]),
   });

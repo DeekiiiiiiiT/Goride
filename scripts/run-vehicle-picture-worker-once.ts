@@ -5,9 +5,10 @@ import { createProductionImagenCaller } from "../supabase/functions/_fleet-serve
 import { createVehiclePictureDb } from "../supabase/functions/_fleet-server/vehicle_picture_db.ts";
 import { runVehiclePictureWorker } from "../supabase/functions/_fleet-server/vehicle_picture_worker.ts";
 import { loadVehiclePicturesSettings } from "../supabase/functions/_fleet-server/vehicle_pictures_settings.ts";
+import { serverKey } from "./lib/serverKey.mjs";
 
 const url = Deno.env.get("SUPABASE_URL")?.trim();
-const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
+const key = serverKey()?.trim();
 if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required");
 const supabase = createClient(url, key);
 const r2 = new R2Client(r2ConfigFromEnv());

@@ -3,7 +3,7 @@
  * Requires local Supabase: PARTS_AUTO_MATCH_CONCURRENCY=1 SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=...
  */
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
+import { createClient } from "jsr:@supabase/supabase-js@2.119.2";
 
 const runConcurrency = Deno.env.get("PARTS_AUTO_MATCH_CONCURRENCY") === "1";
 

@@ -30,6 +30,7 @@ import { strict as assert } from 'node:assert';
 import { randomUUID, createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { serverKey } from "./../lib/serverKey.mjs";
 
 // ── Resolve @supabase/supabase-js from the pnpm store (not a root dep) ──────
 const require = createRequire(import.meta.url);
@@ -46,7 +47,7 @@ const { createClient } = loadSupabase();
 
 // ── Config ─────────────────────────────────────────────────────────────────
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SERVICE_ROLE_KEY = serverKey();
 const ANON_KEY = process.env.SUPABASE_ANON_KEY;
 const VERBOSE = process.argv.includes('--verbose');
 const NO_TEARDOWN = process.argv.includes('--no-teardown');

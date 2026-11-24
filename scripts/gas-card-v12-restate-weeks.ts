@@ -11,6 +11,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { reopenWeek } from "../supabase/functions/_fleet-server/week_close.ts";
 import { sealFuelWeek } from "../supabase/functions/_fleet-server/fuel_week_seal.ts";
+import { serverKey } from "./lib/serverKey.mjs";
 
 const ORG = "8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823";
 const DRIVER = "73e5b1dc-01b4-45ee-a34a-25a3256b9841";
@@ -38,7 +39,7 @@ const WEEKS: Array<{
 
 function sb() {
   const url = Deno.env.get("SUPABASE_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const key = serverKey();
   if (!url || !key) throw new Error("Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
   return createClient(url, key);
 }

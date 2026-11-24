@@ -10,6 +10,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { serverKey } from "./lib/serverKey.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BUCKET = "make-37f42386-vehicles";
@@ -18,7 +19,7 @@ const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01]);
 
 function loadEnv() {
   const url = process.env.SUPABASE_URL || "http://127.0.0.1:54321";
-  let key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  let key = serverKey();
   const keyFile = join(root, ".testcopy", "service-role.txt");
   if (!key && existsSync(keyFile)) key = readFileSync(keyFile, "utf8").trim();
   if (!key) throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
@@ -103,7 +104,7 @@ async function countBucket(sb) {
 async function main() {
   const { url, key } = loadEnv();
   process.env.SUPABASE_URL = url;
-  process.env.SUPABASE_SERVICE_ROLE_KEY = key;
+  serverKey() = key;
 
   const sb = createClient(url, key);
 

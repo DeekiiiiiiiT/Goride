@@ -39,12 +39,14 @@ function denyWrite(admin: ProductAdminUser): Response | null {
 
 async function callRush(path: string, body: unknown): Promise<Response> {
   const base = (Deno.env.get("SUPABASE_URL") || "").replace(/\/$/, "");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  const key = requireServiceKey();
   return await fetch(`${base}/functions/v1/delivery${path}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${key}`,
+      // delivery's /internal/* accepts a current secret key via x-service-key/apikey.
+      apikey: key,
+      "x-service-key": key,
     },
     body: JSON.stringify(body ?? {}),
   });

@@ -15,9 +15,10 @@
  *   LEDGER_HARD_RETIRE_CONFIRM=YES_DELETE_MONEY_LEGACY node scripts/ledger-retire-hard-delete.mjs --execute
  */
 import { createClient } from "@supabase/supabase-js";
+import { serverKey } from "./lib/serverKey.mjs";
 
 const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const key = serverKey();
 const execute = process.argv.includes("--execute");
 const confirm = process.env.LEDGER_HARD_RETIRE_CONFIRM;
 

@@ -3,6 +3,7 @@
  * Usage: node scripts/provision-rush-partner-test.mjs
  */
 import { execSync } from 'node:child_process';
+import { serverKey } from "./lib/serverKey.mjs";
 
 const PROJECT_REF = 'csfllzzastacofsvcdsc';
 const SUPABASE_URL = `https://${PROJECT_REF}.supabase.co`;
@@ -12,8 +13,8 @@ const DISPLAY = 'Island Grill Partner';
 const MERCHANT_SLUG = 'island-grill';
 
 function getServiceRoleKey() {
-  if (process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
-    return process.env.SUPABASE_SERVICE_ROLE_KEY.trim();
+  if (serverKey()?.trim()) {
+    return serverKey().trim();
   }
   const out = execSync(`npx supabase projects api-keys --remote=${PROJECT_REF}`, {
     encoding: 'utf8',

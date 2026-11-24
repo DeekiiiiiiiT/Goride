@@ -48,6 +48,12 @@ steps:
       - "8080"
       - --no-allow-unauthenticated
       - --set-secrets
-      - SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest
+      # New secret-key format (rotation plan, phase 4). ONE-TIME step in Secret Manager before the
+      # next worker deploy, or Cloud Run refuses the revision:
+      #   gcloud secrets create SUPABASE_SECRET_KEYS --replication-policy=automatic
+      #   printf '%s' "$SUPABASE_SECRET_KEYS" | gcloud secrets versions add SUPABASE_SECRET_KEYS --data-file=-
+      # The worker's own code does not read the key today (it is a pure week calculator); the mount
+      # is here so any DB code added later gets the rotated key, not the legacy one.
+      - SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_SECRET_KEYS=SUPABASE_SECRET_KEYS:latest
 images:
   - gcr.io/$PROJECT_ID/recon-worker

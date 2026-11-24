@@ -4,6 +4,7 @@
  */
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
+import { serverKey } from "./lib/serverKey.mjs";
 
 const DRIVER = "73e5b1dc-01b4-45ee-a34a-25a3256b9841";
 const IDS = [
@@ -26,7 +27,7 @@ function weekAnchor(date) {
 
 async function main() {
   const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const key = serverKey();
   if (!url || !key) throw new Error("Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
 
   const sb = createClient(url, key, { db: { schema: "fleet" } });

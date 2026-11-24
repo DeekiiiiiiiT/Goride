@@ -2,7 +2,7 @@
  * Issuer merchant alias registry (JAA / OCR) → verified GOD station id.
  * Kept separate from station.gpsAliases (coordinates).
  */
-import { createClient } from "jsr:@supabase/supabase-js@^2.49.8";
+import { createClient } from "jsr:@supabase/supabase-js@2.119.2";
 import { normalizeVendorName } from "./vendor_matcher.ts";
 import { collectMerchantCandidateTexts } from "./merchant_station_match.ts";
 import { attachRecordIdToStation, type VerifiedStation } from "./station_attach.ts";

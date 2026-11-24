@@ -9,8 +9,10 @@
  *
  * No hardcoded org / weeks / actor — all required via env or flags.
  */
+import { serverKey } from "./lib/serverKey.mjs";
+
 const url = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const key = serverKey() || "";
 const orgId = (process.env.ORG_ID || process.env.ORGANIZATION_ID || "").trim();
 const actorId = (process.env.ACTOR_ID || process.env.HEAL_ACTOR_ID || "").trim();
 if (!url || !key) {

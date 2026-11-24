@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
+import { createClient } from "jsr:@supabase/supabase-js@2.119.2";
 import { invRpcName } from "./inventory_db.ts";
 
 const runIntegration = Deno.env.get("INVENTORY_INTEGRATION_TESTS") === "1";

@@ -117,9 +117,9 @@ export async function syncOrderToFleetKv(
   trip.batchId = syntheticBatchId;
 
   const base = Deno.env.get("SUPABASE_URL") ?? "";
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  if (!base || !serviceKey) {
-    console.warn("[orderToFleetTrip] Missing SUPABASE_URL or service role key — skip fleet sync");
+  const fleetKey = serviceKey();
+  if (!base || !fleetKey) {
+    console.warn("[orderToFleetTrip] Missing SUPABASE_URL or server key — skip fleet sync");
     return { ok: false, reason: "missing_supabase_config" };
   }
 
@@ -129,8 +129,10 @@ export async function syncOrderToFleetKv(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${serviceKey}`,
-      apikey: serviceKey,
+      // The new secret key rides on apikey / x-service-key. No legacy JWT: the gateway no longer
+      // checks one, and phase 8 switches the legacy key off.
+      apikey: fleetKey,
+      "x-service-key": fleetKey,
       "X-Roam-Product-Line": "fleet",
     },
     body: JSON.stringify([trip]),

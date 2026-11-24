@@ -520,7 +520,7 @@ async function composeUsageRows(
 
   // Storage + MAU via service role
   try {
-    const { createClient } = await import("jsr:@supabase/supabase-js@^2.49.8");
+    const { createClient } = await import("jsr:@supabase/supabase-js@2.119.2");
     const url = Deno.env.get("SUPABASE_URL") || "";
     const key = serviceKey();
     if (url && key) {
