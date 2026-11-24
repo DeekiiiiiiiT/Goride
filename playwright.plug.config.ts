@@ -4,7 +4,7 @@ const appleOn = process.env.PLUG_E2E_APPLE === '1';
 const port = appleOn ? 3017 : 3016;
 const standInEnv = {
   VITE_SUPABASE_URL: 'https://example.supabase.co',
-  VITE_SUPABASE_ANON_KEY: 'ci-placeholder-anon-key',
+  VITE_SUPABASE_PUBLISHABLE_KEY: 'ci-placeholder-publishable-key',
   ...(appleOn ? { VITE_PLUG_APPLE: '1' } : {}),
 };
 

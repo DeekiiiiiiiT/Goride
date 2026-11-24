@@ -194,13 +194,13 @@ jobs:
       - name: Test fleet
         env:
           VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
-          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+          VITE_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
         run: pnpm --filter @roam/fleet test
 
       - name: Test admin
         env:
           VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
-          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+          VITE_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
         run: pnpm --filter @roam/admin test
 
       - name: Admin reachability
@@ -209,7 +209,8 @@ jobs:
       - name: Catalog contract
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          # Rotated browser key; the script sends it on apikey only.
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
         run: node scripts/catalog-contract.mjs
 
       - name: Dominion Stitch contract
@@ -224,7 +225,7 @@ jobs:
       - name: Test parts catalog CSV import
         env:
           VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
-          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+          VITE_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
         run: pnpm --filter @roam/admin exec vitest run src/utils/partsCatalogCsvImport.test.ts
 
       - name: Check courier fleet stamp
@@ -267,7 +268,7 @@ jobs:
       - name: Typecheck Plug
         env:
           VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
-          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+          VITE_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
         run: pnpm --filter @roam/plug typecheck
 
       - name: Install Playwright browser
@@ -556,7 +557,7 @@ jobs:
       - name: Typecheck fleet Rush spine
         env:
           VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
-          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+          VITE_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
         run: node scripts/typecheck-fleet-rush.mjs
 
       - name: Ban Figma-style package@version imports

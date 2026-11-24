@@ -79,7 +79,7 @@ export default defineConfig({
     // Same as fleet: api-client throws at import without Supabase placeholders.
     env: {
       VITE_SUPABASE_URL: 'https://ci-placeholder.supabase.co',
-      VITE_SUPABASE_ANON_KEY: 'ci-placeholder-anon-key',
+      VITE_SUPABASE_PUBLISHABLE_KEY: 'ci-placeholder-publishable-key',
     },
     include: [
       'src/**/*.test.ts',

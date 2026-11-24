@@ -31,7 +31,7 @@ jobs:
         # Without Supabase config the app shows its setup screen. "example" matches the sb-example-auth-token session the specs seed; mocks catch the API host.
         env:
           VITE_SUPABASE_URL: https://example.supabase.co
-          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+          VITE_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
         run: pnpm --filter @roam/admin run build
       - name: Parts import Stitch spec
         env:

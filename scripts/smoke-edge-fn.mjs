@@ -36,12 +36,15 @@ if (!base || !/^https?:\/\//i.test(base) || base.endsWith("/functions/v1/")) {
 
 const root = base.replace(/\/$/, "");
 // Secrets are sometimes pasted with wrapping newlines; headers reject that.
-const anonKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "")
+// The rotated publishable key (`sb_publishable_…`) is opaque, so `apikey` only — never Bearer.
+const publicKey = (
+  process.env.SUPABASE_PUBLISHABLE_KEY ||
+  process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  ""
+)
   .replace(/[\r\n\t\s]+/g, "")
   .replace(/^["']|["']$/g, "");
-const anonHeaders = anonKey
-  ? { Authorization: `Bearer ${anonKey}`, apikey: anonKey }
-  : {};
+const anonHeaders = publicKey ? { apikey: publicKey } : {};
 let failed = 0;
 
 async function check(name, fn) {

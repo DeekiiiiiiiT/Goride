@@ -2,7 +2,8 @@
  * Public catalog contract: versioned reads exist, public selects do not
  * return a customer or an organization id, and every public GET stays clean live.
  * Run: node scripts/catalog-contract.mjs
- * Live check uses SUPABASE_URL or VITE_SUPABASE_URL, plus the anon key when set.
+ * Live check uses SUPABASE_URL or VITE_SUPABASE_URL, plus SUPABASE_PUBLISHABLE_KEY (sent on
+ * `apikey` only) when set.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -88,12 +89,17 @@ if (placeholder) {
 } else {
   const headers = {};
   // Secrets are sometimes pasted with wrapping newlines; headers reject that.
-  const anon = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "")
+  // The rotated publishable key (`sb_publishable_…`) is opaque, so it rides on `apikey` only —
+  // never as `Authorization: Bearer`.
+  const publicKey = (
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    ""
+  )
     .replace(/[\r\n\t\s]+/g, "")
     .replace(/^["']|["']$/g, "");
-  if (anon) {
-    headers.apikey = anon;
-    headers.Authorization = `Bearer ${anon}`;
+  if (publicKey) {
+    headers.apikey = publicKey;
   }
   const base = `${supabaseUrl}/functions/v1/platform-catalog`;
   const publicPaths = [
