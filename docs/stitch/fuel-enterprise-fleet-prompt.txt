@@ -1,0 +1,357 @@
+ROAM FLEET — FUEL: WHO PAYS, LINE BY LINE — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+HOW TO USE THIS FILE
+- First paste: everything from "FIRST PASTE" down to the end of SCREEN 2.
+- Then paste one SCREEN block at a time (SCREEN 3, SCREEN 4, …). Each block is complete on its own.
+- Never paste the section "FOR CLAUDE — DO NOT PASTE" at the bottom.
+- Use the same Stitch project as the fuel step slides (the "Calm finance desk" look). If that project's saved design system reads "technical", "utilitarian" or "manual", start a fresh project.
+
+
+
+==================== FIRST PASTE ====================
+
+Roam Fleet - Fuel step in Week Reconciliation, the driver's fuel lines in Driver Settlements, and the Rules tab in Fleet Policy Configuration (Desktop Web App with a phone layout, for the fleet owner and fleet manager):
+
+Design the new fuel screens for Roam Fleet. Every week, each car's fuel is split between the company and the driver by the fleet's fuel rule. Until now Roam priced each kilometre at the car's usual fuel economy, so in a good week the purposes could add up to more fuel than was bought. The new way is simple and exact: cost per km = the fuel bought ÷ the kilometres on the odometer. Each kind of driving (Uber trips, driving to pickups, commute, km nobody can explain) is its km × that cost per km. The company's part and the driver's part always add up to exactly the fuel bought, to the cent. The driver's charge is a short list of lines, one per kind of driving, each one showing km × cost per km × the rule's driver %. The screens also catch problems before the week locks: a gas-card fill still waiting for its card statement, a stretch so long a fill was probably not scanned, and a car whose economy suddenly changes. The step 5 "Fuel" screen already exists as five cards, one at a time (Fuel checks · Disputes · Fuel policy · Distance and who pays · Finalize). Keep that exactly, and only add what each screen below asks for. The person using this is not an accountant: every card says in plain words what it is for. The design must feel modern, calm and effortless, like the best business banking apps: generous spacing, soft elevations, rounded cards, clear hierarchy. Every screen is tall enough to show everything, with no inner scrolling. Draw only the screens asked for in this message.
+
+
+BRAND IDENTITY:
+- Keep the existing Roam Fleet app frame exactly as it is today (do not redesign it):
+  - Top: a white nav row with the black "Roam Fleet" app tile, then: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations, Delivery Operations, Analytics, Reports, Business Finance (active, underlined), a bell with a red count, the avatar.
+  - Dark bar below it: a dark navy strip with a search box "Switch vehicle or search hub…" on the left, and on the right "09:14:22 AM EST", "America/Jamaica", "JM (JMD)" and an org chip "DE · Deeki T".
+  - Breadcrumb: "Business Finance › Week Reconciliation".
+- Keep the existing Week Reconciliation desk:
+  - the "All weeks" button;
+  - the left step rail card "WEEK STEPS" with "Step 5 of 8" (1 Upload inputs Complete, 2 Assign service lines Complete, 3 Tolls "Tolls locked", 4 Tag account Complete, 5 Fuel "In progress" highlighted, 6 Trips & earnings, 7 Settlement preview, 8 Close week — the last three greyed with a padlock and "Waiting on Fuel");
+  - the middle white card with "Week of 16 Nov 2026 · Rideshare · 16–22 Nov 2026", the green dot chip "Numbers updated 2 min ago", the title "Fuel" and the question "Is every fuel fill matched and priced?";
+  - the progress row of five rounded pills joined by a thin line (1 Fuel checks · 2 Disputes · 3 Fuel policy · 4 Distance and who pays · 5 Finalize) with a thin bar under them;
+  - the right column "Money Check" card (Total fuel bought, Driver charge, Company keeps, Payment Sources Breakdown).
+- Theme: "Calm finance desk" — clear, trustworthy, quiet and modern. Not a spreadsheet, not a developer tool.
+- LIGHT MODE (default):
+  - Primary: near-black #030213 — primary buttons, the current pill, the active tab
+  - Page wash: #f8fafc; cards: #FFFFFF with a soft shadow (0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(15,23,42,0.06)) and a hairline border rgba(0,0,0,0.06)
+  - Text: #0b1c30; muted text: #47464c
+  - Done / Adds up: green #069669 on #ecfdf5
+  - Needs a look / Waiting: amber #b45309 on #fffbeb
+  - Blocks Finalize / Doesn't add up: red #ba1a1a on #fff1f2
+  - Info / Preview: slate #475569 on #f1f5f9
+  - Driver pays (amounts and bars): blue #0051d5 on #eff4ff
+- DARK MODE:
+  - Page #1c1c1e, cards #2a2a2d, border #3a3a3d, text #fafafa, muted #a1a1aa, primary buttons white #fafafa with near-black text
+  - Green #34d399 on #064e3b; amber #fbbf24 on #451a03; red #f87171 on #450a0a; blue #60a5fa on #172554; slate #cbd5e1 on #334155
+- Shapes: cards 20px corner radius, buttons and inputs 12px, chips and pills fully rounded.
+- Typography: Inter. Card title 22px semibold, subtitle 15px muted, body 15px, helper text 13px. Money and km use tabular figures, right-aligned, always "J$" with 2 decimals (J$5,648.20). Km with a thousands comma (1,503 km).
+- Car plates are always in a small grey rounded box: "5179KZ".
+- Dates in plain words: "Wed 18 Nov", "Week of 16 Nov 2026", "from 23 Nov 2026". Never "2026-11-16", never codes, ids or internal words.
+- Buttons always look like buttons:
+  - Primary = solid near-black with white text.
+  - Secondary = white with a visible #cbd5e1 border and dark text.
+  - Danger = red border and red text.
+  - Never underlined text links, never grey text-only buttons. Confirms are in-app dialogs, never browser pop-ups.
+- The pieces used across these screens (draw them the same way every time):
+  - Cost per km tile: small uppercase label "COST PER KM", big "J$16.30", and under it the muted sum "J$24,500.00 fuel bought ÷ 1,503 km on the odometer".
+  - Purpose row (white row inside a card, one per kind of driving): a small coloured dot and the name on the left ("Uber trips"); then "1,320 km × J$16.30 = J$21,516.97"; then a grey chip with the rule "Driver 20%"; then two right-aligned amounts, "Driver pays J$4,303.39" in blue and "Company keeps J$17,213.58" in dark text. A row with 0 km is one muted line: "Personal · 0 km · nothing to split".
+  - Adds-up line under the purpose rows: green tick, "Driver J$5,648.20 + company J$18,851.80 = J$24,500.00 fuel bought". When it doesn't add up, the same line is red with a warning icon and names the difference.
+  - Check card (inside Fuel checks): an amber or red left accent bar, an icon, a bold one-line title, two short detail lines, and the buttons on the right.
+  - Status chips: "Charged" (green), "Preview — not charged" (slate), "Waiting for card statement" (amber), "Blocks Finalize" (red).
+  - Centered in-app dialog: title, a soft grey summary box, a plain body sentence, buttons bottom right.
+  - Right side panel: 480px wide, full height, white, title with a close (X) button.
+- Sample data (REAL fills from Roam's week of 16 Nov 2026, Rideshare, car Toyota Roomy · 5179KZ, driver Kenny Gregory Rattray):
+  - Fills this week: Mon 16 Nov J$1,500.00 at 198,437 km · Tue 17 Nov J$3,500.00 at 198,577 km · Tue 17 Nov J$1,500.00 at 198,807 km · Wed 18 Nov J$1,000.00 at 198,849 km · Wed 18 Nov gas card at 198,973 km · Thu 19 Nov gas card at 199,231 km · Fri 20 Nov J$4,000.00 at 199,538 km · Sat 21 Nov J$3,000.00 at 199,753 km. The fill before the week: Sun 15 Nov at 198,250 km.
+  - Cash from earnings J$14,500.00. The two gas-card fills are J$5,000.00 each once the card statement arrives, so the week's fuel bought is J$24,500.00 (gas card J$10,000.00 + cash from earnings J$14,500.00).
+  - Odometer: 198,250 → 199,753 = 1,503 km. Cost per km J$16.30.
+  - Kenny's fuel rule "Standard Fleet Rule": the company pays 80% of Uber trips, 50% of driving to pickups, 100% of commute, 100% of company errands, 0% of personal driving, and 50% of km nobody can explain.
+  - Week split: Uber trips 1,320 km = J$21,516.97 (driver 20% J$4,303.39 · company J$17,213.58); To pickups 150 km = J$2,445.11 (driver 50% J$1,222.55 · company J$1,222.56); Commute 18 km = J$293.41 (company pays all); Unexplained km 15 km = J$244.51 (driver 50% J$122.26 · company J$122.25). Driver pays J$5,648.20 · Company keeps J$18,851.80 · total J$24,500.00.
+
+
+DESIGN PRINCIPLES:
+- The money always adds up, and the screen shows it: every money card ends with the adds-up line.
+- Every charge can be traced: the driver's amount is never a lone number, it always sits next to its km × cost per km × driver %.
+- Problems are rows with their fix button next to them, never error messages. Each one names the car and the date.
+- Waiting is calm (amber), not alarming. Red only for things that block Finalize, or for money that doesn't add up.
+- A locked week is read-only and shows the numbers it was locked with.
+- One view per screen.
+
+
+SCREEN 1: PART 4 OF 5 — DISTANCE AND WHO PAYS (PRICED AND CHARGED)
+- The full desk as in Brand Identity. Progress row: "1 Fuel checks" Done, "2 Disputes" Nothing to do, "3 Fuel policy" Done, "4 Distance and who pays" current, "5 Finalize" Not ready; bar 4/5.
+- The card: title "Distance and who pays", subtitle "How the car was driven this week, and how the fuel cost is split.", green chip "Charged" on the right.
+- One car section: header "Toyota Roomy" with the plate box "5179KZ" and "Kenny Gregory Rattray", and a small grey chip "Standard Fleet Rule · from 3 Aug 2026".
+- Three tiles in a row:
+  - "FUEL BOUGHT J$24,500.00" with "Gas card J$10,000.00 · Cash J$14,500.00"
+  - "KILOMETRES 1,503 km" with "Odometer 198,250 → 199,753"
+  - the cost per km tile: "COST PER KM J$16.30" with "J$24,500.00 fuel bought ÷ 1,503 km on the odometer"
+- Purpose rows:
+  - "Uber trips · 1,320 km × J$16.30 = J$21,516.97 · Driver 20% · Driver pays J$4,303.39 · Company keeps J$17,213.58"
+  - "To pickups · 150 km × J$16.30 = J$2,445.11 · Driver 50% · Driver pays J$1,222.55 · Company keeps J$1,222.56"
+  - "Commute · 18 km × J$16.30 = J$293.41 · Driver 0% · Driver pays J$0.00 · Company keeps J$293.41"
+  - "Unexplained km · 15 km × J$16.30 = J$244.51 · Driver 50% · Driver pays J$122.26 · Company keeps J$122.25"
+  - muted lines: "Company errands · 0 km · nothing to split" and "Personal · 0 km · nothing to split"
+- Under the rows, a soft totals strip: "Driver pays J$5,648.20" (blue, large) and "Company keeps J$18,851.80" (dark, large), then the green adds-up line "Driver J$5,648.20 + company J$18,851.80 = J$24,500.00 fuel bought".
+- On the right of the car header, a secondary button "Why this charge".
+- A slim box "Stop-to-stop gaps" with a green check: "All fill windows on 5179KZ add up."
+- A primary button "Mark reviewed" at the bottom of the card content.
+- Footer: secondary "← Back", "Part 4 of 5", primary "Next: Finalize →".
+- Right column "Money Check": Total fuel bought J$24,500.00 · Driver charge J$5,648.20 · Company keeps J$18,851.80 · Payment Sources Breakdown: Gas card J$10,000.00, Cash from earnings J$14,500.00.
+
+SCREEN 2: WHY THIS CHARGE — SIDE PANEL FOR ONE CAR
+- Behind, dimmed: the desk on part 4 "Distance and who pays" for the week of 16 Nov 2026.
+- On the right, the white side panel, title "Why Kenny pays J$5,648.20" with a close (X) button, and under it the plate box "5179KZ" and "Week of 16 Nov 2026".
+- Step 1 (a numbered circle "1"), "What the car cost to run": "J$24,500.00 fuel bought ÷ 1,503 km on the odometer = J$16.30 per km".
+- Step 2, "How the km were used": a horizontal stacked bar in four colours with a legend under it: "Uber trips 1,320 km", "To pickups 150 km", "Commute 18 km", "Unexplained 15 km" — and the muted line "Adds up to 1,503 km, the same as the odometer."
+- Step 3, "What the rule says the driver pays", three short lines:
+  - "Uber trips: J$21,516.97 × 20% = J$4,303.39"
+  - "To pickups: J$2,445.11 × 50% = J$1,222.55"
+  - "Unexplained km: J$244.51 × 50% = J$122.26"
+  - and a muted line "Commute: the company pays all of it."
+- Step 4, a highlighted blue box: "Kenny pays J$5,648.20", with "J$4,303.39 + J$1,222.55 + J$122.26".
+- A muted footer line: "Rule: Standard Fleet Rule, from 3 Aug 2026."
+- One secondary button at the bottom: "Close".
+
+==================== END OF FIRST PASTE ====================
+
+
+
+SCREEN 3: PART 4 OF 5 — DISTANCE AND WHO PAYS (NEW PRICING PREVIEW, NOT CHARGED YET)
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- The desk: left step rail with step 5 Fuel in progress; middle card "Week of 16 Nov 2026 · Rideshare · 16–22 Nov 2026", title "Fuel"; progress row with "4 Distance and who pays" current, bar 4/5.
+- The card: title "Distance and who pays", subtitle "How the car was driven this week, and how the fuel cost is split.", a slate chip "Preview — not charged" on the right.
+- A soft slate info box across the top of the card: title "New pricing preview", line "This week is still charged the old way. Here is what the new way would charge, so you can compare before it is switched on."
+- A comparison card for "Toyota Roomy · 5179KZ · Kenny Gregory Rattray", two columns side by side:
+  - left, muted, "Charged now (old way)": "Driver pays J$6,066.41", "Priced at the car's usual 12.0 km per litre"
+  - right, highlighted, "New way": "Driver pays J$5,648.20", "Priced at J$16.30 per km from the fuel bought"
+  - under both, a green chip "J$418.21 less for the driver" and the line "Uber trips moved most: J$23,621.40 → J$21,516.97".
+- Below, the four purpose rows of the new way, each with a small slate "Preview" chip: "Uber trips · 1,320 km × J$16.30 = J$21,516.97 · Driver 20% · J$4,303.39", "To pickups · 150 km × J$16.30 = J$2,445.11 · Driver 50% · J$1,222.55", "Commute · 18 km × J$16.30 = J$293.41 · Driver 0% · J$0.00", "Unexplained km · 15 km × J$16.30 = J$244.51 · Driver 50% · J$122.26".
+- The adds-up line in slate (not green): "Preview: driver J$5,648.20 + company J$18,851.80 = J$24,500.00 fuel bought".
+- A primary button "Mark reviewed".
+- Footer: secondary "← Back", "Part 4 of 5", primary "Next: Finalize →".
+
+SCREEN 4: PART 1 OF 5 — FUEL CHECKS (TWO CARD FILLS WAITING FOR THE STATEMENT)
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- The desk: middle card "Week of 16 Nov 2026 · Rideshare · 16–22 Nov 2026", title "Fuel"; progress row with "1 Fuel checks" current and an amber "2 waiting", the other pills "Nothing to do", "Check", "Review", "Not ready"; bar 1/5.
+- The card: title "Fuel checks", subtitle "Fills that need a look before the week can lock.", amber chip "2 waiting".
+- An amber check card titled "2 gas-card fills are waiting for the card statement", with the muted line "Kenny scanned these at the pump. Their amount comes from the gas card statement." Inside it, two rows:
+  - "Wed 18 Nov · 5179KZ · odometer 198,973 km" with "J$0.00 so far", an amber chip "Waiting for card statement" and muted "4 days waiting"
+  - "Thu 19 Nov · 5179KZ · odometer 199,231 km" with "J$0.00 so far", an amber chip "Waiting for card statement" and muted "3 days waiting"
+  - On the right of the check card, a primary button "Upload card statement".
+  - Under the rows, a small red line: "The week can't lock until these are priced."
+- Below, a calm green row: "Other fills · 6 fills · J$14,500.00 · all checked", with a green tick.
+- A section "Car economy" with one compact row: "5179KZ · this week —" and a muted "Shown once the two card fills are priced", with a secondary button "See 8 weeks".
+- Footer: disabled-looking secondary "Back", "Part 1 of 5", primary "Next: Disputes →".
+- Right column "Money Check": Total fuel bought "J$14,500.00 so far" with an amber "2 fills waiting" chip; Driver charge "—"; Company keeps "—".
+
+SCREEN 5: PART 1 OF 5 — FUEL CHECKS (POSSIBLE FILL NOT SCANNED)
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- The desk: middle card "Week of 9 Nov 2026 · Rideshare · 9–15 Nov 2026", title "Fuel"; progress row with "1 Fuel checks" current and a red "1 to fix"; bar 1/5.
+- The card: title "Fuel checks", subtitle "Fills that need a look before the week can lock.", red chip "1 to fix".
+- A red check card titled "Possible fill not scanned", with the plate box "5179KZ" and "Kenny Gregory Rattray":
+  - line 1: "Sun 8 Nov at 196,429 km → Tue 10 Nov at 196,858 km · 429 km with no fill"
+  - line 2, muted: "That is much longer than this car usually goes between fills (usually up to 339 km)."
+  - line 3, small: "Nothing is charged for it. Add the fill if one was missed, or close this with a note."
+  - On the right, a primary button "Add fill" and a secondary button "Close with a note".
+- Below, a calm green row: "Other fills · 9 fills · all checked", with a green tick.
+- Footer: disabled-looking secondary "Back", "Part 1 of 5", primary "Next: Disputes →".
+
+SCREEN 6: ADD A MISSED FILL — SIDE PANEL
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- Behind, dimmed: the Fuel step, part 1 "Fuel checks", for the week of 9 Nov 2026.
+- On the right, the white side panel, title "Add a missed fill" with a close (X) button.
+- A soft grey summary box: plate box "5179KZ", "Between Sun 8 Nov (196,429 km) and Tue 10 Nov (196,858 km)".
+- Fields:
+  - "Date" — date picker showing "Mon 9 Nov"
+  - "Amount" — input showing "J$ 4,000.00"
+  - "Odometer" — input showing "196,640 km", with the helper "Must be between 196,429 and 196,858 km"
+  - "Paid with" — a two-option segmented control "Gas card" / "Cash from earnings" (selected)
+  - "Note" — 2-line text box showing "Kenny forgot to scan at Total, Spanish Town"
+- A soft blue info box: "The week is worked out again with this fill."
+- Buttons at the bottom: white bordered "Cancel", solid near-black "Add fill".
+
+SCREEN 7: CLOSE WITH A NOTE — DIALOG
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- Behind, dimmed: the Fuel step, part 1 "Fuel checks", with a red check card "Possible fill not scanned".
+- In front, a centered white in-app dialog, 16px corners:
+  - Title "Close this without adding a fill?"
+  - Soft grey summary box: plate box "5179KZ", "Sun 8 Nov → Tue 10 Nov · 429 km with no fill"
+  - Body: "Nothing is charged for it either way. Your note is kept with the week."
+  - A text box labelled "Why", 3 lines tall, filled with "Long trip to Negril on Uber, Kenny filled up on Tuesday"; small muted helper "At least 10 characters"
+  - Buttons bottom right: white bordered "Cancel", solid near-black "Close with note"
+- (After closing, the card becomes one grey row: "Closed by Deeki T, Sun 22 Nov: Long trip to Negril on Uber…" with a secondary "Reopen" button.)
+
+SCREEN 8: CAR ECONOMY — LAST 8 WEEKS, SIDE PANEL
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- Behind, dimmed: the Fuel step, part 1 "Fuel checks".
+- On the right, the white side panel, title "Car economy" with a close (X) button, the plate box "5179KZ" and "Toyota Roomy".
+- A small line chart across the top: 8 weekly points of km per litre, with a dashed grey line for the car's usual 12.0 km per litre and a light grey band from 10.2 to 13.8.
+- A clean list, newest first, columns "Week", "Km per litre", "Usual", "Difference", and a chip:
+  - "Week of 9 Nov · 13.7 · 12.0 · 14% better" — amber chip "Check"
+  - "Week of 2 Nov · 11.7 · 12.0 · 3% worse" — green chip "Normal"
+  - "Week of 26 Oct · 12.0 · 12.0 · same" — green "Normal"
+  - "Week of 19 Oct · 11.5 · 12.0 · 4% worse" — green "Normal"
+  - "Week of 12 Oct · 12.4 · 12.0 · 3% better" — green "Normal"
+  - "Week of 5 Oct · 13.8 · 12.0 · 15% better" — amber "Check"
+  - "Week of 28 Sep · 11.8 · 12.0 · 2% worse" — green "Normal"
+  - "Week of 21 Sep · 11.3 · 12.0 · 6% worse" — green "Normal"
+- A muted line under the list: "A week much better than usual often means a fill wasn't scanned."
+- A secondary button at the bottom: "Open car".
+
+SCREEN 9: PART 4 OF 5 — DISTANCE AND WHO PAYS (NOT ENOUGH ODOMETER READINGS)
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- The desk: middle card "Week of 16 Nov 2026 · Rideshare · 16–22 Nov 2026", title "Fuel"; progress row with "4 Distance and who pays" current and amber "Review"; bar 4/5.
+- The card: title "Distance and who pays", amber chip "Review".
+- A car section for "Toyota Probox" with the plate box "8421LA" and "Marlon Andre Sterling".
+- An amber check card at the top of the section: title "Not enough odometer readings this week", line "Only 2 fills had an odometer reading. Roam needs 3 to work out the cost per km from the odometer.", and a secondary button "Mark readings reviewed" on the right.
+- Under it, the same section after review, shown with a slate chip "Priced by share of km":
+  - three tiles: "FUEL BOUGHT J$9,000.00", "KILOMETRES 670 km" with "From trips and pickups", "COST PER KM J$13.43" with "J$9,000.00 ÷ 670 km driven"
+  - purpose rows: "Uber trips · 610 km × J$13.43 = J$8,194.03 · Driver 20% · Driver pays J$1,638.81 · Company keeps J$6,555.22", "To pickups · 60 km × J$13.43 = J$805.97 · Driver 50% · Driver pays J$402.99 · Company keeps J$402.98"
+  - the green adds-up line: "Driver J$2,041.80 + company J$6,958.20 = J$9,000.00 fuel bought"
+  - a muted note: "Priced by share of km — not enough odometer readings this week."
+- Footer: secondary "← Back", "Part 4 of 5", primary "Next: Finalize →".
+
+SCREEN 10: PART 5 OF 5 — FINALIZE (BLOCKED BY THE NEW CHECKS)
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- The desk: middle card "Week of 16 Nov 2026 · Rideshare · 16–22 Nov 2026", title "Fuel"; progress row with part 1 showing amber "2 waiting", part 4 showing amber "Review", "5 Finalize" current; bar 5/5.
+- The card: title "Finalize fuel", subtitle "Lock this week's fuel so pay can be worked out.", grey chip "Not ready".
+- A "Still open" list, each row with a red or amber dot, a plain sentence naming the car and the date, and a jump button:
+  - red dot "2 gas-card fills waiting for the card statement · 5179KZ · Wed 18 Nov, Thu 19 Nov" — secondary "Go to Fuel checks"
+  - red dot "1 stop-to-stop gap not reviewed · 5179KZ · Thu 19 Nov → Fri 20 Nov" — secondary "Go to Distance and who pays"
+  - amber dot "Distance and who pays not reviewed yet" — secondary "Go to Distance and who pays"
+- The checkbox row "I checked the warnings for this week." (unticked).
+- At the bottom, the Fuel seal bar: padlock icon, "Fuel seal", grey chip "Not ready", muted "3 things still open", and a disabled primary "Finalize fuel" button.
+- Footer: secondary "← Back", "Part 5 of 5".
+
+SCREEN 11: PART 5 OF 5 — FINALIZE REFUSED, NOTHING LOCKED
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- The desk: middle card "Week of 16 Nov 2026 · Rideshare · 16–22 Nov 2026", title "Fuel"; all five pills green "Done"; bar full.
+- The card: title "Finalize fuel", red chip "Not locked".
+- A red-tinted box: icon, title "Not locked — Kenny's fuel statement could not be written", line "Nothing was locked and nothing was charged. The week is still open, so you can try again.", and a primary button "Try again" on the right.
+- The totals line under it, muted: "Fuel bought J$24,500.00 · Driver pays J$5,648.20 · Company keeps J$18,851.80".
+- The Fuel seal bar: "Fuel seal", red chip "Not locked", enabled primary "Finalize fuel".
+- Footer: secondary "← Back", "Part 5 of 5".
+
+SCREEN 12: A WEEK LOCKED BEFORE THE NEW PRICING — READ-ONLY
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- The desk: middle card "Week of 9 Nov 2026 · Rideshare · 9–15 Nov 2026", title "Fuel", and a green "Locked" chip with "Sat 21 Nov, 9:00 PM"; the left step rail shows step 5 Fuel "Fuel locked".
+- The card: title "Distance and who pays", a slate chip "Priced the old way".
+- A soft slate info box: "This week was locked before fuel was priced from the fuel bought. It keeps the numbers it was locked with."
+- Three read-only totals in a row: "FUEL BOUGHT J$28,800.00", "DRIVER PAID J$4,081.36", "COMPANY KEPT J$27,430.70".
+- Under them, muted: "Kilometres this week 1,821 km · Uber trips 1,617 km · To pickups 212 km".
+- No purpose rows, no buttons inside the card. (No adds-up line on an old-way week.)
+- Footer: secondary "← Back", "Part 4 of 5", primary "Next: Finalize →".
+
+SCREEN 13: DRIVER SETTLEMENTS — KENNY'S WEEK, FUEL LINES
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- Behind, dimmed: Driver Settlements with the tab row "Cash desk · Close Week · Restatements · Disputes", "Cash desk" active.
+- On the right, the white side panel, title "Kenny Gregory Rattray · Week of 16 Nov 2026" with a close (X) button.
+- The existing summary rows of the week: "Driver share", "Charged to driver", "Personal toll charged", "Net payout" (keep them as they look today).
+- A card "Fuel" that replaces the single "Fuel deduction" row. A clean table with the columns "Car", "Kind of driving", "Km", "Cost per km", "Driver %", "Driver pays":
+  - "5179KZ · Uber trips · 1,320 km · J$16.30 · 20% · J$4,303.39"
+  - "5179KZ · To pickups · 150 km · J$16.30 · 50% · J$1,222.55"
+  - "5179KZ · Unexplained km · 15 km · J$16.30 · 50% · J$122.26"
+  - a total row in bold: "Fuel · J$5,648.20"
+  - a small green line under the table: "Matches the fuel statement for this week."
+- A secondary button under the card: "View week".
+
+SCREEN 14: DRIVER SETTLEMENTS — FUEL LINES AFTER THE WEEK WAS REOPENED
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- Behind, dimmed: Driver Settlements with "Cash desk" active.
+- On the right, the white side panel, title "Kenny Gregory Rattray · Week of 16 Nov 2026" with a close (X) button.
+- The card "Fuel" with the same columns as before ("Car", "Kind of driving", "Km", "Cost per km", "Driver %", "Driver pays", and a last column "Status"):
+  - greyed and struck through: "5179KZ · Uber trips · 1,320 km · J$16.30 · 20% · J$4,303.39", status chip "Reversed Tue 24 Nov (week reopened)"
+  - right under it, normal: "5179KZ · Uber trips · 1,300 km · J$16.30 · 20% · J$4,238.19", status chip "Current"
+  - "5179KZ · To pickups · 150 km · J$16.30 · 50% · J$1,222.55", status "Current"
+  - "5179KZ · Unexplained km · 35 km · J$16.30 · 50% · J$285.26", status "Current"
+  - a total row in bold: "Fuel · J$5,746.00"
+- A muted line: "Reopened lines are kept, never edited."
+- A secondary button "View week".
+
+SCREEN 15: FLEET POLICY — RULES TAB, VERSIONS WITH "APPLIES FROM"
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- Page title "Fleet Policy Configuration" with the muted description "Company rules for fuel and tolls." and the tab row "Rules · Schedule · Tolls", "Rules" active.
+- A policy card "Standard Fleet Rule" with a list of what the company pays: "Uber trips 80%", "Driving to pickups 50%", "Commute 100%", "Company errands 100%", "Personal driving 0%", "Km nobody can explain 50%", each with a small bar.
+- A section "Versions", two version cards stacked:
+  - "Version 2" with a blue chip "Starts 23 Nov 2026"; line "Applies from the week of 23 Nov 2026"; line "Uber trips: company pays 75% (was 80%)"; muted "Weeks locked under this version: 0"
+  - "Version 1" with a green chip "Current"; line "Week of 3 Aug 2026 → week of 16 Nov 2026"; muted "Weeks locked under this version: 15"; a small grey chip "Closed weeks keep this split"
+- A secondary button "Add a version" in the section header.
+- A sticky footer bar: muted "No changes" on the left, solid near-black "Save" on the right shown disabled.
+
+SCREEN 16: ADD A VERSION — "APPLIES FROM" DIALOG, LOCKED WEEK REFUSED
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- Behind, dimmed: Fleet Policy Configuration, "Rules" tab, with the "Versions" section.
+- In front, a centered white in-app dialog, 16px corners:
+  - Title "Add a version of Standard Fleet Rule"
+  - Field "Uber trips — company pays", input showing "75 %"
+  - Field "Applies from", week picker showing "Week of 9 Nov 2026" with a red border
+  - Under it, a red line: "That week is already locked. Choose the week of 16 Nov 2026 or later."
+  - A soft blue info box: "Weeks before this date keep the rule they were locked with. Nothing already locked changes."
+  - Buttons bottom right: white bordered "Cancel", solid near-black "Add version" shown disabled
+
+SCREEN 17: PHONE 390px — DISTANCE AND WHO PAYS
+Same Roam Fleet app, colours, cards and style as the earlier screens in this project, on a 390px phone. Tall enough to show everything, no inner scrolling.
+- Top: compact header "Week of 16 Nov · Rideshare", step chips that scroll sideways with "5 Fuel" active.
+- The progress row as five small numbered circles with the current label under them: "4 · Distance and who pays".
+- A single line above the card: "Fuel J$24,500.00 · Driver J$5,648.20".
+- The card fills the width: title "Distance and who pays", green chip "Charged".
+- Car header: plate box "5179KZ", "Kenny Gregory Rattray".
+- The cost per km tile full width: "COST PER KM J$16.30", "J$24,500.00 ÷ 1,503 km".
+- Purpose rows stacked as small cards, each two lines: "Uber trips · 1,320 km × J$16.30" / "Driver 20% · J$4,303.39"; "To pickups · 150 km × J$16.30" / "Driver 50% · J$1,222.55"; "Commute · 18 km × J$16.30" / "Company pays all · J$0.00"; "Unexplained km · 15 km × J$16.30" / "Driver 50% · J$122.26".
+- The green adds-up line, wrapped on two lines.
+- Full-width buttons: secondary "Why this charge", primary "Mark reviewed".
+- A bar stuck to the bottom of the screen with "← Back" and "Next →".
+
+
+
+==================== FOR CLAUDE — DO NOT PASTE ====================
+
+SOURCE: docs/fuel-enterprise-audit.md Rev 3.4, Part E (screens 1–6) and F-01, F-03, F-04, F-05, F-06, F-08, F-09, F-11, F-13, F-22, F-23. Stitch decides the look; the audit decides the content. Every Stitch screen gets a Keep / Drop / Add list in the audit before porting.
+
+SAMPLE DATA — WHAT IS REAL AND WHAT IS NOT:
+- Real (prod, read 22 Nov 2026): every fill date, amount and odometer of the week of 16 Nov; odometer 198,250 → 199,753; the two J$0.00 gas-card fills on 18 and 19 Nov; Kenny's rule percentages; the 9 Nov totals (J$28,800.00 / J$4,081.36 / J$27,430.70, 1,821 km, trips 1,617, pickups 212); the 8 → 10 Nov 429 km stretch; the 8 weekly km/L figures (audit A2).
+- Assumed: the two card fills at J$5,000.00 each (Kenny's card fills on 5, 10 and 11 Nov were all J$5,000.00); the purpose km split 1,320 / 150 / 18 / 15 (makes 1,503); the usual 12.0 km/L; the old-way J$6,066.41 (J$214.74/L ÷ 12.0 km/L on the same km); "Version 2" and its 75%; the reopened-week lines; the 8421LA / Marlon Andre Sterling car on Screen 9; the 15 weeks under Version 1.
+- Arithmetic checks (per line, half up): J$24,500.00 ÷ 1,503 = J$16.300732/km. 1,320 → 21,516.97; 150 → 2,445.11; 18 → 293.41; 15 → 244.51; total 24,500.00. Driver 4,303.39 + 1,222.55 (2,445.11 × 50% = 1,222.5549) + 122.26 = 5,648.20; company 18,851.80. Old way: J$214.74/L ÷ 12.0 = J$17.895/km → trips 23,621.40 × 20% + pickups 2,684.25 × 50% = 6,066.41; difference 418.21. Screen 9: 9,000 ÷ 670 = 13.432836 → 8,194.03 + 805.97 = 9,000.00; driver 1,638.81 + 402.99 = 2,041.80; company 6,958.20. Screen 14: 1,300 → 21,190.95 × 20% = 4,238.19; 35 → 570.53 × 50% = 285.26; driver 4,238.19 + 1,222.55 + 285.26 = 5,746.00.
+- The cost per km is shown at 2 decimals (J$16.30) but every line is computed from the full value; the tile's helper line shows the division so the 2-decimal display never looks wrong.
+
+ADDITIONAL UI COMPONENTS:
+- Cost per km tile, purpose row, adds-up line, check card, status chips, centered dialog, right side panel: as in BRAND IDENTITY.
+- Comparison card (old way vs new way) for the preview.
+- Stacked km bar with legend (Why this charge, step 2).
+- Fuel lines table with a Status column (Current / Reversed <date>).
+- Version card with "Current" / "Starts <date>" chips and "Weeks locked under this version: N".
+- Week picker with an inline refusal line.
+- Small line chart with a usual-economy dashed line and a band.
+
+INTERACTIONS:
+- Engine switch (audit Part D): while the platform setting fuelEngineV3 is off, part 4 shows Screen 3 (Preview — not charged) from the v3 dual-run and shadowFuelEngineDrift; Money Check shows the v2.2 numbers. When on, Screen 1 (Charged). Locked v2.2 weeks always show Screen 12 (no lines, no adds-up line).
+- "Why this charge" opens Screen 2 for that car; it reads the same lines the week will write (F-03), or the preview lines when off.
+- "Upload card statement" opens the existing in-step statement upload (never leaves Week Reconciliation). A matched line prices its fill and the row clears; an unmatched line goes to the existing unlinked-charge queue. Waiting fills are a lock blocker (new gate code awaiting_card_statement, F-09).
+- "Add fill" opens Screen 6, prefilled with car and the stretch; odometer must sit inside the stretch; saving re-works the week. "Close with a note" opens Screen 7; note ≥ 10 characters; records who and when; moves no money; "Reopen" until the week locks (F-08).
+- "See 8 weeks" opens Screen 8; "Open car" opens the vehicle's existing KmLTracking tab. Chips: "Check" when economy is ≥ 15% better than usual (F-08); worse-economy bands follow KmLTracking today (Watch 15–30% worse, Flagged > 30% worse).
+- "Mark readings reviewed" is the existing odometer chain review (fuel_week_closable_gate.ts:678); after it the car is priced by share of km and the snapshot records pricing: "km_share_fallback" (F-01 detail).
+- Finalize "Still open" rows come from the close gate, including the new codes for unrecommended stop-to-stop gap charges (F-04) and waiting card fills (F-09); each "Go to …" slides to that part.
+- "Finalize fuel" writes the lines and every driver's statement before the period flips to locked (F-05). If a statement fails, nothing locks and Screen 11 shows; "Try again" re-runs Finalize.
+- Driver Settlements fuel card reads the week's fuel lines (bigint minor units, converted to J$ for display); reversed lines stay visible with their date; "View week" opens Week Reconciliation on that week, step 5. Weeks locked before go-live keep the single "Fuel deduction" row.
+- Rules tab: "Add a version" → dialog; the week picker refuses a locked week with the existing closedScheduleChangeError, naming the first open week; Save as today.
+- Leaving with unsaved changes asks in an in-app dialog. Keyboard: Tab between buttons, Enter confirms dialogs, Escape closes panels and dialogs.
+
+OPEN POINTS FOUND WHILE WRITING THIS (for the audit, not for Stitch):
+- F-07: resolved in audit Rev 4.1. One row per fill from the next open week; the statement match (fuel_jaa_match.ts) attaches instead of keeping two rows. Screen 4 is unaffected.
+- F-08: resolved in audit Rev 4.1. The rule is 1.2 × the car's 90th-percentile stretch over the previous 8 weeks (Kenny: 339 km, so the trigger is 406.8 km). Screen 5 line 2 is worded to match. No tank size is needed.
+
+Spec screens / Area
+| Screen | Area |
+| 1 | Step 5 part 4 — Distance and who pays, priced and charged |
+| 2 | Why this charge — side panel for one car |
+| 3 | Part 4 — New pricing preview, not charged yet (switch off) |
+| 4 | Part 1 Fuel checks — two card fills waiting for the statement |
+| 5 | Part 1 Fuel checks — possible fill not scanned |
+| 6 | Add a missed fill — side panel |
+| 7 | Close with a note — dialog |
+| 8 | Car economy — last 8 weeks, side panel |
+| 9 | Part 4 — not enough odometer readings, priced by share of km |
+| 10 | Part 5 Finalize — blocked by the new checks |
+| 11 | Part 5 Finalize — refused, nothing locked |
+| 12 | A week locked before the new pricing — read-only |
+| 13 | Driver Settlements — Kenny's week, fuel lines |
+| 14 | Driver Settlements — fuel lines after a reopen |
+| 15 | Fleet Policy — Rules tab, versions with applies from |
+| 16 | Add a version — applies-from dialog, locked week refused |
+| 17 | Phone 390px — Distance and who pays |

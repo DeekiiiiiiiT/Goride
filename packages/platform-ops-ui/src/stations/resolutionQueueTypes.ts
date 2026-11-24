@@ -42,6 +42,8 @@ export interface ProvisionalFillDto {
   vendor?: string;
   location?: string;
   date?: string | null;
+  amount?: number | null;
+  driverName?: string | null;
   matchedStationId?: string | null;
   organizationId?: string | null;
   lat?: number | null;

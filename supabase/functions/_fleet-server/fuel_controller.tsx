@@ -72,6 +72,7 @@ import {
   findFuelEntryByTransactionId,
   healApprovedFuelEntriesMissingLog,
   healFuelEntriesMissingPendingStatus,
+  resolveDriverName,
   stampPendingReconciliationStatus,
 } from "./fuel_posted_guarantee.ts";
 import { healAdminCashFuelLedgerDebits } from "./fuel_transaction_normalize.ts";
@@ -5155,6 +5156,19 @@ app.get(`${BASE_PATH}/admin/provisional-fills`, requirePlatformStaff(), async (c
             const all = ((await kv.getByPrefix("fuel_entry:")) || []) as Record<string, unknown>[];
             entries = all.filter(isQueueFill).slice(0, limit);
         }
+        const driverIdsNeedingName = new Set<string>();
+        for (const e of entries) {
+            const onEntry = typeof e.driverName === "string" ? e.driverName.trim() : "";
+            if (onEntry) continue;
+            const driverId = e.driverId != null ? String(e.driverId).trim() : "";
+            if (driverId) driverIdsNeedingName.add(driverId);
+        }
+        const driverNameById = new Map<string, string | undefined>();
+        await Promise.all(
+            [...driverIdsNeedingName].map(async (driverId) => {
+                driverNameById.set(driverId, await resolveDriverName(driverId, null));
+            }),
+        );
         const out = entries.map((e) => {
             const meta = (e.metadata || {}) as Record<string, unknown>;
             const loc = (meta.locationMetadata || {}) as Record<string, unknown>;
@@ -5164,6 +5178,13 @@ app.get(`${BASE_PATH}/admin/provisional-fills`, requirePlatformStaff(), async (c
                 vendor: e.vendor || e.location || meta.stationName || "Provisional stop",
                 location: e.location,
                 date: e.date || meta.stationResolution && (meta.stationResolution as any).decidedAt || null,
+                amount: e.amount != null ? Number(e.amount) : null,
+                driverName: (() => {
+                    const onEntry = typeof e.driverName === "string" ? e.driverName.trim() : "";
+                    if (onEntry) return onEntry;
+                    const driverId = e.driverId != null ? String(e.driverId).trim() : "";
+                    return driverId ? driverNameById.get(driverId) ?? null : null;
+                })(),
                 matchedStationId: e.matchedStationId || meta.matchedStationId || null,
                 organizationId: e.organizationId || null,
                 lat: Number(loc.lat) || null,

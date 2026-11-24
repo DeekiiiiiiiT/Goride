@@ -1,5 +1,6 @@
 // Stitch: dominion-redesign/2822ddcab2b8420dbae5772a0b53062b
 import { useEffect, useState } from "react";
+import { encodePlusCode } from "@roam/platform-ops-ui";
 import type { StationDetail, StationListRow } from "./stationRegisterApi";
 import { nearbyStations } from "./stationRegisterApi";
 import { DrawerDetails } from "./DrawerDetails";
@@ -44,6 +45,7 @@ export function StationDrawer({
   const lng = Number(draft.lng ?? place?.lng ?? -76.8);
   const geofence = Number(draft.geofenceM ?? place?.geofence_m ?? row.geofence_m ?? 150);
   const pinState = String(draft.pinState ?? place?.pin_state ?? row.pin_state);
+  const plusCode = String(draft.plusCode ?? place?.plus_code ?? "");
 
   useEffect(() => {
     setDraft({});
@@ -138,7 +140,11 @@ export function StationDrawer({
               lng={lng}
               geofence={geofence}
               pinState={pinState}
-              onMove={(nextLat, nextLng) => patch({ lat: nextLat, lng: nextLng })}
+              plusCode={plusCode}
+              address={String(draft.address ?? (place?.address === "Street Address Required" ? "" : place?.address) ?? "")}
+              onAddress={(next) => patch({ address: next })}
+              onMove={(nextLat, nextLng) => patch({ lat: nextLat, lng: nextLng, plusCode: encodePlusCode(nextLat, nextLng, 11) })}
+              onPlusCode={(code, nextLat, nextLng, address) => patch({ plusCode: code, lat: nextLat, lng: nextLng, ...(address !== undefined ? { address } : {}) })}
               onGeofence={(meters) => patch({ geofenceM: meters })}
               onPin={(state) => patch({ pinState: state })}
               onAddAlias={(raw) => save({ addAlias: { raw, lat, lng } })}

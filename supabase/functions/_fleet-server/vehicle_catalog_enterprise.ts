@@ -4,6 +4,7 @@
  */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
+import { countListings } from "./listings_for_vehicle.ts";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -82,17 +83,13 @@ export async function countCatalogDependencies(
       .select("id", { count: "exact", head: true })
       .eq("vehicle_catalog_id", id)
       .is("component_id", null),
-    supabase
-      .from("part_fitment")
-      .select("id", { count: "exact", head: true })
-      .eq("vehicle_catalog_id", id),
+    countListings(supabase, [id]),
     findFleetVehiclesForCatalogIds([id]),
   ]);
   if (tpl.error) throw tpl.error;
-  if (fit.error) throw fit.error;
   return {
     maintenanceTemplates: tpl.count ?? 0,
-    partFitments: fit.count ?? 0,
+    partFitments: fit,
     fleetVehicles: fleet.length,
   };
 }
@@ -111,17 +108,13 @@ export async function countCatalogDependenciesForIds(
       .select("id", { count: "exact", head: true })
       .in("vehicle_catalog_id", ids)
       .is("component_id", null),
-    supabase
-      .from("part_fitment")
-      .select("id", { count: "exact", head: true })
-      .in("vehicle_catalog_id", ids),
+    countListings(supabase, ids),
     findFleetVehiclesForCatalogIds(ids),
   ]);
   if (tpl.error) throw tpl.error;
-  if (fit.error) throw fit.error;
   return {
     maintenanceTemplates: tpl.count ?? 0,
-    partFitments: fit.count ?? 0,
+    partFitments: fit,
     fleetVehicles: fleet.length,
   };
 }

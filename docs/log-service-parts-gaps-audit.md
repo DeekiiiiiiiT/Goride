@@ -73,7 +73,7 @@
   ER-M-55/55B20L (EFB) = bigger sister in the same B20L case. Toyota gives no battery part number (only the size).
 - Open: CI "migration parity" red = toll migration `20261117204932` live but not on main (not this work).
 
-## 0c2. LC-21 "I used a different …" (label search) — BUILT 20 Nov (local, not shipped; replaces LC-20 Brand/Part number boxes)
+## 0c2. LC-21 "I used a different …" (label search) — LIVE 20 Nov (main 412399b0; replaces LC-20 Brand/Part number boxes)
 - **Why (owner, Roomy battery run):** the battery in the car (Interstate PF-NS60L-5-INTL, Standard, B24L) isn't on the
   Roomy's list. Users don't know part numbers — they read the label. Roam must find it if known, else the user adds it
   and it goes to Dominion to confirm. The user is never told Roam is "looking it up".
@@ -104,7 +104,7 @@
   `PartPickLines.tsx`, `partPick(.test).ts`, `PartsThatFitPanel(.test).tsx`, `partsThatFit.ts`, `itemsUsed(.test).ts`,
   `LogServiceReviewStep.tsx`, `ServiceHistoryRowDialogs.tsx`, `LogMaintenanceServiceDialog.tsx` (LC-21 hunks only).
 
-## 0c3. LC-22 Warranty period + "Cost" label — BUILT 20 Nov (local, not shipped; Fleet only)
+## 0c3. LC-22 Warranty period + "Cost" label — LIVE 20 Nov (main 412399b0)
 - Ticking **Warranty** opens an in-app overlay (`WarrantyDialog.tsx`): 3 / 6 months, 1 year, 18 months, 2 / 3 years,
   Other (months/years); shows "Covered until …" from the service date. Saved in the job's values
   (`warranty_months`, `warranty_until`; `warrantyPeriod.ts`); the tick lands on Save, Cancel leaves it off, untick
@@ -113,7 +113,7 @@
 - Customer copy rule (owner 20 Nov): no text about Roam's database / lookups anywhere in Fleet (label search stripped).
 - Tests: warrantyPeriod.test.tsx (5); suite 242/242.
 
-## 0c4. LC-21b Dominion side of an added part — BUILT 20 Nov (local, not shipped)
+## 0c4. LC-21b/c Dominion side of an added part + auto-close — LIVE 20 Nov (main 412399b0; migrations run)
 - **Real run (owner, 20 Nov):** Roomy service 10 Mar 2026, J$12,000, Interstate PF-NS60L-5-INTL "Added by you", warranty
   6 months → outbox sent → request REQ-3381D6DD (origin service_log) open in Pending catalog.
 - **Gaps found:** (1) "A fluid, oil or size part" (FluidPartFlow) could not save without ticking a car, and ticking a car
@@ -140,7 +140,7 @@
 - **To release:** owner runs the migration + logbook line; deploy platform-catalog + fleet-core + fleet-ops; Fleet +
   Dominion (Vercel). Then: Pending catalog → Interstate → Added — pick the part → the Interstate row.
 
-## 0c5. Gemini model retired — FIXED 20 Nov (local, not shipped)
+## 0c5. Gemini model retired — LIVE 20 Nov (main 412399b0; catalog-research + platform-catalog now on the deploy list). Owner: Resume Dispatcher, reprocess the failed wheel-bearing job
 - Google retired `gemini-2.5-flash` for new users (research paused: gemini_http_404). One shared name now:
   `gemini_models.ts` GEMINI_TEXT_MODEL = `gemini-3.8-flash` (already used live by the vehicle document reader).
 - Switched: catalog research (`catalog_research_gemini.ts`), `gemini_service.ts` (4 calls), analyze-fleet /

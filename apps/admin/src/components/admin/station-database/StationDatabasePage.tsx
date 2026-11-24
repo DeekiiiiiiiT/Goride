@@ -1,5 +1,6 @@
 // Stitch: dominion-redesign/0a5e1746bbfb4439b9d433272b31376a
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { AddStationModal, useLearntVerifyModal } from "@roam/platform-ops-ui";
 import type { ResolutionQueueSubTab } from "../../fuel/stations/ResolutionQueueTab";
 import { ResolutionQueueTab } from "../../fuel/stations/ResolutionQueueTab";
 import { SilentStationAttachPanel } from "../fuel/SilentStationAttachPanel";
@@ -70,6 +71,16 @@ export function StationDatabasePage({
   const list = useStationList(filters);
   const detail = useStationDetail(openId);
   const mutations = useStationMutations();
+  const refreshAfterResolve = useCallback(async () => {
+    await list.refetch();
+  }, [list]);
+  // Unresolved stops loads once on mount; remount it after a Verify Location save so the stop drops off.
+  const [queueReloadKey, setQueueReloadKey] = useState(0);
+  const refreshAfterVerify = useCallback(async () => {
+    setQueueReloadKey((key) => key + 1);
+    await list.refetch();
+  }, [list]);
+  const learntVerify = useLearntVerifyModal({ onAfterSuccess: refreshAfterVerify });
   const rows = list.data?.rows || [];
   const summary = list.data?.summary;
   const openRow = rows.find((row) => row.id === openId) || null;
@@ -263,12 +274,19 @@ export function StationDatabasePage({
         </div>
 
         {tab === "resolution" ? (
-          <ResolutionQueueTab
-            defaultSubTab={defaultResolutionSubTab}
-            enableSilentAttach
-            silentAttachPanel={<SilentStationAttachPanel embedded />}
-            fuelReview={fuelReview}
-          />
+          <>
+            <ResolutionQueueTab
+              key={queueReloadKey}
+              defaultSubTab={defaultResolutionSubTab}
+              enableSilentAttach
+              silentAttachPanel={<SilentStationAttachPanel embedded />}
+              fuelReview={fuelReview}
+              onVerifyLocation={learntVerify.handleVerifyLearntLocation}
+              onPromoted={refreshAfterResolve}
+              onResolved={refreshAfterResolve}
+            />
+            <AddStationModal onAdd={learntVerify.onAddForModal} {...learntVerify.verifyModalProps} />
+          </>
         ) : (
           <div className="bg-white rounded-2xl shadow-card border border-slate-200/80 flex flex-col overflow-hidden">
             <div className="p-4 bg-white border-b border-slate-100">

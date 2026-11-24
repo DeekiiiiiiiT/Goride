@@ -164,6 +164,12 @@ export function decodePlusCode(code: string): { lat: number; lng: number } | nul
   };
 }
 
+/** Google Maps often uses a comma between code and town: "VQ85+WMP, Hayes" */
+export function normalizeCompoundPlusInput(input: string): string {
+  const trimmed = input.trim();
+  return trimmed.replace(/^(\S+\+\S+)\s*,\s*/i, '$1 ');
+}
+
 /**
  * Validate a Plus Code string
  * Supports full codes (e.g. "7795X36X+5W") and compound codes (e.g. "X36X+5W Portmore")
@@ -173,7 +179,7 @@ export function isValidPlusCode(code: string): boolean {
   if (!code || typeof code !== 'string') return false;
   
   // Extract code portion (before any space for compound codes)
-  const codePart = code.trim().split(/\s+/)[0].toUpperCase();
+  const codePart = extractCodePortion(code);
   
   // Must contain exactly one separator
   const sepIdx = codePart.indexOf(SEPARATOR);
@@ -208,7 +214,7 @@ export function looksLikePlusCodeAddress(addr: string): boolean {
  */
 export function isFullPlusCode(code: string): boolean {
   if (!isValidPlusCode(code)) return false;
-  const codePart = code.trim().split(/\s+/)[0].toUpperCase();
+  const codePart = extractCodePortion(code);
   const sepIdx = codePart.indexOf(SEPARATOR);
   return sepIdx === SEPARATOR_POSITION;
 }
@@ -218,7 +224,7 @@ export function isFullPlusCode(code: string): boolean {
  * e.g. "X36X+5W Portmore" → "X36X+5W"
  */
 export function extractCodePortion(code: string): string {
-  return code.trim().split(/\s+/)[0].toUpperCase();
+  return normalizeCompoundPlusInput(code).split(/\s+/)[0].toUpperCase();
 }
 
 /**
@@ -327,7 +333,7 @@ export function recoverShortCode(shortCode: string, refLat: number, refLng: numb
  * Returns null if there's no locality portion.
  */
 export function extractLocality(compoundCode: string): string | null {
-  const trimmed = compoundCode.trim();
+  const trimmed = normalizeCompoundPlusInput(compoundCode);
   const parts = trimmed.split(/\s+/);
   if (parts.length <= 1) return null;
   // Everything after the code portion is the locality

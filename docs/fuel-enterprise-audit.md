@@ -1,122 +1,168 @@
 # Fuel — Enterprise Audit (plan)
 
-**Rev 2 · 21 Nov 2026 · Status: DRAFT for review round 1.** Rev 2: forward only (owner) — nothing here changes an already reconciled week; F-02 (re-working closed weeks) removed. New audit, its own file (asked 14 Nov 2026; parked in `docs/week-reconciliation-architecture-audit.md` → "Next audits"). Method: `docs/how-we-build-playbook.md` (Data → Server → Screens → Tests; one chosen fix per finding; done-tests before building; review round 1 → Stitch screens → review round 2 → build).
+Trimmed 23 Nov 2026: finished work is one line each; the full earlier text is in git history
+(commit `ea104e67` and before, `C:/Roam/Goride-fuel/docs/fuel-enterprise-audit.md`).
+
+## 0. HANDOFF — read this first (updated 23 Nov 2026, ~13:30 UTC)
+
+**Goal (one sentence):** every week, each fuel dollar the fleet spends ends with the right person paying it,
+by a rule the owner set and can trace line by line, from the fills the driver scanned.
+
+**Who:** one fleet company today (Kenny Gregory Rattray, Toyota Roomy 5179KZ, petrol). Build for every company.
+
+**Where things are**
+- Code: worktree `C:/Roam/Goride-fuel` (branch `fuel-f27-f31-f32a`). Its HEAD = `origin/main` = `ea104e67`.
+  Everything below is **pushed and live**. Nothing is waiting in the worktree except untracked docs.
+- This plan's master copy: `C:/Roam/Goride/docs/fuel-enterprise-audit.md` (uncommitted, branch `parts-auto-match`).
+  Copy it into the worktree's `docs/` after editing.
+- Engine: `packages/fuel-core` (v2.2 charges today; v3 `fuelEngineV3.ts` runs beside it as a preview).
+  Server: `supabase/functions/_fleet-server/fuel_*`. Week row: `public.fuel_reconciliation_period`;
+  money: `public.fuel_week_snapshot`; lines: `fuel.week_lines` (only via `public.fuel_*_week_lines` RPCs).
+
+**What is live (all on main)**
+- Engine v3 + fuel lines + statements-before-lock + nightly checks + rules table (`fuel.policy_scenarios`),
+  migrations through `20261123125453`. Switch `fuel_engine_v3` is **OFF**: weeks are charged the old way
+  (v2.2) and show the new way as "Preview — not charged".
+- All 17 Stitch screens (Part J of the old plan): Week Reconciliation step 5 Fuel in five parts
+  (Fuel checks · Disputes · Fuel policy · Distance and who pays · Finalize), the Driver Settlements
+  "Fleet vs Driver" Fuel card (lines), Fleet Policy Rules (six kinds, versions, Add a version).
+  New routes: `GET /fuel/periods/:id/checks`, `POST /fuel/flags/disposition/reopen`,
+  `GET /fuel/driver-week-lines`, `GET /fuel/brain-policy`.
+- 23 Nov fixes: view `public.fleet_fuel_entries` gained `source` (every fuel save had failed 00:39–12:57 UTC;
+  only the owner's statement upload was hit); card statement lines (`importSource = jaa_raw`, staff, not a
+  driver) skip the "does this fill look right" check (`ea104e67`, deployed by Cursor) — the 18 Nov 5179KZ
+  **diesel** line had been refused as "price off the typical price".
+
+- 23 Nov (during the 16–22 Nov test, `39af6d0f`): toll `week_result_live` counts carried dispute results in a
+  driver's owes (Kenny J$0 → J$120; migration `20261123174320`); Disputes blue box removed. Local Fleet app now runs
+  from `C:/Roam/Goride-fuel` with its own `pnpm install` (Deno had broken the shared node_modules).
+  Later 23 Nov (LIVE but NOT on GitHub — owner asked not to push yet): migration `20261123182545` (carried
+  dispute/take-back/correction parts + `carriedOwesMinor` on week result and driver toll statements; only
+  16 Nov restated), fleet-core edge deployed by hand, recon-worker Cloud Run rebuilt by owner (rev 00147);
+  TOLL_IDENTITY_UNBALANCED cleared. Uncommitted in Goride-fuel: that migration + tests, finance-core
+  closeInvariants carried subtract, fleet-core bundle, Tolls screen eye-per-driver + Driver pays tile.
+  ANY push to main before these are committed would roll the server back — commit them in the next push.
+  Open: Uber J$80 late tip (22 Oct trip, `payments_order` "trip fare adjust order") looks unsaved — check at step 6.
+  `toll_dispute_commands_test` p02-w and `toll_screen_reads_disputes_test` "6 rider command" fail on today's date
+  (pre-existing, date-driven).
+
+**Where the owner is right now**
+- 16–22 Nov gas-card statement uploaded; both lines saved (18 Nov diesel, 19 Nov J$5,000), Kenny's scans priced.
+- Next: the owner uploads the other files for **16–22 Nov** and runs the week through Week Reconciliation
+  as the first real end-to-end test of the new screens. **Stop before "Finalize fuel"** and decide step 1 below.
+- Ask the owner / Kenny / Roam why a petrol Roomy has a **diesel** card line on 18 Nov (Jampet).
+
+**Left, in order**
+1. **Owner decides** whether 16–22 Nov locks the new way: if yes, switch `fuel_engine_v3` on (for every
+   company — owner rule) **before** Finalize fuel; locking posts real driver charges. Check the week's
+   "Distance and who pays" preview first (old vs new driver charge).
+2. **After the first real lock:** check live — fuel lines written (`fuel_week_lines_list`), the driver's
+   statement equals the lines (the Fuel card says "Matches the fuel statement"), nightly check green next
+   morning, no server errors. Then re-run the forward-only sweep (second query in
+   `supabase/tests/fuel_forward_only_sweep.sql`; every value must match its comment) — done-test 10.
+3. **F-28:** make sure `recon_v2` is on for every company, then delete the old close path (Driver
+   Settlements → Close Week and the Fuel page's own reconciliation, `App.tsx` ~171–181, 569–575) so
+   `/close-week` and `/fuel-reconciliation` open Week Reconciliation (done-test 19).
+4. **F-25 rest:** step 5 + the lock blocker are built; still to do: remove the Review Queue "Awaiting
+   statement" tab (`FuelReimbursementTable.tsx`); Fuel Cards and Transaction Logs keep a read-only chip that
+   opens the week (done-test 16).
+5. **Done-tests still partial/missing** (Part F below).
+6. **e2e:** `e2e/fuel-recon-wizard.spec.ts` (rewritten for step 5 + Fleet Policy) has never run: it needs a
+   test login (`E2E_FLEET_EMAIL`/`E2E_FLEET_PASSWORD`, not the owner's — it has the extra sign-in step)
+   and `E2E_FUEL_WEEK`, against `FLEET_BASE_URL`. Owner found it a waste of time; do it only if asked.
+7. **Small UI gaps:** "Open car" in the Car economy panel is hidden (no link from Week Reconciliation to the
+   car's km/L tab yet).
+8. **Later:** F-29 re-check in Feb 2027 (delete tables still at 0 rows); Q2 Amber Connect tracker (Part G).
+9. **When no open v2.2 week is left:** delete the v2.2 preference chain and rebuild (F-24 note) and the
+   old-rule tests listed in F-20.
+
+**CI:** red at "Ban bare @roam imports in fleet edge graph" (`scripts/check-fleet-edge-roam-imports.mjs`,
+`apps/fleet/src/services/api.ts` etc.) — pre-existing at `cd9dadf6`, not fuel; deploys still work. The
+earlier "Dominion Stitch fidelity" failure was fixed `c12079d7`. While CI stops early, later steps are
+skipped: after a fuel push run by hand `pnpm --filter @roam/fuel-core typecheck`,
+`pnpm --filter @roam/fleet typecheck:money`, the "Deno test fuel recon Rev 3 controls" list in
+`.github/workflows/ci.yml`, and `pnpm --filter @roam/fleet build`.
+
+**Outside this audit (owner told 22 Nov):** views `public.delivery_courier_roam_tags` and
+`public.delivery_coverage_cells` are readable logged-out with no row security (Rush/Delivery; own check).
+
+**Rules and traps**
+- Tell the owner before any push or live write. Migrations: `npx supabase migration new <name>` (real UTC
+  date); apply with `npx supabase db push --remote` (needs `--yes` + owner OK). After a push, read the edge
+  deploy log for `Deployed Functions on project ***: fleet-fuel`.
+- Adding a column to a `fleet.*` table: also add it to its explicit-column `public.*` view in the same
+  migration, and check live with a PostgREST select of the column.
+- Never `git stash`; never `pnpm install` in the worktree (node_modules are junctions). Recon Deno tests need
+  LF in the worktree; `fuel_controller.tsx` is stored CRLF — keep it. `DriverSettlementsPage.tsx` holds
+  non-UTF-8 bytes: edit it as latin1 and check `git diff --stat` after every scripted edit.
+- Revert timestamp-only `routes.generated.json` changes after `node scripts/edge-route-manifest.mjs --all`.
+- Screen checks without the test copy: a temporary harness html + tsx in `apps/fleet` that swaps `api`
+  methods for sample data, Playwright via a temp config on port 5199; delete it all afterwards.
+- Plain words to the owner; one fix per finding; forward only (weeks ≤ 9 Nov never change).
 
 ---
 
-## START HERE
+## Decisions made while building the screens (keep)
 
-**One sentence:** every week, each fuel dollar the fleet spends ends with the right person paying it, by a rule the owner set and can trace line by line, from the fills the driver scanned.
-
-**Today in one paragraph:** the driver scans the odometer, then the pump, at every fill (gas card or cash from earnings). Week Reconciliation step 5 works out the week per car: kilometres by purpose (Uber trips, driving to pickups, personal, company errands), a cost for each purpose, and the company / driver split from the fleet's Fuel Policy rule. It then locks the week and writes the driver's fuel charge into settlement. The engine is `packages/fuel-core` (`fuel-chain-v2.2`, ~15,800 lines); the server is `supabase/functions/_fleet-server/fuel_*`; the week rows are `public.fuel_reconciliation_period` and `public.fuel_week_snapshot`.
-
-**Scope:** (1) the whole fuel system, (2) the **Fuel Policy** section (Fleet Policy Configuration → Rules / Schedule), (3) **Telematics later**: built so real litres and odometer from a tracker can replace the estimates without a rebuild. Tolls are not in scope (done: `docs/toll-architecture-gap-audit.md`).
-
-**Who:** one fleet company today (Kenny Gregory Rattray, Toyota Roomy 5179KZ). Every finding is written for every company.
-
-**Forward only (owner, 21 Nov 2026):** this audit never touches legacy data. Every week already reconciled (locked or closed, up to and including the week of 9 Nov 2026) keeps its numbers, its snapshot, its statements and its fill records exactly as they are: no re-working, no corrections, no back-filled lines, no relinking of old fills. The new rules start with the first week not yet locked when they go live, and apply to fills from that week on.
-
-**Rules this plan keeps:** the driver's scan is the evidence (no receipts); a locked or closed week's numbers never change; every money line must be traceable to a rule and a fill.
-
----
-
-## Part A — What the live data shows (read 21 Nov 2026; findings only — these weeks stay as they are)
-
-**A1. Nine weeks of Kenny's fuel (Rideshare), from `fuel_reconciliation_period`:**
-
-| Week | Spend | Company | Driver | Company + driver vs spend | Gap ("unexplained") | Gap reviewed before lock |
-|---|---|---|---|---|---|---|
-| 14 Sep | 30,343.70 | 27,676.92 | 2,666.78 | 100.0% | +3,624.88 | yes |
-| 21 Sep | 31,000.00 | 27,718.03 | 3,281.97 | 100.0% | −1,815.04 | **no** |
-| 28 Sep | 28,000.00 | 25,243.31 | 2,756.69 | 100.0% | +1,063.57 | yes |
-| 5 Oct | 28,350.00 | 25,270.51 | 3,930.38 | **103.0%** | −4,044.44 | **no** |
-| 12 Oct | 19,000.00 | 17,191.88 | 1,808.12 | 100.0% | 0.00 | no (none needed) |
-| 19 Oct | 27,650.00 | 24,567.70 | 3,082.30 | 100.0% | −38.47 | **no** |
-| 26 Oct | 29,000.00 | 25,135.89 | 3,864.11 | 100.0% | +797.54 | yes |
-| 2 Nov | 23,000.00 | 21,020.74 | 1,979.26 | 100.0% | +954.93 | yes |
-| 9 Nov | 28,800.00 | 27,430.70 | 4,081.36 | **109.4%** | −3,122.62 | **no** |
-
-**A2. Car economy, fill to fill (5179KZ, `fleet.fuel_entries`, card fills counted once):** 11.3 · 11.8 · 13.8 · 12.4 · 11.5 · 12.0 · 11.7 · **13.7** km/L (weeks of 21 Sep → 9 Nov). The engine prices km at the car's *usual* economy (`referenceKmPerLiter`, rolling); in 9 Nov's snapshot the per-fill "efficiency" ranges from 9.8 to 15.8 km/L.
-
-**A3. How 9 Nov was priced (snapshot `money`):** Uber trips 1,617 km → J$27,791.44; to pickups 212 km → J$3,720.62; personal 0; commute J$410.56; "miscellaneous" **−J$3,122.62**. Trips + pickups = J$31,512.06 against J$28,800 bought. The snapshot itself notes: *"Trip GPS km (2,079) exceeds odometer km (1,821) by >5% — deadhead/personal split is unreliable."*
-
-**A4. Kenny's rule** (`fuel_scenario:86c2f765…`, "Standard Fleet Rule (Auto-Generated)", stored in the shared key-value table `kv_store_37f42386` next to other companies' rules): company covers Uber trips 80%, pickups 50%, personal 0% (driver pays all), company errands 100%, other 50%. At the engine's prices that is about J$5,558 + J$1,860 = **J$7,418** for the driver; the week charged **J$4,081.36**. The screen does not show how the charge comes from the rule.
-
-**A5. Fill records:** every gas-card fill exists twice: a scanned `Manual_Entry` and the card statement's `Card_Transaction` with the same odometer (the engine de-duplicates; reports must too). Two card fills on **18 and 19 Nov** are stored at **J$0.00 with no litres** (scanned, waiting for the card statement). 8 → 10 Nov shows **429 km with no fill** (Kenny's usual is 185–340 km between fills).
-
-**A6. Locking:** 9 Nov was locked with its gap unreviewed. Once locked, the gap review is refused (`period_locked`), so step 5 could not complete. The lock did not write Kenny's fuel week statement (`ledger.week_statements` kind `fuel`); the close check then raised `FUEL_STATEMENT_MISSING`.
+- Fuel checks: "Add a missed fill" with Gas card has no amount box (the statement prices it — never counted
+  twice); Cash asks amount **and litres**. "Upload card statement" goes to step 1. Old check panels stay inside the part.
+- Finalize: in Week Reconciliation the tick box "I checked the warnings for this week." is always shown and
+  required; the "Accept unusual fills" form shows in Finalize. A refused lock reads the week's saved
+  `fuel_seal_error` and names the drivers.
+- Distance and who pays: "Mark reviewed" only when a review is needed; "Mark readings reviewed" opens Fuel checks.
+- Driver Settlements: the Fuel card replaces the single "Fuel deduction" row; old-way weeks show one
+  "Fuel deduction (locked before fuel lines existed)" row; the Reversed/Current tag sits under each row.
+- Fleet Policy: "Add a version" sets the split on the version itself (template "Edit splits" untouched);
+  a date that would change a locked week is refused in the dialog (same `closedScheduleChangeError` the
+  server enforces). No "No changes / Discard / Save" footer (every change saves in its dialog). "How Roam
+  sorts the km" leaves out the industry fallback % and cross-check points.
+- Pills use full names: Fuel checks · Disputes · Fuel policy · Distance and who pays · Finalize.
 
 ---
 
-## Part B — Problems found (each with one fix)
+## Part B / I — Findings
+
+**Done** (built, tested, live): F-01, F-03, F-04, F-05, F-06, F-07 (narrowed), F-08, F-09, F-10, F-11,
+F-12, F-13, F-14, F-15, F-16, F-18, F-21, F-22, F-23, F-24, F-26, F-27, F-30, F-31, F-32.
+**Settled, no code:** F-02 (closed weeks not re-worked — owner, forward only), F-17 (the rolling credit
+stays out of the identity; the first three weeks after the switch carry v2.2 credits that bill J$0),
+F-19 (fuel lines in bigint minor units; settlement lines in J$, converted once at posting).
+
+**Open:**
 
 | # | Problem | Fix |
 |---|---|---|
-| **F-01** | **The engine charges for fuel that was never bought.** Every km is priced at the car's *usual* economy × the real price per litre. When the car does better than usual (5 Oct, 9 Nov), the purposes add up to more than was spent (103%, 109.4%) and the driver's share is worked out on money that was never spent. When it does worse, the gap goes to "unexplained". | **Price from the real spend.** Per car per week: cost per km = fuel bought ÷ odometer km. Each purpose = its km × that cost per km, so the purposes always add up to exactly what was bought. "Usual economy" is kept only as a **check** (flag F-08), never as money. "Over-explained" stops existing as money; "unexplained" becomes only km nobody can explain. Bump `FUEL_ENGINE_VERSION`. |
-| **F-02** | **Closed weeks were charged on these prices** (5 Oct ≈ J$204 over, WRA-58). | **Not re-worked (owner, forward only).** Closed weeks keep their figures; F-01 applies from the first week not yet locked. |
-| **F-03** | **The driver's charge can't be traced to the rule.** 9 Nov: the rule on screen gives ≈ J$7,418, the week charged J$4,081.36, and no screen shows the steps between. Fuel money lives in one JSON bundle per week (`fuel_week_snapshot.money`), not in lines like tolls v2. | **Fuel lines.** Locking writes one line per car × purpose: km, cost per km, the rule's driver %, and the driver amount. The driver's charge is the sum of their lines and nothing else. Lines are written once at lock and kept; a reopen marks them reversed and a re-lock writes new ones (same pattern as `toll.allocations` / `ledger.entries`). Step 5 and Driver Settlements show these lines. |
-| **F-04** | **A week can lock with its gap unreviewed, and then the review is refused** (9 Nov; 21 Sep, 5 Oct and 19 Oct are locked unreviewed too). | Lock refuses while a gap above J$1 is unreviewed ("Review the gap first"). The gap review stays possible on a locked week as a note only (it never changes money). |
-| **F-05** | **Locking can leave the driver without a fuel statement** (9 Nov), so the week close blocks on `FUEL_STATEMENT_MISSING`. | Lock writes the driver statements in the same step as the lock. If a statement can't be written, nothing locks and the screen says which driver failed. |
-| **F-06** | **Locked weeks are re-judged by today's rules** (WRA-49): an old locked week shows "Numbers don't balance". | A locked week shows only what was saved at lock (its lines, F-03, and its engine version). No screen re-runs the engine on a locked week. |
-| **F-07** | **Each gas-card fill is stored twice** (scan + card line, same odometer). | One fill per real fill. A card statement row **attaches** to the scanned fill (same car, same day, odometer / amount within tolerance) instead of adding a second fill. Only fills in weeks not yet locked are linked; fills in reconciled weeks stay as stored. A card line with no scan stays its own fill, flagged "no scan". |
-| **F-08** | **A fill the driver didn't scan is invisible** (8 → 10 Nov: 429 km with no fill). | Flag **"Possible fill not scanned"** on a stretch longer than the car's range at its usual economy and tank size, or when the week's economy is more than 15% better than its usual. The flag names the stretch (dates, odometer from → to). The owner either adds the fill (date, amount, odometer) or closes the flag with a note. Neither changes money by itself. |
-| **F-09** | **Card fills sit at J$0.00 until the card statement arrives** (18 and 19 Nov). | A scanned card fill with no amount shows as **"Waiting for the card statement"**. The week can't lock while one is waiting. When the statement arrives, its line attaches to the fill (F-07). |
-| **F-10** | **Uber's trip km can exceed the odometer** (9 Nov: 2,079 vs 1,821 km), which makes the pickup / personal split unreliable. | The odometer is the total. Trip km are capped to the odometer distance; the cap is shown on the week ("Uber's km were 258 km more than the odometer; trip km capped at 1,821"). |
-| **F-11** | **The Fuel Policy rule lives in a shared key-value table** next to other companies' rules, with no history. Weeks don't record which version of the rule they used. | Rules move to proper tables, one company per row, with "applies from" dates; the first version is today's rule, applying from the first week not yet locked. Each week locked from then on records the rule version it used. Changing a rule never changes a locked week. |
-| **F-12** | **"Change the leftover split for this week" appears when there is nothing to split** (over-explained weeks), and saving it then charges J$0. | After F-01 there is no over-explained case. The section shows only when a week has km nobody can explain, and it says how much is there. |
-| **F-13** | **Nothing tracks the estimate's gap week to week** (economy drift, fills not scanned, km gaps). | The week list shows each car's economy (km/L) per week, against its usual, with F-08 flags. A car outside ±15% three weeks running raises an alert. |
-| **F-14** | **Telematics can't plug in later without a rebuild** ("Coming soon" card). | Every km and litre carries where it came from: `scan`, `card_statement`, `platform` (Uber km), `manual`, or later `telematics`. The engine takes the best source per car per week. Adding a tracker later means adding a source, not changing the money rules. Nothing is built for a tracker now. |
+| **F-20** | Tests pin the old v2.2 rule (`personalAllowance.recon.test.ts:182-188`, `fuelFinalizeGating.test.ts:187-193`, `fuelReconComponents.test.ts:25`, `evaluateFuelWeekClosable.test.ts:34-41`, `fuel_week_closable_gate_r12.test.ts:17-33`). | Change them in the same round that removes v2.2; a red one there is the old rule being removed on purpose. |
+| **F-25** | "Waiting for the card statement" also lives on the Review Queue tab "Awaiting statement" (`FuelReimbursementTable.tsx`), Fuel Card transactions sheet and Transaction Logs. | Step 5 + lock blocker are built. Remove the Review Queue tab; the other two keep a read-only chip that opens the week. |
+| **F-28** | Two ways to close a week while a company's `recon_v2` is off. | `recon_v2` on for every company; delete the old close path. |
+| **F-29** | `fleet.fuel_disputes`, `fleet.fuel_adjustments`, `public.fuel_exception_assignments` have 0 rows. | Keep; re-check Feb 2027 and delete what is still unused. |
 
----
+## Part F — Done-tests not yet passed
 
-## Part C — Data
+Passed: 1, 2, 3, 8, 9, 12, 13, 14, 15, 17, 18, 20, 21a, 21b (server + dialog).
 
-- **Fills:** one row per real fill (F-07), with the car, driver, when, odometer, litres, amount, payment (card / cash from earnings), `source` (F-14), and the attached card statement line if any. The scan photos stay as evidence.
-- **Fuel lines** (F-03): new table (weeks locked after go-live only; no lines are back-filled for reconciled weeks), one row per car × purpose × locked week: km, cost per km, the rule's driver %, the driver amount, the company amount, the rule version (F-11), the engine version, and `reversed_by` for reopens. Rule: a week's lines add up to exactly that week's fuel bought (check fails otherwise).
-- **Fuel rules** (F-11): one row per company per rule version, with "applies from". Moved out of `kv_store_37f42386`; the key-value copy is read once by the migration and kept unchanged as history.
-- **Flags** (F-08, F-09, F-10, F-13): one row each, with what it found and how it was closed (fill added / note).
-- **Checks that fail if broken** (weeks locked after go-live): company + driver = fuel bought for every locked week; every locked week has driver statements; every locked week has lines; no fill is counted twice; a locked week's lines never change.
+| # | Done-test | Have |
+|---|---|---|
+| 4 | Lock with a recommended-only gap charge → refused, naming the car; after review it locks and the statement exists. | partial |
+| 5 | A statement can't be written → nothing locks; the screen names the driver (screen 11 built). | partial — no rollback test |
+| 6 | Card statement line 10 Nov J$5,000 at 197,043 km attaches to the scan; the week counts J$5,000 once; one evidence row. | partial — not end-to-end |
+| 7 | 18 Nov card fill with no statement → "Waiting for the card statement", can't lock; statement arrives → priced, lock allowed. | screens built; check on the 16–22 Nov week |
+| 10 | After go-live every week up to 9 Nov shows the same numbers; no new line for them. | re-run the sweep SQL after the first real lock |
+| 11 | Reopen → lines reversed; re-lock writes new lines; closed weeks unchanged. | partial — no line-level test |
+| 16 | F-25: waiting fills only in step 5 (+ read-only chips); the Review Queue tab is gone. | missing |
+| 19 | F-28: old close path gone; `/close-week` and `/fuel-reconciliation` open Week Reconciliation. | missing |
+| 21b live | Reopen a locked v3 week live → reversal rows, nothing deleted, fills back to Pending, new lines on re-lock. | after the first real v3 lock |
 
-## Part D — Server
-
-- Engine `fuel-chain-v3`, used only for weeks not yet locked (a reconciled week is never re-run, F-06): spend-based pricing (F-01), odometer cap (F-10), source per km / litre (F-14), flags (F-08, F-13).
-- **Lock** (one step): refuses on an unreviewed gap (F-04), a fill waiting for its card statement (F-09) or an open "fill not scanned" flag; writes lines (F-03) and driver statements (F-05) together; records rule and engine versions.
-- **Reopen**: marks the lines reversed and writes the reversal into the open week, as today.
-- **Card statement import**: attaches to scanned fills (F-07, F-09).
-- **Fuel rules**: read / save with "applies from" (F-11).
-- Each action has a test.
-
-## Part E — Screens
-
-Screens to design in Stitch after review round 1 (look only; content from this plan):
-1. **Step 5 Fuel, week view:** per car, km by purpose, cost per km (from the real spend), the driver's lines and total, flags.
-2. **"Possible fill not scanned"** card (F-08): the stretch and the two actions, Add fill / Close with a note.
-3. **"Waiting for the card statement"** row (F-09).
-4. **Driver Settlements → fuel lines** for a week (F-03).
-5. **Fuel Policy → Rules** with "applies from" and history (F-11).
-6. **Car economy by week** (F-13).
-
-## Part F — Done-tests (plain words, written before building)
-
-1. The first week after go-live, a car that bought J$28,800: company + driver = J$28,800.00 exactly; no over-explained; Kenny's charge is the sum of his lines and each line shows km × cost per km × 20% or 50%.
-2. A car beats its usual economy by 15% → nobody is charged for fuel that wasn't bought; a "fill not scanned" flag appears on the longest stretch.
-3. 8 → 10 Nov (429 km, no fill) → the flag names 8 Nov 196,429 km → 10 Nov 196,858 km. Adding a J$4,000 fill on 9 Nov closes it and the week re-works.
-4. Lock with an unreviewed J$500 gap → refused "Review the gap first"; after the review it locks and Kenny's fuel statement exists.
-5. Lock when a statement can't be written → nothing locks; the screen names the driver.
-6. A card statement line for 10 Nov J$5,000 at 197,043 km → attaches to the scanned fill; the week counts J$5,000 once.
-7. 18 Nov scanned card fill with no statement yet → "Waiting for the card statement"; the week can't lock; the statement arrives → priced, lock allowed.
-8. Uber km 2,079 vs odometer 1,821 → trip km capped at 1,821 with the note.
-9. Change the rule from 20% to 25% "applies from 23 Nov" → weeks before 23 Nov keep 20%; their lines don't change.
-10. Go-live → every week up to 9 Nov 2026 shows exactly the same numbers, statements and fills as before; no correction and no new line exists for them.
-11. Reopen a locked week → its lines are reversed in the open week; re-lock writes new lines; the closed weeks' figures are unchanged.
-12. A second company with its own rule → its weeks use only its rule.
-
----
-
-## Part G — Owner questions (working default until answered)
+## Part G — Owner questions
 
 | # | Question | Working default |
 |---|---|---|
-| Q1 | Tank size for the Toyota Roomy (for F-08's range check)? | 36 L until the car record has it (from memory, not checked against Toyota's spec). |
-| Q2 | The car has an **Amber Connect** GPS tracker (expense "Vehicle GPS"). Can it give odometer / trips through an API? (F-14 later) | Not used now; F-14 keeps the door open. |
-| Q3 | Personal km: today the week shows 0 km personal. Should the driver mark personal driving in the driver app, or does it come only from km nobody can explain? | Only from km nobody can explain (as today). |
+| Q2 | The car has an **Amber Connect** GPS tracker. Can it give odometer / trips through an API? | Not used now; `source` (F-14) keeps the door open: add a `telematics` reader, the engine takes the best source per car per week. |
+| Q5 | Gap-charge dual control allows one person to recommend and approve on a solo fleet. | Keep one person allowed; the approve action records who and when. |
+
+## Linked audits (not repeated here)
+
+Fuel price engine (`docs/fuel-price-engine*`), fuel stop location (`docs/fuel-stop-location-resolution-audit.md`),
+split fills (`docs/fuel-split-statement-derived-audit.md`, `docs/fuel-split-station-and-awaiting-queue-audit.md`),
+Roam fuel card statement (`docs/roam-fuel-card-statement-audit.md`), service-line split (`FUEL_SERVICE_LINE_SPLIT_AUDIT.md`),
+research engine (owns the Dominion pending-parts screens).
