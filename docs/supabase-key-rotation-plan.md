@@ -929,35 +929,56 @@ only place that reads the key for the running app — `publicAnonKey` is exporte
    machine).
 4. Re-check each app loads, signs in, and calls one function.
 
-#### Phase 5 execution — started, blocked on the deploy step (24 Nov 2026)
+#### Phase 5 execution — 6 apps live on the publishable key, 5 blocked by the Ignored Build Step
 
-**`apps/haul` / `roam-haul`: the env var is in place.** `VITE_SUPABASE_PUBLISHABLE_KEY` was added to
-**Production** (Config, 46 chars) and `VITE_SUPABASE_ANON_KEY` is still there. Nothing was removed.
-**Resume by deploying haul — do not re-add the variable.**
+Deploys now go through **Vercel Deploy Hooks**, which build from GitHub `main` on Vercel's servers — no
+upload quota, no Windows symlinks, and the CLI is not involved. Hook URLs are read from the API and
+never printed.
 
-The deploy itself is blocked from this machine, for two separate reasons:
+| App | Vercel project | Env added | Build | site 200 | key in bundle | logged-out call |
+|---|---|---|---|---|---|---|
+| `apps/haul` | roam-haul | yes | READY 42 s | pass | pass | **200** |
+| `apps/plug` | roam-plug | yes | READY 42 s | pass | pass | **200** |
+| `apps/admin` | roam-dominion | yes | READY 61 s | pass | pass | **200** |
+| `apps/driver` | roam-driver | yes | READY 50 s | pass | pass | **200** |
+| `apps/dash-merchant` | roam-rush-partner | yes | READY 61 s | pass | pass | **200** |
+| `apps/fleet` | roam-fleet | yes | READY 81 s | pass | pass | **200** |
 
-1. **`vercel --prod` at the repo root uploads the whole monorepo (251 MB) and the free plan's daily
-   API upload quota is spent** — `Too many requests - try again in 24 hours (more than 5000, code:
-   "api-upload-free")`. One root deploy is enough to exceed it, so repeating this eleven times is not
-   viable even after the reset.
-2. **Deploying from the app directory does not work either**: every project sets *Root Directory* to
-   `apps/<app>`, so a scoped upload looks for `apps/haul/apps/haul` —
-   `The specified Root Directory "apps/haul" does not exist`.
-3. **The prebuilt route (the one that only uploads the build output) fails on Windows**: `vercel build`
-   cannot create the symlinks its builder cache needs —
-   `EPERM: operation not permitted, symlink '..\..\~npm~@emnapi+core…'`.
+`roam-plug` had **no deploy hook**; one was created (`main-path-deploy`, ref `main`).
 
-What unblocks it, in order of preference:
+**Edge logs since the first deploy** (`function_edge_logs` from 15:18 UTC): **97 × 200, 17 × 204, 4 × 400
+— no 401 and no 500.** The four 400s are a two-second burst at 15:33 on `GET` (request validation), not
+auth and not server errors.
 
-- **Windows Developer Mode on** (Settings → Privacy & security → For developers), then per app
-  `vercel build --prod` + `vercel deploy --prebuilt --prod`. That uploads only `.vercel/output`
-  (tens of files) instead of 251 MB, so the daily quota is not a problem after it resets.
-- **Or deploy from git** (Vercel dashboard / the existing deploy hooks) — that needs the Phase 5
-  commit pushed, which is the owner's call; nothing here pushes.
-- Root-dir deploys after the quota resets remain impractical (251 MB each).
+How each check works: the site returns 200 · the deployed JS embeds `sb_publishable_` **verbatim** (the
+client lives in a lazy chunk, so the check crawls the chunk graph, not just the `<script src>` tags) · a
+logged-out function call with **`apikey` only** returns 200.
 
-No other app was touched: haul got its variable, the deploys stopped there as instructed.
+#### The five that could not build
+
+`enterprise`, `rides-passenger`, `dash-courier`, `dash-customer`, `rush-command`.
+
+Their hook deploys come back **CANCELED**: *"The deployment was canceled because the Ignored Build Step
+command returned exit code 0."* `scripts/vercel-should-build.mjs` diffs `VERCEL_GIT_PREVIOUS_SHA..HEAD`
+against the app's paths, and for these five the last deployment was itself **canceled at HEAD** (the
+push), so the diff is empty and the build is skipped. Rebuilding the existing deployment reproduces it.
+
+Two facts worth acting on:
+
+- the project-level override is **not settable** — `PATCH /v9/projects` rejects both `ignoreCommand`
+  and `commandForIgnoringBuildStep` with `bad_request`, so the skip cannot be lifted from the API;
+- **`packages/api-client/**` is in no app's path list** in `scripts/vercel-path-deploy-lib.mjs`, so the
+  very change that matters here (the shared client) triggers no rebuild. The six apps above built only
+  because their own `.env.example` / `vite-env.d.ts` changed in the same push.
+
+To unblock, either **(a)** turn off *Ignored Build Step* for those five projects in the Vercel dashboard
+and re-trigger their hooks, or **(b)** push a change inside each app directory — ideally also adding
+`packages/api-client/` to every app's paths so shared client changes rebuild the apps that use it. Both
+need the owner; nothing here pushes.
+
+**Fleet is live on the publishable key — the owner should sign in once and open one screen.** That is the
+sign-in proof, the only check the agent cannot perform.
+
 
 ### Pre-phase-8 item: files still reading `SUPABASE_SERVICE_ROLE_KEY`
 
