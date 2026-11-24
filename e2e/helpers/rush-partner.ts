@@ -3,8 +3,9 @@ import { execFileSync } from 'node:child_process';
 
 const PARTNER_EMAIL =
   process.env.RUSH_PARTNER_EMAIL?.trim() || 'seed-island-grill@roamrush.app';
-const PARTNER_PASSWORD =
-  process.env.RUSH_PARTNER_PASSWORD?.trim() || 'RoamRushPartner2026!';
+function partnerPassword(): string {
+  return requireTestPassword("RUSH_PARTNER_PASSWORD", "the seed partner account");
+}
 
 const repoRoot = process.cwd();
 
@@ -18,6 +19,19 @@ export function ensurePartnerStoreOpen() {
       `
       import { getApiKeys } from './scripts/smoke/_shared.mjs';
       import { getMerchantProfile, setAcceptingOrders, signInMerchant } from './scripts/smoke/_merchant.mjs';
+
+/** Real production accounts: passwords come from the environment, never from the repo. */
+function requireTestPassword(name: string, label: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(
+      `Missing ${name}: ${label} is a real account whose password is not stored in the repo. ` +
+        `Export ${name} and run again.`,
+    );
+  }
+  return value;
+}
+
       const { anonKey } = getApiKeys();
       const token = await signInMerchant(anonKey);
       const m = await getMerchantProfile(anonKey, token);
@@ -93,7 +107,7 @@ export async function partnerClick(page: Page, locator: Locator) {
 
 async function fillAndSubmitLogin(page: Page) {
   await page.getByRole('textbox', { name: /Email or phone/i }).fill(PARTNER_EMAIL);
-  await page.getByRole('textbox', { name: /Password/i }).fill(PARTNER_PASSWORD);
+  await page.getByRole('textbox', { name: /Password/i }).fill(partnerPassword());
   const keep = page.getByRole('checkbox', { name: /Keep me signed in/i });
   if (await keep.isVisible().catch(() => false)) {
     await keep.check().catch(() => undefined);

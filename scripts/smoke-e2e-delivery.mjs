@@ -4,6 +4,7 @@
  */
 import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { customerPassword, partnerPassword, courierPassword } from "../lib/testAccounts.mjs";
 
 const PROJECT_REF = 'csfllzzastacofsvcdsc';
 const SUPABASE_URL = `https://${PROJECT_REF}.supabase.co`;
@@ -11,9 +12,9 @@ const MERCHANT_ID = 'e31e6d88-ae1d-4ad2-a1ae-d14001f5d372';
 const MENU_ITEM_ID = '30d77535-496b-40f4-aff0-5875e3c9574a'; // Jerk Chicken Meal
 
 const ACCOUNTS = {
-  customer: { email: 'seed-customer@roamrush.app', password: 'RoamRushCustomer2026!' },
-  merchant: { email: 'seed-island-grill@roamrush.app', password: 'RoamRushPartner2026!' },
-  courier: { email: 'seed-courier@roamrush.app', password: 'RoamRushCourier2026!' },
+  customer: { email: 'seed-customer@roamrush.app', password: customerPassword() },
+  merchant: { email: 'seed-island-grill@roamrush.app', password: partnerPassword() },
+  courier: { email: 'seed-courier@roamrush.app', password: courierPassword() },
 };
 
 function getApiKeys() {

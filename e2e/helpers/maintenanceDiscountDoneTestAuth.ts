@@ -3,7 +3,16 @@ import { join } from 'node:path';
 import { getLocalSupabaseKeys, signInPlatformAal2 } from './mmP01Auth';
 import { MD_DISC_OWNER_EMAIL } from './maintenanceDiscountDoneTestDb';
 
-export const MD_DISC_PASSWORD = 'MdDiscDone2026!';
+/** Real prod account: the password comes from the environment, never from the repo. */
+export const MD_DISC_PASSWORD = (() => {
+  const value = process.env.MD_DISC_PASSWORD?.trim();
+  if (!value) {
+    throw new Error(
+      "Missing MD_DISC_PASSWORD: the maintenance-discount done-test account is a real account whose password is not stored in the repo. Export MD_DISC_PASSWORD and run again.",
+    );
+  }
+  return value;
+})();
 
 function readConfigProjectRef(): string {
   try {

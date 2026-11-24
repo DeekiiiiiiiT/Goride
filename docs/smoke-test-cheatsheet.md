@@ -37,7 +37,7 @@ You do **not** need to paste script code — the files live in this repo.
 | Report issue | `scripts/smoke-customer-issue.mjs` | File support issue on completed order |
 | Rate order | `scripts/smoke-customer-review.mjs` | Submit star rating (skips if none eligible) |
 
-**Test account:** `seed-customer@roamrush.app` / `RoamRushCustomer2026!`
+**Test account:** `seed-customer@roamrush.app` / password in `$RUSH_TEST_CUSTOMER_PASSWORD`
 
 **Run one script:**
 ```bash
@@ -53,7 +53,7 @@ node scripts/smoke-customer-all.mjs
 
 Same idea as Partner: API scripts are separate; these commands click the live app UI via saved Playwright specs.
 
-**Test account:** `seed-customer@roamrush.app` / `RoamRushCustomer2026!`
+**Test account:** `seed-customer@roamrush.app` / password in `$RUSH_TEST_CUSTOMER_PASSWORD`
 
 **Method #1 — you run it (free)**
 
@@ -139,7 +139,7 @@ Still Method #3 / later if needed:
 | Pause orders | `scripts/smoke-merchant-pause.mjs` | Pause/resume accepting orders (restores state) |
 | Order flow | `scripts/smoke-merchant-order-flow.mjs` | Accept → preparing → ready (creates test order) |
 
-**Test account:** `seed-island-grill@roamrush.app` / `RoamRushPartner2026!`
+**Test account:** `seed-island-grill@roamrush.app` / password in `$RUSH_TEST_PARTNER_PASSWORD`
 
 **Run one script:**
 ```bash
@@ -247,7 +247,7 @@ Still manual / Method #3 if needed:
 | Report issue | `scripts/smoke-courier-issue.mjs` | Log delivery issue mid-run (creates test order) |
 | **Cross-app E2E** | `scripts/smoke-e2e-delivery.mjs` | Customer + partner + courier in one script |
 
-**Test account:** `seed-courier@roamrush.app` / `RoamRushCourier2026!`
+**Test account:** `seed-courier@roamrush.app` / password in `$RUSH_TEST_COURIER_PASSWORD`
 
 **Run one script:**
 ```bash

@@ -2,6 +2,7 @@
  * Shared helpers for Roam Rush Partner (merchant) smoke scripts.
  */
 import { randomUUID } from 'node:crypto';
+import { partnerPassword } from "../lib/testAccounts.mjs";
 import {
   ISLAND_GRILL,
   SEED_CUSTOMER,
@@ -15,7 +16,11 @@ import {
 
 export const SEED_MERCHANT = {
   email: 'seed-island-grill@roamrush.app',
-  password: 'RoamRushPartner2026!',
+  get password() {
+
+    return partnerPassword();
+
+  },
 };
 
 export { ISLAND_GRILL };

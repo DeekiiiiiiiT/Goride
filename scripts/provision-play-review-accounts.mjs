@@ -4,6 +4,7 @@
  */
 import { execSync } from 'node:child_process';
 import { serverKey } from "./lib/serverKey.mjs";
+import { testPassword } from "./lib/testAccounts.mjs";
 
 const PROJECT_REF = 'csfllzzastacofsvcdsc';
 const SUPABASE_URL = `https://${PROJECT_REF}.supabase.co`;
@@ -11,13 +12,13 @@ const SUPABASE_URL = `https://${PROJECT_REF}.supabase.co`;
 const ACCOUNTS = {
   driver: {
     email: 'deekiiiiiii+roam.driver.review@gmail.com',
-    password: 'RoamPlay2026!Driver',
+    password: testPassword("PLAY_REVIEW_DRIVER_PASSWORD", "the Play-review driver account"),
     displayName: 'Play Store Driver',
     role: 'driver',
   },
   rider: {
     email: 'deekiiiiiii+roam.rider.review@gmail.com',
-    password: 'RoamPlay2026!Rider',
+    password: testPassword("PLAY_REVIEW_RIDER_PASSWORD", "the Play-review rider account"),
     displayName: 'Play Store Rider',
     role: 'passenger',
   },
@@ -240,11 +241,11 @@ async function main() {
   console.log('\n--- Paste into Play Console → App access ---\n');
   console.log('ROAM DRIVER:');
   console.log(`Email: ${ACCOUNTS.driver.email}`);
-  console.log(`Password: ${ACCOUNTS.driver.password}`);
+  console.log("Password: set from PLAY_REVIEW_DRIVER_PASSWORD");;
   console.log('Steps: Open app → Sign in → Email → enter credentials → tap go online.\n');
   console.log('ROAM RIDES:');
   console.log(`Email: ${ACCOUNTS.rider.email}`);
-  console.log(`Password: ${ACCOUNTS.rider.password}`);
+  console.log("Password: set from PLAY_REVIEW_RIDER_PASSWORD");;
   console.log('Steps: Open app → Sign in → Email → enter credentials → book a ride.');
 }
 

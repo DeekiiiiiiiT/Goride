@@ -2,6 +2,7 @@
  * Shared helpers for Roam Rush Courier smoke scripts.
  */
 import { randomUUID } from 'node:crypto';
+import { courierPassword, partnerPassword } from "../lib/testAccounts.mjs";
 import {
   DROP_OFF,
   ISLAND_GRILL,
@@ -16,13 +17,21 @@ import {
 
 export const SEED_COURIER = {
   email: 'seed-courier@roamrush.app',
-  password: 'RoamRushCourier2026!',
+  get password() {
+
+    return courierPassword();
+
+  },
   name: 'Rush Test Courier',
 };
 
 export const SEED_MERCHANT = {
   email: 'seed-island-grill@roamrush.app',
-  password: 'RoamRushPartner2026!',
+  get password() {
+
+    return partnerPassword();
+
+  },
 };
 
 /** GPS near Spanish Town drop-off so dispatch radius includes the courier. */

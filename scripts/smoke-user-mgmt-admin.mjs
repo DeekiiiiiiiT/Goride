@@ -3,9 +3,10 @@
  * Usage: node scripts/smoke-user-mgmt-admin.mjs
  */
 import { getApiKeys, SUPABASE_URL } from './smoke/_shared.mjs';
+import { adminPassword } from "../lib/testAccounts.mjs";
 
 const EMAIL = 'user-mgmt-smoke@roamrush.app';
-const PASSWORD = 'RoamUserMgmtSmoke2026!';
+const PASSWORD = adminPassword();
 const BASE = `${SUPABASE_URL}/functions/v1/delivery/admin`;
 
 const results = [];

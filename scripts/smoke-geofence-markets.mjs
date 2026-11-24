@@ -3,9 +3,10 @@
  * Usage: node scripts/smoke-geofence-markets.mjs
  */
 import { DROP_OFF, deliveryApi, getApiKeys, signIn, SUPABASE_URL } from './smoke/_shared.mjs';
+import { adminPassword } from "../lib/testAccounts.mjs";
 
 const ADMIN_EMAIL = 'user-mgmt-smoke@roamrush.app';
-const ADMIN_PASSWORD = 'RoamUserMgmtSmoke2026!';
+const ADMIN_PASSWORD = adminPassword();
 const DELIVERY = `${SUPABASE_URL}/functions/v1/delivery`;
 
 const results = [];

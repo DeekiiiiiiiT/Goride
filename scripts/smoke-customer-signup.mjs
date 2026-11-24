@@ -2,6 +2,7 @@
  * Smoke: new customer account + first profile load (temp user cleaned up after).
  * Usage: node scripts/smoke-customer-signup.mjs
  */
+import { randomUUID } from 'node:crypto';
 import {
   assertOk,
   createConfirmedUser,
@@ -16,7 +17,8 @@ async function main() {
   console.log('=== Customer signup smoke ===\n');
   const { anonKey, serviceKey } = getApiKeys();
   const email = `smoke-signup-${Date.now()}@roamrush.app`;
-  const password = 'SmokeSignup2026!Temp';
+  // Throwaway account, deleted at the end — generate the password so no literal lives in the repo.
+  const password = `Smoke-${randomUUID()}`;
 
   const user = await createConfirmedUser(serviceKey, email, password);
   const userId = user.id;

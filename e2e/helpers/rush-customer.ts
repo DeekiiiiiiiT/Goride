@@ -1,9 +1,23 @@
 import { expect, type Page } from '@playwright/test';
 
+/** Real production accounts: passwords come from the environment, never from the repo. */
+function requireTestPassword(name: string, label: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(
+      `Missing ${name}: ${label} is a real account whose password is not stored in the repo. ` +
+        `Export ${name} and run again.`,
+    );
+  }
+  return value;
+}
+
+
 const CUSTOMER_EMAIL =
   process.env.RUSH_CUSTOMER_EMAIL?.trim() || 'seed-customer@roamrush.app';
-const CUSTOMER_PASSWORD =
-  process.env.RUSH_CUSTOMER_PASSWORD?.trim() || 'RoamRushCustomer2026!';
+function customerPassword(): string {
+  return requireTestPassword("RUSH_CUSTOMER_PASSWORD", "the seed customer account");
+}
 const DELIVERY_ADDRESS =
   process.env.RUSH_DELIVERY_ADDRESS?.trim() || '12 Burke Rd, Spanish Town';
 
@@ -37,7 +51,7 @@ export async function signInCustomer(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: 'I already have an account' }).click();
   await page.getByRole('textbox', { name: 'Email address' }).fill(CUSTOMER_EMAIL);
-  await page.getByRole('textbox', { name: 'Password' }).fill(CUSTOMER_PASSWORD);
+  await page.getByRole('textbox', { name: 'Password' }).fill(customerPassword());
   await page.getByRole('button', { name: 'Sign In' }).click();
 
   // Seed account may land on address onboarding after a fresh session.

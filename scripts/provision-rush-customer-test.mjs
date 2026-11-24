@@ -4,11 +4,12 @@
  */
 import { execSync } from 'node:child_process';
 import { serverKey } from "./lib/serverKey.mjs";
+import { customerPassword } from "../lib/testAccounts.mjs";
 
 const PROJECT_REF = 'csfllzzastacofsvcdsc';
 const SUPABASE_URL = `https://${PROJECT_REF}.supabase.co`;
 const EMAIL = 'seed-customer@roamrush.app';
-const PASSWORD = 'RoamRushCustomer2026!';
+const PASSWORD = customerPassword();
 const DISPLAY = 'Rush Test Customer';
 const PHONE = '+18765550888';
 const HOME = {

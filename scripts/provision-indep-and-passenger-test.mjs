@@ -4,6 +4,7 @@
  */
 import { execSync } from 'node:child_process';
 import { serverKey } from "./lib/serverKey.mjs";
+import { testPassword } from "./lib/testAccounts.mjs";
 
 const PROJECT_REF = 'csfllzzastacofsvcdsc';
 const SUPABASE_URL = `https://${PROJECT_REF}.supabase.co`;
@@ -11,7 +12,7 @@ const SUPABASE_URL = `https://${PROJECT_REF}.supabase.co`;
 const ACCOUNTS = {
   independentDriver: {
     email: 'deekiiiiiii+indep.test.driver@gmail.com',
-    password: 'RoamIndepTest2026!',
+    password: testPassword("INDEP_TEST_DRIVER_PASSWORD", "the independent test driver account"),
     displayName: 'Indep Test Driver',
     firstName: 'Indep',
     lastName: 'Test',
@@ -19,7 +20,7 @@ const ACCOUNTS = {
   },
   passenger: {
     email: 'deekiiiiiii+test.passenger@gmail.com',
-    password: 'RoamPassengerTest2026!',
+    password: testPassword("TEST_PASSENGER_PASSWORD", "the test passenger account"),
     displayName: 'Test Passenger',
     firstName: 'Test',
     lastName: 'Passenger',
@@ -257,12 +258,12 @@ async function main() {
 
   console.log('INDEPENDENT DRIVER');
   console.log(`Email:    ${ACCOUNTS.independentDriver.email}`);
-  console.log(`Password: ${ACCOUNTS.independentDriver.password}`);
+  console.log("Password: set from INDEP_TEST_DRIVER_PASSWORD");;
   console.log(`User ID:  ${driverId}\n`);
 
   console.log('PASSENGER');
   console.log(`Email:    ${ACCOUNTS.passenger.email}`);
-  console.log(`Password: ${ACCOUNTS.passenger.password}`);
+  console.log("Password: set from TEST_PASSENGER_PASSWORD");;
   console.log(`User ID:  ${passengerId}`);
 }
 

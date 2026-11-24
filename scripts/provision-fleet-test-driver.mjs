@@ -4,6 +4,7 @@
  */
 import { execSync } from 'node:child_process';
 import { serverKey } from "./lib/serverKey.mjs";
+import { testPassword } from "./lib/testAccounts.mjs";
 
 const PROJECT_REF = 'csfllzzastacofsvcdsc';
 const SUPABASE_URL = `https://${PROJECT_REF}.supabase.co`;
@@ -13,7 +14,7 @@ const FLEET_ORG_ID = '8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823';
 
 const ACCOUNT = {
   email: 'deekiiiiiii+fleet.test.driver@gmail.com',
-  password: 'RoamFleetTest2026!',
+  password: testPassword("FLEET_TEST_DRIVER_PASSWORD", "the fleet test driver account"),
   displayName: 'Fleet Test Driver',
   firstName: 'Fleet',
   lastName: 'Test',
@@ -197,7 +198,7 @@ async function main() {
 
   console.log('OK — fleet driver ready\n');
   console.log(`Email:    ${ACCOUNT.email}`);
-  console.log(`Password: ${ACCOUNT.password}`);
+  console.log("Password: set from FLEET_TEST_DRIVER_PASSWORD");;
   console.log(`User ID:  ${userId}`);
   console.log(`Fleet:    deekiiiiiii's Fleet (${FLEET_ORG_ID})`);
   console.log('\nIn Fleet app: assign a vehicle (and Active gas card if testing Gas Card Fill).');

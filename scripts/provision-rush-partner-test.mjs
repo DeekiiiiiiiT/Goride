@@ -4,11 +4,12 @@
  */
 import { execSync } from 'node:child_process';
 import { serverKey } from "./lib/serverKey.mjs";
+import { partnerPassword } from "../lib/testAccounts.mjs";
 
 const PROJECT_REF = 'csfllzzastacofsvcdsc';
 const SUPABASE_URL = `https://${PROJECT_REF}.supabase.co`;
 const EMAIL = 'seed-island-grill@roamrush.app';
-const PASSWORD = 'RoamRushPartner2026!';
+const PASSWORD = partnerPassword();
 const DISPLAY = 'Island Grill Partner';
 const MERCHANT_SLUG = 'island-grill';
 

@@ -6,13 +6,18 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { serverKey } from "./../lib/serverKey.mjs";
+import { customerPassword } from "../lib/testAccounts.mjs";
 
 export const PROJECT_REF = 'csfllzzastacofsvcdsc';
 export const SUPABASE_URL = `https://${PROJECT_REF}.supabase.co`;
 
 export const SEED_CUSTOMER = {
   email: 'seed-customer@roamrush.app',
-  password: 'RoamRushCustomer2026!',
+  get password() {
+
+    return customerPassword();
+
+  },
   name: 'Rush Test Customer',
   phone: '+18765550888',
 };

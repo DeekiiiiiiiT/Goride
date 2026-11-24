@@ -4,11 +4,12 @@
  */
 import { execSync } from 'node:child_process';
 import { serverKey } from "./lib/serverKey.mjs";
+import { courierPassword } from "../lib/testAccounts.mjs";
 
 const PROJECT_REF = 'csfllzzastacofsvcdsc';
 const SUPABASE_URL = `https://${PROJECT_REF}.supabase.co`;
 const EMAIL = 'seed-courier@roamrush.app';
-const PASSWORD = 'RoamRushCourier2026!';
+const PASSWORD = courierPassword();
 const DISPLAY = 'Rush Test Courier';
 
 function getServiceRoleKey() {

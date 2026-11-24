@@ -44,6 +44,8 @@ const MIGRATIONS = /^supabase\/migrations\//;
 const EDGE = /^supabase\/functions\//;
 
 const checks = [
+  // Always on: a real account password in the repo is how four live accounts had to be locked.
+  { name: 'No hard-coded password beside production credentials', when: true, cmd: 'node scripts/check-no-hardcoded-passwords.mjs' },
   { name: 'Migration SQL (names, dates, syntax)', when: touched(MIGRATIONS), cmd: 'node scripts/validate-migration-sql.mjs' },
   { name: 'Migration files are UTF-8', when: touched(MIGRATIONS), cmd: 'node scripts/assert-migrations-utf8.mjs' },
   { name: 'New functions locked from anon', when: touched(MIGRATIONS), cmd: 'node scripts/assert-public-fn-revoke-anon.mjs' },
