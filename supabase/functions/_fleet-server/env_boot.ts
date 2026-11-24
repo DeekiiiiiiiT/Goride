@@ -5,7 +5,13 @@
  * missing secrets immediately rather than failing silently mid-request.
  */
 
-const REQUIRED_SECRETS = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"] as const;
+const REQUIRED_SECRETS = ["SUPABASE_URL"] as const;
+/**
+ * A server key is required, but either form satisfies it: the rotated `SUPABASE_SECRET_KEYS`
+ * (JSON, `.default`) or the legacy single `SUPABASE_SERVICE_ROLE_KEY`. Requiring the legacy name
+ * would make every fleet function refuse to boot the day Supabase stops injecting it.
+ */
+const SERVER_KEY_SOURCES = ["SUPABASE_SECRET_KEYS", "SUPABASE_SERVICE_ROLE_KEY"] as const;
 const OPTIONAL_WARN_SECRETS = ["AUDIT_HMAC_SECRET"] as const;
 
 let _validated = false;
@@ -25,6 +31,10 @@ export function assertRequiredEnv(): void {
     if (!val || val.trim().length === 0) {
       missing.push(key);
     }
+  }
+  const hasServerKey = SERVER_KEY_SOURCES.some((key) => (Deno.env.get(key) || "").trim().length > 0);
+  if (!hasServerKey) {
+    missing.push("SUPABASE_SECRET_KEYS (or the legacy SUPABASE_SERVICE_ROLE_KEY)");
   }
 
   if (missing.length > 0) {

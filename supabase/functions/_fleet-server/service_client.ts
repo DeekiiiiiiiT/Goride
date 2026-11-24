@@ -23,7 +23,7 @@ export function getServiceClient(): SupabaseClient {
     const key = serviceKey();
     if (!url || !key) {
       throw new Error(
-        "[ServiceClient] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY — cannot create service client"
+        "[ServiceClient] Missing SUPABASE_URL or a server key (SUPABASE_SECRET_KEYS / SUPABASE_SERVICE_ROLE_KEY) — cannot create service client"
       );
     }
     _cachedClient = createClient(url, key);
@@ -47,7 +47,7 @@ export function getServiceClientWithSchema(
   const key = serviceKey();
   if (!url || !key) {
     throw new Error(
-      `[ServiceClient] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY — cannot create ${schema} client`
+      `[ServiceClient] Missing SUPABASE_URL or a server key (SUPABASE_SECRET_KEYS / SUPABASE_SERVICE_ROLE_KEY) — cannot create ${schema} client`
     );
   }
   return createClient(url, key, { db: { schema } });

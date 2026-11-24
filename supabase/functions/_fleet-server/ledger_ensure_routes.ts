@@ -11,7 +11,6 @@ import {
 } from "./rbac_middleware.ts";
 import { appendCanonicalLedgerEvents } from "./ledger_canonical.ts";
 import { buildCanonicalTripFareEventsFromTrip } from "./canonical_from_ops.ts";
-import { jwtRoleClaim } from "./jwt_role_claim.ts";
 import { secretKeyCandidates } from "../_shared/serviceKey.ts";
 
 const PREFIX = "/make-server-37f42386";
@@ -50,39 +49,32 @@ export function tripHasMoneyForLedgerProjection(trip: any): boolean {
 }
 
 /**
- * Import pipeline gate: Bearer must be a project anon or service_role JWT.
- * Supabase gateway already validates the signature; we only accept those roles
- * (not authenticated user sessions — those use the Repair route).
+ * Import pipeline gate: the caller must present a current secret key exactly (apikey or Bearer).
+ *
+ * The previous version also accepted a decoded `role` claim from the token, which trusts an
+ * unverified JWT payload — a forged `service_role` token would have passed. That path is gone:
+ * only an exact match against `SUPABASE_SECRET_KEYS` is accepted, and the legacy anon key no longer
+ * qualifies.
+ *
+ * Note: this route is currently unreachable from outside anyway — fleet-core mounts `requireAuth`
+ * ahead of it, so every machine caller gets AUTH_REQUIRED first (verified: anon, secret key and a
+ * forged service_role token all 401). The gate stays as defence in depth.
  */
-export function requireImportAnonOrServiceKey() {
+export function requireImportSecretKey() {
   return async (c: Context, next: Next) => {
     const auth = c.req.header("Authorization") || "";
     const token = auth.replace(/^Bearer\s+/i, "").trim();
     const apikey = (c.req.header("apikey") || "").trim();
-    const anon = (Deno.env.get("SUPABASE_ANON_KEY") || "").trim();
-    // Accept any current secret key (the legacy service key is retired in phase 8).
     const serviceKeys = secretKeyCandidates();
 
-    const candidates = [token, apikey].filter(Boolean);
-    const exactMatch = candidates.some(
-      (t) => (anon && t === anon) || serviceKeys.some((k) => t === k),
-    );
+    const supplied = [token, apikey].filter(Boolean);
+    const authorised = supplied.some((value) => serviceKeys.some((key) => value === key));
 
-    let roleOk = false;
-    for (const t of candidates) {
-      const role = jwtRoleClaim(t);
-      if (role === "anon" || role === "service_role") {
-        roleOk = true;
-        break;
-      }
-    }
-
-    if (!exactMatch && !roleOk) {
+    if (!authorised) {
       return c.json(
         {
           error: "Unauthorized",
-          message:
-            "POST /ledger/ensure-from-trip-ids/import requires the project anon or service role key.",
+          message: "POST /ledger/ensure-from-trip-ids/import requires the project secret key.",
         },
         401,
       );
@@ -223,7 +215,7 @@ export function registerLedgerEnsureRoutes(app: Hono) {
   // Import callers (admin/driver anon or service key) — key-checked, not session RBAC.
   app.post(
     `${PREFIX}/ledger/ensure-from-trip-ids/import`,
-    requireImportAnonOrServiceKey(),
+    requireImportSecretKey(),
     async (c) => handleEnsureFromTripIds(c),
   );
 }

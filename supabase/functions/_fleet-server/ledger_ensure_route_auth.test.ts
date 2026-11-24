@@ -25,9 +25,9 @@ Deno.test("authenticated ensure-from-trip-ids is registered with requireAuth", a
 Deno.test("import ensure-from-trip-ids is key-gated (not open)", async () => {
   const source = await Deno.readTextFile(new URL("./ledger_ensure_routes.ts", import.meta.url));
   assertEquals(
-    /requireImportAnonOrServiceKey\s*\(\s*\)/.test(source),
+    /requireImportSecretKey\s*\(\s*\)/.test(source),
     true,
-    "POST /ledger/ensure-from-trip-ids/import must use requireImportAnonOrServiceKey()",
+    "POST /ledger/ensure-from-trip-ids/import must use requireImportSecretKey()",
   );
   // Must not register the import path as a bare open handler.
   const openImport =

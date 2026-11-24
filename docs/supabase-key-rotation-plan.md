@@ -1104,10 +1104,39 @@ phase-5 checks (site 200 **and not the Vercel login page**, key in the crawled b
 **Step 4 — the owner's dashboard clicks (Supabase, not Vercel).**
 
 1. Supabase → **Settings → API keys** → the **legacy** `anon` and `service_role` keys →
-   **Deactivate** (or rotate/revoke). The project's own functions no longer use them.
-2. Supabase → **Settings → Auth → JWT signing keys** → **revoke the legacy JWT secret** /
-   rotate to the new signing keys. This **signs every existing session out** — expected, one-time.
-3. Watch the edge logs for 30 minutes: no 401 spike (a spike means something still sends a legacy JWT).
+   **Deactivate**. Reversible: re-activate if a client turns out to still use them.
+2. Supabase → **Settings → Auth → JWT signing keys** → **Migrate JWT secret**, then **Rotate keys** to
+   the standby key.
+3. **Wait before revoking** (see below), then move the legacy secret to **Revoked**.
+4. Watch the edge logs for 30 minutes: no 401 spike (a spike means something still sends a legacy JWT).
+
+#### What the Supabase docs actually say about sessions (checked 24 Nov 2026)
+
+Earlier revisions of this plan said revoking the legacy JWT secret "signs everyone out". **That is
+wrong**, per [JWT Signing Keys](https://supabase.com/docs/guides/auth/signing-keys):
+
+- **Rotation does not sign anyone out.** "Rotating the keys immediately causes the Auth server to issue
+  new JWT access tokens for signed in users signed with the new key. Non-expired access tokens will
+  remain to be accepted, so no users will be forcefully signed out." The docs' own comparison table
+  puts it plainly: legacy = "currently active users get immediately signed out", signing keys = "no
+  users get signed out".
+- **Refresh tokens are not JWTs**, so rotation does not invalidate them; a signed-in user's session
+  keeps refreshing and the new access tokens are signed with the new key.
+- **Revocation is the step that can sign people out** — and only users whose still-unexpired access
+  token was signed with the legacy secret. The docs give the wait: "If your access token expiry time is
+  configured to be 1 hour, wait at least **1 hour and 15 minutes** before revoking the legacy JWT
+  secret … This prevents currently active users from being forcefully signed out."
+
+So the correct order is: **rotate → wait (access-token TTL + 15 min; check the TTL under
+Auth → Sessions → JWT expiry, default 1 h) → revoke.** With that wait, nobody is signed out.
+
+Two caveats the docs call out, both already handled or worth a look:
+
+- anything that **verifies JWTs against the legacy secret itself** (a `jose`/`jsonwebtoken` check, or
+  an Edge Function with `verify_jwt` on) breaks at rotation. Every function here already runs
+  `verify_jwt = false` and none verifies against the legacy secret, so this is clear;
+- the legacy secret also signs **Storage pre-signed URLs**, so URLs minted before rotation stop
+  working. Nothing in this repo mints long-lived signed URLs, but check any external links in flight.
 
 **Step 5 — done-tests (phase 9).**
 
@@ -1125,6 +1154,46 @@ phase-5 checks (site 200 **and not the Vercel login page**, key in the crawled b
 - delete the GitHub repo secret `SUPABASE_SERVICE_ROLE_KEY`
 - delete the Google Secret Manager `SUPABASE_SERVICE_ROLE_KEY`
 - delete `apps/fleet/src/supabase/functions/**` (source of the five deleted functions)
+
+### Two must-fix items before phase 8 (done 24 Nov 2026)
+
+**1. `_fleet-server/env_boot.ts` required the legacy key to boot.** `REQUIRED_SECRETS` was
+`["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]`, so the day Supabase stopped injecting the legacy
+variable every fleet function would have refused to boot. It now requires `SUPABASE_URL` plus **a
+server key in either form** — `SUPABASE_SECRET_KEYS` or the legacy `SUPABASE_SERVICE_ROLE_KEY` — and
+the failure message names both. `service_client.ts`'s two error strings were updated the same way
+(they said "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY").
+
+Deployed all six fleet functions (`fleet-core`, `fleet-ops`, `fleet-fuel`, `fleet-pay`, `fleet-toll`,
+`fleet-claims`); `/health` **200** on each, which also proves the boot assertion passes with the new
+key. Functional re-checks, all **200**: fuel period sweep `22473`, activity drift `22474`, toll door
+`22475`. Edge logs 16:55–17:05: 30 × 200, 6 × 204, 4 × 400, 4 × 401 — **no 5xx**; the 401s are my own
+anonymous probes of the POST-only relays.
+
+**2. `ledger_ensure_routes.ts` trusted an unverified JWT role claim.** The import gate accepted
+`jwtRoleClaim(token)` — a decode with no signature check — so a forged `service_role` token would have
+satisfied it. That path is gone: the middleware is renamed `requireImportSecretKey` and accepts **only
+an exact match against a current secret key** (`apikey` or Bearer). The legacy anon key no longer
+qualifies, and the local `jwtRoleClaim` import was dropped (its re-export stays for the Repair route).
+
+**What the route investigation found — it is dead at runtime.** `POST
+/ledger/ensure-from-trip-ids/import` is registered behind fleet-core's `requireAuth`, and no
+`/ledger` path is on the skip list. Probed live, every caller gets the auth gate's answer:
+
+| Caller credential | Result |
+|---|---|
+| legacy anon key | **401** `AUTH_REQUIRED` |
+| current secret key | **401** `AUTH_REQUIRED` |
+| forged `service_role` JWT (unsigned) | **401** `AUTH_REQUIRED` |
+| no credential | **401** "No token provided" |
+
+So the new gate never runs, and the two shipped callers — `apps/admin/src/services/api.ts` and
+`apps/driver/src/services/api.ts`, which post to it with the anon key — have been getting 401. That is a
+separate pre-existing fault: either the route should move onto the skip list with its secret-key gate
+(the pattern used for `/internal/*`), or it and those two client functions should be deleted. Recorded
+here rather than changed, because the route touches ledger writes and the decision is the owner's.
+
+The auth guard test was updated to the new name and still passes (5/5).
 
 ### Separate faults (not key problems)
 
