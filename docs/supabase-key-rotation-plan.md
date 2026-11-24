@@ -1155,6 +1155,56 @@ Two caveats the docs call out, both already handled or worth a look:
 - delete the Google Secret Manager `SUPABASE_SERVICE_ROLE_KEY`
 - delete `apps/fleet/src/supabase/functions/**` (source of the five deleted functions)
 
+### Phase 8 blocker cleared — recon-worker rebuilt on the new key (24 Nov 2026)
+
+The Cloud Run worker (`us-east1`, revision `recon-worker-00150-6lm`) was still an old build whose only
+key env var was `SUPABASE_SERVICE_ROLE_KEY`, so its REST calls went out on the legacy key. Rebuilt from
+`c5497898` with `gcloud builds submit --config cloudbuild.recon-worker.yaml .` — build
+`ed75bae3` **SUCCESS** in 1m59s, new revision **`recon-worker-00151-mxd`**.
+
+**Its env is now exactly two secrets:** `SUPABASE_URL` and `SUPABASE_SECRET_KEYS`. No
+`SUPABASE_SERVICE_ROLE_KEY`.
+
+**Wake path exercised:** `private.invoke_recon_worker_wake()` returned **NULL** because the queue is
+empty and nothing is due (`queueWaiting: 0`, `nightlyDue: false`) — that is the function's designed
+answer, not a failure. So the path was driven directly: `POST fleet-recon-cron` with the cron secret →
+**200** `{"processed":0,"workflows":0,"nightly":false}`.
+
+**The worker now uses the new key — proof in the logs:**
+
+- `edge_logs` for the window: **397 × 200 + 1 × 204** requests with
+  `request.sb.apikey.apikey.prefix = sb_secret_RT8Oq`.
+- the legacy signature is gone: requests with `jwt.authorization.payload.role = service_role` and an
+  **empty** apikey prefix were **158 at the 14:00 hour, all `Deno/2.1.4`** (the old revision), and
+  **zero after 17:36**.
+
+**Reconciliation data is intact:** `finance_recon_runs` 20, `finance_recon_drift` 41,
+`toll_reconciliation_period` 3, `fuel_reconciliation_period` 45, `recon_import_staging` 32. The page's
+own endpoints answered the browser: `fleet-core/recon/approvals` **307 × 200**, `recon/alerts`
+**155 × 200**, `fleet-ops/maintenance-alerts` **155 × 200**.
+
+#### 24-hour sweep: every request with an empty apikey prefix
+
+Excluding `OPTIONS` preflights, this is everything (the ~16k rows with no method/path are non-function
+sources — `auth_logs`, `postgres_logs` — and carry no HTTP request attributes).
+
+| Category | Who / what | Count | Verdict |
+|---|---|---|---|
+| legacy key, **now fixed** | old `recon-worker` (`Deno/2.1.4`, role `service_role`, no apikey) | 158, all in the 14:00 hour | gone since the rebuild |
+| my own probes | the fake-`service_role` JWT test (1, `node`) and ~50 anon-key probe requests over the phases (`scan-receipt`, `places/autocomplete`, `financials`, `haul/admin`, `claims`, `evidence-cleanup`, `seal-fuel-week`, `rides/v1/requests/me/active`, `platform-status`) | ~50 | test traffic from this machine, not production |
+| DB → function cron doors | `pg_net/0.19.5` calling `catalog-research` (759), `fleet-fuel-cron` (21), `rush-cron` (10), `fleet-activity-cron/drift-check` (7), `fleet-toll-cron` (6), `fleet-recon-cron` (1) | ~804 | **legitimate**: they authenticate with `X-Fleet-Cron-Secret`, no apikey by design |
+| GoTrue hook | `custom-access-token`, `Go-http-client/2.0` | 23 | legitimate: the Auth hook caller |
+| edge → edge | `rush-cron` → `delivery/internal/geo/reconcile`, `Deno/2.1.4` | 8 | legitimate: cron secret, no apikey |
+| my health probes | `GET /health` on fleet-core, fleet-ops, fleet-fuel, fleet-pay, fleet-toll, fleet-claims, rides (`node`) | ~50 | test traffic from this machine |
+| app fetches with a session | Chrome 157/158 and the Android driver app (`recon/approvals`, `parts/*`, `maintenance-alerts`, `enterprise/me/modules`, `platform-feature-flags`, `team/access`, `fleet-fuel/fuel-entries`, `check-ins/eligibility`) — every one **200** | ~1,000 | they send **only** the session JWT and **no apikey at all** (no hash, no prefix) — not the legacy anon key |
+
+**Nothing in browser or app traffic is using the legacy anon key.** Those requests carry no apikey
+header whatsoever; the empty prefix is "no key", not "old key". The only real legacy-key traffic in the
+24 hours was the old worker, and it stopped at the rebuild.
+
+One thing worth knowing, not a key issue: `fleet-core/platform-status` returns **401** to 9 anonymous
+Chrome requests but **200** to 13 anon-role ones — pre-existing mixed handling on that endpoint.
+
 ### Phase 8 steps 1–3 — the legacy anon key is out of the web apps (24 Nov 2026)
 
 **Step 1 — `VITE_SUPABASE_ANON_KEY` deleted from all 11 Vercel projects.** Both targets went with each
