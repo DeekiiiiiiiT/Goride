@@ -887,6 +887,61 @@ $$;
 -- The whole 4b block rolls back at its end (the R7 probe's unknown plaza would block later sections); a failed
 -- check above still stops the test, because only the 'r13-probe-done' marker is swallowed.
 
+-- (Runs before 5: section 5 seals last week, and on a Jamaica Monday "yesterday" is in last week.)
+-- ══ 6. InDrive rider suggestion ══
+DO $$
+DECLARE v_day date := (now() AT TIME ZONE 'America/Jamaica')::date - 1;
+  v_req text := to_char(v_day, 'YYYY-MM-DD') || 'T10:00:00';
+  v_drop text := to_char(v_day, 'YYYY-MM-DD') || 'T10:45:00';
+  v_week date := ledger.jamaica_week_start((v_day::timestamp AT TIME ZONE 'America/Jamaica'));
+  c toll.charges; v_sug uuid; v_desk jsonb; v_row jsonb;
+BEGIN
+  INSERT INTO fleet.trips (id, organization_id, date, driver_id, vehicle_id, platform, status, batch_id,
+    payment_method, service_line, amount, legacy_kv_id, payload_json)
+  VALUES ('s3rd-indrive-1', pg_temp._s3rd_org()::text, v_day, 's3rd-d1', 'v1', 'InDrive', 'completed', 'live_driver_app',
+    'cash', 'rideshare', 2000, 's3rd-kv-ind', jsonb_build_object('isManual', true, 'requestTime', v_req, 'dropoffTime', v_drop))
+  ON CONFLICT DO NOTHING;
+  PERFORM public.toll_sys_import(pg_temp._s3rd_org(), 'tag_statement', format(
+    '[{"source_ref":"s3rd-ch-indrive","occurred_at":"%s","amount_minor":39000,"plaza_id":"s3rd-pz",
+      "vehicle_id":"v1","driver_id":"s3rd-d1"}]',
+    ((v_day::timestamp + time '10:20') AT TIME ZONE 'America/Jamaica'))::jsonb, 's3rd-tag-ind', 'smoke');
+  c := pg_temp._s3rd_ch('s3rd-ch-indrive');
+  PERFORM pg_temp._s3rd_match_store(jsonb_build_array(
+    pg_temp._s3rd_cand_rider(c.id, 'indrive', 'logged:s3rd-indrive-1')));
+  SELECT id INTO v_sug FROM toll.suggestions WHERE organization_id = pg_temp._s3rd_org() AND charge_id = c.id
+    AND kind = 'rider_pays_driver' AND superseded_by IS NULL LIMIT 1;
+  IF v_sug IS NULL THEN RAISE EXCEPTION '6 no rider suggestion'; END IF;
+  v_desk := pg_temp._s3rd_desk(v_week);
+  v_row := (SELECT x FROM jsonb_array_elements(v_desk -> 'charges') x
+    WHERE EXISTS (SELECT 1 FROM toll.charges ch WHERE ch.id = (x ->> 'id')::uuid AND ch.source_ref = 's3rd-ch-indrive'));
+  IF v_row ->> 'section' <> 'suggested' OR (v_row ->> 'part')::int <> 1 THEN RAISE EXCEPTION '6 section/part'; END IF;
+  IF v_row -> 'suggestions' -> 0 -> 'command' IS DISTINCT FROM jsonb_build_object('confirm', 'driver_pays', 'other', 'fleet_absorbs') THEN
+    RAISE EXCEPTION '6 rider command';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v_desk -> 'blockers') b WHERE (b ->> 'part')::int = 1) THEN
+    RAISE EXCEPTION '6 blocker part 1';
+  END IF;
+  c := pg_temp._s3rd_ch('s3rd-ch-indrive');
+  PERFORM pg_temp._s3rd_cmd('driver_pays', jsonb_build_object(
+    'command_id', 's3rd-ind-drive', 'charge_id', c.id, 'expected_charge_version', c.version,
+    'suggestion_id', v_sug));
+  v_desk := pg_temp._s3rd_desk(v_week);
+  v_row := (SELECT x FROM jsonb_array_elements(v_desk -> 'charges') x WHERE (x ->> 'id')::uuid = c.id);
+  IF v_row ->> 'section' NOT IN ('decided', 'disputes') AND toll_system.charge_state(pg_temp._s3rd_org(), c.id) NOT IN ('resolved','decided') THEN
+    RAISE EXCEPTION '6 after driver_pays %', v_row ->> 'section';
+  END IF;
+  UPDATE fleet.trips SET status = 'cancelled' WHERE id = 's3rd-indrive-1';
+  PERFORM pg_temp._s3rd_match_store(jsonb_build_array(
+    pg_temp._s3rd_cand_rider(c.id, 'indrive', 'logged:s3rd-indrive-1')));
+  v_desk := pg_temp._s3rd_desk(v_week);
+  v_row := (SELECT x FROM jsonb_array_elements(v_desk -> 'charges') x WHERE (x ->> 'id')::uuid = c.id);
+  IF EXISTS (SELECT 1 FROM jsonb_array_elements(v_row -> 'suggestions') s WHERE s ->> 'kind' = 'rider_pays_driver') THEN
+    RAISE EXCEPTION '6 withdrawn suggestion still shown';
+  END IF;
+  PERFORM pg_temp._s3rd_assert_nightly();
+END;
+$$;
+
 -- ══ 5. Results this week ══
 DO $$
 DECLARE
@@ -1005,60 +1060,6 @@ BEGIN
   v_desk := pg_temp._s3rd_desk(v_open);
   IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v_desk -> 'results') x
     WHERE (x ->> 'id')::uuid = d.id AND (x ->> 'chargeWeekKey')::date = v_old) THEN RAISE EXCEPTION '5 sealed result week'; END IF;
-  PERFORM pg_temp._s3rd_assert_nightly();
-END;
-$$;
-
--- ══ 6. InDrive rider suggestion ══
-DO $$
-DECLARE v_day date := (now() AT TIME ZONE 'America/Jamaica')::date - 1;
-  v_req text := to_char(v_day, 'YYYY-MM-DD') || 'T10:00:00';
-  v_drop text := to_char(v_day, 'YYYY-MM-DD') || 'T10:45:00';
-  v_week date := ledger.jamaica_week_start((v_day::timestamp AT TIME ZONE 'America/Jamaica'));
-  c toll.charges; v_sug uuid; v_desk jsonb; v_row jsonb;
-BEGIN
-  INSERT INTO fleet.trips (id, organization_id, date, driver_id, vehicle_id, platform, status, batch_id,
-    payment_method, service_line, amount, legacy_kv_id, payload_json)
-  VALUES ('s3rd-indrive-1', pg_temp._s3rd_org()::text, v_day, 's3rd-d1', 'v1', 'InDrive', 'completed', 'live_driver_app',
-    'cash', 'rideshare', 2000, 's3rd-kv-ind', jsonb_build_object('isManual', true, 'requestTime', v_req, 'dropoffTime', v_drop))
-  ON CONFLICT DO NOTHING;
-  PERFORM public.toll_sys_import(pg_temp._s3rd_org(), 'tag_statement', format(
-    '[{"source_ref":"s3rd-ch-indrive","occurred_at":"%s","amount_minor":39000,"plaza_id":"s3rd-pz",
-      "vehicle_id":"v1","driver_id":"s3rd-d1"}]',
-    ((v_day::timestamp + time '10:20') AT TIME ZONE 'America/Jamaica'))::jsonb, 's3rd-tag-ind', 'smoke');
-  c := pg_temp._s3rd_ch('s3rd-ch-indrive');
-  PERFORM pg_temp._s3rd_match_store(jsonb_build_array(
-    pg_temp._s3rd_cand_rider(c.id, 'indrive', 'logged:s3rd-indrive-1')));
-  SELECT id INTO v_sug FROM toll.suggestions WHERE organization_id = pg_temp._s3rd_org() AND charge_id = c.id
-    AND kind = 'rider_pays_driver' AND superseded_by IS NULL LIMIT 1;
-  IF v_sug IS NULL THEN RAISE EXCEPTION '6 no rider suggestion'; END IF;
-  v_desk := pg_temp._s3rd_desk(v_week);
-  v_row := (SELECT x FROM jsonb_array_elements(v_desk -> 'charges') x
-    WHERE EXISTS (SELECT 1 FROM toll.charges ch WHERE ch.id = (x ->> 'id')::uuid AND ch.source_ref = 's3rd-ch-indrive'));
-  IF v_row ->> 'section' <> 'suggested' OR (v_row ->> 'part')::int <> 1 THEN RAISE EXCEPTION '6 section/part'; END IF;
-  IF v_row -> 'suggestions' -> 0 -> 'command' IS DISTINCT FROM jsonb_build_object('confirm', 'driver_pays', 'other', 'fleet_absorbs') THEN
-    RAISE EXCEPTION '6 rider command';
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v_desk -> 'blockers') b WHERE (b ->> 'part')::int = 1) THEN
-    RAISE EXCEPTION '6 blocker part 1';
-  END IF;
-  c := pg_temp._s3rd_ch('s3rd-ch-indrive');
-  PERFORM pg_temp._s3rd_cmd('driver_pays', jsonb_build_object(
-    'command_id', 's3rd-ind-drive', 'charge_id', c.id, 'expected_charge_version', c.version,
-    'suggestion_id', v_sug));
-  v_desk := pg_temp._s3rd_desk(v_week);
-  v_row := (SELECT x FROM jsonb_array_elements(v_desk -> 'charges') x WHERE (x ->> 'id')::uuid = c.id);
-  IF v_row ->> 'section' NOT IN ('decided', 'disputes') AND toll_system.charge_state(pg_temp._s3rd_org(), c.id) NOT IN ('resolved','decided') THEN
-    RAISE EXCEPTION '6 after driver_pays %', v_row ->> 'section';
-  END IF;
-  UPDATE fleet.trips SET status = 'cancelled' WHERE id = 's3rd-indrive-1';
-  PERFORM pg_temp._s3rd_match_store(jsonb_build_array(
-    pg_temp._s3rd_cand_rider(c.id, 'indrive', 'logged:s3rd-indrive-1')));
-  v_desk := pg_temp._s3rd_desk(v_week);
-  v_row := (SELECT x FROM jsonb_array_elements(v_desk -> 'charges') x WHERE (x ->> 'id')::uuid = c.id);
-  IF EXISTS (SELECT 1 FROM jsonb_array_elements(v_row -> 'suggestions') s WHERE s ->> 'kind' = 'rider_pays_driver') THEN
-    RAISE EXCEPTION '6 withdrawn suggestion still shown';
-  END IF;
   PERFORM pg_temp._s3rd_assert_nightly();
 END;
 $$;

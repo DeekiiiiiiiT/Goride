@@ -30,7 +30,9 @@ function resolveImport(fromFile, spec) {
   return null;
 }
 
-const fleetImportRe = /['"](?:\.\.\/)+apps\/fleet\/src\/([^'"]+)['"]/g;
+// Only real imports/exports pull a file into the edge bundle. A test that reads a Fleet file
+// as text (Deno.readTextFileSync(new URL("../../../apps/fleet/src/..."))) does not.
+const fleetImportRe = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)['"](?:\.\.\/)+apps\/fleet\/src\/([^'"]+)['"]/g;
 const entryPoints = new Set();
 
 for (const f of walk(edgeDir)) {

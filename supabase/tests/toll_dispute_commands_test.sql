@@ -1301,60 +1301,6 @@ BEGIN
 END;
 $$;
 
--- mx-undo-weekb: undo after posting week B sealed — reversal lands in current posting_week
-DO $$
-DECLARE
-  v_org uuid := pg_temp._s1_org();
-  v_charge uuid; v_pb uuid; v_week_a date; v_week_b date;
-  c toll.charges; p toll.paybacks; d toll.disputes;
-  v_dispute uuid; v_r jsonb; v_snap jsonb; v_settle uuid;
-  v_hash_b_pre text; v_hash_b_post text; v_rev_cnt int; v_post_wk date;
-BEGIN
-  SELECT * INTO v_charge, v_pb, v_week_a FROM pg_temp._s1_setup390('mx-uwb', 252);
-  c := pg_temp._s1_ch('s1-ch-mx-uwb'); p := pg_temp._s1_pb('trip:s1-trip-mx-uwb');
-  v_r := pg_temp._s1_cmd('open_dispute', jsonb_build_object(
-    'command_id', 's1-mx-uwb', 'charge_id', c.id, 'payback_id', p.id,
-    'expected_charge_version', c.version, 'expected_payback_version', p.version));
-  v_dispute := (v_r ->> 'dispute_id')::uuid;
-  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
-  PERFORM pg_temp._s1_cmd('mark_dispute_sent', jsonb_build_object(
-    'command_id', 's1-mx-uwb-sent', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
-  PERFORM pg_temp._s1_cmd('seal_week', jsonb_build_object(
-    'command_id', 's1-mx-uwb-seal-a', 'week_key', v_week_a, 'expected_week_version',
-    toll_system.week_version(v_org, v_week_a)));
-  PERFORM public.toll_sys_import(v_org, 'uber', format(
-    '[{"row_type":"adjustment","reference":"s1-adj-mx-uwb","driver_id":"s1-d1","paid_on":"%s","amount_minor":2000}]',
-    (now() AT TIME ZONE 'America/Jamaica')::date)::jsonb, 's1-adj-mx-uwb', 'smoke');
-  p := pg_temp._s1_pb('s1-adj-mx-uwb');
-  v_week_b := toll_system.posting_week(v_org);
-  v_snap := pg_temp._s1_snap_bals();
-  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
-  v_r := pg_temp._s1_cmd('settle_dispute', jsonb_build_object(
-    'command_id', 's1-mx-uwb-settle', 'dispute_id', v_dispute, 'payback_id', p.id,
-    'expected_dispute_version', d.version, 'expected_payback_version', p.version));
-  v_settle := (v_r ->> 'decision_id')::uuid;
-  PERFORM pg_temp._s1_cmd('seal_week', jsonb_build_object(
-    'command_id', 's1-mx-uwb-seal-b', 'week_key', v_week_b, 'expected_week_version',
-    toll_system.week_version(v_org, v_week_b)));
-  v_hash_b_pre := pg_temp._s1_week_ledger_hash(v_week_b);
-  v_post_wk := toll_system.posting_week(v_org);
-  c := pg_temp._s1_ch('s1-ch-mx-uwb');
-  p := pg_temp._s1_pb('s1-adj-mx-uwb');
-  PERFORM pg_temp._s1_cmd('undo_decision', jsonb_build_object(
-    'command_id', 's1-mx-uwb-undo', 'decision_id', v_settle,
-    'expected_versions', jsonb_build_object(c.id::text, c.version, p.id::text, p.version)));
-  PERFORM pg_temp._s1_assert_snap(v_snap, 'mx-undo-weekb-bal');
-  v_hash_b_post := pg_temp._s1_week_ledger_hash(v_week_b);
-  IF v_hash_b_pre IS DISTINCT FROM v_hash_b_post THEN RAISE EXCEPTION 'mx-undo-weekb hash B'; END IF;
-  SELECT count(*)::int INTO v_rev_cnt FROM ledger.entries e
-  WHERE e.organization_id = v_org AND e.reference_type = 'toll'
-    AND coalesce((e.metadata ->> 'reverse')::boolean, false) = true
-    AND (e.metadata ->> 'toll_week')::date = v_post_wk;
-  IF v_rev_cnt < 1 THEN RAISE EXCEPTION 'mx-undo-weekb no reversal in posting week %', v_post_wk; END IF;
-  PERFORM pg_temp._s1_assert_nightly();
-END;
-$$;
-
 -- ── P-02 (R10, done-test 15): the result posted while its charge week was open; the week was sealed
 --    afterwards; the undo leaves the sealed week (ledger and allocations) untouched and posts the money
 --    back in the open posting week as a carried dispute_result fact.
@@ -1615,6 +1561,61 @@ BEGIN
   IF d.owed_minor <> 2000 THEN RAISE EXCEPTION 'p03 owed %', d.owed_minor; END IF;
   IF toll_system.charge_open_minor(v_org, v_charge) <> 0 THEN RAISE EXCEPTION 'p03 charge still open'; END IF;
   IF toll_system.open_missing_disputes(v_org) <> 0 THEN RAISE EXCEPTION 'p03 opened twice'; END IF;
+  PERFORM pg_temp._s1_assert_nightly();
+END;
+$$;
+
+-- Kept last on purpose: it seals the live posting week, so any test after it that adds a trip refund dated 3 days ago would hit AFTER_SEAL on some weekdays.
+-- mx-undo-weekb: undo after posting week B sealed — reversal lands in current posting_week
+DO $$
+DECLARE
+  v_org uuid := pg_temp._s1_org();
+  v_charge uuid; v_pb uuid; v_week_a date; v_week_b date;
+  c toll.charges; p toll.paybacks; d toll.disputes;
+  v_dispute uuid; v_r jsonb; v_snap jsonb; v_settle uuid;
+  v_hash_b_pre text; v_hash_b_post text; v_rev_cnt int; v_post_wk date;
+BEGIN
+  SELECT * INTO v_charge, v_pb, v_week_a FROM pg_temp._s1_setup390('mx-uwb', 252);
+  c := pg_temp._s1_ch('s1-ch-mx-uwb'); p := pg_temp._s1_pb('trip:s1-trip-mx-uwb');
+  v_r := pg_temp._s1_cmd('open_dispute', jsonb_build_object(
+    'command_id', 's1-mx-uwb', 'charge_id', c.id, 'payback_id', p.id,
+    'expected_charge_version', c.version, 'expected_payback_version', p.version));
+  v_dispute := (v_r ->> 'dispute_id')::uuid;
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  PERFORM pg_temp._s1_cmd('mark_dispute_sent', jsonb_build_object(
+    'command_id', 's1-mx-uwb-sent', 'dispute_id', v_dispute, 'expected_dispute_version', d.version));
+  PERFORM pg_temp._s1_cmd('seal_week', jsonb_build_object(
+    'command_id', 's1-mx-uwb-seal-a', 'week_key', v_week_a, 'expected_week_version',
+    toll_system.week_version(v_org, v_week_a)));
+  PERFORM public.toll_sys_import(v_org, 'uber', format(
+    '[{"row_type":"adjustment","reference":"s1-adj-mx-uwb","driver_id":"s1-d1","paid_on":"%s","amount_minor":2000}]',
+    (now() AT TIME ZONE 'America/Jamaica')::date)::jsonb, 's1-adj-mx-uwb', 'smoke');
+  p := pg_temp._s1_pb('s1-adj-mx-uwb');
+  v_week_b := toll_system.posting_week(v_org);
+  v_snap := pg_temp._s1_snap_bals();
+  SELECT * INTO d FROM toll.disputes WHERE organization_id = v_org AND id = v_dispute;
+  v_r := pg_temp._s1_cmd('settle_dispute', jsonb_build_object(
+    'command_id', 's1-mx-uwb-settle', 'dispute_id', v_dispute, 'payback_id', p.id,
+    'expected_dispute_version', d.version, 'expected_payback_version', p.version));
+  v_settle := (v_r ->> 'decision_id')::uuid;
+  PERFORM pg_temp._s1_cmd('seal_week', jsonb_build_object(
+    'command_id', 's1-mx-uwb-seal-b', 'week_key', v_week_b, 'expected_week_version',
+    toll_system.week_version(v_org, v_week_b)));
+  v_hash_b_pre := pg_temp._s1_week_ledger_hash(v_week_b);
+  v_post_wk := toll_system.posting_week(v_org);
+  c := pg_temp._s1_ch('s1-ch-mx-uwb');
+  p := pg_temp._s1_pb('s1-adj-mx-uwb');
+  PERFORM pg_temp._s1_cmd('undo_decision', jsonb_build_object(
+    'command_id', 's1-mx-uwb-undo', 'decision_id', v_settle,
+    'expected_versions', jsonb_build_object(c.id::text, c.version, p.id::text, p.version)));
+  PERFORM pg_temp._s1_assert_snap(v_snap, 'mx-undo-weekb-bal');
+  v_hash_b_post := pg_temp._s1_week_ledger_hash(v_week_b);
+  IF v_hash_b_pre IS DISTINCT FROM v_hash_b_post THEN RAISE EXCEPTION 'mx-undo-weekb hash B'; END IF;
+  SELECT count(*)::int INTO v_rev_cnt FROM ledger.entries e
+  WHERE e.organization_id = v_org AND e.reference_type = 'toll'
+    AND coalesce((e.metadata ->> 'reverse')::boolean, false) = true
+    AND (e.metadata ->> 'toll_week')::date = v_post_wk;
+  IF v_rev_cnt < 1 THEN RAISE EXCEPTION 'mx-undo-weekb no reversal in posting week %', v_post_wk; END IF;
   PERFORM pg_temp._s1_assert_nightly();
 END;
 $$;
