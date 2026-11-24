@@ -1395,3 +1395,21 @@ fix (a platform-staff or role check on `/admin/*` in the residual monolith).
 3. Every pg_cron job that calls a function returns 2xx the next morning (`net._http_response`).
 4. Merchant gets the new-order push.
 5. recon-worker run succeeds; Week Reconciliation page loads numbers.
+
+## Notion record (24 Nov 2026)
+
+Project rule: Supabase audits go to Notion. Both entries live in the **Supabase Audits** hub, in the
+**Audit Tracker** database:
+
+- **Supabase master key replacement** — Status **Done**, Completed 24 Nov 2026. Phases 0–8 with the
+  times (legacy API keys disabled ~17:47 UTC, legacy HS256 JWT secret revoked 18:20 UTC), what was
+  verified, and the follow-ups (phase 9 overnight check, and the dead
+  `/ledger/ensure-from-trip-ids/import` route).
+  https://app.notion.com/p/Supabase-master-key-replacement-4222ac0f759881d5807edfb75451bbfe
+- **Repo history scan before going public** — Status **Partial**, Completed 24 Nov 2026. The
+  hard-coded test-account passwords are closed; the real Uber export in
+  `apps/fleet/src/fixtures/golden-import-bundle-march16-23/` is still open (fake data + history
+  purge before the repo goes public).
+  https://app.notion.com/p/Repo-history-scan-before-going-public-4222ac0f759881af9967ebbef1a0c23f
+
+Neither page contains a key value or a password.
