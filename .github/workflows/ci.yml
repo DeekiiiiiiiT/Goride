@@ -7,8 +7,60 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Private repo = 2,000 free Actions minutes a month (24 Nov 2026). A newer push cancels the older
+# run, docs-only pushes skip the build, and the inventory e2e only runs for inventory/car-kit files.
+# The secret scan always runs.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      inventory: ${{ steps.filter.outputs.inventory }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"; echo "inventory=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ "${{ github.event_name }}" = "push" ]; then
+            BASE="${{ github.event.before }}"
+          else
+            BASE="${{ github.event.pull_request.base.sha }}"
+          fi
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE" 2>/dev/null; then
+            echo "code=true" >> "$GITHUB_OUTPUT"; echo "inventory=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          mapfile -t CHANGED < <(git diff --name-only "$BASE" "${{ github.sha }}")
+          code=false
+          inventory=false
+          for f in "${CHANGED[@]}"; do
+            case "$f" in
+              docs/*|*.md) ;;
+              *) code=true ;;
+            esac
+            lower="$(printf '%s' "$f" | tr '[:upper:]' '[:lower:]')"
+            case "$lower" in
+              *inventory*|*inv_*|*car-kit*|*carkit*|*car_kit*|\
+              pnpm-lock.yaml|package.json|playwright*.config.ts|e2e/helpers/*|\
+              .github/workflows/ci.yml|scripts/typecheck-fleet-inventory.mjs|scripts/typecheck-driver-car-kit.mjs)
+                inventory=true ;;
+            esac
+          done
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "inventory=$inventory" >> "$GITHUB_OUTPUT"
+          echo "Changed files: ${#CHANGED[@]}  code=$code  inventory=$inventory"
+
   test-and-build:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -579,6 +631,8 @@ jobs:
           gitleaks detect --source . --config .gitleaks.toml --log-opts="$RANGE" --redact --no-banner --exit-code 1
 
   inventory:
+    needs: changes
+    if: needs.changes.outputs.inventory == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

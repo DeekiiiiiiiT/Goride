@@ -10,9 +10,7 @@ name: Fuel period auto-close cron
 # Wave G monitoring: docs/fuel-period-wave-g-monitoring.md
 
 on:
-  schedule:
-    # Daily 14:00 UTC ≈ 09:00 Jamaica
-    - cron: '0 14 * * *'
+  # Schedule moved to Supabase pg_cron job fuel-period-auto-close (24 Nov 2026). Manual run only.
   workflow_dispatch:
 
 jobs:

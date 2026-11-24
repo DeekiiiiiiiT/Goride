@@ -4,9 +4,7 @@ name: Rush pricing cron jobs
 # (Finding P — do not schedule GG; workflow_dispatch only).
 
 on:
-  schedule:
-    # Daily 13:00 UTC ≈ 08:00 Jamaica — Pass renew / past_due / expire
-    - cron: '0 13 * * *'
+  # Schedule moved to Supabase pg_cron job rush-pass-renew (24 Nov 2026). Manual run only.
   workflow_dispatch:
     inputs:
       job:

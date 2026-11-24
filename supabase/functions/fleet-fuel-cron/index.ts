@@ -1,4 +1,13 @@
-/** Door for the fuel close sweeper. The database job has no user login. */
+/**
+ * Door for fuel database jobs. The database job has no user login.
+ * Body {} (or no job) = close-job sweeper (hourly). Body {"job":"auto-close"} = daily auto-close of
+ * eligible weeks for every company (moved here from GitHub Actions, 24 Nov 2026).
+ */
+
+const JOBS: Record<string, string> = {
+  sweep: "/fuel/period-jobs/sweep",
+  "auto-close": "/fuel/periods/auto-close?orgId=all",
+};
 
 function sameSecret(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -21,7 +30,13 @@ Deno.serve(async (req) => {
   if (!base || !key) {
     return new Response(JSON.stringify({ error: "server_misconfigured" }), { status: 500 });
   }
-  const res = await fetch(`${base}/functions/v1/fleet-fuel/fuel/period-jobs/sweep`, {
+  const body = await req.json().catch(() => ({})) as { job?: string };
+  const job = String(body.job || "sweep");
+  const path = JOBS[job];
+  if (!path) {
+    return new Response(JSON.stringify({ error: "Unknown job" }), { status: 400 });
+  }
+  const res = await fetch(`${base}/functions/v1/fleet-fuel${path}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

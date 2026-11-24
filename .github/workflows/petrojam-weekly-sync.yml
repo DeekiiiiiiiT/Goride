@@ -1,9 +1,7 @@
 name: Petrojam weekly sync
 
 on:
-  schedule:
-    # Thursdays 17:00 UTC (12:00 PM Jamaica) — after Petrojam's weekly price post
-    - cron: '0 17 * * 4'
+  # Schedule moved to Supabase pg_cron job petrojam-weekly-sync (24 Nov 2026). Manual run only.
   workflow_dispatch:
 
 jobs:

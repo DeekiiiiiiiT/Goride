@@ -6,6 +6,9 @@ const ALLOWED = new Set([
   "/internal/rush-money/scores",
   "/internal/in-house/sweep",
   "/internal/geo/reconcile",
+  // Daily Rush Pass renew / past_due / expire (moved from GitHub Actions, 24 Nov 2026).
+  // Growth Guarantee stays manual-only (Finding P), so it is not listed.
+  "/internal/pricing/rush-pass/renew",
 ]);
 
 function sameSecret(a: string, b: string): boolean {
