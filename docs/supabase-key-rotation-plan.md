@@ -114,7 +114,64 @@ nothing to create.
    secret or publishable key has to run with `verify_jwt = false` and check the caller itself,
    which is exactly what phase 3 does.
 
+### Phase 2 — done (24 Nov 2026)
 
+**Code.** 146 `createClient(...)` key arguments across 110 files now come from
+`_shared/serviceKey.ts` — `serviceKey()` where the old code tolerated an empty value
+(`?? ""`), `requireServiceKey()` where the old code asserted non-null (`!`). Nothing else in
+those files changed: no header, route, query or logic. Verified mechanically — no added line
+contains `Authorization`, `Bearer` or `apikey`, and no file gained key material.
+
+**What deliberately still sends the legacy JWT**, because its target keeps `verify_jwt = true`
+until phase 3: delivery/courierConsumerRoutes (×3) → notifications; delivery/orderChatNotify →
+notifications; _shared/dashOrderSms → notifications; _shared/orderToFleetTrip → fleet-core;
+_fleet-server/fuel_seal_http → fleet-fuel; _fleet-server/earnings_seal_http → fleet-pay;
+rides/fare/tollBrainClient → toll-brain; rides/matchingBrainClient → matching;
+platform-catalog/geoRoutes → delivery; fleet-fuel-cron → fleet-fuel; fleet-toll-cron →
+fleet-toll; fleet-picture-cron → fleet-core; fleet-activity-cron → fleet-core; rush-cron →
+delivery. Also untouched: _fleet-server/team_staff_service (Auth admin API) and the 8
+`_fleet-server` files pinned to `jsr:@supabase/supabase-js@2.49.8`, which predates the new key
+format and would send a secret key as a Bearer JWT — those wait for an SDK bump.
+
+**Deployed — 30 functions, in six groups, by hand with the Supabase CLI** (`--use-api`,
+telemetry off; the native CLI binary cannot write files inside this agent's sandbox, so
+`DO_NOT_TRACK=1` is required, and the access token is read from the user environment block).
+Every deploy was followed by the job that normally wakes the function, started on demand
+instead of waiting for the schedule. `verify_jwt` was checked before and after: **0 of 44
+functions changed flag**, 30 versions bumped.
+
+| Group | Functions | Proof |
+|---|---|---|
+| 1 | catalog-research, parts-sourcing-drain, spatial-index-canary | cron-secret calls: **200** `{"ok":true,"skipped":"empty"}` and **200** `{"claimed":0,…}` |
+| 2 | toll-brain, fuel-brain, matching | internal only; verified in phase 3 when their flags come off |
+| 3 | delivery, notifications, payments, driver | `invoke_rush_delivery('/internal/geo/reconcile')` → **200** `{"healed":0}`; payments answers its own **404** route |
+| 4 | rides, haul, freight, logistics, explorer, identity, custom-access-token | boot probe: every route answers (404 own router, custom-access-token **401** `Hook verification failed`) |
+| 5 | fleet-core, fleet-fuel, fleet-toll, fleet-ops, fleet-claims, fleet-pay | fleet-core **200** `{"success":true,"driftCount":0}` via fleet-activity-cron; fleet-fuel **200** `{"processed":0}`; fleet-toll **200** `{"reports":[]}` via fleet-toll-cron |
+| 6 | platform-catalog, petrojam-prices, evidence-cleanup, finance-doctor, finance-recon, gct-admin, order-chat-retention | petrojam sync **200** (20 weeks); the rest answer their own 401/404 |
+
+Fleet bundles were regenerated from source. The committed `fleet-toll` bundle was stale: it
+still carried the retired `/make-server-37f42386/recon` routes and lacked the vehicle-pictures
+relay and toll driver-dispute routes, so the rebuild drops those six dead strings and adds
+three live ones — that is the source's current state, not a change of intent.
+
+**Faults found that this work did not cause** (all pre-date the rotation):
+1. `fleet-evidence-cleanup-daily` has **never run**: `evidence-cleanup` has
+   `verify_jwt = true`, but `private.invoke_evidence_cleanup()` sends only
+   `X-Fleet-Cron-Secret`, so the gateway answers **401** `UNAUTHORIZED_NO_AUTH_HEADER`.
+   Phase 3 gives it its own check and turns the flag off, which fixes it.
+2. `spatial-index-canary` answers **500**: it queries `courier_availability` through the
+   default `public` client, but that table lives in schema `delivery`.
+3. `fleet-core /internal/vehicle-pictures/fill` answers **500**. Proven pre-existing: the
+   scheduled 05:15 fill returned the same 500 (response `21714`) before fleet-core was
+   redeployed at 05:38.
+4. Suspect, needs a look in phase 3: `rush-trip-recon-daily` posts `Authorization: Bearer
+   <cron secret>` straight to `fleet-core`, which has `verify_jwt = true`.
+
+**Checks.** `pnpm check --all` 15/15; `lint-edge-kernel`, `edge-route-manifest --all --check`,
+`check-edge-manifest-overlap` pass; `deno check` on the CI-listed edge files passes;
+`deno test supabase/functions` → 2035 passed, 1 failed, and that one is
+`_shared/menuEngine/exports.drift.test.ts`, which compares two files this work never touched
+that differ only by CRLF vs LF in this Windows checkout.
 
 ## Done-tests
 
