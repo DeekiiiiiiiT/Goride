@@ -63,6 +63,13 @@ function resolvePrev() {
 }
 
 try {
+  // One-off override: set ROAM_FORCE_BUILD=1 on a Vercel project to build even when the
+  // diff is empty (e.g. a hook re-run at the same commit). Remove the variable afterwards.
+  if (process.env.ROAM_FORCE_BUILD === "1") {
+    console.log(`vercel-should-build: ROAM_FORCE_BUILD=1 — building ${APP_PATH} (forced)`);
+    process.exit(1);
+  }
+
   const prev = resolvePrev();
   if (!prev) {
     console.log(`vercel-should-build: no previous SHA — building ${APP_PATH}`);
