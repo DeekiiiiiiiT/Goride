@@ -7,9 +7,40 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
 import { applyCors } from "../_shared/corsAllowlist.ts";
 import { sendFcmPush } from "../_shared/fcmSend.ts";
-import { requireServiceKey } from "../_shared/serviceKey.ts";
+import { requireServiceKey, secretKeyCandidates } from "../_shared/serviceKey.ts";
+import { authorizeInternalRequest } from "../_shared/requireInternalSecret.ts";
 
 const app = new Hono().basePath("/notifications");
+
+/**
+ * The four server-to-server routes below (/courier-offer, /customer-order-status, /order-sms,
+ * /order-chat) may only be called by another backend. Accepted credentials:
+ *   - a NEW secret key (`sb_secret_…`) on `x-service-role`, `x-service-key`, `apikey`, or as a Bearer
+ *   - the fleet / rides cron secret on `x-fleet-cron-secret` / `x-rides-cron-secret`, or as a Bearer
+ * The legacy `service_role` JWT is deliberately NOT accepted: it was leaked, and honouring it
+ * would keep the leaked key working after phase 8 turns the legacy keys off.
+ */
+function serviceCallerDenied(req: Request): Response | null {
+  const denied = authorizeInternalRequest(req, {
+    envKeys: ["FLEET_CRON_SECRET", "RIDES_CRON_SECRET"],
+    headerNames: [
+      "x-service-role",
+      "x-service-key",
+      "apikey",
+      "x-fleet-cron-secret",
+      "x-rides-cron-secret",
+    ],
+    alsoAccept: secretKeyCandidates(),
+  });
+  if (!denied) return null;
+  // authorizeInternalRequest answers 500 when nothing is configured; a caller-facing route
+  // should say "forbidden" either way.
+  const misconfigured = denied.status === 500;
+  return new Response(
+    JSON.stringify({ error: misconfigured ? "Server misconfigured" : "Forbidden" }),
+    { status: misconfigured ? 500 : 403, headers: { "Content-Type": "application/json" } },
+  );
+}
 
 applyCors(app, {
   allowHeaders: [
@@ -312,10 +343,8 @@ app.post("/unsubscribe", async (c) => {
 
 /** Courier offer alert — send web-push to stored subscriptions when VAPID configured. */
 app.post("/courier-offer", async (c) => {
-  const serviceKey = c.req.header("x-service-role") || "";
-  if (serviceKey !== Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) {
-    return c.json({ error: "Forbidden" }, 403);
-  }
+  const denied = serviceCallerDenied(c.req.raw);
+  if (denied) return denied;
 
   const body = await c.req.json().catch(() => ({}));
   const courierUserId = String(body.courierUserId || "");
@@ -344,10 +373,8 @@ app.post("/courier-offer", async (c) => {
 
 /** Customer order-status push — additive to SMS from dashOrderSms. */
 app.post("/customer-order-status", async (c) => {
-  const serviceKey = c.req.header("x-service-role") || "";
-  if (serviceKey !== Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) {
-    return c.json({ error: "Forbidden" }, 403);
-  }
+  const denied = serviceCallerDenied(c.req.raw);
+  if (denied) return denied;
 
   const body = await c.req.json().catch(() => ({}));
   const customerUserId = String(body.customerUserId || "");
@@ -389,10 +416,8 @@ app.post("/customer-order-status", async (c) => {
 
 /** Internal SMS intent logger — real SMS is dashOrderSms in delivery. */
 app.post("/order-sms", async (c) => {
-  const serviceKey = c.req.header("x-service-role") || "";
-  if (serviceKey !== Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) {
-    return c.json({ error: "Forbidden" }, 403);
-  }
+  const denied = serviceCallerDenied(c.req.raw);
+  if (denied) return denied;
 
   const body = await c.req.json().catch(() => ({}));
   const phone = String(body.phone || "");
@@ -413,10 +438,8 @@ app.post("/order-sms", async (c) => {
 
 /** In-order chat push — customer or courier audience. */
 app.post("/order-chat", async (c) => {
-  const serviceKey = c.req.header("x-service-role") || "";
-  if (serviceKey !== Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) {
-    return c.json({ error: "Forbidden" }, 403);
-  }
+  const denied = serviceCallerDenied(c.req.raw);
+  if (denied) return denied;
 
   const body = await c.req.json().catch(() => ({}));
   const audienceRaw = String(body.audience || "customer");

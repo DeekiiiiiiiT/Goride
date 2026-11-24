@@ -67,6 +67,8 @@ export function requireServiceKey(): string {
 /**
  * Every server-side secret this deployment knows, for constant-time comparison of an
  * incoming header. Includes secret keys first, then the legacy service_role JWT.
+ *
+ * Not for anything that must stop accepting the legacy key — use secretKeyCandidates().
  */
 export function serviceKeyCandidates(): string[] {
   const raw = secretKeysJson();
@@ -74,4 +76,16 @@ export function serviceKeyCandidates(): string[] {
   const legacy = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
   if (legacy) out.push(legacy);
   return out;
+}
+
+/**
+ * Only the NEW-format secret keys (`SUPABASE_SECRET_KEYS`), never the legacy service_role JWT.
+ *
+ * Use this to authorise a caller. The legacy key was leaked, so accepting its value keeps the
+ * leaked key working even after phase 8 deactivates it at the gateway. Callers must present a
+ * secret key — or a cron secret, where the route also accepts one.
+ */
+export function secretKeyCandidates(): string[] {
+  const raw = secretKeysJson();
+  return raw ? parseSecretKeys(raw) : [];
 }

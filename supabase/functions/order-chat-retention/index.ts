@@ -4,9 +4,9 @@
  * Days from enterprise.privacy.retention.chatDays (query ?days= overrides).
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { requireInternalSecret } from "../_shared/requireInternalSecret.ts";
+import { authorizeInternalRequest } from "../_shared/requireInternalSecret.ts";
 import { getSetting } from "../_shared/rushSettings/getSetting.ts";
-import { requireServiceKey } from "../_shared/serviceKey.ts";
+import { requireServiceKey, secretKeyCandidates } from "../_shared/serviceKey.ts";
 
 type DataRetention = {
   deliveryPhotosDays: number;
@@ -22,9 +22,13 @@ Deno.serve(async (req) => {
     return new Response(null, { status: 204 });
   }
 
-  const denied = requireInternalSecret(req, {
-    headerNames: ["x-fleet-cron-secret", "x-service-role"],
-    envKeys: ["FLEET_CRON_SECRET", "SUPABASE_SERVICE_ROLE_KEY"],
+  // Accept a NEW secret key (`sb_secret_…`) or the cron secret. The legacy service_role JWT is
+  // deliberately not accepted: it was leaked, so honouring it would keep that key working after
+  // phase 8 turns the legacy keys off.
+  const denied = authorizeInternalRequest(req, {
+    headerNames: ["x-fleet-cron-secret", "x-rides-cron-secret", "x-service-role", "x-service-key"],
+    envKeys: ["FLEET_CRON_SECRET", "RIDES_CRON_SECRET"],
+    alsoAccept: secretKeyCandidates(),
   });
   if (denied) return denied;
 

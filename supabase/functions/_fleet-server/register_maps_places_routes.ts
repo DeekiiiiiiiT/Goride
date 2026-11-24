@@ -1,18 +1,33 @@
 /**
  * Peeled from index.tsx — Wave F0. Behavior unchanged.
+ *
+ * The Maps/Places routes below are unauthenticated on purpose (the browser needs the Maps key
+ * and the Fleet address fields need the Places proxy), but they spend provider quota, so each
+ * one is rate limited per caller IP.
  */
 import type { Hono } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
 import { logProviderCall } from "./api_usage_logger.ts";
+import { assertRateLimit } from "../_shared/rateLimit.ts";
 import {
   fleetAutocompletePlaces,
   fleetFetchPlaceDetails,
   isFleetPlacesConfigured,
 } from "./places_proxy.ts";
 
+/** Caller IP for the rate-limit bucket (Kong/Cloudflare set these). */
+function callerIp(c: { req: { header: (n: string) => string | undefined } }): string {
+  const forwarded = (c.req.header("x-forwarded-for") || "").split(",")[0]?.trim();
+  if (forwarded) return forwarded;
+  return c.req.header("x-real-ip") || "unknown";
+}
+
 export function registerMapsPlacesRoutes(app: Hono) {
   // Google Maps Config Endpoint
   app.get("/make-server-37f42386/maps-config", async (c) => {
+    const limited = await assertRateLimit(c, `fleet:maps-config:${callerIp(c)}`, { max: 120, windowMs: 60_000 });
+    if (limited) return limited;
+
     const apiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
     // Log as a proxy for client-side JS Maps loads — we cannot meter tile loads
     // directly, but each fresh Maps JS load fetches this endpoint once.
@@ -29,6 +44,9 @@ export function registerMapsPlacesRoutes(app: Hono) {
 
   /** Roam Rides passenger — separate browser key (`GOOGLE_MAPS_API_KEY_RIDES` secret). */
   app.get("/make-server-37f42386/maps-config-rides", async (c) => {
+    const limited = await assertRateLimit(c, `fleet:maps-config-rides:${callerIp(c)}`, { max: 120, windowMs: 60_000 });
+    if (limited) return limited;
+
     const apiKey = Deno.env.get("GOOGLE_MAPS_API_KEY_RIDES");
     logProviderCall({
       provider: "google_maps",
@@ -43,6 +61,9 @@ export function registerMapsPlacesRoutes(app: Hono) {
 
   /** Fleet address autocomplete — server Places (avoids browser referrer / Places JS failures). */
   app.get("/make-server-37f42386/places/autocomplete", async (c) => {
+    const limited = await assertRateLimit(c, `fleet:places-autocomplete:${callerIp(c)}`, { max: 60, windowMs: 60_000 });
+    if (limited) return limited;
+
     const q = (c.req.query("q") ?? "").trim();
     if (q.length < 3) return c.json({ suggestions: [] });
 
@@ -69,6 +90,9 @@ export function registerMapsPlacesRoutes(app: Hono) {
   });
 
   app.get("/make-server-37f42386/places/:placeId/details", async (c) => {
+    const limited = await assertRateLimit(c, `fleet:places-details:${callerIp(c)}`, { max: 60, windowMs: 60_000 });
+    if (limited) return limited;
+
     const placeId = (c.req.param("placeId") ?? "").trim();
     if (!placeId) return c.json({ error: "place_id_required" }, 400);
 

@@ -4,6 +4,7 @@
  * but MUST block on failure (no warn). This HTTP helper is used once earnings is extracted.
  */
 import { buildSealIdempotencyKey } from "./week_seal_log.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 const SEAL_TIMEOUT_MS = 15_000;
 const SEAL_ATTEMPTS = 3;
@@ -43,6 +44,7 @@ export async function sealEarningsWeekViaHttp(opts: {
         method: "POST",
         headers: {
           Authorization: `Bearer ${key}`,
+          "x-service-key": requireServiceKey(),
           apikey: key,
           "Content-Type": "application/json",
           "Idempotency-Key": idempotencyKey,

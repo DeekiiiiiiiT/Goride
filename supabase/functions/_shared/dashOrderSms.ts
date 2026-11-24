@@ -10,6 +10,7 @@ import {
   type QuietHours,
 } from "./rushSettings/enterpriseReaders.ts";
 import { getSetting } from "./rushSettings/getSetting.ts";
+import { requireServiceKey } from "./serviceKey.ts";
 
 type NotifyChannel = "sms" | "push" | "email";
 
@@ -209,7 +210,7 @@ async function notifyCustomerOrderPush(input: {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${serviceKey}`,
-        "x-service-role": serviceKey,
+        "x-service-key": requireServiceKey(),
       },
       body: JSON.stringify({
         customerUserId: input.customerUserId,

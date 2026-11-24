@@ -207,7 +207,7 @@ and gets *fully* open when the flag comes off. Those are listed as "would become
 **fleet-core.** The earlier draft of this review called 22 fleet-core routes "open". That was
 wrong: they all sit behind `requireAuth({ strict: true })` from the mounted inventory
 controller, and return `401 AUTH_REQUIRED` to the anon key today. The routes that are genuinely
-reachable with no user session are only the ones `requireAuth` skips, and of those, three do an
+reachable with no user session are only the ones `requireAuth` skips, and of those, four do an
 upload/OCR and are worth closing:
 
 These are the six routes the review flags. The first four need a login check or a rate limit; the
@@ -315,7 +315,7 @@ re-checked by hand for the sections above; the tables record what the route actu
 #### fleet-core — 179 / 43
 | Route group | Own check |
 |---|---|
-| `/internal/*` | kernel: `Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>` |
+| `/internal/*` | own handler checks (the kernel gate never applies to fleet-core) |
 | `make-server-37f42386/**` domain routes | `resolveActor`, `requirePermission`, `requireProductAdmin`, `verifySettingsAccess`, `requireOrg` per route |
 | AI/scan/parse/vendor/admin-scan routes | `requireAuth({ strict: true })` from the mounted inventory controller — signed-in only, no role check (see the separate fault at the end) |
 | login / signup / health / ready / extraction-status | none (by design) |
@@ -392,9 +392,28 @@ re-checked by hand for the sections above; the tables record what the route actu
 
 #### Legacy functions also on `verify_jwt = true`
 `admin-operations`, `ai-services`, `financial-operations`, `fleet-management`,
-`fuel-maintenance` are live but have **no source folder in the repo** and are not in `ALL_FNS`.
+`fuel-maintenance` are live but their source sits under `apps/fleet/src/supabase/functions/`,
+not `supabase/functions/`, so they are outside `ALL_FNS` and the normal deploy path.
 They cannot be reviewed or redeployed from this repo. They must be deactivated or left alone
 deliberately — do not assume they are current.
+
+### Fix stage — code done, nothing deployed (24 Nov 2026)
+
+The changes below are written and committed but **not deployed and no flag was changed**.
+
+| Fix | Where | What changed |
+|---|---|---|
+| OCR/upload need a login | `_fleet-server/rbac_middleware.ts` | `/scan-receipt`, `/scan-odometer`, `/upload` removed from the `requireAuth` skip list, so the mounted login gate answers `401` when there is no session. Live callers are signed-in app screens (`apps/driver`); `apps/admin` defines `scanReceipt` but never calls it. |
+| Rate limits on the public proxies | `_fleet-server/register_maps_places_routes.ts` | `assertRateLimit` per caller IP: `maps-config` and `maps-config-rides` 120/min, `places/autocomplete` and `places/:placeId/details` 60/min. |
+| Callers must show a secret key | `notifications/index.ts`, `order-chat-retention/index.ts`, `_shared/edgeKernel.ts` | All three now use `authorizeInternalRequest` with `secretKeyCandidates()` + the cron secrets. **The legacy `service_role` JWT is no longer accepted**, so the leaked value cannot keep these routes open after phase 8. New `secretKeyCandidates()` in `_shared/serviceKey.ts` returns only `SUPABASE_SECRET_KEYS` entries. |
+| Callers updated to match | `delivery/courierConsumerRoutes.ts` (3), `delivery/orderChatNotify.ts`, `_shared/dashOrderSms.ts`, `_fleet-server/fuel_seal_http.ts`, `_fleet-server/earnings_seal_http.ts` | Each now sends the new secret key on `x-service-role` / `x-service-key`, while keeping the legacy JWT in `Authorization` — the gateway still needs a JWT until the targets' flags come off. |
+
+**Deploy order matters when this goes live:** deploy the callers and the callees together
+(`delivery` + `notifications`, `delivery` + `order-chat-retention`, and all six fleet functions
+because `edgeKernel.ts` is bundled into each). Deploying one side alone makes that path answer
+403/401.
+
+Fleet bundles were regenerated locally so the working tree matches the sources.
 
 ### Separate faults (not key problems)
 

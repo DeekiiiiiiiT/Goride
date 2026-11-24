@@ -7,6 +7,8 @@
 import { Hono } from "npm:hono@4.3.11";
 import type { Context, Next } from "npm:hono@4.3.11";
 import { applyCorsNpm } from "./corsAllowlistNpm.ts";
+import { authorizeInternalRequest } from "./requireInternalSecret.ts";
+import { secretKeyCandidates } from "./serviceKey.ts";
 
 export type FleetPathStyle = "slug" | "monolith" | "fleet-core";
 
@@ -242,13 +244,23 @@ export function createFleetFunction(opts: CreateFleetFunctionOpts): Hono {
   app.get("/health", (c) => c.json({ service: slug, status: "ok" }));
   app.get("/ready", (c) => c.json({ service: slug, status: "ready" }));
 
-  // 7. Service-role guard for /internal/* (parent-level; domain may also check)
+  // 7. Internal-call gate for /internal/* (parent-level; domain may also check).
+  //    Accepts a NEW secret key (`sb_secret_…`) or the fleet/rides cron secret. The legacy
+  //    service_role JWT is deliberately NOT accepted: it was leaked, so honouring its value
+  //    would keep that key working after phase 8 turns the legacy keys off.
   app.use("/internal/*", async (c, next) => {
-    const auth = c.req.header("Authorization") ?? "";
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-    const token = auth.replace(/^Bearer\s+/i, "").trim();
-    if (!serviceKey || token !== serviceKey) {
-      return c.json({ error: "unauthorized" }, 401);
+    const denied = authorizeInternalRequest(c.req.raw, {
+      envKeys: ["FLEET_CRON_SECRET", "RIDES_CRON_SECRET"],
+      headerNames: [
+        "x-fleet-cron-secret",
+        "x-rides-cron-secret",
+        "x-service-key",
+        "apikey",
+      ],
+      alsoAccept: secretKeyCandidates(),
+    });
+    if (denied) {
+      return c.json({ error: "unauthorized" }, denied.status === 500 ? 503 : 401);
     }
     await next();
   });

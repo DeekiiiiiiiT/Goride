@@ -490,7 +490,7 @@ async function dispatchOffersForOrder(
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-            "x-service-role": Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+            "x-service-role": requireServiceKey(),
           },
           body: JSON.stringify({
             courierUserId: row.driver_id,
@@ -822,7 +822,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-          "x-service-role": Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+          "x-service-role": requireServiceKey(),
         },
         body: JSON.stringify({
           courierUserId: auth.userId,
@@ -1741,6 +1741,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          "x-service-role": requireServiceKey(),
         },
         body: JSON.stringify({
           orderId,

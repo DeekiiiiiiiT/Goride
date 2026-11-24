@@ -3,6 +3,7 @@
  * Retries + timeout + Idempotency-Key (ADR-0019). Silent skip is not allowed.
  */
 import { buildSealIdempotencyKey } from "./week_seal_log.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 const SEAL_TIMEOUT_MS = 15_000;
 const SEAL_ATTEMPTS = 3;
@@ -43,6 +44,7 @@ export async function sealFuelWeekViaHttp(opts: {
         method: "POST",
         headers: {
           Authorization: `Bearer ${key}`,
+          "x-service-key": requireServiceKey(),
           apikey: key,
           "Content-Type": "application/json",
           "Idempotency-Key": idempotencyKey,

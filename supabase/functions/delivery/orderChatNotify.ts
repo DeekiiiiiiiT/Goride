@@ -1,6 +1,8 @@
 /**
  * Push fan-out for new order chat messages (customer / courier / merchant).
  */
+import { requireServiceKey } from "../_shared/serviceKey.ts";
+
 export async function notifyOrderChatRecipients(opts: {
   orderId: string;
   orderNumber?: string | null;
@@ -31,7 +33,7 @@ export async function notifyOrderChatRecipients(opts: {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-service-role": serviceKey,
+          "x-service-key": requireServiceKey(),
           Authorization: `Bearer ${serviceKey}`,
         },
         body: JSON.stringify({

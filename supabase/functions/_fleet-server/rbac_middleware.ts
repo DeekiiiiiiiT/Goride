@@ -497,13 +497,13 @@ export function requireAuth(options?: RequireAuthOptions) {
       path.includes("/fuel/periods/auto-close") ||
       // Public Maps JS bootstrap (browser key only)
       path.includes("/maps-config") ||
-      // Server Places proxy — Fleet address fields (key stays server-side)
+      // Server Places proxy — Fleet address fields (key stays server-side).
+      // Rate-limited in register_maps_places_routes.ts.
       path.includes("/places/autocomplete") ||
-      (path.includes("/places/") && path.includes("/details")) ||
-      // OCR helpers — auth enforced by the route handler / client session JWT
-      path.includes("/scan-receipt") ||
-      path.includes("/scan-odometer") ||
-      path.includes("/upload")
+      (path.includes("/places/") && path.includes("/details"))
+      // OCR / file upload are deliberately NOT skipped: they spend OpenAI credit, so they
+      // require a signed-in user like every other route. (They used to be skipped and relied
+      // on the caller being logged in; /upload's own check only ran when a token was present.)
     ) {
       await next();
       return;
