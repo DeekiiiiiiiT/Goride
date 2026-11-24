@@ -1,3 +1,4 @@
+import { serviceKey } from "../_shared/serviceKey.ts";
 /** Door for the toll matcher sweep. The database job has no user login. */
 
 function sameSecret(a: string, b: string): boolean {
@@ -17,7 +18,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
   }
   const base = (Deno.env.get("SUPABASE_URL") || "").replace(/\/$/, "");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  const key = serviceKey();
   if (!base || !key) {
     return new Response(JSON.stringify({ error: "server_misconfigured" }), { status: 500 });
   }
@@ -28,7 +29,7 @@ Deno.serve(async (req) => {
       // The legacy JWT stays on Authorization only so the gateway (verify_jwt = true on
       // fleet-toll until phase 3) lets the call through. The target's own /internal/* gate
       // no longer accepts that key, so send the cron secret this relay already validated.
-      Authorization: `Bearer ${key}`,
+
       apikey: key,
       "X-Fleet-Cron-Secret": expected,
     },

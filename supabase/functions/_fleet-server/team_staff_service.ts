@@ -4,6 +4,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { writeAdminAuditBestEffort, type AdminAuditInput } from "../delivery/admin/adminAuditWriter.ts";
 import { invalidateAccessCache } from "./access_cache.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 import {
   canGrantRole,
   isOwnerRole,
@@ -78,11 +79,11 @@ export async function findAuthUserByEmail(
   email: string,
 ): Promise<{ id: string; email: string; app_metadata: Record<string, unknown> } | null> {
   const base = Deno.env.get("SUPABASE_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const key = serviceKey();
   if (!base || !key) return null;
   const url = `${base}/auth/v1/admin/users?page=1&per_page=20`;
   const res = await fetch(`${url}&filter=${encodeURIComponent(email)}`, {
-    headers: { Authorization: `Bearer ${key}`, apikey: key },
+    headers: { apikey: key, ...(key.startsWith("eyJ") ? { Authorization: `Bearer ${key}` } : {}) },
   });
   if (!res.ok) return null;
   const body = await res.json().catch(() => ({}));

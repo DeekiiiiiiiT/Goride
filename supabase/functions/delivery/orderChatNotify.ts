@@ -1,7 +1,7 @@
 /**
  * Push fan-out for new order chat messages (customer / courier / merchant).
  */
-import { requireServiceKey } from "../_shared/serviceKey.ts";
+import { requireServiceKey, serviceKey as resolveServiceKey } from "../_shared/serviceKey.ts";
 
 export async function notifyOrderChatRecipients(opts: {
   orderId: string;
@@ -15,7 +15,7 @@ export async function notifyOrderChatRecipients(opts: {
   courierUserId: string | null;
 }): Promise<void> {
   const base = Deno.env.get("SUPABASE_URL");
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const serviceKey = resolveServiceKey();
   if (!base || !serviceKey) return;
 
   const preview = opts.preview.length > 80 ? `${opts.preview.slice(0, 79)}…` : opts.preview;
@@ -34,7 +34,7 @@ export async function notifyOrderChatRecipients(opts: {
         headers: {
           "Content-Type": "application/json",
           "x-service-key": requireServiceKey(),
-          Authorization: `Bearer ${serviceKey}`,
+
         },
         body: JSON.stringify({
           audience,

@@ -1,3 +1,4 @@
+import { serviceKey } from "../_shared/serviceKey.ts";
 export const DEVICE_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -15,7 +16,7 @@ export function generatePairingCode(): string {
 function deviceSecret(): string {
   return Deno.env.get("STATION_DEVICE_SECRET") ||
     Deno.env.get("STATION_SHIFT_SECRET") ||
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
+    serviceKey() ||
     "station-device-dev-secret";
 }
 

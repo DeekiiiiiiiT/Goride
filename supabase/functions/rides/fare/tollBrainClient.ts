@@ -6,6 +6,7 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { TollCrossingRecord } from "./tollGeofence.ts";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 
 function brainEnabled(): boolean {
   return Deno.env.get("RIDES_USE_TOLL_BRAIN") === "1" &&
@@ -29,7 +30,7 @@ async function brainPost(path: string, body: Record<string, unknown>): Promise<R
       headers: {
         "Content-Type": "application/json",
         "X-Toll-Brain-Internal-Secret": secret(),
-        Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""}`,
+        apikey: serviceKey(),
       },
       body: JSON.stringify(body),
     });

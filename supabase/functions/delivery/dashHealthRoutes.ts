@@ -5,6 +5,7 @@
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getSetting } from "../_shared/rushSettings/getSetting.ts";
+import { secretKeyCandidates } from "../_shared/serviceKey.ts";
 
 export function registerDashHealthRoutes(
   app: Hono,
@@ -13,11 +14,11 @@ export function registerDashHealthRoutes(
   app.get("/health/dash-golden-path", async (c) => {
     const cronSecret = c.req.header("x-fleet-cron-secret") || "";
     const expected = Deno.env.get("FLEET_CRON_SECRET") || "";
-    const serviceKey = c.req.header("x-service-role") || "";
-    const expectedService = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const serviceKey = (c.req.header("x-service-role") || c.req.header("x-service-key") || "").trim();
+
     const authorized =
       (expected && cronSecret === expected) ||
-      (expectedService && serviceKey === expectedService) ||
+      (serviceKey && secretKeyCandidates().some((k) => k === serviceKey)) ||
       c.req.query("public") === "1";
     if (!authorized) return c.json({ error: "Forbidden" }, 403);
 

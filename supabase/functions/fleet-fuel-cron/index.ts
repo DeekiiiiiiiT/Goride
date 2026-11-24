@@ -1,3 +1,4 @@
+import { serviceKey } from "../_shared/serviceKey.ts";
 /**
  * Door for fuel database jobs. The database job has no user login.
  * Body {} (or no job) = close-job sweeper (hourly). Body {"job":"auto-close"} = daily auto-close of
@@ -26,7 +27,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
   }
   const base = (Deno.env.get("SUPABASE_URL") || "").replace(/\/$/, "");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  const key = serviceKey();
   if (!base || !key) {
     return new Response(JSON.stringify({ error: "server_misconfigured" }), { status: 500 });
   }
@@ -40,7 +41,7 @@ Deno.serve(async (req) => {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${key}`,
+
       apikey: key,
       "X-Fleet-Cron-Secret": expected,
     },

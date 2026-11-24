@@ -1,3 +1,4 @@
+import { serviceKey } from "../_shared/serviceKey.ts";
 /**
  * Matching Brain Client — Delegation Shim
  *
@@ -57,7 +58,7 @@ function getInternalSecret(): string {
 }
 
 function getServiceRoleKey(): string {
-  return Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  return serviceKey();
 }
 
 export function isMatchingBrainEnabled(): boolean {

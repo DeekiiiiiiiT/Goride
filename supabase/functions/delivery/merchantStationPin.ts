@@ -1,3 +1,4 @@
+import { serviceKey } from "../_shared/serviceKey.ts";
 export const PIN_MIN_LENGTH = 4;
 export const PIN_MAX_LENGTH = 6;
 export const PIN_MAX_ATTEMPTS = 5;
@@ -87,7 +88,7 @@ export async function verifyPin(pin: string, hash: string): Promise<boolean> {
 
 function shiftSecret(): string {
   return Deno.env.get("STATION_SHIFT_SECRET") ||
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
+    serviceKey() ||
     "station-shift-dev-secret";
 }
 

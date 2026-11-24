@@ -10,7 +10,7 @@ import {
   type QuietHours,
 } from "./rushSettings/enterpriseReaders.ts";
 import { getSetting } from "./rushSettings/getSetting.ts";
-import { requireServiceKey } from "./serviceKey.ts";
+import { requireServiceKey, serviceKey as resolveServiceKey } from "./serviceKey.ts";
 
 type NotifyChannel = "sms" | "push" | "email";
 
@@ -201,7 +201,7 @@ async function notifyCustomerOrderPush(input: {
   merchantName?: string | null;
 }): Promise<void> {
   const base = Deno.env.get("SUPABASE_URL");
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const serviceKey = resolveServiceKey();
   if (!base || !serviceKey) return;
 
   try {
@@ -209,7 +209,6 @@ async function notifyCustomerOrderPush(input: {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${serviceKey}`,
         "x-service-key": requireServiceKey(),
       },
       body: JSON.stringify({

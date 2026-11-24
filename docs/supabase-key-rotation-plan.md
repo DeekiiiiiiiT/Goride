@@ -1033,182 +1033,98 @@ Output: **`apps/driver/android/app/release/app-release.aab`** — that is the ex
 signing identity; this is a Windows machine. It is also not clear that the iOS build is wired into any
 pipeline — treat iOS as a separate task on a Mac.
 
-### Pre-phase-8: removing the legacy anon key, and everything else still on the old keys
+### Phase 3.5 (final) — the last 15 legacy-key readers are gone (24 Nov 2026)
 
-**Do this only after the new driver AAB is live in Play**, otherwise the shipped app (1.0.29) breaks
-when the anon key goes.
+Fifteen edge files still read `SUPABASE_SERVICE_ROLE_KEY` after the DB-client migration. All are now
+on `_shared/serviceKey.ts`, and **only `_shared/serviceKey.ts` still reads the legacy variable** (its
+deliberate fallback).
 
-1. Delete `VITE_SUPABASE_ANON_KEY` from all **11** Vercel projects (Production).
-2. Delete the legacy fallback in `packages/api-client/src/supabaseInfo.ts` — leave only
-   `VITE_SUPABASE_PUBLISHABLE_KEY`.
-3. Redeploy every app with **`ROAM_FORCE_BUILD=1`** (then remove it), and re-run the phase-5 checks.
-
-**Everything else that still holds the old anon or service key:**
-
-| Holder | What it is | Action before phase 8 |
+| File(s) | What it was | Now |
 |---|---|---|
-| `supabase/functions/_shared/serviceKey.ts` | the intentional legacy fallback | keep, or drop the fallback once nothing needs it |
-| 15 edge files that still **read** `SUPABASE_SERVICE_ROLE_KEY` (below) | HTTP header sends (Bearer) and one GoTrue admin call | switch each to the cron secret or the new secret key on `apikey`/`x-service-key` |
-| GitHub repo secret `SUPABASE_SERVICE_ROLE_KEY` | unused by the three cron workflows now | delete after phase 8 |
-| Google Secret Manager `SUPABASE_SERVICE_ROLE_KEY` | the worker no longer mounts it | delete after phase 8 |
-| the **Play app 1.0.29** | its bundle still contains the anon key | replaced by 1.0.30+ |
-| `apps/*/.env.testcopy` (4 files) | point at the **local** stack (127.0.0.1:54321) | leave alone — never put a production key there |
-| `apps/fleet/.env.local` | the owner's local dev file | keep the publishable/secret keys there |
-| `apps/fleet/src/supabase/functions/**` | source of the five deleted functions (dead code) | delete or ignore |
+| `delivery/dashHealthRoutes.ts` | compared callers to the legacy key | accepts the cron secret or any current secret key (`secretKeyCandidates`) via `x-service-role`/`x-service-key` |
+| `delivery/merchantStationDevice.ts`, `merchantStationPin.ts` | HMAC secret fallback | `STATION_SHIFT_SECRET` → `serviceKey()` → dev default |
+| `delivery/orderChatNotify.ts`, `_shared/dashOrderSms.ts` | notified `notifications` with the legacy Bearer | `serviceKey()`, key on `x-service-key` only |
+| `fleet-activity-cron`, `fleet-fuel-cron`, `fleet-picture-cron`, `fleet-toll-cron` | relayed to `fleet-*` with the legacy Bearer | `serviceKey()`, `apikey` + `X-Fleet-Cron-Secret` (Bearer dropped) |
+| `rides/fare/tollBrainClient.ts` | Bearer to toll-brain | `apikey: serviceKey()` (its internal secret header unchanged) |
+| `rides/matchingBrainClient.ts` | `getServiceRoleKey()` | returns `serviceKey()` |
+| `_fleet-server/earnings_seal_http.ts`, `fuel_seal_http.ts` | Bearer to fleet-pay / fleet-fuel | `serviceKey()`, `apikey` + `x-service-key` (Bearer dropped) |
+| `_fleet-server/ledger_ensure_routes.ts` | accepted the legacy key by exact match | accepts **any** current secret key (`secretKeyCandidates`), anon still allowed for public reads |
+| `_fleet-server/team_staff_service.ts` | GoTrue admin call with the legacy key as Bearer | `serviceKey()` on `apikey`; sends `Authorization: Bearer` **only** when the key is a legacy `eyJ` JWT |
 
-The 15 edge files that still read the service key, classified:
+**Deployed in the usual groups**, each followed by a health probe: `fleet-fuel` + `fleet-pay` +
+`fleet-toll-cron` + `fleet-toll` → `fleet-ops` + `fleet-claims` + `fleet-core` + the three cron relays →
+`delivery` → `rides`. All `/health` **200**; the POST-only relays answer 403/401 to an anonymous POST,
+which is the intended refusal.
 
-- header senders: `delivery/dashHealthRoutes.ts`, `delivery/merchantStationDevice.ts`,
-  `delivery/merchantStationPin.ts`, `delivery/orderChatNotify.ts`, `_shared/dashOrderSms.ts`,
-  `rides/fare/tollBrainClient.ts`, `rides/matchingBrainClient.ts`, the four `fleet-*-cron` doors,
-  `_fleet-server/earnings_seal_http.ts`, `_fleet-server/fuel_seal_http.ts`;
-- GoTrue admin call: `_fleet-server/team_staff_service.ts` (`/auth/v1/admin/users`) — must move to the
-  new key on `apikey`, not `Bearer`;
-- `_fleet-server/ledger_ensure_routes.ts` — same class, verify when switching.
+**Functional proof after the deploys** (all **200**, none timed out):
 
-#### Also fixed in this pass (they were phase-8 landmines)
+- `invoke_rush_delivery('/internal/geo/reconcile')` → `22459`
+- `invoke_fuel_period_job_sweep()` → `22460` `{"processed":0}`
+- `fleet-toll-cron` door → `22461` `{"reports":[]}`
+- `fleet-activity-cron/drift-check` → `22462` `{"success":true,"driftCount":0}`
+- `fleet-fuel-cron` sweep relay → `22463` `{"processed":0}`
 
-- `_fleet-server/register_residual_monolith_routes.tsx` had **five multi-line `createClient` calls** on
-  the legacy key that the earlier exact-string migration missed. All five now use `requireServiceKey()`.
-- the same file's `POST /internal/trips/project` **compared the caller against the legacy key**. It now
-  uses `authorizeCronOrServiceRole` (cron secret or current secret key).
-- that route was also **behind `requireAuth`**, so it answered **401** to every service caller and no
-  order/ride → Fleet trip projection ever landed. It is now on the `requireAuth` skip list with its own
-  gate; verified live: new secret key → **200** `{"success":true,"count":0}`, no credential → **403**.
+**Edge logs for the window:** 116 × 200, 24 × 204, **no 5xx**; the 401/403/405 entries are ten test
+requests between 16:47:50 and 16:49:12 (my own negative probes), not client traffic.
 
-Fleet bundles rebuilt and redeployed (`fleet-core`, `fleet-ops`); `/health` **200** on all six.
+One self-inflicted bug found and fixed during this: `rides/matchingBrainClient.ts` lives in `rides/`,
+so its import had to be `../_shared/serviceKey.ts` (I first wrote `../../`, which failed to resolve);
+after the fix its type errors match `HEAD` exactly.
 
-### Pre-phase-8 item: files still reading `SUPABASE_SERVICE_ROLE_KEY`
+### Phase 8 checklist — exact steps (do not start before step 0 passes)
 
-**Not fixed here — this is the gate in front of phase 8.** This is the **original audit from before
-the migration above**; the edge DB clients in it have since moved to the helper (see phase 3.5), so
-read it together with that section. A grep over source files (bundles and
-tests excluded) found **106 files / 185 occurrences**, not the ~35 first estimated. **67 of
-them build a database client** — that is the part that stops working when the legacy key dies.
-Ten of those files belong to the five legacy functions that were deleted from prod, so they are now
-dead code; **the live count was 96 files, 57 of them DB clients — of which the 31 edge ones are now
-migrated**, leaving the 26 local scripts and `recon-worker` for phase 4. The rest only put the legacy
-JWT in an `Authorization` header, which is now redundant because no function has `verify_jwt` on.
+**Step 0 — drivers on 1.0.30 (Play says 1.0.30 / 31).**
 
-Move every DB client onto `_shared/serviceKey.ts`, and bump the `jsr:@supabase/supabase-js@2.49.8`
-pin at the same time — that version predates the new key format and would send an `sb_secret_…` key
-as a Bearer JWT. The files the owner named are all in the list below: `service_client.ts`,
-`kv_store.tsx`, `fleet_sql_bridge.ts`, the ledger files, `explorer/index.ts` (its `admin()` helper),
-the rides fare clients, the delivery merchant files, and `orderToFleetTrip.ts` / `rideToFleetTrip.ts`.
+- Play Console → the driver app → **Release → Production**: the current release must read
+  **1.0.30 (31)** and the rollout must be **100%** (not staged).
+- Play Console → **Quality → Android vitals / Crashes**: no new cluster from 1.0.29 in the last 48 h.
+- Only then is it safe to remove the legacy anon key: 1.0.29 bundles it.
 
-#### Helper + its expected legacy fallback (2)
-- `supabase/functions/_shared/authorizeCronOrServiceRole.ts` — DB client
-- `supabase/functions/_shared/serviceKey.ts`
+**Step 1 — remove `VITE_SUPABASE_ANON_KEY` from the 11 Vercel projects (Production).**
 
-#### Edge functions (48)
-- `supabase/functions/_fleet-server/api_command_center.tsx`
-- `supabase/functions/_fleet-server/driver_financial_periods.ts` — DB client
-- `supabase/functions/_fleet-server/earnings_period_materialize.ts` — DB client
-- `supabase/functions/_fleet-server/earnings_seal_http.ts`
-- `supabase/functions/_fleet-server/env_boot.ts`
-- `supabase/functions/_fleet-server/financial_ledger.ts` — DB client
-- `supabase/functions/_fleet-server/fleet_sql_bridge.ts` — DB client
-- `supabase/functions/_fleet-server/fuel_controller.tsx` — DB client
-- `supabase/functions/_fleet-server/fuel_seal_http.ts`
-- `supabase/functions/_fleet-server/kv_store.tsx` — DB client
-- `supabase/functions/_fleet-server/ledger_canonical.ts` — DB client
-- `supabase/functions/_fleet-server/ledger_ensure_routes.ts`
-- `supabase/functions/_fleet-server/odometer_ledger.ts` — DB client
-- `supabase/functions/_fleet-server/plug_public_price.ts` — DB client
-- `supabase/functions/_fleet-server/service_client.ts` — DB client
-- `supabase/functions/_fleet-server/station_merchant_aliases.ts` — DB client
-- `supabase/functions/_fleet-server/supabase_platform_usage.ts` — DB client
-- `supabase/functions/_fleet-server/team_staff_service.ts`
-- `supabase/functions/_fleet-server/unified_ledger_dual_write.ts` — DB client
-- `supabase/functions/_shared/dashOrderSms.ts`
-- `supabase/functions/_shared/featureFlags.ts` — DB client
-- `supabase/functions/_shared/orderToFleetTrip.ts` — DB client
-- `supabase/functions/_shared/rideToFleetTrip.ts` — DB client
-- `supabase/functions/_shared/rushSettings/getSetting.ts` — DB client
-- `supabase/functions/before-user-created/index.ts` — DB client
-- `supabase/functions/catalog-research/index.ts` — DB client
-- `supabase/functions/custom-access-token/index.ts` — DB client
-- `supabase/functions/delivery/courierConsumerRoutes.ts` — DB client
-- `supabase/functions/delivery/dashHealthRoutes.ts`
-- `supabase/functions/delivery/inventoryRoadClearanceGate.ts` — DB client
-- `supabase/functions/delivery/merchant_application_routes.ts` — DB client
-- `supabase/functions/delivery/merchantStationDevice.ts`
-- `supabase/functions/delivery/merchantStationPin.ts`
-- `supabase/functions/delivery/orderChatNotify.ts`
-- `supabase/functions/explorer/index.ts` — DB client
-- `supabase/functions/fleet-activity-cron/index.ts`
-- `supabase/functions/fleet-fuel-cron/index.ts`
-- `supabase/functions/fleet-picture-cron/index.ts`
-- `supabase/functions/fleet-toll-cron/index.ts`
-- `supabase/functions/parts-sourcing-drain/index.ts` — DB client
-- `supabase/functions/petrojam-prices/index.ts` — DB client
-- `supabase/functions/platform-catalog/geoRoutes.ts` — DB client
-- `supabase/functions/platform-catalog/index.ts` — DB client
-- `supabase/functions/rides/fare/resolveLocation.ts` — DB client
-- `supabase/functions/rides/fare/tollBrainClient.ts`
-- `supabase/functions/rides/index.ts` — DB client
-- `supabase/functions/rides/matchingBrainClient.ts`
-- `supabase/functions/rush-cron/index.ts`
+```
+# per project id (from GET /v9/projects?slug=sadiki-thomas-projects)
+GET  /v10/projects/<id>/env?slug=sadiki-thomas-projects        # find the env id for the key
+DELETE /v10/projects/<id>/env/<envId>?slug=sadiki-thomas-projects
+```
 
-#### Legacy function sources — dead code now, the functions were deleted from prod (10)
-- `apps/fleet/src/supabase/functions/admin-operations/index.ts` — DB client
-- `apps/fleet/src/supabase/functions/admin-operations/kv_store.tsx` — DB client
-- `apps/fleet/src/supabase/functions/ai-services/index.ts` — DB client
-- `apps/fleet/src/supabase/functions/ai-services/kv_store.tsx` — DB client
-- `apps/fleet/src/supabase/functions/financial-operations/index.ts` — DB client
-- `apps/fleet/src/supabase/functions/financial-operations/kv_store.tsx` — DB client
-- `apps/fleet/src/supabase/functions/fleet-management/index.ts` — DB client
-- `apps/fleet/src/supabase/functions/fleet-management/kv_store.tsx` — DB client
-- `apps/fleet/src/supabase/functions/fuel-maintenance/index.ts` — DB client
-- `apps/fleet/src/supabase/functions/fuel-maintenance/kv_store.tsx` — DB client
+Keep `VITE_SUPABASE_PUBLISHABLE_KEY` and `VITE_SUPABASE_URL`.
 
-#### Local scripts — not runtime, but they break after phase 8 (46)
-- `scripts/backfill_settlement_transactions.mjs` — DB client
-- `scripts/backfill-rush-settings.mjs` — DB client
-- `scripts/backfill-week-statements.mjs` — DB client
-- `scripts/cleanup-sync-restatement-drafts.mjs` — DB client
-- `scripts/dash-golden-path-load-probe.mjs`
-- `scripts/e2e/toll-reconciliation-smoke.mjs` — DB client
-- `scripts/export-periods-baseline.mjs` — DB client
-- `scripts/export-vehicle-catalog-restore.ts` — DB client
-- `scripts/finance-doctor.mjs` — DB client
-- `scripts/finance-recon.mjs` — DB client
-- `scripts/gas-card-rev7-p4-remediate.mjs` — DB client
-- `scripts/gas-card-v12-restate-weeks.ts` — DB client
-- `scripts/heal-fuel-service-line-backlog.mjs`
-- `scripts/heal-week-close-sync.mjs`
-- `scripts/heal-week-close-sync.ts`
-- `scripts/import-catalog-expansion.ts` — DB client
-- `scripts/import-codab-via-sql.ts`
-- `scripts/ledger-dual-read-compare.mjs`
-- `scripts/ledger-retire-backup.mjs` — DB client
-- `scripts/ledger-retire-hard-delete.mjs` — DB client
-- `scripts/ledger-soak-check.mjs` — DB client
-- `scripts/load-test-trip-projector.mjs`
-- `scripts/provision-fleet-test-driver.mjs`
-- `scripts/provision-indep-and-passenger-test.mjs`
-- `scripts/provision-play-review-accounts.mjs`
-- `scripts/provision-rush-courier-test.mjs`
-- `scripts/provision-rush-customer-test.mjs`
-- `scripts/provision-rush-partner-test.mjs`
-- `scripts/report_fare_events_parity.mjs` — DB client
-- `scripts/rev4-stage0-heal-2026-08-24.ts` — DB client
-- `scripts/rev6-reheal-g5-aliases.ts`
-- `scripts/run-vehicle-picture-worker-once.ts` — DB client
-- `scripts/run-week-recon-done-tests.mjs`
-- `scripts/seed-warehouse-door-user.mjs` — DB client
-- `scripts/seed-week-recon-done-tests.ts`
-- `scripts/shadow-week-statements.mjs` — DB client
-- `scripts/smoke-courier-all.mjs`
-- `scripts/smoke-customer-all.mjs`
-- `scripts/smoke-merchant-all.mjs`
-- `scripts/smoke/_shared.mjs`
-- `scripts/unstick-domino-engine.mjs` — DB client
-- `scripts/vehicle-pictures-preprod-c4b.mjs` — DB client
-- `scripts/vehicle-pictures-preprod.mjs` — DB client
-- `scripts/vehicle-pictures-reset-t22.mjs` — DB client
-- `scripts/vehicle-pictures-reset.mjs` — DB client
-- `scripts/verify_settlement_tx_parity.mjs` — DB client
+**Step 2 — remove the fallback in code.**
+
+`packages/api-client/src/supabaseInfo.ts`: drop the `VITE_SUPABASE_ANON_KEY` branch, leave
+`VITE_SUPABASE_PUBLISHABLE_KEY` only, and say so in the error message. Commit.
+
+**Step 3 — redeploy every app with the force switch, then remove it.**
+
+Per project: add `ROAM_FORCE_BUILD=1` (Production) → trigger `main-path-deploy` → wait **READY** → run the
+phase-5 checks (site 200 **and not the Vercel login page**, key in the crawled bundle, one logged-out
+`apikey`-only call 200) → delete `ROAM_FORCE_BUILD`.
+
+**Step 4 — the owner's dashboard clicks (Supabase, not Vercel).**
+
+1. Supabase → **Settings → API keys** → the **legacy** `anon` and `service_role` keys →
+   **Deactivate** (or rotate/revoke). The project's own functions no longer use them.
+2. Supabase → **Settings → Auth → JWT signing keys** → **revoke the legacy JWT secret** /
+   rotate to the new signing keys. This **signs every existing session out** — expected, one-time.
+3. Watch the edge logs for 30 minutes: no 401 spike (a spike means something still sends a legacy JWT).
+
+**Step 5 — done-tests (phase 9).**
+
+- sign in on Fleet, Driver, Admin, Plug and one Rush app; open a screen on each
+- one delivery order end-to-end, one ride request end-to-end (proves `orderToFleetTrip` /
+  `rideToFleetTrip` → `/internal/trips/project`, which is **200** for the new key as of this pass)
+- `fleet-toll-cron`, `fleet-fuel-cron`, `fleet-activity-cron`, `fleet-picture-cron`, `rush-cron` relays:
+  `net._http_response` 2xx
+- `evidence-cleanup` 03:00 run reports `purged`, `errors: []`
+- a local script (e.g. `node scripts/finance-recon.mjs --help` or a dry run) still authenticates
+- `pnpm check` 12/12 and the edge suites green
+
+**Step 6 — cleanup after a clean week.**
+
+- delete the GitHub repo secret `SUPABASE_SERVICE_ROLE_KEY`
+- delete the Google Secret Manager `SUPABASE_SERVICE_ROLE_KEY`
+- delete `apps/fleet/src/supabase/functions/**` (source of the five deleted functions)
 
 ### Separate faults (not key problems)
 

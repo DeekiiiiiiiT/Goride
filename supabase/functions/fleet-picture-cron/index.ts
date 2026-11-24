@@ -1,3 +1,4 @@
+import { serviceKey } from "../_shared/serviceKey.ts";
 /**
  * Door for the vehicle-picture worker and fill. The database jobs (pg_cron / pg_net) have no
  * user login, and fleet-core's gateway requires one, so they call this function with the fleet
@@ -26,7 +27,7 @@ Deno.serve(async (req) => {
   if (op !== "run" && op !== "fill") return json({ error: "Unknown operation" }, 404);
 
   const base = (Deno.env.get("SUPABASE_URL") || "").replace(/\/$/, "");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  const key = serviceKey();
   if (!base || !key) return json({ error: "server_misconfigured" }, 500);
 
   const body = op === "fill" ? (await req.text()) || "{}" : "{}";
@@ -34,7 +35,7 @@ Deno.serve(async (req) => {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${key}`,
+
       apikey: key,
       "X-Fleet-Cron-Secret": secret,
     },

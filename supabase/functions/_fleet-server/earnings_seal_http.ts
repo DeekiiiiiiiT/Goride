@@ -4,7 +4,7 @@
  * but MUST block on failure (no warn). This HTTP helper is used once earnings is extracted.
  */
 import { buildSealIdempotencyKey } from "./week_seal_log.ts";
-import { requireServiceKey } from "../_shared/serviceKey.ts";
+import { requireServiceKey, serviceKey } from "../_shared/serviceKey.ts";
 
 const SEAL_TIMEOUT_MS = 15_000;
 const SEAL_ATTEMPTS = 3;
@@ -26,7 +26,7 @@ export async function sealEarningsWeekViaHttp(opts: {
   const base =
     Deno.env.get("FLEET_PAY_URL") ||
     `${Deno.env.get("SUPABASE_URL") ?? ""}/functions/v1/fleet-pay`;
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const key = serviceKey();
   if (!base || !key) {
     throw new Error("sealEarningsWeekViaHttp: missing FLEET_PAY_URL/SUPABASE_URL or service role key");
   }
@@ -43,7 +43,7 @@ export async function sealEarningsWeekViaHttp(opts: {
       const res = await fetch(url, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${key}`,
+
           "x-service-key": requireServiceKey(),
           apikey: key,
           "Content-Type": "application/json",

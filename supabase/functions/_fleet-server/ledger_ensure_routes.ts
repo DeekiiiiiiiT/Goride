@@ -12,6 +12,7 @@ import {
 import { appendCanonicalLedgerEvents } from "./ledger_canonical.ts";
 import { buildCanonicalTripFareEventsFromTrip } from "./canonical_from_ops.ts";
 import { jwtRoleClaim } from "./jwt_role_claim.ts";
+import { secretKeyCandidates } from "../_shared/serviceKey.ts";
 
 const PREFIX = "/make-server-37f42386";
 
@@ -59,11 +60,12 @@ export function requireImportAnonOrServiceKey() {
     const token = auth.replace(/^Bearer\s+/i, "").trim();
     const apikey = (c.req.header("apikey") || "").trim();
     const anon = (Deno.env.get("SUPABASE_ANON_KEY") || "").trim();
-    const service = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
+    // Accept any current secret key (the legacy service key is retired in phase 8).
+    const serviceKeys = secretKeyCandidates();
 
     const candidates = [token, apikey].filter(Boolean);
     const exactMatch = candidates.some(
-      (t) => (anon && t === anon) || (service && t === service),
+      (t) => (anon && t === anon) || serviceKeys.some((k) => t === k),
     );
 
     let roleOk = false;

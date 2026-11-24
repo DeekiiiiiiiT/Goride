@@ -3,7 +3,7 @@
  * Retries + timeout + Idempotency-Key (ADR-0019). Silent skip is not allowed.
  */
 import { buildSealIdempotencyKey } from "./week_seal_log.ts";
-import { requireServiceKey } from "../_shared/serviceKey.ts";
+import { requireServiceKey, serviceKey } from "../_shared/serviceKey.ts";
 
 const SEAL_TIMEOUT_MS = 15_000;
 const SEAL_ATTEMPTS = 3;
@@ -26,7 +26,7 @@ export async function sealFuelWeekViaHttp(opts: {
   const base =
     Deno.env.get("FLEET_FUEL_URL") ||
     `${Deno.env.get("SUPABASE_URL") ?? ""}/functions/v1/fleet-fuel`;
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const key = serviceKey();
   if (!base || !key) {
     throw new Error("sealFuelWeekViaHttp: missing FLEET_FUEL_URL/SUPABASE_URL or service role key");
   }
@@ -43,7 +43,7 @@ export async function sealFuelWeekViaHttp(opts: {
       const res = await fetch(url, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${key}`,
+
           "x-service-key": requireServiceKey(),
           apikey: key,
           "Content-Type": "application/json",

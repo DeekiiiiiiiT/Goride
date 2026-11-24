@@ -5,6 +5,7 @@
  * Path: /functions/v1/fleet-core/internal/activity/* (fleet-core rewrites to make-server prefix).
  */
 import { requireInternalSecret } from "../_shared/requireInternalSecret.ts";
+import { serviceKey as resolveServiceKey } from "../_shared/serviceKey.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -44,7 +45,7 @@ Deno.serve(async (req) => {
   }
 
   const base = Deno.env.get("SUPABASE_URL")?.replace(/\/$/, "") || "";
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  const serviceKey = resolveServiceKey();
   const cronSecret = Deno.env.get("FLEET_CRON_SECRET") ||
     Deno.env.get("RIDES_CRON_SECRET") ||
     Deno.env.get("CRON_SECRET") ||
@@ -61,7 +62,7 @@ Deno.serve(async (req) => {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${serviceKey}`,
+
       apikey: serviceKey,
       "X-Fleet-Cron-Secret": cronSecret,
     },
