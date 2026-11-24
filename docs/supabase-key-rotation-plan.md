@@ -1155,6 +1155,60 @@ Two caveats the docs call out, both already handled or worth a look:
 - delete the Google Secret Manager `SUPABASE_SERVICE_ROLE_KEY`
 - delete `apps/fleet/src/supabase/functions/**` (source of the five deleted functions)
 
+### Phase 8 steps 1–3 — the legacy anon key is out of the web apps (24 Nov 2026)
+
+**Step 1 — `VITE_SUPABASE_ANON_KEY` deleted from all 11 Vercel projects.** Both targets went with each
+entry (each var carried `production` + `preview`; two projects kept them as separate records, so two
+deletes). `VITE_SUPABASE_PUBLISHABLE_KEY` was re-asserted on **production + preview** in every project.
+
+**Step 2 — the legacy fallback is gone from code.** `packages/api-client/src/supabaseInfo.ts` reads
+**only** `VITE_SUPABASE_PUBLISHABLE_KEY` and throws a clear error naming it when it is missing. This
+change is committed locally and takes effect on the next build after the push.
+
+**Step 3 — every app rebuilt and re-checked** with `ROAM_FORCE_BUILD=1` (added, then removed).
+
+| App | Public URL | Build | site (not the login page) | publishable key in bundle | legacy anon key absent | logged-out call |
+|---|---|---|---|---|---|---|
+| haul | www.roamhaul.co | READY | 200 "Roam Haul" | ✔ | ✔ | **200** |
+| enterprise | roamenterprise.co | READY | 200 "Roam Enterprise" | ✔ | ✔ | **200** |
+| rides-passenger | roam-s.co | READY | 200 "Roam Rides" | ✔ | ✔ | **200** |
+| plug | roamplug.app | READY | 200 "Roam Plug" | ✔ | ✔ | **200** |
+| admin | roamdominion.co | READY | 200 "Roam Dominion" | ✔ | ✔ | **200** |
+| driver | roamdriver.co | READY | 200 "Roam Driver" | ✔ | ✔ | **200** |
+| dash-merchant | partner.roamrush.app | READY | 200 "Roam Rush Partner" | ✔ | ✔ | **200** |
+| dash-courier | courier.roamrush.app | READY | 200 "Roam Rush Courier" | ✔ | ✔ | **200** |
+| dash-customer | www.roamrush.app | READY | 200 "Roam Rush - Food Delivery" | ✔ | ✔ | **200** |
+| rush-command | command.roamrush.app | READY | 200 "Roam Command" | ✔ | ✔ | **200** |
+| fleet | www.roamfleet.co | READY | 200 "Roam Fleet" | ✔ | ✔ | **200** |
+
+The "absent" column is the check that matters: the crawl searched every chunk for the legacy anon key's
+actual value, not just its variable name.
+
+**Audit after the run:** 0 projects keep `VITE_SUPABASE_ANON_KEY`, 0 are missing the publishable key,
+all 11 carry it on **both** production and preview, and 0 are left with `ROAM_FORCE_BUILD`.
+
+**Edge logs 17:10–17:31:** 185 × 200, 69 × 204, 22 × 403, 5 × 400 — **no 5xx**.
+
+#### The 22 403s are Play-review traffic, not a key problem
+
+All 22 are one authenticated user (`5b5e2918…`) on an Android 11 / OnePlus 8 Pro **WebView** coming from
+Google's IPs (66.102.8.5, Play review), hitting fleet data endpoints:
+
+- `GET /fleet-core/vehicles` — 16
+- `GET /fleet-core/drivers` — 5
+- `GET /fleet-core/transactions` — 1
+
+The request log shows the whole chain working: `apikey` = `sb_publishable_…`, a valid **ES256** session
+JWT (issuer this project, `role: authenticated`, `key_id` of the new signing key), gateway
+`sb_api_key_compatibility: minted`. So the publishable key **and** the rotated signing key are working on
+a real device; the 403 comes from fleet-core's own authorization, because a driver account is not
+allowed to list all vehicles/drivers/transactions.
+
+That is worth a look for a different reason: **if the Play reviewer is supposed to see those screens,
+the 403s will count against the review.** Either the driver account needs the right membership/org, or
+those calls should not be made from the driver app. Not a key-rotation defect — nothing here changed
+that path.
+
 ### Two must-fix items before phase 8 (done 24 Nov 2026)
 
 **1. `_fleet-server/env_boot.ts` required the legacy key to boot.** `REQUIRED_SECRETS` was

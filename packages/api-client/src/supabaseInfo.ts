@@ -40,17 +40,15 @@ function resolveProjectId(supabaseApiUrl: string): string {
 }
 
 /**
- * The browser key. `VITE_SUPABASE_PUBLISHABLE_KEY` (sb_publishable_…) is the rotated key;
- * `VITE_SUPABASE_ANON_KEY` stays as the fallback so an app keeps working before its Vercel
- * environment is switched. Both are public by design — they ship in the bundle.
+ * The browser key: `VITE_SUPABASE_PUBLISHABLE_KEY` (`sb_publishable_…`), the rotated key. It is
+ * public by design — it ships in the bundle. The legacy `VITE_SUPABASE_ANON_KEY` fallback is gone as
+ * of phase 8; every app's Vercel environment carries the publishable key now.
  */
 function resolvePublicKey(): string {
-  const publishable = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)?.trim();
-  const legacy = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
-  const key = publishable || legacy;
+  const key = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)?.trim();
   if (!key) {
     throw new Error(
-      'Missing Supabase config: set VITE_SUPABASE_URL (or VITE_SUPABASE_PROJECT_ID) and VITE_SUPABASE_PUBLISHABLE_KEY (or the legacy VITE_SUPABASE_ANON_KEY)',
+      'Missing Supabase config: set VITE_SUPABASE_URL (or VITE_SUPABASE_PROJECT_ID) and VITE_SUPABASE_PUBLISHABLE_KEY (sb_publishable_…)',
     );
   }
   return key;
