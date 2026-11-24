@@ -16,6 +16,7 @@ import { requireProductAdmin } from "../_shared/productAdmin.ts";
 import { classifyTollMatch, mergePolicy, DEFAULT_POLICY } from "./classify.ts";
 import { evaluatePoint, estimateRoute, loadPlazas, invalidatePlazaCache } from "./detect.ts";
 import { STABLE_GET_CACHE } from "../_shared/cacheControl.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 const app = new Hono().basePath("/toll-brain");
 applyCors(app);
@@ -27,7 +28,7 @@ function logLine(payload: Record<string, unknown>) {
 function svc(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

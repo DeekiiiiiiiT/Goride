@@ -1,6 +1,7 @@
 /**
  * Map a Roam ride_requests row to fleet KV Trip shape (major currency units).
  */
+import { serviceKey } from "./serviceKey.ts";
 import {
   mapRideLedgerLineRowToPaymentLedgerLine,
   rollupPaymentLinesFromRows,
@@ -111,7 +112,7 @@ export async function loadLedgerLinesForRide(
   const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
   const db = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
     { db: { schema: "rides" } },
   );
   const { data, error } = await db.from("ledger_lines").select("*").eq(

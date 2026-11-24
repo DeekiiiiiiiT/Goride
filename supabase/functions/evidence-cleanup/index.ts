@@ -8,6 +8,7 @@ import * as kv from "../_fleet-server/kv_store.tsx";
 import { runEvidenceCleanup } from "../_fleet-server/evidence_storage.ts";
 import { requireInternalSecret } from "../_shared/requireInternalSecret.ts";
 import { getSetting } from "../_shared/rushSettings/getSetting.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -45,7 +46,7 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 
   try {

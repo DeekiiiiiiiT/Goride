@@ -68,6 +68,7 @@ import { enforcePartnerAcceptOnStatusChange } from "./partnerAcceptDeadline.ts";
 // Must be top-level: edge bundler mishandles mid-file / dynamic imports in this large index.
 import { registerSettingsAdminRoutes } from "./admin/settingsRoutes.ts";
 import { registerMenuPriceReviewAdminRoutes } from "./admin/menuPriceReviewRoutes.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 const app = new Hono().basePath("/delivery");
 
@@ -106,7 +107,7 @@ function getSupabase(authHeader: string) {
 function getServiceSupabase() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "delivery" } },
   );
 }
@@ -114,7 +115,7 @@ function getServiceSupabase() {
 function getPaymentsSupabase() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "payments" } },
   );
 }
@@ -123,7 +124,7 @@ function getPaymentsSupabase() {
 function getPublicServiceSupabase() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
   );
 }
 
@@ -3402,7 +3403,7 @@ app.post("/internal/geo/reconcile", async (c) => {
     const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
     const geo = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      requireServiceKey(),
       { db: { schema: "geo" } },
     );
     const db = getServiceSupabase();

@@ -5,6 +5,7 @@ import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { requireProductAdmin } from "../../_shared/productAdmin.ts";
 import { getDriverAdminDb } from "../../_shared/driverAdminDb.ts";
 import { getRidesAdminDb } from "../../_shared/ridesAdminDb.ts";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 
 type RidesDbOrResponse = (
   c: { json: (body: unknown, status?: number) => Response },
@@ -86,7 +87,7 @@ export function registerDashboardListRoutes(
             );
             const ridesDb = createClient(
               Deno.env.get("SUPABASE_URL") ?? "",
-              Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+              serviceKey(),
               { db: { schema: "rides" } },
             );
             const fallback = await ridesDb

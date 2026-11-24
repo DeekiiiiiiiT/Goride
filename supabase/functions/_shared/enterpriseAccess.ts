@@ -4,6 +4,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getJwtRoles, jwtPrimaryRole } from "./authEdge.ts";
 import { PLATFORM_ROLES } from "./productAdmin.ts";
+import { serviceKey } from "./serviceKey.ts";
 import {
   enterpriseSeatHasPermission,
   parseSectionOverrides,
@@ -33,7 +34,7 @@ function authClient(authHeader: string) {
 export function serviceClient() {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

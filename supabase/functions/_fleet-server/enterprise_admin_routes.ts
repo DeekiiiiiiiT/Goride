@@ -12,6 +12,7 @@ import {
 } from "./product_line.ts";
 import { getPlatformSettingsCached } from "./platform_settings.ts";
 import { ensureCustomerOrganization } from "./ensure_customer_org.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 import {
   DEFAULT_ENTERPRISE_MODULES,
   resolveEffectiveModules,
@@ -36,7 +37,7 @@ type RegisterDeps = {
 function serviceClient() {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

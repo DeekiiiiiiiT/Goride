@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireServiceKey } from "../../_shared/serviceKey.ts";
 
 export type VerificationStatus =
   | "pending"
@@ -37,7 +38,7 @@ export function isChecklistComplete(checklist: Record<string, boolean> | null | 
 export function getDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "delivery" } },
   );
 }
@@ -45,7 +46,7 @@ export function getDb() {
 export function getAuthAdmin() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
   );
 }
 

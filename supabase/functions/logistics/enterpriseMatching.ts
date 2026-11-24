@@ -16,6 +16,7 @@ import {
   type ResolvedPolicy,
 } from "../matching/policy/loadPolicy.ts";
 import { appendJobEvent } from "./syncFromShipment.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 export interface EnterpriseMatchResult {
   ok: boolean;
@@ -30,7 +31,7 @@ export interface EnterpriseMatchResult {
 function pub(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 
@@ -41,7 +42,7 @@ function logisticsDb() {
 function matchingDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

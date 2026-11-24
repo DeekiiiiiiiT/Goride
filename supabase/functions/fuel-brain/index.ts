@@ -18,6 +18,7 @@ import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supa
 import { requirePlatformAdmin } from "../_shared/platformAdmin.ts";
 import { classifyFuelWeek } from "./classify.ts";
 import { STABLE_GET_CACHE } from "../_shared/cacheControl.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 const app = new Hono().basePath("/fuel-brain");
 
@@ -30,7 +31,7 @@ function logLine(payload: Record<string, unknown>) {
 function svc(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

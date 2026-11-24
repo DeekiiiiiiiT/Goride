@@ -15,6 +15,7 @@ import {
   type InputTaxCreditRestriction,
 } from '../_shared/gctCore.ts';
 import { loadGlobalGctConfig } from '../_shared/gctRate.ts';
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 const app = new Hono().basePath('/gct-admin');
 app.use('*', cors());
@@ -36,7 +37,7 @@ async function requireDominion(
 function svc(): SupabaseClient {
   return createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    serviceKey(),
   );
 }
 

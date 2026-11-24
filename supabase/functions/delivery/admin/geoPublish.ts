@@ -7,6 +7,7 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { activeCoverageGeneration, compileMarketCoverageCells, recomputeMerchantCoverageCells } from "../coverageCompile.ts";
 import { suggestMarketIdsAgainstBorder, type BorderPreviewOverlay } from "./coverageZones.ts";
+import { requireServiceKey } from "../../_shared/serviceKey.ts";
 import {
   decideMerchantMove,
   overlayZonesForCompile,
@@ -17,7 +18,7 @@ import {
 function geoDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "geo" } },
   );
 }

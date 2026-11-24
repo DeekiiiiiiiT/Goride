@@ -10,6 +10,7 @@ import { requirePlatformAdmin } from "../_shared/platformAdmin.ts";
 import { dominionCan } from "../../../packages/auth-client/src/dominionPermissions.ts";
 import { PETROJAM_PRICE_URL, type PetrojamSyncMode } from "./scrape.ts";
 import { syncActiveRefineries, syncOneRefinery, writeRefinerySnapshot, type ActiveRefinery } from "./refinerySync.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 const app = new Hono().basePath("/petrojam-prices");
 
@@ -22,7 +23,7 @@ function logLine(payload: Record<string, unknown>) {
 function svc(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

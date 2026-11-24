@@ -12,6 +12,7 @@ import {
 } from "../cashSettlement/buildJournalEntries.ts";
 import { postPaymentJournal } from "../../_shared/paymentAccounts.ts";
 import { getRiderArrearsMinor } from "../cashSettlement/arrearsCheck.ts";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 
 type RidesDbOrResponse = (
   c: { json: (body: unknown, status?: number) => Response },
@@ -28,7 +29,7 @@ type AdminAuditFn = (
 function pubSvc(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

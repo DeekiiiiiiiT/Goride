@@ -6,6 +6,7 @@ import type { Hono } from "npm:hono@4.3.11";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { requireProductAdmin } from "./product_admin_guard.ts";
 import { inferProductLineFromUser } from "./product_line.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 type Deps = {
   logAdminAction: (opts: {
@@ -24,7 +25,7 @@ type Deps = {
 function serviceClient() {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

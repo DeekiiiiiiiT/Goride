@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supa
 import { deniesPassengerSurface, jsonEdgeForbidden } from "../_shared/authEdge.ts";
 import type { RidesContactsDb } from "../_shared/ridesContactsDb.ts";
 import { generatePublicCode, generateToken, normalizePhoneE164 } from "./rideAccess.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 type BookingRequestDeps = {
   getContactsDb: () => Promise<RidesContactsDb>;
@@ -70,7 +71,7 @@ function publicBookingRequest(row: Record<string, unknown>) {
 function serviceAuth() {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

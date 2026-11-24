@@ -2,6 +2,7 @@
  * Resolve driver display labels for admin presence / directory views.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 
 type ProfileRow = {
   user_id?: string;
@@ -14,7 +15,7 @@ type ProfileRow = {
 function serviceAuth() {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

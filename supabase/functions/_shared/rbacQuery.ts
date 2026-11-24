@@ -8,6 +8,7 @@ import {
   type ProductKey,
 } from "./productAdmin.ts";
 import { productPortalAccess } from "./platformPermissions.ts";
+import { serviceKey } from "./serviceKey.ts";
 
 export type RbacUser = {
   user_metadata?: Record<string, unknown>;
@@ -17,7 +18,7 @@ export type RbacUser = {
 export function serviceClient(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

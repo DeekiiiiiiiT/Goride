@@ -3,11 +3,12 @@
  */
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { DispatchSettings } from "../rides/fare/dispatchSettings.ts";
+import { serviceKey } from "./serviceKey.ts";
 
 function publicDb(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

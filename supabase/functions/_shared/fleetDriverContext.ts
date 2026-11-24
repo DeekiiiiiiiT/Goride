@@ -5,13 +5,14 @@
  * ride→fleet sync can attribute org + vehicle without HTTP round-trips.
  */
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serviceKey } from "./serviceKey.ts";
 
 const KV_TABLE = "kv_store_37f42386";
 
 function publicDb(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

@@ -1,6 +1,7 @@
 /**
  * Project Rush delivery.orders → fleet.trips (mirrors rideToFleetTrip.ts).
  */
+import { serviceKey } from "./serviceKey.ts";
 import {
   courierDeliveryEarnings,
   courierTipEarnings,
@@ -177,7 +178,7 @@ async function upsertDeliveryDetails(
   const { computeCodTrialBalance } = await import("../../../packages/dash-pricing/src/codBalance.ts");
   const db = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
   const merchant = order.merchant as { id?: string; name?: string } | null;
   const snap = (order.pricing_snapshot ?? {}) as Record<string, unknown>;

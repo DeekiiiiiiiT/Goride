@@ -12,6 +12,7 @@ import { courierAssignmentFields } from "./courierFleetAttribution.ts";
 import { assertRoadClearForDispatch } from "./inventoryRoadClearanceGate.ts";
 import { processDispute, logCourierUnassignRedispatch } from "./disputeResolution/processDispute.ts";
 import { notifyCustomerOrderStatus } from "../_shared/dashOrderSms.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 type Sb = ReturnType<typeof createClient>;
 
@@ -754,7 +755,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
       // (reading fleet.drivers directly always returned nothing and the gate never ran).
       const publicSb = createClient(
         Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        requireServiceKey(),
       );
       const { data: driverRow } = await publicSb
         .from("fleet_drivers")
@@ -1947,7 +1948,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
 function createPaymentsClient() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "payments" } },
   );
 }

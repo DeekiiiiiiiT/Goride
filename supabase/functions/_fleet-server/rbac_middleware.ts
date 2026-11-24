@@ -17,6 +17,7 @@ import { readAccessCache, writeAccessCache } from "./access_cache.ts";
 import { resolveAccess, type AccessDecision, type AccessSeat, type OpenMembership, type OwnedOrg } from "./access_resolution.ts";
 import { hasPermission as catalogHasPermission } from "../../../packages/auth-client/src/permissions.ts";
 import { runAsMasterActor } from "./master_actor.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 // ---------------------------------------------------------------------------
 // 1. Types
@@ -347,7 +348,7 @@ function getSupabase() {
   if (!_supabase) {
     _supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      requireServiceKey()
     );
   }
   return _supabase;

@@ -3,6 +3,7 @@
  * Default OFF — journals credit driver until org flag is enabled.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serviceKey } from "./serviceKey.ts";
 
 export function orgDigitalAccountKey(organizationId: string): string {
   return `org:${organizationId}:digital`;
@@ -21,7 +22,7 @@ export async function isFleetOrgPayoutEnabled(organizationId: string | null | un
 
   const db = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
   const { data, error } = await db
     .from("organizations")

@@ -47,6 +47,7 @@ import {
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { suggestMarketIdForMerchantPin } from "./coverageZones.ts";
 import { recomputeMerchantCoverageCells } from "../coverageCompile.ts";
+import { requireServiceKey } from "../../_shared/serviceKey.ts";
 
 const SLA_HOURS = 48;
 
@@ -95,7 +96,7 @@ async function fetchOwnerEmail(ownerId: string): Promise<string> {
 function getPaymentsDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "payments" } },
   );
 }
@@ -1021,7 +1022,7 @@ export function registerMerchantAdminRoutes(app: Hono) {
 
     const payments = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      requireServiceKey(),
       { db: { schema: "payments" } },
     );
     await payments.from("merchant_bank_accounts").delete().eq("merchant_id", id);

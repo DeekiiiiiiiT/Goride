@@ -4,6 +4,7 @@
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireProductAdmin } from "../../_shared/productAdmin.ts";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 
 /** Fallback when catalog is empty or unreadable — matches Commando Body tab picklist. */
 const COMMANDO_BODY_TYPE_FALLBACK: readonly string[] = [
@@ -34,7 +35,7 @@ const FACET_MAX_OFFSET = 20000;
 function catalogClient() {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

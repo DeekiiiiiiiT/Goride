@@ -6,6 +6,7 @@ import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { detectFileMagicBytes, extForMime, IMAGE_MIMES } from "../_shared/fileMagic.ts";
 import { validateBody, z } from "../_shared/validateBody.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 const AVATAR_BUCKET = "customer-avatars";
 const ISSUE_PHOTO_BUCKET = "customer-issue-photos";
@@ -84,7 +85,7 @@ type CustomerRow = {
 function getAuthAdmin() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
   );
 }
 
@@ -501,7 +502,7 @@ export function registerCustomerAccountRoutes(app: Hono, deps: CustomerAccountRo
     const path = `${auth.user.id}/avatars/${crypto.randomUUID()}.${extForMime(detected)}`;
     const storage = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      requireServiceKey(),
     );
     const { error: uploadError } = await storage.storage.from(AVATAR_BUCKET).upload(path, buffer, {
       contentType: detected,
@@ -566,7 +567,7 @@ export function registerCustomerAccountRoutes(app: Hono, deps: CustomerAccountRo
     const path = `${auth.user.id}/issues/${crypto.randomUUID()}.${extForMime(detected)}`;
     const storage = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      requireServiceKey(),
     );
     const { error: uploadError } = await storage.storage.from(ISSUE_PHOTO_BUCKET).upload(path, buffer, {
       contentType: detected,

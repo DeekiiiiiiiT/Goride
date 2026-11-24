@@ -9,11 +9,12 @@ import { requireDashWrite } from "./dashPermissions.ts";
 import { getDb } from "./merchantAdminShared.ts";
 import { applyMerchantFaultDebit } from "../disputeResolution/merchantDebit.ts";
 import { merchantFundedAmount, reverseSplit } from "../../_shared/rushMoney/reverseSplit.ts";
+import { requireServiceKey } from "../../_shared/serviceKey.ts";
 
 function getPaymentsDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "payments" } },
   );
 }

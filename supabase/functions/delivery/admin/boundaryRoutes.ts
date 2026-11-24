@@ -8,11 +8,12 @@ import { requireDashWrite } from "./dashPermissions.ts";
 import { getDb, writeKvAudit } from "./merchantAdminShared.ts";
 import { marketSlugFromBoundary } from "./marketSlug.ts";
 import { geographyManagedResponse } from "./geoManaged.ts";
+import { requireServiceKey } from "../../_shared/serviceKey.ts";
 
 function geoDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "geo" } },
   );
 }

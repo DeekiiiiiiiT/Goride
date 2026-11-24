@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { deniesPassengerSurface, jsonEdgeForbidden } from "../_shared/authEdge.ts";
 import { getRiderAdminDb } from "../_shared/ridesAdminDb.ts";
 import { normalizePhoneE164 } from "./rideAccess.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 /** Set true once Supabase SMS is configured to require OTP on signup. */
 export const REQUIRE_PHONE_SMS_VERIFICATION = false;
@@ -51,7 +52,7 @@ function safetySharingDto(profile: ProfileRow) {
 function serviceAuth() {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

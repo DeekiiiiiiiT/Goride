@@ -2,6 +2,7 @@
  * Rush journals live in public. A delivery-schema client cannot see rush_post_journal.
  */
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireServiceKey } from "../serviceKey.ts";
 
 export type JournalRpc = {
   rpc: (fn: string, args: Record<string, unknown>) => Promise<{ error: { message: string } | null }>;
@@ -15,7 +16,7 @@ export type JournalRpc = {
 export function publicJournalClient(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
   );
 }
 

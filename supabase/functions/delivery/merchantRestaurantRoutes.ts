@@ -4,6 +4,7 @@ import { calculateOrderPricing } from "../_shared/orderPricing.ts";
 import { resolvePosGctRate } from "../_shared/gctRate.ts";
 import type { ResolvedMerchantAccess } from "./merchantAuth.ts";
 import { requireResolvedMerchantWithPermission } from "./merchantAuth.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 import {
   depleteForPosSale,
   merchantUsesEnterpriseInventory,
@@ -15,7 +16,7 @@ const IN_STORE_CAPABILITY = "in_store_operations";
 function getServiceDb(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "delivery" } },
   );
 }

@@ -3,11 +3,12 @@
  */
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { normalizeTransportSolutionSlug, slugFromCommandoBodyType } from "../../_shared/transportSlug.ts";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 
 function publicDb(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

@@ -4,6 +4,7 @@
  * capture still goes through WiPay webhook / confirm. Missed renew → past_due → expired.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 // deno-lint-ignore no-explicit-any
 type ServiceSb = { from: (t: string) => any };
@@ -21,7 +22,7 @@ const RENEW_WINDOW_MS = 24 * 60 * 60 * 1000;
 function getPaymentsDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "payments" } },
   );
 }

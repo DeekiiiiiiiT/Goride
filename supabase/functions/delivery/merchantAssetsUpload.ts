@@ -4,6 +4,7 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 import {
   detectFileMagicBytes,
   extForMime,
@@ -24,7 +25,7 @@ function getAnonAuthClient(authHeader: string) {
 function getServiceStorage() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
   );
 }
 

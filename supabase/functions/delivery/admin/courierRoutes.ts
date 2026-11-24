@@ -33,6 +33,7 @@ import {
   recoveryRedirectForProduct,
 } from "../../_shared/authRecoveryRedirects.ts";
 import { registerDashPlayStoreLaunchRoutes } from "./playStoreLaunchShared.ts";
+import { requireServiceKey, serviceKey } from "../../_shared/serviceKey.ts";
 
 const ONLINE_STALE_MS = 5 * 60 * 1000;
 
@@ -42,7 +43,7 @@ type CourierLiveStatus = "online" | "offline" | "on_delivery";
 function getDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "delivery" } },
   );
 }
@@ -50,7 +51,7 @@ function getDb() {
 function serviceAuth() {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

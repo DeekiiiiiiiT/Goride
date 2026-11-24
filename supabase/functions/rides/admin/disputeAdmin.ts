@@ -2,6 +2,7 @@ import type { Hono, Context } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireProductAdmin } from "../../_shared/productAdmin.ts";
 import type { RidesAdminTables } from "../../_shared/ridesAdminDb.ts";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 import {
   isCashSettlementDisputeFlowEnabled,
 } from "../cashSettlement/flags.ts";
@@ -29,7 +30,7 @@ type AdminAuditFn = (
 function pubSvc(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

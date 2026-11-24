@@ -7,10 +7,11 @@ import { createFleetFunction } from "../../_shared/edgeKernel.ts";
 import { registerMaintenanceRoutes } from "../../_fleet-server/maintenance/index.ts";
 import { registerExpenseHubRoutes } from "../../_fleet-server/expense_hub_routes.ts";
 import { registerBusinessFinanceRoutes } from "../../_fleet-server/business_finance_week_read.ts";
+import { requireServiceKey } from "../../_shared/serviceKey.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  requireServiceKey(),
 );
 
 const app = createFleetFunction({

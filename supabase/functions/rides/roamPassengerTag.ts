@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { allowsPassengerSurface, deniesPassengerSurface, jsonEdgeForbidden } from "../_shared/authEdge.ts";
 import { getRidesAdminDb } from "../_shared/ridesAdminDb.ts";
 import type { RidesContactsDb } from "../_shared/ridesContactsDb.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 import {
   isPassengerVerified,
   REQUIRE_PHONE_SMS_VERIFICATION,
@@ -235,7 +236,7 @@ export function registerRoamPassengerTagRoutes(app: Hono, deps: RoamTagDeps) {
         try {
           const svc = createClient(
             Deno.env.get("SUPABASE_URL") ?? "",
-            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+            serviceKey(),
           );
           const { data: authData } = await svc.auth.admin.getUserById(userId);
           const meta = authData.user?.user_metadata as Record<string, unknown> | undefined;

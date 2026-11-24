@@ -7,11 +7,12 @@ import { type ProductAdminUser } from "../../_shared/productAdmin.ts";
 import { requireDashDelete, requireDashWrite } from "./dashPermissions.ts";
 import { writeAdminAudit } from "./adminAuditWriter.ts";
 import { courierGrantAllowed } from "./consoleAccess.ts";
+import { requireServiceKey } from "../../_shared/serviceKey.ts";
 
 function getPlatformDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "platform" } },
   );
 }
@@ -19,7 +20,7 @@ function getPlatformDb() {
 function getAuthAdmin() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
   );
 }
 

@@ -20,6 +20,7 @@ import {
   requireWrite,
 } from "./permissions.ts";
 import { PRIVATE_LIST_CACHE } from "../../_shared/cacheControl.ts";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 
 interface Deps {
   svc: () => SupabaseClient;
@@ -28,7 +29,7 @@ interface Deps {
 function serviceAuth() {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

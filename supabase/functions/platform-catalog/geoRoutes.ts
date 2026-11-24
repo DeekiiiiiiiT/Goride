@@ -11,11 +11,12 @@ import {
   type ProductAdminUser,
 } from "../_shared/productAdmin.ts";
 import { draftDiscardStatus, outsideJamaica } from "./geoGuards.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 function geoDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "geo" } },
   );
 }
@@ -23,7 +24,7 @@ function geoDb() {
 function deliveryDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "delivery" } },
   );
 }
@@ -124,7 +125,7 @@ export function registerGeoRoutes(app: Hono) {
     const { data: usedMarkets } = await deliveryDb().from("service_markets").select("id, is_active").eq("pcode", pcode);
     const placesDb = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      requireServiceKey(),
       { db: { schema: "places" } },
     );
     const [{ count: placeCount }, { count: pinCount }, { data: children }, { data: metrics }, { count: older }] = await Promise.all([

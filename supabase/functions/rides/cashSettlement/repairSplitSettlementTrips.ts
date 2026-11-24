@@ -10,6 +10,7 @@ import { getRidesPaymentDb } from "../../_shared/ridesPaymentDb.ts";
 import { settlementJournalAmountsForRide } from "./settlementJournalAmounts.ts";
 import { applyPendingDebt } from "./debtRepayment.ts";
 import { filterSplitRepairMissingLines } from "./settlementRepairGuards.ts";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 
 const RIDE_SELECT =
   "id, rider_user_id, assigned_driver_user_id, currency, fare_final_minor, fare_estimate_minor, cash_received_minor, cash_settlement_outcome, payment_method, status, cash_settlement_snapshot";
@@ -17,7 +18,7 @@ const RIDE_SELECT =
 function pubSvc(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

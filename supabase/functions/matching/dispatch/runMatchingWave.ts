@@ -22,6 +22,7 @@ import {
   loadServiceBodyTypeTiers,
 } from "../../rides/fare/serviceMatching.ts";
 import { getRidesAdminDb } from "../../_shared/ridesAdminDb.ts";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 import {
   DEFAULT_H3_RESOLUTION,
   getCellsForWave,
@@ -50,7 +51,7 @@ export interface RunWaveResult {
 function svc(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
     { db: { schema: "rides" } },
   );
 }
@@ -58,7 +59,7 @@ function svc(): SupabaseClient {
 function pubSvc(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

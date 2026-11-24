@@ -10,6 +10,7 @@ import { activateRushPassFromPaymentIntent } from "../_shared/rushPassActivate.t
 import { loadActiveRushPassMembership } from "./rushPassMembership.ts";
 import { isWipayDemoMode } from "../_shared/wipayDemo.ts";
 import { loadRushPassSubsidyUsed } from "../_shared/rushPassSubsidyUsed.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 import {
   assertRushPassPlanCapsValid,
   mirrorRushPassCapsToGlobalProfile,
@@ -60,7 +61,7 @@ async function ensureCustomer(
 function getPaymentsDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "payments" } },
   );
 }

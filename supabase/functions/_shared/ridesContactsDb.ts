@@ -3,6 +3,7 @@
  * Hosted Supabase exposes public.rides_* views, not the rides schema.
  */
 import { createClient, type PostgrestError, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serviceKey } from "./serviceKey.ts";
 
 export type RidesContactsTables = {
   rider_contacts: string;
@@ -93,7 +94,7 @@ export function isMissingRidesContactsTableError(error: PostgrestError | null): 
 function serviceClient(schema: string): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
     { db: { schema } },
   );
 }

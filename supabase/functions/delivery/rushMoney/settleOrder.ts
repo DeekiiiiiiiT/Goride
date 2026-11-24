@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cashSettleLines, inHouseSettleLines, settleLines } from "../../_shared/rushMoney/journalLines.ts";
 import type { DashOrderFeeFields } from "../../_shared/dashMoneySplit.ts";
+import { requireServiceKey } from "../../_shared/serviceKey.ts";
 
 // deno-lint-ignore no-explicit-any
 type Sb = { from: (table: string) => any };
@@ -8,7 +9,7 @@ type Sb = { from: (table: string) => any };
 function publicDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
   );
 }
 

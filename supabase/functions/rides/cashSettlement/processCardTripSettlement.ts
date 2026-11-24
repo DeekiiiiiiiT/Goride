@@ -7,6 +7,7 @@ import { getRiderWalletAvailableMinor } from "./getRiderWalletAvailableMinor.ts"
 import { postPaymentJournal } from "../../_shared/paymentAccounts.ts";
 import { getRidesPaymentDb } from "../../_shared/ridesPaymentDb.ts";
 import { resolveOwedFareMinor } from "./processCashSettlement.ts";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 
 export function isCardTripRide(ride: Record<string, unknown>): boolean {
   return String(ride.payment_method ?? "") === "card";
@@ -120,7 +121,7 @@ export async function processCardTripSettlement(
 function pubSvc(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

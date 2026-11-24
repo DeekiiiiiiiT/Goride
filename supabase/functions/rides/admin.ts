@@ -33,6 +33,7 @@ import { registerPlayStoreLaunchAdminRoutes } from "./admin/playStoreLaunch.ts";
 import { registerDisputeAdminRoutes } from "./admin/disputeAdmin.ts";
 import { registerSettlementOverrideRoutes } from "./admin/settlementOverrides.ts";
 import { registerHaulageCatalogAdminRoutes } from "./admin/haulageCatalog.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 export type RidesAdminDb = Awaited<ReturnType<typeof getRidesAdminDb>>;
 
@@ -189,7 +190,7 @@ function parseLocationFromBody(body: Record<string, unknown>):
 function ridesNativeDb(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
     { db: { schema: "rides" } },
   );
 }

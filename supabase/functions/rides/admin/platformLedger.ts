@@ -17,11 +17,12 @@ import {
 import { ledgerPage } from "../../_shared/unifiedLedger/readApi.ts";
 import { thisWeekRange } from "../../_shared/unifiedLedger/dateRange.ts";
 import { shadowCompareAsync } from "../../_shared/unifiedLedger/shadowRead.ts";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 
 function ridesSvc() {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
     { db: { schema: "rides" } },
   );
 }
@@ -105,7 +106,7 @@ export function registerPlatformLedgerAdminRoutes(admin: Hono) {
     const db = ridesSvc();
     const pub = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      serviceKey(),
     );
 
     if (grain === "line") {
@@ -173,7 +174,7 @@ export function registerPlatformLedgerAdminRoutes(admin: Hono) {
     const db = ridesSvc();
     const pub = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      serviceKey(),
     );
 
     const { data: obligationRows, error } = await pub

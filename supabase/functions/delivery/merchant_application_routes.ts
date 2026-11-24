@@ -30,6 +30,7 @@ import { findPendingInviteForEmail } from "./merchantTeam.ts";
 import { seedVenueOpsFromBusinessType } from "./merchantVenueOps.ts";
 import { assertCanEnableAcceptingOrders } from "./merchantPayoutGate.ts";
 import { suggestMarketIdForMerchantPin } from "./admin/coverageZones.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 type SupabaseClient = ReturnType<typeof createDeliveryClient>;
 
@@ -51,7 +52,7 @@ function createDeliveryClient(authHeader: string | null) {
 function getServiceSupabase() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "delivery" } },
   );
 }
@@ -59,7 +60,7 @@ function getServiceSupabase() {
 function getPaymentsSupabase() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "payments" } },
   );
 }
@@ -67,7 +68,7 @@ function getPaymentsSupabase() {
 function getStorageSupabase() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
   );
 }
 

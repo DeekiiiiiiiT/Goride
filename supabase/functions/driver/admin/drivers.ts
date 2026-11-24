@@ -39,6 +39,7 @@ import {
   requireWrite,
 } from "./permissions.ts";
 import { PRIVATE_LIST_CACHE } from "../../_shared/cacheControl.ts";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 
 type DriverAdminDb = Awaited<ReturnType<typeof getDriverAdminDb>>;
 
@@ -97,7 +98,7 @@ async function driverDbOrResponse(
 function serviceAuth() {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 
@@ -899,7 +900,7 @@ export function registerDriverUserAdminRoutes(admin: Hono) {
 
     const ridesDb = resolved.ridesDb ?? createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      serviceKey(),
       { db: { schema: "rides" } },
     );
 
@@ -937,7 +938,7 @@ export function registerDriverUserAdminRoutes(admin: Hono) {
 
     const ridesDb = resolved.ridesDb ?? createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      serviceKey(),
       { db: { schema: "rides" } },
     );
 

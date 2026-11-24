@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireServiceKey } from "../../_shared/serviceKey.ts";
 
 /** Best-effort customer notification via order_events audit trail. */
 export async function notifyDisputeResolution(
@@ -66,7 +67,7 @@ export async function processPendingRefunds(
   const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
   const pdb = createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "payments" } },
   );
 

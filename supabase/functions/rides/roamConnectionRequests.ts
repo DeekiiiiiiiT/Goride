@@ -5,6 +5,7 @@ import type { RidesContactsDb } from "../_shared/ridesContactsDb.ts";
 import { normalizePhoneE164 } from "./rideAccess.ts";
 import { resolveRoamUserByPhone } from "./resolveRoamUserByPhone.ts";
 import { isRoamConnectionsEnabled } from "./roamConnectionFlags.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 import {
   areUsersConnected,
   canonicalPair,
@@ -63,7 +64,7 @@ async function resolveDisplayNameForUser(userId: string): Promise<string | null>
   try {
     const svc = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      serviceKey(),
     );
     const { data } = await svc.auth.admin.getUserById(userId);
     const meta = data.user?.user_metadata as Record<string, unknown> | undefined;
@@ -329,7 +330,7 @@ export function registerRoamConnectionRoutes(app: Hono, deps: ConnectionDeps) {
 
     const svc = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      serviceKey(),
     );
     const { data: authData } = await svc.auth.admin.getUserById(gate.user!.id);
     const rawPhone = authData.user?.phone;

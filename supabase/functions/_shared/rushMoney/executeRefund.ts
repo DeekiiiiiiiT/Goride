@@ -7,11 +7,12 @@ import { assertRefundAmount, refundableRemaining, orderRefundState, type RefundS
 import { interpretRefundStatus } from "./wipayContract.ts";
 import { refundUnwindLines } from "./journalLines.ts";
 import { merchantFundedAmount, reverseSplit } from "./reverseSplit.ts";
+import { requireServiceKey } from "../serviceKey.ts";
 
 function paymentsDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "payments" } },
   );
 }
@@ -19,7 +20,7 @@ function paymentsDb() {
 function deliveryDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "delivery" } },
   );
 }
@@ -27,7 +28,7 @@ function deliveryDb() {
 function publicDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
   );
 }
 

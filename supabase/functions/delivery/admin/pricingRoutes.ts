@@ -31,6 +31,7 @@ import {
   rowToMerchantTier,
 } from "./pricingConfigHelpers.ts";
 import type { MerchantTier } from "../../_shared/dashPricing.ts";
+import { requireServiceKey } from "../../_shared/serviceKey.ts";
 
 function adminFromCtx(c: { get: (k: string) => unknown }): ProductAdminUser {
   return c.get("adminUser") as ProductAdminUser;
@@ -363,7 +364,7 @@ export function registerPricingAdminRoutes(app: Hono) {
     // Growth Guarantee credits + claw-backs (last 90 days)
     const paymentsDb = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      requireServiceKey(),
       { db: { schema: "payments" } },
     );
     const since90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();

@@ -16,6 +16,7 @@ import { appendDriverAuditEvent } from "./drivers_audit.ts";
 import { isFeatureEnabled, FEATURE_FLAGS } from "./feature_flags.ts";
 import * as kv from "./kv_store.tsx";
 import { uberTimelineDriverIdMismatch } from "./recon_activity_timeline.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 import {
   buildCoverageBySource,
   buildCoverageWindows,
@@ -61,7 +62,7 @@ function serviceClient(schema?: string): SupabaseClient {
   const opts = schema ? { db: { schema } } : undefined;
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     opts as any,
   );
 }

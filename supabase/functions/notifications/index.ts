@@ -7,6 +7,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
 import { applyCors } from "../_shared/corsAllowlist.ts";
 import { sendFcmPush } from "../_shared/fcmSend.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 const app = new Hono().basePath("/notifications");
 
@@ -72,7 +73,7 @@ function getAuthClient(authHeader: string) {
 function getServiceDelivery() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "delivery" } },
   );
 }

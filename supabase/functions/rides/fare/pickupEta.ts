@@ -8,6 +8,7 @@ import {
 } from "./dispatchSettings.ts";
 import { haversineKm } from "./routing.ts";
 import { getEligibleDriverUserIds } from "../../_shared/driverModeFilter.ts";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 import {
   DEFAULT_H3_RESOLUTION,
   h3Disk,
@@ -51,7 +52,7 @@ async function loadLegacyDriverLocations(
   ];
   const pub = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 
   for (const locSelect of locSelects) {
@@ -86,7 +87,7 @@ async function loadNearbyDriverLocations(
 ): Promise<Record<string, unknown>[]> {
   const pub = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 
   const k = kRingForRadiusKmWithMargin(quoteRadiusKm, DEFAULT_H3_RESOLUTION);

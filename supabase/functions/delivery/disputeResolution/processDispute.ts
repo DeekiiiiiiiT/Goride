@@ -8,6 +8,7 @@ import { notifyDisputeResolution } from "./notifications.ts";
 import { createLinkedSupportCase, createOrderDispute } from "./supportCase.ts";
 import type { FaultAttribution, ProcessDisputeResult, ResolutionAction } from "./types.ts";
 import { isForgottenOrderCandidate, shouldEvaluateForgottenRule } from "./forgottenOrderRule.ts";
+import { requireServiceKey } from "../../_shared/serviceKey.ts";
 
 async function autoRefundCapJmd(): Promise<number> {
   const { getSetting } = await import("../../_shared/rushSettings/getSetting.ts");
@@ -20,7 +21,7 @@ async function customerOverRefundBudget(serviceSb: SupabaseClient, customerId: s
   const { data: orders } = await serviceSb.from("orders").select("id").eq("customer_id", customerId);
   const ids = (orders || []).map((row: { id: string }) => row.id);
   if (!ids.length) return false;
-  const pdb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { db: { schema: "payments" } });
+  const pdb = createClient(Deno.env.get("SUPABASE_URL")!, requireServiceKey(), { db: { schema: "payments" } });
   const { data: refunds } = await pdb.from("refunds").select("amount, reason").in("order_id", ids).gte("created_at", since).in("status", ["pending", "submitted", "completed", "succeeded"]);
   const autos = (refunds || []).filter((row: { reason?: string }) => String(row.reason || "").toLowerCase().startsWith("auto"));
   const sum = autos.reduce((total: number, row: { amount?: number }) => total + Number(row.amount || 0), 0);

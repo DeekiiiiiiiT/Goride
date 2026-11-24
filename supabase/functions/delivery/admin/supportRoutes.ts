@@ -10,6 +10,7 @@ import { orchestrateOrderRefund } from "./orderRefund.ts";
 import { applyMerchantFaultDebit } from "../disputeResolution/merchantDebit.ts";
 import { merchantFundedAmount, reverseSplit } from "../../_shared/rushMoney/reverseSplit.ts";
 import { notifyCaseStatusChange } from "../disputeResolution/notifications.ts";
+import { requireServiceKey } from "../../_shared/serviceKey.ts";
 
 const CASE_STATUSES = new Set(["open", "pending", "resolved", "closed"]);
 const CASE_PRIORITIES = new Set(["low", "normal", "high", "urgent"]);
@@ -35,7 +36,7 @@ export function registerSupportAdminRoutes(app: Hono) {
     if (error) return c.json({ error: error.message }, 500);
     const rows = (data ?? []) as Array<Record<string, unknown>>;
     const assigneeIds = [...new Set(rows.map((row) => String(row.assigned_to || "")).filter(Boolean))];
-    const pdb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
+    const pdb = createClient(Deno.env.get("SUPABASE_URL")!, requireServiceKey(), {
       db: { schema: "platform" },
     });
     const { data: people } = assigneeIds.length
@@ -255,7 +256,7 @@ export function registerSupportAdminRoutes(app: Hono) {
 
     const pdb = (await import("https://esm.sh/@supabase/supabase-js@2")).createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      requireServiceKey(),
       { db: { schema: "platform" } },
     );
 

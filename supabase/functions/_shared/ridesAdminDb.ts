@@ -5,6 +5,7 @@
  * - `public.rides_*` views (migration 20260517210000_rides_public_admin_views.sql).
  */
 import { createClient, type PostgrestError, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serviceKey } from "./serviceKey.ts";
 
 export type RidesAdminTables = {
   fare_rules: string;
@@ -65,7 +66,7 @@ let riderResolved: Resolved | null = null;
 function serviceClient(schema: string): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
     { db: { schema } },
   );
 }

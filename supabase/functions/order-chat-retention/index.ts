@@ -6,6 +6,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireInternalSecret } from "../_shared/requireInternalSecret.ts";
 import { getSetting } from "../_shared/rushSettings/getSetting.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 type DataRetention = {
   deliveryPhotosDays: number;
@@ -29,7 +30,7 @@ Deno.serve(async (req) => {
 
   const sb = createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
   );
 
   const retention = await getSetting<DataRetention>("enterprise.privacy.retention", {

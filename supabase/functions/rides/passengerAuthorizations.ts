@@ -11,6 +11,7 @@ import {
 } from "./rideAccess.ts";
 import { isRoamConnectionsEnabled } from "./roamConnectionFlags.ts";
 import { isBlockedEitherDirection } from "./roamConnectionHelpers.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 type AuthDeps = {
   getContactsDb: () => Promise<RidesContactsDb>;
@@ -65,7 +66,7 @@ function toAuthDto(row: Record<string, unknown>) {
 async function resolveAuthUserPhone(userId: string): Promise<string | null> {
   const svc = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
   const { data } = await svc.auth.admin.getUserById(userId);
   const phone = data.user?.phone;
@@ -92,7 +93,7 @@ export async function lookupPassengerByPhone(phoneE164: string): Promise<{
   try {
     const svc = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      serviceKey(),
     );
     const { data: authData } = await svc.auth.admin.getUserById(resolved.user_id);
     const meta = authData.user?.user_metadata as Record<string, unknown> | undefined;

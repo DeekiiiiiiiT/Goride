@@ -9,6 +9,7 @@ import { dispatchOffersForOrder } from "../courierConsumerRoutes.ts";
 import { insertCourierReassignedSystemMessages } from "../orderChat.ts";
 import { ORDER_CUSTOMER_EMBED } from "../orderSelectEmbeds.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireServiceKey } from "../../_shared/serviceKey.ts";
 
 /** Orders considered "in flight" for the live ops board. */
 const LIVE_STATUSES = [
@@ -125,7 +126,7 @@ export function registerOpsAdminRoutes(app: Hono) {
       try {
         const publicSb = createClient(
           Deno.env.get("SUPABASE_URL")!,
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+          requireServiceKey(),
         );
         await insertCourierReassignedSystemMessages(publicSb, orderId, String(previousCourier));
       } catch (e) {

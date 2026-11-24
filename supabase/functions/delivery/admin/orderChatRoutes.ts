@@ -9,11 +9,12 @@ import { getDb, writeKvAudit } from "./merchantAdminShared.ts";
 import { parseOrderChatPair, type OrderChatPair } from "../orderChatAccess.ts";
 import { toOrderMessageDto } from "../orderChat.ts";
 import { notifyOrderChatRecipients } from "../orderChatNotify.ts";
+import { requireServiceKey } from "../../_shared/serviceKey.ts";
 
 function publicSb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
   );
 }
 

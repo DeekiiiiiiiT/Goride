@@ -19,6 +19,7 @@ import { resolveMerchantFoodGctRate } from "../_shared/gctRate.ts";
 import { assertMerchantAcceptingOrders } from "./merchantOpenCheck.ts";
 import { ORDER_CUSTOMER_EMBED_WITH_USER } from "./orderSelectEmbeds.ts";
 import { processDispute } from "./disputeResolution/processDispute.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 function asCoord(value: unknown): number | null {
   if (value == null || value === "") return null;
@@ -499,7 +500,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     {
       const { loadCustomerWallet } = await import("../_shared/rushMoney/customerWallet.ts");
       const { walletDecision } = await import("../_shared/rushMoney/walletRules.ts");
-      const books = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const books = createClient(Deno.env.get("SUPABASE_URL")!, requireServiceKey());
       const wallet = await loadCustomerWallet(books, String(customer.id));
       const walletLive = await getSetting<boolean>("customer.payment.wallet");
       const { count } = await serviceSb.from("orders").select("id", { count: "exact", head: true })

@@ -8,6 +8,7 @@ import {
   riderWalletTransactionTitle,
 } from "../../_shared/paymentAccounts.ts";
 import { riderAccountKeyForUser } from "./buildJournalEntries.ts";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 
 export interface RiderWalletTransactionBreakdownLine {
   label: string;
@@ -40,7 +41,7 @@ const TRIP_PAYMENT_ENTRY_TYPES = new Set([
 function pubRidesClient(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

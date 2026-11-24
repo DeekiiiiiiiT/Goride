@@ -6,6 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireProductAdmin } from "../../_shared/productAdmin.ts";
 import type { RidesAdminTables } from "../../_shared/ridesAdminDb.ts";
 import { invalidatePolicyCache } from "../../matching/policy/loadPolicy.ts";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 import {
   DEFAULT_DISPATCH_SETTINGS,
   dispatchSettingsDto,
@@ -45,7 +46,7 @@ async function syncTollFieldsToMatchingPolicy(
 
   const db = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
   const { error } = await db
     .from("matching_policies")

@@ -27,10 +27,11 @@ import {
   type CatalogGateVehicleShape,
 } from "../../../packages/types/src/vehicleCatalogGate.ts";
 import { catalogIdExists } from "./vehicle_catalog_enterprise.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 const gateSupabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+  serviceKey(),
 );
 
 /** Permission that lets platform operators temporarily bypass the gate (rare). */

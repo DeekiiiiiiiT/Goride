@@ -15,11 +15,12 @@ import {
 } from "./identityState.ts";
 import { normalizeJmPhone } from "./identityPhone.ts";
 import { sanitizeSearchToken } from "./consoleAccess.ts";
+import { requireServiceKey } from "../../_shared/serviceKey.ts";
 
 function platformDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "platform" } },
   );
 }

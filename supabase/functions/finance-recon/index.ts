@@ -17,6 +17,7 @@ import {
 } from "../../../packages/finance-core/src/closeInvariants.ts";
 import { shouldCompareWeekToLiveTrips } from "../../../packages/finance-core/src/closedWeekLiveCompare.ts";
 import { classifyStatementControl } from "../../../packages/finance-core/src/statementControl.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -104,7 +105,7 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 
   const weekFrom = new Date();

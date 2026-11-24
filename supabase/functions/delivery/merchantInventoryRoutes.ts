@@ -4,13 +4,14 @@ import type { ResolvedMerchantAccess } from "./merchantAuth.ts";
 import { requireResolvedMerchantWithPermission } from "./merchantAuth.ts";
 import { appendLedgerEntry } from "./inventory/ledgerService.ts";
 import { toBaseQty, resolveUomIdByCode } from "./inventory/uomService.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 const IN_STORE_CAPABILITY = "in_store_operations";
 
 function getServiceDb(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "delivery" } },
   );
 }

@@ -7,6 +7,7 @@
  * - Seal-log write failures throw (fail-closed).
  */
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 export type SealLane = "fuel" | "toll" | "earnings";
 export type SealStatus = "pending" | "in_progress" | "succeeded" | "failed";
@@ -58,7 +59,7 @@ function admin(): SupabaseClient {
   if (_adminOverride) return _adminOverride;
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
   );
 }
 

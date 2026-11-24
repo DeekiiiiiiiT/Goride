@@ -3,6 +3,7 @@
  * rewritten when markup rows change (FUEL_SYSTEM_AUDIT §K12).
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 type MarkupRow = {
   id: string;
@@ -25,7 +26,7 @@ type WholesaleRow = {
 function serviceDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
   );
 }
 

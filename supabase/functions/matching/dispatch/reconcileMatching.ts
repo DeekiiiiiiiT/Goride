@@ -27,6 +27,7 @@ import { buildCandidatePool, hasUnofferedCandidates, type Candidate } from "./ca
 import { loadAvailableDriverLocations } from "../supply/loadLocations.ts";
 import { getWaveRadiusKm, driverLocationMaxAgeMs } from "../policy/loadPolicy.ts";
 import { gridCellKey } from "../../rides/fare/buildQuote.ts";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 
 export interface ReconcileResult {
   ok: boolean;
@@ -42,7 +43,7 @@ const RECONCILE_WAVE_LOOP_CAP = 8;
 function svc(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
     { db: { schema: "rides" } },
   );
 }
@@ -50,7 +51,7 @@ function svc(): SupabaseClient {
 function pubSvc(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

@@ -41,6 +41,7 @@ import type {
   ExpenseBulkPreview,
 } from "../../../packages/types/src/expenseHub.ts";
 import { buildFixedExpenseOccurrences } from "../../../packages/finance-core/src/fixedExpenseOccurrences.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 import {
   buildExpenseSpendBreakdown,
   type CoverageRuleInput,
@@ -682,7 +683,7 @@ export function registerExpenseHubRoutes(app: {
         }
         const sb = createClient(
           Deno.env.get("SUPABASE_URL") ?? "",
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+          serviceKey(),
         );
         await recordExpenseInputTax(sb, {
           expenseDocId: next.id,
@@ -720,7 +721,7 @@ export function registerExpenseHubRoutes(app: {
       try {
         const sb = createClient(
           Deno.env.get("SUPABASE_URL") ?? "",
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+          serviceKey(),
         );
         await reverseExpenseInputTax(sb, doc.id);
       } catch (e) {

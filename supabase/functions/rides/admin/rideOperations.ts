@@ -16,6 +16,7 @@ import { applyRideTransition, type ApplyTransitionDeps, type RideStatus } from "
 import { isCashSettlementEnabled } from "../cashSettlement/flags.ts";
 import { computeFinalFareFromRide } from "../cashSettlement/computeFinalFare.ts";
 import { processCashSettlement } from "../cashSettlement/processCashSettlement.ts";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 import {
   canAdminReleaseCashSettlement,
   canAdminSettleCash,
@@ -51,7 +52,7 @@ type AdminAuditFn = (
 function ridesSvc(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
     { db: { schema: "rides" } },
   );
 }
@@ -59,7 +60,7 @@ function ridesSvc(): SupabaseClient {
 function pubSvc(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

@@ -6,11 +6,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireProductAdmin, type ProductAdminUser } from "../../_shared/productAdmin.ts";
 import { requireDashDelete, requireDashWrite } from "./dashPermissions.ts";
 import { getAuthAdmin, getDb, writeKvAudit } from "./merchantAdminShared.ts";
+import { requireServiceKey } from "../../_shared/serviceKey.ts";
 
 function getPaymentsDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "payments" } },
   );
 }

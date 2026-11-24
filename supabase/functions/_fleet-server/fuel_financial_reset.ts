@@ -3,6 +3,7 @@
  * and rebuild driver_financial_periods (toll-reset parity).
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 import {
   minorToMajor,
   postFinancialEvent,
@@ -25,7 +26,7 @@ const MONEY_EPS = 0.005;
 function sb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
   );
 }
 

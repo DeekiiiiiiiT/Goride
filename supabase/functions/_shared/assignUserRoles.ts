@@ -3,6 +3,7 @@
  * Clients must not call updateUser for permission fields.
  */
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serviceKey } from "./serviceKey.ts";
 
 const VALID_ROLES = new Set([
   "platform_owner",
@@ -43,7 +44,7 @@ export function isAssignableRole(raw: string): boolean {
 export function serviceAuthClient(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

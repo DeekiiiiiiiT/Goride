@@ -15,6 +15,7 @@ import { captureLines, codShortLines, deductionReversalLines, merchantShortTopUp
 import type { DashOrderFeeFields } from "../../_shared/dashMoneySplit.ts";
 import { settleDeliveredOrder } from "./settleOrder.ts";
 import { requireCourierUser } from "../courierConsumerRoutes.ts";
+import { requireServiceKey } from "../../_shared/serviceKey.ts";
 
 type Deps = {
   // Callers pass the delivery-scoped client. Courier auth only needs getUser.
@@ -23,7 +24,7 @@ type Deps = {
 };
 
 function publicDb() {
-  return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  return createClient(Deno.env.get("SUPABASE_URL")!, requireServiceKey());
 }
 
 const RUNTIME_FLAG_TO_SETTING: Record<string, string> = {

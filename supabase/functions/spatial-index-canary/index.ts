@@ -6,6 +6,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireInternalSecret } from "../_shared/requireInternalSecret.ts";
 import { DEFAULT_H3_RESOLUTION, latLngToH3 } from "../_shared/h3/geoIndex.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -35,7 +36,7 @@ Deno.serve(async (req) => {
 
   const sb = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 
   const report: Record<string, unknown> = {

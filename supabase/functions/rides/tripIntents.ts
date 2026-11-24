@@ -19,6 +19,7 @@ import { isTripIntentV2Enabled } from "./tripIntentFlags.ts";
 import { linkBookingRequestToRide } from "./bookingRequests.ts";
 import { TRIP_INTENT_QUOTE_TTL_MS, verifyQuoteToken } from "./fare/quoteToken.ts";
 import { resolveTargetedBooker } from "./tripIntentTargeting.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 export const TRIP_INTENT_TTL_HOURS = 1;
 export const TRIP_INTENT_BOOK_WINDOW_MS = 15 * 60_000;
@@ -255,7 +256,7 @@ async function findPublishedForRequester(
 function serviceAuth() {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

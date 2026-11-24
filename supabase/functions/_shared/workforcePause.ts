@@ -3,6 +3,7 @@
  * A paused driver or courier cannot start new work. A trip already underway can finish.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serviceKey } from "./serviceKey.ts";
 
 export type WorkforceServiceLine = "rideshare" | "rush_delivery";
 
@@ -11,7 +12,7 @@ const PAUSED_MESSAGE = "This fleet has paused you.";
 function db() {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

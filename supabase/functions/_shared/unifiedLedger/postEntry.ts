@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serviceKey } from "../serviceKey.ts";
 
 export type PostEntryResult = {
   inserted?: boolean;
@@ -54,7 +55,7 @@ export function unifiedLedgerClient(): SupabaseClient {
   if (!pubClient) {
     pubClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      serviceKey(),
     );
   }
   return pubClient;

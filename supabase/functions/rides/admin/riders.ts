@@ -12,6 +12,7 @@ import { getJwtRoles, jwtPrimaryRole } from "../../_shared/authEdge.ts";
 import { getRiderAdminDb, type RidesAdminTables } from "../../_shared/ridesAdminDb.ts";
 import { getWalletBalance } from "../../_shared/paymentAccounts.ts";
 import { isCashSettlementV2Enabled } from "../cashSettlement/flags.ts";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 import {
   generateRecoveryLink,
   recoveryRedirectForProduct,
@@ -56,7 +57,7 @@ function hasAnyRiderRole(roles: string[], allowed: ReadonlySet<string>): boolean
 function serviceAuth() {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

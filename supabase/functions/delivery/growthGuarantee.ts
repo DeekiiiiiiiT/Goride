@@ -3,6 +3,7 @@
  * Credits the commission delta vs Economy when prior-month delivered orders < min.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 import {
   parsePricingRules,
   growthGuaranteeCreditFromCommission,
@@ -40,7 +41,7 @@ export type GrowthGuaranteeRunResult = {
 function getPaymentsDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "payments" } },
   );
 }

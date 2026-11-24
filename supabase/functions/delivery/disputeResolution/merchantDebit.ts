@@ -1,10 +1,11 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { merchantFaultJournal } from "../inHouse/deskRules.ts";
+import { requireServiceKey } from "../../_shared/serviceKey.ts";
 
 function getPaymentsDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "payments" } },
   );
 }
@@ -66,7 +67,7 @@ export async function applyMerchantFaultDebit(
 
   const publicDb = createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
   );
   await publicDb.rpc("rush_post_journal", {
     p_idempotency_key: idempotencyKey,

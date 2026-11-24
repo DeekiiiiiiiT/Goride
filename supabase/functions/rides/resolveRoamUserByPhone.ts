@@ -8,6 +8,7 @@ import {
 } from "./passengerProfile.ts";
 import { loadCustomTagNameForUser } from "./passengerIdentity.ts";
 import { normalizePhoneE164, phonesMatch } from "./rideAccess.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 export type ResolvedRoamUser = {
   user_id: string;
@@ -26,7 +27,7 @@ type ProfileCandidate = {
 function serviceAuth() {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

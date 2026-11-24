@@ -12,6 +12,7 @@ import {
   pickupLocationShareUrl,
 } from "./rideAccess.ts";
 import { sendRideNotification } from "./rideNotifications.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 export const PICKUP_LOCATION_REQUEST_TTL_MS = 15 * 60_000;
 
@@ -143,7 +144,7 @@ export async function expirePickupLocationRequestIfNeeded(
 async function resolveAuthUserPhone(userId: string): Promise<string | null> {
   const svc = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
   const { data } = await svc.auth.admin.getUserById(userId);
   const phone = data.user?.phone;
@@ -159,7 +160,7 @@ async function resolveBookerDisplayName(bookerUserId: string): Promise<string | 
   try {
     const svc = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      serviceKey(),
     );
     const { data: booker } = await svc.auth.admin.getUserById(bookerUserId);
     if (!booker.user) return null;

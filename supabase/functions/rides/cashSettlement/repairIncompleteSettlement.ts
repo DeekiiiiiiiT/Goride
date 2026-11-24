@@ -11,6 +11,7 @@ import {
 import { hashSettlementRequest } from "./requestHash.ts";
 import { postPaymentJournal } from "../../_shared/paymentAccounts.ts";
 import { getRidesPaymentDb } from "../../_shared/ridesPaymentDb.ts";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 import {
   filterLegacyRepairMissingLines,
   shouldSkipLegacySettlementRepair,
@@ -60,7 +61,7 @@ type WalletRepairResult = {
 function pubSvc(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

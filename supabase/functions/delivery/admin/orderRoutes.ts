@@ -13,6 +13,7 @@ import { sanitizeSearchToken } from "./consoleAccess.ts";
 
 const LIVE_ORDER_STATUSES = ["placed", "accepted", "preparing", "ready", "picked_up", "in_transit"];
 import { handleOrderDelivered } from "../courierCashLedger.ts";
+import { requireServiceKey } from "../../_shared/serviceKey.ts";
 
 async function requireDashOrCourierAdmin(c: { req: { header: (n: string) => string | undefined } }) {
   const dash = await requireProductAdmin(c, "dash");
@@ -30,7 +31,7 @@ function requireOrderWrite(admin: ProductAdminUser, product: "dash" | "courier")
 function getPaymentsDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
     { db: { schema: "payments" } },
   );
 }

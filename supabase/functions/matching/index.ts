@@ -31,6 +31,7 @@ import { getFlag } from "../_shared/featureFlags.ts";
 import { loadMatchingPolicy, invalidatePolicyCache, type ResolvedPolicy } from "./policy/loadPolicy.ts";
 import { startMatching, reconcileMatching as doReconcile } from "./dispatch/reconcileMatching.ts";
 import { patchDriverOfferRow, supersedePendingOffersForRide, loadDriverOfferById } from "./dispatch/offerWrites.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 import {
   acceptEnterpriseJobOffer,
   declineEnterpriseJobOffer,
@@ -54,7 +55,7 @@ function logLine(payload: Record<string, unknown>) {
 function svc(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

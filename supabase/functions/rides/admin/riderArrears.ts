@@ -8,11 +8,12 @@ import { getRiderAdminDb } from "../../_shared/ridesAdminDb.ts";
 import { getRidesPaymentDb } from "../../_shared/ridesPaymentDb.ts";
 import { isCashSettlementV2Enabled } from "../cashSettlement/flags.ts";
 import { walletBalanceFromMinor } from "../../_shared/paymentAccounts.ts";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 
 function serviceAuth() {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 

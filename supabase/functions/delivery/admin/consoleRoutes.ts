@@ -8,6 +8,7 @@ import { requireProductAdmin, type ProductAdminUser } from "../../_shared/produc
 import { getSetting } from "../../_shared/rushSettings/getSetting.ts";
 import { getDb } from "./merchantAdminShared.ts";
 import { canSee, canSeePeople, personHref, sanitizeSearchToken } from "./consoleAccess.ts";
+import { requireServiceKey } from "../../_shared/serviceKey.ts";
 
 const LIVE = ["placed", "accepted", "preparing", "ready", "picked_up", "in_transit"];
 
@@ -43,7 +44,7 @@ async function countOldest(
 }
 
 function platformDb() {
-  return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
+  return createClient(Deno.env.get("SUPABASE_URL")!, requireServiceKey(), {
     db: { schema: "platform" },
   });
 }
@@ -105,10 +106,10 @@ export function registerConsoleAdminRoutes(app: Hono) {
   admin.get("/attention", async (c) => {
     const user = c.get("adminUser") as ProductAdminUser;
     const db = getDb();
-    const payments = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
+    const payments = createClient(Deno.env.get("SUPABASE_URL")!, requireServiceKey(), {
       db: { schema: "payments" },
     });
-    const publicDb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const publicDb = createClient(Deno.env.get("SUPABASE_URL")!, requireServiceKey());
 
     const built: Array<Queue | null> = await Promise.all([
       countOldest(async () => {

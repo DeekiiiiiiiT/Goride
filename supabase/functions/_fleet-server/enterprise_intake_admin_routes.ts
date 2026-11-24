@@ -5,6 +5,7 @@
 import type { Hono } from "npm:hono@4.3.11";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { requireProductAdmin, type ProductAdminUser } from "./product_admin_guard.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 const BASE = "/make-server-37f42386/enterprise-admin";
 
@@ -18,7 +19,7 @@ const WRITE_ROLES = new Set([
 function serviceClient() {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey(),
   );
 }
 
