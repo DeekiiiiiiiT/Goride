@@ -44,14 +44,17 @@ function get(key) {
 
 const url = get('VITE_SUPABASE_URL');
 const projectId = get('VITE_SUPABASE_PROJECT_ID');
-const anonKey = get('VITE_SUPABASE_ANON_KEY');
+// The rotated publishable key is preferred; the legacy anon key still satisfies the build until
+// phase 8 removes it from the app envs.
+const publicKey = get('VITE_SUPABASE_PUBLISHABLE_KEY') || get('VITE_SUPABASE_ANON_KEY');
 
-if ((!url && !projectId) || !anonKey) {
+if ((!url && !projectId) || !publicKey) {
   console.error('');
   console.error('Mobile build blocked: missing Supabase env for Vite.');
   console.error('Add to .env.production (gitignored) in this app folder:');
   console.error('  VITE_SUPABASE_URL=https://YOUR_REF.supabase.co');
-  console.error('  VITE_SUPABASE_ANON_KEY=your-anon-key');
+  console.error('  VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_…');
+  console.error('  (or the legacy VITE_SUPABASE_ANON_KEY)');
   console.error(`App directory: ${cwd}`);
   console.error('');
   process.exit(1);

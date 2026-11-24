@@ -488,6 +488,10 @@ export function requireAuth(options?: RequireAuthOptions) {
       // a user session is not one, and the login gate must not answer first.
       path.includes("/internal/seal-") ||
       path.includes("/internal/activity/") ||
+      // Order/ride → Fleet trip projection. Service-to-service only: the handler checks the cron
+      // secret or a current secret key (authorizeCronOrServiceRole), and a user session is not one.
+      // Without this the login gate answered 401 and no projection ever landed.
+      path.includes("/internal/trips/project") ||
       // Machine callers (cron + service key). The route handler checks the
       // cron secret or service role; a user session is not one.
       path.includes("/internal/vehicle-pictures/") ||

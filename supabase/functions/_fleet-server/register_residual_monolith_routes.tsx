@@ -79,6 +79,8 @@ import {
 } from "./rbac_middleware.ts";
 import { logAdminAction, getAuditLogs, getAuditLogsByActor } from "./audit_log.ts";
 import { logRoleChange } from "../_shared/auditLog.ts";
+import { requireServiceKey, serviceKey } from "../_shared/serviceKey.ts";
+import { authorizeCronOrServiceRole } from "../_shared/authorizeCronOrServiceRole.ts";
 import { 
   stampOrg,
   stampOrgRequired, 
@@ -420,7 +422,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    requireServiceKey()
   );
 
   /** Keeps Postgres `driver_profiles` aligned with KV + auth (service role bypasses RLS). */
@@ -1391,9 +1393,11 @@ export function registerResidualMonolithRoutes(app: Hono) {
       }
 
       if (isInternalProjection) {
-        const auth = (c.req.header("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
-        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-        if (!serviceKey || auth !== serviceKey) {
+        // Accepts the cron secret or a current secret key (x-service-key / apikey / Bearer).
+        // The legacy service key is no longer accepted — phase 8 switches it off, and the callers
+        // (orderToFleetTrip / rideToFleetTrip) now send the new secret key on apikey/x-service-key.
+        const internalAuth = await authorizeCronOrServiceRole(c.req.raw);
+        if (!internalAuth.ok) {
           return c.json({ error: "Forbidden" }, 403);
         }
       } else if (isRushProjection) {
@@ -10120,7 +10124,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
       try {
         const ridesDb = createClient(
           Deno.env.get("SUPABASE_URL") || "",
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+          serviceKey(),
           { db: { schema: "rides" } },
         );
         const { count } = await ridesDb.from("rider_profiles").select("user_id", { count: "exact", head: true });
@@ -10134,7 +10138,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
       try {
         const counter = createClient(
           Deno.env.get("SUPABASE_URL") || "",
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+          serviceKey(),
           { auth: { persistSession: false, autoRefreshToken: false } },
         );
         const { data, error } = await counter.rpc("fleet_station_counts");
@@ -12538,7 +12542,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
       try {
         const ridesDb = createClient(
           Deno.env.get("SUPABASE_URL") || "",
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+          serviceKey(),
           { db: { schema: "rides" } }
         );
         const { error: riderErr, count: riderCount } = await ridesDb
@@ -12641,7 +12645,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
     try {
       const ridesDb = createClient(
         Deno.env.get("SUPABASE_URL") || "",
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+        serviceKey(),
         { db: { schema: "rides" } },
       );
       const { data: riderProfile } = await ridesDb

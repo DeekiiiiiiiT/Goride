@@ -980,11 +980,103 @@ function call with **`apikey` only** returns 200.
 **Fleet is live on the publishable key — the owner signs in once and opens one screen** as the
 sign-in proof (the one check an agent cannot do).
 
-**Still worth fixing (not blocking):** `packages/api-client/**` is in no app's path list in
-`scripts/vercel-path-deploy-lib.mjs`, so a shared-client change does not rebuild the apps that use it
-— the force switch has to be used each time. Adding that path to every app's entry would make the
-next shared change deploy itself.
+**Shared packages ARE mapped — correction (second time, and it was wrong both times).**
+`scripts/vercel-path-deploy-lib.mjs` maps `packages/<dir>` changes to every app that depends on that
+package through `selectSecretsToFire`, and all eleven apps depend on `@roam/api-client`. So a change to
+`packages/api-client/**` **does** fire every app that uses it. The only thing that went wrong here was
+the **empty diff** (the previous SHA was already HEAD, because the push's own deployments were canceled)
+— and `ROAM_FORCE_BUILD=1` now covers exactly that case. There is no path-list gap to fix.
 
+
+### Phase 6 — driver phone app (blocked in this environment, recipe ready)
+
+**What is done:**
+
+- `apps/driver/android/version.properties` bumped **1.0.29 (30) → 1.0.30 (31)**, past the version
+  currently on Play. `pnpm cap:release` would bump again at build time (to 32/1.0.31) — harmless.
+- `scripts/assert-vite-supabase-env.mjs` used to hard-require `VITE_SUPABASE_ANON_KEY` and would have
+  **blocked the mobile build** on the new key. It now accepts
+  `VITE_SUPABASE_PUBLISHABLE_KEY` (preferred) or the legacy anon key.
+- The driver **web bundle already carries `sb_publishable_`** — proven live on roamdriver.co in phase 5,
+  from the same source the mobile build wraps.
+
+**Why the AAB could not be produced here** (four independent blockers, all environmental):
+
+1. no JDK — `java` is absent and `JAVA_HOME` is empty, and `cap:aab` needs Android Studio's JBR;
+2. no Android SDK — `ANDROID_HOME` / `ANDROID_SDK_ROOT` are empty, so Gradle cannot build;
+3. no release signing material — `apps/driver/android/keystore.properties` and its keystore are absent,
+   and Play only accepts a **signed** release AAB;
+4. even the web step fails here: `vite build` dies in esbuild with
+   `remove …\Temp\esbuild-…: Access is denied`, so the bundle cannot be produced on this machine at all.
+
+**The build, on a machine with Android Studio (JBR + SDK) and the keystore:**
+
+```
+cd apps/driver
+set VITE_SUPABASE_URL=https://csfllzzastacofsvcdsc.supabase.co
+set VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_…      # or .env.production
+pnpm run cap:release     # bumps version (→ 1.0.31 / 32) and copies the web bundle into android/
+pnpm run cap:aab         # gradle :app:bundleRelease, then copies the AAB out
+```
+
+Output: **`apps/driver/android/app/release/app-release.aab`** — that is the exact file to upload.
+
+**Play Console steps:**
+
+1. Play Console → the driver app (`co.roamenterprise.driver`) → **Release → Production → Create new release**.
+2. **Upload** `apps/driver/android/app/release/app-release.aab`.
+3. Release notes: "Moves the app to the rotated Supabase key."
+4. **Next → Save → Review release → Start rollout to Production** (or a staged rollout percentage).
+5. Wait for Google's review; the version shown must be **1.0.30+ (31+)**.
+
+**iOS: not buildable today.** `apps/driver/ios` exists (Capacitor), but iOS needs macOS + Xcode and a
+signing identity; this is a Windows machine. It is also not clear that the iOS build is wired into any
+pipeline — treat iOS as a separate task on a Mac.
+
+### Pre-phase-8: removing the legacy anon key, and everything else still on the old keys
+
+**Do this only after the new driver AAB is live in Play**, otherwise the shipped app (1.0.29) breaks
+when the anon key goes.
+
+1. Delete `VITE_SUPABASE_ANON_KEY` from all **11** Vercel projects (Production).
+2. Delete the legacy fallback in `packages/api-client/src/supabaseInfo.ts` — leave only
+   `VITE_SUPABASE_PUBLISHABLE_KEY`.
+3. Redeploy every app with **`ROAM_FORCE_BUILD=1`** (then remove it), and re-run the phase-5 checks.
+
+**Everything else that still holds the old anon or service key:**
+
+| Holder | What it is | Action before phase 8 |
+|---|---|---|
+| `supabase/functions/_shared/serviceKey.ts` | the intentional legacy fallback | keep, or drop the fallback once nothing needs it |
+| 15 edge files that still **read** `SUPABASE_SERVICE_ROLE_KEY` (below) | HTTP header sends (Bearer) and one GoTrue admin call | switch each to the cron secret or the new secret key on `apikey`/`x-service-key` |
+| GitHub repo secret `SUPABASE_SERVICE_ROLE_KEY` | unused by the three cron workflows now | delete after phase 8 |
+| Google Secret Manager `SUPABASE_SERVICE_ROLE_KEY` | the worker no longer mounts it | delete after phase 8 |
+| the **Play app 1.0.29** | its bundle still contains the anon key | replaced by 1.0.30+ |
+| `apps/*/.env.testcopy` (4 files) | point at the **local** stack (127.0.0.1:54321) | leave alone — never put a production key there |
+| `apps/fleet/.env.local` | the owner's local dev file | keep the publishable/secret keys there |
+| `apps/fleet/src/supabase/functions/**` | source of the five deleted functions (dead code) | delete or ignore |
+
+The 15 edge files that still read the service key, classified:
+
+- header senders: `delivery/dashHealthRoutes.ts`, `delivery/merchantStationDevice.ts`,
+  `delivery/merchantStationPin.ts`, `delivery/orderChatNotify.ts`, `_shared/dashOrderSms.ts`,
+  `rides/fare/tollBrainClient.ts`, `rides/matchingBrainClient.ts`, the four `fleet-*-cron` doors,
+  `_fleet-server/earnings_seal_http.ts`, `_fleet-server/fuel_seal_http.ts`;
+- GoTrue admin call: `_fleet-server/team_staff_service.ts` (`/auth/v1/admin/users`) — must move to the
+  new key on `apikey`, not `Bearer`;
+- `_fleet-server/ledger_ensure_routes.ts` — same class, verify when switching.
+
+#### Also fixed in this pass (they were phase-8 landmines)
+
+- `_fleet-server/register_residual_monolith_routes.tsx` had **five multi-line `createClient` calls** on
+  the legacy key that the earlier exact-string migration missed. All five now use `requireServiceKey()`.
+- the same file's `POST /internal/trips/project` **compared the caller against the legacy key**. It now
+  uses `authorizeCronOrServiceRole` (cron secret or current secret key).
+- that route was also **behind `requireAuth`**, so it answered **401** to every service caller and no
+  order/ride → Fleet trip projection ever landed. It is now on the `requireAuth` skip list with its own
+  gate; verified live: new secret key → **200** `{"success":true,"count":0}`, no credential → **403**.
+
+Fleet bundles rebuilt and redeployed (`fleet-core`, `fleet-ops`); `/health` **200** on all six.
 
 ### Pre-phase-8 item: files still reading `SUPABASE_SERVICE_ROLE_KEY`
 
