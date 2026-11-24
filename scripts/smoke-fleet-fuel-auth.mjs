@@ -92,8 +92,13 @@ failed =
     "monolith route should resolve",
   ) || failed;
 
+// Negative test, on purpose: /internal/seal-fuel-week must refuse a caller who has no internal
+// credential. That is still 401 after the key rotation — the kernel's /internal/* gate now
+// accepts only a NEW secret key (SUPABASE_SECRET_KEYS, sent as x-service-key) or the fleet cron
+// secret, and deliberately no longer accepts the legacy service_role JWT.
+// Do NOT send a real secret key here: the route actually seals a fuel week.
 const seal = await hit(
-  "seal without service key",
+  "seal without an internal credential",
   `${base}/fleet-fuel/internal/seal-fuel-week`,
   {
     anonKey,

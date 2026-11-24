@@ -25,8 +25,12 @@ Deno.serve(async (req) => {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      // The legacy JWT stays on Authorization only so the gateway (verify_jwt = true on
+      // fleet-toll until phase 3) lets the call through. The target's own /internal/* gate
+      // no longer accepts that key, so send the cron secret this relay already validated.
       Authorization: `Bearer ${key}`,
       apikey: key,
+      "X-Fleet-Cron-Secret": expected,
     },
     body: "{}",
   });

@@ -407,11 +407,59 @@ The changes below are written and committed but **not deployed and no flag was c
 | Rate limits on the public proxies | `_fleet-server/register_maps_places_routes.ts` | `assertRateLimit` per caller IP: `maps-config` and `maps-config-rides` 120/min, `places/autocomplete` and `places/:placeId/details` 60/min. |
 | Callers must show a secret key | `notifications/index.ts`, `order-chat-retention/index.ts`, `_shared/edgeKernel.ts` | All three now use `authorizeInternalRequest` with `secretKeyCandidates()` + the cron secrets. **The legacy `service_role` JWT is no longer accepted**, so the leaked value cannot keep these routes open after phase 8. New `secretKeyCandidates()` in `_shared/serviceKey.ts` returns only `SUPABASE_SECRET_KEYS` entries. |
 | Callers updated to match | `delivery/courierConsumerRoutes.ts` (3), `delivery/orderChatNotify.ts`, `_shared/dashOrderSms.ts`, `_fleet-server/fuel_seal_http.ts`, `_fleet-server/earnings_seal_http.ts` | Each now sends the new secret key on `x-service-role` / `x-service-key`, while keeping the legacy JWT in `Authorization` — the gateway still needs a JWT until the targets' flags come off. |
+| `fleet-toll-cron` must send the cron secret | `fleet-toll-cron/index.ts` | It previously sent only the legacy JWT + `apikey` to `fleet-toll/internal/toll-matcher-sweep`. With the new `/internal/*` gate that call would **401** on the next `toll-v2-matcher-sweep` run (every 10 min). It now also sends `X-Fleet-Cron-Secret`, the same as `fleet-fuel-cron`, and keeps the legacy JWT in `Authorization` for the gateway. |
+| Kernel unit test updated | `_shared/edgeKernel.test.ts` | The test that sent `Bearer <legacy key>` and expected `200` now asserts the new contract: legacy key → **401**, secret key (header or Bearer) → **200**, cron secret → **200**. `deno test` 6/6. |
+| Smoke script note | `scripts/smoke-fleet-fuel-auth.mjs` | Its seal call is a deliberate negative test ("no internal credential → 401"); it stays 401 under the new gate. Comment added, and it must not be changed to send a real key because that route actually seals a week. |
 
-**Deploy order matters when this goes live:** deploy the callers and the callees together
-(`delivery` + `notifications`, `delivery` + `order-chat-retention`, and all six fleet functions
-because `edgeKernel.ts` is bundled into each). Deploying one side alone makes that path answer
-403/401.
+**Deploy order matters when this goes live — one group:**
+`fleet-core`, `fleet-fuel`, `fleet-toll`, `fleet-ops`, `fleet-claims`, `fleet-pay`,
+**`fleet-toll-cron`**, together with `delivery`, `notifications` and `order-chat-retention`.
+`edgeKernel.ts` is bundled into each fleet function, so they all carry the new gate; deploying
+one side alone makes that path answer 403/401. `fleet-toll-cron` must ship in the same group as
+`fleet-toll`, otherwise the 10-minute toll sweep starts failing.
+
+**Deploy-day check list** (run after the group is deployed, before any flag is turned off):
+
+```sql
+-- 1. toll matcher sweep: fleet-toll-cron -> fleet-toll /internal/toll-matcher-sweep
+select private.invoke_toll_matcher_sweep();        -- returns a pg_net request id, or null when
+                                                    -- toll.match_queue is empty (job is a no-op)
+-- 2. fuel period sweep: fleet-fuel-cron -> fleet-fuel /fuel/period-jobs/sweep
+select private.invoke_fuel_period_job_sweep();
+
+-- 3. both responses must be 2xx
+select id, status_code, left(content, 120) as body
+from net._http_response
+where id in (<id from 1>, <id from 2>);
+```
+
+If `invoke_toll_matcher_sweep()` returns null because the queue is empty, call the door directly
+instead (it does not check the queue) and expect **not** 401:
+
+```sql
+select net.http_post(
+  url := 'https://csfllzzastacofsvcdsc.supabase.co/functions/v1/fleet-toll-cron',
+  headers := jsonb_build_object(
+    'Content-Type', 'application/json',
+    'X-Fleet-Cron-Secret', (select value from private.fleet_ops_secrets where name = 'fleet_cron_secret')),
+  body := '{}'::jsonb);
+```
+
+4. **Notifications path is not 403.** Trigger one and read its status:
+
+```sql
+select net.http_post(
+  url := 'https://csfllzzastacofsvcdsc.supabase.co/functions/v1/notifications/customer-order-status',
+  headers := jsonb_build_object(
+    'Content-Type', 'application/json',
+    'x-service-key', ((select value from private.fleet_ops_secrets where name = 'fleet_cron_secret'))),
+  body := '{"customerUserId":"00000000-0000-0000-0000-000000000000","orderId":"00000000-0000-0000-0000-000000000000"}'::jsonb);
+-- expect NOT 403 (401 means the credential was rejected -> callers are out of step; 400/200 both
+-- prove the gate accepted the credential). The cron secret is read from the database here on
+-- purpose: never paste a secret key into SQL, it would land in the query log.
+```
+
+Also run `node scripts/smoke-fleet-fuel-auth.mjs` — its seal case must stay **401**.
 
 Fleet bundles were regenerated locally so the working tree matches the sources.
 

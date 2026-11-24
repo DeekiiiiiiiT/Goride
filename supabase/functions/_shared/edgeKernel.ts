@@ -260,7 +260,13 @@ export function createFleetFunction(opts: CreateFleetFunctionOpts): Hono {
       alsoAccept: secretKeyCandidates(),
     });
     if (denied) {
-      return c.json({ error: "unauthorized" }, denied.status === 500 ? 503 : 401);
+      if (denied.status === 500) {
+        // Nothing configured at all — that is an operator problem, not the caller's.
+        console.error(
+          "[edgeKernel] /internal/* has no secret configured (SUPABASE_SECRET_KEYS / FLEET_CRON_SECRET)",
+        );
+      }
+      return c.json({ error: "unauthorized" }, 401);
     }
     await next();
   });

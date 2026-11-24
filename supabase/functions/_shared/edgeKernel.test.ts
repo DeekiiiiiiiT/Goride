@@ -90,9 +90,19 @@ Deno.test("createFleetFunction exposes /health and guards /internal without serv
   assertEquals(internal.status === 401 || internal.status === 403, true);
 });
 
-Deno.test("internal seal answers before a login gate mounted on /", async () => {
-  const previous = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "test-service-key");
+Deno.test("internal seal accepts a secret key or the cron secret, never the legacy key", async () => {
+  const SECRET = "sb_secret_test_key_value";
+  const LEGACY = "legacy-service-role-jwt";
+  const CRON = "cron-secret-value";
+
+  const previous = {
+    secretKeys: Deno.env.get("SUPABASE_SECRET_KEYS"),
+    legacy: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+    cron: Deno.env.get("FLEET_CRON_SECRET"),
+  };
+  Deno.env.set("SUPABASE_SECRET_KEYS", JSON.stringify({ default: SECRET }));
+  Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", LEGACY);
+  Deno.env.set("FLEET_CRON_SECRET", CRON);
   try {
     const gated = new Hono();
     gated.use("*", async (c) =>
@@ -109,21 +119,35 @@ Deno.test("internal seal answers before a login gate mounted on /", async () => 
       },
     });
 
-    const res = await app.request(
-      "http://local/fleet-toll/internal/seal-toll-week",
-      {
+    const post = (headers: Record<string, string>) =>
+      app.request("http://local/fleet-toll/internal/seal-toll-week", {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: "Bearer test-service-key",
-        },
+        headers: { "content-type": "application/json", ...headers },
         body: "{}",
-      },
-    );
-    assertEquals(res.status, 200);
-    assertEquals(await res.json(), { sealed: true });
+      });
+
+    // The leaked legacy service_role JWT must no longer open an internal route.
+    const legacy = await post({ authorization: `Bearer ${LEGACY}` });
+    assertEquals(legacy.status, 401);
+
+    // The new secret key must, on either accepted header.
+    const viaHeader = await post({ "x-service-key": SECRET });
+    assertEquals(viaHeader.status, 200);
+    assertEquals(await viaHeader.json(), { sealed: true });
+
+    const viaBearer = await post({ authorization: `Bearer ${SECRET}` });
+    assertEquals(viaBearer.status, 200);
+
+    // So must the fleet cron secret.
+    const cron = await post({ "x-fleet-cron-secret": CRON });
+    assertEquals(cron.status, 200);
   } finally {
-    if (previous == null) Deno.env.delete("SUPABASE_SERVICE_ROLE_KEY");
-    else Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", previous);
+    const restore = (key: string, value: string | undefined) => {
+      if (value == null) Deno.env.delete(key);
+      else Deno.env.set(key, value);
+    };
+    restore("SUPABASE_SECRET_KEYS", previous.secretKeys);
+    restore("SUPABASE_SERVICE_ROLE_KEY", previous.legacy);
+    restore("FLEET_CRON_SECRET", previous.cron);
   }
 });
