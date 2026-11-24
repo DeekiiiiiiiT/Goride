@@ -37476,7 +37476,7 @@ CREATE OR REPLACE TRIGGER "ensure_merchant_owner_profile" AFTER INSERT OR UPDATE
 
 
 
-CREATE OR REPLACE TRIGGER "notify-merchant-new-order" AFTER INSERT ON "delivery"."orders" FOR EACH ROW EXECUTE FUNCTION "supabase_functions"."http_request"('https://csfllzzastacofsvcdsc.supabase.co/functions/v1/merchant-push', 'POST', '{"Content-type":"application/json","Authorization":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNzZmxsenphc3RhY29mc3ZjZHNjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NTg0NTIzNCwiZXhwIjoyMDgxNDIxMjM0fQ.4xUkyd9VazsWxOTOkncpS8oDVuzy4zLE4VjgYxBwIEg"}', '{}', '5000');
+-- Trigger "notify-merchant-new-order" used to be created here with a hard-coded service_role JWT in its arguments. The key was removed on 24 Nov 2026 (docs/supabase-key-rotation-plan.md, phase 0); the trigger is now created by 20261124044708_merchant_push_trigger_cron_secret.sql.
 
 
 

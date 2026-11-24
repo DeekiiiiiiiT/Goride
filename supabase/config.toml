@@ -492,3 +492,10 @@ verify_jwt = false
 
 [functions.parts-sourcing-drain]
 verify_jwt = false
+
+# Called by the delivery.orders trigger with X-Fleet-Cron-Secret (no JWT), and by the
+# pre-rotation trigger with the service_role JWT. The function checks every request
+# itself (_shared/requireInternalSecret.ts authorizeInternalRequest) and fails closed,
+# so verify_jwt off opens no route: every POST needs a server-side secret or the server key.
+[functions.merchant-push]
+verify_jwt = false

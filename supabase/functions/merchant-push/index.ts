@@ -1,19 +1,26 @@
 /**
  * Merchant Web Push + native FCM — sends notifications to subscribed merchant devices.
- * Requires MERCHANT_PUSH_SECRET (or FLEET_CRON_SECRET) via X-Merchant-Push-Secret
- * or Authorization: Bearer <secret>. Database webhooks must send the same secret.
+ *
+ * Auth (this function is deployed with verify_jwt = false, so this check IS the gate):
+ *   X-Merchant-Push-Secret / X-Fleet-Cron-Secret / X-Rides-Cron-Secret, or
+ *   Authorization: Bearer <one of those secrets>, or Authorization: Bearer <server key>.
+ *   The database trigger sends X-Fleet-Cron-Secret (see
+ *   supabase/migrations/20261124044708_merchant_push_trigger_cron_secret.sql).
+ *
  * Native sends: FCM_SERVICE_ACCOUNT_JSON (HTTP v1) or legacy FCM_SERVER_KEY.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
-import { buildCorsOriginFn } from "../_shared/corsAllowlist.ts";
+// corsOrigins directly: corsAllowlist.ts pulls the deno.land Hono build, which this
+// function never uses.
+import { buildCorsOriginFn } from "../_shared/corsOrigins.ts";
 import { sendFcmPush } from "../_shared/fcmSend.ts";
-import { requireInternalSecret } from "../_shared/requireInternalSecret.ts";
-import { timingSafeEqual } from "../_shared/timingSafeEqual.ts";
+import { authorizeInternalRequest } from "../_shared/requireInternalSecret.ts";
+import { requireServiceKey, serviceKeyCandidates } from "../_shared/serviceKey.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  requireServiceKey(),
   { db: { schema: "delivery" } },
 );
 
@@ -120,31 +127,20 @@ Deno.serve(async (req) => {
     return jsonResponse(req, { error: "Method not allowed" }, 405);
   }
 
-  // Accept dedicated secret or shared cron secret (for DB webhook / service invoke)
-  const denied = requireInternalSecret(req, {
+  // Accept the dedicated push secret, the shared cron secret (database trigger / jobs),
+  // or a Bearer holding any of those — plus the server key, so the pre-rotation caller
+  // (old trigger carrying the service_role JWT) keeps working until phase 8.
+  const denied = authorizeInternalRequest(req, {
     envKeys: ["MERCHANT_PUSH_SECRET", "FLEET_CRON_SECRET", "RIDES_CRON_SECRET"],
     headerNames: ["X-Merchant-Push-Secret", "X-Fleet-Cron-Secret", "X-Rides-Cron-Secret"],
+    alsoAccept: serviceKeyCandidates(),
   });
-  // Also allow Authorization: Bearer <secret> for supabase.functions.invoke with service role wrappers
   if (denied) {
-    const auth = req.headers.get("Authorization") ?? "";
-    const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-    const expected =
-      Deno.env.get("MERCHANT_PUSH_SECRET")?.trim() ||
-      Deno.env.get("FLEET_CRON_SECRET")?.trim() ||
-      Deno.env.get("RIDES_CRON_SECRET")?.trim() ||
-      "";
-    if (!expected || !bearer || !timingSafeEqual(bearer, expected)) {
-      // Service-role JWT is not a push secret — reject anon/user spam
-      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ?? "";
-      if (!serviceKey || !bearer || !timingSafeEqual(bearer, serviceKey)) {
-        const body = await denied.text();
-        return new Response(body, {
-          status: denied.status,
-          headers: { ...corsHeadersFor(req), "Content-Type": "application/json" },
-        });
-      }
-    }
+    const body = await denied.text();
+    return new Response(body, {
+      status: denied.status,
+      headers: { ...corsHeadersFor(req), "Content-Type": "application/json" },
+    });
   }
 
   try {
