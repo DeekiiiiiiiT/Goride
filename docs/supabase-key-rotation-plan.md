@@ -528,14 +528,14 @@ redeployed (that is the only reliable way; the CLI applies `config.toml` on depl
 
 Order, and **stop at the first failure**:
 
-| # | Functions |
-|---|---|
-| 1 | `evidence-cleanup` — **paused, see below** |
-| 2 | `order-chat-retention`, `notifications` |
-| 3 | `toll-brain`, `fuel-brain`, `matching`, `logistics`, `identity` |
-| 4 | `fleet-claims`, `fleet-pay`, `fleet-ops`, `fleet-toll`, `fleet-fuel` |
-| 5 | `haul`, `freight`, `explorer`, `driver`, `rides`, `platform-catalog` |
-| 6 | `fleet-core`, `delivery` (busiest — quiet hour) |
+| # | Functions | Status |
+|---|---|---|
+| 1 | `evidence-cleanup` | **done** (flag off; real run 03:00 UTC tomorrow) |
+| 2 | `order-chat-retention`, `notifications` | **done** |
+| 3 | `toll-brain`, `fuel-brain`, `matching`, `logistics`, `identity` | **done** |
+| 4 | `fleet-claims`, `fleet-pay`, `fleet-ops`, `fleet-toll`, `fleet-fuel` | **done** |
+| 5 | `haul`, `freight`, `explorer`, `driver`, `rides`, `platform-catalog` | next |
+| 6 | `fleet-core`, `delivery` (busiest — quiet hour) | after 5 |
 
 Never touched: `admin-operations`, `ai-services`, `financial-operations`, `fleet-management`,
 `fuel-maintenance` — they had 0 calls in 24 h and get their own decision.
@@ -601,11 +601,42 @@ server-to-server path was proven directly instead: cron secret only, no JWT →
 **Health after the eight flips** (25-minute window): all **30** `net._http_response` rows were
 **200**, and no `cron.job_run_details` row failed.
 
-**Still `verify_jwt = true` (18) = the five legacy functions that get their own decision**
+#### Step 4 — done (5 Fleet functions)
+
+Flipped one at a time, `fleet-fuel` last as instructed. Same config-block-then-redeploy method.
+Every flip moved exactly one flag (`26 → 13` require a login overall; none newly true).
+
+| Function | Version | normal route, no login / with anon key | `/health` without Authorization | `/internal/*` with no credential |
+|---|---|---|---|---|
+| `fleet-claims` | v196 → **v197** | `/claims` → **401** "No token provided" / **401** `AUTH_REQUIRED` | **200** | none on this function |
+| `fleet-pay` | v219 → **v220** | `/cash-held` → **401** / **401** `AUTH_REQUIRED` | **200** | `/internal/seal-earnings-week` → **401** `unauthorized` |
+| `fleet-ops` | v441 → **v442** | `/admin/maintenance-categories` → **401** / **401** `AUTH_REQUIRED` | **200** | none on this function |
+| `fleet-toll` | v213 → **v214** | `/toll-info` → **401** / **401** `AUTH_REQUIRED` | **200** | `/internal/toll-matcher-sweep` → **401** `unauthorized` |
+| `fleet-fuel` | v264 → **v265** | `/fuel-entries` → **401** / **401** `AUTH_REQUIRED` | **200** | `/internal/seal-fuel-week` → **401** `unauthorized` |
+
+**The 14:00 UTC fuel run was checked before flipping `fleet-fuel`** (its first run since the job
+moved off GitHub Actions):
+
+- `cron.job_run_details` — `fuel-period-auto-close` at `14:00:00.351` → `succeeded`
+- `net._http_response` `22273` at `14:00:00.404` → **200**, `timed_out = false`,
+  `{"ok":true,"enqueued":1,"skipped":2,"skipByReason":{"skip_prior_weeks_open":2},"orgs":1}`
+
+Both OK, so the flip went ahead.
+
+**Sweeps after the flips**
+
+- after `fleet-toll`: `toll.match_queue` empty (helper returns null by design) → door call
+  `22258` → **200** `{"reports":[]}`
+- after `fleet-fuel`: `private.invoke_fuel_period_job_sweep()` → `22276` → **200**
+  `{"processed":1}`, `timed_out = false`
+
+**Health after group 4** (20-minute window): all **23** `net._http_response` rows **200**, no failed
+`cron.job_run_details` rows.
+
+**Still `verify_jwt = true` (13) = the five legacy functions that get their own decision**
 (`admin-operations`, `ai-services`, `financial-operations`, `fleet-management`, `fuel-maintenance`)
-**plus the 13 queued for groups 4–6:** `fleet-claims`, `fleet-pay`, `fleet-ops`, `fleet-toll`,
-`fleet-fuel`, `haul`, `freight`, `explorer`, `driver`, `rides`, `platform-catalog`, `fleet-core`,
-`delivery`. **Group 4 is paused for review, as instructed.**
+**plus the 8 left for groups 5–6:** `haul`, `freight`, `explorer`, `driver`, `rides`,
+`platform-catalog`, `fleet-core`, `delivery`. **Group 5 not started — paused for review.**
 
 #### Separate fix in the same session — rush job timeout
 

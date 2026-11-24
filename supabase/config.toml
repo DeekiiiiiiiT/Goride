@@ -539,3 +539,21 @@ verify_jwt = false
 # User routes authenticate themselves: /permissions reads Authorization and calls getUser().
 [functions.identity]
 verify_jwt = false
+
+# Fleet app functions, group 4. Each route resolves the caller itself (resolveActor ->
+# requirePermission / requireOrg); /internal/* is gated by edgeKernel on a secret key or the
+# cron secret. Flipped one at a time, with the four checks in the plan.
+[functions.fleet-claims]
+verify_jwt = false
+
+[functions.fleet-pay]
+verify_jwt = false
+
+[functions.fleet-ops]
+verify_jwt = false
+
+[functions.fleet-toll]
+verify_jwt = false
+
+[functions.fleet-fuel]
+verify_jwt = false
