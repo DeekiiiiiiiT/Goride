@@ -252,7 +252,7 @@ them changes nothing that is not already public — confirm each is meant to be)
 | fleet-toll | `GET /toll-info/rate`, `GET /toll-info/versions` |
 | freight | `POST /trn/validate`, `GET /public/pod*` (token-in-link proof of delivery) |
 | driver | `GET /health` (the `/play-store*`, `/stats`, `/presence` routes sit behind `admin.use("*", requireProductAdmin("driver"))`) |
-| explorer | `GET /health`, `GET /push/public-key` |
+| explorer | `GET /health` only (`/push/public-key` is **not** public — it calls `requireExplorer`) |
 | haul, identity, fuel-brain, toll-brain, matching, logistics, fleet-ops, fleet-fuel, fleet-pay, fleet-claims | `GET /health` (and `/ready`); `/internal/*` on these fleet functions **is** covered by the kernel's service-key gate (fleet-core is the exception described above) |
 
 **Previously listed as "to confirm" — all checked, all guarded.** Nothing here becomes open:
@@ -349,7 +349,7 @@ re-checked by hand for the sections above; the tables record what the route actu
 |---|---|
 | `/admin/*` | `deps.requirePlatformAdmin` / `deps.requireOwner` |
 | `/profile`, `/vehicles`, `/pins`, `/notifications`, `/fuel-logs` … | user auth via handler |
-| `/push/public-key`, `/health` | none (by design) |
+| `/health` only (`/push/public-key` requires a login) | guarded: `requireExplorer` |
 | `POST /demand`, `/admin/register*` | to confirm |
 | Callers | plug app; verify scripts |
 
@@ -633,10 +633,43 @@ Both OK, so the flip went ahead.
 **Health after group 4** (20-minute window): all **23** `net._http_response` rows **200**, no failed
 `cron.job_run_details` rows.
 
-**Still `verify_jwt = true` (13) = the five legacy functions that get their own decision**
-(`admin-operations`, `ai-services`, `financial-operations`, `fleet-management`, `fuel-maintenance`)
-**plus the 8 left for groups 5–6:** `haul`, `freight`, `explorer`, `driver`, `rides`,
-`platform-catalog`, `fleet-core`, `delivery`. **Group 5 not started — paused for review.**
+#### Step 5 — in progress, STOPPED on a failed expectation (3 of 6 flipped)
+
+`haul`, `freight` and `explorer` are flipped and safe. Then the **public-by-design confirmation
+failed**, which is a stop signal, so `driver`, `rides` and `platform-catalog` were not touched.
+
+| Function | Version | normal route, no login / with anon key | `/health` w/o auth | public-route confirmation |
+|---|---|---|---|---|
+| `haul` | v169 → **v170** | `/admin` → **401** "missing Authorization header" / **401** "invalid token" | **200** | n/a |
+| `freight` | v210 → **v211** | `/shipments` → **401** / **401** | **200** | `/public/pod/fake-token-phase3` → **404** `{"error":"Invalid link"}` ✔ |
+| `explorer` | v76 → **v77** | `/garage` → **400** `{"error":"Sign in required"}` / **400** same | **200** | `/push/public-key` → **401** `{"error":"Sign in required"}` ✘ |
+
+**What the stop is and is not.** The flip itself is sound: `explorer` refuses unauthenticated calls
+and `/health` answers. The failure is in the *review*, not the code — `/push/public-key` was listed
+as "public by design", but the handler is:
+
+```ts
+app.get("/push/public-key", async (c) => {
+  try {
+    await requireExplorer(c);      // <- always required a login
+```
+
+So it was never public. `apps/plug/src/push.ts` calls it from `enablePlugPush()`, which runs inside
+a signed-in flow, so a 401 without a session is correct behaviour and unchanged by the flag flip.
+The review's "public by design" rows for explorer have been corrected above.
+
+Also worth noting (pre-existing, not caused here): `explorer/index.ts` still builds its admin client
+from `Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")` in a local `admin()` helper, so that client is
+still on the legacy key and will need the shared helper before phase 8.
+
+Both `/garage` and `/push/public-key` answer **400/401 from the function** because their own
+`requireExplorer` throws and the handler catches it — the status is the route's choice, not the
+gateway's.
+
+**Still `verify_jwt = true` (10) = the five legacy functions** (`admin-operations`, `ai-services`,
+`financial-operations`, `fleet-management`, `fuel-maintenance`) **plus 5 left:** `driver`, `rides`,
+`platform-catalog` (group 5) and `fleet-core`, `delivery` (group 6). Waiting on the owner's call
+about the `/push/public-key` expectation before continuing.
 
 #### Separate fix in the same session — rush job timeout
 

@@ -557,3 +557,13 @@ verify_jwt = false
 
 [functions.fleet-fuel]
 verify_jwt = false
+
+# Group 5: apps and their edge surfaces. Same rule — every route resolves the caller itself.
+[functions.haul]
+verify_jwt = false
+
+[functions.freight]
+verify_jwt = false
+
+[functions.explorer]
+verify_jwt = false
