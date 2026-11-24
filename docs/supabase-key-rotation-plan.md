@@ -88,6 +88,33 @@ The leaked key is no longer in the database, the function, or the repo.
 - **Checks** — `pnpm check --all` 15/15, `validate-migration-sql`, `check:edge-imports`,
   `check:edge-manifest`, `check:edge-overlap` all pass.
 
+### Phase 1 — done (24 Nov 2026)
+
+The `default` secret key (`sb_secret_…`) already existed in Settings > API Keys, so there was
+nothing to create.
+
+- Supabase injects `SUPABASE_SECRET_KEYS` (`{"default":"sb_secret_…"}`) into every Edge
+  Function as a **default secret** — confirmed in `docs/guides/functions/secrets` and
+  `docs/guides/getting-started/migrating-to-new-api-keys`. No dashboard secret has to be added
+  for it.
+- Prove it works: merchant-push (deployed in phase 0) builds its client from
+  `_shared/serviceKey.ts`, which resolves `SUPABASE_SECRET_KEYS.default` and only falls back to
+  the legacy JWT when that is absent. It queried `delivery.merchant_push_subscriptions` and
+  answered `200 {"ok":true,"sent":0}`, so **the new secret key is already serving live traffic**.
+
+#### Two rules learned from the docs that change later phases
+
+1. **Secret / publishable keys go on the `apikey` header, never `Authorization: Bearer`.**
+   The gateway tries to parse a Bearer value as a JWT and fails with `Invalid JWT`. Modern
+   supabase-js already sends `sb_secret_…` on `apikey` only (proven by the 200 above), so
+   Node/Deno code is fine. **Raw `pg_net` calls, DB webhooks and curl-style callers must send
+   `apikey`, not `Authorization`** — this matters for phase 4 (recon-worker) and for any
+   remaining `net.http_post` that carries a key.
+2. **`verify_jwt` only understands legacy JWT keys.** Every function that must accept a
+   secret or publishable key has to run with `verify_jwt = false` and check the caller itself,
+   which is exactly what phase 3 does.
+
+
 
 ## Done-tests
 
