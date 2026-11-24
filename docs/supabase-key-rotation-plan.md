@@ -921,12 +921,43 @@ only place that reads the key for the running app — `publicAnonKey` is exporte
 
 #### What phase 5 still needs (owner/next session)
 
-1. Create the publishable key (`sb_publishable_…`) in Supabase if not already created.
+1. **The publishable key already exists** — `default`, type `publishable`, `sb_publishable_…`. Do not
+   create another one.
 2. Add `VITE_SUPABASE_PUBLISHABLE_KEY` to each of the eleven Vercel projects (and keep
-   `VITE_SUPABASE_ANON_KEY` until the app is redeployed on the new key).
-3. Redeploy each app (`vercel` per project, or a commit through the path-triggered hooks — Actions
-   are out until 1 Dec, so by hand).
+   `VITE_SUPABASE_ANON_KEY` until the app is redeployed on the new key). **Done for `roam-haul`.**
+3. Redeploy each app (see the execution note below — the CLI route is currently blocked on this
+   machine).
 4. Re-check each app loads, signs in, and calls one function.
+
+#### Phase 5 execution — started, blocked on the deploy step (24 Nov 2026)
+
+**`apps/haul` / `roam-haul`: the env var is in place.** `VITE_SUPABASE_PUBLISHABLE_KEY` was added to
+**Production** (Config, 46 chars) and `VITE_SUPABASE_ANON_KEY` is still there. Nothing was removed.
+**Resume by deploying haul — do not re-add the variable.**
+
+The deploy itself is blocked from this machine, for two separate reasons:
+
+1. **`vercel --prod` at the repo root uploads the whole monorepo (251 MB) and the free plan's daily
+   API upload quota is spent** — `Too many requests - try again in 24 hours (more than 5000, code:
+   "api-upload-free")`. One root deploy is enough to exceed it, so repeating this eleven times is not
+   viable even after the reset.
+2. **Deploying from the app directory does not work either**: every project sets *Root Directory* to
+   `apps/<app>`, so a scoped upload looks for `apps/haul/apps/haul` —
+   `The specified Root Directory "apps/haul" does not exist`.
+3. **The prebuilt route (the one that only uploads the build output) fails on Windows**: `vercel build`
+   cannot create the symlinks its builder cache needs —
+   `EPERM: operation not permitted, symlink '..\..\~npm~@emnapi+core…'`.
+
+What unblocks it, in order of preference:
+
+- **Windows Developer Mode on** (Settings → Privacy & security → For developers), then per app
+  `vercel build --prod` + `vercel deploy --prebuilt --prod`. That uploads only `.vercel/output`
+  (tens of files) instead of 251 MB, so the daily quota is not a problem after it resets.
+- **Or deploy from git** (Vercel dashboard / the existing deploy hooks) — that needs the Phase 5
+  commit pushed, which is the owner's call; nothing here pushes.
+- Root-dir deploys after the quota resets remain impractical (251 MB each).
+
+No other app was touched: haul got its variable, the deploys stopped there as instructed.
 
 ### Pre-phase-8 item: files still reading `SUPABASE_SERVICE_ROLE_KEY`
 
