@@ -2,7 +2,7 @@
  * Shared weekly driver financial period projection.
  * One rebuild path feeds Expenses / Settlement / Payout / Reconciliation.
  */
-import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
+import { createClient } from "jsr:@supabase/supabase-js@^2.49.8";
 import { format, addDays } from "npm:date-fns";
 import * as kv from "./kv_store.tsx";
 import { getFleetTimezone, fleetCalendarDay } from "./timezone_helper.tsx";
@@ -63,6 +63,7 @@ import {
   isTripTollActionable,
 } from "../../../packages/finance-core/src/periodTollTrip.ts";
 import { sumExcludedCashFromWeek } from "../../../packages/finance-core/src/periodTollCashSpend.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 import {
   loadMirroredDriverTransactions,
   settlementTxTableReadEnabled,
@@ -86,7 +87,7 @@ import { statementAmountMajor } from "../../../packages/finance-core/src/weekSta
 function sb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
   );
 }
 

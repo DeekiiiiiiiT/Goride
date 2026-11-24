@@ -6,6 +6,7 @@ import * as kv from "./kv_store.tsx";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { fleetDb, fleetTable, rowToKvValue } from "./repos/baseRepo.ts";
 import { getFleetTimezone, hasTzSuffix, naiveToUtc } from "./timezone_helper.tsx";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 export type OdometerLedgerSource =
   | "manual"
@@ -353,7 +354,7 @@ export async function projectOdometerReading(
   if (input.organizationId && !isAnomaly) {
     try {
       const url = Deno.env.get("SUPABASE_URL");
-      const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      const key = serviceKey();
       if (url && key) {
         const sb = createClient(url, key);
         const { data: flag } = await sb

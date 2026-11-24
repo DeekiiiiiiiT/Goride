@@ -4,6 +4,7 @@
  */
 import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
 import { fetchUserRoleNames } from "../_shared/rbacQuery.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 const PRIVILEGED_USER_META = new Set([
   "role",
@@ -57,10 +58,10 @@ Deno.serve(async (req) => {
     const email = (claims.email as string | undefined)?.toLowerCase();
     if (userId) {
       const dbUrl = Deno.env.get("SUPABASE_URL")!;
-      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const svcKey = requireServiceKey();
       const pdb = (await import("https://esm.sh/@supabase/supabase-js@2")).createClient(
         dbUrl,
-        serviceKey,
+        svcKey,
         { db: { schema: "platform" } },
       );
 

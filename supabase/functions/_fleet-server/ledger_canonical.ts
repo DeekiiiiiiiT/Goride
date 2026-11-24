@@ -3,9 +3,10 @@
  * Idempotency resolves against ledger.entries / source_receipts (KV money store retired).
  */
 import type { Context } from "npm:hono@4.3.11";
-import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
+import { createClient } from "jsr:@supabase/supabase-js@^2.49.8";
 import { stampOrg } from "./org_scope.ts";
 import { isKnownPlatform, normalizePlatform } from "../../../packages/finance-core/src/normalizePlatform.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 export const CANONICAL_SCHEMA_VERSION = 1;
 export const CANONICAL_EVENT_KIND = "canonical";
@@ -188,7 +189,7 @@ export async function canonicalEventExistsByIdemKey(idempotencyKey: string): Pro
 function supabaseKv() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
   );
 }
 

@@ -6,6 +6,7 @@
  */
 import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 const PRIVILEGED_META_KEYS = new Set([
   "role",
@@ -69,7 +70,7 @@ Deno.serve(async (req) => {
     // Trust the Plug flag only at creation. The trigger stamps the role; later edits do not.
     if (meta.app === "plug") {
       const url = Deno.env.get("SUPABASE_URL");
-      const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      const key = serviceKey();
       const userId = typeof user.id === "string" ? user.id : "";
       if (!url || !key || !userId) {
         return new Response(

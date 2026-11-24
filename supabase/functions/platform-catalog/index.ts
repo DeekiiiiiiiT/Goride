@@ -14,6 +14,7 @@ import { registerCatalogResearchRoutes } from "../_fleet-server/catalog_research
 import { registerResearchEngineRoutes } from "../_fleet-server/research_engine_routes.ts";
 import { withPrivacyGuard } from "../_fleet-server/research_privacy.ts";
 import { registerVehicleCatalogWriteRoutes } from "../_fleet-server/vehicle_catalog_write_routes.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 const app = new Hono().basePath("/platform-catalog");
 
@@ -44,7 +45,7 @@ app.use("*", async (c, next) => {
 
 function admin() {
   const url = Deno.env.get("SUPABASE_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const key = serviceKey();
   if (!url || !key) throw new Error("Supabase is not configured");
   return createClient(url, key);
 }

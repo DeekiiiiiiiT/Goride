@@ -147,7 +147,7 @@ import { latLngToH3, DEFAULT_H3_RESOLUTION } from "../_shared/h3/geoIndex.ts";
 // Wave 5: Env boot validation — fail-fast if critical secrets missing
 // ---------------------------------------------------------------------------
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const SUPABASE_SERVICE_ROLE_KEY = serviceKey();
 const ROAM_RIDES_QUOTE_SECRET = Deno.env.get("ROAM_RIDES_QUOTE_SECRET");
 
 {

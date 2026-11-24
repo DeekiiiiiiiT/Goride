@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { mapFuelGrade, resolveFleetGrade } from "../_shared/priceEngineMath.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 type FleetPriceEntry = {
   id?: string;
@@ -174,7 +175,7 @@ async function catalogGrade(sb: SupabaseClient, vehicleId?: string, hinted?: str
 
 function serviceClient(): SupabaseClient | null {
   const url = Deno.env.get("SUPABASE_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const key = serviceKey();
   if (!url || !key) return null;
   return createClient(url, key);
 }

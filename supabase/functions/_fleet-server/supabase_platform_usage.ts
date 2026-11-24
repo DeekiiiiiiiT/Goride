@@ -9,6 +9,7 @@
  */
 
 import * as kv from "./kv_store.tsx";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -519,9 +520,9 @@ async function composeUsageRows(
 
   // Storage + MAU via service role
   try {
-    const { createClient } = await import("jsr:@supabase/supabase-js@2.49.8");
+    const { createClient } = await import("jsr:@supabase/supabase-js@^2.49.8");
     const url = Deno.env.get("SUPABASE_URL") || "";
-    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const key = serviceKey();
     if (url && key) {
       const sb = createClient(url, key, { auth: { persistSession: false } });
 

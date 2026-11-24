@@ -8,7 +8,8 @@
  *
  * KV mapped domains: use fromKvStore() / kv.* — not client.from("kv_store_*").
  */
-import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2.49.8";
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@^2.49.8";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 let _cachedClient: SupabaseClient | null = null;
 
@@ -19,7 +20,7 @@ let _cachedClient: SupabaseClient | null = null;
 export function getServiceClient(): SupabaseClient {
   if (!_cachedClient) {
     const url = Deno.env.get("SUPABASE_URL");
-    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const key = serviceKey();
     if (!url || !key) {
       throw new Error(
         "[ServiceClient] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY — cannot create service client"
@@ -43,7 +44,7 @@ export function getServiceClientWithSchema(
   schema: string,
 ): SupabaseClient<any, any, any> {
   const url = Deno.env.get("SUPABASE_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const key = serviceKey();
   if (!url || !key) {
     throw new Error(
       `[ServiceClient] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY — cannot create ${schema} client`

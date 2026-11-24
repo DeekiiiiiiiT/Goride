@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serviceKey } from "../../_shared/serviceKey.ts";
 import {
   JAMAICA_COUNTRY_SLUG,
   buildLocationKey,
@@ -16,7 +17,7 @@ export type ResolvedPickupLocation = {
 
 function geoDb(db: SupabaseClient) {
   const url = Deno.env.get("SUPABASE_URL") || "";
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  const key = serviceKey();
   if (!url || !key) return db;
   return createClient(url, key, { db: { schema: "geo" } });
 }
@@ -32,7 +33,7 @@ export async function resolvePickupLocation(
 ): Promise<ResolvedPickupLocation> {
   const client = db ? geoDb(db) : geoDb(createClient(
     Deno.env.get("SUPABASE_URL") || "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+    serviceKey(),
   ));
   const { data, error } = await client.rpc("resolve_fare_location", { p_lat: lat, p_lng: lng });
   if (error || !data || typeof data !== "object") {

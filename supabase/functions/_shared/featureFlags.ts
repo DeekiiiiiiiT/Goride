@@ -15,6 +15,7 @@
  */
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serviceKey } from ".//serviceKey.ts";
 
 const envCache = new Map<string, boolean | undefined>();
 const dbCache = new Map<string, { value: boolean; expiresAt: number }>();
@@ -40,7 +41,7 @@ function readEnvFlag(name: string): boolean | undefined {
 
 function serviceClient(): SupabaseClient | null {
   const url = Deno.env.get("SUPABASE_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const key = serviceKey();
   if (!url || !key) return null;
   return createClient(url, key);
 }

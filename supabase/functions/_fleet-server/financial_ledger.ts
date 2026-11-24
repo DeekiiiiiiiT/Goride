@@ -2,14 +2,15 @@
  * Unified financial ledger poster — single entry point for toll/fuel/cash
  * money events. Calls public.ledger_post_financial_event (atomic SQL).
  */
-import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
+import { createClient } from "jsr:@supabase/supabase-js@^2.49.8";
 import { startOfWeek, endOfWeek, format } from "npm:date-fns";
 import { getFleetTimezone, fleetCalendarDay } from "./timezone_helper.tsx";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 function sb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
   );
 }
 

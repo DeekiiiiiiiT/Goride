@@ -697,14 +697,97 @@ logbook row in `supabase_migrations.schema_migrations` (version `20261124132804`
 (`{postgres=X/postgres}`). Verified after applying: `private.invoke_rush_delivery('/internal/geo/reconcile')`
 → request `22240` → **200** `{"healed":0,"failed":[]}`, not timed out.
 
+### Phase 3.5 — edge DB clients off the legacy key (done 24 Nov 2026)
+
+Every live edge function now builds its database client from `_shared/serviceKey.ts` instead of
+reading `SUPABASE_SERVICE_ROLE_KEY` itself. **25 source files changed**, mechanically, with the old
+expression swapped for `serviceKey()` (soft) or `requireServiceKey()` (throws when nothing is
+configured — used where the code already had a fail-fast check).
+
+The `jsr:@supabase/supabase-js@2.49.8` pin was the other half: 2.49.8 predates the new key format
+and would try to parse `sb_secret_…` as a JWT. **10 runtime files** now import
+`jsr:@supabase/supabase-js@^2.49.8`, which resolves to **2.119.2** (the current JSR release, same as
+npm) — a version that sends the secret key on `apikey` only, never `Authorization`. Test files keep
+the old pin; the generated bundles were rebuilt, not hand-edited.
+
+Files: `_fleet-server/` (service_client, kv_store, fleet_sql_bridge, financial_ledger,
+ledger_canonical, unified_ledger_dual_write, odometer_ledger, earnings_period_materialize,
+driver_financial_periods, station_merchant_aliases, plug_public_price, fuel_controller,
+supabase_platform_usage), `_shared/` (featureFlags, rushSettings/getSetting), and
+`before-user-created`, `catalog-research`, `custom-access-token`, `delivery/inventoryRoadClearanceGate`,
+`delivery/merchant_application_routes`, `explorer`, `parts-sourcing-drain`, `platform-catalog`,
+`rides`, `rides/fare/resolveLocation`.
+
+#### Proven on fleet-core first, alone
+
+Deployed fleet-core only, then:
+
+- unauthenticated `POST /fleet-core/financials` → **401** "No token provided"; with the anon key →
+  **401** `AUTH_REQUIRED`; `/health` → **200**
+- **the DB-using internal path**: `fleet-activity-cron/drift-check` → `22302` → **200**
+  `{"success":true,"day":"2026-11-24","driftCount":0}` — that route reads the activity tables
+  through the migrated client, so a successful read proves the new key works against PostgREST
+
+`fleet-picture-cron/run` → `22303` → **500**, which is the pre-existing vehicle-pictures fault
+(same endpoint failed at 05:15, hours before this change), not a migration regression.
+
+#### The remaining 18 functions, in the same groups
+
+| Group | Functions | Deploy + probe |
+|---|---|---|
+| 1 | `catalog-research`, `parts-sourcing-drain`, `evidence-cleanup` | anon call refused by the function: **401 / 403 / 401** |
+| 2–3 | `order-chat-retention`, `before-user-created`, `custom-access-token`, `matching`, `logistics`, `payments` | **401** hook refusal ×3, `/health` **200** ×3 |
+| 4 | `fleet-claims`, `fleet-pay`, `fleet-ops`, `fleet-toll`, `fleet-fuel` | `/health` **200** ×5 |
+| 5 | `explorer`, `rides`, `platform-catalog` | `/health` **200** ×3 |
+| 6 | `delivery` (traffic checked first: 0 orders, 0 chats, 0 ride requests in 30 min) | `/health` **200** |
+
+**DB reads after the migration** (each exercises a migrated client):
+
+- `platform-catalog /stations` → **200** with real station rows
+- `explorer /places/taxonomy` → **200** with brands
+- `rides /v1/places/reverse?lat=17.9970&lng=-76.7936` → **200** `{"address":"13 Lyndhurst Rd…"}` (the
+  fare/geo client)
+- `private.invoke_rush_delivery('/internal/geo/reconcile')` → `22307` → **200** `{"healed":0,"failed":[]}`
+
+**Health across the whole migration:** 30 × **200** in `net._http_response`, and the only non-200 was
+the `22303` picture-cron 500 above. No failed `cron.job_run_details` rows in the window.
+
+**Typecheck is unchanged by this work.** `deno check` on the 25 files reports 445 pre-existing
+`TS` errors; the same files checked out from `HEAD` report the **identical counts**
+(162 / 78 / 38 / 22 / 14 / 1 / 1), so nothing was introduced — the bump is type-neutral and CI's
+`deno check` step stays `continue-on-error` for its own debt.
+
+#### What still mentions the legacy key (Phase 8 gap, not a DB client)
+
+A re-run of the grep finds **8 edge files**, none of which builds a client from it:
+
+- `_fleet-server/service_client.ts` — the error message text only
+- `_shared/authorizeCronOrServiceRole.ts` — still *accepts* the legacy key on `delivery`'s 9
+  `/internal/*` routes (it also accepts the cron secret)
+- `_shared/orderToFleetTrip.ts`, `_shared/rideToFleetTrip.ts`, `platform-catalog/geoRoutes.ts`,
+  `delivery/courierConsumerRoutes.ts` — send it in an `Authorization`/`apikey` header
+- `petrojam-prices/index.ts` — compares it for its `/cron/sync-latest` gate
+- `rides/index.ts` — only the local variable *name* (its value comes from the helper now)
+
+**One concrete dependency for Phase 8:** `rush-cron` calls `delivery`'s `/internal/*` with
+`Authorization: Bearer <legacy key>` and does **not** send the cron header. `authorizeCronOrServiceRole`
+already accepts the cron secret, so the fix is one header in `rush-cron` (send
+`X-Fleet-Cron-Secret`) — do that before the legacy keys are switched off, or every Rush job breaks.
+
+Left alone on purpose: the **26 local scripts** and `recon-worker` (Phase 4), and the ten files of
+the deleted legacy functions (dead code).
+
 ### Pre-phase-8 item: files still reading `SUPABASE_SERVICE_ROLE_KEY`
 
-**Not fixed here — this is the gate in front of phase 8.** A grep over source files (bundles and
-tests excluded) finds **106 files / 185 occurrences**, not the ~35 first estimated. **67 of
+**Not fixed here — this is the gate in front of phase 8.** This is the **original audit from before
+the migration above**; the edge DB clients in it have since moved to the helper (see phase 3.5), so
+read it together with that section. A grep over source files (bundles and
+tests excluded) found **106 files / 185 occurrences**, not the ~35 first estimated. **67 of
 them build a database client** — that is the part that stops working when the legacy key dies.
 Ten of those files belong to the five legacy functions that were deleted from prod, so they are now
-dead code; **the live count is 96 files, 57 of them DB clients.** The rest only put the legacy JWT
-in an `Authorization` header, which is now redundant because no function has `verify_jwt` on.
+dead code; **the live count was 96 files, 57 of them DB clients — of which the 31 edge ones are now
+migrated**, leaving the 26 local scripts and `recon-worker` for phase 4. The rest only put the legacy
+JWT in an `Authorization` header, which is now redundant because no function has `verify_jwt` on.
 
 Move every DB client onto `_shared/serviceKey.ts`, and bump the `jsr:@supabase/supabase-js@2.49.8`
 pin at the same time — that version predates the new key format and would send an `sb_secret_…` key

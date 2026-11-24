@@ -2,6 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { formatSupabaseError } from "../_shared/formatSupabaseError.ts";
 import { timingSafeEqual } from "../_shared/timingSafeEqual.ts";
 import { runPartsSourcingDrain } from "../_fleet-server/parts_sourcing_drain.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 function drainSecretDenied(req: Request): Response | null {
   const expected = (Deno.env.get("PARTS_SOURCING_DRAIN_SECRET") || "").trim();
@@ -24,7 +25,7 @@ Deno.serve(async (req) => {
   if (denied) return denied;
 
   const url = Deno.env.get("SUPABASE_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const key = serviceKey();
   if (!url || !key) {
     return new Response(JSON.stringify({ error: "misconfigured" }), { status: 500 });
   }

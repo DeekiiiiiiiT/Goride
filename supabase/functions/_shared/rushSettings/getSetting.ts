@@ -6,6 +6,7 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getRegistryEntry, type EdgeSettingDef } from "./registry.ts";
 import { validateKind } from "./validateWritable.ts";
+import { serviceKey } from "../serviceKey.ts";
 
 export { validateKind, assertWritableValue } from "./validateWritable.ts";
 
@@ -25,7 +26,7 @@ const cache = new Map<string, CacheEntry>();
 
 function serviceClient(): SupabaseClient {
   const url = Deno.env.get("SUPABASE_URL") ?? "";
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const key = serviceKey();
   if (!url || !key) {
     throw new Error("rushSettings: SUPABASE_URL / SERVICE_ROLE_KEY missing");
   }

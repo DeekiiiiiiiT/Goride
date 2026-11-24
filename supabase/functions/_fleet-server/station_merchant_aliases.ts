@@ -2,18 +2,19 @@
  * Issuer merchant alias registry (JAA / OCR) → verified GOD station id.
  * Kept separate from station.gpsAliases (coordinates).
  */
-import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
+import { createClient } from "jsr:@supabase/supabase-js@^2.49.8";
 import { normalizeVendorName } from "./vendor_matcher.ts";
 import { collectMerchantCandidateTexts } from "./merchant_station_match.ts";
 import { attachRecordIdToStation, type VerifiedStation } from "./station_attach.ts";
 import { resolveLinkedFuelEntryIds } from "./fuel_entry_pair.ts";
 import { queryFleet } from "./repos/baseRepo.ts";
 import * as kv from "./kv_store.tsx";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 function supabaseAdmin() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
   );
 }
 

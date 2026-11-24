@@ -5,7 +5,7 @@
  * Prefer queryFleet / fleetSelect / kv.getByPrefix for new code.
  * Use fromKvStore() only when migrating legacy chained builders.
  */
-import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2.49.8";
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@^2.49.8";
 import { FLEET_DOMAINS, resolveDomain } from "./fleet_domains.ts";
 import { isFleetReadTableEnabled } from "./fleet_table_flags.ts";
 import {
@@ -17,6 +17,7 @@ import {
 } from "./repos/baseRepo.ts";
 import type { FleetDomain as FD } from "./fleet_table_flags.ts";
 import { buildOrFilterSegment } from "./fleet_sql_bridge_filters.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 type Call = { method: string; args: unknown[] };
 
@@ -74,7 +75,7 @@ function findDomainForPrefix(prefix: string) {
 function rawClient(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
   );
 }
 

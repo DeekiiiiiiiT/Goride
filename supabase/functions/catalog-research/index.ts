@@ -2,6 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { formatSupabaseError } from "../_shared/formatSupabaseError.ts";
 import { requireInternalSecret } from "../_shared/requireInternalSecret.ts";
 import { runCatalogResearchWorker } from "../_fleet-server/catalog_research_worker.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
@@ -14,7 +15,7 @@ Deno.serve(async (req) => {
   if (denied) return denied;
 
   const url = Deno.env.get("SUPABASE_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const key = serviceKey();
   if (!url || !key) {
     return new Response(JSON.stringify({ error: "misconfigured" }), { status: 500 });
   }

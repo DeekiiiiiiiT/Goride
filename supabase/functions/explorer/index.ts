@@ -24,13 +24,14 @@ import { priceStatusFor, resolvePlugGrade } from "../_shared/priceEngineMath.ts"
 import { requirePlatformAdmin } from "../_shared/platformAdmin.ts";
 import { registerPlaceAdmin } from "./place_admin.ts";
 import { registerPriceEngineAdmin } from "./price_engine_admin.ts";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 const app = new Hono().basePath("/explorer");
 app.use("*", cors());
 
 function admin(): SupabaseClient {
   const url = Deno.env.get("SUPABASE_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const key = serviceKey();
   if (!url || !key) throw new Error("Supabase is not configured");
   return createClient(url, key);
 }

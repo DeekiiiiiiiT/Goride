@@ -3,12 +3,13 @@
  * Keep in sync with supabase/functions/_fleet-server/inventory_road_clearance_gate.ts
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { serviceKey } from "../_shared/serviceKey.ts";
 
 const BLOCKED_STATUSES = ["missing", "short", "damaged"] as const;
 
 function serviceClient() {
   const url = Deno.env.get("SUPABASE_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const key = serviceKey();
   if (!url || !key) return null;
   return createClient(url, key);
 }

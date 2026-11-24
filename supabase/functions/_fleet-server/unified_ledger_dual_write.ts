@@ -1,11 +1,12 @@
 /**
  * Fleet edge — unified ledger dual-write (mirrors supabase/functions/_shared/unifiedLedger).
  */
-import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
+import { createClient } from "jsr:@supabase/supabase-js@^2.49.8";
 import { dualWriteTollLedgerKv } from "../_shared/unifiedLedger/dualWriteToll.ts";
 import { logDualWriteMetric } from "../_shared/unifiedLedger/metrics.ts";
 
 import { shouldPostUnifiedLedger } from "../_shared/unifiedLedger/flags.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 
 function dualWriteEnabled(island = "kv_ledger_event"): boolean {
   const override = unifiedLedgerDualWriteTestHooks.dualWriteEnabledOverride;
@@ -16,7 +17,7 @@ function dualWriteEnabled(island = "kv_ledger_event"): boolean {
 function sb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireServiceKey(),
   );
 }
 

@@ -78,6 +78,7 @@ import { findConflictingGasCardAnchor } from "./gas_card_anchor_guard.ts";
 import { canReuseLinkedFuelEntry } from "./fuel_entry_link.ts";
 import { projectFromFuelEntry } from "./odometer_ledger.ts";
 import { findSoftDuplicateFuelEntry } from "./fuel_soft_dedup.ts";
+import { requireServiceKey } from "../_shared/serviceKey.ts";
 import { findUnlinkedSplitHalfConflict } from "./fuel_split_halves.ts";
 import { stampOrg, getOrgId, filterByOrg, belongsToOrg } from "./org_scope.ts";
 import { stampFuelEntryRetailPrice } from "./fuel_retail_stamp.ts";
@@ -180,7 +181,7 @@ import { FUEL_HTTP_PREFIX } from "./fuel_http_prefix.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  requireServiceKey()
 );
 
 const BASE_PATH = FUEL_HTTP_PREFIX;
