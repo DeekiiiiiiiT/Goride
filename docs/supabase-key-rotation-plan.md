@@ -852,12 +852,81 @@ gcloud secrets create SUPABASE_SECRET_KEYS --replication-policy=automatic
 printf '%s' "$SUPABASE_SECRET_KEYS" | gcloud secrets versions add SUPABASE_SECRET_KEYS --data-file=-
 ```
 
-**Left for the owner on purpose:** the two places that need the key *value* written somewhere, which
-the rotation rules forbid the agent from doing — adding `SUPABASE_SECRET_KEYS=…` to the local
-git-ignored env files (`apps/fleet/.env.local`, `apps/fleet/.env.testcopy`, `apps/admin/.env.testcopy`,
-`apps/driver/.env.testcopy`, `apps/plug/.env.testcopy`) and updating the GitHub repo secret
-(`gh secret set SUPABASE_SECRET_KEYS`). Until then every script falls back to the legacy key, so
-nothing is broken.
+**Where the key actually lives now (owner did this, verified).**
+
+- **Google Cloud secret** `SUPABASE_SECRET_KEYS` — the compute service account can read it, so the
+  next `recon-worker` revision picks it up from the mount above.
+- **GitHub repo secret** `SUPABASE_SECRET_KEYS`.
+- **`apps/fleet/.env.local`** — set as `SUPABASE_SECRET_KEY` (the single-key form the scripts'
+  resolver reads).
+
+**The four `.env.testcopy` files must NOT get the new key.** `apps/admin`, `apps/driver`,
+`apps/fleet` and `apps/plug` `.env.testcopy` point at the **local stack** (`127.0.0.1:54321`), so a
+production key there is both useless and a leak risk. Leave them alone.
+
+**Phase 4 is done** apart from phase 5–9 below: the scripts resolve the key through
+`scripts/lib/serverKey.mjs`, the worker takes it from Secret Manager, and the three GitHub workflows
+are on the cron secret. Nothing in this phase is still waiting on code.
+
+#### The three GitHub workflows switched to the cron secret
+
+`fuel-period-auto-close-cron`, `fuel-period-job-sweep` and `petrojam-weekly-sync` no longer take
+`secrets.SUPABASE_SERVICE_ROLE_KEY` at all: the env line, the `SERVICE_KEY` variable and both
+`Authorization: Bearer` / `apikey` headers are gone. Each sends **only** `X-Fleet-Cron-Secret`
+(`FLEET_CRON_SECRET`, falling back to `CRON_SECRET`), and each now fails early if that secret is
+missing instead of silently sending an empty credential. They are `workflow_dispatch`-only, so no
+run was needed; the same routes were exercised directly from the database (`22320`–`22324`, all
+**200**).
+
+### Phase 5 — plan: the web apps move to the publishable key (code done, nothing deployed)
+
+**Eleven apps, not twelve.** Vercel deploy hooks cover ten of them (`apps/plug` is not in
+`scripts/vercel-path-deploy-lib.mjs`, so it is not part of the path-triggered deploys).
+
+| App | Vercel project (deploy-hook secret) | Where the Supabase key is read |
+|---|---|---|
+| `apps/fleet` | **roam-fleet** (`VERCEL_DEPLOY_HOOK_FLEET`) | shared `supabaseInfo.ts`; `vite.config.ts` |
+| `apps/driver` | **roam-driver** (`VERCEL_DEPLOY_HOOK_DRIVER`) | shared; `vite.config.ts` |
+| `apps/admin` | **roam-dominion** (`VERCEL_DEPLOY_HOOK_DOMINION`) | shared; a help-text mention in `src/main.tsx` |
+| `apps/enterprise` | **roam-enterprise** | shared only |
+| `apps/haul` | **roam-haul** | shared only |
+| `apps/rides-passenger` | **rides-passenger** (`VERCEL_DEPLOY_HOOK_RIDES_PASSENGER`) | shared; `src/admin/services/ridesAdminService.ts` (already sends it on `apikey`) |
+| `apps/rush-command` | **roam-rush-command** | shared; `vitest.config.ts` (tests only) |
+| `apps/dash-customer` | **roam-rush-customer** | shared; `vitest.config.ts` (tests only) |
+| `apps/dash-courier` | **roam-rush-courier** | shared; `src/vite-env.d.ts` (type declaration) |
+| `apps/dash-merchant` | **roam-rush-partner** | shared; `vitest.config.ts` (tests only) |
+| `apps/plug` | **no hook — deployed by hand** | shared; `vite.config.ts` |
+
+Every app funnels through one choke point: **`packages/api-client/src/supabaseInfo.ts`**. It is the
+only place that reads the key for the running app — `publicAnonKey` is exported from there and
+`packages/auth-client/src/supabase.ts` builds the client with it.
+
+#### Code change made (no Vercel env touched, no deploy)
+
+- `resolvePublicKey()` reads **`VITE_SUPABASE_PUBLISHABLE_KEY`** first and falls back to
+  `VITE_SUPABASE_ANON_KEY`, so an app keeps working before its Vercel environment is switched —
+  the code is safe to ship ahead of the env change.
+- new `isLegacyJwtKey()`: only an `eyJ…` key is a JWT.
+- `supabaseAnonFunctionHeaders()` now sends the key on **`apikey`**, and adds
+  `Authorization: Bearer …` **only when the key is a legacy JWT**. A publishable key
+  (`sb_publishable_…`) is opaque — sending it as a Bearer presents a string where the gateway and
+  PostgREST expect a token.
+- `.env.example` documents the new variable in the 9 apps that have one (`plug` and `rush-command`
+  do not), `apps/dash-courier/src/vite-env.d.ts` declares it, and the admin startup hint names it.
+- `@supabase/supabase-js` is already `^2` (2.119.2), which understands publishable keys, so no app
+  dependency changes.
+
+**Verified:** `pnpm check` 11/11, and an app typecheck reports no error in `api-client` or
+`supabaseInfo.ts`.
+
+#### What phase 5 still needs (owner/next session)
+
+1. Create the publishable key (`sb_publishable_…`) in Supabase if not already created.
+2. Add `VITE_SUPABASE_PUBLISHABLE_KEY` to each of the eleven Vercel projects (and keep
+   `VITE_SUPABASE_ANON_KEY` until the app is redeployed on the new key).
+3. Redeploy each app (`vercel` per project, or a commit through the path-triggered hooks — Actions
+   are out until 1 Dec, so by hand).
+4. Re-check each app loads, signs in, and calls one function.
 
 ### Pre-phase-8 item: files still reading `SUPABASE_SERVICE_ROLE_KEY`
 

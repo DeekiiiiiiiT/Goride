@@ -9,32 +9,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Sync Petrojam latest prices
+        # Auth: the cron secret only. verify_jwt is off for petrojam-prices, and that function
+        # now accepts the cron secret instead of comparing callers against the legacy key.
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          FLEET_CRON_SECRET: ${{ secrets.FLEET_CRON_SECRET }}
         run: |
           set -euo pipefail
-          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
-            echo "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY secrets"
+          SUPABASE_URL="$(printf '%s' "$SUPABASE_URL" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+          CRON_VAL="$(printf '%s' "${CRON_SECRET:-${FLEET_CRON_SECRET:-}}" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+          if [ -z "$SUPABASE_URL" ] || [ -z "$CRON_VAL" ]; then
+            echo "Missing SUPABASE_URL or the cron secret (CRON_SECRET / FLEET_CRON_SECRET)"
             exit 1
           fi
-          # Always auth with service_role key. Optional CRON_SECRET is a separate header only.
-          SUPABASE_URL="$(printf '%s' "$SUPABASE_URL" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
-          SERVICE_KEY="$(printf '%s' "$SUPABASE_SERVICE_ROLE_KEY" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
-          CRON_VAL="$(printf '%s' "${CRON_SECRET:-}" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
 
           CURL_ARGS=(
             -sS -w "\nHTTP_CODE:%{http_code}\n"
             -X POST
             "${SUPABASE_URL}/functions/v1/petrojam-prices/cron/sync-latest"
-            -H "Authorization: Bearer ${SERVICE_KEY}"
-            -H "apikey: ${SERVICE_KEY}"
             -H "Content-Type: application/json"
+            -H "x-fleet-cron-secret: ${CRON_VAL}"
           )
-          if [ -n "$CRON_VAL" ]; then
-            CURL_ARGS+=(-H "x-fleet-cron-secret: ${CRON_VAL}")
-          fi
 
           RESP="$(curl "${CURL_ARGS[@]}")"
           echo "$RESP" | grep -q 'HTTP_CODE:200' || {

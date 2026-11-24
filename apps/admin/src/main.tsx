@@ -53,7 +53,8 @@ try {
       <p style="margin:0 0 0.75rem;font-size:0.875rem;line-height:1.5">${message.replace(/</g, '&lt;')}</p>
       <p style="margin:0;font-size:0.8rem;color:#7f1d1d">
         Create <code>apps/admin/.env.local</code> with <code>VITE_SUPABASE_URL</code> and
-        <code>VITE_SUPABASE_ANON_KEY</code> (same values as Fleet), then stop and restart
+        <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> (or the legacy <code>VITE_SUPABASE_ANON_KEY</code>),
+        then stop and restart
         <code>npm run dev</code> in <code>apps/admin</code>.
       </p>
     </div>
