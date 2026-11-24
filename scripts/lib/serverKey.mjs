@@ -28,7 +28,8 @@ export function serverKey() {
   }
   const single = env("SUPABASE_SECRET_KEY").trim();
   if (single) return single;
-  return env("SUPABASE_SERVICE_ROLE_KEY").trim();
+  // Phase 8 revoked the legacy keys, so there is nothing to fall back to.
+  return "";
 }
 
 /** Throws with a clear message when no server key is configured. */
@@ -36,7 +37,7 @@ export function requireServerKey() {
   const key = serverKey();
   if (!key) {
     throw new Error(
-      "No server key configured (set SUPABASE_SECRET_KEYS, SUPABASE_SECRET_KEY or SUPABASE_SERVICE_ROLE_KEY)",
+      "No server key configured (set SUPABASE_SECRET_KEYS or SUPABASE_SECRET_KEY in the environment, or in the app's .env.local)",
     );
   }
   return key;

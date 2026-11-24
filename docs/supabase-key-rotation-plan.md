@@ -43,9 +43,9 @@ kill only `service_role`. So every app that uses `anon` moves too.
 | 4 | recon-worker, GitHub secrets, local `.env`, scripts → secret key | Claude (gcloud, gh signed in) | none |
 | 5 | Web apps → publishable key; redeploy all 12 | Claude (vercel CLI) | none |
 | 6 | Driver app rebuild with publishable key; Play Store / App Store release; drivers update | Claude builds, owner uploads | none; old app keeps working until step 8 |
-| 7 | JWT signing keys: "Migrate JWT secret", rotate to the new key | owner: dashboard clicks | none (users stay signed in) |
-| 8 | Deactivate legacy API keys, revoke legacy JWT secret | owner: dashboard clicks | old driver-app versions stop working |
-| 9 | Test every app; nightly checks; logs | Claude | — |
+| 7 | JWT signing keys: "Migrate JWT secret", rotate to the new key | owner: dashboard clicks | **DONE — current key is ECC, legacy HS256 sits in "previous" (not revoked)** |
+| 8 | Deactivate legacy API keys, revoke legacy JWT secret | owner: dashboard clicks | **DONE 18:20 UTC — legacy `anon`/`service_role` disabled and the legacy HS256 secret revoked** |
+| 9 | Test every app; nightly checks; logs | Claude | in progress — checks listed below |
 
 ## Status log
 
@@ -1154,6 +1154,78 @@ Two caveats the docs call out, both already handled or worth a look:
 - delete the GitHub repo secret `SUPABASE_SERVICE_ROLE_KEY`
 - delete the Google Secret Manager `SUPABASE_SERVICE_ROLE_KEY`
 - delete `apps/fleet/src/supabase/functions/**` (source of the five deleted functions)
+
+## Phases 7 and 8 — done (24 Nov 2026)
+
+**Phase 7 — JWT signing keys.** Owner migrated the legacy JWT secret into the signing-keys system and
+rotated: the **current signing key is ECC (ES256)**, and the legacy HS256 secret sits in **"previous"**,
+deliberately *not* revoked at that point. No users were signed out (the docs' behaviour: rotation
+issues new access tokens, non-expired ones stay valid).
+
+**Phase 8 — legacy keys switched off, 18:20 UTC.** Owner's dashboard clicks: the legacy JWT-based API
+keys (`anon`, `service_role`) were **disabled**, and the **legacy HS256 JWT secret was revoked**.
+
+Verified after the clicks: a token signed with the old secret answers **401**; every app and function
+reports **200**; `net._http_response` **21/21** 2xx; no failed cron runs. **The leaked key is dead.**
+
+Ordering note for the record: the revocation was safe because the wait window had passed (access-token
+TTL + 15 min), which is exactly the sequence the Supabase docs prescribe — rotate, wait, revoke.
+
+## Phase 9 — checks for tomorrow (25 Nov 2026)
+
+Everything here needs either a scheduled run or a human eye, so it is the next session's list.
+
+1. **Nightly jobs.** `cron.job_run_details` for the last 24 h: every job `succeeded`, and
+   `net._http_response` 2xx. Anything that ran overnight after 18:20 UTC ran entirely on the new keys —
+   the first clean night is the real end-to-end proof.
+2. **`evidence-cleanup` 03:00 UTC run.** It should report **`purged: 17`, `errors: []`** (the 17 files the
+   owner approved: 7 odometer, 7 toll receipt, 3 fuel receipt, all past their 14-day delete date). This
+   is also the first night the job can actually run — the function was `verify_jwt = true` until phase 3.
+3. **Week Reconciliation page** (`roamdominion.co` → Fleet → Week Reconciliation): numbers render, no
+   console errors, the approvals/alerts panels load. The worker behind it was rebuilt on the new key
+   today; `recon/approvals` and `recon/alerts` answered 200 for a signed-in browser.
+4. **Merchant push.** Place a test order on a merchant account and confirm the merchant push lands —
+   this is the `delivery.orders` trigger → `merchant-push` path that phase 0 moved onto the cron secret,
+   the one webhook that no longer carries a key at all.
+5. **Sign-in smoke on the apps that matter:** Fleet, Driver, Admin, Plug, and one Rush app — sign in,
+   open a screen, confirm no 401s in `function_edge_logs`.
+6. **Driver adoption.** Play Console shows 1.0.30 (31) at 100% with no 1.0.29 crash cluster. Until
+   adoption completes, some devices still run 1.0.29 — which is fine only because it shipped before the
+   keys were switched off; those users cannot sign in again on that build, so adoption is the remaining
+   user-facing risk.
+
+## Cleanup after phase 8 — code only (24 Nov 2026)
+
+With the legacy keys revoked, every fallback to them was dead code that could only hide a
+misconfiguration, so it is gone:
+
+- `supabase/functions/_shared/serviceKey.ts` — `serviceKey()` reads `SUPABASE_SECRET_KEYS` only and
+  returns "" when absent; `requireServiceKey()` throws with the new variable's name;
+  `serviceKeyCandidates()` no longer appends the legacy JWT.
+- `scripts/lib/serverKey.mjs` — same shape for local scripts (JSON `.default`, then the single
+  `SUPABASE_SECRET_KEY`); no legacy fallback, and its error names both accepted forms.
+- `supabase/functions/_fleet-server/env_boot.ts` — `SERVER_KEY_SOURCES` is now just
+  `SUPABASE_SECRET_KEYS`; the boot assertion no longer accepts the retired name.
+- `_fleet-server/service_client.ts` — the two error strings name `SUPABASE_SECRET_KEYS` only.
+- `rides/index.ts` — its env diagnostic was renamed from `SUPABASE_SERVICE_ROLE_KEY` to
+  `SUPABASE_SECRET_KEYS`.
+
+**The fourth manual workflow was still on the dead key.** `rush-pricing-cron.yml` (Growth Guarantee and
+Rush Pass renew) sent the legacy key as Bearer/apikey/x-service-role; with those keys disabled it could
+only work by luck of the cron header. Both steps now authenticate with the **cron secret only**
+(`CRON_SECRET`, falling back to `FLEET_CRON_SECRET`) and fail early when it is missing — the same shape
+as the other three workflows. `test-supabase-functions.yml` and `ci.yml` still mention the legacy name
+but only as a **dummy value for the local/CI database**, which is harmless.
+
+Fleet bundles were rebuilt so the committed artifacts match the sources. **Nothing was deployed for this
+cleanup and no GitHub/Google Cloud secret was deleted** — that is Claude's call with the owner.
+
+Two cosmetic leftovers, deliberately untouched:
+- `_fleet-server/api_command_center.tsx` lists the `supabase` provider as `SUPABASE_SERVICE_ROLE_KEY` for
+  the masked key-presence panel. It is a display label, not an auth path; it should eventually read
+  `SUPABASE_SECRET_KEYS`.
+- `tmp-petrojam-deploy-payload.mjs` in the repo root is a tracked leftover deploy payload containing an
+  old copy of `petrojam-prices`. Safe to delete.
 
 ### Phase 8 blocker cleared — recon-worker rebuilt on the new key (24 Nov 2026)
 

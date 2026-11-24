@@ -41,26 +41,23 @@ jobs:
         if: steps.flags.outputs.gg == 'true'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          FLEET_CRON_SECRET: ${{ secrets.FLEET_CRON_SECRET }}
+        # Auth: the cron secret only. The legacy service_role key is retired (phase 8) and
+        # delivery's /internal/* routes accept the cron secret.
         run: |
           set -euo pipefail
           SUPABASE_URL="$(printf '%s' "$SUPABASE_URL" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
-          SERVICE_KEY="$(printf '%s' "$SUPABASE_SERVICE_ROLE_KEY" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
-          CRON_VAL="$(printf '%s' "${CRON_SECRET:-}" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+          CRON_VAL="$(printf '%s' "${CRON_SECRET:-${FLEET_CRON_SECRET:-}}" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+          if [ -z "$CRON_VAL" ]; then echo "Missing CRON_SECRET / FLEET_CRON_SECRET"; exit 1; fi
           CURL_ARGS=(
             -sS -w "\nHTTP_CODE:%{http_code}\n"
             -X POST
             "${SUPABASE_URL}/functions/v1/delivery/internal/pricing/growth-guarantee/run"
-            -H "Authorization: Bearer ${SERVICE_KEY}"
-            -H "apikey: ${SERVICE_KEY}"
-            -H "x-service-role: ${SERVICE_KEY}"
             -H "Content-Type: application/json"
+            -H "x-fleet-cron-secret: ${CRON_VAL}"
             -d '{}'
           )
-          if [ -n "$CRON_VAL" ]; then
-            CURL_ARGS+=(-H "x-fleet-cron-secret: ${CRON_VAL}")
-          fi
           RESP="$(curl "${CURL_ARGS[@]}")"
           echo "$RESP"
           echo "$RESP" | grep -q 'HTTP_CODE:200' || exit 1
@@ -69,26 +66,23 @@ jobs:
         if: steps.flags.outputs.pass == 'true'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          FLEET_CRON_SECRET: ${{ secrets.FLEET_CRON_SECRET }}
+        # Auth: the cron secret only. The legacy service_role key is retired (phase 8) and
+        # delivery's /internal/* routes accept the cron secret.
         run: |
           set -euo pipefail
           SUPABASE_URL="$(printf '%s' "$SUPABASE_URL" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
-          SERVICE_KEY="$(printf '%s' "$SUPABASE_SERVICE_ROLE_KEY" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
-          CRON_VAL="$(printf '%s' "${CRON_SECRET:-}" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+          CRON_VAL="$(printf '%s' "${CRON_SECRET:-${FLEET_CRON_SECRET:-}}" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+          if [ -z "$CRON_VAL" ]; then echo "Missing CRON_SECRET / FLEET_CRON_SECRET"; exit 1; fi
           CURL_ARGS=(
             -sS -w "\nHTTP_CODE:%{http_code}\n"
             -X POST
             "${SUPABASE_URL}/functions/v1/delivery/internal/pricing/rush-pass/renew"
-            -H "Authorization: Bearer ${SERVICE_KEY}"
-            -H "apikey: ${SERVICE_KEY}"
-            -H "x-service-role: ${SERVICE_KEY}"
             -H "Content-Type: application/json"
+            -H "x-fleet-cron-secret: ${CRON_VAL}"
             -d '{}'
           )
-          if [ -n "$CRON_VAL" ]; then
-            CURL_ARGS+=(-H "x-fleet-cron-secret: ${CRON_VAL}")
-          fi
           RESP="$(curl "${CURL_ARGS[@]}")"
           echo "$RESP"
           echo "$RESP" | grep -q 'HTTP_CODE:200' || exit 1

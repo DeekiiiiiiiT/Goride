@@ -7,11 +7,10 @@
 
 const REQUIRED_SECRETS = ["SUPABASE_URL"] as const;
 /**
- * A server key is required, but either form satisfies it: the rotated `SUPABASE_SECRET_KEYS`
- * (JSON, `.default`) or the legacy single `SUPABASE_SERVICE_ROLE_KEY`. Requiring the legacy name
- * would make every fleet function refuse to boot the day Supabase stops injecting it.
+ * The rotated secret keys (`SUPABASE_SECRET_KEYS`, JSON, `.default`). Phase 8 revoked the legacy
+ * `SUPABASE_SERVICE_ROLE_KEY`, so requiring or accepting it would only mask a real misconfiguration.
  */
-const SERVER_KEY_SOURCES = ["SUPABASE_SECRET_KEYS", "SUPABASE_SERVICE_ROLE_KEY"] as const;
+const SERVER_KEY_SOURCES = ["SUPABASE_SECRET_KEYS"] as const;
 const OPTIONAL_WARN_SECRETS = ["AUDIT_HMAC_SECRET"] as const;
 
 let _validated = false;
@@ -34,7 +33,7 @@ export function assertRequiredEnv(): void {
   }
   const hasServerKey = SERVER_KEY_SOURCES.some((key) => (Deno.env.get(key) || "").trim().length > 0);
   if (!hasServerKey) {
-    missing.push("SUPABASE_SECRET_KEYS (or the legacy SUPABASE_SERVICE_ROLE_KEY)");
+    missing.push("SUPABASE_SECRET_KEYS");
   }
 
   if (missing.length > 0) {

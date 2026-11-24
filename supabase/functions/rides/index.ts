@@ -147,13 +147,13 @@ import { latLngToH3, DEFAULT_H3_RESOLUTION } from "../_shared/h3/geoIndex.ts";
 // Wave 5: Env boot validation — fail-fast if critical secrets missing
 // ---------------------------------------------------------------------------
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-const SUPABASE_SERVICE_ROLE_KEY = serviceKey();
+const SERVER_KEYS = serviceKey();
 const ROAM_RIDES_QUOTE_SECRET = Deno.env.get("ROAM_RIDES_QUOTE_SECRET");
 
 {
   const missing: string[] = [];
   if (!SUPABASE_URL) missing.push("SUPABASE_URL");
-  if (!SUPABASE_SERVICE_ROLE_KEY) missing.push("SUPABASE_SERVICE_ROLE_KEY");
+  if (!SERVER_KEYS) missing.push("SUPABASE_SECRET_KEYS");
   if (!ROAM_RIDES_QUOTE_SECRET) missing.push("ROAM_RIDES_QUOTE_SECRET");
   if (missing.length > 0) {
     const msg = `[Rides] FATAL: Missing required env: ${missing.join(", ")}`;

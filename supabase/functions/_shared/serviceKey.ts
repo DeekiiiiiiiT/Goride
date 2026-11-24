@@ -5,9 +5,9 @@
  * Order:
  *  1. SUPABASE_SECRET_KEYS — JSON object of secret API keys, e.g. {"default":"sb_secret_…"}.
  *     `.default` wins; if only one key is present that one is used.
- *  2. SUPABASE_SERVICE_ROLE_KEY — the legacy service_role JWT, kept as a fallback until
- *     phase 8 switches the legacy keys off, so a function deployed before the platform
- *     secret lands keeps working.
+ *  2. (retired) the legacy `SUPABASE_SERVICE_ROLE_KEY` — phase 8 revoked those keys, so there is
+ *     no fallback any more: a missing `SUPABASE_SECRET_KEYS` yields "" and `requireServiceKey()`
+ *     throws instead of silently using a dead key.
  *
  * The value is a master key: never log it, never return it to a client, never put it in a
  * response body or error message.
@@ -50,32 +50,26 @@ export function serviceKey(): string {
     if (def) return def;
     if (keys.length === 1) return keys[0];
   }
-  return (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
+  // Phase 8 disabled the legacy keys, so there is no fallback to read any more.
+  return "";
 }
 
 /** Same as serviceKey() but throws instead of returning "". Use where a key is mandatory. */
 export function requireServiceKey(): string {
   const key = serviceKey();
   if (!key) {
-    throw new Error(
-      "No server key configured (set SUPABASE_SECRET_KEYS or SUPABASE_SERVICE_ROLE_KEY)",
-    );
+    throw new Error("No server key configured (set SUPABASE_SECRET_KEYS)");
   }
   return key;
 }
 
 /**
- * Every server-side secret this deployment knows, for constant-time comparison of an
- * incoming header. Includes secret keys first, then the legacy service_role JWT.
- *
- * Not for anything that must stop accepting the legacy key — use secretKeyCandidates().
+ * Current server-side secret keys, for constant-time comparison of an incoming header.
+ * The legacy service_role JWT is gone (phase 8 revoked it), so this is secret keys only.
  */
 export function serviceKeyCandidates(): string[] {
   const raw = secretKeysJson();
-  const out = raw ? parseSecretKeys(raw) : [];
-  const legacy = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
-  if (legacy) out.push(legacy);
-  return out;
+  return raw ? parseSecretKeys(raw) : [];
 }
 
 /**
