@@ -173,6 +173,214 @@ three live ones — that is the source's current state, not a change of intent.
 `_shared/menuEngine/exports.drift.test.ts`, which compares two files this work never touched
 that differ only by CRLF vs LF in this Windows checkout.
 
+## Phase 3 — review
+
+**Review only. No flag was changed and nothing was deployed for this section.**
+
+26 live functions still have `verify_jwt = true`. The review answers one question for each:
+*if the flag went off, what could a caller reach without a login?*
+
+### What `verify_jwt` actually protects
+
+It only asks for *a* valid JWT. The public `anon` key is a valid JWT and it is in the leaked
+repo, so today every one of these routes is already reachable by anyone who read the repo.
+Turning the flag off changes one thing: it removes the last requirement that *some* key be
+present. After phase 8 the legacy `anon` key dies, so the flag would then reject the apps
+themselves — which is why the flag has to come off for every function the apps call.
+
+Consequence for this review: a route with no check of its own is **already effectively open**,
+and gets *fully* open when the flag comes off. Those are listed as "would become open".
+
+### Guard models found
+
+| Model | Where | Meaning |
+|---|---|---|
+| **Kernel** | fleet-core, fleet-fuel, fleet-toll, fleet-ops, fleet-claims, fleet-pay (all via `_shared/edgeKernel.ts`) | Global chain is CORS, path rewrite, request-id, error boundary, maintenance mode only. `/health` and `/ready` are public by design. `/internal/*` requires `Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>`. Every other route must guard itself; there is no global user auth. |
+| **Router guard** | delivery, driver, rides, explorer, freight, logistics, matching, platform-catalog, notifications, toll-brain, fuel-brain, haul, identity | Each Hono sub-app does `use("*", guard)` (e.g. `requireProductAdmin`, `requireAnyProductAdmin`, `requirePassenger`) and handlers add finer checks (`requireDashWrite`, `requirePermission`, merchant/station device checks). |
+| **Handler check** | same set | Many routes compare a header themselves, e.g. `notifications` requires `x-service-role` to equal `SUPABASE_SERVICE_ROLE_KEY`; `evidence-cleanup` and `order-chat-retention` require the fleet cron secret. |
+| **Nothing** | listed below | No check anywhere in the handler and no router guard. |
+
+### Would become open — must be fixed before the flag comes off
+
+**fleet-core (blocker).** These legacy monolith routes have no check at all in their handler
+(verified by reading each full body) and no router guard. Several spend money (OpenAI) or write
+data. `supabase/functions/_fleet-server/register_residual_monolith_routes.tsx`:
+
+| Route | Line | What it does with no login |
+|---|---|---|
+| `POST /scan-receipt` | 3997 | uploads a file, calls OpenAI, returns parsed receipt |
+| `POST /scan-odometer` | 4084 | uploads a file, calls OpenAI |
+| `POST /ai/map-csv` | 6070 | OpenAI CSV mapping |
+| `POST /ai/parse-toll-csv` | 7038 | OpenAI toll parse |
+| `POST /ai/parse-toll-image` | 7132 | OpenAI toll image parse |
+| `POST /analyze-fleet` | 6359 | 228-line handler, fleet analysis |
+| `POST /parse-invoice` | 6733 | OpenAI invoice parse |
+| `POST /parse-inspection` | 6824 | OpenAI inspection parse |
+| `POST /financials` | 6722 | financial read |
+| `POST /fleet/sync` | 6587 | writes fleet sync state |
+| `POST /map-match` | 8400 | map matching |
+| `PATCH /anchors/:id` | 7279 | writes an anchor |
+| `POST /check-ins/review` | 9149 | writes a check-in review |
+| `DELETE /check-ins/:id` | 9177 | deletes a check-in |
+| `POST /unverified-vendors` | 13689 | creates a vendor row |
+| `POST /unverified-vendors/bulk` | 13729 | bulk vendor insert |
+| `PUT /unverified-vendors/:id/resolve` | 13777 | resolves a vendor |
+| `POST /unverified-vendors/:id/create-station` | 13816 | creates a station |
+| `DELETE /unverified-vendors/:id` | 13861 | deletes a vendor |
+| `GET /admin/scan-corrupted-types` | 9193 | reads corrupted type report |
+| `POST /admin/fix-corrupted-types` | 9273 | **repairs/rewrites data** |
+| `GET /admin/scan-anomaly-flags` | 9330 | reads anomaly flags |
+
+By design public (leave as is): `POST /fleet-login` (9636), `POST /driver-login` (9858),
+`POST /admin-login` (9954), `POST /signup` (7364), `GET /v1/extraction-status`,
+`GET /make-server-37f42386/v1/extraction-status`, `GET /health`, `GET /ready`.
+
+**Public by design elsewhere** (verified: they return catalogue/marketing/rate data, so opening
+them changes nothing that is not already public — confirm each is meant to be):
+
+| Function | Routes |
+|---|---|
+| delivery | `GET /merchants`, `/merchants/:id`, `/merchants/:id/pricing`, `/merchants/:id/hours`, `GET /promotions`, `GET /app-config`, `GET /maps-config`, `GET /geo/*` reads, `GET /health`, `GET /health/dash-golden-path` |
+| platform-catalog | `GET /stations`, `/stations/:id`, `/places`, `/places/taxonomy`, `/places/search`, `/places/:id`, `/geo/parishes`, `/tolls`, `/schedules`, `/parts`, `GET /health` |
+| fleet-toll | `GET /toll-info/rate`, `GET /toll-info/versions` |
+| freight | `POST /trn/validate`, `GET /public/pod*` (token-in-link proof of delivery) |
+| driver | `GET /health` (the `/play-store*`, `/stats`, `/presence` routes sit behind `admin.use("*", requireProductAdmin("driver"))`) |
+| explorer | `GET /health`, `GET /push/public-key` |
+| haul, identity, fuel-brain, toll-brain, matching, logistics, fleet-ops, fleet-fuel, fleet-pay, fleet-claims | `GET /health` (and `/ready`); `/internal/*` on the fleet functions is covered by the kernel's service-key gate |
+
+**To confirm before flipping** (registered in a shared registrar, or a guard may come from a
+router defined in another file — read these individually):
+
+| Function | Routes | Why flagged |
+|---|---|---|
+| explorer | `POST /demand` (index.ts:1055), `GET /admin/register`, `/admin/register/nearby`, `/admin/register/export` (place_admin.ts:282,297,328) | no auth in the handler body; check the router they mount on |
+| rides | `GET/POST /v1/internal*` (3) | expected to use an internal secret; confirm |
+| matching | `/v1/internal*` (5) | same |
+| toll-brain | `/v1/internal*` (5) | same |
+| fuel-brain | `/v1/internal` (1) | same |
+| logistics | `/internal/reconcile-job`, `/internal/reconcile-all-matching`, `/internal/sync-from-shipment` | same |
+| fleet-ops | `/maintenance/nightly-run`, `/maintenance/overdue-digest` | same |
+| delivery | `POST /promotions/redeem`, `GET /presence`, `GET /ledger/deliveries`, `GET /settings*` | handler did not read an actor; some are under `admin.use("*")`, confirm which |
+
+### Two key-comparison bugs this phase must also fix
+
+1. `notifications` (`/courier-offer`, `/customer-order-status`, `/order-sms`, `/order-chat`)
+   and `order-chat-retention` compare the `x-service-role` header to
+   `Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")` with `!==`. Once callers send the new secret key
+   these return 403. They must use `_shared/serviceKey.ts` candidates.
+2. `edgeKernel.ts` (line ~246) gates `/internal/*` the same way — exact string match against
+   `SUPABASE_SERVICE_ROLE_KEY`. When the legacy key dies, **every** internal call to
+   fleet-core / fleet-fuel / fleet-toll / fleet-ops / fleet-claims / fleet-pay breaks, including
+   the cron relays. This must accept the secret key before phase 8.
+
+### Per-function tables
+
+Route counts are registrations found in the source tree (a registration can serve several
+paths, so treat them as scope, not exact endpoint counts). "Callers" lists the apps/scripts
+that reference the function; `pg_cron` means a database job wakes it, `function` means another
+edge function calls it.
+
+#### delivery — 383 checked / 106 without a detected guard
+| Route group | Own check |
+|---|---|
+| `/admin/*` (market, pricing, customer, merchant, order, courier, settings, support, identity, chat, menu-price) | router `use("*", requireProductAdmin("dash"/"courier"))`, writes add `requireDashWrite` |
+| `/merchant/*`, `/merchant/enterprise-inventory/*` | `requireResolvedMerchantWithPermission`, `requireOwner`, `requireStationDevice` |
+| `/courier/*`, `/customer/*` | `requireCourierUser` / `requireActiveCourier`, customer auth |
+| `/internal/*` | `authorizeCronOrServiceRole` |
+| public catalogue + config + geo reads | none (by design, listed above) |
+| Callers | dash-customer, dash-merchant, dash-courier, dash-admin, rush-command, fleet, gct-core; `pg_cron` via rush-cron; `function` from platform-catalog (legacy key Bearer) |
+
+#### fleet-core — 179 / 43
+| Route group | Own check |
+|---|---|
+| `/internal/*` | kernel: `Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>` |
+| `make-server-37f42386/**` domain routes | `resolveActor`, `requirePermission`, `requireProductAdmin`, `verifySettingsAccess`, `requireOrg` per route |
+| AI/scan/parse/vendor/admin-scan routes | **none — see blocker table** |
+| login / signup / health / ready / extraction-status | none (by design) |
+| Callers | admin (Dominion), fleet, driver, rides-passenger, roam-shared, ui; `function` from fleet-picture-cron, fleet-activity-cron, orderToFleetTrip, fuel_seal_http (legacy key Bearer); `pg_cron` vehicle-picture-*, fleet-activity-*, rush-trip-recon-* |
+
+#### rides — 188 / 18
+| Route group | Own check |
+|---|---|
+| `/v1/*` passenger routes | `requirePassenger`, `deps.requireUser(authHeader)`, `requireAuth` |
+| `/internal/*`, `/ledger/*` | to confirm (see table above) |
+| Callers | driver, enterprise, haul, rides-passenger, business-config; `pg_cron` (SQL-only jobs); `function` from admin/matchingBrainClient/tollBrainClient |
+
+#### platform-catalog — 184 / 41
+| Route group | Own check |
+|---|---|
+| `/geo/*` | `app.use("/geo/*", requireAnyProductAdmin)` |
+| `make-server-37f42386/admin/parts-import/*` | `requireAuth()` + `requirePermission("catalog.import")` |
+| `make-server-37f42386/admin/*` rest | to confirm |
+| catalogue reads (`/stations`, `/places`, `/tolls`, `/schedules`, `/parts`) | none (public catalogue) |
+| Callers | rides-passenger, plug (stand-in + public load script), fleet find-parts e2e; `function` from geoRoutes → delivery |
+
+#### driver — 15 / 11
+| Route group | Own check |
+|---|---|
+| `/admin/*` incl. `/admin/play-store*`, `/admin/stats`, `/admin/presence` | `admin.use("*", requireProductAdmin("driver"))` |
+| `/health` | none (by design) |
+| Callers | driver app, fleet, haul, enterprise, play-store-launch scripts |
+
+#### explorer — 50 / 8
+| Route group | Own check |
+|---|---|
+| `/admin/*` | `deps.requirePlatformAdmin` / `deps.requireOwner` |
+| `/profile`, `/vehicles`, `/pins`, `/notifications`, `/fuel-logs` … | user auth via handler |
+| `/push/public-key`, `/health` | none (by design) |
+| `POST /demand`, `/admin/register*` | to confirm |
+| Callers | plug app; verify scripts |
+
+#### notifications — 7 / 0
+| Route group | Own check |
+|---|---|
+| `/courier-offer`, `/customer-order-status`, `/order-sms`, `/order-chat` | `x-service-role === SUPABASE_SERVICE_ROLE_KEY` (**must move to the helper**) |
+| Callers | `function` only: delivery/courierConsumerRoutes, delivery/orderChatNotify, _shared/dashOrderSms (legacy key Bearer) |
+
+#### fleet-fuel — 5 / 3 · fleet-toll — 21 / 5 · fleet-pay — 1 / 2 · fleet-ops — 121 / 3 · fleet-claims — 1 / 1
+| Route group | Own check |
+|---|---|
+| `/internal/*` (seal-fuel-week, toll-matcher-sweep, seal-earnings-week, nightly-run) | kernel service-key gate |
+| domain routes | `resolveActor` + `requirePermission(...)` per route |
+| `GET /health`, `/ready` | none (by design) |
+| fleet-toll `/toll-info/rate`, `/toll-info/versions` | none (public rate lookup) |
+| Callers | fleet app; `function` from the cron relays and from fleet-core's seal helpers (legacy key Bearer); `pg_cron` fuel-period-job-sweep, toll-v2-matcher-sweep, vehicle-picture-* |
+
+#### freight — 109 / 5 · logistics — 18 / 1 · matching — 16 / 2 · haul — 8 / 1 · toll-brain — 8 / 1 · fuel-brain — 5 / 1 · identity — 2 / 1
+| Route group | Own check |
+|---|---|
+| freight `/public/pod*`, `/trn/validate` | none (token-in-link / public lookup) |
+| logistics `/v1/drivers`, `/internal/*` | to confirm |
+| matching `/v1/internal*` | to confirm (own internal secret expected) |
+| identity `/permissions*` | `getUser(authHeader)` then 401 |
+| elsewhere | `GET /health` only |
+| Callers | freight/haul/enterprise apps; matching/toll-brain/fuel-brain from admin and rides; logistics from scripts |
+
+#### evidence-cleanup — single handler
+| Route | Own check |
+|---|---|
+| `POST /` (whole function) | `requireInternalSecret(["FLEET_CRON_SECRET","RIDES_CRON_SECRET"])` — **but the flag is on, so the gateway rejects it first** (see fault 1) |
+| Callers | `pg_cron` fleet-evidence-cleanup-daily |
+
+#### order-chat-retention — single handler
+| Route | Own check |
+|---|---|
+| `POST /` | `requireInternalSecret(["FLEET_CRON_SECRET","SUPABASE_SERVICE_ROLE_KEY"])` |
+| Callers | none found in `pg_cron` or apps (rush-settings scripts reference it) |
+
+#### Legacy functions also on `verify_jwt = true`
+`admin-operations`, `ai-services`, `financial-operations`, `fleet-management`,
+`fuel-maintenance` are live but have **no source folder in the repo** and are not in `ALL_FNS`.
+They cannot be reviewed or redeployed from this repo. They must be deactivated or left alone
+deliberately — do not assume they are current.
+
+### Separate fault (not a key problem)
+
+`rush-trip-recon-daily` (`cron.job` #65) fails in SQL before it sends anything:
+`current_setting('app.settings.supabase_url', true)` is null, so the URL concatenates to null and
+`net.http_post` never fires. It therefore never reaches `fleet-core`. Fix by setting the GUC or
+moving the job onto `private.invoke_*`-style helper. Out of scope for the key rotation.
+
 ## Done-tests
 
 1. The leaked key returns 401 on `/rest/v1/` and on a function call.
