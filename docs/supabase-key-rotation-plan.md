@@ -482,6 +482,44 @@ Also run `node scripts/smoke-fleet-fuel-auth.mjs` — its seal case must stay **
 
 Fleet bundles were regenerated locally so the working tree matches the sources.
 
+### Phase 3 — deploy (done 24 Nov 2026, 13:19–13:20 UTC)
+
+Deployed from `f43fccdb` with a clean working tree, in six steps, each checked before the next.
+No `verify_jwt` flag moved: 26 functions still require a login, exactly as before, and every
+deployed function is `ACTIVE`.
+
+| Step | Function | Version | Check and result |
+|---|---|---|---|
+| 1 | **fleet-core** | v343 → **v344** | anon-only `POST /fleet-core/scan-receipt` **400 → 401** `AUTH_REQUIRED`; `GET /fleet-core/places/autocomplete?q=ab` **200**; anon `POST /fleet-core/financials` **401** |
+| 2 | **fleet-fuel** | v263 → **v264** | `private.invoke_fuel_period_job_sweep()` → response **200** `{"processed":0}` |
+| 2 | **fleet-pay** | v218 → **v219** | (same group; no job to fire) |
+| 3 | **fleet-toll-cron** | v28 → **v29** | door called directly (queue empty): **200** `{"reports":[]}` — the extra cron header is ignored by the old gate, so nothing broke |
+| 4 | **fleet-toll** | v212 → **v213** | same door call after the new `/internal/*` gate: **200** `{"reports":[]}` (not 401) |
+| 4 | **fleet-ops** | v440 → **v441** | (same group) |
+| 4 | **fleet-claims** | v195 → **v196** | (same group) |
+| 5 | **delivery** | v951 → **v952** | quiet hour confirmed first: 0 orders in 2 h, 0 chat messages in 30 min |
+| 6 | **notifications** | v154 → **v155** | `POST /notifications/customer-order-status` with the anon JWT + cron secret → **400** `{"error":"customerUserId and status required"}` = credential **accepted**, route ran |
+| 6 | **order-chat-retention** | v10 → **v11** | deployed 2 s after notifications |
+
+Steps 5 and 6 went out 13:20:19 → 13:20:25 UTC (a ~6 s gap), so the unavoidable mixed-version
+window was seconds long during zero order traffic.
+
+**Seal refusal.** `node scripts/smoke-fleet-fuel-auth.mjs` needs a real user login
+(`FLEET_USER_JWT` or `FLEET_SMOKE_EMAIL` + password), which this run did not have. Its seal
+assertion was run directly instead — `POST /fleet-fuel/internal/seal-fuel-week` with a valid JWT
+and no internal credential → **401** `{"error":"unauthorized"}`, which is the result the script
+requires.
+
+**Health sweep after the deploys** (14-minute window): all **18** `net._http_response` rows were
+**200** — no 401s and no 500s — and every `cron.job_run_details` row was `succeeded`, including
+`toll-v2-matcher-sweep` at 13:20, `fuel-period-job-sweep` at 13:17, `vehicle-picture-worker`,
+`catalog-research-worker` and `parts-sourcing-outbox-drain` (20 runs each).
+
+**How the credential was handled.** The notifications check needed the cron secret and a gateway
+JWT. The JWT is the public anon key from `apps/fleet/.env.local`; the cron secret was read through
+the Management API inside the script, so both values stayed in memory — the output printed only
+their lengths and the HTTP status, never a value.
+
 ### Separate faults (not key problems)
 
 **1. `rush-trip-recon-daily` never sends anything.** (`cron.job` #65) It fails in SQL first:
