@@ -201,8 +201,11 @@ export async function runDoneTest06(page: Page) {
   putInCar(INV_DONE_ORG, 'ZZ-TEST-TRI', VEH1, 'dt06-tri');
   await seedInventoryDriverSession(page);
   await gotoDriverCarKit(page);
+  // Go offline only once the kit has loaded; cutting the network mid-load shows "Couldn't load your kit".
+  const reportButton = page.getByRole('button', { name: /Report a problem/i }).first();
+  await expect(reportButton).toBeVisible({ timeout: 60_000 });
   await page.context().setOffline(true);
-  await page.getByRole('button', { name: /Report a problem/i }).first().click();
+  await reportButton.click();
   await page.getByRole('radio', { name: /Missing/i }).click();
   await page.getByRole('button', { name: /Send report/i }).click();
   // Offline: the report is kept as a draft with "Resend now" (same key, so it never lands twice).
