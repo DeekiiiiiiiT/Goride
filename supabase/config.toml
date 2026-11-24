@@ -567,3 +567,20 @@ verify_jwt = false
 
 [functions.explorer]
 verify_jwt = false
+
+[functions.driver]
+verify_jwt = false
+
+[functions.rides]
+verify_jwt = false
+
+[functions.platform-catalog]
+verify_jwt = false
+
+# Group 6: the busiest two, flipped at a quiet hour (checked: 0 orders / 0 chats / 0 ride
+# requests in the previous 30 minutes).
+[functions.fleet-core]
+verify_jwt = false
+
+[functions.delivery]
+verify_jwt = false

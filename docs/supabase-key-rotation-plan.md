@@ -23,7 +23,7 @@ kill only `service_role`. So every app that uses `anon` moves too.
 | Where | Uses | Count |
 |---|---|---|
 | Edge functions | `SUPABASE_SERVICE_ROLE_KEY` env | 242 files read it; 45 live functions |
-| Edge functions with `verify_jwt = true` | gateway checks a legacy JWT | 28 functions (fleet-core, fleet-fuel, delivery, rides, driver, payments…) |
+| Edge functions with `verify_jwt = true` | gateway checks a legacy JWT | **done — off everywhere this repo deploys**; only the 5 legacy functions remain `true` (see phase 3) |
 | DB webhook `notify-merchant-new-order` | ~~service_role JWT hard-coded in trigger args~~ → fleet cron secret (**done: phase 0**) | 1 |
 | Web apps (Vercel) | `VITE_SUPABASE_ANON_KEY` | 12 apps |
 | Driver app (Android/iOS, Capacitor) | anon key baked in at build | needs a store release |
@@ -633,43 +633,48 @@ Both OK, so the flip went ahead.
 **Health after group 4** (20-minute window): all **23** `net._http_response` rows **200**, no failed
 `cron.job_run_details` rows.
 
-#### Step 5 — in progress, STOPPED on a failed expectation (3 of 6 flipped)
-
-`haul`, `freight` and `explorer` are flipped and safe. Then the **public-by-design confirmation
-failed**, which is a stop signal, so `driver`, `rides` and `platform-catalog` were not touched.
+#### Steps 5–6 — done (all 8), after the owner cleared the `/push/public-key` mislabel
 
 | Function | Version | normal route, no login / with anon key | `/health` w/o auth | public-route confirmation |
 |---|---|---|---|---|
-| `haul` | v169 → **v170** | `/admin` → **401** "missing Authorization header" / **401** "invalid token" | **200** | n/a |
+| `haul` | v169 → **v170** | `/admin` → **401** "missing Authorization header" / **401** "invalid token" | **200** | n/a — haul has no public route |
 | `freight` | v210 → **v211** | `/shipments` → **401** / **401** | **200** | `/public/pod/fake-token-phase3` → **404** `{"error":"Invalid link"}` ✔ |
-| `explorer` | v76 → **v77** | `/garage` → **400** `{"error":"Sign in required"}` / **400** same | **200** | `/push/public-key` → **401** `{"error":"Sign in required"}` ✘ |
+| `explorer` | v76 → **v77** | `/garage` → **400** `{"error":"Sign in required"}` / **400** same | **200** | `/push/public-key` → **401** — see the mislabel note below |
+| `driver` | v617 → **v618** | `/admin/drivers` → **401** / **401** | **200** | n/a |
+| `rides` | v788 → **v789** | `/v1/requests/me/active` → **401** / **401** | **200** | `/v1/vehicle-types` → **200** ✔ |
+| `platform-catalog` | v220 → **v221** | `/admin/consumers` → **401** / **401** | **200** | `/stations` → **200** ✔ |
+| `fleet-core` | v344 → **v345** | `POST /financials` → **401** `No token provided` / **401** `AUTH_REQUIRED` | **200** | scheduled path: `fleet-activity-cron/drift-check` → `22285` → **200** `{"success":true,"driftCount":0}` |
+| `delivery` | v952 → **v953** | `/admin/pricing/overview` → **401** / **401** | **200** | `private.invoke_rush_delivery('/internal/geo/reconcile')` → `22287` → **200** `{"healed":0}`, not timed out |
 
-**What the stop is and is not.** The flip itself is sound: `explorer` refuses unauthenticated calls
-and `/health` answers. The failure is in the *review*, not the code — `/push/public-key` was listed
-as "public by design", but the handler is:
+Group 6 went out at a quiet hour, checked rather than assumed: **0 orders in 30 min and 2 h, 0 order
+messages, 0 ride requests**.
+
+**The `/push/public-key` mislabel (owner cleared it).** It is listed as "public by design" in the
+review but the handler is:
 
 ```ts
 app.get("/push/public-key", async (c) => {
   try {
-    await requireExplorer(c);      // <- always required a login
+    await requireExplorer(c);      // always required a login
 ```
 
-So it was never public. `apps/plug/src/push.ts` calls it from `enablePlugPush()`, which runs inside
-a signed-in flow, so a 401 without a session is correct behaviour and unchanged by the flag flip.
-The review's "public by design" rows for explorer have been corrected above.
+So it was never public: `apps/plug/src/push.ts` calls it from `enablePlugPush()`, which runs inside a
+signed-in flow, so a 401 without a session is correct and unchanged by the flip. The review's
+explorer rows were corrected in place. Both `/garage` and `/push/public-key` answer **400/401 from
+the function** (its own `requireExplorer` throwing inside a try/catch), not from the gateway.
 
-Also worth noting (pre-existing, not caused here): `explorer/index.ts` still builds its admin client
-from `Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")` in a local `admin()` helper, so that client is
-still on the legacy key and will need the shared helper before phase 8.
+Two probe errors of my own, corrected rather than counted as failures: `rides /v1/profile` returned
+**404** because that route does not exist (the real protected route is `/v1/requests/me/active`), and
+`explorer /garage` answers **400**, not 401, because the handler catches the guard's throw.
 
-Both `/garage` and `/push/public-key` answer **400/401 from the function** because their own
-`requireExplorer` throws and the handler catches it — the status is the route's choice, not the
-gateway's.
+#### Phase 3 result
 
-**Still `verify_jwt = true` (10) = the five legacy functions** (`admin-operations`, `ai-services`,
-`financial-operations`, `fleet-management`, `fuel-maintenance`) **plus 5 left:** `driver`, `rides`,
-`platform-catalog` (group 5) and `fleet-core`, `delivery` (group 6). Waiting on the owner's call
-about the `/push/public-key` expectation before continuing.
+`verify_jwt` is off for **every function this repo deploys**. The only five still `true` are the
+legacy functions that had 0 calls in 24 h and get their own decision: `admin-operations`,
+`ai-services`, `financial-operations`, `fleet-management`, `fuel-maintenance`.
+
+That means the gateway no longer requires a legacy JWT anywhere the apps call, which is the
+precondition for phases 7 and 8 (revoking the JWT secret / deactivating the legacy keys).
 
 #### Separate fix in the same session — rush job timeout
 
@@ -683,6 +688,134 @@ Migration `supabase/migrations/20261124132804_rush_delivery_timeout_30s.sql` rai
 logbook row in `supabase_migrations.schema_migrations` (version `20261124132804`). Grants unchanged
 (`{postgres=X/postgres}`). Verified after applying: `private.invoke_rush_delivery('/internal/geo/reconcile')`
 → request `22240` → **200** `{"healed":0,"failed":[]}`, not timed out.
+
+### Pre-phase-8 item: files still reading `SUPABASE_SERVICE_ROLE_KEY`
+
+**Not fixed here — this is the gate in front of phase 8.** A grep over source files (bundles and
+tests excluded) finds **106 files / 185 occurrences**, not the ~35 first estimated. **67 of
+them build a database client** — that is the part that stops working when the legacy key dies.
+The rest only put the legacy JWT in an `Authorization` header, which is now redundant because every
+non-legacy function has `verify_jwt` off.
+
+Move every DB client onto `_shared/serviceKey.ts`, and bump the `jsr:@supabase/supabase-js@2.49.8`
+pin at the same time — that version predates the new key format and would send an `sb_secret_…` key
+as a Bearer JWT. The files the owner named are all in the list below: `service_client.ts`,
+`kv_store.tsx`, `fleet_sql_bridge.ts`, the ledger files, `explorer/index.ts` (its `admin()` helper),
+the rides fare clients, the delivery merchant files, and `orderToFleetTrip.ts` / `rideToFleetTrip.ts`.
+
+#### Helper + its expected legacy fallback (2)
+- `supabase/functions/_shared/authorizeCronOrServiceRole.ts` — DB client
+- `supabase/functions/_shared/serviceKey.ts`
+
+#### Edge functions (48)
+- `supabase/functions/_fleet-server/api_command_center.tsx`
+- `supabase/functions/_fleet-server/driver_financial_periods.ts` — DB client
+- `supabase/functions/_fleet-server/earnings_period_materialize.ts` — DB client
+- `supabase/functions/_fleet-server/earnings_seal_http.ts`
+- `supabase/functions/_fleet-server/env_boot.ts`
+- `supabase/functions/_fleet-server/financial_ledger.ts` — DB client
+- `supabase/functions/_fleet-server/fleet_sql_bridge.ts` — DB client
+- `supabase/functions/_fleet-server/fuel_controller.tsx` — DB client
+- `supabase/functions/_fleet-server/fuel_seal_http.ts`
+- `supabase/functions/_fleet-server/kv_store.tsx` — DB client
+- `supabase/functions/_fleet-server/ledger_canonical.ts` — DB client
+- `supabase/functions/_fleet-server/ledger_ensure_routes.ts`
+- `supabase/functions/_fleet-server/odometer_ledger.ts` — DB client
+- `supabase/functions/_fleet-server/plug_public_price.ts` — DB client
+- `supabase/functions/_fleet-server/service_client.ts` — DB client
+- `supabase/functions/_fleet-server/station_merchant_aliases.ts` — DB client
+- `supabase/functions/_fleet-server/supabase_platform_usage.ts` — DB client
+- `supabase/functions/_fleet-server/team_staff_service.ts`
+- `supabase/functions/_fleet-server/unified_ledger_dual_write.ts` — DB client
+- `supabase/functions/_shared/dashOrderSms.ts`
+- `supabase/functions/_shared/featureFlags.ts` — DB client
+- `supabase/functions/_shared/orderToFleetTrip.ts` — DB client
+- `supabase/functions/_shared/rideToFleetTrip.ts` — DB client
+- `supabase/functions/_shared/rushSettings/getSetting.ts` — DB client
+- `supabase/functions/before-user-created/index.ts` — DB client
+- `supabase/functions/catalog-research/index.ts` — DB client
+- `supabase/functions/custom-access-token/index.ts` — DB client
+- `supabase/functions/delivery/courierConsumerRoutes.ts` — DB client
+- `supabase/functions/delivery/dashHealthRoutes.ts`
+- `supabase/functions/delivery/inventoryRoadClearanceGate.ts` — DB client
+- `supabase/functions/delivery/merchant_application_routes.ts` — DB client
+- `supabase/functions/delivery/merchantStationDevice.ts`
+- `supabase/functions/delivery/merchantStationPin.ts`
+- `supabase/functions/delivery/orderChatNotify.ts`
+- `supabase/functions/explorer/index.ts` — DB client
+- `supabase/functions/fleet-activity-cron/index.ts`
+- `supabase/functions/fleet-fuel-cron/index.ts`
+- `supabase/functions/fleet-picture-cron/index.ts`
+- `supabase/functions/fleet-toll-cron/index.ts`
+- `supabase/functions/parts-sourcing-drain/index.ts` — DB client
+- `supabase/functions/petrojam-prices/index.ts` — DB client
+- `supabase/functions/platform-catalog/geoRoutes.ts` — DB client
+- `supabase/functions/platform-catalog/index.ts` — DB client
+- `supabase/functions/rides/fare/resolveLocation.ts` — DB client
+- `supabase/functions/rides/fare/tollBrainClient.ts`
+- `supabase/functions/rides/index.ts` — DB client
+- `supabase/functions/rides/matchingBrainClient.ts`
+- `supabase/functions/rush-cron/index.ts`
+
+#### Legacy function sources, not deployed from this repo (10)
+- `apps/fleet/src/supabase/functions/admin-operations/index.ts` — DB client
+- `apps/fleet/src/supabase/functions/admin-operations/kv_store.tsx` — DB client
+- `apps/fleet/src/supabase/functions/ai-services/index.ts` — DB client
+- `apps/fleet/src/supabase/functions/ai-services/kv_store.tsx` — DB client
+- `apps/fleet/src/supabase/functions/financial-operations/index.ts` — DB client
+- `apps/fleet/src/supabase/functions/financial-operations/kv_store.tsx` — DB client
+- `apps/fleet/src/supabase/functions/fleet-management/index.ts` — DB client
+- `apps/fleet/src/supabase/functions/fleet-management/kv_store.tsx` — DB client
+- `apps/fleet/src/supabase/functions/fuel-maintenance/index.ts` — DB client
+- `apps/fleet/src/supabase/functions/fuel-maintenance/kv_store.tsx` — DB client
+
+#### Local scripts — not runtime, but they break after phase 8 (46)
+- `scripts/backfill_settlement_transactions.mjs` — DB client
+- `scripts/backfill-rush-settings.mjs` — DB client
+- `scripts/backfill-week-statements.mjs` — DB client
+- `scripts/cleanup-sync-restatement-drafts.mjs` — DB client
+- `scripts/dash-golden-path-load-probe.mjs`
+- `scripts/e2e/toll-reconciliation-smoke.mjs` — DB client
+- `scripts/export-periods-baseline.mjs` — DB client
+- `scripts/export-vehicle-catalog-restore.ts` — DB client
+- `scripts/finance-doctor.mjs` — DB client
+- `scripts/finance-recon.mjs` — DB client
+- `scripts/gas-card-rev7-p4-remediate.mjs` — DB client
+- `scripts/gas-card-v12-restate-weeks.ts` — DB client
+- `scripts/heal-fuel-service-line-backlog.mjs`
+- `scripts/heal-week-close-sync.mjs`
+- `scripts/heal-week-close-sync.ts`
+- `scripts/import-catalog-expansion.ts` — DB client
+- `scripts/import-codab-via-sql.ts`
+- `scripts/ledger-dual-read-compare.mjs`
+- `scripts/ledger-retire-backup.mjs` — DB client
+- `scripts/ledger-retire-hard-delete.mjs` — DB client
+- `scripts/ledger-soak-check.mjs` — DB client
+- `scripts/load-test-trip-projector.mjs`
+- `scripts/provision-fleet-test-driver.mjs`
+- `scripts/provision-indep-and-passenger-test.mjs`
+- `scripts/provision-play-review-accounts.mjs`
+- `scripts/provision-rush-courier-test.mjs`
+- `scripts/provision-rush-customer-test.mjs`
+- `scripts/provision-rush-partner-test.mjs`
+- `scripts/report_fare_events_parity.mjs` — DB client
+- `scripts/rev4-stage0-heal-2026-08-24.ts` — DB client
+- `scripts/rev6-reheal-g5-aliases.ts`
+- `scripts/run-vehicle-picture-worker-once.ts` — DB client
+- `scripts/run-week-recon-done-tests.mjs`
+- `scripts/seed-warehouse-door-user.mjs` — DB client
+- `scripts/seed-week-recon-done-tests.ts`
+- `scripts/shadow-week-statements.mjs` — DB client
+- `scripts/smoke-courier-all.mjs`
+- `scripts/smoke-customer-all.mjs`
+- `scripts/smoke-merchant-all.mjs`
+- `scripts/smoke/_shared.mjs`
+- `scripts/unstick-domino-engine.mjs` — DB client
+- `scripts/vehicle-pictures-preprod-c4b.mjs` — DB client
+- `scripts/vehicle-pictures-preprod.mjs` — DB client
+- `scripts/vehicle-pictures-reset-t22.mjs` — DB client
+- `scripts/vehicle-pictures-reset.mjs` — DB client
+- `scripts/verify_settlement_tx_parity.mjs` — DB client
 
 ### Separate faults (not key problems)
 
