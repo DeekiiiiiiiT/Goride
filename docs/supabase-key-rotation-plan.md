@@ -164,8 +164,9 @@ three live ones — that is the source's current state, not a change of intent.
 3. `fleet-core /internal/vehicle-pictures/fill` answers **500**. Proven pre-existing: the
    scheduled 05:15 fill returned the same 500 (response `21714`) before fleet-core was
    redeployed at 05:38.
-4. Suspect, needs a look in phase 3: `rush-trip-recon-daily` posts `Authorization: Bearer
-   <cron secret>` straight to `fleet-core`, which has `verify_jwt = true`.
+4. `rush-trip-recon-daily` — resolved in the phase 3 review: it fails in SQL before sending
+   anything (`app.settings.supabase_url` is null), so it is a scheduling fault, not a key
+   problem. See "Separate faults" at the end of the phase 3 review.
 
 **Checks.** `pnpm check --all` 15/15; `lint-edge-kernel`, `edge-route-manifest --all --check`,
 `check-edge-manifest-overlap` pass; `deno check` on the CI-listed edge files passes;
@@ -195,45 +196,51 @@ and gets *fully* open when the flag comes off. Those are listed as "would become
 
 | Model | Where | Meaning |
 |---|---|---|
-| **Kernel** | fleet-core, fleet-fuel, fleet-toll, fleet-ops, fleet-claims, fleet-pay (all via `_shared/edgeKernel.ts`) | Global chain is CORS, path rewrite, request-id, error boundary, maintenance mode only. `/health` and `/ready` are public by design. `/internal/*` requires `Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>`. Every other route must guard itself; there is no global user auth. |
+| **Kernel** | fleet-fuel, fleet-toll, fleet-ops, fleet-claims, fleet-pay (all via `_shared/edgeKernel.ts`) | Global chain is CORS, path rewrite, request-id, error boundary, maintenance mode only. `/health` and `/ready` are public by design. `/internal/*` requires `Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>`. Every other route must guard itself; the kernel adds no user auth. |
+| **Kernel + mounted login gate** | **fleet-core** | fleet-core also mounts `inventory_controller.tsx` at `/` (`fleet-core/src/main.ts:26`), and that controller does `app.use("*", requireAuth({ strict: true }))` (`inventory_controller.tsx:729`). Because it is mounted at the root, **every** fleet-core route passes through it except the explicit skip list in `rbac_middleware.ts:475-507`. Proven live with the anon key: `/financials`, `/admin/scan-corrupted-types`, `/admin/export-data` all return `401 AUTH_REQUIRED`. |
 | **Router guard** | delivery, driver, rides, explorer, freight, logistics, matching, platform-catalog, notifications, toll-brain, fuel-brain, haul, identity | Each Hono sub-app does `use("*", guard)` (e.g. `requireProductAdmin`, `requireAnyProductAdmin`, `requirePassenger`) and handlers add finer checks (`requireDashWrite`, `requirePermission`, merchant/station device checks). |
 | **Handler check** | same set | Many routes compare a header themselves, e.g. `notifications` requires `x-service-role` to equal `SUPABASE_SERVICE_ROLE_KEY`; `evidence-cleanup` and `order-chat-retention` require the fleet cron secret. |
 | **Nothing** | listed below | No check anywhere in the handler and no router guard. |
 
 ### Would become open — must be fixed before the flag comes off
 
-**fleet-core (blocker).** These legacy monolith routes have no check at all in their handler
-(verified by reading each full body) and no router guard. Several spend money (OpenAI) or write
-data. `supabase/functions/_fleet-server/register_residual_monolith_routes.tsx`:
+**fleet-core.** The earlier draft of this review called 22 fleet-core routes "open". That was
+wrong: they all sit behind `requireAuth({ strict: true })` from the mounted inventory
+controller, and return `401 AUTH_REQUIRED` to the anon key today. The routes that are genuinely
+reachable with no user session are only the ones `requireAuth` skips, and of those, three do an
+upload/OCR and are worth closing:
 
-| Route | Line | What it does with no login |
-|---|---|---|
-| `POST /scan-receipt` | 3997 | uploads a file, calls OpenAI, returns parsed receipt |
-| `POST /scan-odometer` | 4084 | uploads a file, calls OpenAI |
-| `POST /ai/map-csv` | 6070 | OpenAI CSV mapping |
-| `POST /ai/parse-toll-csv` | 7038 | OpenAI toll parse |
-| `POST /ai/parse-toll-image` | 7132 | OpenAI toll image parse |
-| `POST /analyze-fleet` | 6359 | 228-line handler, fleet analysis |
-| `POST /parse-invoice` | 6733 | OpenAI invoice parse |
-| `POST /parse-inspection` | 6824 | OpenAI inspection parse |
-| `POST /financials` | 6722 | financial read |
-| `POST /fleet/sync` | 6587 | writes fleet sync state |
-| `POST /map-match` | 8400 | map matching |
-| `PATCH /anchors/:id` | 7279 | writes an anchor |
-| `POST /check-ins/review` | 9149 | writes a check-in review |
-| `DELETE /check-ins/:id` | 9177 | deletes a check-in |
-| `POST /unverified-vendors` | 13689 | creates a vendor row |
-| `POST /unverified-vendors/bulk` | 13729 | bulk vendor insert |
-| `PUT /unverified-vendors/:id/resolve` | 13777 | resolves a vendor |
-| `POST /unverified-vendors/:id/create-station` | 13816 | creates a station |
-| `DELETE /unverified-vendors/:id` | 13861 | deletes a vendor |
-| `GET /admin/scan-corrupted-types` | 9193 | reads corrupted type report |
-| `POST /admin/fix-corrupted-types` | 9273 | **repairs/rewrites data** |
-| `GET /admin/scan-anomaly-flags` | 9330 | reads anomaly flags |
+These are the six routes the review flags. The first four need a login check or a rate limit; the
+last three are unauthenticated **server-side key proxies** (they spend your Google Maps/Places
+quota), so keep them public but put a rate limit on them:
 
-By design public (leave as is): `POST /fleet-login` (9636), `POST /driver-login` (9858),
-`POST /admin-login` (9954), `POST /signup` (7364), `GET /v1/extraction-status`,
-`GET /make-server-37f42386/v1/extraction-status`, `GET /health`, `GET /ready`.
+| Route | Line | What it does with no login | Suggested |
+|---|---|---|---|
+| `POST /scan-receipt` | 3997 | uploads a file, calls OpenAI, returns a parsed receipt | login or rate limit |
+| `POST /scan-receipt` (second registration) | 8734 | same | same |
+| `POST /scan-odometer` | 4084 | uploads a file, calls OpenAI | login or rate limit |
+| `POST /upload` | 4875 | accepts a file; its `getUser` check only runs `if (token)`, so a request with **no** Authorization header skips the check | enforce the check or rate limit |
+| `GET /places/autocomplete` | — | proxy to Google Places, key stays server-side | public, rate limit |
+| `GET /places/:placeId/details` | — | same | public, rate limit |
+| `GET /maps-config` | — | returns the browser Maps key | public, rate limit |
+
+Everything else on the skip list is public **by design**:
+
+- `POST /fleet-login` (9636), `POST /driver-login` (9858), `POST /admin-login` (9954),
+  `POST /admin-check`, `POST /signup` (7364), `/recover-platform-owner`, `/admin-seed` (retired),
+  `GET /platform-status`, `GET /platform-feature-flags`, `GET /health`,
+  `GET /v1/extraction-status`, `GET /make-server-37f42386/v1/extraction-status`
+- `GET /maps-config` (browser Maps key only), `GET /places/autocomplete`,
+  `GET /places/:placeId/details` — listed in the table above; public but should be rate limited
+- machine callers that do their own check: `/internal/seal-*`, `/internal/activity/*`,
+  `/internal/vehicle-pictures/*`, `/fuel/period-jobs/sweep`, `/fuel/periods/auto-close`
+
+**The kernel `/internal/*` gate never applies to fleet-core.** fleet-core uses
+`pathStyle: "fleet-core"`, so `normalizeFleetCorePathname` rewrites `/fleet-core/...` to
+`/make-server-37f42386/...` **before** the kernel's `use("/internal/*")` middleware would match.
+fleet-core's internal routes therefore rely on their own handler checks — which is exactly why
+`requireAuth` has to skip them. Do not assume the service-key gate protects anything on
+fleet-core.
 
 **Public by design elsewhere** (verified: they return catalogue/marketing/rate data, so opening
 them changes nothing that is not already public — confirm each is meant to be):
@@ -246,32 +253,42 @@ them changes nothing that is not already public — confirm each is meant to be)
 | freight | `POST /trn/validate`, `GET /public/pod*` (token-in-link proof of delivery) |
 | driver | `GET /health` (the `/play-store*`, `/stats`, `/presence` routes sit behind `admin.use("*", requireProductAdmin("driver"))`) |
 | explorer | `GET /health`, `GET /push/public-key` |
-| haul, identity, fuel-brain, toll-brain, matching, logistics, fleet-ops, fleet-fuel, fleet-pay, fleet-claims | `GET /health` (and `/ready`); `/internal/*` on the fleet functions is covered by the kernel's service-key gate |
+| haul, identity, fuel-brain, toll-brain, matching, logistics, fleet-ops, fleet-fuel, fleet-pay, fleet-claims | `GET /health` (and `/ready`); `/internal/*` on these fleet functions **is** covered by the kernel's service-key gate (fleet-core is the exception described above) |
 
-**To confirm before flipping** (registered in a shared registrar, or a guard may come from a
-router defined in another file — read these individually):
+**Previously listed as "to confirm" — all checked, all guarded.** Nothing here becomes open:
 
-| Function | Routes | Why flagged |
+| Function | Routes | Actual check |
 |---|---|---|
-| explorer | `POST /demand` (index.ts:1055), `GET /admin/register`, `/admin/register/nearby`, `/admin/register/export` (place_admin.ts:282,297,328) | no auth in the handler body; check the router they mount on |
-| rides | `GET/POST /v1/internal*` (3) | expected to use an internal secret; confirm |
-| matching | `/v1/internal*` (5) | same |
-| toll-brain | `/v1/internal*` (5) | same |
-| fuel-brain | `/v1/internal` (1) | same |
-| logistics | `/internal/reconcile-job`, `/internal/reconcile-all-matching`, `/internal/sync-from-shipment` | same |
-| fleet-ops | `/maintenance/nightly-run`, `/maintenance/overdue-digest` | same |
-| delivery | `POST /promotions/redeem`, `GET /presence`, `GET /ledger/deliveries`, `GET /settings*` | handler did not read an actor; some are under `admin.use("*")`, confirm which |
+| rides | `/v1/internal*` | `requireCronSecret` / `RIDES_CRON_SECRET` |
+| matching | `/v1/internal*` | its own internal secret |
+| toll-brain | `/v1/internal*` | `X-Toll-Brain-Internal-Secret` |
+| fuel-brain | `/v1/internal` | its own internal secret |
+| logistics | `/internal/reconcile-job`, `/internal/reconcile-all-matching`, `/internal/sync-from-shipment` | its own internal secret |
+| fleet-ops | `/maintenance/nightly-run`, `/maintenance/overdue-digest` | maintenance cron secret, or org scope |
+| delivery | `GET /presence`, `GET /ledger/deliveries`, `GET /settings*` | under `requireProductAdmin` (`admin.use("*")`) |
+| explorer | `GET /admin/register`, `/admin/register/nearby`, `/admin/register/export` | `allowRead` |
+| explorer | `POST /demand` | open by design, harmless |
+| delivery | `POST /promotions/redeem` | open by design, harmless |
 
 ### Two key-comparison bugs this phase must also fix
+
+Both compare a header to `Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")` with an exact string
+match. **A crucial consequence:** if that env var is still populated after phase 8 (the platform
+keeps injecting it while the legacy key exists in any form), then the leaked key itself still
+opens `/internal/*` and the notifications routes even though the flag is off and the key is
+supposedly dead. The fix must therefore accept **the new secret key or the cron secret only** —
+not "whatever value is in the legacy env var".
 
 1. `notifications` (`/courier-offer`, `/customer-order-status`, `/order-sms`, `/order-chat`)
    and `order-chat-retention` compare the `x-service-role` header to
    `Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")` with `!==`. Once callers send the new secret key
-   these return 403. They must use `_shared/serviceKey.ts` candidates.
+   these return 403. They must use `_shared/serviceKey.ts` candidates — and stop honouring the
+   legacy value.
 2. `edgeKernel.ts` (line ~246) gates `/internal/*` the same way — exact string match against
    `SUPABASE_SERVICE_ROLE_KEY`. When the legacy key dies, **every** internal call to
-   fleet-core / fleet-fuel / fleet-toll / fleet-ops / fleet-claims / fleet-pay breaks, including
-   the cron relays. This must accept the secret key before phase 8.
+   fleet-fuel / fleet-toll / fleet-ops / fleet-claims / fleet-pay breaks, including the cron
+   relays. This must accept the secret key before phase 8, and must not keep honouring the
+   legacy value.
 
 ### Per-function tables
 
@@ -295,7 +312,7 @@ edge function calls it.
 |---|---|
 | `/internal/*` | kernel: `Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>` |
 | `make-server-37f42386/**` domain routes | `resolveActor`, `requirePermission`, `requireProductAdmin`, `verifySettingsAccess`, `requireOrg` per route |
-| AI/scan/parse/vendor/admin-scan routes | **none — see blocker table** |
+| AI/scan/parse/vendor/admin-scan routes | `requireAuth({ strict: true })` from the mounted inventory controller — signed-in only, no role check (see the separate fault at the end) |
 | login / signup / health / ready / extraction-status | none (by design) |
 | Callers | admin (Dominion), fleet, driver, rides-passenger, roam-shared, ui; `function` from fleet-picture-cron, fleet-activity-cron, orderToFleetTrip, fuel_seal_http (legacy key Bearer); `pg_cron` vehicle-picture-*, fleet-activity-*, rush-trip-recon-* |
 
@@ -374,12 +391,22 @@ edge function calls it.
 They cannot be reviewed or redeployed from this repo. They must be deactivated or left alone
 deliberately — do not assume they are current.
 
-### Separate fault (not a key problem)
+### Separate faults (not key problems)
 
-`rush-trip-recon-daily` (`cron.job` #65) fails in SQL before it sends anything:
+**1. `rush-trip-recon-daily` never sends anything.** (`cron.job` #65) It fails in SQL first:
 `current_setting('app.settings.supabase_url', true)` is null, so the URL concatenates to null and
-`net.http_post` never fires. It therefore never reaches `fleet-core`. Fix by setting the GUC or
-moving the job onto `private.invoke_*`-style helper. Out of scope for the key rotation.
+`net.http_post` never fires, so it never reaches `fleet-core`. Fix by setting the GUC or moving
+the job onto a `private.invoke_*`-style helper. Out of scope for the key rotation.
+
+**2. fleet-core's login gate checks *that* you are signed in, never *who* you are.**
+`requireAuth({ strict: true })` only resolves the user (and rejects anon/banned tokens); it
+applies no role, permission or organisation check. Combined with `POST /signup`, which is on
+the skip list and public, **anyone can create an account and then reach the fleet-core "admin"
+routes** — e.g. `POST /admin/fix-corrupted-types` (9273, rewrites data),
+`DELETE /check-ins/:id`, the `unverified-vendors` family, `PUT /admin/platform-settings`
+(that one does add `verifySettingsAccess`, but most do not). These routes are not *unauthenticated*,
+they are *under-authorised*. This pre-dates the rotation and is not fixed by it; it needs its own
+fix (a platform-staff or role check on `/admin/*` in the residual monolith).
 
 ## Done-tests
 
