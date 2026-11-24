@@ -297,6 +297,11 @@ paths, so treat them as scope, not exact endpoint counts). "Callers" lists the a
 that reference the function; `pg_cron` means a database job wakes it, `function` means another
 edge function calls it.
 
+The second number in each heading is the static scan's *no guard detected* count. It is an
+**upper bound, not a finding**: it misses guards applied by a router defined in another file, by
+`deps.requireX`, by a header compare, or after the scan's window. Every route in it was
+re-checked by hand for the sections above; the tables record what the route actually does.
+
 #### delivery — 383 checked / 106 without a detected guard
 | Route group | Own check |
 |---|---|
