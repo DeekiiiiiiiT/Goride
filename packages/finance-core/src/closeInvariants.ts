@@ -110,6 +110,10 @@ export type CloseTollStatement = {
   netLoss?: number;
   /** Toll disputes: what Uber still owes for this driver-week when it sealed (provisional, not yet won or lost). */
   disputed?: number;
+  /** Carried into this week: not part of this week's toll spend; subtract from ChargedToDrivers in identity only. */
+  carriedDisputeToDriver?: number;
+  carriedTakeBackToDriver?: number;
+  carriedCorrectionCashToDriver?: number;
   cashWashSpend?: number;
   tagSpend?: number;
   status?: 'draft' | 'closed' | 'restated';
@@ -334,14 +338,21 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
       num(p.toll_charged_to_driver), num(input.tollStatement.chargedToDriver),
     );
     // Toll identity: Spend − Reimbursed − ChargedToDrivers − NetLoss − Disputed (still owed by Uber) ≈ 0
+    // ChargedToDrivers for identity excludes amounts carried in from sealed weeks (still on chargedToDriver for settlement).
     if (
       input.tollStatement.reimbursed != null ||
       input.tollStatement.netLoss != null
     ) {
+      const carriedCharged = round2(
+        num(input.tollStatement.carriedDisputeToDriver) +
+          num(input.tollStatement.carriedTakeBackToDriver) +
+          num(input.tollStatement.carriedCorrectionCashToDriver),
+      );
+      const chargedForIdentity = round2(num(input.tollStatement.chargedToDriver) - carriedCharged);
       const residual = round2(
         num(input.tollStatement.totalSpend) -
           num(input.tollStatement.reimbursed) -
-          num(input.tollStatement.chargedToDriver) -
+          chargedForIdentity -
           num(input.tollStatement.netLoss) -
           num(input.tollStatement.disputed),
       );

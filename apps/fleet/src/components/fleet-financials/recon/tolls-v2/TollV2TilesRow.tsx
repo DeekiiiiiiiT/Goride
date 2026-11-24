@@ -14,7 +14,15 @@ export function TollV2TilesRow({
   subcounts: TollV2TileSubcounts;
   locked?: boolean;
 }) {
-  const items = [
+  const items: Array<{
+    label: string;
+    value: number;
+    sub: string;
+    icon: React.ReactNode;
+    emphasize?: boolean;
+    highlight?: boolean;
+    testId?: string;
+  }> = [
     {
       label: 'Toll spend',
       value: tiles.spendMinor,
@@ -30,15 +38,18 @@ export function TollV2TilesRow({
       icon: <Sparkles className="h-4 w-4 text-[#1d4ed8]" aria-hidden />,
     },
     {
+      // Includes earlier weeks' disputes that ended this week (each driver's eye in Driver toll charges explains it).
       label: 'Driver pays',
-      value: tiles.driverMinor,
+      value: tiles.driverMinor + tiles.earlierDriverMinor,
       sub: subcounts.driverAssignedLabel,
+      testId: 'toll-v2-tile-driver-pays',
       icon: <User className="h-4 w-4 text-[#47464c]" aria-hidden />,
     },
     {
       label: 'Fleet pays',
-      value: tiles.fleetMinor,
+      value: tiles.fleetMinor + tiles.earlierFleetMinor,
       sub: `${subcounts.fleetAbsorbedCount} absorbed`,
+      testId: 'toll-v2-tile-fleet-pays',
       icon: <Car className="h-4 w-4 text-[#47464c]" aria-hidden />,
     },
     {
@@ -55,6 +66,7 @@ export function TollV2TilesRow({
         {items.map((it) => (
           <div
             key={it.label}
+            data-testid={it.testId}
             className={`rounded-xl border p-3 shadow-sm ${
               locked ? 'opacity-80' : ''
             } ${it.highlight ? 'border-[#d5e0f8] bg-[#d5e0f8]/40' : 'border-[#e5eeff] bg-white'}`}

@@ -121,7 +121,7 @@ export function ReconTollsV2Step({
     document.getElementById('toll-v2-parts-top')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   }, []);
   const tiles = useMemo(
-    () => (desk ? computeTiles(desk.result, desk.charges) : null),
+    () => (desk ? computeTiles(desk.result, desk.charges, desk.earlierResults) : null),
     [desk],
   );
   const subcounts = useMemo(
@@ -627,6 +627,8 @@ export function ReconTollsV2Step({
         charges={desk.charges}
         onGoToTagAccount={onGoToTagAccount}
         roll={tagRoll}
+        results={desk.results}
+        weekKey={weekKey}
       />
 
       <TollV2PickTripDialog

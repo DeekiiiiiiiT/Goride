@@ -173,6 +173,35 @@ LANGUAGE sql AS $ow$
     LIMIT 1), -1);
 $ow$;
 
+CREATE OR REPLACE FUNCTION pg_temp._s1_assert_toll_stmt_carried_identity(p_week date, p_driver text, p_label text)
+RETURNS void
+LANGUAGE plpgsql AS $id$
+DECLARE
+  a jsonb;
+BEGIN
+  SELECT ws.amounts_minor INTO a
+  FROM ledger.week_statements ws
+  WHERE ws.organization_id = pg_temp._s1_org() AND ws.kind = 'toll' AND ws.driver_id = p_driver
+    AND ws.week_key = p_week AND ws.status = 'closed'
+  ORDER BY ws.version DESC LIMIT 1;
+  IF a IS NULL THEN RAISE EXCEPTION '%: no closed toll statement', p_label; END IF;
+  IF (coalesce((a ->> 'chargedToDriver')::bigint, 0)
+        - coalesce((a ->> 'carriedOwesMinor')::bigint, 0))
+      <> (coalesce((a ->> 'totalSpend')::bigint, 0)
+          - coalesce((a ->> 'reimbursed')::bigint, 0)
+          - coalesce((a ->> 'netLoss')::bigint, 0)
+          - coalesce((a ->> 'disputed')::bigint, 0)) THEN
+    RAISE EXCEPTION '%: stmt carried identity', p_label;
+  END IF;
+  IF coalesce((a ->> 'carriedOwesMinor')::bigint, -1) <>
+     coalesce((a ->> 'carriedDisputeToDriver')::bigint, 0)
+     + coalesce((a ->> 'carriedTakeBackToDriver')::bigint, 0)
+     + coalesce((a ->> 'carriedCorrectionCashToDriver')::bigint, 0) THEN
+    RAISE EXCEPTION '%: stmt carried parts', p_label;
+  END IF;
+END;
+$id$;
+
 CREATE OR REPLACE FUNCTION pg_temp._s1_assert_nightly() RETURNS void
 LANGUAGE plpgsql AS $n$
 DECLARE r record;
@@ -716,6 +745,23 @@ BEGIN
   v_owes := pg_temp._s1_driver_owes(v_post, 's1-d1');
   IF v_owes <> 2000 THEN RAISE EXCEPTION 'carried-expire-owes after re-expire owes %', v_owes; END IF;
 
+  PERFORM toll_system.publish_driver_toll_statements(v_org, v_post, 'closed', 'carried-expire-owes-stmt');
+  IF (SELECT (ws.amounts_minor ->> 'chargedToDriver')::bigint FROM ledger.week_statements ws
+      WHERE ws.organization_id = v_org AND ws.kind = 'toll' AND ws.driver_id = 's1-d1' AND ws.week_key = v_post
+        AND ws.status = 'closed' ORDER BY ws.version DESC LIMIT 1) IS DISTINCT FROM 2000 THEN
+    RAISE EXCEPTION 'carried-expire-owes stmt chargedToDriver %', (SELECT ws.amounts_minor FROM ledger.week_statements ws
+      WHERE ws.organization_id = v_org AND ws.kind = 'toll' AND ws.driver_id = 's1-d1' AND ws.week_key = v_post
+      ORDER BY ws.version DESC LIMIT 1);
+  END IF;
+  IF (SELECT (ws.amounts_minor ->> 'carriedDisputeToDriver')::bigint FROM ledger.week_statements ws
+      WHERE ws.organization_id = v_org AND ws.kind = 'toll' AND ws.driver_id = 's1-d1' AND ws.week_key = v_post
+        AND ws.status = 'closed' ORDER BY ws.version DESC LIMIT 1) IS DISTINCT FROM 2000 THEN
+    RAISE EXCEPTION 'carried-expire-owes stmt carriedDisputeToDriver %', (SELECT ws.amounts_minor FROM ledger.week_statements ws
+      WHERE ws.organization_id = v_org AND ws.kind = 'toll' AND ws.driver_id = 's1-d1' AND ws.week_key = v_post
+      ORDER BY ws.version DESC LIMIT 1);
+  END IF;
+  PERFORM pg_temp._s1_assert_toll_stmt_carried_identity(v_post, 's1-d1', 'carried-expire-owes-dispute');
+
   PERFORM public.toll_sys_import(v_org, 'uber', format(
     '[{"row_type":"adjustment","reference":"s1-adj-p-owe","driver_id":"s1-d1","paid_on":"%s","amount_minor":2000}]',
     (now() AT TIME ZONE 'America/Jamaica')::date)::jsonb, 's1-adj-p-owe', 'smoke');
@@ -730,10 +776,16 @@ BEGIN
   v_owes := pg_temp._s1_driver_owes(v_post, 's1-d1');
   IF v_owes <> 0 THEN RAISE EXCEPTION 'carried-expire-owes after refund owes %', v_owes; END IF;
 
+  PERFORM toll_system.publish_driver_toll_statements(v_org, v_post, 'closed', 'carried-expire-owes-p24');
+  PERFORM pg_temp._s1_assert_toll_stmt_carried_identity(v_post, 's1-d1', 'carried-expire-owes-p24-refund');
+
   PERFORM pg_temp._s1_cmd('undo_decision', jsonb_build_object(
     'command_id', 's1-p-owe-undo-settle', 'decision_id', v_settle));
   v_owes := pg_temp._s1_driver_owes(v_post, 's1-d1');
   IF v_owes <> 2000 THEN RAISE EXCEPTION 'carried-expire-owes after undo refund owes %', v_owes; END IF;
+
+  PERFORM toll_system.publish_driver_toll_statements(v_org, v_post, 'closed', 'carried-expire-owes-p24-undo');
+  PERFORM pg_temp._s1_assert_toll_stmt_carried_identity(v_post, 's1-d1', 'carried-expire-owes-p24-undo');
 
   PERFORM pg_temp._s1_assert_nightly();
 END;

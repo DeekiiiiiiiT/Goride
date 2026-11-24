@@ -1,4 +1,137 @@
+import { addDaysYmd } from './ledgerMoneyAggregate.ts';
 import { MONEY_EPS } from './money.ts';
+
+export type TagAccountOpeningResetPayload = {
+  statementClosingMinor: number;
+  openingMinor: number;
+  previousOpeningMinor: number;
+  differenceMinor: number;
+  reason?: string | null;
+};
+
+export type TagAccountOpeningResetEvent = {
+  id?: number | string;
+  kind: string;
+  at?: string;
+  actor?: string;
+  reason?: string | null;
+  payload?: Record<string, unknown>;
+};
+
+export type ActiveTagAccountOpeningReset = TagAccountOpeningResetPayload & {
+  eventId?: number | string;
+  actor?: string;
+  at?: string;
+  reason: string;
+};
+
+/** Opening that ties to the statement: statement closing − top-ups + usage. */
+export function computeOpeningFromStatementClosing(input: {
+  statementClosingMinor: number;
+  topUpsMinor: number;
+  tagUsageMinor: number;
+}): number {
+  const stmt = Math.round(Number(input.statementClosingMinor));
+  const topUps = Math.max(0, Math.round(Number(input.topUpsMinor) || 0));
+  const usage = Math.max(0, Math.round(Number(input.tagUsageMinor) || 0));
+  return stmt - topUps + usage;
+}
+
+/** Payload fields for a starting-balance reset from baseline roll and statement. */
+export function buildTagAccountOpeningResetPayload(input: {
+  statementClosingMinor: number;
+  previousOpeningMinor: number;
+  topUpsMinor: number;
+  tagUsageMinor: number;
+  reason: string;
+}): TagAccountOpeningResetPayload {
+  const statementClosingMinor = Math.round(Number(input.statementClosingMinor));
+  const previousOpeningMinor = Math.round(Number(input.previousOpeningMinor));
+  const openingMinor = computeOpeningFromStatementClosing({
+    statementClosingMinor,
+    topUpsMinor: input.topUpsMinor,
+    tagUsageMinor: input.tagUsageMinor,
+  });
+  return {
+    statementClosingMinor,
+    openingMinor,
+    previousOpeningMinor,
+    differenceMinor: openingMinor - previousOpeningMinor,
+    reason: String(input.reason).trim(),
+  };
+}
+
+/**
+ * Latest active reset on a run (append-only: undone resets are folded out).
+ * Events ordered oldest → newest.
+ */
+export function effectiveTagOpeningReset(events: TagAccountOpeningResetEvent[]): ActiveTagAccountOpeningReset | null {
+  let active: ActiveTagAccountOpeningReset | null = null;
+  for (const ev of events) {
+    const kind = String(ev.kind);
+    if (kind === 'tag_account_opening_reset') {
+      const p = (ev.payload ?? {}) as Partial<TagAccountOpeningResetPayload>;
+      const statementClosingMinor = Math.round(Number(p.statementClosingMinor));
+      const openingMinor = Math.round(Number(p.openingMinor));
+      const previousOpeningMinor = Math.round(Number(p.previousOpeningMinor));
+      const differenceMinor = Math.round(Number(p.differenceMinor));
+      if (
+        !Number.isFinite(statementClosingMinor) ||
+        !Number.isFinite(openingMinor) ||
+        !Number.isFinite(previousOpeningMinor) ||
+        !Number.isFinite(differenceMinor)
+      ) {
+        continue;
+      }
+      active = {
+        eventId: ev.id,
+        actor: ev.actor,
+        at: ev.at,
+        reason: String(p.reason ?? ev.reason ?? '').trim(),
+        statementClosingMinor,
+        openingMinor,
+        previousOpeningMinor,
+        differenceMinor,
+      };
+    } else if (kind === 'tag_account_opening_reset_undo') {
+      active = null;
+    }
+  }
+  return active;
+}
+
+/** Roll-forward numbers when an opening reset is active for the current week. */
+export function tagAccountRollAfterReset(input: {
+  topUpsMinor: number;
+  tagUsageMinor: number;
+  reset: ActiveTagAccountOpeningReset;
+}): TagAccountRollForwardResult & {
+  openingMinor: number;
+  statementClosingMinor: number;
+} {
+  const openingMinor = input.reset.openingMinor;
+  const statementClosingMinor = input.reset.statementClosingMinor;
+  const roll = computeTagAccountRollForward({
+    openingMinor,
+    topUpsMinor: input.topUpsMinor,
+    tagUsageMinor: input.tagUsageMinor,
+    statementClosingMinor,
+  });
+  return { openingMinor, statementClosingMinor, ...roll };
+}
+
+export function tagAccountFirstWeekAfterReset(resetWeekKey: string): string {
+  return addDaysYmd(String(resetWeekKey).slice(0, 10), 7);
+}
+
+/** False when a reset anchor exists and this week is on or before the reset week (no legacy toll reads). */
+export function tagAccountUseOldTollRecords(input: {
+  resetAnchorWeekKey: string | null;
+  weekKey: string;
+}): boolean {
+  if (!input.resetAnchorWeekKey) return true;
+  return input.weekKey > input.resetAnchorWeekKey.slice(0, 10);
+}
 
 export type TagAccountRollForwardInput = {
   openingMinor: number;

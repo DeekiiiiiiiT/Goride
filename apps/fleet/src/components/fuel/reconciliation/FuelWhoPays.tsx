@@ -15,7 +15,9 @@ import {
   XCircle,
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../../ui/sheet';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../ui/tooltip';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
+import { PURPOSE_LABEL } from '../../../utils/fuelWhoPaysModel';
 import type {
   WhoPaysCar,
   WhoPaysComparison,
@@ -97,17 +99,105 @@ function DriverPctChip({ pct }: { pct: number }) {
   );
 }
 
-function PurposeRow({ row, preview }: { row: WhoPaysRow; preview: boolean }) {
+/** What each kind of driving means, in plain words (owner 23 Nov: a tooltip on every label). */
+export const PURPOSE_TIP: Record<WhoPaysPurpose, string> = {
+  uber_trips:
+    'Kilometres driven while online on a ride app: on a trip, driving to the pickup, and waiting for a request. InDrive and Roam do not report the drive to the pickup, so that part is estimated from Uber’s numbers the same week.',
+  to_pickups:
+    'Driving from one drop-off to the next pickup, when the next trip started within 30 minutes. Measured on a road map.',
+  commute: 'Driving from home to the first pickup of a shift, and from the last drop-off back home.',
+  unexplained_km:
+    'Kilometres the odometer moved that no trip, pickup, commute or logged errand accounts for. The rule’s leftover setting decides who pays.',
+  company_errands: 'Driving the company asked for, logged as a company or maintenance trip.',
+  personal: 'Personal driving the driver logged.',
+  personal_allowance: 'Personal kilometres the driver earned for free under the rule. The company pays them.',
+  no_odometer_fills: 'Fuel bought with no odometer reading, so it can’t be matched to kilometres. Split by the leftover rule.',
+};
+
+const TIP_BY_LABEL: Record<string, string> = Object.fromEntries(
+  (Object.keys(PURPOSE_TIP) as WhoPaysPurpose[]).map((p) => [PURPOSE_LABEL[p], PURPOSE_TIP[p]]),
+);
+
+/** A kind-of-driving label with a small (i) that shows what it means on hover or focus. */
+function LabelWithTip({ label, tip, className }: { label: string; tip: string | undefined; className?: string }) {
+  if (!tip) return <span className={className}>{label}</span>;
+  return (
+    <span className={`inline-flex items-center gap-1 ${className || ''}`}>
+      {label}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            tabIndex={0}
+            aria-label={`What ${label} means`}
+            className="inline-flex cursor-help items-center text-[#78767d] hover:text-[#0051d5]"
+            data-testid="who-pays-label-tip"
+          >
+            <Info className="h-3.5 w-3.5" aria-hidden />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs text-[12px] leading-snug">
+          {tip}
+        </TooltipContent>
+      </Tooltip>
+    </span>
+  );
+}
+
+/** One platform tab (same look as the Distance tabs and the Tolls Disputes tabs). */
+function PlatformTab({
+  selected,
+  onClick,
+  label,
+  sub,
+  testId,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  label: string;
+  sub: string;
+  testId: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={selected}
+      onClick={onClick}
+      data-testid={testId}
+      className={`flex flex-col items-center rounded-lg px-3 py-2 text-center text-sm font-semibold ${
+        selected ? 'bg-[#030213] text-white' : 'text-[#47464c] hover:bg-white'
+      }`}
+    >
+      {label}
+      <span className={`text-xs font-medium tabular-nums ${selected ? 'text-white/80' : 'text-[#47464c]'}`}>{sub}</span>
+    </button>
+  );
+}
+
+/** A grey bar that starts a section of the "who pays" table. */
+function SectionBar({ title, right, testId }: { title: string; right?: string | null; testId?: string }) {
+  return (
+    <div
+      className="flex items-center justify-between gap-3 bg-[#f2f4f6] px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.04em] text-[#47464c]"
+      data-testid={testId}
+    >
+      <span className="text-[12px] text-[#191c1e]">{title}</span>
+      {right ? <span className="normal-case tracking-normal tabular-nums">{right}</span> : null}
+    </div>
+  );
+}
+
+function PurposeRow({ row, preview, testId }: { row: WhoPaysRow; preview: boolean; testId?: string }) {
   return (
     <div
       className="flex flex-col justify-between gap-2 p-4 transition-colors hover:bg-[#f2f4f6]/50 sm:flex-row sm:items-center sm:p-5"
-      data-testid={`who-pays-row-${row.purpose}`}
+      data-testid={testId ?? `who-pays-row-${row.purpose}`}
     >
       <div className="flex items-start gap-3 sm:items-center">
         <span className={`mt-1 h-3 w-3 shrink-0 rounded-full sm:mt-0 ${DOT[row.purpose]}`} aria-hidden />
         <div className="flex flex-col">
           <span className="flex items-center gap-2 text-[15px] font-semibold leading-[22px] text-[#191c1e]">
-            {row.label}
+            <LabelWithTip label={row.label} tip={PURPOSE_TIP[row.purpose]} />
             {preview ? (
               <span className="rounded-full bg-[#eceef0] px-2 py-0.5 text-[11px] font-semibold text-[#47464c]">Preview</span>
             ) : null}
@@ -173,16 +263,6 @@ function ComparisonCard({ comparison }: { comparison: WhoPaysComparison }) {
   const less = comparison.change < 0;
   return (
     <div className="space-y-3" data-testid="who-pays-comparison">
-      <div className="flex gap-3 rounded-2xl bg-[#f2f4f6] p-4">
-        <Info className="mt-0.5 h-5 w-5 shrink-0 text-[#47464c]" aria-hidden />
-        <div>
-          <p className="text-[15px] font-semibold text-[#191c1e]">New pricing preview</p>
-          <p className="text-[12px] leading-[18px] text-[#47464c]">
-            This week is still charged the old way. Here is what the new way would charge, so you can compare before it
-            is switched on.
-          </p>
-        </div>
-      </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="rounded-2xl bg-[#f2f4f6] p-5">
           <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[#47464c]">Charged now (old way)</p>
@@ -215,12 +295,6 @@ function ComparisonCard({ comparison }: { comparison: WhoPaysComparison }) {
             Same for the driver
           </span>
         )}
-        {comparison.movedMost ? (
-          <span className="text-[13px] text-[#191c1e]">
-            {comparison.movedMost.label} moved most: <s className="text-[#78767d]">{money(comparison.movedMost.from)}</s> →{' '}
-            {money(comparison.movedMost.to)}
-          </span>
-        ) : null}
       </div>
     </div>
   );
@@ -244,6 +318,9 @@ function CarCard({
   const oldWay = car.state === 'old_way';
   const purposeKm = car.rows.reduce((s, r) => s + (r.purpose === 'unexplained_km' ? 0 : r.km), 0);
   const noTrips = chainless && car.rows.every((r) => r.purpose === 'unexplained_km' && !(r.km > 0));
+  const tabs = car.platformTabs && car.platformTabs.length > 0 ? car.platformTabs : null;
+  const [platformTab, setPlatformTab] = useState<string>('all');
+  const selectedTab = tabs?.find((t) => t.platform === platformTab) ?? null;
   return (
     <section className="space-y-4" data-testid={`who-pays-car-${car.vehicleId}`}>
       <div className="flex flex-col justify-between gap-3 rounded-2xl bg-[#f2f4f6] p-3 sm:flex-row sm:items-center">
@@ -366,18 +443,89 @@ function CarCard({
         </div>
       ) : (
         <>
-          <div className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm">
-            <div className="flex items-center justify-between bg-[#f2f4f6] px-5 py-3.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-[#47464c]">
-              <span>Kind of driving</span>
-              <span className="hidden sm:inline">Who pays</span>
+          {/* Owner 23 Nov: one tab per platform (same look as the tabs above). Each platform tab has the same
+              breakdown as All, with that platform's share; kinds with no platform (unexplained, errands,
+              personal) show 0 there. */}
+          {tabs ? (
+            <div
+              className="grid gap-1 rounded-xl bg-[#eff4ff] p-1"
+              style={{ gridTemplateColumns: `repeat(${tabs.length + 1}, minmax(0, 1fr))` }}
+              role="tablist"
+              aria-label="Platforms"
+            >
+              <PlatformTab
+                selected={platformTab === 'all'}
+                onClick={() => setPlatformTab('all')}
+                label="All"
+                sub={`Driver pays ${money(car.driver)}`}
+                testId="who-pays-platform-tab-all"
+              />
+              {tabs.map((t) => (
+                <PlatformTab
+                  key={t.platform}
+                  selected={platformTab === t.platform}
+                  onClick={() => setPlatformTab(t.platform)}
+                  label={t.platform}
+                  sub={`${kmText(t.tripKm)} · ${money(t.driver)}`}
+                  testId={`who-pays-platform-tab-${t.platform}`}
+                />
+              ))}
             </div>
+          ) : null}
+          {selectedTab ? (
+            <div className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm" data-testid={`who-pays-platform-${selectedTab.platform}`}>
+              <SectionBar title={`Kind of driving · ${selectedTab.platform}`} right="Who pays" />
+              {/* Owner 23 Nov: same rows as All; a kind this platform has none of shows "0 km · nothing to split". */}
+              {selectedTab.rows.map((r) =>
+                r.km > 0 || r.cost > 0 ? (
+                  <PurposeRow
+                    key={r.purpose}
+                    row={r.purpose === 'uber_trips' ? { ...r, label: `${selectedTab.platform} trips` } : r}
+                    preview={preview}
+                    testId={`who-pays-platform-row-${selectedTab.platform}-${r.purpose}`}
+                  />
+                ) : (
+                  <div
+                    key={r.purpose}
+                    className="flex items-center justify-between bg-[#f2f4f6]/40 px-5 py-3 text-[12px] text-[#47464c]"
+                    data-testid={`who-pays-platform-row-${selectedTab.platform}-${r.purpose}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#c9c5cd]" aria-hidden />
+                      <LabelWithTip label={r.purpose === 'uber_trips' ? `${selectedTab.platform} trips` : r.label} tip={PURPOSE_TIP[r.purpose]} />
+                    </div>
+                    <span className="whitespace-nowrap text-[13px] font-medium tabular-nums text-[#78767d]">0 km · nothing to split</span>
+                  </div>
+                ),
+              )}
+              {car.mutedRows.map((label) => (
+                <div
+                  key={label}
+                  className="flex items-center justify-between bg-[#f2f4f6]/40 px-5 py-3 text-[12px] text-[#47464c]"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#c9c5cd]" aria-hidden />
+                    <LabelWithTip label={label} tip={TIP_BY_LABEL[label]} />
+                  </div>
+                  <span className="whitespace-nowrap text-[13px] font-medium tabular-nums text-[#78767d]">0 km · nothing to split</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+          <div className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm">
+            {/* "All" = the original table: one "Trips (all platforms)" row (owner 23 Nov). */}
+            <SectionBar title="Kind of driving" right="Who pays" />
             {noTrips ? (
               <p className="px-5 py-4 text-[13px] text-[#47464c]">
                 No trips this week — the whole {money(car.total)} goes to the leftover rule.
               </p>
             ) : null}
             {car.rows.map((r) => (
-              <PurposeRow key={r.purpose} row={r} preview={preview} />
+              <PurposeRow
+                key={r.purpose}
+                row={r.purpose === 'uber_trips' ? { ...r, label: 'Trips (all platforms)' } : r}
+                preview={preview}
+              />
             ))}
             {car.personalAllowance ? (
               <div className="flex items-center justify-between gap-3 px-5 py-3 text-[12px] text-[#005137]" data-testid="who-pays-allowance">
@@ -402,12 +550,13 @@ function CarCard({
               >
                 <div className="flex items-center gap-3">
                   <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#c9c5cd]" aria-hidden />
-                  <span>{label}</span>
+                  <LabelWithTip label={label} tip={TIP_BY_LABEL[label]} />
                 </div>
                 <span className="whitespace-nowrap text-[13px] font-medium tabular-nums text-[#78767d]">0 km · nothing to split</span>
               </div>
             ))}
           </div>
+          )}
 
           <div className="flex flex-col justify-between gap-3 rounded-2xl bg-[#f2f4f6] p-5 shadow-sm sm:flex-row sm:items-center">
             <div className="flex flex-col">
@@ -669,17 +818,15 @@ export function FuelWhoPaysSection({
     : weeks.some((w) => w.state === 'preview')
       ? 'preview'
       : 'old_way';
+  // The part card already shows the title and line. Owner 23 Nov: no repeat heading, no "Preview — not
+  // charged" chip, no "New pricing preview" box, no "moved most" line. A charged or old-way week keeps its chip.
   return (
     <div className="space-y-5" data-testid="who-pays">
-      <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
-        <div>
-          <h2 className="text-[18px] font-semibold leading-[26px] text-[#191c1e]">Distance and who pays</h2>
-          <p className="text-[12px] text-[#47464c]">How the car was driven this week, and how the fuel cost is split.</p>
-        </div>
-        <div className="self-start sm:self-auto">
+      {state !== 'preview' ? (
+        <div className="flex justify-end">
           <StateChip state={state} />
         </div>
-      </div>
+      ) : null}
       {weeks.map((w) => (
         <div key={w.driverId} className="space-y-5">
           {w.comparison ? <ComparisonCard comparison={w.comparison} /> : null}

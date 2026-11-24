@@ -13,6 +13,7 @@ import {
 } from "../_shared/directionsRoute.ts";
 import { getServiceClient } from "./service_client.ts";
 import { commuteRouteStatus } from "../../../packages/fuel-core/src/commuteRouteStatus.ts";
+import { ladderPlatformName } from "../../../packages/fuel-core/src/evidenceLadder.ts";
 import { straightLineRoadKm } from "../../../packages/fuel-core/src/roadFactor.ts";
 import {
   commuteLegs,
@@ -219,6 +220,9 @@ export async function measureOffAppKm(args: {
   repositionMeasured: boolean;
   repositionAnyEstimated: boolean;
   repositionAnySkipped: boolean;
+  /** Same km by platform (owner 23 Nov: one tab per platform on Fuel → Distance and who pays). */
+  commuteByPlatform: Record<string, number>;
+  repositionByPlatform: Record<string, number>;
 }> {
   const session: RouteSession = {
     backend: args.routing.ok ? args.routing.backend : null,
@@ -228,13 +232,20 @@ export async function measureOffAppKm(args: {
   const legs = args.home ? commuteLegs({ lat: args.home.lat, lng: args.home.lng }, shifts) : [];
   let commuteKm = 0;
   let routedLegs = 0;
+  const commuteByPlatform: Record<string, number> = {};
   if (session.backend && session.apiKey) {
     for (const leg of legs) {
       const km = await drivingKm(leg.from, leg.to, session);
       if (km == null) continue;
       routedLegs += 1;
       const net = netLegKm(km, leg.alreadyCountedKm);
-      if (net != null) commuteKm += net;
+      if (net != null) {
+        commuteKm += net;
+        if (net > 0) {
+          const name = ladderPlatformName(leg.platform);
+          commuteByPlatform[name] = round2((commuteByPlatform[name] || 0) + net);
+        }
+      }
     }
   }
   const commute = commuteRouteStatus({
@@ -261,6 +272,8 @@ export async function measureOffAppKm(args: {
       repositionMeasured: tripsHavePoints,
       repositionAnyEstimated: false,
       repositionAnySkipped: false,
+      commuteByPlatform,
+      repositionByPlatform: {},
     };
   }
   const folded = foldMeasuredGaps(await mapLimited(gaps, ROUTE_CONCURRENCY, async (gap) => {
@@ -275,7 +288,7 @@ export async function measureOffAppKm(args: {
         Number(gap.to.lng),
       ))
       : null;
-    return { routedKm, straightKm, alreadyCountedKm: gap.alreadyCountedKm };
+    return { routedKm, straightKm, alreadyCountedKm: gap.alreadyCountedKm, platform: gap.platform };
   }));
   return {
     commuteKm: round2(commuteKm),
@@ -285,6 +298,8 @@ export async function measureOffAppKm(args: {
     repositionMeasured: folded.measured,
     repositionAnyEstimated: folded.anyEstimated,
     repositionAnySkipped: folded.anySkipped,
+    commuteByPlatform,
+    repositionByPlatform: folded.byPlatform,
   };
 }
 

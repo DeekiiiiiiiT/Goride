@@ -120,9 +120,8 @@ export const FEATURE_FLAGS = {
   PARTS_SUPPLIER_API: "parts_supplier_api",
   /**
    * Fuel engine v3 (fuel enterprise audit Part D): open weeks are charged from the fuel bought
-   * (cost per km = spend ÷ odometer km). Default OFF: v2.2 is charged and v3 is a preview.
-   * Turned on for every company at once; locked weeks keep the engine they were locked with.
-   * Do not turn on before the fuel-lines writer and statements-before-lock (F-03, F-05) ship.
+   * (cost per km = spend ÷ odometer km). Global default ON — v3 is charged; v2.2 is not used
+   * for open weeks. Locked weeks keep the engine they were locked with.
    */
   FUEL_ENGINE_V3: "fuel_engine_v3",
   /** Roam rider-app funnel on Trip Analytics. Off until requests can be tied to a fleet before accept. */
@@ -448,8 +447,9 @@ export async function initializeDefaultFlags(): Promise<void> {
     },
     {
       name: FEATURE_FLAGS.FUEL_ENGINE_V3,
-      enabled: false,
-      description: "Fuel priced from the fuel bought (cost per km = spend ÷ odometer km). Off = old pricing charged, new shown as a preview",
+      enabled: true,
+      description:
+        "Open weeks charge fuel-chain-v3 (fuel bought ÷ odometer km). Locked weeks keep their lock engine; open weeks no longer use v2.2.",
     },
     {
       name: FEATURE_FLAGS.TOLL_SEAL_BEFORE_PAY,

@@ -29,4 +29,14 @@ describe('computeTiles', () => {
     );
     expect(tiles.tilesAddUp).toBe(true);
   });
+
+  it("carries earlier weeks' dispute results for the Driver pays / Fleet pays tiles without breaking the add-up", () => {
+    const desk = deskAug24Fixture();
+    const plain = computeTiles(desk.result, desk.charges);
+    const tiles = computeTiles(desk.result, desk.charges, { toDriverMinor: 12000, toFleetMinor: 500 });
+    expect(tiles.earlierDriverMinor).toBe(12000);
+    expect(tiles.earlierFleetMinor).toBe(500);
+    expect(tiles.driverMinor).toBe(plain.driverMinor);
+    expect(tiles.tilesAddUp).toBe(true);
+  });
 });

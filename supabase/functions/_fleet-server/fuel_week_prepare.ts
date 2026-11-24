@@ -116,6 +116,7 @@ function asShiftTrip(trip: Record<string, unknown>): ShiftTrip {
     enrouteKm: Number(trip.normalizedEnrouteDistance) || 0,
     openKm: Number(trip.normalizedOpenDistance) || 0,
     unavailableKm: Number(trip.normalizedUnavailableDistance) || 0,
+    platform: trip.platform ? String(trip.platform) : undefined,
   };
 }
 
@@ -438,6 +439,9 @@ export async function prepareFuelWeekReports(args: {
           : routed.commuteStatus,
         commuteNote: routed.commuteNote,
         repositionKm: repositionMeasured ? routed.repositionKm! : fallbackReposition,
+        // Owner 23 Nov: per-platform tabs. The week estimate (not measured) has no platform.
+        repositionByPlatform: repositionMeasured ? routed.repositionByPlatform : undefined,
+        commuteByPlatform: routed.commuteByPlatform,
         repositionConfidence: repositionMeasured && !routed.repositionAnyEstimated ? "measured" : "estimated",
         repositionNote,
         trips: vehicleTrips.map((trip) => {

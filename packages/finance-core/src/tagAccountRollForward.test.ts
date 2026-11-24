@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildTagAccountOpeningResetPayload,
+  computeOpeningFromStatementClosing,
   computeTagAccountRollForward,
-  tagLedgerAmountToRollForwardParts,
+  effectiveTagOpeningReset,
+  tagAccountFirstWeekAfterReset,
   tagAccountOpeningFromWeeks,
+  tagAccountRollAfterReset,
+  tagAccountUseOldTollRecords,
+  tagLedgerAmountToRollForwardParts,
 } from './tagAccountRollForward.ts';
 
 describe('computeTagAccountRollForward', () => {
@@ -119,5 +125,82 @@ describe('tagAccountOpeningFromWeeks (step 4 from the new toll system)', () => {
     expect(r.openingMinor).toBe(761900);
     expect(r.openingFromStatement).toBe(true);
     expect(r.carriedWeekKeys).toEqual([]);
+  });
+});
+
+describe('tag account opening reset (2026-11-16 fixture)', () => {
+  const stmt = 22_500;
+  const topUps = 500_000;
+  const usage = 619_000;
+  const previousOpening = 86_900;
+  const opening = 141_500;
+  const difference = 54_600;
+
+  it('computeOpeningFromStatementClosing matches statement roll-back', () => {
+    expect(computeOpeningFromStatementClosing({ statementClosingMinor: stmt, topUpsMinor: topUps, tagUsageMinor: usage })).toBe(
+      opening,
+    );
+  });
+
+  it('buildTagAccountOpeningResetPayload fills correction fields', () => {
+    expect(
+      buildTagAccountOpeningResetPayload({
+        statementClosingMinor: stmt,
+        previousOpeningMinor: previousOpening,
+        topUpsMinor: topUps,
+        tagUsageMinor: usage,
+        reason: 'Old toll records were off',
+      }),
+    ).toEqual({
+      statementClosingMinor: stmt,
+      openingMinor: opening,
+      previousOpeningMinor: previousOpening,
+      differenceMinor: difference,
+      reason: 'Old toll records were off',
+    });
+  });
+
+  it('tagAccountRollAfterReset ties variance to zero', () => {
+    const reset = buildTagAccountOpeningResetPayload({
+      statementClosingMinor: stmt,
+      previousOpeningMinor: previousOpening,
+      topUpsMinor: topUps,
+      tagUsageMinor: usage,
+      reason: 'x',
+    });
+    const roll = tagAccountRollAfterReset({ topUpsMinor: topUps, tagUsageMinor: usage, reset });
+    expect(roll.openingMinor).toBe(opening);
+    expect(roll.statementClosingMinor).toBe(stmt);
+    expect(roll.varianceMinor).toBe(0);
+    expect(roll.ties).toBe(true);
+  });
+
+  it('effectiveTagOpeningReset folds undo', () => {
+    const payload = buildTagAccountOpeningResetPayload({
+      statementClosingMinor: stmt,
+      previousOpeningMinor: previousOpening,
+      topUpsMinor: topUps,
+      tagUsageMinor: usage,
+      reason: 'r',
+    });
+    const events = [
+      { id: 1, kind: 'tag_account_opening_reset', actor: 'u1', at: '2026-11-20T12:00:00Z', payload },
+      { id: 2, kind: 'tag_account_opening_reset_undo', payload: { undoesEventId: 1 } },
+    ];
+    expect(effectiveTagOpeningReset(events)).toBeNull();
+    const active = effectiveTagOpeningReset(events.slice(0, 1));
+    expect(active?.openingMinor).toBe(opening);
+    expect(active?.differenceMinor).toBe(difference);
+  });
+
+  it('tagAccountFirstWeekAfterReset is +7 days', () => {
+    expect(tagAccountFirstWeekAfterReset('2026-11-16')).toBe('2026-11-23');
+  });
+
+  it('tagAccountUseOldTollRecords stops at and before anchor week', () => {
+    expect(tagAccountUseOldTollRecords({ resetAnchorWeekKey: '2026-11-16', weekKey: '2026-11-16' })).toBe(false);
+    expect(tagAccountUseOldTollRecords({ resetAnchorWeekKey: '2026-11-16', weekKey: '2026-11-09' })).toBe(false);
+    expect(tagAccountUseOldTollRecords({ resetAnchorWeekKey: '2026-11-16', weekKey: '2026-11-23' })).toBe(true);
+    expect(tagAccountUseOldTollRecords({ resetAnchorWeekKey: null, weekKey: '2026-11-16' })).toBe(true);
   });
 });

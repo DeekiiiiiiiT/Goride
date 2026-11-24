@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { priceFuelWeekV3, type FuelV3Input, type WeeklyFuelReport } from '@roam/fuel-core';
 import { FuelWhoPaysSection } from './FuelWhoPays';
@@ -87,14 +87,16 @@ describe('FuelWhoPaysSection', () => {
     expect(screen.getByText('Nothing to review')).toBeInTheDocument();
   });
 
-  it('preview week: preview chip, old vs new, and "Preview" on each row', () => {
+  it('preview week: old vs new and "Preview" on each row; no chip, box or "moved most" (owner 23 Nov)', () => {
     render(<FuelWhoPaysSection weeks={[weekFor({ fuelV3: v3 })]} review={null} chainReview={null} stopToStopFor={() => null} />);
-    expect(screen.getByTestId('who-pays-chip')).toHaveTextContent('Preview — not charged');
+    expect(screen.queryByTestId('who-pays-chip')).toBeNull();
     const cmp = screen.getByTestId('who-pays-comparison');
     expect(cmp).toHaveTextContent('J$6,066.41');
     expect(cmp).toHaveTextContent("Priced at the car's usual 12.0 km per litre");
     expect(cmp).toHaveTextContent('less for the driver');
-    expect(cmp).toHaveTextContent('Uber trips moved most');
+    expect(cmp).not.toHaveTextContent('moved most');
+    expect(document.body.textContent).not.toContain('New pricing preview');
+    expect(document.body.textContent).not.toContain('Distance and who pays');
     expect(within(screen.getByTestId('who-pays-row-uber_trips')).getByText('Preview')).toBeInTheDocument();
   });
 
@@ -118,6 +120,65 @@ describe('FuelWhoPaysSection', () => {
     expect(screen.getByTestId('who-pays-chip')).toHaveTextContent('Priced the old way');
     expect(screen.getByTestId('who-pays-old-way')).toHaveTextContent('Worked out with the old pricing (fuel-chain-v2.2)');
     expect(screen.queryByRole('button', { name: /Why this charge/ })).toBeNull();
+  });
+
+  it('one tab per platform, each with the same breakdown as All, adding up to All (owner 23 Nov)', () => {
+    const plain = weekFor({ fuelV3: v3 });
+    const tripsCost = plain.cars[0].rows.find((r) => r.purpose === 'uber_trips')!;
+    const pickupsCost = plain.cars[0].rows.find((r) => r.purpose === 'to_pickups')!;
+    render(
+      <FuelWhoPaysSection
+        weeks={[
+          weekFor({
+            fuelV3: v3,
+            kmSources: [
+              { category: 'online', km: 1320, byPlatform: { InDrive: 300, Uber: 1000, Roam: 20 } },
+              { category: 'reposition', km: 150, byPlatform: { Uber: 120, InDrive: 30 } },
+            ],
+          }),
+        ]}
+        review={null}
+        chainReview={null}
+        stopToStopFor={() => null}
+      />,
+    );
+    // Tabs: All, then Uber, InDrive, Roam.
+    const tabs = screen.getAllByRole('tab').map((t) => t.childNodes[0]?.textContent);
+    expect(tabs).toEqual(['All', 'Uber', 'InDrive', 'Roam']);
+    // All = the original table: one "Trips (all platforms)" row plus the rest (owner 23 Nov).
+    expect(screen.getByTestId('who-pays-row-uber_trips')).toHaveTextContent('Trips (all platforms)');
+    expect(screen.getByTestId('who-pays-row-to_pickups')).toBeInTheDocument();
+    // The three platform tabs add up to the trips row, to the cent.
+    const money = (s: string) => Number(s.replace(/[^0-9.]/g, ''));
+    const driverOf = (p: string, purpose: string) => {
+      const row = screen.queryByTestId(`who-pays-platform-row-${p}-${purpose}`);
+      const t = row ? within(row).queryByText(/^Driver pays/) : null;
+      return t ? money(t.textContent || '') : 0;
+    };
+    const trips: number[] = [];
+    const pickups: number[] = [];
+    for (const p of ['Uber', 'InDrive', 'Roam']) {
+      fireEvent.click(screen.getByTestId(`who-pays-platform-tab-${p}`));
+      trips.push(driverOf(p, 'uber_trips'));
+      pickups.push(driverOf(p, 'to_pickups'));
+    }
+    const c = (xs: number[]) => Math.round(xs.reduce((a, b) => a + b, 0) * 100);
+    expect(c(trips)).toBe(Math.round(tripsCost.driver * 100));
+    expect(c(pickups)).toBe(Math.round(pickupsCost.driver * 100));
+    // Roam has no pickups: 0, shown as "nothing to split".
+    expect(screen.getByTestId('who-pays-platform-row-Roam-to_pickups')).toHaveTextContent('0 km · nothing to split');
+    // A platform tab has the full breakdown, its own trips label, and no "All" rows.
+    fireEvent.click(screen.getByTestId('who-pays-platform-tab-InDrive'));
+    const indrive = screen.getByTestId('who-pays-platform-InDrive');
+    expect(indrive).toHaveTextContent('InDrive trips');
+    expect(indrive).toHaveTextContent('To pickups');
+    expect(screen.queryByTestId('who-pays-row-to_pickups')).toBeNull();
+  });
+
+  it('no saved split: one "Trips (all platforms)" row, not "Uber trips"', () => {
+    render(<FuelWhoPaysSection weeks={[weekFor({ fuelV3: v3 })]} review={null} chainReview={null} stopToStopFor={() => null} />);
+    expect(screen.getByTestId('who-pays-row-uber_trips')).toHaveTextContent('Trips (all platforms)');
+    expect(screen.queryAllByRole('tab')).toHaveLength(0);
   });
 
   it('no reports: "No fuel this week"', () => {

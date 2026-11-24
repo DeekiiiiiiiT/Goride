@@ -173,10 +173,11 @@ export function BucketReconciliationView({
     };
 
     React.useEffect(() => {
+        let cancelled = false;
         const loadAnchors = async () => {
             try {
                 const history = await odometerService.getLedger(vehicle.id, { limit: 5000 });
-                const anchors: UnifiedAnchor[] = history.data
+                const allAnchors: UnifiedAnchor[] = history.data
                     .filter(h => h.isVerified && h.isAnchorPoint)
                     .map(h => ({
                         id: h.id,
@@ -185,6 +186,17 @@ export function BucketReconciliationView({
                         referenceId: h.referenceId,
                         source: h.source,
                     }));
+                // Owner 23 Nov: the overlay froze the page. Only windows closing this week are shown, so keep this
+                // week's readings plus the two before it; working out every window in the car's history (and
+                // loading every trip since its first reading) locked the browser.
+                let anchors = allAnchors;
+                if (periodYmd) {
+                    const sortedAll = [...allAnchors].sort((a, b) => a.date.localeCompare(b.date));
+                    const before = sortedAll.filter((a) => a.date < periodYmd.from).slice(-2);
+                    const inWeek = sortedAll.filter((a) => a.date >= periodYmd.from && a.date <= periodYmd.to);
+                    anchors = [...before, ...inWeek];
+                }
+                if (cancelled) return;
                 setUnifiedAnchors(anchors);
 
                 if (anchors.length >= 2) {
@@ -200,6 +212,7 @@ export function BucketReconciliationView({
                             limit: tripLimit,
                         });
                         const vehicleTrips = response.data || [];
+                        if (cancelled) return;
                         setBucketTrips(vehicleTrips);
                         setTripsTruncated((response.total ?? vehicleTrips.length) > tripLimit || vehicleTrips.length >= tripLimit);
                     } catch (tripErr) {
@@ -214,7 +227,10 @@ export function BucketReconciliationView({
             }
         };
         loadAnchors();
-    }, [vehicle.id]);
+        return () => {
+            cancelled = true;
+        };
+    }, [vehicle.id, periodYmd?.from, periodYmd?.to]);
 
     // Q-3: hydrate pending recommendations from server (not session-local state).
     React.useEffect(() => {

@@ -2,7 +2,7 @@
  * Shift breaks and the legs we can route: home to a shift, and a short
  * gap from one dropoff to the next pickup.
  */
-import { DEFAULT_SHIFT_BREAK_HOURS, REPOSITION_GAP_MAX_MINUTES } from './evidenceLadder.ts';
+import { DEFAULT_SHIFT_BREAK_HOURS, REPOSITION_GAP_MAX_MINUTES, ladderPlatformName } from './evidenceLadder.ts';
 
 export type LegPoint = {
   lat?: number;
@@ -24,6 +24,8 @@ export type ShiftTrip = {
   enrouteKm?: number;
   openKm?: number;
   unavailableKm?: number;
+  /** Uber / InDrive / Roam — which platform a pickup or commute leg is shown under (owner 23 Nov). */
+  platform?: string;
 };
 
 export type RouteLeg = {
@@ -31,6 +33,8 @@ export type RouteLeg = {
   to: LegPoint;
   /** Positioning already inside the next trip file. */
   alreadyCountedKm: number;
+  /** Platform the leg belongs to: the next trip's for a pickup gap, the first/last trip's for commute. */
+  platform?: string;
 };
 
 const SHIFT_BREAK_MS = DEFAULT_SHIFT_BREAK_HOURS * 60 * 60 * 1000;
@@ -66,6 +70,7 @@ export type MeasuredGap = {
   routedKm: number | null;
   straightKm: number | null;
   alreadyCountedKm: number;
+  platform?: string;
 };
 
 /**
@@ -77,35 +82,46 @@ export function foldMeasuredGaps(gaps: MeasuredGap[]): {
   measured: boolean;
   anyEstimated: boolean;
   anySkipped: boolean;
+  /** The same km by the platform of the trip each gap leads to. */
+  byPlatform: Record<string, number>;
 } {
   let sum = 0;
   let measuredCount = 0;
   let anyEstimated = false;
   let anySkipped = false;
+  const byPlatform: Record<string, number> = {};
+  const add = (gap: MeasuredGap, km: number) => {
+    sum += km;
+    measuredCount += 1;
+    if (km > 0) {
+      const name = ladderPlatformName(gap.platform);
+      byPlatform[name] = (byPlatform[name] || 0) + km;
+    }
+  };
   for (const gap of gaps) {
     const routed = netLegKm(gap.routedKm, gap.alreadyCountedKm);
     if (routed != null) {
-      sum += routed;
-      measuredCount += 1;
+      add(gap, routed);
       continue;
     }
     const straight = netLegKm(gap.straightKm, gap.alreadyCountedKm);
     if (straight != null) {
-      sum += straight;
-      measuredCount += 1;
+      add(gap, straight);
       anyEstimated = true;
       continue;
     }
     anySkipped = true;
   }
   if (measuredCount === 0) {
-    return { repositionKm: null, measured: false, anyEstimated: false, anySkipped };
+    return { repositionKm: null, measured: false, anyEstimated: false, anySkipped, byPlatform: {} };
   }
+  for (const k of Object.keys(byPlatform)) byPlatform[k] = Math.round(byPlatform[k] * 100) / 100;
   return {
     repositionKm: Math.round(sum * 100) / 100,
     measured: true,
     anyEstimated,
     anySkipped,
+    byPlatform,
   };
 }
 
@@ -181,9 +197,9 @@ export function commuteLegs(home: LegPoint, shifts: ShiftTrip[][]): RouteLeg[] {
     const start = pickup(first);
     const end = dropoff(last);
     if (pointUsable(start)) {
-      legs.push({ from: home, to: start, alreadyCountedKm: alreadyOnTrip(first) });
+      legs.push({ from: home, to: start, alreadyCountedKm: alreadyOnTrip(first), platform: first.platform });
     }
-    if (pointUsable(end)) legs.push({ from: end, to: home, alreadyCountedKm: 0 });
+    if (pointUsable(end)) legs.push({ from: end, to: home, alreadyCountedKm: 0, platform: last.platform });
   }
   return legs;
 }
@@ -200,7 +216,7 @@ export function repositionGaps(shifts: ShiftTrip[][]): RouteLeg[] {
       const from = dropoff(prev);
       const to = pickup(next);
       if (!pointUsable(from) || !pointUsable(to)) continue;
-      gaps.push({ from, to, alreadyCountedKm: alreadyOnTrip(next) });
+      gaps.push({ from, to, alreadyCountedKm: alreadyOnTrip(next), platform: next.platform });
     }
   }
   return gaps;

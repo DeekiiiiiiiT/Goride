@@ -137,6 +137,9 @@ export function buildFuelWeekHashParts(sources: FuelWeekHashSources): string[] {
     ...priorParts,
     prefPart,
     "shape:fuel-rule-v2",
+    // Owner 23 Nov: kmSources online now carries byPlatform. Bumping this makes open weeks work out once more so
+    // the Distance step can show one tab per platform; money is unchanged (metadata only).
+    "kmsources:by-platform-v2", // v2: commute and pickups by platform too
     `engine:${FUEL_ENGINE_VERSION}`,
     `leftover:${stable(sources.leftoverOverride || null)}`,
   ];

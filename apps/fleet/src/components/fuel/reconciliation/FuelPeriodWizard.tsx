@@ -7,6 +7,7 @@ import { FuelDeskFinalizeBar } from './FuelDeskSection';
 import { FuelDeskSlides, FuelStillOpenList, openParts, type FuelSlidePart } from './FuelDeskSlides';
 import { FuelDisputesEmpty, FuelPolicyBars } from './FuelSlideParts';
 import { FuelWhoPaysSection } from './FuelWhoPays';
+import { FuelDistanceTabs } from './FuelDistanceTabs';
 import { buildWhoPaysWeek } from '../../../utils/fuelWhoPaysModel';
 import { FuelWeekMoneyStrip } from './FuelWeekMoneyStrip';
 import {
@@ -1856,32 +1857,42 @@ function FuelPeriodWizardInner({
         description: 'How the car was driven this week, and how the fuel cost is split.',
         status: slideStatus.distance,
         testId: 'recon-fuel-section-distance',
-        content: ({ goTo }) => (
-          <div className="space-y-5">
-            <FuelWhoPaysSection
-              weeks={whoPaysWeeks}
-              review={
-                periodLocked
-                  ? null
-                  : {
-                      needed: Boolean(leakageStepHero.showDispositionForm && !leakageReviewed),
-                      onMarkReviewed: () =>
-                        leakageReviewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
-                    }
+        content: ({ goTo }) => {
+          const reviewNeeded = Boolean(leakageStepHero.showDispositionForm && !leakageReviewed);
+          const driverTotal = whoPaysWeeks.reduce(
+            (sum, w) => sum + w.cars.reduce((s, car) => s + (Number(car.driver) || 0), 0),
+            0,
+          );
+          return (
+            <FuelDistanceTabs
+              whoPaysSub={whoPaysWeeks.length ? `Driver pays ${formatFuelMoney(driverTotal, 2)}` : 'No fuel'}
+              checksSub={stopToStopBlocking ? 'To fix' : reviewNeeded ? 'Review' : 'All add up'}
+              checksNeedAttention={stopToStopBlocking || reviewNeeded}
+              whoPays={(openChecks) => (
+                <FuelWhoPaysSection
+                  weeks={whoPaysWeeks}
+                  review={periodLocked ? null : { needed: reviewNeeded, onMarkReviewed: openChecks }}
+                  chainReview={
+                    periodLocked
+                      ? null
+                      : {
+                          needed: needsOdometerChainAck && !odometerChainReviewed,
+                          onMarkReadingsReviewed: () => goTo('checks'),
+                        }
+                  }
+                  // Fill windows live on the Odometer checks tab.
+                  stopToStopFor={() => null}
+                />
+              )}
+              checks={
+                <div ref={leakageReviewRef}>
+                  {React.cloneElement(leakageStepNode, { section: 'checks' })}
+                </div>
               }
-              chainReview={
-                periodLocked
-                  ? null
-                  : {
-                      needed: needsOdometerChainAck && !odometerChainReviewed,
-                      onMarkReadingsReviewed: () => goTo('checks'),
-                    }
-              }
-              stopToStopFor={whoPaysStopToStop}
+              more={React.cloneElement(leakageStepNode, { section: 'more' })}
             />
-            <div ref={leakageReviewRef}>{leakageStepNode}</div>
-          </div>
-        ),
+          );
+        },
       },
       {
         id: 'finalize',

@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fromMoneyMinor, computeTagAccountRollForward } from '@roam/finance-core';
-import { Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertTriangle, Eye } from 'lucide-react';
+import { ReconTagAccountOpeningResetDialog } from './ReconTagAccountOpeningResetDialog';
 import type { ReconRunPayload } from '../../../services/reconApi';
 import {
   fetchTagAccountRollForward,
@@ -47,6 +48,8 @@ export function ReconTagAccountStep({
   const [busy, setBusy] = useState(false);
   /** WRA-48: show the typed-balance box instead of the Confirm card. */
   const [editing, setEditing] = useState(false);
+  const [resetDialog, setResetDialog] = useState<'edit' | 'read' | null>(null);
+  const weekClosed = run.run.state === 'closed';
 
   const rollQuery = useQuery({
     queryKey: ['recon-tag-account', line, weekKey],
@@ -107,6 +110,42 @@ export function ReconTagAccountStep({
     await postClosing(statementMinor, false);
   };
 
+  const applyOpeningReset = async (statementClosingMinor: number, reason: string) => {
+    setBusy(true);
+    try {
+      await postRunEvent(line, weekKey, {
+        kind: 'tag_account_opening_reset',
+        expectedVersion: run.run.version,
+        reason,
+        payload: { statementClosingMinor },
+      });
+      setResetDialog(null);
+      await rollQuery.refetch();
+      onRefresh();
+    } catch (err) {
+      reportTagAccountSaveError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const undoOpeningReset = async () => {
+    setBusy(true);
+    try {
+      await postRunEvent(line, weekKey, {
+        kind: 'tag_account_opening_reset_undo',
+        expectedVersion: run.run.version,
+        payload: {},
+      });
+      await rollQuery.refetch();
+      onRefresh();
+    } catch (err) {
+      reportTagAccountSaveError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const varianceAction = async (action: 'missing_topup' | 'provider_fee' | 'investigate') => {
     setBusy(true);
     try {
@@ -159,9 +198,14 @@ export function ReconTagAccountStep({
     tagUsageMinor: data.tagUsageMinor,
   }).expectedClosingMinor;
   const savedMinor = data.statementClosingMinor;
-  const showConfirmCard = hasPrior && !editing && (savedMinor == null || data.ties);
+  const hasOpeningReset = data.openingReset != null;
+  const previousOpeningMinor = data.baselineOpeningMinor ?? data.openingMinor;
+  const showConfirmCard =
+    hasPrior && !editing && !hasOpeningReset && (savedMinor == null || data.ties);
   const staleConfirm =
     hasPrior && savedMinor != null && !data.ties && data.statementConfirmedFromExpected === true;
+  const showResetOffer =
+    !hasOpeningReset && !weekClosed && liveRoll.varianceMinor != null && !liveRoll.ties;
 
   return (
     <div className="space-y-4">
@@ -169,6 +213,29 @@ export function ReconTagAccountStep({
         Match your toll provider&apos;s prepaid balance: opening (from last closed week) plus top-ups,
         minus tag usage, should equal the statement closing balance.
       </p>
+
+      {hasOpeningReset && data.openingReset ? (
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+          data-testid="tag-opening-reset-summary"
+        >
+          <span>
+            Starting balance set from statement · old-records correction{' '}
+            <strong className="tabular-nums">J${fmtMajor(data.openingReset.differenceMinor)}</strong>
+          </span>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 shrink-0"
+            aria-label="View starting balance details"
+            onClick={() => setResetDialog('read')}
+            data-testid="tag-opening-reset-eye"
+          >
+            <Eye className="h-4 w-4" aria-hidden />
+          </Button>
+        </div>
+      ) : null}
 
       <dl className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-sm sm:grid-cols-2">
         <div>
@@ -310,7 +377,20 @@ export function ReconTagAccountStep({
       </div>
       )}
 
-      {!showConfirmCard && hasStatement && !tied ? (
+      {showResetOffer ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={busy}
+          onClick={() => setResetDialog('edit')}
+          data-testid="tag-set-starting-balance"
+        >
+          Set starting balance from statement
+        </Button>
+      ) : null}
+
+      {!showConfirmCard && !hasOpeningReset && hasStatement && !tied ? (
         <div className="flex flex-wrap gap-2">
           <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void varianceAction('missing_topup')}>
             Missing top-up
@@ -323,6 +403,25 @@ export function ReconTagAccountStep({
           </Button>
         </div>
       ) : null}
+
+      {hasOpeningReset && data.openingReset?.undoable ? (
+        <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void undoOpeningReset()}>
+          Undo starting balance
+        </Button>
+      ) : null}
+
+      <ReconTagAccountOpeningResetDialog
+        open={resetDialog != null}
+        onOpenChange={(o) => !o && setResetDialog(null)}
+        mode={resetDialog === 'read' ? 'read' : 'edit'}
+        topUpsMinor={data.topUpsMinor}
+        tagUsageMinor={data.tagUsageMinor}
+        previousOpeningMinor={previousOpeningMinor}
+        reset={data.openingReset}
+        savedStatementClosingMinor={data.openingReset ? null : data.statementClosingMinor}
+        busy={busy}
+        onConfirm={applyOpeningReset}
+      />
     </div>
   );
 }

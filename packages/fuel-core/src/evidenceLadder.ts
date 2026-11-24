@@ -24,7 +24,23 @@ export type KmSource = {
   km: number;
   confidence: 'measured' | 'estimated' | 'none';
   note?: string;
+  /**
+   * Online only: the same km split by platform (Uber, InDrive, Roam, …), after the same scale as `km`.
+   * Uber = on-trip + its own positioning; a platform without positioning = on-trip × (1 + Uber's ratio).
+   * Shown as one section per platform on Fuel → Distance and who pays (owner 23 Nov).
+   */
+  byPlatform?: Record<string, number>;
 };
+
+/** "uber" / "UBER" / "inDrive" → "Uber" / "InDrive"; blank → "Other". */
+export function ladderPlatformName(platform: string | undefined): string {
+  const p = String(platform || '').trim().toLowerCase();
+  if (!p) return 'Other';
+  if (p === 'uber') return 'Uber';
+  if (p === 'indrive') return 'InDrive';
+  if (p === 'roam') return 'Roam';
+  return p.charAt(0).toUpperCase() + p.slice(1);
+}
 
 export type EvidenceLadderInput = {
   spanKm: number;
@@ -44,6 +60,9 @@ export type EvidenceLadderInput = {
   repositionConfidence?: 'measured' | 'estimated';
   repositionNote?: string;
   refuelDetourKm?: number;
+  /** Same km as commuteKm / repositionKm, by platform (owner 23 Nov tabs). Scaled like the totals. */
+  commuteByPlatform?: Record<string, number>;
+  repositionByPlatform?: Record<string, number>;
 };
 
 export type EvidenceLadderResult = {
@@ -88,6 +107,19 @@ export function buildEvidenceLadder(input: EvidenceLadderInput): EvidenceLadderR
 
   const uberRatio = measuredOn > 0 ? measuredPos / measuredOn : null;
   const estimatedExtra = uberRatio != null ? bareOn * uberRatio : 0;
+  // Same km, by platform (before any scale-down to the odometer span).
+  const rawByPlatform: Record<string, number> = {};
+  for (const t of trips) {
+    const on = Math.max(0, Number(t.onTripKm) || 0);
+    const pos =
+      Math.max(0, Number(t.enrouteKm) || 0) +
+      Math.max(0, Number(t.openKm) || 0) +
+      Math.max(0, Number(t.unavailableKm) || 0);
+    const km = t.positioningMissing ? on * (1 + (uberRatio ?? 0)) : on + pos;
+    if (km <= 0) continue;
+    const name = ladderPlatformName(t.platform);
+    rawByPlatform[name] = (rawByPlatform[name] || 0) + km;
+  }
   const onlineKm = measuredOn + measuredPos + bareOn + estimatedExtra;
   const onlinePositioningPct =
     measuredOn + measuredPos > 0
@@ -118,11 +150,25 @@ export function buildEvidenceLadder(input: EvidenceLadderInput): EvidenceLadderR
     claimed = span;
   }
   const unattributed = span > 0 ? Math.max(0, span - claimed) : 0;
+  const onlineScale = onlineKm > 0 ? onlineOut / onlineKm : 0;
+  const byPlatform: Record<string, number> = {};
+  for (const [name, km] of Object.entries(rawByPlatform)) byPlatform[name] = round2(km * onlineScale);
+  // Commute / reposition by platform, scaled by the same factor as their totals.
+  const scaledBy = (parts: Record<string, number> | undefined, total: number, out: number) => {
+    if (!parts || !(total > 0)) return undefined;
+    const f = out / total;
+    const res: Record<string, number> = {};
+    for (const [name, km] of Object.entries(parts)) if (Number(km) > 0) res[name] = round2(Number(km) * f);
+    return Object.keys(res).length > 0 ? res : undefined;
+  };
+  const commuteByPlatform = scaledBy(input.commuteByPlatform, commute, commuteOut);
+  const repositionByPlatform = scaledBy(input.repositionByPlatform, reposition, repositionOut);
 
   const sources: KmSource[] = [
     {
       category: 'online',
       km: round2(onlineOut),
+      ...(Object.keys(byPlatform).length > 0 ? { byPlatform } : {}),
       confidence: estimatedExtra > 0 ? 'estimated' : 'measured',
       note: estimatedExtra > 0
         ? 'Platforms without positioning used this week’s own Uber ratio'
@@ -133,12 +179,14 @@ export function buildEvidenceLadder(input: EvidenceLadderInput): EvidenceLadderR
     {
       category: 'commute',
       km: round2(commuteOut),
+      ...(commuteByPlatform ? { byPlatform: commuteByPlatform } : {}),
       confidence: input.homeMissing ? 'none' : (input.commuteConfidence || 'measured'),
       note: input.homeMissing ? undefined : input.commuteNote,
     },
     {
       category: 'reposition',
       km: round2(repositionOut),
+      ...(repositionByPlatform ? { byPlatform: repositionByPlatform } : {}),
       confidence: repositionOut > 0 ? (input.repositionConfidence || 'estimated') : 'none',
       note: input.repositionNote,
     },

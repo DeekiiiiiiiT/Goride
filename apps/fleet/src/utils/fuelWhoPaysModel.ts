@@ -71,7 +71,119 @@ export type WhoPaysRow = {
   driverPct: number;
   driver: number;
   company: number;
+  /**
+   * Trips row only: the same km and money split by platform, from the engine's online km by platform
+   * (`metadata.kmSources` online `byPlatform`). Parts add up to the row to the cent. Null when the week
+   * was worked out before the split was saved (refresh fuel to get it).
+   */
+  platforms?: WhoPaysPlatformPart[] | null;
 };
+
+export type WhoPaysPlatformPart = {
+  platform: string;
+  km: number;
+  cost: number;
+  driver: number;
+  company: number;
+};
+
+/** Splits `totalMinor` by weights so the parts add up exactly (largest remainder). */
+function splitMinor(totalMinor: number, weights: number[]): number[] {
+  const sumW = weights.reduce((a, b) => a + b, 0);
+  if (!(sumW > 0)) return weights.map(() => 0);
+  const raw = weights.map((w) => (totalMinor * w) / sumW);
+  const out = raw.map((r) => Math.floor(r));
+  let left = totalMinor - out.reduce((a, b) => a + b, 0);
+  const order = raw.map((r, i) => ({ i, rem: r - Math.floor(r) })).sort((a, b) => b.rem - a.rem);
+  for (let k = 0; left > 0 && k < order.length; k += 1, left -= 1) out[order[k].i] += 1;
+  return out;
+}
+
+const PLATFORM_ORDER = ['Uber', 'InDrive', 'Roam'];
+
+type KmSourceRow = { category?: string; byPlatform?: Record<string, number> };
+
+function byPlatformOf(kmSources: unknown, category: string): Record<string, number> | null {
+  if (!Array.isArray(kmSources)) return null;
+  const src = (kmSources as KmSourceRow[]).find((s) => s?.category === category);
+  return src?.byPlatform && Object.values(src.byPlatform).some((v) => Number(v) > 0) ? src.byPlatform : null;
+}
+
+const platformSort = (a: string, b: string) => {
+  const ia = PLATFORM_ORDER.indexOf(a);
+  const ib = PLATFORM_ORDER.indexOf(b);
+  return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+};
+
+/** One row split across `names` by `weights` (missing weight = 0); parts add up to the row to the cent. */
+function splitRow(row: WhoPaysRow, names: string[], weights: Record<string, number> | null): WhoPaysRow[] {
+  const w = names.map((n) => Math.max(0, Number(weights?.[n]) || 0));
+  const kmTenths = splitMinor(Math.round(row.km * 10), w);
+  const cost = splitMinor(cents(row.cost), w);
+  const driver = splitMinor(cents(row.driver), w);
+  return names.map((_, i) => ({
+    ...row,
+    platforms: null,
+    km: kmTenths[i] / 10,
+    cost: cost[i] / 100,
+    driver: driver[i] / 100,
+    company: (cost[i] - driver[i]) / 100,
+  }));
+}
+
+export type WhoPaysPlatformTab = {
+  platform: string;
+  /** Same kinds of driving as All, this platform's share. Rows with no platform (unexplained, errands, personal) are 0. */
+  rows: WhoPaysRow[];
+  tripKm: number;
+  driver: number;
+};
+
+/**
+ * Owner 23 Nov: one tab per platform with the same breakdown as All. Trips split by online km by platform,
+ * pickups by the platform of the trip each gap leads to, commute by the first/last trip's platform. Other kinds
+ * belong to no platform (0 here). Null without a saved split (week worked out before it existed).
+ */
+export function platformTabsOf(rows: WhoPaysRow[], kmSources: unknown): WhoPaysPlatformTab[] | null {
+  const online = byPlatformOf(kmSources, 'online');
+  if (!online) return null;
+  const reposition = byPlatformOf(kmSources, 'reposition');
+  const commute = byPlatformOf(kmSources, 'commute');
+  const names = [...new Set([online, reposition, commute].flatMap((m) => Object.keys(m || {})))]
+    .filter((n) => [online, reposition, commute].some((m) => Number(m?.[n]) > 0))
+    .sort(platformSort);
+  if (names.length === 0) return null;
+  const weightFor: Partial<Record<WhoPaysPurpose, Record<string, number> | null>> = {
+    uber_trips: online,
+    to_pickups: reposition,
+    commute,
+  };
+  const split = rows.map((r) => splitRow(r, names, weightFor[r.purpose] ?? null));
+  return names.map((platform, i) => {
+    const prow = split.map((parts) => parts[i]);
+    return {
+      platform,
+      rows: prow,
+      tripKm: prow.find((r) => r.purpose === 'uber_trips')?.km ?? 0,
+      driver: prow.reduce((s, r) => s + r.driver, 0),
+    };
+  });
+}
+
+/** The trips row split by platform; null without a saved split. Exported for tests. */
+export function tripsByPlatform(row: WhoPaysRow, kmSources: unknown): WhoPaysPlatformPart[] | null {
+  const by = byPlatformOf(kmSources, 'online');
+  if (!by) return null;
+  const names = Object.keys(by).filter((n) => Number(by[n]) > 0).sort(platformSort);
+  if (names.length === 0) return null;
+  return splitRow(row, names, by).map((r, i) => ({
+    platform: names[i],
+    km: r.km,
+    cost: r.cost,
+    driver: r.driver,
+    company: r.company,
+  }));
+}
 
 export type WhoPaysCar = {
   key: string;
@@ -95,6 +207,8 @@ export type WhoPaysCar = {
   /** F-10 note, already in plain words. */
   capNote: string | null;
   rows: WhoPaysRow[];
+  /** One tab per platform with the same breakdown as All (owner 23 Nov); null without a saved split. */
+  platformTabs: WhoPaysPlatformTab[] | null;
   /** Standard kinds of driving with 0 km this week. */
   mutedRows: string[];
   personalAllowance: WhoPaysRow | null;
@@ -188,6 +302,8 @@ function buildCar(args: {
   const rows = allRows.filter(
     (r) => r.purpose !== 'personal_allowance' && r.purpose !== 'no_odometer_fills' && r.cost > 0,
   );
+  // kmSources is the report's car; with several cars on one report the split would be wrong, so skip it.
+  const platformTabs = single ? platformTabsOf(rows, meta.kmSources) : null;
   const shown = new Set(rows.map((r) => r.purpose));
   const carFills = args.fills.filter(
     (f) => f.vehicleId === vehicleId && (!f.driverId || f.driverId === report.driverId),
@@ -219,6 +335,7 @@ function buildCar(args: {
     previewOnly: Boolean(result.previewOnly),
     capNote: capNoteOf(result.cap),
     rows,
+    platformTabs,
     mutedRows: STANDARD_PURPOSES.filter((p) => !shown.has(p)).map((p) => PURPOSE_LABEL[p]),
     personalAllowance: allRows.find((r) => r.purpose === 'personal_allowance' && r.cost > 0) || null,
     noOdometer: allRows.find((r) => r.purpose === 'no_odometer_fills' && r.cost > 0) || null,
@@ -295,6 +412,7 @@ export function buildWhoPaysWeek(args: {
           previewOnly: false,
           capNote: null,
           rows: [],
+          platformTabs: null,
           mutedRows: [],
           personalAllowance: null,
           noOdometer: null,

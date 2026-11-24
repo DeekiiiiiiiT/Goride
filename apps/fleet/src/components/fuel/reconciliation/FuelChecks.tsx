@@ -910,11 +910,8 @@ export function FuelChecksSection({
 
   return (
     <div className="space-y-4" data-testid="fuel-checks">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-[20px] font-semibold text-[#191c1e]">Fuel checks</h2>
-          <p className="text-[14px] text-[#47464c]">Fills that need a look before the week can lock.</p>
-        </div>
+      {/* The part card above already shows the "Fuel checks" title and line (owner removed the repeat 23 Nov). */}
+      <div className="flex flex-wrap items-start justify-end gap-3">
         {open.length > 0 ? (
           <span className="rounded-full bg-[#ffdad6]/60 px-3 py-1 text-[12px] font-semibold text-[#ba1a1a]">
             {open.length} to fix

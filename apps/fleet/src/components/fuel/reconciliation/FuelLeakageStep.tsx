@@ -108,6 +108,11 @@ export type FuelLeakageStepProps = {
   }) => Promise<void>;
   /** Mark unexplained residual reviewed and advance (disposition form CTA). */
   onMarkLeakageReviewed?: () => void;
+  /**
+   * Which half to show. 'checks' = warnings, gaps, the accept form and fill to fill; 'more' = More details and
+   * the leftover split. The step 5 desk puts them in separate tabs (owner 23 Nov); the older wizard shows 'all'.
+   */
+  section?: 'all' | 'checks' | 'more';
 };
 
 export function FuelLeakageStep(props: FuelLeakageStepProps) {
@@ -153,7 +158,10 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
     onMarkLeakageReviewed,
     periodId,
     onSaveLeftoverOverride,
+    section = 'all',
   } = props;
+  const showChecks = section !== 'more';
+  const showMore = section !== 'checks';
   const [leftoverMode, setLeftoverMode] = useState<'company' | 'percentage' | 'fixed'>('company');
   const [leftoverPercent, setLeftoverPercent] = useState(0);
   const [leftoverFixed, setLeftoverFixed] = useState(0);
@@ -184,22 +192,22 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
 
   return (
     <div className="space-y-3">
-      {referenceOutOfBand && (
+      {showChecks && referenceOutOfBand && (
         <p className="rounded-2xl bg-[#fffbeb] px-4 py-3 text-sm text-[#92400e]">
           This car’s usual economy came out impossible, so the driver was not charged for unexplained fuel.
         </p>
       )}
-      {referenceTooThin && (
+      {showChecks && referenceTooThin && (
         <p className="rounded-2xl bg-[#fffbeb] px-4 py-3 text-sm text-[#92400e]">
           There isn’t enough earlier fuel history to know this car’s usual economy, so the driver was not charged for unexplained fuel.
         </p>
       )}
-      {openPriorMessage && (
+      {showChecks && openPriorMessage && (
         <p className="rounded-2xl bg-[#fffbeb] px-4 py-3 text-sm text-[#92400e]">
           {openPriorMessage}
         </p>
       )}
-      {routingHealth?.message && !routingHealth.ok && (
+      {showChecks && routingHealth?.message && !routingHealth.ok && (
         <p className={`rounded-lg border px-3 py-2 text-sm ${
           routingHealth.ok
             ? 'border-slate-200 bg-slate-50 text-slate-800'
@@ -208,7 +216,7 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
           {routingHealth.message}
         </p>
       )}
-      {referenceNumbers.length > 0 || routingHealth?.ok || varianceRows.length > 0 || sourceNotes.length > 0 ? (
+      {showMore && (referenceNumbers.length > 0 || routingHealth?.ok || varianceRows.length > 0 || sourceNotes.length > 0) ? (
         <details className="group rounded-2xl bg-[#f8f9ff] px-4 py-3" data-testid="fuel-distance-details">
           <summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-[#0b1c30]">
             <span className="transition-transform group-open:rotate-90" aria-hidden>›</span>
@@ -260,12 +268,12 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
           </div>
         </details>
       ) : null}
-      {clockAssumed && (
+      {showChecks && clockAssumed && (
         <p className="rounded-2xl bg-[#fffbeb] px-4 py-3 text-sm text-[#92400e]">
           A fill has no time. We treated it as the end of that day. Add a time or link the gas card.
         </p>
       )}
-      {homeMissing && (
+      {showChecks && homeMissing && (
         <p className="rounded-2xl bg-[#fffbeb] px-4 py-3 text-sm text-[#92400e]">
           Home is not set. Commute stays unexplained until you pin a home on the driver profile.
           {homeDrivers.length > 0 && (
@@ -283,7 +291,7 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
           )}
         </p>
       )}
-      {streetHomeDrivers.length > 0 && (
+      {showChecks && streetHomeDrivers.length > 0 && (
         <p className="rounded-2xl bg-[#fffbeb] px-4 py-3 text-sm text-[#92400e]">
           Commute is using the street address on file, not a confirmed home.
           <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
@@ -299,7 +307,7 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
           </span>
         </p>
       )}
-      {periodId && onSaveLeftoverOverride && !periodLocked && (
+      {showMore && periodId && onSaveLeftoverOverride && !periodLocked && (
         <details className="group rounded-2xl bg-[#f8f9ff] px-4 py-3" data-testid="fuel-leftover-split">
           <summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-[#0b1c30]">
             <span className="transition-transform group-open:rotate-90" aria-hidden>›</span>
@@ -384,7 +392,7 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
           </div>
         </details>
       )}
-      {needsUnattributedAck && !periodLocked && (
+      {showChecks && needsUnattributedAck && !periodLocked && (
         <div className="space-y-3 rounded-lg border border-slate-300 bg-white px-3 py-3">
           {unattributedReviewed ? (
             <p className="text-sm text-slate-700">
@@ -424,7 +432,7 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
         </div>
       )}
 
-      {overExplained && moneyResidualActive && (
+      {showChecks && overExplained && moneyResidualActive && (
         <div
           role="alert"
           className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] text-amber-950"
@@ -435,7 +443,7 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
         </div>
       )}
 
-      {moneyResidualActive ? (
+      {!showChecks ? null : moneyResidualActive ? (
         <>
           <h3 className="px-1 text-[12px] font-semibold uppercase tracking-wide text-slate-500">
             Vehicles with {unexplainedLabel(leakage).toLowerCase()} gaps
@@ -488,7 +496,7 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
         </div>
       )}
 
-      {showDispositionForm ? (
+      {showChecks && showDispositionForm ? (
         <div className="space-y-3 rounded-lg border border-slate-900 bg-white px-3 py-3 shadow-sm">
           <p className="text-sm font-medium text-slate-900">
             Accept unexplained fuel (required to continue)
@@ -548,7 +556,7 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
         </div>
       ) : null}
 
-      {vehicles.length > 0 && (
+      {showChecks && vehicles.length > 0 && (
         <div className="space-y-2" data-testid="fuel-stop-to-stop">
           <p className="text-[12px] font-semibold uppercase tracking-wider text-[#47464c]">Fill to fill (odometer check)</p>
           {stopToStopBlocking ? (
@@ -601,7 +609,7 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
         }}
       >
         <DialogContent
-          className="flex h-[min(92vh,920px)] w-[min(96vw,1400px)] max-w-[min(96vw,1400px)] flex-col gap-0 overflow-hidden p-0"
+          className="flex h-[min(92vh,920px)] w-[min(96vw,1400px)] max-w-[min(96vw,1400px)] sm:max-w-[min(96vw,1400px)] flex-col gap-0 overflow-hidden p-0"
           aria-describedby="stop-to-stop-gap-detail-desc"
         >
           <DialogHeader className="shrink-0 space-y-1 border-b border-slate-200 px-5 py-4 text-left sm:px-6">

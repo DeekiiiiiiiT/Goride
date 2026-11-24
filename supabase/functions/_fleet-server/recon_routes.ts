@@ -72,12 +72,12 @@ import {
 } from "../../../packages/finance-core/src/periodKey.ts";
 import { isSettlementPeriodEnded } from "../../../packages/finance-core/src/settlementPeriodGate.ts";
 import { computeWeekResult, type WeekStatementRow } from "../../../packages/finance-core/src/weekResult.ts";
+import { computeTagAccountRollForward } from "../../../packages/finance-core/src/tagAccountRollForward.ts";
 import {
-  computeTagAccountRollForward,
-  tagAccountOpeningFromWeeks,
-  tagLedgerAmountToRollForwardParts,
-} from "../../../packages/finance-core/src/tagAccountRollForward.ts";
-import { addDaysYmd } from "../../../packages/finance-core/src/ledgerMoneyAggregate.ts";
+  buildOpeningResetPayloadForWeek,
+  loadActiveOpeningResetForRun,
+  tagAccountRollFor,
+} from "./recon_tag_account.ts";
 import {
   coverageInputHash,
   countTripsEarningsBlockers,
@@ -1277,158 +1277,6 @@ async function loadExternalQueue(): Promise<ExternalQueueItem[]> {
   return items;
 }
 
-/**
- * The tag account roll-forward for one week. When no earlier closed week saved a statement
- * closing (the first week on Week Reconciliation, or weeks adopted as closed at go-live), the
- * account has no known opening: the statement closing entered for this week anchors it, so
- * opening = closing − top-ups + usage, and later weeks open from this week's closing.
- */
-async function tagAccountRollFor(orgId: string, weekKey: string, runId: string | null) {
-  const prior = await loadPriorTagClosingMinor(orgId, weekKey);
-  // Weeks after the last saved TransJam closing and before this week (e.g. 12 Oct, closed before
-  // step 4 saved closings): their top-ups and tolls carry into this week's opening.
-  const firstWeek = prior.priorWeekKey ? addDaysYmd(prior.priorWeekKey, 7) : weekKey;
-  const newSystemWeeks = await tagAccountWeeksFromTollSystem(orgId, firstWeek, weekKey);
-  // A carried week the new toll system has nothing for was closed before the 14 Nov switch
-  // (e.g. 12 Oct): its tag top-ups and tolls are only in the old toll records, so read them there.
-  const weeks = await Promise.all(newSystemWeeks.map(async (w) => {
-    if (w.weekKey >= weekKey || w.topUpsMinor !== 0 || w.usageMinor !== 0) return w;
-    const old = await oldTollRecordsTagWeekMinor(orgId, w.weekKey);
-    return { weekKey: w.weekKey, topUpsMinor: old.topUpsMinor, usageMinor: old.tagUsageMinor };
-  }));
-  const stored = runId ? await loadStoredStatementClosing(runId) : null;
-  const statementClosingMinor = stored?.minor ?? null;
-  const { openingMinor, openingFromStatement, topUpsMinor, tagUsageMinor, carriedWeekKeys } =
-    tagAccountOpeningFromWeeks({ weekKey, prior, weeks, statementClosingMinor });
-  const roll = computeTagAccountRollForward({ openingMinor, topUpsMinor, tagUsageMinor, statementClosingMinor });
-  return {
-    priorWeekKey: prior.priorWeekKey,
-    /** Weeks between the last saved closing and this one whose movements are in the opening. */
-    carriedWeekKeys,
-    openingMinor,
-    openingFromStatement,
-    topUpsMinor,
-    tagUsageMinor,
-    statementClosingMinor,
-    /** WRA-48: the saved closing was the worked-out balance the user confirmed. */
-    statementConfirmedFromExpected: stored?.confirmedExpected === true,
-    ...roll,
-  };
-}
-
-async function loadPriorTagClosingMinor(
-  orgId: string,
-  weekKey: string,
-): Promise<{ openingMinor: number; priorWeekKey: string | null }> {
-  const recon = reconDb();
-  const { data: priorRuns } = await recon
-    .from("week_runs")
-    .select("id, week_key, state")
-    .eq("organization_id", orgId)
-    .lt("week_key", weekKey)
-    .eq("state", "closed")
-    .order("week_key", { ascending: false })
-    .limit(5);
-
-  for (const row of priorRuns ?? []) {
-    const runId = String(row.id);
-    const priorWeekKey = String(row.week_key).slice(0, 10);
-    const { data: events } = await recon
-      .from("run_events")
-      .select("payload")
-      .eq("run_id", runId)
-      .eq("kind", "tag_account_statement_closing")
-      .order("at", { ascending: false })
-      .limit(1);
-    const payload = events?.[0]?.payload as { statementClosingMinor?: number } | undefined;
-    const minor = payload?.statementClosingMinor;
-    if (minor != null && Number.isFinite(Number(minor))) {
-      return { openingMinor: Math.round(Number(minor)), priorWeekKey };
-    }
-  }
-  return { openingMinor: 0, priorWeekKey: null };
-}
-
-/**
- * Tag top-ups and tag usage per week from the NEW toll system (toll_system.week_result →
- * tagAccount, the same numbers the Tolls step shows). The old fleet.toll_ledger stopped
- * receiving tag files at the 14 Nov switch, so reading it gave 0 / 0 from 19 Oct on.
- */
-export async function tagAccountWeeksFromTollSystem(
-  orgId: string,
-  fromWeek: string,
-  toWeek: string,
-): Promise<Array<{ weekKey: string; topUpsMinor: number; usageMinor: number }>> {
-  if (fromWeek > toWeek) return [];
-  const { data, error } = await getServiceClient().rpc("toll_sys_tag_account_weeks", {
-    p_company: orgId,
-    p_from: fromWeek,
-    p_to: toWeek,
-  });
-  // A wrong tag balance is worse than none: never fall back to zeros.
-  if (error) throw new Error(`tag account read failed: ${error.message}`);
-  return ((data ?? []) as Array<{ weekKey: string; topUpsMinor: number; usageMinor: number }>).map((r) => ({
-    weekKey: String(r.weekKey).slice(0, 10),
-    topUpsMinor: Math.round(Number(r.topUpsMinor) || 0),
-    usageMinor: Math.round(Number(r.usageMinor) || 0),
-  }));
-}
-
-/** Tag top-ups / usage of one week from the OLD toll records (fleet.toll_ledger) — only for
- *  weeks closed before the 14 Nov switch, which the new toll system never received. */
-async function oldTollRecordsTagWeekMinor(
-  orgId: string,
-  weekKey: string,
-): Promise<{ topUpsMinor: number; tagUsageMinor: number }> {
-  const { data, error } = await getServiceClient()
-    .from("fleet_toll_ledger")
-    .select("amount, type, payment_method, status, metadata, payload_json")
-    .eq("organization_id", orgId)
-    .gte("date", weekKey)
-    .lte("date", periodEndForAnchor(weekKey))
-    .limit(100000);
-  // A wrong tag balance is worse than none: never fall back to zeros.
-  if (error) throw new Error(`old toll records read failed: ${error.message}`);
-  let topUpsMinor = 0;
-  let tagUsageMinor = 0;
-  for (const row of data ?? []) {
-    const payload = (row.payload_json as Record<string, unknown>) || {};
-    const meta = {
-      ...((row.metadata as Record<string, unknown>) || {}),
-      ...((payload.metadata as Record<string, unknown>) || {}),
-    };
-    const parts = tagLedgerAmountToRollForwardParts({
-      type: String(row.type || payload.type || ""),
-      amount: Number(row.amount),
-      paymentMethod: String(row.payment_method || payload.paymentMethod || ""),
-      status: String(row.status || ""),
-      metadata: meta as { voided?: boolean },
-    });
-    topUpsMinor += parts.topUpMinor;
-    tagUsageMinor += parts.usageMinor;
-  }
-  return { topUpsMinor, tagUsageMinor };
-}
-
-async function loadStoredStatementClosing(
-  runId: string,
-): Promise<{ minor: number; confirmedExpected: boolean } | null> {
-  const { data } = await reconDb()
-    .from("run_events")
-    .select("payload")
-    .eq("run_id", runId)
-    .eq("kind", "tag_account_statement_closing")
-    .order("at", { ascending: false })
-    .limit(1);
-  const payload = data?.[0]?.payload as
-    | { statementClosingMinor?: number; confirmedExpected?: boolean }
-    | undefined;
-  if (payload?.statementClosingMinor == null) return null;
-  const n = Number(payload.statementClosingMinor);
-  if (!Number.isFinite(n)) return null;
-  return { minor: Math.round(n), confirmedExpected: payload.confirmedExpected === true };
-}
-
 export function registerReconRoutes(app: Hono) {
   app.get(
     `${BASE}/runs/:line/:weekKey/status`,
@@ -1815,7 +1663,9 @@ export function registerReconRoutes(app: Hono) {
         }
 
         const run = await loadWeekRun(orgId, line, weekKey);
-        const roll = await tagAccountRollFor(orgId, weekKey, run ? run.id : null);
+        const roll = await tagAccountRollFor(orgId, weekKey, run ? run.id : null, {
+          runState: run?.state ?? null,
+        });
 
         return c.json({ success: true, weekKey, ...roll });
       } catch (e) {
@@ -1844,6 +1694,7 @@ export function registerReconRoutes(app: Hono) {
           kind?: string;
           payload?: Record<string, unknown>;
           expectedVersion?: number;
+          reason?: string;
         };
         const kind = String(body.kind ?? "").trim();
         if (!kind) return c.json({ error: "VALIDATION", message: "kind is required" }, 400);
@@ -1851,13 +1702,54 @@ export function registerReconRoutes(app: Hono) {
         const actor = actorFromContext(c);
         const run = await loadWeekRun(orgId, line, weekKey);
         if (!run) return weekNotReady(c);
-        const payload = body.payload && typeof body.payload === "object" ? body.payload : {};
+        let payload = body.payload && typeof body.payload === "object" ? { ...body.payload } : {};
+        const eventReason = String(body.reason ?? payload.reason ?? "").trim();
+
+        if (kind === "tag_account_opening_reset") {
+          const stmt = Number(payload.statementClosingMinor);
+          if (!Number.isFinite(stmt)) {
+            return c.json({ error: "VALIDATION", message: "statementClosingMinor is required" }, 400);
+          }
+          if (!eventReason) {
+            return c.json({ error: "VALIDATION", message: "reason is required" }, 400);
+          }
+          const existing = await loadActiveOpeningResetForRun(run.id);
+          if (existing) {
+            return c.json({ error: "ALREADY_RESET", message: "This week already has a starting balance reset." }, 409);
+          }
+          const baseline = await tagAccountRollFor(orgId, weekKey, run.id, {
+            ignoreOpeningReset: true,
+            runState: run.state,
+          });
+          const wouldTie = computeTagAccountRollForward({
+            openingMinor: baseline.baselineOpeningMinor,
+            topUpsMinor: baseline.topUpsMinor,
+            tagUsageMinor: baseline.tagUsageMinor,
+            statementClosingMinor: Math.round(stmt),
+          }).ties;
+          if (wouldTie) {
+            return c.json({ error: "ALREADY_TIES", message: "Tag account already ties; no reset needed." }, 409);
+          }
+          payload = buildOpeningResetPayloadForWeek(baseline, eventReason, Math.round(stmt));
+        } else if (kind === "tag_account_opening_reset_undo") {
+          const existing = await loadActiveOpeningResetForRun(run.id);
+          if (!existing) {
+            return c.json({ error: "NO_RESET", message: "No starting balance reset to undo." }, 409);
+          }
+          payload = {
+            undoesEventId: existing.eventId ?? null,
+            ...payload,
+          };
+        }
+
         // The event IS the change (e.g. the tag account statement closing): the claim writes it.
         const outcome = await withWeekChange(c, {
           runId: run.id,
           expectedVersion: body.expectedVersion,
           actor,
           kind,
+          step: kind.startsWith("tag_account") ? "tag_account" : null,
+          reason: eventReason || null,
           payload,
           idempotencyKey: idempotencyKeyFrom(c, body as { idempotencyKey?: unknown }),
           apply: async () => undefined,

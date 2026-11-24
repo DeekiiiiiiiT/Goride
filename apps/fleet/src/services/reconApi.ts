@@ -351,12 +351,25 @@ export async function fetchExternalQueue(): Promise<ReconExternalQueueItem[] | n
   return body.items ?? [];
 }
 
+export type TagAccountOpeningResetPayload = {
+  statementClosingMinor: number;
+  openingMinor: number;
+  previousOpeningMinor: number;
+  differenceMinor: number;
+  reason: string;
+  actor?: string;
+  at?: string;
+  undoable?: boolean;
+  eventId?: number | string;
+};
+
 export type TagAccountRollForwardPayload = {
   weekKey: string;
   priorWeekKey: string | null;
   /** Weeks between the last saved closing and this one whose top-ups and tolls are in the opening. */
   carriedWeekKeys?: string[];
   openingMinor: number;
+  baselineOpeningMinor?: number;
   /** First week with no earlier closing: the opening is worked out from this week's statement closing. */
   openingFromStatement?: boolean;
   topUpsMinor: number;
@@ -367,6 +380,7 @@ export type TagAccountRollForwardPayload = {
   expectedClosingMinor: number;
   varianceMinor: number | null;
   ties: boolean;
+  openingReset?: TagAccountOpeningResetPayload | null;
 };
 
 export async function fetchTagAccountRollForward(
@@ -385,7 +399,12 @@ export async function fetchTagAccountRollForward(
 export async function postRunEvent(
   line: 'rideshare' | 'rush_delivery',
   weekKey: string,
-  body: { kind: string; payload?: Record<string, unknown>; expectedVersion: number },
+  body: {
+    kind: string;
+    payload?: Record<string, unknown>;
+    expectedVersion: number;
+    reason?: string;
+  },
 ): Promise<ReconRunPayload> {
   const response = await reconFetch(
     `/runs/${encodeURIComponent(line)}/${encodeURIComponent(weekKey)}/events`,

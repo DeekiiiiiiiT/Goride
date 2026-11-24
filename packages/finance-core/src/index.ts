@@ -240,11 +240,20 @@ export {
   stagingRowOverrideId,
 } from './reconTollImport.ts';
 export {
+  buildTagAccountOpeningResetPayload,
+  computeOpeningFromStatementClosing,
   computeTagAccountRollForward,
-  tagLedgerAmountToRollForwardParts,
+  effectiveTagOpeningReset,
+  tagAccountFirstWeekAfterReset,
   tagAccountOpeningFromWeeks,
+  tagAccountRollAfterReset,
+  tagAccountUseOldTollRecords,
+  tagLedgerAmountToRollForwardParts,
 } from './tagAccountRollForward.ts';
 export type {
+  ActiveTagAccountOpeningReset,
+  TagAccountOpeningResetEvent,
+  TagAccountOpeningResetPayload,
   TagAccountRollForwardInput,
   TagAccountRollForwardResult,
 } from './tagAccountRollForward.ts';

@@ -12,6 +12,9 @@ export type TollV2TileSet = {
   fleetMinor: number;
   stillToDecideMinor: number;
   tilesAddUp: boolean;
+  /** Earlier weeks' disputes that ended this week (charged in this week, not part of this week's spend). */
+  earlierDriverMinor: number;
+  earlierFleetMinor: number;
 };
 
 export type TollV2TileSubcounts = {
@@ -23,7 +26,11 @@ export type TollV2TileSubcounts = {
   itemsRemainingCount: number;
 };
 
-export function computeTiles(result: TollV2WeekResult, charges: TollV2Charge[]): TollV2TileSet {
+export function computeTiles(
+  result: TollV2WeekResult,
+  charges: TollV2Charge[],
+  earlier?: { toDriverMinor?: number; toFleetMinor?: number } | null,
+): TollV2TileSet {
   const spendMinor = result.spend?.totalMinor ?? 0;
   const platformMinor = result.bearers?.platformMinor ?? 0;
   const driverMinor = result.bearers?.driverMinor ?? 0;
@@ -32,8 +39,18 @@ export function computeTiles(result: TollV2WeekResult, charges: TollV2Charge[]):
     .filter((c) => !STILL_TO_DECIDE_EXCLUDE.has(c.state))
     .reduce((n, c) => n + (c.openMinor ?? 0), 0);
   const sum = platformMinor + driverMinor + fleetMinor + stillToDecideMinor;
+  // The add-up check covers this week's spend only; earlier weeks' dispute results are shown on top of it.
   const tilesAddUp = sum === spendMinor;
-  return { spendMinor, platformMinor, driverMinor, fleetMinor, stillToDecideMinor, tilesAddUp };
+  return {
+    spendMinor,
+    platformMinor,
+    driverMinor,
+    fleetMinor,
+    stillToDecideMinor,
+    tilesAddUp,
+    earlierDriverMinor: earlier?.toDriverMinor ?? 0,
+    earlierFleetMinor: earlier?.toFleetMinor ?? 0,
+  };
 }
 
 export function computeTileSubcounts(

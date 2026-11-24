@@ -115,6 +115,51 @@ BEGIN
 END;
 $h$;
 
+CREATE OR REPLACE FUNCTION pg_temp._cf_assert_toll_stmt_carried_identity(
+  p_org uuid, p_week date, p_driver text, p_label text)
+RETURNS void
+LANGUAGE plpgsql AS $id$
+DECLARE
+  a jsonb;
+BEGIN
+  SELECT ws.amounts_minor INTO a
+  FROM ledger.week_statements ws
+  WHERE ws.organization_id = p_org AND ws.kind = 'toll' AND ws.driver_id = p_driver
+    AND ws.week_key = p_week AND ws.status = 'closed'
+  ORDER BY ws.version DESC LIMIT 1;
+  IF a IS NULL THEN RAISE EXCEPTION '%: no closed toll statement', p_label; END IF;
+  IF (coalesce((a ->> 'chargedToDriver')::bigint, 0)
+        - coalesce((a ->> 'carriedOwesMinor')::bigint, 0))
+      <> (coalesce((a ->> 'totalSpend')::bigint, 0)
+          - coalesce((a ->> 'reimbursed')::bigint, 0)
+          - coalesce((a ->> 'netLoss')::bigint, 0)
+          - coalesce((a ->> 'disputed')::bigint, 0)) THEN
+    RAISE EXCEPTION '%: stmt carried identity', p_label;
+  END IF;
+END;
+$id$;
+
+CREATE OR REPLACE FUNCTION pg_temp._cf_assert_live_carried_parts(
+  p_org uuid, p_week date, p_driver text, p_label text)
+RETURNS void
+LANGUAGE plpgsql AS $lp$
+DECLARE
+  d jsonb;
+  v_parts bigint;
+BEGIN
+  SELECT l INTO d
+  FROM jsonb_array_elements(toll_system.week_result_live(p_org, p_week) -> 'drivers') l
+  WHERE l ->> 'driverId' IS NOT DISTINCT FROM p_driver LIMIT 1;
+  IF d IS NULL THEN RAISE EXCEPTION '%: no live driver line', p_label; END IF;
+  v_parts := coalesce((d ->> 'carriedDisputeToDriver')::bigint, 0)
+           + coalesce((d ->> 'carriedTakeBackToDriver')::bigint, 0)
+           + coalesce((d ->> 'carriedCorrectionCashToDriver')::bigint, 0);
+  IF coalesce((d ->> 'carriedOwesMinor')::bigint, -1) IS DISTINCT FROM v_parts THEN
+    RAISE EXCEPTION '%: live carried parts', p_label;
+  END IF;
+END;
+$lp$;
+
 CREATE OR REPLACE FUNCTION pg_temp._cf_post_at(p_week date) RETURNS timestamptz
 LANGUAGE sql AS $pa$
   SELECT (p_week + time '12:00') AT TIME ZONE 'America/Jamaica';
@@ -527,6 +572,7 @@ BEGIN
              FROM jsonb_array_elements(toll_system.week_result_live(v_org, v_tw) -> 'drivers') d
              WHERE d ->> 'driverId' = 'd1' LIMIT 1);
   IF v_post >= v_pre THEN RAISE EXCEPTION '4 cash take-back should lower recovered'; END IF;
+  PERFORM pg_temp._cf_assert_live_carried_parts(v_org, v_tw, 'd1', 's4-takeback-driver');
 
   PERFORM pg_temp._cf_refused('carry_forward', jsonb_build_object(
     'command_id', 'cf-s4-again', 'from_week', v_w, 'to_week', v_tw, 'kind', 'take_back',
@@ -563,6 +609,7 @@ BEGIN
              FROM jsonb_array_elements(toll_system.week_result_live(v_org, v_tw) -> 'drivers') d
              WHERE d ->> 'driverId' = 'd1' LIMIT 1);
   IF v_post - v_pre <> 3000 THEN RAISE EXCEPTION '5 cash driver owes delta'; END IF;
+  PERFORM pg_temp._cf_assert_live_carried_parts(v_org, v_tw, 'd1', 's5-correction-cash');
 
   c := pg_temp._cf_ch(v_org, 'cf-round');
   r := pg_temp._cf_cmd('carry_forward', jsonb_build_object(
@@ -737,6 +784,9 @@ BEGIN
   IF v_j ? 'carriedMoney' IS NOT TRUE THEN RAISE EXCEPTION '8 carriedMoney missing'; END IF;
   v_j := toll_system.week_result(v_org, v_w);
   IF v_j ? 'carriedMoney' THEN RAISE EXCEPTION '8 paid week must not have carriedMoney'; END IF;
+  PERFORM pg_temp._cf_assert_live_carried_parts(v_org, v_tw, 'd1', 's8-sealed-live');
+  PERFORM toll_system.publish_driver_toll_statements(v_org, v_tw, 'closed', 'cf-carried-sealed');
+  PERFORM pg_temp._cf_assert_toll_stmt_carried_identity(v_org, v_tw, 'd1', 's8-sealed-stmt');
   PERFORM pg_temp._cf_assert_paid_hash(v_org, v_w, v_paid);
   PERFORM pg_temp._cf_nightly(v_org, 's8');
 
