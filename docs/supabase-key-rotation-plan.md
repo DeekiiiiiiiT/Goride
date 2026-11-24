@@ -548,21 +548,64 @@ Never touched: `admin-operations`, `ai-services`, `financial-operations`, `fleet
 3. no `Authorization` at all → `GET /health` → **200**;
 4. `net._http_response` for the next scheduled call → **2xx**.
 
-#### Step 1 — evidence-cleanup: dry run done, flag NOT flipped
+#### Step 1 — evidence-cleanup: done (flag off, pending tonight's real run)
 
-Why this one is special: `evidence-cleanup` is `verify_jwt = true` while its 03:00 job sends only
-`X-Fleet-Cron-Secret`, so the gateway has been rejecting it and **the nightly cleanup has never
-deleted anything**. The moment the flag comes off, the job starts working — and deleting.
+Why this one was special: it was `verify_jwt = true` while its 03:00 job sends only
+`X-Fleet-Cron-Secret`, so the gateway rejected it every night and **the nightly cleanup had never
+deleted anything**.
 
-Dry run (`POST /evidence-cleanup?dryRun=true`, cron secret + anon JWT for the gateway):
+Dry run before the flip — 17 files due (7 odometer, 7 toll receipt, 3 fuel receipt; uploaded
+20 Jul–29 Oct; all past the 14-day delete date; none linked to a toll dispute). Owner approved the
+deletion.
 
 ```json
 {"success":true,"purged":0,"kvPatched":0,"errors":[],"dryRun":true,
  "wouldPurge":17,"retentionDays":90,"retentionSource":"enterprise.privacy.retention"}
 ```
 
-**It would delete 17 files at the next 03:00 run** (retention 90 days; the query takes at most 200
-per run). Owner decides whether that is expected before the flag goes off.
+Flag flipped: **v415 → v416**, `verify_jwt = false`.
+
+- anon key, no login → **401** `{"error":"Unauthorized"}` — the function refused it, not the gateway
+- no `Authorization` at all → **401** `{"error":"Unauthorized"}` — the function answered, so the
+  gateway no longer blocks the scheduled call (this function has no `/health` route)
+- **the scheduled path now works without any JWT:** `POST /evidence-cleanup?dryRun=true` with the
+  cron secret only → **200** with the same `wouldPurge: 17`. That is exactly what the 03:00 job
+  sends, and nothing was deleted (dry run).
+
+**Tomorrow, record the 03:00 run** — expected `purged: 17`, `errors: []`. No real cleanup was run
+by hand, on purpose. If it does not show 17, stop before the next flip.
+
+#### Steps 2–3 — done (7 functions)
+
+Each flipped one at a time by adding its `[functions.<name>] verify_jwt = false` block in
+`supabase/config.toml` and redeploying only that function. After every single flip the audit showed
+exactly one function changed (`26 → 18` required a login; none newly true), and the two probes
+below passed.
+
+| Function | Version | anon key, no login (must be the function's own refusal) | no `Authorization` |
+|---|---|---|---|
+| `order-chat-retention` | v10 → **v12** | **401** `{"error":"Unauthorized"}` | **401** `{"error":"Unauthorized"}` (no `/health`; function answered) |
+| `notifications` | v154 → **v156** | **403** `{"error":"Forbidden"}` from `serviceCallerDenied` | `GET /health` → **200** |
+| `toll-brain` | v193 → **v194** | **401** `{"error":"Unauthorized"}` | `GET /health` → **200** |
+| `fuel-brain` | v184 → **v185** | **401** `{"error":"unauthorized"}` | `GET /health` → **200** |
+| `matching` | v203 → **v204** | **401** `{"error":"Unauthorized: invalid token"}` | `GET /health` → **200** |
+| `logistics` | v162 → **v163** | **401** `{"error":"Unauthorized: invalid token"}` | `GET /health` → **200** |
+| `identity` | v176 → **v177** | **401** `{"error":"Unauthorized"}` | `GET /health` → **200** |
+
+Scheduled-call check: `order-chat-retention`, `notifications`, `toll-brain`, `fuel-brain`,
+`matching`, `logistics` and `identity` have **no pg_cron caller** — they are woken by other
+functions or by the apps, so there is no `net._http_response` row to read. For `notifications` the
+server-to-server path was proven directly instead: cron secret only, no JWT →
+**400** `{"error":"customerUserId and status required"}` (credential accepted, route ran).
+
+**Health after the eight flips** (25-minute window): all **30** `net._http_response` rows were
+**200**, and no `cron.job_run_details` row failed.
+
+**Still `verify_jwt = true` (18) = the five legacy functions that get their own decision**
+(`admin-operations`, `ai-services`, `financial-operations`, `fleet-management`, `fuel-maintenance`)
+**plus the 13 queued for groups 4–6:** `fleet-claims`, `fleet-pay`, `fleet-ops`, `fleet-toll`,
+`fleet-fuel`, `haul`, `freight`, `explorer`, `driver`, `rides`, `platform-catalog`, `fleet-core`,
+`delivery`. **Group 4 is paused for review, as instructed.**
 
 #### Separate fix in the same session — rush job timeout
 
