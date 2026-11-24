@@ -520,6 +520,63 @@ JWT. The JWT is the public anon key from `apps/fleet/.env.local`; the cron secre
 the Management API inside the script, so both values stayed in memory — the output printed only
 their lengths and the HTTP status, never a value.
 
+### Phase 3 — flags off (in progress, 24 Nov 2026)
+
+Turning `verify_jwt` off one function at a time, machine-only callers first, the apps last.
+Nothing else about a function changes — the flag is set in `config.toml` and the function is
+redeployed (that is the only reliable way; the CLI applies `config.toml` on deploy).
+
+Order, and **stop at the first failure**:
+
+| # | Functions |
+|---|---|
+| 1 | `evidence-cleanup` — **paused, see below** |
+| 2 | `order-chat-retention`, `notifications` |
+| 3 | `toll-brain`, `fuel-brain`, `matching`, `logistics`, `identity` |
+| 4 | `fleet-claims`, `fleet-pay`, `fleet-ops`, `fleet-toll`, `fleet-fuel` |
+| 5 | `haul`, `freight`, `explorer`, `driver`, `rides`, `platform-catalog` |
+| 6 | `fleet-core`, `delivery` (busiest — quiet hour) |
+
+Never touched: `admin-operations`, `ai-services`, `financial-operations`, `fleet-management`,
+`fuel-maintenance` — they had 0 calls in 24 h and get their own decision.
+
+**After every flip**, all four must hold before the next function:
+
+1. exactly that one function's `verify_jwt` changed, nothing else;
+2. anon key + no login on one protected route → still **401/403 from the function**, not the
+   gateway (a gateway 401 would mean the flag did not take effect);
+3. no `Authorization` at all → `GET /health` → **200**;
+4. `net._http_response` for the next scheduled call → **2xx**.
+
+#### Step 1 — evidence-cleanup: dry run done, flag NOT flipped
+
+Why this one is special: `evidence-cleanup` is `verify_jwt = true` while its 03:00 job sends only
+`X-Fleet-Cron-Secret`, so the gateway has been rejecting it and **the nightly cleanup has never
+deleted anything**. The moment the flag comes off, the job starts working — and deleting.
+
+Dry run (`POST /evidence-cleanup?dryRun=true`, cron secret + anon JWT for the gateway):
+
+```json
+{"success":true,"purged":0,"kvPatched":0,"errors":[],"dryRun":true,
+ "wouldPurge":17,"retentionDays":90,"retentionSource":"enterprise.privacy.retention"}
+```
+
+**It would delete 17 files at the next 03:00 run** (retention 90 days; the query takes at most 200
+per run). Owner decides whether that is expected before the flag goes off.
+
+#### Separate fix in the same session — rush job timeout
+
+`private.invoke_rush_delivery` used pg_net's default 5 s request timeout while delivery answers in
+about 6 s, so `rush-pass-renew` (13:00) and `rush-money-recon` (06:30) were recording a timeout
+even though delivery had answered 200. Evidence: response `22206` at 13:00:00 —
+`Timeout of 5000 ms reached. Total time: 5000.187 ms`.
+
+Migration `supabase/migrations/20261124132804_rush_delivery_timeout_30s.sql` raises
+`timeout_milliseconds` to **30000** on the same URL/headers/body, and was applied live with its
+logbook row in `supabase_migrations.schema_migrations` (version `20261124132804`). Grants unchanged
+(`{postgres=X/postgres}`). Verified after applying: `private.invoke_rush_delivery('/internal/geo/reconcile')`
+→ request `22240` → **200** `{"healed":0,"failed":[]}`, not timed out.
+
 ### Separate faults (not key problems)
 
 **1. `rush-trip-recon-daily` never sends anything.** (`cron.job` #65) It fails in SQL first:
