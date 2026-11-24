@@ -445,19 +445,38 @@ select net.http_post(
   body := '{}'::jsonb);
 ```
 
-4. **Notifications path is not 403.** Trigger one and read its status:
+4. **Notifications path accepts the credential.** `notifications` still has
+   `verify_jwt = true` (no block in `config.toml`, so the default applies), so this **cannot** be
+   tested from `net.http_post`: a call with no `Authorization` header is refused by the gateway
+   with 401 before the function runs, which looks like a failure but is not one. Run it from a
+   shell instead, with the gateway JWT and the internal credential:
 
-```sql
-select net.http_post(
-  url := 'https://csfllzzastacofsvcdsc.supabase.co/functions/v1/notifications/customer-order-status',
-  headers := jsonb_build_object(
-    'Content-Type', 'application/json',
-    'x-service-key', ((select value from private.fleet_ops_secrets where name = 'fleet_cron_secret'))),
-  body := '{"customerUserId":"00000000-0000-0000-0000-000000000000","orderId":"00000000-0000-0000-0000-000000000000"}'::jsonb);
--- expect NOT 403 (401 means the credential was rejected -> callers are out of step; 400/200 both
--- prove the gate accepted the credential). The cron secret is read from the database here on
--- purpose: never paste a secret key into SQL, it would land in the query log.
+```bash
+# Both values come from places that already hold them. Neither is echoed, pasted or logged.
+SUPABASE_URL=https://csfllzzastacofsvcdsc.supabase.co
+ANON=$(grep -m1 '^VITE_SUPABASE_ANON_KEY=' apps/fleet/.env.local | cut -d= -f2- | tr -d '"'"'"')
+# Cron secret: read it straight out of the database, or `read -rs CRON_SECRET` if psql isn't to hand.
+CRON_SECRET=$(psql "$SUPABASE_DB_URL" -tAc "select value from private.fleet_ops_secrets where name='fleet_cron_secret'")
+
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -X POST "$SUPABASE_URL/functions/v1/notifications/customer-order-status" \
+  -H "Authorization: Bearer $ANON" \
+  -H "apikey: $ANON" \
+  -H "x-fleet-cron-secret: $CRON_SECRET" \
+  -H 'Content-Type: application/json' \
+  -d '{"customerUserId":"00000000-0000-0000-0000-000000000000","orderId":"00000000-0000-0000-0000-000000000000"}'
 ```
+
+Expected status codes:
+
+| Code | Meaning |
+|---|---|
+| **403** | `notifications` refused the credential — the helper rejects it. **This is the failure to act on: callers and callee are out of step.** |
+| **401** | the gateway refused it — `Authorization` is missing or not a valid JWT (wrong/expired anon key). Fix the header, not the function. |
+| **200 / 400 / 404** | the gate accepted the credential and the route ran. Any of these is a pass; 400/404 just means the dummy ids were rejected or the path differs. |
+
+The anon key is the legacy one today. Once phase 8 turns the legacy keys off, the same check
+needs the publishable key in `Authorization` instead.
 
 Also run `node scripts/smoke-fleet-fuel-auth.mjs` — its seal case must stay **401**.
 
