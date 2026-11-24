@@ -31,7 +31,7 @@ import { getFlag } from "../_shared/featureFlags.ts";
 import { loadMatchingPolicy, invalidatePolicyCache, type ResolvedPolicy } from "./policy/loadPolicy.ts";
 import { startMatching, reconcileMatching as doReconcile } from "./dispatch/reconcileMatching.ts";
 import { patchDriverOfferRow, supersedePendingOffersForRide, loadDriverOfferById } from "./dispatch/offerWrites.ts";
-import { serviceKey } from "../_shared/serviceKey.ts";
+import { serviceKey, publicApiKey } from "../_shared/serviceKey.ts";
 import {
   acceptEnterpriseJobOffer,
   declineEnterpriseJobOffer,
@@ -62,7 +62,7 @@ function svc(): SupabaseClient {
 function authClient(authHeader: string): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    publicApiKey()?? "",
     { global: { headers: { Authorization: authHeader } } },
   );
 }

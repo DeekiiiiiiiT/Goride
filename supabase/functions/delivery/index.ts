@@ -68,7 +68,7 @@ import { enforcePartnerAcceptOnStatusChange } from "./partnerAcceptDeadline.ts";
 // Must be top-level: edge bundler mishandles mid-file / dynamic imports in this large index.
 import { registerSettingsAdminRoutes } from "./admin/settingsRoutes.ts";
 import { registerMenuPriceReviewAdminRoutes } from "./admin/menuPriceReviewRoutes.ts";
-import { requireServiceKey } from "../_shared/serviceKey.ts";
+import { requireServiceKey, publicApiKey } from "../_shared/serviceKey.ts";
 
 const app = new Hono().basePath("/delivery");
 
@@ -96,7 +96,7 @@ app.use("*", rushMaintenanceMiddleware());
 /** JWT-scoped client only — never falls back to service role (P0 audit fix). */
 function getSupabase(authHeader: string) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const supabaseAnonKey = publicApiKey();
   return createClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: { Authorization: authHeader } },
     db: { schema: "delivery" },
@@ -132,7 +132,7 @@ function getPublicServiceSupabase() {
 function getAuthClient(authHeader: string) {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
+    publicApiKey(),
     { global: { headers: { Authorization: authHeader } } },
   );
 }

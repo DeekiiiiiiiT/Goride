@@ -10,7 +10,7 @@ import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { applyCors } from "../_shared/corsAllowlist.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { registerDriverAdminRoutes } from "./admin.ts";
-import { serviceKey } from "../_shared/serviceKey.ts";
+import { serviceKey, publicApiKey } from "../_shared/serviceKey.ts";
 
 const app = new Hono().basePath("/driver");
 
@@ -35,7 +35,7 @@ function svc(): SupabaseClient {
 function authClient(authHeader: string) {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    publicApiKey()?? "",
     { global: { headers: { Authorization: authHeader } } },
   );
 }

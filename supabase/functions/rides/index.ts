@@ -79,7 +79,7 @@ import { evaluateGeofenceTransitions, cleanupRideLiveState } from "./rideGeofenc
 import { getTotalTollsForRide } from "./fare/tollGeofence.ts";
 import { syncNativeTolls as syncRideNativeTolls } from "./tolls/nativeTollSync.ts";
 import { loadAppPermissionPolicy, policyDto } from "../_shared/appPermissionPolicy.ts";
-import { serviceKey } from "../_shared/serviceKey.ts";
+import { serviceKey, publicApiKey } from "../_shared/serviceKey.ts";
 import type { AppPermissionSurface } from "../_shared/appPermissionCatalog.ts";
 import { registerRideChatRoutes } from "./rideChat.ts";
 import { autocompletePlaces, fetchPlaceDetails, isPlacesConfigured, reverseGeocodeCoordinates } from "./fare/places.ts";
@@ -863,7 +863,7 @@ function normalizePresenceBodyTypeSlug(slug: string | null | undefined): string 
 function authClient(authHeader: string) {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    publicApiKey()?? "",
     { global: { headers: { Authorization: authHeader } } },
   );
 }

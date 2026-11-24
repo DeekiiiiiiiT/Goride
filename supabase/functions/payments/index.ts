@@ -17,7 +17,7 @@ import { wipayAmountMatches, wipayCurrencyOk, wipayStatusAccepted } from "../_sh
 import { queueAndExecuteRefund } from "../_shared/rushMoney/executeRefund.ts";
 import { captureLines, walletDebtPayLines } from "../_shared/rushMoney/journalLines.ts";
 import { loadCustomerWallet } from "../_shared/rushMoney/customerWallet.ts";
-import { serviceKey } from "../_shared/serviceKey.ts";
+import { serviceKey, publicApiKey } from "../_shared/serviceKey.ts";
 
 const PaymentIntentBody = z.object({
   orderId: z.string().uuid(),
@@ -44,7 +44,7 @@ applyCors(app);
 function getSupabase(authHeader?: string) {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    publicApiKey()?? "",
     authHeader ? { global: { headers: { Authorization: authHeader } } } : {}
   );
 }

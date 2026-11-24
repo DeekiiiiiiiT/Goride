@@ -7,7 +7,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
 import { applyCors } from "../_shared/corsAllowlist.ts";
 import { sendFcmPush } from "../_shared/fcmSend.ts";
-import { requireServiceKey, secretKeyCandidates } from "../_shared/serviceKey.ts";
+import { requireServiceKey, secretKeyCandidates, publicApiKey } from "../_shared/serviceKey.ts";
 import { authorizeInternalRequest } from "../_shared/requireInternalSecret.ts";
 
 const app = new Hono().basePath("/notifications");
@@ -96,7 +96,7 @@ function requireVapidConfigured(): boolean {
 function getAuthClient(authHeader: string) {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
+    publicApiKey(),
     { global: { headers: { Authorization: authHeader } } },
   );
 }

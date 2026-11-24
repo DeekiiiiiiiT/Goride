@@ -10,6 +10,7 @@ import {
   resolveUserPermissions,
 } from "../_shared/rbacQuery.ts";
 import { getJwtRoles, jwtPrimaryRole } from "../_shared/authEdge.ts";
+import { publicApiKey } from "../_shared/serviceKey.ts";
 
 const app = new Hono().basePath("/identity");
 
@@ -21,7 +22,7 @@ applyCors(app, {
 function authClient(authHeader: string) {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    publicApiKey()?? "",
     { global: { headers: { Authorization: authHeader } } },
   );
 }
