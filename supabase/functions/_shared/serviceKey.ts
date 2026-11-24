@@ -83,3 +83,25 @@ export function secretKeyCandidates(): string[] {
   const raw = secretKeysJson();
   return raw ? parseSecretKeys(raw) : [];
 }
+
+/**
+ * The project's PUBLIC (browser) key for server code that needs an anon-level client, e.g. to
+ * sign a user in or to call auth.getUser(jwt). The legacy `SUPABASE_ANON_KEY` was disabled in
+ * phase 8, so it is never used: SUPABASE_PUBLISHABLE_KEYS (platform-injected JSON) first, then
+ * the ROAM_PUBLISHABLE_KEY function secret.
+ */
+export function publicApiKey(): string {
+  const raw = (Deno.env.get("SUPABASE_PUBLISHABLE_KEYS") || "").trim();
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown> | null;
+      const def = parsed && typeof parsed.default === "string" ? parsed.default.trim() : "";
+      if (def) return def;
+      const first = parsed ? Object.values(parsed).find((v) => typeof v === "string" && v.trim()) : undefined;
+      if (typeof first === "string") return first.trim();
+    } catch {
+      // not JSON; fall through
+    }
+  }
+  return (Deno.env.get("ROAM_PUBLISHABLE_KEY") || "").trim();
+}

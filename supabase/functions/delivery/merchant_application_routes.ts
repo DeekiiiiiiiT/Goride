@@ -30,13 +30,13 @@ import { findPendingInviteForEmail } from "./merchantTeam.ts";
 import { seedVenueOpsFromBusinessType } from "./merchantVenueOps.ts";
 import { assertCanEnableAcceptingOrders } from "./merchantPayoutGate.ts";
 import { suggestMarketIdForMerchantPin } from "./admin/coverageZones.ts";
-import { requireServiceKey } from "../_shared/serviceKey.ts";
+import { requireServiceKey, publicApiKey } from "../_shared/serviceKey.ts";
 
 type SupabaseClient = ReturnType<typeof createDeliveryClient>;
 
 function createDeliveryClient(authHeader: string | null) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const supabaseAnonKey = publicApiKey();
   const supabaseServiceKey = requireServiceKey();
   if (authHeader) {
     return createClient(supabaseUrl, supabaseAnonKey, {

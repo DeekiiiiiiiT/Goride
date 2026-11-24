@@ -6,6 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getJwtRoles, jwtPrimaryRole } from "./authEdge.ts";
 import { resolveEffectiveRoleNames, resolveUserPermissions, userHasProductAccessResolved } from "./rbacQuery.ts";
 import { dominionCan } from "../../../packages/auth-client/src/dominionPermissions.ts";
+import { publicApiKey } from "./serviceKey.ts";
 
 /** Product identifiers */
 export type ProductKey = "fleet" | "enterprise" | "dash" | "rides" | "driver" | "haul" | "courier";
@@ -99,7 +100,7 @@ export function staffRolesRequireMfa(
 function authClient(authHeader: string) {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    publicApiKey()?? "",
     { global: { headers: { Authorization: authHeader } } },
   );
 }

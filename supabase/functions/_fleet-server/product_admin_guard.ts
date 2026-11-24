@@ -4,6 +4,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import type { ProductLine } from "./product_line.ts";
 import { PLATFORM_STAFF_RAW_ROLES } from "./rbac_middleware.ts";
+import { publicApiKey } from "../_shared/serviceKey.ts";
 
 export type FleetProductKey = "fleet" | "enterprise" | "dash" | "rides" | "driver" | "haul";
 
@@ -29,7 +30,7 @@ export type ProductAdminUser = {
 function authClient(authHeader: string) {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    publicApiKey()?? "",
     { global: { headers: { Authorization: authHeader } } },
   );
 }

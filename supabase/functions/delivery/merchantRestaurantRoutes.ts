@@ -4,7 +4,7 @@ import { calculateOrderPricing } from "../_shared/orderPricing.ts";
 import { resolvePosGctRate } from "../_shared/gctRate.ts";
 import type { ResolvedMerchantAccess } from "./merchantAuth.ts";
 import { requireResolvedMerchantWithPermission } from "./merchantAuth.ts";
-import { requireServiceKey } from "../_shared/serviceKey.ts";
+import { requireServiceKey, publicApiKey } from "../_shared/serviceKey.ts";
 import {
   depleteForPosSale,
   merchantUsesEnterpriseInventory,
@@ -44,7 +44,7 @@ async function resolveOwnerAccess(c: Context) {
 
   const authClient = createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
+    publicApiKey(),
     { global: { headers: { Authorization: authHeader } } },
   );
   const { data: { user } } = await authClient.auth.getUser();

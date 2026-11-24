@@ -5,6 +5,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
 import { getServiceClient } from "./service_client.ts";
 import { SettlementCommandError } from "./settlement_commands.ts";
+import { publicApiKey } from "../_shared/serviceKey.ts";
 
 export type TollSealBeforePayInput = {
   organizationId: string;
@@ -69,7 +70,7 @@ async function defaultFetchV2Enabled(
   if (!authHeader?.trim()) return "rpc_failed";
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    publicApiKey()?? "",
     { global: { headers: { Authorization: authHeader } } },
   );
   // One retry for a passing network blip; still fails closed if the second try fails too.

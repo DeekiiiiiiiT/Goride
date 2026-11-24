@@ -86,9 +86,13 @@ async function buildOne(name) {
     },
     plugins: [externalRemotePlugin],
     logLevel: "info",
-    write: true,
+    // Node writes the file (below): on some Windows machines the esbuild binary itself is
+    // refused write access to the repo ("Access is denied"), while node is allowed.
+    write: false,
     metafile: true,
   });
+
+  for (const out of result.outputFiles ?? []) fs.writeFileSync(out.path, out.contents);
 
   const bytes = fs.statSync(target.outfile).size;
   const mb = (bytes / (1024 * 1024)).toFixed(3);

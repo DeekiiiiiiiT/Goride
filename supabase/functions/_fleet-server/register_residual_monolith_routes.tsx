@@ -79,7 +79,7 @@ import {
 } from "./rbac_middleware.ts";
 import { logAdminAction, getAuditLogs, getAuditLogsByActor } from "./audit_log.ts";
 import { logRoleChange } from "../_shared/auditLog.ts";
-import { requireServiceKey, serviceKey } from "../_shared/serviceKey.ts";
+import { requireServiceKey, serviceKey, publicApiKey } from "../_shared/serviceKey.ts";
 import { authorizeCronOrServiceRole } from "../_shared/authorizeCronOrServiceRole.ts";
 import { 
   stampOrg,
@@ -7535,7 +7535,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
           const { createClient: createAnonClient } = await import("npm:@supabase/supabase-js@2");
           const anonClient = createAnonClient(
             Deno.env.get("SUPABASE_URL")!,
-            Deno.env.get("SUPABASE_ANON_KEY")!,
+            publicApiKey(),
           );
           const { data: signIn, error: signInErr } = await anonClient.auth.signInWithPassword({ email, password });
           if (!signInErr && signIn?.session) {
@@ -9659,7 +9659,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
 
       const { createClient: createAnonClient } = await import("npm:@supabase/supabase-js@2");
       const anonUrl = Deno.env.get("SUPABASE_URL")!;
-      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const anonKey = publicApiKey();
       const anonClient = createAnonClient(anonUrl, anonKey);
 
       const { data, error: signInError } = await anonClient.auth.signInWithPassword({ email, password });
@@ -9881,7 +9881,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
 
       const { createClient: createAnonClient } = await import("npm:@supabase/supabase-js@2");
       const anonUrl = Deno.env.get("SUPABASE_URL")!;
-      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const anonKey = publicApiKey();
       const anonClient = createAnonClient(anonUrl, anonKey);
 
       const { data, error: signInError } = await anonClient.auth.signInWithPassword({ email, password });
@@ -9977,7 +9977,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
 
       const { createClient: createAnonClient } = await import("npm:@supabase/supabase-js@2");
       const anonUrl = Deno.env.get("SUPABASE_URL")!;
-      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const anonKey = publicApiKey();
       const anonClient = createAnonClient(anonUrl, anonKey);
 
       let signInResult = await anonClient.auth.signInWithPassword({ email, password });

@@ -14,6 +14,7 @@ import {
   getResolvedBusyMode,
   type Rollout,
 } from "../_shared/rushSettings/enterpriseReaders.ts";
+import { publicApiKey } from "../_shared/serviceKey.ts";
 
 const APPS = new Set(["customer", "courier", "partner"]);
 
@@ -48,7 +49,7 @@ async function resolveAuthUserId(
   try {
     const sb = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      publicApiKey()?? "",
       { global: { headers: { Authorization: authHeader } } },
     );
     const { data: { user } } = await sb.auth.getUser();

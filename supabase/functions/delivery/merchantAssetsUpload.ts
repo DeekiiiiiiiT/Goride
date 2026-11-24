@@ -4,7 +4,7 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
-import { requireServiceKey } from "../_shared/serviceKey.ts";
+import { requireServiceKey, publicApiKey } from "../_shared/serviceKey.ts";
 import {
   detectFileMagicBytes,
   extForMime,
@@ -17,7 +17,7 @@ const BUCKET = "merchant-assets";
 function getAnonAuthClient(authHeader: string) {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
+    publicApiKey(),
     { global: { headers: { Authorization: authHeader } } },
   );
 }

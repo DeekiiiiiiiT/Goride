@@ -9,6 +9,7 @@ import {
   tollsV2OffResponse,
 } from "./toll_v2_command_errors.ts";
 import { getOrgId } from "./org_scope.ts";
+import { publicApiKey } from "../_shared/serviceKey.ts";
 
 const app = new Hono();
 
@@ -18,7 +19,7 @@ function userScopedClient(c: Context) {
   const authHeader = c.req.header("Authorization") ?? "";
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    publicApiKey()?? "",
     { global: { headers: { Authorization: authHeader } } },
   );
 }

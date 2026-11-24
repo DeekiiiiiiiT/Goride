@@ -4,7 +4,7 @@ import type { ResolvedMerchantAccess } from "./merchantAuth.ts";
 import { requireResolvedMerchantWithPermission } from "./merchantAuth.ts";
 import { appendLedgerEntry } from "./inventory/ledgerService.ts";
 import { toBaseQty, resolveUomIdByCode } from "./inventory/uomService.ts";
-import { requireServiceKey } from "../_shared/serviceKey.ts";
+import { requireServiceKey, publicApiKey } from "../_shared/serviceKey.ts";
 
 const IN_STORE_CAPABILITY = "in_store_operations";
 
@@ -28,7 +28,7 @@ async function resolveAccess(c: Context) {
 
   const authClient = createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
+    publicApiKey(),
     { global: { headers: { Authorization: authHeader } } },
   );
   const { data: { user } } = await authClient.auth.getUser();

@@ -41,6 +41,7 @@ import {
   type MatcherSweepItem,
   type TollRpc,
 } from "./toll_v2_matcher_run.ts";
+import { publicApiKey } from "../_shared/serviceKey.ts";
 
 export type MatcherSummary =
   | { ok: true; rounds?: number; stored?: Record<string, number>; queueLeft?: boolean }
@@ -400,7 +401,7 @@ function userScopedClient(c: Context): SupabaseClient {
   const authHeader = c.req.header("Authorization") ?? "";
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    publicApiKey()?? "",
     { global: { headers: { Authorization: authHeader } } },
   );
 }

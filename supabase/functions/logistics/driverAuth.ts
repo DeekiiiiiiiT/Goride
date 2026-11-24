@@ -3,7 +3,7 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getJwtRoles } from "../_shared/authEdge.ts";
-import { serviceKey } from "../_shared/serviceKey.ts";
+import { serviceKey, publicApiKey } from "../_shared/serviceKey.ts";
 
 export type LogisticsDriverUser = {
   id: string;
@@ -21,7 +21,7 @@ export async function requireLogisticsDriver(c: {
 
   const authClient = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    publicApiKey()?? "",
     { global: { headers: { Authorization: authHeader } } },
   );
 

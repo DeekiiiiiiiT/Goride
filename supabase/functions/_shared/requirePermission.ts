@@ -9,6 +9,7 @@ import {
   resolveUserPermissions,
   userHasPermissionResolved,
 } from "./rbacQuery.ts";
+import { publicApiKey } from "./serviceKey.ts";
 
 export type AuthenticatedUser = {
   id: string;
@@ -27,7 +28,7 @@ type JsonContext = {
 function authClient(authHeader: string) {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    publicApiKey()?? "",
     { global: { headers: { Authorization: authHeader } } },
   );
 }

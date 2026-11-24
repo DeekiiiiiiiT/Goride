@@ -7,6 +7,7 @@ import { jwtPrimaryRole } from "./authEdge.ts";
 import { dbIsPlatformUser } from "./rbacQuery.ts";
 import { ROLE_LEVELS } from "./platformPermissions.ts";
 import { jwtAssuranceLevel } from "./productAdmin.ts";
+import { publicApiKey } from "./serviceKey.ts";
 
 export const PLATFORM_ADMIN_ROLES = new Set([
   "platform_owner",
@@ -20,7 +21,7 @@ export type PlatformAdminUser = { id: string; email: string; role: string };
 function authClient(authHeader: string) {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    publicApiKey()?? "",
     { global: { headers: { Authorization: authHeader } } },
   );
 }

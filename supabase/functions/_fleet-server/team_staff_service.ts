@@ -4,7 +4,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { writeAdminAuditBestEffort, type AdminAuditInput } from "../delivery/admin/adminAuditWriter.ts";
 import { invalidateAccessCache } from "./access_cache.ts";
-import { serviceKey } from "../_shared/serviceKey.ts";
+import { serviceKey, publicApiKey } from "../_shared/serviceKey.ts";
 import {
   canGrantRole,
   isOwnerRole,
@@ -790,7 +790,7 @@ export async function sendStaffResetEmail(
     throw err;
   }
   const base = Deno.env.get("SUPABASE_URL");
-  const anon = Deno.env.get("SUPABASE_ANON_KEY");
+  const anon = publicApiKey();
   if (!base || !anon) throw new Error("Auth email is not configured");
   const res = await fetch(`${base}/auth/v1/recover`, {
     method: "POST",

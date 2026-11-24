@@ -10,6 +10,7 @@ import { resolveProductLine, type ProductLine } from "./product_line.ts";
 import { isPlatformStaffFromAuthUser, platformMfaRequiredResponse, rbacUserFromSupabaseUser } from "./rbac_middleware.ts";
 import { requireProductAdmin, type FleetProductKey } from "./product_admin_guard.ts";
 import { DEFAULT_ENTERPRISE_MODULES } from "./enterprise_modules.ts";
+import { publicApiKey } from "../_shared/serviceKey.ts";
 
 export type SettingsSegment =
   | "global"
@@ -325,7 +326,7 @@ export async function verifySettingsAccess(c: Context): Promise<SettingsActor | 
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    publicApiKey()?? "",
     { global: { headers: { Authorization: authHeader } } },
   );
   const { data: { user }, error } = await supabase.auth.getUser();

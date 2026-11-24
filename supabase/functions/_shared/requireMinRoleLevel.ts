@@ -6,6 +6,7 @@ import { getJwtRoles, jwtPrimaryRole } from "./authEdge.ts";
 import { logPermissionCheck } from "./auditLog.ts";
 import { dbUserMaxRoleLevel } from "./rbacQuery.ts";
 import { ROLE_LEVELS, type RoleLevel } from "./platformPermissions.ts";
+import { publicApiKey } from "./serviceKey.ts";
 
 const JWT_ROLE_LEVELS: Record<string, number> = {
   platform_owner: 1000,
@@ -45,7 +46,7 @@ type JsonContext = {
 function authClient(authHeader: string) {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    publicApiKey()?? "",
     { global: { headers: { Authorization: authHeader } } },
   );
 }
