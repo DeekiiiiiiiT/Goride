@@ -929,55 +929,61 @@ only place that reads the key for the running app — `publicAnonKey` is exporte
    machine).
 4. Re-check each app loads, signs in, and calls one function.
 
-#### Phase 5 execution — 6 apps live on the publishable key, 5 blocked by the Ignored Build Step
+#### Phase 5 execution — all 11 apps live on the publishable key (24 Nov 2026)
 
-Deploys now go through **Vercel Deploy Hooks**, which build from GitHub `main` on Vercel's servers — no
-upload quota, no Windows symlinks, and the CLI is not involved. Hook URLs are read from the API and
-never printed.
+Deploys run through **Vercel Deploy Hooks** (they build from GitHub `main` on Vercel's servers, so
+no upload quota and no Windows symlink problem). Hook URLs are read from the API, never printed.
 
-| App | Vercel project | Env added | Build | site 200 | key in bundle | logged-out call |
+Five projects could not rebuild at first: their last deployment was itself canceled at HEAD, so the
+Ignored Build Step saw an empty diff. The owner added a one-off override —
+`scripts/vercel-should-build.mjs` builds when **`ROAM_FORCE_BUILD=1`**. The loop per app was:
+
+1. set `VITE_SUPABASE_PUBLISHABLE_KEY` (encrypted) and `ROAM_FORCE_BUILD=1` (plain) on **Production**,
+2. trigger the deploy hook, poll the deployment until a terminal state,
+3. check site · key in bundle · logged-out call,
+4. **delete `ROAM_FORCE_BUILD`** so the next ordinary push behaves normally.
+
+| App | Vercel project | Public URL checked | Build | site | key in bundle | logged-out call |
 |---|---|---|---|---|---|---|
-| `apps/haul` | roam-haul | yes | READY 42 s | pass | pass | **200** |
-| `apps/plug` | roam-plug | yes | READY 42 s | pass | pass | **200** |
-| `apps/admin` | roam-dominion | yes | READY 61 s | pass | pass | **200** |
-| `apps/driver` | roam-driver | yes | READY 50 s | pass | pass | **200** |
-| `apps/dash-merchant` | roam-rush-partner | yes | READY 61 s | pass | pass | **200** |
-| `apps/fleet` | roam-fleet | yes | READY 81 s | pass | pass | **200** |
+| `apps/haul` | roam-haul | www.roamhaul.co | READY 42 s | 200 | ✔ | **200** |
+| `apps/plug` | roam-plug | roamplug.app | READY 42 s | 200 | ✔ | **200** |
+| `apps/admin` | roam-dominion | roamdominion.co | READY 61 s | 200 | ✔ | **200** |
+| `apps/driver` | roam-driver | roamdriver.co | READY 50 s | 200 | ✔ | **200** |
+| `apps/dash-merchant` | roam-rush-partner | partner.roamrush.app | READY 61 s | 200 | ✔ | **200** |
+| `apps/fleet` | roam-fleet | www.roamfleet.co | READY 81 s | 200 | ✔ | **200** |
+| `apps/enterprise` | roam-enterprise | roamenterprise.co | READY (forced) | 200 | ✔ | **200** |
+| `apps/rides-passenger` | rides-passenger | roam-s.co | READY (forced) | 200 | ✔ | **200** |
+| `apps/dash-courier` | roam-rush-courier | courier.roamrush.app | READY (forced) | 200 | ✔ | **200** |
+| `apps/dash-customer` | roam-rush-customer | www.roamrush.app | READY (forced) | 200 | ✔ | **200** |
+| `apps/rush-command` | roam-rush-command | command.roamrush.app | READY (forced) | 200 | ✔ | **200** |
 
 `roam-plug` had **no deploy hook**; one was created (`main-path-deploy`, ref `main`).
 
-**Edge logs since the first deploy** (`function_edge_logs` from 15:18 UTC): **97 × 200, 17 × 204, 4 × 400
-— no 401 and no 500.** The four 400s are a two-second burst at 15:33 on `GET` (request validation), not
-auth and not server errors.
+**Trap worth remembering:** every project except `roam-plug` has SSO protection
+`all_except_custom_domains`, so the `*.vercel.app` deployment URL answers **Vercel's login page with
+HTTP 200**. Checking the vercel.app URL "passes" while proving nothing — always check the **custom
+domain**. That is how the first pass wrongly reported enterprise, rides-passenger and dash-courier as
+client-less: it was measuring Vercel's own JS bundle.
 
-How each check works: the site returns 200 · the deployed JS embeds `sb_publishable_` **verbatim** (the
-client lives in a lazy chunk, so the check crawls the chunk graph, not just the `<script src>` tags) · a
-logged-out function call with **`apikey` only** returns 200.
+**Final audit:** all 11 projects have `VITE_SUPABASE_PUBLISHABLE_KEY` on Production; **no project is
+left with `ROAM_FORCE_BUILD`**.
 
-#### The five that could not build
+**Edge logs for the whole phase** (`function_edge_logs` from 15:18 UTC): **227 × 200, 33 × 204, 8 × 400
+— no 401 and no 500.** The eight 400s are two four-request bursts (15:33 and 15:43) on `GET` request
+validation, not auth and not server errors.
 
-`enterprise`, `rides-passenger`, `dash-courier`, `dash-customer`, `rush-command`.
+**Checks explained:** site returns 200 **and is not the Vercel login page** (the `<title>` is checked) ·
+the deployed JS embeds `sb_publishable_` verbatim — the client sits in a lazy chunk, so the check
+crawls the chunk graph and only applies when the app actually ships a Supabase client · a logged-out
+function call with **`apikey` only** returns 200.
 
-Their hook deploys come back **CANCELED**: *"The deployment was canceled because the Ignored Build Step
-command returned exit code 0."* `scripts/vercel-should-build.mjs` diffs `VERCEL_GIT_PREVIOUS_SHA..HEAD`
-against the app's paths, and for these five the last deployment was itself **canceled at HEAD** (the
-push), so the diff is empty and the build is skipped. Rebuilding the existing deployment reproduces it.
+**Fleet is live on the publishable key — the owner signs in once and opens one screen** as the
+sign-in proof (the one check an agent cannot do).
 
-Two facts worth acting on:
-
-- the project-level override is **not settable** — `PATCH /v9/projects` rejects both `ignoreCommand`
-  and `commandForIgnoringBuildStep` with `bad_request`, so the skip cannot be lifted from the API;
-- **`packages/api-client/**` is in no app's path list** in `scripts/vercel-path-deploy-lib.mjs`, so the
-  very change that matters here (the shared client) triggers no rebuild. The six apps above built only
-  because their own `.env.example` / `vite-env.d.ts` changed in the same push.
-
-To unblock, either **(a)** turn off *Ignored Build Step* for those five projects in the Vercel dashboard
-and re-trigger their hooks, or **(b)** push a change inside each app directory — ideally also adding
-`packages/api-client/` to every app's paths so shared client changes rebuild the apps that use it. Both
-need the owner; nothing here pushes.
-
-**Fleet is live on the publishable key — the owner should sign in once and open one screen.** That is the
-sign-in proof, the only check the agent cannot perform.
+**Still worth fixing (not blocking):** `packages/api-client/**` is in no app's path list in
+`scripts/vercel-path-deploy-lib.mjs`, so a shared-client change does not rebuild the apps that use it
+— the force switch has to be used each time. Adding that path to every app's entry would make the
+next shared change deploy itself.
 
 
 ### Pre-phase-8 item: files still reading `SUPABASE_SERVICE_ROLE_KEY`
