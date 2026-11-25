@@ -32,8 +32,8 @@ is open.
      --offline` at the repo root. Never delete `node_modules/.deno` by hand.
 3. Tests to keep green: Deno (`deno test --no-check --allow-all` on `catalog_research_*.test.ts research_*.test.ts
    listings_for_vehicle.test.ts api_pricing.test.ts catalog_privacy.test.ts pending_parts_catalog_routes.test.ts` in
-   `supabase/functions/_fleet-server/` — 176), admin (`npx tsc --noEmit -p tsconfig.json`; `npx vitest run
-   src/components/admin/research-engine src/components/admin/vehicle-catalog src/components/admin/parts-database` — 114),
+   `supabase/functions/_fleet-server/` — 178), admin (`npx tsc --noEmit -p tsconfig.json`; `npx vitest run
+   src/components/admin/research-engine src/components/admin/vehicle-catalog src/components/admin/parts-database` — 115),
    screens (`pnpm test:e2e:dominion:research-engine` — 19).
 
 ## 1. Where we stopped (25 Nov)
@@ -137,26 +137,31 @@ and show as **Closed**.
 ## 3. Open work, in order
 
 1. **Sources decision** (§1). Nothing else in the "more sources" area until the owner picks.
-2. **Ship to the live website:** `a6878354` (names the missing dates) and `61fdf293` (one step per side with how-to +
-   "Same as") are on the branch only. Screen-only; server unchanged. Tell the owner first.
-3. Only shocks have a front/rear section in `partFinder`; other parts with places (brakes, bearings) still use the
-   plain "Do you see …?" line. Add them when the owner checks one.
-4. **Small fixes (one round):** health route `GET /admin/catalog-research/health` (RE-45); research screen test in its
-   own CI job (RE-40); `GET /admin/catalog/signals` + "Added. N companies were told…" panel (RE-41); Settings jobs/day,
-   finish date, cap above the Google limit refused (RE-37, RE-50); cross-reference proof prefers the car's own engine
-   (RE-55); owner browser checks stored `trust_set_by = 'engine'`, should be `owner` (RE-58); pasted text keeps prices
-   (old paste path, RE-59).
-5. **Dominion data fix (RE-64):** Roomy `vehicle_catalog.full_model_code` / `trim_suffix_code` are wrong (`GBME` is the
-   X grade; Custom G is `AGBVE`). Don't use them for lookups until fixed.
-6. **Readiness rebuild:** the nightly `catalog-demand-readiness` job has failed every night since at least 16 Nov
-   (rebuild of `variant_parts_readiness` exceeds live's 2-minute limit). Fix the slow rebuild, then count only Confirmed
-   specs (swap `(COALESCE(btrim(sv.evidence_url), '') <> '')` for `(sv.trust = 'confirmed')`; old block in
-   `git show 92b3cd21:supabase/migrations/20261120234117_research_engine_layer1b.sql`).
-7. **Switch on for everyone** (leave practice mode) once the Roomy looks right.
-8. Cleanup migration: drop `catalog_trusted_source`, `catalog_trusted_source_fetch`, `part_fitment`,
+2. **Ship the 25 Nov build round** (branch only, nothing live). Tell the owner first. From a worktree off origin/main
+   with the research commits only; then hand-run the two migrations on live, each with its logbook line:
+   - Screens: `a6878354` missing dates named · `61fdf293` one step per side + "Same as" · `7cccb5ab` any front/rear
+     part names its section · `701b523b` Settings jobs a day + cap ceiling (RE-37, RE-50).
+   - Server: `f0f200e2` RE-41 (no counts from `/admin/catalog/signals`, Added panel wording), RE-45
+     (`GET /admin/catalog-research/health`, 503 when the database can't be read), RE-55 (proof keeps the car's own
+     engine row), RE-59 (pasted part evidence drops prices) · `701b523b` server refuses a cap above US$21.
+   - CI: `74874e87` RE-40 research screens in their own job (`research-engine-ui`).
+   - Migration `20261125150531_readiness_table_rebuild.sql` (`8728b54f`): `variant_parts_readiness` becomes a plain
+     table rebuilt from `private.variant_parts_readiness_rows()`, writing only changed rows (readers never locked);
+     both cron jobs `SET statement_timeout = '10min'`; Confirmed specs only (RE-05, 0 rows differ today). Takes ~3 min
+     (the first fill); run it with a 10-minute limit, not through the MCP (its HTTP call times out at ~2 min). Dry-run
+     on live 25 Nov: halves checked separately, both rolled back. After: check the 03:30 run in
+     `cron.job_run_details` succeeds.
+   - Migration `20261125151043_owner_browser_checks_set_by_owner.sql` (`e6fa2cd6`): RE-58, browser-check saves are
+     `trust_set_by = 'owner'` (evidence reads kept); fixes the 4 listings so far. Dry-run on live rolled back: 4 fixed.
+3. **RE-64 reconsidered (no change):** Amayama's `M900A-AGBVE` is the catalogue's own code (kept as the remembered
+   version, which research uses). `vehicle_catalog.full_model_code` `DBA-M900A-GBME` may be the code on the car's own
+   papers, and Fleet matching reads it, so it isn't overwritten. Change it only after a Roomy's papers are checked.
+4. **Switch on for everyone** (leave practice mode) once the Roomy looks right.
+5. Cleanup migration: drop `catalog_trusted_source`, `catalog_trusted_source_fetch`, `part_fitment`,
    `catalog_research_settings.daily_job_limit`.
-9. CI red, not research: migration parity lists live-only `20261117204932` (someone's hand-run change with no repo
-   file); a stale find-parts screen test fails in "Dominion places checks".
+6. CI red, not research: migration parity lists live-only `20261117204932` (someone's hand-run change with no repo
+   file); a stale find-parts screen test fails in "Dominion places checks" (the research screens no longer depend on
+   it once item 2 ships).
 
 ## 4. Pace and cost
 
