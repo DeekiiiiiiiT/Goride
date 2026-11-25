@@ -20,6 +20,7 @@ import {
   type TollV2MetricBucket,
 } from './recon/tolls-v2/useTollV2Metrics';
 import { useTollV2Weeks } from './recon/tolls-v2/useTollV2Weeks';
+import { isTollReadAccessRefusal, TOLL_V2_NO_ACCESS_MESSAGE } from './recon/tolls-v2/tollV2ReadAccess';
 
 /** Week Reconciliation opens a week only after its Sunday (Jamaica time). */
 export function weekOpensAfter(weekKey: string, now: Date = new Date()): string | null {
@@ -72,6 +73,8 @@ type TileSpec = {
   showAmount?: boolean;
   openWeek?: string;
   footerHint?: string;
+  /** The read behind this number failed: the number is unknown, not zero. */
+  unknown?: boolean;
 };
 
 export function TollHealthPage({
@@ -85,6 +88,10 @@ export function TollHealthPage({
 
   const takeBackCount = weeksQ.data?.takeBacks?.length ?? 0;
   const openWeek = weeksQ.data?.openWeek ?? '';
+  // A tile is unknown whenever the read behind it has not answered (still loading or failed). Never show 0 —
+  // and never "All clear" — for a number we do not have.
+  const metricsUnknown = metricsQ.isError || metricsQ.isPending;
+  const weeksUnknown = weeksQ.isError || weeksQ.isPending;
 
   const tiles: TileSpec[] = useMemo(
     () => [
@@ -95,6 +102,7 @@ export function TollHealthPage({
         bucket: metricsQ.data?.pendingCharges,
         showAmount: true,
         openWeek,
+        unknown: metricsUnknown,
       },
       {
         key: 'receipts',
@@ -103,6 +111,7 @@ export function TollHealthPage({
         bucket: metricsQ.data?.unverifiedReceipts,
         showAmount: true,
         openWeek,
+        unknown: metricsUnknown,
       },
       {
         key: 'paybacks',
@@ -111,6 +120,7 @@ export function TollHealthPage({
         bucket: metricsQ.data?.unallocatedPaybacks,
         showAmount: true,
         openWeek,
+        unknown: metricsUnknown,
         footerHint: 'Confirm their matches in the week',
       },
       {
@@ -120,6 +130,7 @@ export function TollHealthPage({
         bucket: metricsQ.data?.afterSeal,
         showAmount: false,
         openWeek,
+        unknown: metricsUnknown,
       },
       {
         key: 'dupes',
@@ -128,6 +139,7 @@ export function TollHealthPage({
         countOverride: metricsQ.data?.reviewPairsOpen ?? 0,
         showAmount: false,
         openWeek,
+        unknown: metricsUnknown,
       },
       {
         key: 'takebacks',
@@ -136,9 +148,11 @@ export function TollHealthPage({
         countOverride: takeBackCount,
         showAmount: false,
         openWeek,
+        // How many take-backs there are is unknown while the weeks read is loading or has failed.
+        unknown: weeksUnknown,
       },
     ],
-    [metricsQ.data, openWeek, takeBackCount],
+    [metricsQ.data, openWeek, takeBackCount, metricsUnknown, weeksUnknown],
   );
 
   const nightly = weeksQ.data?.nightly;
@@ -146,6 +160,8 @@ export function TollHealthPage({
 
   const loading = metricsQ.isLoading || weeksQ.isLoading;
   const errored = metricsQ.isError || weeksQ.isError;
+  // A permission refusal is not a connection problem — say what actually happened.
+  const noAccess = isTollReadAccessRefusal(metricsQ.error) || isTollReadAccessRefusal(weeksQ.error);
 
   return (
     <div className="space-y-6 pb-8" data-testid="toll-health-page">
@@ -168,8 +184,11 @@ export function TollHealthPage({
       ) : null}
 
       {errored ? (
-        <div className="rounded-xl border border-[#ba1a1a]/30 bg-[#ffdad6]/30 p-4 text-sm text-[#ba1a1a]">
-          Check your connection and try again.
+        <div
+          className="rounded-xl border border-[#ba1a1a]/30 bg-[#ffdad6]/30 p-4 text-sm text-[#ba1a1a]"
+          data-testid="toll-health-error"
+        >
+          {noAccess ? TOLL_V2_NO_ACCESS_MESSAGE : 'Check your connection and try again.'}
         </div>
       ) : null}
 
@@ -191,7 +210,9 @@ export function TollHealthPage({
           <Landmark className={`h-4 w-4 ${nightly ? '' : 'text-[#78767d]'}`} aria-hidden />
           Nightly money check
         </p>
-        {!nightly ? (
+        {weeksQ.isError ? (
+          <p className="mt-1 text-sm text-[#47464c]">Couldn't check</p>
+        ) : !nightly ? (
           <p className="mt-1 text-sm text-[#47464c]">No nightly check has run yet</p>
         ) : nightly.ok !== false && !failedCheck ? (
           <p className="mt-1 text-sm text-[#47464c]">
@@ -215,10 +236,13 @@ export function TollHealthPage({
         )}
       </section>
 
-      <section className="rounded-2xl border border-[#e5eeff] bg-white shadow-sm">
+      <section className="rounded-2xl border border-[#e5eeff] bg-white shadow-sm" data-testid="toll-health-weeks">
         <h2 className="border-b border-[#e5eeff] px-4 py-3 text-sm font-semibold text-[#0b1c30]">Weeks</h2>
         <ul className="divide-y divide-[#e5eeff]">
-          {(weeksQ.data?.weeks ?? []).map((w) => (
+          {weeksQ.isError ? (
+            <li className="px-4 py-3 text-sm text-[#47464c]">Couldn't load weeks</li>
+          ) : (
+            (weeksQ.data?.weeks ?? []).map((w) => (
             <li key={w.weekKey} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0 space-y-0.5">
                 <p className="text-sm font-semibold text-[#0b1c30]">{formatWeekTitle(w.weekKey)}</p>
@@ -247,7 +271,8 @@ export function TollHealthPage({
                 ) : null}
               </div>
             </li>
-          ))}
+            ))
+          )}
         </ul>
       </section>
     </div>
@@ -268,9 +293,13 @@ function HealthTile({
   const days = metricAgeDays(spec.bucket?.oldestAt);
   const over14 = days != null && days > 14;
   const clear = count === 0;
+  const unknown = spec.unknown === true;
 
   return (
-    <article className="flex h-full min-h-[168px] flex-col justify-between rounded-2xl border border-[#e5eeff] bg-white p-5 shadow-sm">
+    <article
+      className="flex h-full min-h-[168px] flex-col justify-between rounded-2xl border border-[#e5eeff] bg-white p-5 shadow-sm"
+      data-testid={`toll-health-tile-${spec.key}`}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#e5eeff] text-[#47464c]">
@@ -278,7 +307,7 @@ function HealthTile({
           </div>
           <p className="text-xs font-medium text-[#47464c]">{spec.label}</p>
         </div>
-        {over14 && count > 0 ? (
+        {unknown ? null : over14 && count > 0 ? (
           <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900">
             Over 14 days
           </span>
@@ -289,13 +318,17 @@ function HealthTile({
         ) : null}
       </div>
       <div className="my-2 flex items-baseline justify-between gap-2">
-        <span className="text-2xl font-bold tabular-nums text-[#0b1c30]">{count}</span>
+        <span className="text-2xl font-bold tabular-nums text-[#0b1c30]">{unknown ? '—' : count}</span>
         {spec.showAmount !== false ? (
-          <span className="text-sm font-semibold tabular-nums text-[#0b1c30]">{fmtTollMinor(amount)}</span>
+          <span className="text-sm font-semibold tabular-nums text-[#0b1c30]">
+            {unknown ? '—' : fmtTollMinor(amount)}
+          </span>
         ) : null}
       </div>
       <div className="flex items-center justify-between border-t border-[#e5eeff] pt-2 text-xs text-[#47464c]">
-        {spec.footerHint ? (
+        {unknown ? (
+          <span>Couldn't check</span>
+        ) : spec.footerHint ? (
           <span>{spec.footerHint}</span>
         ) : (
           <span className="inline-flex items-center gap-1">
@@ -303,7 +336,7 @@ function HealthTile({
             Oldest {metricAgeLabel(days)}
           </span>
         )}
-        {count > 0 && openWeek && onNavigate ? (
+        {!unknown && count > 0 && openWeek && onNavigate ? (
           <OpenWeekButton
             weekKey={openWeek}
             onNavigate={onNavigate}
