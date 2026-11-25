@@ -1,5 +1,6 @@
 import type { User } from '@supabase/supabase-js';
 import { supabase } from './supabase/client';
+import { uploadHaulerPhoto } from './haulerPhotoUpload';
 import type { ProfileSetupData } from '../components/auth/onboarding/HaulProfileSetupScreen';
 import type { VehicleSetupData } from '../components/auth/onboarding/HaulVehicleSetupScreen';
 
@@ -24,15 +25,7 @@ export async function saveHaulerOnboarding(
   let photoUrl: string | null = null;
 
   if (profile.photoFile) {
-    const ext = profile.photoFile.name.split('.').pop() || 'jpg';
-    const path = `${user.id}/avatar.${ext}`;
-    const { error: uploadErr } = await supabase.storage
-      .from('driver-photos')
-      .upload(path, profile.photoFile, { upsert: true });
-    if (!uploadErr) {
-      const { data: urlData } = supabase.storage.from('driver-photos').getPublicUrl(path);
-      photoUrl = urlData.publicUrl;
-    }
+    photoUrl = await uploadHaulerPhoto(user.id, profile.photoFile);
   }
 
   const displayName = profile.displayName || profile.fullName;

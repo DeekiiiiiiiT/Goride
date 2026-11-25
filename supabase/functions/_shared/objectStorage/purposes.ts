@@ -46,6 +46,8 @@ export const UPLOAD_PURPOSES = {
   "merchant-kyc": { bucket: "private", folder: "merchant-kyc", scope: "merchant", mimes: IMG_PDF, maxBytes: 10 * MB, scan: true, replaces: "merchant-documents" },
   "in-house-receipts": { bucket: "private", folder: "in-house-receipts", scope: "merchant", mimes: IMG_PDF, maxBytes: 5 * MB, scan: false, replaces: "in-house-receipts" },
   "courier-docs": { bucket: "private", folder: "courier-docs", scope: "user", mimes: IMG_PDF, maxBytes: 10 * MB, scan: true, replaces: "courier-documents" },
+  /** Courier proof / issue / avatar / vehicle photos — never scanned, so a delivery never waits on it. */
+  "courier-photos": { bucket: "private", folder: "courier-photos", scope: "user", mimes: IMG, maxBytes: 10 * MB, scan: false, replaces: "courier-documents" },
   "driver-photos": { bucket: "private", folder: "driver-photos", scope: "user", mimes: IMG, maxBytes: 5 * MB, scan: false, replaces: "driver-photos" },
   "driver-docs": { bucket: "private", folder: "driver-docs", scope: "user", mimes: IMG_PDF, maxBytes: 10 * MB, scan: true, replaces: "driver-documents" },
   "customer-avatars": { bucket: "public", folder: "avatars", scope: "user", mimes: IMG, maxBytes: 2 * MB, scan: false, replaces: "customer-avatars" },
