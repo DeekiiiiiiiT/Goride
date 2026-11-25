@@ -8,7 +8,7 @@
 
 ## 0. START HERE (24 Nov 2026)
 
-**Where we are:** M1 and M2 done. M3 has 3 of ~12 slices: maker logos (live), vehicle pictures + certificates (live, own audit), and **evidence uploads (LIVE + switched on 25 Nov ~00:21 UTC; waiting for the first real driver receipt)**. M4–M7 not started.
+**Where we are:** M1 and M2 done. M3 has 4 of ~12 slices: maker logos (live), vehicle pictures + certificates (live, own audit), **evidence uploads (LIVE + switched on 25 Nov ~00:21 UTC; waiting for the first real driver receipt)**, and **parts request photos (built 24 Nov, on `parts-auto-match`, not pushed, off until the same switch)**. M4–M7 not started.
 
 **Production check (24 Nov):** 427 files still in Supabase Storage (~180 MB): `ephemeral-evidence` 313 (50 MB, **12 new in the last 7 days**, the only bucket still growing), `make-37f42386-docs` 61 (125 MB), `merchant-assets` 23, `parts-imports` 17, `enterprise-freight-docs` 5, `courier-documents` 4, `merchant-documents` 3, `in-house-receipts` 1. `make-37f42386-vehicles` is empty (vehicle pictures audit).
 
@@ -20,6 +20,17 @@
 - Code: `_shared/objectStorage/fileLink.ts`, `supabase/functions/file-link/`, `_fleet-server/evidence_storage.ts`, `evidence_routes.ts`, the `/upload` route in `register_residual_monolith_routes.tsx`. Added to config.toml, the edge deploy list and the CI R2 test step.
 - **Proof:** 37 Deno tests pass (6 new link tests, 5 new evidence tests). Against the real R2: put → signed link → `file-link` run locally → 302 to R2 → same bytes; tampered link 404, expired 410, unsigned R2 request 400; test files removed.
 
+**Slice 1 — parts request photos (built 24 Nov, on `parts-auto-match`, not pushed):**
+- Fleet → Find parts → "add part info" photo (`POST /make-server-37f42386/parts/request-photo`) keeps its answer: `{ photo_url }`, one address per file. The app does not change.
+- When switched on, the photo goes to `roam-private/parts-requests/<org>/<uuid>.<ext>` and the answer is a signed `file-link` address (1 year, same trust model as evidence). The file never passes through Supabase.
+- **Limits are the ones the old bucket had**: 8 MB, JPEG/PNG/WebP. The R2 branch checks the magic bytes before it writes, so a renamed non-image is refused (415).
+- **Old rows stay readable:** rows written before the switch keep the bare Supabase path inside `parts-request-photos`. `parsePartsPhotoAddress` reads both (a `file-link` address or an old path/URL); `removePartsRequestPhotos` sends each one to R2 or Supabase, and refuses an address belonging to another org. No delete path exists for these photos yet, so nothing had to be rewired — the helper is there for the first cleanup job.
+- **Switch:** the same as evidence — `FILE_LINK_SECRET` plus the R2 keys (already set). Without it, `/parts/request-photo` runs the old Supabase upload exactly as before.
+- Code: `_fleet-server/parts_request_photo_storage.ts`, `fleet_find_parts_routes.ts` (one route). The delete helper moved to `_shared/objectStorage/storedFiles.ts` so every later slice shares it (evidence imports it unchanged).
+- **Proof:** 8 new Deno tests (key scope, old path shape, both stored addresses, delete routing, another org refused, limits) and the existing 5 evidence R2 tests still pass. Bundle check on `fleet-core/src/main.ts` clean (1.83 MB), `lint-edge-kernel` and `edge-route-manifest --all --check` green.
+- **How to check it live:** after deploy + `FILE_LINK_SECRET`, send one add-part-info request with a photo in Fleet → Find parts. Then confirm `parts_sourcing_requests.photo_url` for that row starts with `https://<project>.supabase.co/functions/v1/file-link?b=private&k=parts-requests/`, the link opens the photo, and no new row appeared in `storage.objects` for `parts-request-photos`.
+- **Note:** the Fleet Find-parts screen does not attach a photo yet (`uploadPartRequestPhoto` in `apps/fleet/src/services/api.ts` has no caller), so this route is ready and correct but no screen uses it until photo attach ships. Dominion already receives the stored address as `photos[].url` from `pending_parts_catalog_routes.ts`; that value is now directly openable.
+
 **Go-live done (25 Nov):** pushed `2f45698a` to main (cherry-picked onto main, without this branch's unrelated "y" commit). Deploy Edge run 45516878276 green: `file-link` + `fleet-core` deployed, smoke passed. `FILE_LINK_SECRET` set through the Supabase Management API (the `npx supabase` CLI crashes on this machine), confirmed present; `file-link` now answers 404 to a fake link (it answered 503 before the secret). Snapshot at 00:21 UTC: 374 files in `ephemeral-evidence` + `make-37f42386-docs`, 0 `r2:private` rows.
 **Left: the first real upload.** Receipt photos come from the **Driver app** (DriverExpenses, fuel log, offline queue); in the Fleet app only Add driver uploads (licence photos), and the fuel screens upload nothing. Check after the next driver receipt: a new `evidence_files` row with `bucket_id = 'r2:private'`, no new `storage.objects` row, and the photo opens in Fleet.
 
@@ -28,7 +39,7 @@
 2. Set the Supabase secret `FILE_LINK_SECRET` (64 random hex characters). From then on, new receipts go to R2.
 3. Real check: log one fuel receipt in Fleet. It shows on screen; `evidence_files` has a row with `bucket_id = 'r2:private'`; no new row in `storage.objects` for `ephemeral-evidence`.
 
-**Next slices (M3), in this order:** parts request photos (`fleet_find_parts_routes.ts`) → parts imports → merchant assets (public) → in-house receipts → customer avatars + issue photos → freight docs → courier docs, driver docs, merchant KYC (these three need `MALWARE_SCAN_API_KEY` first) → explorer, refinery sources. The courier and hauler apps upload straight to Supabase today and need the start/finish flow (`uploadToStorage`). Then M4 (copy the 427 old files), M5 (rewrite stored addresses, including old evidence links), M6, M7.
+**Next slices (M3), in this order:** ~~parts request photos (`fleet_find_parts_routes.ts`)~~ (built, slice 1) → parts imports → merchant assets (public) → in-house receipts → customer avatars + issue photos → freight docs → courier docs, driver docs, merchant KYC (these three need `MALWARE_SCAN_API_KEY` first) → explorer, refinery sources. The courier and hauler apps upload straight to Supabase today and need the start/finish flow (`uploadToStorage`). Then M4 (copy the 427 old files), M5 (rewrite stored addresses, including old evidence links), M6, M7.
 
 ---
 

@@ -19,6 +19,17 @@ export const FILE_LINK_SECONDS = 365 * 24 * 60 * 60;
 /** Stored as evidence_files.bucket_id for files that live in roam-private. */
 export const R2_PRIVATE_BUCKET_ID = "r2:private";
 
+/**
+ * The upload switch for every private slice: all three R2 keys, FILE_LINK_SECRET and
+ * SUPABASE_URL. Without them the old Supabase path stays exactly as it is.
+ */
+export function isR2PrivateLinksEnabled(
+  env: (name: string) => string | undefined = (n) => Deno.env.get(n),
+): boolean {
+  return ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "FILE_LINK_SECRET", "SUPABASE_URL"]
+    .every((n) => !!env(n)?.trim());
+}
+
 const enc = new TextEncoder();
 
 async function hmacHex(secret: string, message: string): Promise<string> {

@@ -5,12 +5,15 @@
  * docs/cloudflare-r2-storage-migration-audit.md.
  */
 import {
+  isR2PrivateLinksEnabled,
   keyFromFileLink,
   R2_PRIVATE_BUCKET_ID,
 } from "../_shared/objectStorage/fileLink.ts";
-import { r2FromEnv } from "../_shared/objectStorage/r2Client.ts";
+import { removeStoredFiles } from "../_shared/objectStorage/storedFiles.ts";
+import type { RemoveObjects } from "../_shared/objectStorage/storedFiles.ts";
 
-export { R2_PRIVATE_BUCKET_ID };
+export { R2_PRIVATE_BUCKET_ID, removeStoredFiles };
+export type { RemoveObjects };
 
 export const EVIDENCE_RETENTION_DAYS = 14;
 export const EPHEMERAL_EVIDENCE_BUCKET = "ephemeral-evidence";
@@ -73,8 +76,7 @@ export function computeDeleteAfter(resolvedAt: Date): string {
 export function isR2EvidenceEnabled(
   env: (name: string) => string | undefined = (n) => Deno.env.get(n),
 ): boolean {
-  return ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "FILE_LINK_SECRET", "SUPABASE_URL"]
-    .every((n) => !!env(n)?.trim());
+  return isR2PrivateLinksEnabled(env);
 }
 
 /** R2 key for a new upload: evidence/<org>/<type>/<uuid>.<ext> or fleet-docs/<org>/driver-docs/<uuid>.<ext>. */
@@ -89,37 +91,6 @@ export function buildR2UploadKey(
   return evidenceType
     ? `evidence/${safeOrg}/${evidenceType}/${id}.${ext}`
     : `fleet-docs/${safeOrg}/driver-docs/${id}.${ext}`;
-}
-
-export type RemoveObjects = (bucket: string, paths: string[]) => Promise<{ error: { message: string } | null }>;
-
-/**
- * Deletes stored files wherever they live: R2 ("r2:private") or a Supabase bucket.
- * Never throws; returns the error message per failed batch.
- */
-export async function removeStoredFiles(
-  supabase: SupabaseClient,
-  bucket: string,
-  paths: string[],
-  r2Remove: (keys: string[]) => Promise<void> = (keys) => r2FromEnv().remove("private", keys),
-): Promise<{ removed: number; errors: string[] }> {
-  let removed = 0;
-  const errors: string[] = [];
-  for (let i = 0; i < paths.length; i += 50) {
-    const chunk = paths.slice(i, i + 50);
-    try {
-      if (bucket === R2_PRIVATE_BUCKET_ID) {
-        await r2Remove(chunk);
-      } else {
-        const { error } = await supabase.storage.from(bucket).remove(chunk);
-        if (error) throw error;
-      }
-      removed += chunk.length;
-    } catch (e) {
-      errors.push(e instanceof Error ? e.message : String((e as { message?: unknown })?.message ?? e));
-    }
-  }
-  return { removed, errors };
 }
 
 export function buildEphemeralStoragePath(
