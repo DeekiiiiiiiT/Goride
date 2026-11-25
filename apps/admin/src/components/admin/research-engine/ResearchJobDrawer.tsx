@@ -531,8 +531,10 @@ function BrowserCheckCard({
   const [changed, setChanged] = useState(false);
   const [changeMonth, setChangeMonth] = useState(0);
   const [changeYear, setChangeYear] = useState(0);
+  const [stepAt, setStepAt] = useState(0);
   // Another check opened in the same drawer starts clean (keyed on the job only, so a refetch keeps the answers).
   useEffect(() => {
+    setStepAt(0);
     setChanged(false);
     setChangeMonth(0);
     setChangeYear(0);
@@ -596,7 +598,6 @@ function BrowserCheckCard({
   ]);
   const filledSplit = splitKeys.filter((k) => posValue(k.key));
   const splitOk = Boolean(changeMonth && changeYear) && filledSplit.length > 0 && filledSplit.every((k) => posAgainOk(k.key));
-  const anyNo = versionOk === false || partFound === false || datesOk === false || sideOk === false;
   const canConfirm = Boolean(
     openUrl &&
       versionAnswered &&
@@ -663,13 +664,11 @@ function BrowserCheckCard({
   );
   const input =
     `h-10 w-full rounded-lg bg-white px-3 text-[14px] text-[#30323b] shadow-sm outline-none focus:ring-2 focus:ring-[#0153dc] dark:bg-[#0b1220] dark:text-[#e2e8f0] ${D_MONO}`;
-  let n = 1;
-
-  return (
-    <div className="flex flex-col gap-6" data-testid="browser-check-card">
-      <div className="flex flex-col gap-4 rounded-2xl bg-[#dbe1ff] p-6 text-[14px] text-[#00174b] dark:bg-[#1e3a8a]/40 dark:text-[#dbe1ff]">
-        <div className="flex items-center gap-2">
-          <StepDot n={n++} />
+  // Owner 25 Nov: one question on screen at a time; Next moves on, Back goes back.
+  type Step = { id: string; node: ReactNode; ok: boolean; no?: boolean };
+  const steps: Step[] = [
+    { id: "open", ok: Boolean(openUrl), node: (
+          <div className="flex w-full flex-col gap-2">
           {openUrl ? (
             <a
               href={openUrl}
@@ -683,11 +682,10 @@ function BrowserCheckCard({
           ) : (
             <span className={D_MUTED}>No {site} link for this one. Use Not on this page.</span>
           )}
-        </div>
-
-        <div className="flex items-start gap-2" data-testid="browser-check-instruction">
-          <StepDot n={n++} />
-          <div className="flex w-full flex-col gap-2 pt-0.5">
+          </div>
+        ) },
+    { id: "version", ok: versionAnswered, no: versionOk === false, node: (
+          <div className="flex w-full flex-col gap-2" data-testid="browser-check-instruction">
             {known ? (
               <>
                 <p>{known.url ? "Check it's this one:" : "Click this one in the list:"}</p>
@@ -719,11 +717,9 @@ function BrowserCheckCard({
               </>
             )}
           </div>
-        </div>
-
-        <div className="flex items-start gap-2" data-testid="guide-find-part">
-          <StepDot n={n++} />
-          <div className="flex w-full flex-col gap-2 pt-0.5">
+        ) },
+    { id: "part", ok: partFound === true, no: partFound === false, node: (
+          <div className="flex w-full flex-col gap-2" data-testid="guide-find-part">
             <p>
               {jobType === "part" ? (
                 <>
@@ -740,12 +736,9 @@ function BrowserCheckCard({
             </p>
             {yesNo(partFound, setPartFound, "q-part")}
           </div>
-        </div>
-
-        {canSplit ? (
-          <div className="flex items-start gap-2" data-testid="q-change">
-            <StepDot n={n++} />
-            <div className="flex w-full flex-col gap-2 pt-0.5">
+        ) },
+    ...(canSplit ? [{ id: "change", ok: !changed || Boolean(changeMonth && changeYear), node: (
+          <div className="flex w-full flex-col gap-2" data-testid="q-change">
               <p>Under the part, how many different Period dates?</p>
               <div className="flex flex-wrap gap-2">
                 <PartsButton
@@ -796,14 +789,11 @@ function BrowserCheckCard({
                   </select>
                 </div>
               ) : null}
-            </div>
           </div>
-        ) : null}
-
-        {split ? (
-          <div className="flex items-start gap-2" data-testid="q-split">
-            <StepDot n={n++} />
-            <div className="flex w-full flex-col gap-3 pt-0.5">
+        ) }] : []),
+    split
+      ? { id: "numbers", ok: splitOk, node: (
+          <div className="flex w-full flex-col gap-3" data-testid="q-split">
               <p>{positions ? "Its numbers for each place:" : "Its numbers:"}</p>
               {splitKeys.map((k) => (
                 <div key={k.key} className="flex flex-col gap-1.5" data-testid={`q-split-${k.key}`}>
@@ -814,14 +804,11 @@ function BrowserCheckCard({
                   {numberPick(k.key, "q-split")}
                 </div>
               ))}
-            </div>
           </div>
-        ) : null}
-
-        {positions && !split ? (
-          <div className="flex items-start gap-2" data-testid="q-positions">
-            <StepDot n={n++} />
-            <div className="flex w-full flex-col gap-3 pt-0.5">
+        ) }
+      : positions
+      ? { id: "numbers", ok: positionsOk, node: (
+          <div className="flex w-full flex-col gap-3" data-testid="q-positions">
               <p>Its number for each place:</p>
               {positions.map((p) => (
                 <div key={p.key} className="flex flex-col gap-1.5" data-testid={`q-position-${p.key}`}>
@@ -829,14 +816,10 @@ function BrowserCheckCard({
                   {numberPick(p.key, "q-position")}
                 </div>
               ))}
-            </div>
           </div>
-        ) : null}
-
-        {positions || split ? null : (
-          <div className="flex items-start gap-2">
-            <StepDot n={n++} />
-            <div className="flex w-full flex-col gap-2 pt-0.5">
+        ) }
+      : { id: "numbers", ok: Boolean(value) && againOk, node: (
+          <div className="flex w-full flex-col gap-2">
               <p>{jobType === "part" ? "Its number:" : "The value shown:"}</p>
             {suggestions.length ? (
               <div className="flex flex-wrap gap-2" data-testid="q-suggestions">
@@ -884,33 +867,40 @@ function BrowserCheckCard({
               </>
             ) : null}
           </div>
-        </div>
-        )}
-
-        <div className="flex items-start gap-2">
-          <StepDot n={n++} />
-          <div className="flex w-full flex-col gap-2 pt-0.5">
+        ) },
+    { id: "dates", ok: datesOk === true, no: datesOk === false, node: (
+          <div className="flex w-full flex-col gap-2">
             <p>
               {split ? "Do their dates together cover " : "Do its dates include "}
               <span className="font-semibold">{dates || "your car's years"}</span>?
             </p>
             {yesNo(datesOk, setDatesOk, "q-dates")}
           </div>
-        </div>
-
-        {side && !positions ? (
-          <div className="flex items-start gap-2">
-            <StepDot n={n++} />
-            <div className="flex w-full flex-col gap-2 pt-0.5">
+        ) },
+    ...(side && !positions ? [{ id: "side", ok: sideOk === true, no: sideOk === false, node: (
+          <div className="flex w-full flex-col gap-2">
               <p>
                 Is it for the <span className="font-semibold">{side}</span>?
               </p>
               {yesNo(sideOk, setSideOk, "q-side")}
-            </div>
           </div>
-        ) : null}
+        ) }] : []),
+  ];
+  const at = Math.min(stepAt, steps.length - 1);
+  const cur = steps[at];
+  const last = at === steps.length - 1;
 
-        {anyNo ? (
+  return (
+    <div className="flex flex-col gap-6" data-testid="browser-check-card">
+      <div className="flex flex-col gap-4 rounded-2xl bg-[#dbe1ff] p-6 text-[14px] text-[#00174b] dark:bg-[#1e3a8a]/40 dark:text-[#dbe1ff]">
+        <p className="text-[13px] font-medium" data-testid="browser-check-step-count">
+          Step {at + 1} of {steps.length}
+        </p>
+        <div className="flex items-start gap-2" data-testid={`step-${cur.id}`}>
+          <StepDot n={at + 1} />
+          {cur.node}
+        </div>
+        {cur.no ? (
           <p className="font-semibold text-[#a83836]" data-testid="q-no-hint">
             Then press Not on this page.
           </p>
@@ -925,9 +915,15 @@ function BrowserCheckCard({
           </p>
         ) : null}
         <div className="flex flex-col gap-2 md:flex-row">
+          {at > 0 ? (
+            <PartsButton variant="secondary" className="!min-h-[44px]" disabled={busy} data-testid="browser-check-back" onClick={() => setStepAt(at - 1)}>
+              Back
+            </PartsButton>
+          ) : null}
+          {last ? (
           <PartsButton
             variant="primary"
-            className="!min-h-[40px] flex-1"
+            className="!min-h-[44px] flex-1"
             disabled={busy || !canConfirm}
             data-testid="browser-check-confirm"
             onClick={() =>
@@ -978,7 +974,18 @@ function BrowserCheckCard({
           >
             <DIcon name="check" className="text-[18px]" /> Confirm
           </PartsButton>
-          <PartsButton variant="danger" className="!min-h-[40px]" disabled={busy} data-testid="not-on-page" onClick={onNotOnPage}>
+          ) : (
+            <PartsButton
+              variant="primary"
+              className="!min-h-[44px] flex-1"
+              disabled={busy || !cur.ok}
+              data-testid="browser-check-next"
+              onClick={() => setStepAt(at + 1)}
+            >
+              Next
+            </PartsButton>
+          )}
+          <PartsButton variant="danger" className="!min-h-[44px]" disabled={busy} data-testid="not-on-page" onClick={onNotOnPage}>
             Not on this page
           </PartsButton>
         </div>
