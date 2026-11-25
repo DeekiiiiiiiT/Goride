@@ -157,6 +157,10 @@ describe("browser-check guide (RE-63)", () => {
       rowContains: true,
     });
     expect(partFinder("Shock absorber", "Toyota", "rear").section).toBe("rear shock absorber");
+    // Any part with a front / rear names its section, on any make; the maker's row name stays as it was.
+    expect(partFinder("Front brake pads", "Toyota", "front")).toEqual({ search: "disc brake", rowName: "PAD KIT, DISC BRAKE", section: "front brake pads" });
+    expect(partFinder("Wheel bearing", "Honda", "Rear")).toEqual({ search: "wheel bearing", rowName: null, section: "rear wheel bearing" });
+    expect(partFinder("Spark Plugs", "Toyota", null).section).toBeUndefined();
   });
 
   it("falls back to the part's own name for other makers and unknown parts", () => {
