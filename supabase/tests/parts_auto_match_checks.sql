@@ -1630,13 +1630,11 @@ BEGIN
   PERFORM public.part_match_recompute('a9000006-0000-4000-8000-000000000004', NULL);
 END $$;
 
--- Proof 52: variant_parts_readiness exists after Rev 13 (X8)
+-- Proof 52: variant_parts_readiness exists after Rev 13 (X8); a plain table since 20261125150531 (rebuilt in the background)
 DO $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_matviews WHERE schemaname = 'public' AND matviewname = 'variant_parts_readiness'
-  ) THEN
-    RAISE EXCEPTION 'Proof 52 failed: variant_parts_readiness materialized view missing';
+  IF to_regclass('public.variant_parts_readiness') IS NULL THEN
+    RAISE EXCEPTION 'Proof 52 failed: variant_parts_readiness missing';
   END IF;
   PERFORM public.refresh_variant_parts_readiness();
 END $$;
