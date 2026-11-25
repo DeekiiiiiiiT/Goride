@@ -25,10 +25,26 @@ jobs:
       - name: Setup Supabase CLI
         uses: ./.github/actions/setup-supabase-cli
 
-      - name: Start local Supabase stack (applies migrations in filename order)
+      # Database only (same as parts-sql-checks.yml): `supabase start` also serves the edge
+      # functions, whose entry bundles (e.g. fleet-core/index.ts) are built at deploy time and
+      # never committed, so it failed on every migration PR before reaching a single migration.
+      - name: Start the database
         run: |
           set -euo pipefail
-          supabase start
+          for attempt in 1 2 3 4 5; do
+            if supabase db start; then
+              exit 0
+            fi
+            echo "supabase db start failed (attempt ${attempt}); waiting before retry"
+            sleep $((attempt * 20))
+          done
+          echo "supabase db start failed after retries"
+          exit 1
+
+      - name: Replay all migrations from empty, in filename order
+        run: |
+          set -euo pipefail
+          supabase db reset --no-seed
 
       - name: Confirm all migrations applied
         run: |
