@@ -528,14 +528,14 @@ function BrowserCheckCard({
   // RE-69: one number per position (shocks, bearings, brakes…): tapped or typed (typed twice).
   const [posVals, setPosVals] = useState<Record<string, { picked: string; typed: string; again: string }>>({});
   // RE-70: the car maker changed the number during the build (e.g. Roomy shocks at 11.2018): a number for each period.
-  const [changed, setChanged] = useState(false);
+  const [changed, setChanged] = useState<boolean | null>(null);
   const [changeMonth, setChangeMonth] = useState(0);
   const [changeYear, setChangeYear] = useState(0);
   const [stepAt, setStepAt] = useState(0);
   // Another check opened in the same drawer starts clean (keyed on the job only, so a refetch keeps the answers).
   useEffect(() => {
     setStepAt(0);
-    setChanged(false);
+    setChanged(null);
     setChangeMonth(0);
     setChangeYear(0);
     setVersionOk(null);
@@ -589,24 +589,28 @@ function BrowserCheckCard({
   const positionsOk = filledPositions.length > 0 && filledPositions.every((p) => posAgainOk(p.key));
   // RE-70: with a change date, every place (or the one number) has a "before" and a "from" entry.
   const canSplit = jobType === "part";
-  const split = canSplit && changed;
+  const split = canSplit && changed === true;
   const changeYears = changeYearOptions(detail.car);
   const changeText = changeMonth && changeYear ? `${MONTHS[changeMonth - 1]} ${changeYear}` : "the change";
   const splitKeys = (positions ?? [{ key: "one", axle: null, side: null, label: "" }]).flatMap((p) => [
-    { place: p, period: "before" as const, key: `${p.key}|before` },
+    { place: p, period: "before" as const, key: p.key },
     { place: p, period: "from" as const, key: `${p.key}|from` },
   ]);
   const filledSplit = splitKeys.filter((k) => posValue(k.key));
   const splitOk = Boolean(changeMonth && changeYear) && filledSplit.length > 0 && filledSplit.every((k) => posAgainOk(k.key));
+  // Owner 25 Nov: a part's number is asked first (before any date question); one number when the part has no places.
+  const firstOk = positions ? positionsOk : Boolean(posValue("one")) && posAgainOk("one");
+  const secondOk =
+    Boolean(changeMonth && changeYear) &&
+    splitKeys.filter((k) => k.period === "from" && posValue(k.key)).length > 0 &&
+    splitKeys.filter((k) => k.period === "from").every((k) => posAgainOk(k.key));
   const canConfirm = Boolean(
     openUrl &&
       versionAnswered &&
       partFound === true &&
       datesOk === true &&
-      (split
-        ? splitOk && (positions || !side || sideOk === true)
-        : positions
-        ? positionsOk
+      (jobType === "part"
+        ? firstOk && changed !== null && (!split || (splitOk && secondOk)) && (positions || !side || sideOk === true)
         : Boolean(value) && againOk && (!side || sideOk === true)),
   );
   const numberPick = (k: string, testid: string) => (
@@ -756,91 +760,76 @@ function BrowserCheckCard({
             {yesNo(partFound, setPartFound, "q-part")}
           </div>
         ) },
-    ...(canSplit ? [{ id: "change", ok: !changed || Boolean(changeMonth && changeYear), node: (
-          <div className="flex w-full flex-col gap-2" data-testid="q-change">
-              <p>Look at the dates shown for this part. Is there one date range, or two?</p>
-              <p className="text-[13px]">Two looks like: 11.2016 – 11.2018 and 11.2018 – 09.2020.</p>
-              <div className="flex flex-wrap gap-2">
-                <PartsButton
-                  variant={!changed ? "primary" : "secondary"}
-                  className="!min-h-[32px]"
-                  onClick={() => setChanged(false)}
-                  data-testid="q-change-one"
-                >
-                  One
-                </PartsButton>
-                <PartsButton
-                  variant={changed ? "primary" : "secondary"}
-                  className="!min-h-[32px]"
-                  onClick={() => setChanged(true)}
-                  data-testid="q-change-split"
-                >
-                  Two
-                </PartsButton>
+    ...(jobType === "part"
+      ? [
+        { id: "numbers", ok: firstOk, node: (
+          <div className="flex w-full flex-col gap-3" data-testid={positions ? "q-positions" : "q-number"}>
+            <p>{positions ? "Type or tap the part number shown for each place:" : "Type or tap the part number shown:"}</p>
+            {(positions ?? [{ key: "one", axle: null, side: null, label: "" }]).map((p) => (
+              <div key={p.key} className="flex flex-col gap-1.5" data-testid={positions ? `q-position-${p.key}` : undefined}>
+                {p.label ? <span className="font-semibold">{p.label}:</span> : null}
+                {numberPick(p.key, positions ? "q-position" : "q")}
               </div>
-              {changed ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span>The second date range starts:</span>
-                  <select
-                    value={changeMonth || ""}
-                    onChange={(e) => setChangeMonth(Number(e.target.value) || 0)}
-                    className={`${input} !w-auto`}
-                    data-testid="q-change-month"
-                  >
-                    <option value="">Month</option>
-                    {MONTHS.map((m, i) => (
-                      <option key={m} value={i + 1}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={changeYear || ""}
-                    onChange={(e) => setChangeYear(Number(e.target.value) || 0)}
-                    className={`${input} !w-auto`}
-                    data-testid="q-change-year"
-                  >
-                    <option value="">Year</option>
-                    {changeYears.map((y) => (
-                      <option key={y} value={y}>
-                        {y}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
+            ))}
           </div>
-        ) }] : []),
-    split
-      ? { id: "numbers", ok: splitOk, node: (
-          <div className="flex w-full flex-col gap-3" data-testid="q-split">
-              <p>{positions ? "The part number for each place and date range:" : "The part number for each date range:"}</p>
-              {splitKeys.map((k) => (
+        ) },
+        { id: "change", ok: changed !== null, node: (
+          <div className="flex w-full flex-col gap-2" data-testid="q-change">
+            <p>Is there another part number for it, with different dates?</p>
+            <p className="text-[13px]">For example: one number for 11.2016 – 11.2018 and another for 11.2018 – 09.2020.</p>
+            {yesNo(changed, setChanged, "q-change")}
+          </div>
+        ) },
+        ...(split
+          ? [{ id: "second", ok: secondOk, node: (
+            <div className="flex w-full flex-col gap-3" data-testid="q-split">
+              <div className="flex flex-wrap items-center gap-2">
+                <span>The second number's dates start:</span>
+                <select
+                  value={changeMonth || ""}
+                  onChange={(e) => setChangeMonth(Number(e.target.value) || 0)}
+                  className={`${input} !w-auto`}
+                  data-testid="q-change-month"
+                >
+                  <option value="">Month</option>
+                  {MONTHS.map((m, i) => (
+                    <option key={m} value={i + 1}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={changeYear || ""}
+                  onChange={(e) => setChangeYear(Number(e.target.value) || 0)}
+                  className={`${input} !w-auto`}
+                  data-testid="q-change-year"
+                >
+                  <option value="">Year</option>
+                  {changeYears.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <p>{positions ? "The second part number for each place:" : "The second part number:"}</p>
+              {splitKeys.filter((k) => k.period === "from").map((k) => (
                 <div key={k.key} className="flex flex-col gap-1.5" data-testid={`q-split-${k.key}`}>
                   <span className="font-semibold">
-                    {k.place.label ? `${k.place.label}, built ` : "Built "}
-                    {k.period === "before" ? "before" : "from"} {changeText}:
+                    {k.place.label ? `${k.place.label}, from ` : "From "}
+                    {changeText}:
                   </span>
                   {numberPick(k.key, "q-split")}
                 </div>
               ))}
-          </div>
-        ) }
-      : positions
-      ? { id: "numbers", ok: positionsOk, node: (
-          <div className="flex w-full flex-col gap-3" data-testid="q-positions">
-              <p>The part number for each place:</p>
-              {positions.map((p) => (
-                <div key={p.key} className="flex flex-col gap-1.5" data-testid={`q-position-${p.key}`}>
-                  <span className="font-semibold">{p.label}:</span>
-                  {numberPick(p.key, "q-position")}
-                </div>
-              ))}
-          </div>
-        ) }
-      : { id: "numbers", ok: Boolean(value) && againOk, node: (
+            </div>
+          ) }]
+          : []),
+      ]
+      : [
+        { id: "numbers", ok: Boolean(value) && againOk, node: (
           <div className="flex w-full flex-col gap-2">
-              <p>{jobType === "part" ? "The part number shown:" : "The value shown:"}</p>
+              <p>The value shown:</p>
             {suggestions.length ? (
               <p className={`text-[13px] ${D_MUTED}`}>Roam's guesses. Tap one only if it's exactly what the site shows; otherwise type it.</p>
             ) : null}
@@ -891,6 +880,7 @@ function BrowserCheckCard({
             ) : null}
           </div>
         ) },
+      ]),
     { id: "dates", ok: datesOk === true, no: datesOk === false, node: (
           <div className="flex w-full flex-col gap-2">
             <p>
@@ -960,8 +950,8 @@ function BrowserCheckCard({
                   ...(split
                     ? {
                       changeAt: { month: changeMonth, year: changeYear },
-                      value: positions ? "" : posValue("one|before"),
-                      valueAgain: positions || pv("one|before").picked ? null : pv("one|before").again.trim(),
+                      value: positions ? "" : posValue("one"),
+                      valueAgain: positions || pv("one").picked ? null : pv("one").again.trim(),
                       valueFrom: positions ? null : posValue("one|from") || null,
                       valueFromAgain: positions || pv("one|from").picked ? null : pv("one|from").again.trim(),
                       positions: positions
@@ -975,8 +965,14 @@ function BrowserCheckCard({
                         : null,
                     }
                     : {
-                      value: positions ? "" : value,
-                      valueAgain: positions ? null : needsAgain ? typedAgain.trim() : null,
+                      value: positions ? "" : jobType === "part" ? posValue("one") : value,
+                      valueAgain: positions
+                        ? null
+                        : jobType === "part"
+                        ? pv("one").picked || !pv("one").typed.trim() ? null : pv("one").again.trim()
+                        : needsAgain
+                        ? typedAgain.trim()
+                        : null,
                       positions: positions
                         ? filledPositions.map((p) => ({
                           axle: p.axle,
