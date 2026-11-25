@@ -445,8 +445,11 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect(d.getByTestId("guide-find-part")).toContainText("Do you see PLUG, SPARK");
     await d.getByTestId("q-part-yes").click();
     await d.getByTestId("browser-check-next").click();
-    await d.getByTestId("browser-check-next").click();
     await d.getByTestId("q-suggestion").filter({ hasText: "00000-T0009" }).click();
+    await d.getByTestId("browser-check-next").click();
+    // The second-number question has no default answer.
+    await expect(d.getByTestId("browser-check-next")).toBeDisabled();
+    await d.getByTestId("q-change-no").click();
     await d.getByTestId("browser-check-next").click();
     await expect(d.getByTestId("browser-check-confirm")).toBeDisabled();
     await d.getByTestId("q-dates-yes").click();
@@ -476,7 +479,6 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect(d.getByTestId("copy-icon")).toHaveCount(2);
     await d.getByTestId("q-part-yes").click();
     await d.getByTestId("browser-check-next").click();
-    await d.getByTestId("browser-check-next").click();
     await expect(d.getByTestId("q-positions")).toContainText("Front left:");
     await expect(d.getByTestId("q-positions")).toContainText("Rear right:");
     await expect(d.getByTestId("copy-icon")).toHaveCount(12);
@@ -488,6 +490,8 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect(d.getByTestId("browser-check-next")).toBeDisabled();
     await d.getByTestId("q-position-rear-left").getByTestId("q-position-again").fill("00000-S0009");
     await shot(page, "19-four-corner-check");
+    await d.getByTestId("browser-check-next").click();
+    await d.getByTestId("q-change-no").click();
     await d.getByTestId("browser-check-next").click();
     await d.getByTestId("q-dates-yes").click();
     await d.getByTestId("browser-check-confirm").click();
@@ -524,20 +528,19 @@ test.describe("Research engine screens (layer 3)", () => {
     await d.getByTestId("browser-check-next").click();
     await d.getByTestId("q-part-yes").click();
     await d.getByTestId("browser-check-next").click();
-    await expect(d.getByTestId("q-change")).toContainText("Look at the dates shown for this part. Is there one date range, or two?");
-    await expect(d.getByTestId("q-change-one")).toHaveText("One");
-    await expect(d.getByTestId("q-change-split")).toHaveText("Two");
-    await d.getByTestId("q-change-split").click();
-    // Two needs the month and year before Next.
+    // The number first (owner, 25 Nov), then whether there is a second one.
+    await d.getByTestId("q-position-front-left").getByTestId("q-position-suggestion").filter({ hasText: "00000-S0002" }).click();
+    await d.getByTestId("browser-check-next").click();
+    await expect(d.getByTestId("q-change")).toContainText("Is there another part number for it, with different dates?");
+    await d.getByTestId("q-change-yes").click();
+    await d.getByTestId("browser-check-next").click();
+    // The second number needs its start month and year, and a number, before Next.
     await expect(d.getByTestId("browser-check-next")).toBeDisabled();
     await d.getByTestId("q-change-month").selectOption("11");
     await d.getByTestId("q-change-year").selectOption("2018");
-    await expect(d.getByTestId("q-change")).toContainText("The second date range starts:");
-    await d.getByTestId("browser-check-next").click();
-    await expect(d.getByTestId("q-positions")).toHaveCount(0);
-    await expect(d.getByTestId("q-split-front-left|before")).toContainText("Front left, built before Nov 2018:");
-    await expect(d.getByTestId("q-split-front-left|from")).toContainText("Front left, built from Nov 2018:");
-    await d.getByTestId("q-split-front-left|before").getByTestId("q-split-suggestion").filter({ hasText: "00000-S0002" }).click();
+    await expect(d.getByTestId("q-split")).toContainText("The second number's dates start:");
+    await expect(d.getByTestId("q-split-front-left|from")).toContainText("Front left, from Nov 2018:");
+    await expect(d.getByTestId("browser-check-next")).toBeDisabled();
     await d.getByTestId("q-split-front-left|from").getByTestId("q-split-value").fill("00000-S0012");
     await d.getByTestId("q-split-front-left|from").getByTestId("q-split-again").fill("00000-S0012");
     await d.getByTestId("browser-check-next").click();
