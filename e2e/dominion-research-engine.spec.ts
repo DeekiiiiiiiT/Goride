@@ -384,18 +384,31 @@ test.describe("Research engine screens (layer 3)", () => {
     const d = page.getByTestId("research-drawer");
     await expect(d.getByTestId("open-catalogue-page")).toHaveAttribute("href", "https://www.amayama.com/en/part/toyota/roomy-m900a");
     await expect(d.getByTestId("open-catalogue-page")).toContainText("Open Amayama");
+    // One step on screen at a time (owner, 25 Nov): Step 1 of N, no Back on the first step.
+    await expect(d.getByTestId("browser-check-step-count")).toContainText("Step 1 of");
+    await expect(d.getByTestId("browser-check-back")).toHaveCount(0);
+    await expect(d.getByTestId("q-part-yes")).toHaveCount(0);
+    await d.getByTestId("browser-check-next").click();
     // No remembered version: the row to click in the catalogue's own column words, never a frame code to read.
     await expect(d.getByTestId("browser-check-instruction")).toContainText("Click the row with:");
     await expect(d.getByTestId("guide-version-row")).toContainText("Engine: 1KRFE");
     await expect(d.getByTestId("guide-version-row")).toContainText("Prod period:");
     await expect(d.getByTestId("browser-check-counter")).toContainText("7 of 25");
-    await expect(d.getByTestId("browser-check-confirm")).toBeDisabled();
+    await expect(d.getByTestId("browser-check-next")).toBeDisabled();
     await d.getByTestId("q-version-code").fill("M900A-AGBVE");
+    await d.getByTestId("browser-check-next").click();
     await d.getByTestId("q-part-yes").click();
+    await d.getByTestId("browser-check-next").click();
     await d.getByTestId("q-value").fill("M-42");
     // Typed (not tapped) → typed twice.
+    await expect(d.getByTestId("browser-check-next")).toBeDisabled();
     await d.getByTestId("q-value-again").fill("M-42");
+    await d.getByTestId("browser-check-next").click();
     await expect(d.getByTestId("browser-check-confirm")).toBeDisabled();
+    // Back keeps the answers.
+    await d.getByTestId("browser-check-back").click();
+    await expect(d.getByTestId("q-value")).toHaveValue("M-42");
+    await d.getByTestId("browser-check-next").click();
     // A "No" stops Confirm and says what to do.
     await d.getByTestId("q-dates-no").click();
     await expect(d.getByTestId("q-no-hint")).toHaveText("Then press Not on this page.");
@@ -423,13 +436,18 @@ test.describe("Research engine screens (layer 3)", () => {
     await openParts(page);
     await page.getByTestId("parts-row").filter({ hasText: "Spark plugs" }).getByTestId("row-open-browser-check").click();
     const d = page.getByTestId("research-drawer");
+    await d.getByTestId("browser-check-next").click();
     await expect(d.getByTestId("browser-check-instruction")).toContainText("Check it's this one:");
     await expect(d.getByTestId("guide-version-row")).toContainText("Model: M900A-AGBVE");
+    await d.getByTestId("q-version-yes").click();
+    await d.getByTestId("browser-check-next").click();
     await expect(d.getByTestId("guide-find-part")).toContainText("Search spark plug");
     await expect(d.getByTestId("guide-find-part")).toContainText("Do you see PLUG, SPARK");
-    await d.getByTestId("q-version-yes").click();
     await d.getByTestId("q-part-yes").click();
+    await d.getByTestId("browser-check-next").click();
+    await d.getByTestId("browser-check-next").click();
     await d.getByTestId("q-suggestion").filter({ hasText: "00000-T0009" }).click();
+    await d.getByTestId("browser-check-next").click();
     await expect(d.getByTestId("browser-check-confirm")).toBeDisabled();
     await d.getByTestId("q-dates-yes").click();
     await d.getByTestId("browser-check-confirm").click();
@@ -449,22 +467,29 @@ test.describe("Research engine screens (layer 3)", () => {
     await page.getByTestId("parts-row").filter({ hasText: "Shock absorber" }).getByTestId("row-open-browser-check").click();
     const d = page.getByTestId("research-drawer");
     await expect(d.getByTestId("open-catalogue-page")).toContainText("Open Amayama");
+    await d.getByTestId("browser-check-next").click();
+    // Copy icons, step by step: Model + Engine, then the search words + row name, then every number in every place (3 × 4).
+    await expect(d.getByTestId("copy-icon")).toHaveCount(2);
+    await expect(d.getByRole("button", { name: "Copy M900A-AGBVE" })).toBeVisible();
+    await d.getByTestId("q-version-yes").click();
+    await d.getByTestId("browser-check-next").click();
+    await expect(d.getByTestId("copy-icon")).toHaveCount(2);
+    await d.getByTestId("q-part-yes").click();
+    await d.getByTestId("browser-check-next").click();
+    await d.getByTestId("browser-check-next").click();
     await expect(d.getByTestId("q-positions")).toContainText("Front left:");
     await expect(d.getByTestId("q-positions")).toContainText("Rear right:");
-    // Copy icons: Model, Engine, the search words, the row name, and every number in every place (3 × 4).
-    await expect(d.getByTestId("copy-icon")).toHaveCount(2 + 2 + 12);
-    await expect(d.getByRole("button", { name: "Copy M900A-AGBVE" })).toBeVisible();
+    await expect(d.getByTestId("copy-icon")).toHaveCount(12);
     await shot(page, "20-copy-icons");
-    await d.getByTestId("q-version-yes").click();
-    await d.getByTestId("q-part-yes").click();
     await d.getByTestId("q-position-front-left").getByTestId("q-position-suggestion").filter({ hasText: "00000-S0002" }).click();
     await d.getByTestId("q-position-front-right").getByTestId("q-position-suggestion").filter({ hasText: "00000-S0001" }).click();
     await d.getByTestId("q-position-rear-left").getByTestId("q-position-value").fill("00000-S0009");
-    await d.getByTestId("q-dates-yes").click();
-    // A typed number needs typing twice before Confirm.
-    await expect(d.getByTestId("browser-check-confirm")).toBeDisabled();
+    // A typed number needs typing twice before Next.
+    await expect(d.getByTestId("browser-check-next")).toBeDisabled();
     await d.getByTestId("q-position-rear-left").getByTestId("q-position-again").fill("00000-S0009");
     await shot(page, "19-four-corner-check");
+    await d.getByTestId("browser-check-next").click();
+    await d.getByTestId("q-dates-yes").click();
     await d.getByTestId("browser-check-confirm").click();
     await expect.poll(() => calls.find((c) => c.path === "/browser-checks/job-bcs/confirm")?.body).toEqual({
       url: "https://www.amayama.com/en/part/toyota/roomy-m900a-agbve",
@@ -494,21 +519,28 @@ test.describe("Research engine screens (layer 3)", () => {
     await openParts(page);
     await page.getByTestId("parts-row").filter({ hasText: "Shock absorber" }).getByTestId("row-open-browser-check").click();
     const d = page.getByTestId("research-drawer");
+    await d.getByTestId("browser-check-next").click();
+    await d.getByTestId("q-version-yes").click();
+    await d.getByTestId("browser-check-next").click();
+    await d.getByTestId("q-part-yes").click();
+    await d.getByTestId("browser-check-next").click();
     await expect(d.getByTestId("q-change")).toContainText("Under the part, how many different Period dates?");
     await expect(d.getByTestId("q-change-one")).toHaveText("One");
     await expect(d.getByTestId("q-change-split")).toHaveText("Two");
-    await d.getByTestId("q-version-yes").click();
-    await d.getByTestId("q-part-yes").click();
     await d.getByTestId("q-change-split").click();
-    await expect(d.getByTestId("q-positions")).toHaveCount(0);
+    // Two needs the month and year before Next.
+    await expect(d.getByTestId("browser-check-next")).toBeDisabled();
     await d.getByTestId("q-change-month").selectOption("11");
     await d.getByTestId("q-change-year").selectOption("2018");
     await expect(d.getByTestId("q-change")).toContainText("The second Period starts:");
+    await d.getByTestId("browser-check-next").click();
+    await expect(d.getByTestId("q-positions")).toHaveCount(0);
     await expect(d.getByTestId("q-split-front-left|before")).toContainText("Front left, built before Nov 2018:");
     await expect(d.getByTestId("q-split-front-left|from")).toContainText("Front left, built from Nov 2018:");
     await d.getByTestId("q-split-front-left|before").getByTestId("q-split-suggestion").filter({ hasText: "00000-S0002" }).click();
     await d.getByTestId("q-split-front-left|from").getByTestId("q-split-value").fill("00000-S0012");
     await d.getByTestId("q-split-front-left|from").getByTestId("q-split-again").fill("00000-S0012");
+    await d.getByTestId("browser-check-next").click();
     await expect(d.getByText("Do their dates together cover")).toBeVisible();
     await d.getByTestId("q-dates-yes").click();
     await shot(page, "21-changed-during-build");
@@ -544,7 +576,7 @@ test.describe("Research engine screens (layer 3)", () => {
     await page.getByTestId("parts-card").filter({ hasText: "Battery size" }).click();
     const d = page.getByTestId("research-drawer");
     await expect(d.getByTestId("open-catalogue-page")).toBeVisible();
-    await expect(d.getByTestId("q-part-yes")).toBeVisible();
+    await expect(d.getByTestId("browser-check-next")).toBeVisible();
     const box = await d.locator("aside").boundingBox();
     expect(box?.width).toBeGreaterThan(380);
     await shot(page, "18-phone-browser-check");
