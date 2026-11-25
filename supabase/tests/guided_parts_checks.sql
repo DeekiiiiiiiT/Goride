@@ -199,7 +199,7 @@ BEGIN
     ));
   END LOOP;
   -- Readiness is rebuilt in the background since 20261107142326; rebuild it here before reading.
-  REFRESH MATERIALIZED VIEW public.variant_parts_readiness;
+  PERFORM public.refresh_variant_parts_readiness_now();
   SELECT r.ready, r.cells->>'LGT-WIPER' INTO v_ready, v_cell
   FROM public.variant_parts_readiness r
   WHERE r.variant_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddd13';
