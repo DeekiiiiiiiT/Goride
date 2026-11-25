@@ -426,17 +426,30 @@ export function catalogueEngineCode(code: string | null | undefined): string {
   return String(code ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
-export type PartFinder = { search: string; rowName: string | null };
+/**
+ * `picture`: the catalogue picture to open after searching (Amayama shows pictures first). `rowContains`: the row name
+ * is only part of the catalogue's name ("ABSORBER SET, SHOCK, FRONT RH" contains "SHOCK, FRONT").
+ */
+export type PartFinder = { search: string; rowName: string | null; picture?: string | null; rowContains?: boolean };
 
 /**
  * What to type in a Japanese maker catalogue's search box (Toyota / Daihatsu / Lexus parts catalogues), and the row's
  * name there. Only names seen in those catalogues; other parts fall back to the part's own name.
  */
-export function partFinder(itemName: string, make: string | null | undefined): PartFinder {
+export function partFinder(itemName: string, make: string | null | undefined, fitDescriptor?: string | null): PartFinder {
   const n = itemName.toLowerCase();
   const japanese = /toyota|daihatsu|lexus/i.test(String(make ?? ""));
   const plain = { search: itemName.toLowerCase(), rowName: null };
   if (!japanese) return plain;
+  // Owner 25 Nov (Roomy): Amayama shows "Front spring & shock absorber" / "Rear spring & shock absorber" pictures, and
+  // the row reads "ABSORBER SET, SHOCK, FRONT RH" (SET or ASSY varies), so ask for the words every such row has.
+  if (/shock absorber|^shocks?$/.test(n)) {
+    const fit = String(fitDescriptor ?? "").toLowerCase();
+    const axle = fit.includes("rear") ? "Rear" : fit.includes("front") ? "Front" : null;
+    if (axle) {
+      return { search: "shock absorber", picture: `${axle} spring & shock absorber`, rowName: `SHOCK, ${axle.toUpperCase()}`, rowContains: true };
+    }
+  }
   // Parts that only sit near these (mounts, sensors, timing belts, A/C compressors…) get no row name: better none than wrong.
   if (/mount|sensor|switch|timing|compressor|bearing|hose|cover|bracket|gasket/.test(n)) return plain;
   if (/\bcabin\b|a\/c filter|air ?con(ditioning)? filter/.test(n)) return { search: "air filter", rowName: "ELEMENT, CLEAN AIR FILTER (or AIR REFINER)" };
