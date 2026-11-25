@@ -490,4 +490,14 @@ describe('ReconTollsV2Step', () => {
     expect(screen.queryByTestId('toll-v2-empty')).toBeNull();
     expect(screen.queryByTestId('toll-v2-weeks-error')).toBeNull();
   });
+
+  it('an empty week with the weeks list loaded still says "No tolls this week"', () => {
+    weeksOverview.takeBacks = [];
+    fetchDesk.mockReturnValue(
+      deskAug24Fixture({ charges: [], paybacks: [], kept: [], reviewPairs: [], blockers: [], late: [] }),
+    );
+    wrap(<ReconTollsV2Step weekKey="2026-08-24" summaryTarget={null} onGoToTagAccount={() => {}} />);
+    const card = screen.getByTestId('toll-v2-empty');
+    expect(card.textContent).toContain('No tolls this week');
+  });
 });

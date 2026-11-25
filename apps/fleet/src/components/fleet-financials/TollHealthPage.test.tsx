@@ -8,26 +8,33 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TollHealthPage, weekOpensAfter } from './TollHealthPage';
 import { TOLL_V2_NO_ACCESS_MESSAGE } from './recon/tolls-v2/tollV2ReadAccess';
 
+const metricsQueryState = vi.hoisted(() => ({ isError: false, isPending: false }));
+
 vi.mock('./recon/tolls-v2/useTollV2Metrics', async (importOriginal) => {
   const mod = await importOriginal<typeof import('./recon/tolls-v2/useTollV2Metrics')>();
   return {
     ...mod,
     useTollV2Metrics: () => ({
-      isLoading: false,
-      isError: false,
-      data: {
-        pendingCharges: { count: 3, amountMinor: 101500, oldestAt: new Date(Date.now() - 9 * 864e5).toISOString() },
-        unverifiedReceipts: { count: 0, amountMinor: 0 },
-        unallocatedPaybacks: { count: 1, amountMinor: 37000, oldestAt: new Date(Date.now() - 20 * 864e5).toISOString() },
-        afterSeal: { count: 0 },
-        reviewPairsOpen: 0,
-      },
+      isLoading: metricsQueryState.isPending,
+      isPending: metricsQueryState.isPending,
+      isError: metricsQueryState.isError,
+      data:
+        metricsQueryState.isError || metricsQueryState.isPending
+          ? undefined
+          : {
+              pendingCharges: { count: 3, amountMinor: 101500, oldestAt: new Date(Date.now() - 9 * 864e5).toISOString() },
+              unverifiedReceipts: { count: 0, amountMinor: 0 },
+              unallocatedPaybacks: { count: 1, amountMinor: 37000, oldestAt: new Date(Date.now() - 20 * 864e5).toISOString() },
+              afterSeal: { count: 0 },
+              reviewPairsOpen: 0,
+            },
     }),
   };
 });
 
 const weeksQueryState = vi.hoisted(() => ({
   isError: false,
+  isPending: false,
   error: null as unknown,
 }));
 
@@ -51,10 +58,11 @@ const weeksOverview = vi.hoisted(() => ({
 
 vi.mock('./recon/tolls-v2/useTollV2Weeks', () => ({
   useTollV2Weeks: () => ({
-    isLoading: false,
+    isLoading: weeksQueryState.isPending,
+    isPending: weeksQueryState.isPending,
     isError: weeksQueryState.isError,
     error: weeksQueryState.error,
-    data: weeksQueryState.isError ? undefined : weeksOverview,
+    data: weeksQueryState.isError || weeksQueryState.isPending ? undefined : weeksOverview,
   }),
 }));
 
@@ -66,7 +74,10 @@ function wrap(ui: React.ReactElement) {
 describe('TollHealthPage', () => {
   beforeEach(() => {
     weeksQueryState.isError = false;
+    weeksQueryState.isPending = false;
     weeksQueryState.error = null;
+    metricsQueryState.isError = false;
+    metricsQueryState.isPending = false;
   });
 
   it('renders Money › Tolls and metric tiles from fixtures', () => {
@@ -122,6 +133,28 @@ describe('TollHealthPage', () => {
     const weeks = screen.getByTestId('toll-health-weeks');
     expect(weeks.textContent).toContain("Couldn't load weeks");
     expect(weeks.textContent).not.toContain('13 tolls');
+  });
+
+  it('when the metrics read fails, every metric tile says unknown, never All clear', () => {
+    metricsQueryState.isError = true;
+    wrap(<TollHealthPage />);
+
+    for (const key of ['pending', 'receipts', 'paybacks', 'after-seal', 'dupes']) {
+      const tile = screen.getByTestId(`toll-health-tile-${key}`);
+      expect(tile.textContent).toContain('—');
+      expect(tile.textContent).not.toContain('All clear');
+    }
+    // The weeks read still worked, so the take-backs number is real and is not blanked out.
+    expect(screen.getByTestId('toll-health-tile-takebacks').textContent).toContain('1');
+  });
+
+  it('while the weeks list is loading, the take-backs tile is unknown, not All clear', () => {
+    weeksQueryState.isPending = true;
+    wrap(<TollHealthPage />);
+
+    const tile = screen.getByTestId('toll-health-tile-takebacks');
+    expect(tile.textContent).toContain('—');
+    expect(tile.textContent).not.toContain('All clear');
   });
 });
 

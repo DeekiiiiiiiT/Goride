@@ -28,6 +28,24 @@ describe('isTollReadAccessRefusal', () => {
     expect(isTollReadAccessRefusal({ code: 'PGRST301', message: 'JWT expired' })).toBe(false);
   });
 
+  it('P0001 BAD_REQUEST (a week key that is not a Monday) is not an access refusal', () => {
+    expect(
+      isTollReadAccessRefusal({
+        code: 'P0001',
+        message: 'BAD_REQUEST',
+        details: '{"week_key":"must be a Monday (ADR 0007)"}',
+      }),
+    ).toBe(false);
+  });
+
+  it('a P0001 command refusal is not an access refusal', () => {
+    expect(isTollReadAccessRefusal({ code: 'P0001', message: 'PENDING_NOT_RESOLVED' })).toBe(false);
+  });
+
+  it('P0001 with no message is not treated as an access refusal', () => {
+    expect(isTollReadAccessRefusal({ code: 'P0001' })).toBe(false);
+  });
+
   it('nothing to read is not an access refusal', () => {
     expect(isTollReadAccessRefusal(null)).toBe(false);
     expect(isTollReadAccessRefusal(undefined)).toBe(false);

@@ -88,6 +88,10 @@ export function TollHealthPage({
 
   const takeBackCount = weeksQ.data?.takeBacks?.length ?? 0;
   const openWeek = weeksQ.data?.openWeek ?? '';
+  // A tile is unknown whenever the read behind it has not answered (still loading or failed). Never show 0 —
+  // and never "All clear" — for a number we do not have.
+  const metricsUnknown = metricsQ.isError || metricsQ.isPending;
+  const weeksUnknown = weeksQ.isError || weeksQ.isPending;
 
   const tiles: TileSpec[] = useMemo(
     () => [
@@ -98,6 +102,7 @@ export function TollHealthPage({
         bucket: metricsQ.data?.pendingCharges,
         showAmount: true,
         openWeek,
+        unknown: metricsUnknown,
       },
       {
         key: 'receipts',
@@ -106,6 +111,7 @@ export function TollHealthPage({
         bucket: metricsQ.data?.unverifiedReceipts,
         showAmount: true,
         openWeek,
+        unknown: metricsUnknown,
       },
       {
         key: 'paybacks',
@@ -114,6 +120,7 @@ export function TollHealthPage({
         bucket: metricsQ.data?.unallocatedPaybacks,
         showAmount: true,
         openWeek,
+        unknown: metricsUnknown,
         footerHint: 'Confirm their matches in the week',
       },
       {
@@ -123,6 +130,7 @@ export function TollHealthPage({
         bucket: metricsQ.data?.afterSeal,
         showAmount: false,
         openWeek,
+        unknown: metricsUnknown,
       },
       {
         key: 'dupes',
@@ -131,6 +139,7 @@ export function TollHealthPage({
         countOverride: metricsQ.data?.reviewPairsOpen ?? 0,
         showAmount: false,
         openWeek,
+        unknown: metricsUnknown,
       },
       {
         key: 'takebacks',
@@ -139,11 +148,11 @@ export function TollHealthPage({
         countOverride: takeBackCount,
         showAmount: false,
         openWeek,
-        // The weeks read failed: how many take-backs there are is unknown, so never show 0.
-        unknown: weeksQ.isError,
+        // How many take-backs there are is unknown while the weeks read is loading or has failed.
+        unknown: weeksUnknown,
       },
     ],
-    [metricsQ.data, openWeek, takeBackCount, weeksQ.isError],
+    [metricsQ.data, openWeek, takeBackCount, metricsUnknown, weeksUnknown],
   );
 
   const nightly = weeksQ.data?.nightly;
