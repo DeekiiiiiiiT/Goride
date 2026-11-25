@@ -39,6 +39,15 @@ import { resolvePartsFitPairs } from "../../../packages/types/src/partsFitParam.
 import { readFleetPartLookup } from "./fleet_parts_lookup.ts";
 import { readBrakesOverview } from "./read_brakes_overview.ts";
 import { publicMediaUrl } from "../_shared/objectStorage/index.ts";
+import { isR2PrivateLinksEnabled, r2FromEnv, signFileLink } from "../_shared/objectStorage/index.ts";
+import { detectFileMagicBytes, extForMime } from "../_shared/fileMagic.ts";
+import {
+  buildLegacyPartsPhotoPath,
+  buildPartsPhotoR2Key,
+  PARTS_PHOTO_BUCKET,
+  PARTS_PHOTO_MAX_BYTES,
+  PARTS_PHOTO_MIMES,
+} from "./parts_request_photo_storage.ts";
 import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
 import { placeCodesFilterActive, splitPlacesForFind } from "./parts_finder.ts";
 export { splitPlacesForFind };
@@ -61,7 +70,6 @@ function errorText(error: unknown): string {
   return String(error);
 }
 
-const PHOTO_BUCKET = "parts-request-photos";
 const URGENCY = new Set(["low", "normal", "urgent", "within_24h"]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -668,10 +676,31 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       if (!photoFolderAllowed(orgId, folder)) return c.json({ error: "Wrong organization" }, 403);
       const file = form.get("file");
       if (!(file instanceof File)) return c.json({ error: "Choose a photo" }, 400);
-      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 80) || "photo";
-      const path = `${orgId}/${crypto.randomUUID()}-${safe}`;
       const bytes = new Uint8Array(await file.arrayBuffer());
-      const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, bytes, {
+
+      // Cloudflare R2 (roam-private/parts-requests/<org>/) when switched on. The answer is
+      // still one address per file, so the app needs no change. Without the switch the old
+      // Supabase upload below runs exactly as before.
+      if (isR2PrivateLinksEnabled()) {
+        const detected = detectFileMagicBytes(bytes);
+        if (!detected || !PARTS_PHOTO_MIMES.includes(detected)) {
+          return c.json({ error: "Choose a JPEG, PNG or WebP photo" }, 415);
+        }
+        if (bytes.byteLength > PARTS_PHOTO_MAX_BYTES) {
+          return c.json({ error: `Photo is larger than ${Math.round(PARTS_PHOTO_MAX_BYTES / (1024 * 1024))} MB` }, 413);
+        }
+        const key = buildPartsPhotoR2Key(orgId, extForMime(detected));
+        await r2FromEnv().put("private", key, bytes, detected, "private, no-store");
+        const linkUrl = await signFileLink({
+          key,
+          secret: Deno.env.get("FILE_LINK_SECRET") ?? "",
+          supabaseUrl: Deno.env.get("SUPABASE_URL") ?? "",
+        });
+        return c.json({ photo_url: linkUrl });
+      }
+
+      const path = buildLegacyPartsPhotoPath(orgId, file.name);
+      const { error } = await supabase.storage.from(PARTS_PHOTO_BUCKET).upload(path, bytes, {
         contentType: file.type || "image/jpeg",
         upsert: false,
       });
