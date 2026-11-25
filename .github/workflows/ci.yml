@@ -380,6 +380,7 @@ jobs:
           supabase/functions/_fleet-server/evidence_storage_r2.test.ts
           supabase/functions/_fleet-server/parts_request_photo_storage.test.ts
           supabase/functions/_fleet-server/parts_import_storage.test.ts
+          supabase/functions/delivery/merchant_asset_storage.test.ts
 
       - name: Deno test ledger read API parity
         run: >
