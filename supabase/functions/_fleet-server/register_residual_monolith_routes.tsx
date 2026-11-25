@@ -263,8 +263,15 @@ import {
   registerEvidenceFile,
   collectStoragePathsFromRecord,
   markEvidenceFilesDeleted,
+  buildR2UploadKey,
+  isR2EvidenceEnabled,
+  parseStoragePathFromUrl,
+  R2_PRIVATE_BUCKET_ID,
+  removeStoredFiles,
   type EvidenceType,
 } from "./evidence_storage.ts";
+import { r2FromEnv } from "../_shared/objectStorage/r2Client.ts";
+import { signFileLink } from "../_shared/objectStorage/fileLink.ts";
 import { ensureBucket } from "./storage_buckets.ts";
 import { detectFileMagicBytes, extForMime, IMAGE_AND_PDF_MIMES } from "./file_magic.ts";
 import { registerPendingVehicleCatalogRoutes } from "./pending_vehicle_catalog_routes.ts";
@@ -4936,18 +4943,50 @@ export function registerResidualMonolithRoutes(app: Hono) {
         }, 400);
       }
 
-      const bucketName = useEphemeral ? EPHEMERAL_EVIDENCE_BUCKET : "make-37f42386-docs";
-      await ensureBucket(
-        supabase,
-        useEphemeral ? "ephemeral-evidence" : "make-37f42386-docs",
-      );
-
       const buffer = new Uint8Array(await blob.arrayBuffer());
       const detected = detectFileMagicBytes(buffer);
       if (!detected || !IMAGE_AND_PDF_MIMES.has(detected)) {
         return c.json({ error: "File content does not match an allowed type" }, 400);
       }
       const fileExt = extForMime(detected);
+
+      // Cloudflare R2 (roam-private) when switched on (FILE_LINK_SECRET + R2 keys set).
+      // The answer is still one address per file, so the apps need no change.
+      if (isR2EvidenceEnabled()) {
+        const r2Key = buildR2UploadKey(
+          resolvedOrgId,
+          useEphemeral ? (evidenceType as EvidenceType) : null,
+          fileExt,
+        );
+        await r2FromEnv().put("private", r2Key, buffer, detected, "private, no-store");
+        const linkUrl = await signFileLink({
+          key: r2Key,
+          secret: Deno.env.get("FILE_LINK_SECRET") ?? "",
+          supabaseUrl: Deno.env.get("SUPABASE_URL") ?? "",
+        });
+        if (useEphemeral) {
+          await registerEvidenceFile(supabase, {
+            bucketId: R2_PRIVATE_BUCKET_ID,
+            storagePath: r2Key,
+            evidenceType: evidenceType as EvidenceType,
+            sourceType: sourceType as "transaction" | "fuel_entry" | "maintenance_log",
+            sourceId,
+            orgId: resolvedOrgId,
+            publicUrl: linkUrl,
+            parentStatus,
+            retentionClass: 'ephemeral',
+            fileSizeBytes: buffer.byteLength,
+            contentType: detected,
+          });
+        }
+        return c.json({ url: linkUrl });
+      }
+
+      const bucketName = useEphemeral ? EPHEMERAL_EVIDENCE_BUCKET : "make-37f42386-docs";
+      await ensureBucket(
+        supabase,
+        useEphemeral ? "ephemeral-evidence" : "make-37f42386-docs",
+      );
       const filePath = useEphemeral
         ? buildEphemeralStoragePath(resolvedOrgId, evidenceType as EvidenceType, fileExt)
         : `driver-docs/${crypto.randomUUID()}.${fileExt}`;
@@ -5916,13 +5955,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
           }
 
           let filesDeletedCount = 0;
-          const fileChunkSize = 50;
           for (const [bucketName, paths] of filesByBucket) {
-              for (let i = 0; i < paths.length; i += fileChunkSize) {
-                  const chunk = paths.slice(i, i + fileChunkSize);
-                  await supabase.storage.from(bucketName).remove(chunk);
-                  filesDeletedCount += chunk.length;
-              }
+              filesDeletedCount += (await removeStoredFiles(supabase, bucketName, paths)).removed;
           }
 
           const rbacUser = c.get('rbacUser') as { userId?: string; email?: string } | undefined;
@@ -6040,22 +6074,24 @@ export function registerResidualMonolithRoutes(app: Hono) {
 
       // Execute Deletion
       const keysToDelete = candidates.map(c => c.key);
-      const filesToDelete: string[] = [];
+      const filesByBucketForDelete = new Map<string, string[]>();
       candidates.forEach(c => {
           const url = c.data.receiptUrl || c.data.invoiceUrl;
-          if (url && typeof url === 'string' && url.includes('make-37f42386-docs')) {
-               const parts = url.split('make-37f42386-docs/');
-               if (parts.length > 1) filesToDelete.push(parts[1].split('?')[0]);
+          const parsed = typeof url === 'string' ? parseStoragePathFromUrl(url) : null;
+          if (parsed && (parsed.bucket === 'make-37f42386-docs' || parsed.bucket === R2_PRIVATE_BUCKET_ID)) {
+               const list = filesByBucketForDelete.get(parsed.bucket) || [];
+               list.push(parsed.path);
+               filesByBucketForDelete.set(parsed.bucket, list);
           }
       });
+      const filesToDelete = [...filesByBucketForDelete.values()].flat();
 
       if (keysToDelete.length > 0) {
           for (let i = 0; i < keysToDelete.length; i += 100) await kv.mdel(keysToDelete.slice(i, i + 100));
       }
 
-      if (filesToDelete.length > 0) {
-          const bucketName = "make-37f42386-docs";
-          for (let i = 0; i < filesToDelete.length; i += 50) await supabase.storage.from(bucketName).remove(filesToDelete.slice(i, i + 50));
+      for (const [bucketName, paths] of filesByBucketForDelete) {
+          await removeStoredFiles(supabase, bucketName, paths);
       }
 
       return c.json({ success: true, deletedCount: keysToDelete.length, filesDeletedCount: filesToDelete.length });
@@ -13459,7 +13495,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
       }
 
       const CHUNK_SIZE = 100;
-      const FILE_CHUNK_SIZE = 50;
       const filesByBucket = new Map<string, string[]>();
 
       for (let i = 0; i < keys.length; i += CHUNK_SIZE) {
@@ -13494,14 +13529,10 @@ export function registerResidualMonolithRoutes(app: Hono) {
         allPaths.push(...paths);
       }
       for (const [bucket, paths] of filesByBucket) {
-        for (let i = 0; i < paths.length; i += FILE_CHUNK_SIZE) {
-          const fileChunk = paths.slice(i, i + FILE_CHUNK_SIZE);
-          try {
-            await supabase.storage.from(bucket).remove(fileChunk);
-            filesDeletedCount += fileChunk.length;
-          } catch (storageErr: any) {
-            console.log(`bulk-delete-execute: storage cleanup warning (non-fatal): ${storageErr.message}`);
-          }
+        const res = await removeStoredFiles(supabase, bucket, paths);
+        filesDeletedCount += res.removed;
+        for (const msg of res.errors) {
+          console.log(`bulk-delete-execute: storage cleanup warning (non-fatal): ${msg}`);
         }
       }
       if (cleanupStorage && allPaths.length) {

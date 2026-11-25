@@ -10,6 +10,8 @@ import {
   isEvidenceTtlEnabled,
   markEvidenceFilesDeleted,
   parseStoragePathFromUrl,
+  R2_PRIVATE_BUCKET_ID,
+  removeStoredFiles,
   runEvidenceCleanup,
   scheduleEvidenceDeletion,
   storagePathsFromUrls,
@@ -78,7 +80,7 @@ export function registerEvidenceRoutes(
         const { data: sizeRows } = await supabase
           .from("evidence_files")
           .select("metadata")
-          .eq("bucket_id", EPHEMERAL_EVIDENCE_BUCKET)
+          .in("bucket_id", [EPHEMERAL_EVIDENCE_BUCKET, R2_PRIVATE_BUCKET_ID])
           .is("deleted_at", null)
           .limit(5000);
         for (const row of sizeRows || []) {
@@ -242,12 +244,15 @@ export async function cleanupEphemeralPathsOnDelete(
 ): Promise<number> {
   if (!isEvidenceTtlEnabled() || !urls.length) return 0;
   const ephemeral = storagePathsFromUrls(urls).filter(
-    (p) => p.bucket === EPHEMERAL_EVIDENCE_BUCKET,
+    (p) => p.bucket === EPHEMERAL_EVIDENCE_BUCKET || p.bucket === R2_PRIVATE_BUCKET_ID,
   );
   if (!ephemeral.length) return 0;
-  const paths = ephemeral.map((p) => p.path);
-  for (let i = 0; i < paths.length; i += FILE_CHUNK) {
-    await supabase.storage.from(EPHEMERAL_EVIDENCE_BUCKET).remove(paths.slice(i, i + FILE_CHUNK));
+  const paths: string[] = [];
+  for (const bucket of [EPHEMERAL_EVIDENCE_BUCKET, R2_PRIVATE_BUCKET_ID]) {
+    const inBucket = ephemeral.filter((p) => p.bucket === bucket).map((p) => p.path);
+    if (!inBucket.length) continue;
+    await removeStoredFiles(supabase, bucket, inBucket);
+    paths.push(...inBucket);
   }
   await markEvidenceFilesDeleted(supabase, paths);
   return paths.length;

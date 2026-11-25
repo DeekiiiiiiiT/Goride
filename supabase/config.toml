@@ -487,6 +487,11 @@ verify_jwt = false
 [functions.fleet-picture-cron]
 verify_jwt = false
 
+# Private R2 files (receipts, invoices, driver docs) open from signed links in plain <img> tags, so no login here.
+# The signature + expiry are the lock; it redirects to a 10-minute R2 link.
+[functions.file-link]
+verify_jwt = false
+
 [functions.catalog-research]
 verify_jwt = false
 

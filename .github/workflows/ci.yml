@@ -321,6 +321,7 @@ jobs:
           supabase/functions/_shared/objectStorage/
           supabase/functions/_shared/vehiclePictures/
           supabase/functions/_fleet-server/catalog_maker_logo_routes.test.ts
+          supabase/functions/_fleet-server/evidence_storage_r2.test.ts
 
       - name: Deno test ledger read API parity
         run: >
