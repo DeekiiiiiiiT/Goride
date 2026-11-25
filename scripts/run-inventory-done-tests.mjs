@@ -167,16 +167,16 @@ async function main() {
   assertLocalDatabaseUrl();
   const started = Date.now();
 
+  // fleet-core/index.ts is a git-ignored bundle. Build it BEFORE `supabase start`:
+  // the CLI reads every function in config.toml at start and fails with
+  // "failed to read file: open supabase/functions/fleet-core/index.ts" on a fresh checkout.
+  run('node', ['scripts/build-edge-bundle.mjs', 'fleet-core']);
   run('npx', ['supabase', 'start', '-x', SUPABASE_START_EXCLUDE]);
   run('npx', ['supabase', 'db', 'reset']);
   run('node', ['scripts/bootstrap-inventory-local-db.mjs'], {
     env: { INVENTORY_TEST_ORG_ID: process.env.INVENTORY_TEST_ORG_ID || 'test-org-inv' },
   });
   run('node', ['scripts/seed-inventory-done-tests.mjs', 'reset']);
-
-  // fleet-core/index.ts is a git-ignored bundle — without this build the function
-  // doesn't exist on a fresh checkout (404 "Function not found").
-  run('node', ['scripts/build-edge-bundle.mjs', 'fleet-core']);
 
   killFunctionsServe();
   // One serve process for all functions: a second `functions serve` replaces the first,
