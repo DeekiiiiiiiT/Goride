@@ -137,22 +137,15 @@ and show as **Closed**.
 ## 3. Open work, in order
 
 1. **Sources decision** (§1). Nothing else in the "more sources" area until the owner picks.
-2. **Ship the 25 Nov build round** (branch only, nothing live). Tell the owner first. From a worktree off origin/main
-   with the research commits only; then hand-run the two migrations on live, each with its logbook line:
-   - Screens: `a6878354` missing dates named · `61fdf293` one step per side + "Same as" · `7cccb5ab` any front/rear
-     part names its section · `701b523b` Settings jobs a day + cap ceiling (RE-37, RE-50).
-   - Server: `f0f200e2` RE-41 (no counts from `/admin/catalog/signals`, Added panel wording), RE-45
-     (`GET /admin/catalog-research/health`, 503 when the database can't be read), RE-55 (proof keeps the car's own
-     engine row), RE-59 (pasted part evidence drops prices) · `701b523b` server refuses a cap above US$21.
-   - CI: `74874e87` RE-40 research screens in their own job (`research-engine-ui`).
-   - Migration `20261125150531_readiness_table_rebuild.sql` (`8728b54f`): `variant_parts_readiness` becomes a plain
-     table rebuilt from `private.variant_parts_readiness_rows()`, writing only changed rows (readers never locked);
-     both cron jobs `SET statement_timeout = '10min'`; Confirmed specs only (RE-05, 0 rows differ today). Takes ~3 min
-     (the first fill); run it with a 10-minute limit, not through the MCP (its HTTP call times out at ~2 min). Dry-run
-     on live 25 Nov: halves checked separately, both rolled back. After: check the 03:30 run in
-     `cron.job_run_details` succeeds.
-   - Migration `20261125151043_owner_browser_checks_set_by_owner.sql` (`e6fa2cd6`): RE-58, browser-check saves are
-     `trust_set_by = 'owner'` (evidence reads kept); fixes the 4 listings so far. Dry-run on live rolled back: 4 fixed.
+2. **25 Nov build round: LIVE** on main `86b9db1a` (pushed from a worktree, research commits only). Both migrations
+   hand-run on live with logbook lines: `20261125150531` (readiness table, ~3 min; committed via the CLI even though its
+   HTTP call timed out at 100 s; result checked: 2,679 rows, RLS on, service_role only, both crons `SET statement_timeout
+   = 10min`) and `20261125151043` (RE-58: 4 listings now `owner`, function patched). Edge deploy green
+   (platform-catalog), Dominion Vercel Ready, Supabase function tests green, Parts SQL checks green after `86b9db1a`
+   (two SQL tests still refreshed the old materialized view), new `research-engine-ui` CI job green.
+   **Watch:** the first catch-up rebuild (flag set 25 Nov 15:42 UTC) and the 26 Nov 03:30 nightly in
+   `cron.job_run_details` should both succeed. Roomy cells after the rebuild: FILT-AIR, HVAC-CABIN, ENG-THERM, BELT-SERP
+   "missing" — FILT-AIR is odd (engine air filter 17801-21060 was confirmed 21 Nov); look at why it doesn't count.
 3. **RE-64 reconsidered (no change):** Amayama's `M900A-AGBVE` is the catalogue's own code (kept as the remembered
    version, which research uses). `vehicle_catalog.full_model_code` `DBA-M900A-GBME` may be the code on the car's own
    papers, and Fleet matching reads it, so it isn't overwritten. Change it only after a Roomy's papers are checked.
