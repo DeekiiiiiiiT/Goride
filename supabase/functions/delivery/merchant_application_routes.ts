@@ -28,6 +28,13 @@ import {
 import { resolveMerchantAccess, requireResolvedMerchantWithPermission } from "./merchantAuth.ts";
 import { findPendingInviteForEmail } from "./merchantTeam.ts";
 import { seedVenueOpsFromBusinessType } from "./merchantVenueOps.ts";
+import {
+  buildScannedDocKey,
+  isScannedDocOnR2,
+  isScannedR2Enabled,
+  putScannedDoc,
+  signScannedDocUrl,
+} from "../_shared/objectStorage/scannedPurposes.ts";
 import { assertCanEnableAcceptingOrders } from "./merchantPayoutGate.ts";
 import { suggestMarketIdForMerchantPin } from "./admin/coverageZones.ts";
 import { requireServiceKey, publicApiKey } from "../_shared/serviceKey.ts";
@@ -693,19 +700,38 @@ export function registerMerchantApplicationRoutes(app: Hono) {
       return c.json({ error: scan.reason || "This file failed a security scan and was not uploaded." }, 422);
     }
 
-    // Deliberate: upsert by docType — latest file wins (path is merchant/docType-timestamp)
+    // Deliberate: latest file wins per docType (the row is upserted below either way)
     const ext = extForMime(detected);
-    const storagePath = `${merchant.id}/${docType}-${Date.now()}.${ext}`;
     const storage = getStorageSupabase();
 
-    const { error: uploadError } = await storage.storage
-      .from("merchant-documents")
-      .upload(storagePath, buffer, {
-        contentType: detected,
-        upsert: true,
+    // Cloudflare R2 (roam-private/merchant-kyc/<merchant>/<docType>-<uuid>.<ext>) only when the
+    // scanned-purpose switch is on — that switch also requires MALWARE_SCAN_API_KEY, so without
+    // the key this route behaves exactly as before.
+    let storagePath: string;
+    if (isScannedR2Enabled()) {
+      storagePath = buildScannedDocKey({
+        purpose: "merchant-kyc",
+        scopeId: String(merchant.id),
+        ext,
+        label: docType,
       });
-    if (uploadError) {
-      return c.json({ error: uploadError.message }, 500);
+      try {
+        await putScannedDoc(storagePath, buffer, detected);
+      } catch (e) {
+        // Same answer shape as a failed Supabase upload.
+        return c.json({ error: e instanceof Error ? e.message : "Upload failed" }, 500);
+      }
+    } else {
+      storagePath = `${merchant.id}/${docType}-${Date.now()}.${ext}`;
+      const { error: uploadError } = await storage.storage
+        .from("merchant-documents")
+        .upload(storagePath, buffer, {
+          contentType: detected,
+          upsert: true,
+        });
+      if (uploadError) {
+        return c.json({ error: uploadError.message }, 500);
+      }
     }
 
     const serviceSb = getServiceSupabase();
@@ -1088,6 +1114,14 @@ export async function extendAdminMerchantDetail(
   const docsWithUrls = await Promise.all(
     (documents || []).map(async (doc: Record<string, unknown>) => {
       const filePath = doc.file_path as string;
+      // New KYC rows store a roam-private key; older ones a path in the old bucket.
+      if (isScannedDocOnR2("merchant-kyc", filePath)) {
+        try {
+          return { ...doc, signedUrl: await signScannedDocUrl(filePath, 3600) };
+        } catch {
+          return { ...doc, signedUrl: null };
+        }
+      }
       const { data: signed } = await storage.storage
         .from("merchant-documents")
         .createSignedUrl(filePath, 3600);

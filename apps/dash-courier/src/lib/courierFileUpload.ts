@@ -1,6 +1,9 @@
+import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 import { supabase } from '@/lib/supabase';
+import { normalizeStoragePath } from '@/lib/normalizeStoragePath';
 
 const BUCKET = 'courier-documents';
+const BASE = API_ENDPOINTS.delivery;
 
 async function getUserId(): Promise<string | null> {
   const {
@@ -9,13 +12,91 @@ async function getUserId(): Promise<string | null> {
   return session?.user?.id ?? null;
 }
 
-import { normalizeStoragePath } from '@/lib/normalizeStoragePath';
+type StartedUpload = {
+  enabled: true;
+  uploadUrl: string;
+  headers: Record<string, string>;
+  ticket: string;
+};
+
+/**
+ * Ask our server for a one-time R2 upload link (courier docs are scanned before they are kept).
+ * Returns null when the switch is off, the route is not deployed yet or the network failed — the
+ * caller then keeps the old direct Supabase upload.
+ */
+async function startScannedUpload(contentType: string, size: number): Promise<StartedUpload | null> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.access_token) return null;
+  try {
+    const res = await fetch(`${BASE}/scanned-documents/start`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        apikey: publicAnonKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ purpose: 'courier-docs', contentType, size }),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as {
+      enabled?: boolean;
+      uploadUrl?: string;
+      headers?: Record<string, string>;
+      ticket?: string;
+    };
+    if (!body.enabled || !body.uploadUrl || !body.ticket) return null;
+    return { enabled: true, uploadUrl: body.uploadUrl, headers: body.headers ?? {}, ticket: body.ticket };
+  } catch {
+    return null;
+  }
+}
+
+/** Store the file on R2 and return the address to save. Null means the upload failed. */
+async function uploadScanned(file: File, started: StartedUpload): Promise<string | null> {
+  try {
+    const put = await fetch(started.uploadUrl, {
+      method: 'PUT',
+      headers: { 'content-type': started.headers['content-type'] ?? file.type ?? 'image/jpeg' },
+      body: file,
+    });
+    if (!put.ok) return null;
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.access_token) return null;
+    const res = await fetch(`${BASE}/scanned-documents/finish`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        apikey: publicAnonKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ticket: started.ticket }),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { address?: string; key?: string };
+    return body.address || body.key || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function uploadAndGetProofUrl(
   file: File,
   folder: 'proofs' | 'issues' | 'docs' | 'vehicles' | 'avatars' = 'proofs',
 ): Promise<string | null> {
   const userId = await getUserId();
   if (!userId) return null;
+
+  // Only identity documents take the virus-scanned R2 path (when the server switches it on).
+  // Delivery proofs, issue, profile and vehicle photos never wait on the scanner: they keep the
+  // old upload below until their own unscanned slice moves them.
+  if (folder === 'docs') {
+    const started = await startScannedUpload(file.type || 'image/jpeg', file.size);
+    if (started) return uploadScanned(file, started);
+  }
 
   const ext = file.name.split('.').pop() || 'jpg';
   const path = `${userId}/${folder}/${crypto.randomUUID()}.${ext}`;
