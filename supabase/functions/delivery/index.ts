@@ -3273,6 +3273,7 @@ app.post("/merchant/notifications/:id/read", async (c) => {
 
 import { registerMerchantApplicationRoutes } from "./merchant_application_routes.ts";
 import { registerMerchantAssetsRoutes } from "./merchantAssetsUpload.ts";
+import { registerScannedDocumentRoutes } from "./scannedDocumentRoutes.ts";
 import { registerPartnerBusinessTypeRoutes } from "./admin/onboardingConfigRoutes.ts";
 import { registerDashboardAdminRoutes } from "./admin/dashboardRoutes.ts";
 import { registerCourierAdminRoutes } from "./admin/courierRoutes.ts";
@@ -3532,6 +3533,7 @@ registerAppConfigRoutes(app, { getServiceSupabase });
 registerBankPayoutRoutes(app, { getSupabase });
 registerMerchantApplicationRoutes(app);
 registerMerchantAssetsRoutes(app);
+registerScannedDocumentRoutes(app, { getSupabase });
 registerMerchantTeamRoutes(app, { getSupabase, getServiceSupabase });
 registerMerchantStationRoutes(app, { getSupabase, getServiceSupabase });
 registerMerchantVenueOpsRoutes(app, { getSupabase, getServiceSupabase });
