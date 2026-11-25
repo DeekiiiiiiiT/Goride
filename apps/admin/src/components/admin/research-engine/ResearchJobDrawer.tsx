@@ -720,14 +720,14 @@ function BrowserCheckCard({
         ) },
     { id: "part", ok: partFound === true, no: partFound === false, node: (
           <div className="flex w-full flex-col gap-2" data-testid="guide-find-part">
-            {jobType === "part" && finder.picture ? (
+            {jobType === "part" && finder.section ? (
               <ul className="flex flex-col gap-1.5">
                 <li>
                   Search <span className="font-semibold">{finder.search}</span>
                   <CopyIcon text={finder.search} />
                 </li>
-                <li data-testid="guide-picture">
-                  Open the picture <span className="font-semibold">{finder.picture}</span>
+                <li data-testid="guide-section">
+                  Open the section for the <span className="font-semibold">{finder.section}</span>
                 </li>
                 <li>
                   Do you see a row with <span className="font-semibold">{finder.rowName}</span> in its name?
@@ -754,7 +754,7 @@ function BrowserCheckCard({
         ) },
     ...(canSplit ? [{ id: "change", ok: !changed || Boolean(changeMonth && changeYear), node: (
           <div className="flex w-full flex-col gap-2" data-testid="q-change">
-              <p>Look at the Period column under the part. Is there one date range, or two?</p>
+              <p>Look at the dates shown for this part. Is there one date range, or two?</p>
               <p className="text-[13px]">Two looks like: 11.2016 – 11.2018 and 11.2018 – 09.2020.</p>
               <div className="flex flex-wrap gap-2">
                 <PartsButton
