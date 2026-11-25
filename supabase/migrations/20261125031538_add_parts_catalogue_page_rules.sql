@@ -220,7 +220,3 @@ GRANT EXECUTE ON FUNCTION public.save_self_serve_catalog_page(jsonb) TO service_
 -- The link-hints signature changed; tell PostgREST to reload its function cache.
 NOTIFY pgrst, 'reload schema';
 
--- Logbook line: the owner applies migrations in the SQL editor, which never records them.
-INSERT INTO supabase_migrations.schema_migrations (version, name)
-VALUES ('20261125031538', 'add_parts_catalogue_page_rules')
-ON CONFLICT (version) DO NOTHING;
