@@ -1,5 +1,6 @@
 /**
- * Enterprise org Files — upload to enterprise-freight-docs + freight.org_files registry.
+ * Enterprise org Files — upload to enterprise-freight-docs (or roam-private when the R2 switch is
+ * on) + freight.org_files registry.
  */
 import { serviceClient } from "../_shared/enterpriseAccess.ts";
 import {
@@ -7,8 +8,20 @@ import {
   extForMime,
   IMAGE_AND_PDF_MIMES,
 } from "../_shared/fileMagic.ts";
+import {
+  buildFreightDocR2Key,
+  FREIGHT_DOCS_BUCKET,
+  FREIGHT_DOCS_LINK_SECONDS,
+  isFreightDocOnR2,
+  isR2FreightDocsEnabled,
+  legacyFreightDocPath,
+  putFreightDoc,
+  R2_PRIVATE_BUCKET_ID,
+  removeFreightDoc,
+  signFreightDocUrl,
+} from "./freight_docs_storage.ts";
 
-export const ORG_FILES_BUCKET = "enterprise-freight-docs";
+export const ORG_FILES_BUCKET = FREIGHT_DOCS_BUCKET;
 export const ORG_FILE_KINDS = [
   "pod",
   "invoice",
@@ -99,28 +112,43 @@ export async function uploadOrgFile(
 
   const ext = extForMime(detected);
   const id = crypto.randomUUID();
-  const storagePath = `${input.organizationId}/${input.kind}/${id}.${ext}`;
+  // Cloudflare R2 (freight-docs/<org>/<kind>/<uuid>.<ext>) when switched on. Same checks and
+  // same answer as before; only where the bytes live changes.
+  const useR2 = isR2FreightDocsEnabled();
+  const storagePath = useR2
+    ? buildFreightDocR2Key(input.organizationId, input.kind, ext)
+    : legacyFreightDocPath(input.organizationId, input.kind, ext, id);
+  const bucketId = useR2 ? R2_PRIVATE_BUCKET_ID : ORG_FILES_BUCKET;
   const fileName =
     (input.fileName && input.fileName.trim()) ||
     input.file.name ||
     `${input.kind}.${ext}`;
 
   const svc = serviceClient();
-  const { error: uploadError } = await svc.storage
-    .from(ORG_FILES_BUCKET)
-    .upload(storagePath, buffer, {
-      contentType: detected,
-      upsert: false,
-    });
-  if (uploadError) {
-    return { ok: false, status: 500, error: uploadError.message };
+  if (useR2) {
+    try {
+      await putFreightDoc(storagePath, buffer, detected);
+    } catch (e) {
+      // Same answer shape as a failed Supabase upload; callers don't catch throws.
+      return { ok: false, status: 500, error: e instanceof Error ? e.message : "Upload failed" };
+    }
+  } else {
+    const { error: uploadError } = await svc.storage
+      .from(ORG_FILES_BUCKET)
+      .upload(storagePath, buffer, {
+        contentType: detected,
+        upsert: false,
+      });
+    if (uploadError) {
+      return { ok: false, status: 500, error: uploadError.message };
+    }
   }
 
   const { data, error } = await freightDb()
     .from("org_files")
     .insert({
       organization_id: input.organizationId,
-      bucket_id: ORG_FILES_BUCKET,
+      bucket_id: bucketId,
       storage_path: storagePath,
       file_name: fileName.slice(0, 500),
       content_type: detected,
@@ -134,7 +162,7 @@ export async function uploadOrgFile(
     .single();
 
   if (error || !data) {
-    await svc.storage.from(ORG_FILES_BUCKET).remove([storagePath]);
+    await removeFreightDoc(svc, bucketId, storagePath);
     return { ok: false, status: 500, error: error?.message || "Failed to register file" };
   }
 
@@ -153,11 +181,14 @@ export async function registerOrgFile(input: {
   uploadedBy?: string | null;
   byteSize?: number | null;
 }): Promise<UploadOrgFileResult> {
+  // A caller may hand us a key that already lives in roam-private; mark the row so reads and
+  // deletes go to the right place.
+  const onR2 = isFreightDocOnR2(null, input.storagePath);
   const { data, error } = await freightDb()
     .from("org_files")
     .insert({
       organization_id: input.organizationId,
-      bucket_id: ORG_FILES_BUCKET,
+      bucket_id: onR2 ? R2_PRIVATE_BUCKET_ID : ORG_FILES_BUCKET,
       storage_path: input.storagePath,
       file_name: input.fileName.slice(0, 500),
       content_type: input.contentType || null,
@@ -217,10 +248,22 @@ export async function getOrgFile(
   return (data as OrgFileRow | null) ?? null;
 }
 
+/**
+ * Read link for one stored document. Rows in roam-private get a short-lived R2 link;
+ * rows written before the switch keep the Supabase signed URL.
+ */
 export async function signedOrgFileUrl(
   file: OrgFileRow,
-  expiresIn = 3600,
+  expiresIn: number = FREIGHT_DOCS_LINK_SECONDS,
 ): Promise<{ url: string } | { error: string }> {
+  if (isFreightDocOnR2(file.bucket_id, file.storage_path)) {
+    try {
+      return { url: await signFreightDocUrl(file.storage_path, expiresIn) };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : "Could not create signed URL" };
+    }
+  }
+
   const { data, error } = await serviceClient().storage
     .from(file.bucket_id || ORG_FILES_BUCKET)
     .createSignedUrl(file.storage_path, expiresIn);
@@ -250,9 +293,8 @@ export async function deleteOrgFile(
     .eq("organization_id", organizationId);
   if (softErr) return { ok: false, status: 500, error: softErr.message };
 
-  await serviceClient().storage
-    .from(file.bucket_id || ORG_FILES_BUCKET)
-    .remove([file.storage_path]);
+  // Row is soft-deleted first, then the bytes go (R2 or the old bucket).
+  await removeFreightDoc(serviceClient(), file.bucket_id, file.storage_path);
 
   // Clear POD photo pointers that reference this storage path
   await freightDb()
