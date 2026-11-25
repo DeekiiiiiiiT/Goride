@@ -554,7 +554,7 @@ test.describe("Research engine screens (layer 3)", () => {
     await fl.getByTestId("q-row-to-month").selectOption("11");
     await fl.getByTestId("q-row-to-year").selectOption("2018");
     // The first number stops in Nov 2018: Roam says the dates don't cover the build, and Confirm waits.
-    await expect(fl.getByTestId("q-cover")).toContainText("These dates don't cover your car's whole build");
+    await expect(fl.getByTestId("q-cover")).toContainText("Missing: 12.2018 – 12.2020");
     await expect(d.getByTestId("browser-check-confirm")).toBeDisabled();
     await fl.getByTestId("q-add-number").click();
     await expect(fl.getByTestId("q-row")).toHaveCount(2);

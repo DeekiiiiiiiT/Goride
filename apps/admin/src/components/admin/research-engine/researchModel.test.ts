@@ -250,3 +250,16 @@ describe("numbers list dates (owner 25 Nov)", () => {
     expect(rowCheck({ ...EMPTY_ROW_DATES, none: true }, roomy)).toBe("ok");
   });
 });
+
+import { missingRanges, monthIndexText } from "./researchModel";
+
+describe("missing dates (owner 25 Nov)", () => {
+  const roomy = buildRange({ production_start_year: 2016, production_start_month: 11, production_end_year: 2020, production_end_month: 8 } as never);
+  const m = (y: number, mo: number) => y * 12 + mo;
+  it("names the gap before a later number, a gap at the end, and nothing when covered", () => {
+    expect(missingRanges([{ from: m(2018, 11), to: m(2020, 9) }], roomy).map((g) => `${monthIndexText(g.from)} – ${monthIndexText(g.to)}`)).toEqual(["11.2016 – 10.2018"]);
+    expect(missingRanges([{ from: m(2016, 11), to: m(2018, 11) }], roomy).map((g) => `${monthIndexText(g.from)} – ${monthIndexText(g.to)}`)).toEqual(["12.2018 – 08.2020"]);
+    expect(missingRanges([{ from: m(2016, 11), to: m(2018, 11) }, { from: m(2018, 11), to: m(2020, 9) }], roomy)).toEqual([]);
+    expect(monthIndexText(m(2020, 12))).toBe("12.2020");
+  });
+});

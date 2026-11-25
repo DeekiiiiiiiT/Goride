@@ -34,6 +34,8 @@ import {
   buildDates,
   buildRange,
   EMPTY_ROW_DATES,
+  missingRanges,
+  monthIndexText,
   rangesCoverBuild,
   rowCheck,
   rowSpan,
@@ -610,7 +612,12 @@ function BrowserCheckCard({
       filled.length > 0 && valid && dated.length === filled.length
         ? rangesCoverBuild(dated.map((k) => rowSpan(rdOf(k))!), build)
         : null;
-    return { place: p, keys, filled, valid, covered, undated: filled.length - dated.length, rowState };
+    // Owner 25 Nov: say which part of the build no number covers yet.
+    const missing =
+      covered === false
+        ? missingRanges(dated.map((k) => rowSpan(rdOf(k))!), build).map((g) => `${monthIndexText(g.from)} – ${monthIndexText(g.to)}`)
+        : [];
+    return { place: p, keys, filled, valid, covered, missing, undated: filled.length - dated.length, rowState };
   });
   const anyFilled = placeStates.some((s) => s.filled.length > 0);
   const numbersOk = anyFilled && placeStates.every((s) => s.valid && s.covered !== false);
@@ -893,8 +900,8 @@ function BrowserCheckCard({
                   ) : null}
                   {s.covered === false ? (
                     <p className="font-medium text-[#a83836]" data-testid="q-cover">
-                      These dates don&apos;t cover your car&apos;s whole build ({dates}). Add the number for the missing dates, or press
-                      Not on this page.
+                      Missing: {s.missing.join(", ")}. Your car was built {dates}; add the number for those dates, or press Not on
+                      this page.
                     </p>
                   ) : null}
                 </div>
