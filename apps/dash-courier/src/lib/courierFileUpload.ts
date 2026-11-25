@@ -15,12 +15,15 @@ async function getUserId(): Promise<string | null> {
 }
 
 /**
- * Identity documents ('docs') go through the scanned purpose; every other photo (delivery proofs,
- * issue photos, avatars, vehicle photos) goes through the unscanned one, so a proof never waits on
- * a virus check. Both are private R2 files behind a signed address.
+ * Identity documents ('docs') go through the scanned purpose; profile/vehicle photos go through
+ * the public one, because those addresses are saved once and shown indefinitely (the media
+ * address never expires); delivery proofs and issue photos go through the private unscanned one,
+ * so a proof never waits on a virus check.
  */
-function purposeForFolder(folder: CourierFolder): 'courier-docs' | 'courier-photos' {
-  return folder === 'docs' ? 'courier-docs' : 'courier-photos';
+function purposeForFolder(folder: CourierFolder): 'courier-docs' | 'courier-profile' | 'courier-photos' {
+  if (folder === 'docs') return 'courier-docs';
+  if (folder === 'avatars' || folder === 'vehicles') return 'courier-profile';
+  return 'courier-photos';
 }
 
 type StartedUpload = {

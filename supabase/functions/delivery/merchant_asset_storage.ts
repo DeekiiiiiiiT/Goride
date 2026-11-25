@@ -13,8 +13,7 @@
  * the route keeps the old Supabase upload exactly as it was.
  * docs/cloudflare-r2-storage-migration-audit.md §0, slice 3.
  */
-import { isR2PrivateLinksEnabled } from "../_shared/objectStorage/fileLink.ts";
-import { publicMediaUrl } from "../_shared/objectStorage/index.ts";
+import { isR2PublicAssetsEnabled as sharedPublicAssetsEnabled, publicMediaUrl } from "../_shared/objectStorage/index.ts";
 import { UPLOAD_PURPOSES } from "../_shared/objectStorage/purposes.ts";
 import { assertSafeKey, r2FromEnv } from "../_shared/objectStorage/r2Client.ts";
 import { extForMime } from "../_shared/objectStorage/contentCheck.ts";
@@ -36,7 +35,8 @@ export { R2_PUBLIC_BUCKET_ID };
 export function isR2PublicAssetsEnabled(
   env: (name: string) => string | undefined = (n) => Deno.env.get(n),
 ): boolean {
-  return isR2PrivateLinksEnabled(env) && !!env("R2_PUBLIC_BASE_URL")?.trim();
+  // One definition for every public purpose lives in the shared module.
+  return sharedPublicAssetsEnabled(env);
 }
 
 function safeSegment(value: string | null | undefined): string {
