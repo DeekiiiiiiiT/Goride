@@ -40,7 +40,8 @@ is open.
 
 The owner is working through the **Toyota Roomy 2016–2020 2WD** (catalogue row
 `3cd9cbf3-a804-4817-82db-400cf6abf13a`, Amayama version `M900A-AGBVE`).
-**Confirmed so far:** spark plugs 90048-51216, engine air filter 17801-21060 (plus brakes from earlier work).
+**Confirmed so far:** spark plugs 90048-51216, engine air filter 17801-21060, brakes (earlier), and **rear shocks** (25 Nov,
+first save from the new screen; checked on live: 48530-B9285 rear both sides `yearTo 2018`, 48530-B9165 `yearFrom 2018`).
 The 5 rows closed on 21 Nov now show **Closed** on the owner's screen (RE-73 checked 25 Nov).
 
 **Browser check rebuilt on 25 Nov (owner asked, step by step).** Commits on the branch: `b9053b63` … `eab98416`.
@@ -55,12 +56,10 @@ The 5 rows closed on 21 Nov now show **Closed** on the owner's screen (RE-73 che
   red only on the old find-parts visual test (§3 item 9, not research).
 
 **Next for the owner** (Pending catalog → Parts, refresh first):
-1. **Shock absorber, Rear.** Both sides: 48530-B9285 dates 11.2016 – 11.2018, then Add another number 48530-B9165
-   dates 11.2018 – 09.2020.
-2. **Shock absorber, Front.** Front left 48520-B9285 (11.2016 – 11.2018) + 48520-B9115 (11.2018 – 09.2020); front
+1. **Shock absorber, Front.** Front left 48520-B9285 (11.2016 – 11.2018) + 48520-B9115 (11.2018 – 09.2020); front
    right 48510-B9285 + 48510-B9115, same dates.
-3. **Cabin A/C Filter** (one number, its dates).
-4. Then the 6 **Needs review** rows (coolant, tyre size, H4 bulb, thermostat, wheel bearing, drive belt): no source, so
+2. **Cabin A/C Filter** (one number, its dates).
+3. Then the 6 **Needs review** rows (coolant, tyre size, H4 bulb, thermostat, wheel bearing, drive belt): no source, so
    browser check or reject. Never "Looks right" on an unsourced row.
 
 **Decision waiting on the owner: sources (no more scraping shops).** Amayama, Partsouq and SB Parts block robots on
@@ -138,8 +137,8 @@ and show as **Closed**.
 ## 3. Open work, in order
 
 1. **Sources decision** (§1). Nothing else in the "more sources" area until the owner picks.
-2. **First real save from the new screen:** after the owner confirms the rear shock, check the listings on live
-   carry the years per number (48530-B9285 up to 2018, 48530-B9165 from 2018) and the evidence text.
+2. **Ship to the live website:** `a6878354` (names the missing dates) and `61fdf293` (one step per side with how-to +
+   "Same as") are on the branch only. Screen-only; server unchanged. Tell the owner first.
 3. Only shocks have a front/rear section in `partFinder`; other parts with places (brakes, bearings) still use the
    plain "Do you see …?" line. Add them when the owner checks one.
 4. **Small fixes (one round):** health route `GET /admin/catalog-research/health` (RE-45); research screen test in its
