@@ -578,3 +578,14 @@ Deno.test("RE-59: pasted text loses prices, keeps dates, part numbers and sizes"
   assertEquals(withoutPrices("90041-79333 M8 11.2016 - 09.2020 02 1.49 $1,204.50 USD 3"), "90041-79333 M8 11.2016 - 09.2020 02");
   assertEquals(withoutPrices("Price from, USD 4.63 · 165/65R14 · 0.8 mm"), "Price from, · 165/65R14 · 0.8 mm");
 });
+
+import { confirmedPartKind } from "./research_browser_check.ts";
+
+Deno.test("Owner 25 Nov: a number confirmed on the car maker's catalogue is the car maker's OEM part", () => {
+  // The engine had suggested it as aftermarket (17801-21060 on the Roomy): the car maker's page wins.
+  assertEquals(confirmedPartKind(true, "Toyota", { brand: "Toyota", match_kind: "aftermarket" }), { brand: "Toyota", matchKind: "oem" });
+  assertEquals(confirmedPartKind(true, "Toyota", null), { brand: "Toyota", matchKind: "oem" });
+  // A part maker's page keeps the suggestion's brand and kind.
+  assertEquals(confirmedPartKind(false, "Toyota", { brand: "NiBK", match_kind: "aftermarket" }), { brand: "NiBK", matchKind: "aftermarket" });
+  assertEquals(confirmedPartKind(false, "Toyota", null), { brand: "Toyota", matchKind: "oem" });
+});

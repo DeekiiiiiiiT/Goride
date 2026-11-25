@@ -10,6 +10,7 @@ import { closeJobNotFound } from "./catalog_research_not_found.ts";
 import {
   answersGate,
   browserCheckGate,
+  confirmedPartKind,
   type CarBuild,
   type CheckAnswers,
   type PositionItem,
@@ -256,6 +257,11 @@ export function registerResearchEngineRoutes(
       return row.kind === "part_maker" || (row.kind === "car_maker" && String(row.maker_norm ?? "").toLowerCase() === make);
     });
     if (!allowed) return c.json({ error: "That page isn't on a trusted catalogue for this car. Use the Open page button." }, 400);
+    // The car maker's own catalogue for this car: its numbers are the car maker's parts (OEM).
+    const carMakerPage = (trusted ?? []).some((t) => {
+      const row = t as { kind: string; maker_norm: string | null };
+      return row.kind === "car_maker" && String(row.maker_norm ?? "").toLowerCase() === make;
+    });
 
     // RE-68: the owner answers the check's questions (new screen); pasted text (older screen) still works.
     let detected = "";
@@ -431,14 +437,15 @@ export function registerResearchEngineRoutes(
       const { data: existingRows } = await supabase.from("catalog_part_proposal").select("id, brand, part_name, match_kind")
         .eq("job_id", jobId).eq("part_number_norm", norm).order("created_at").limit(1);
       const existing = (existingRows ?? [])[0] as { brand?: string; part_name?: string; match_kind?: string } | undefined;
+      const kind = confirmedPartKind(carMakerPage, ctx.car.make, existing);
       const { data: prop, error } = await supabase.from("catalog_part_proposal").upsert({
         job_id: jobId,
-        brand: existing?.brand ?? ctx.car.make ?? "OEM",
+        brand: kind.brand,
         part_number: g.number,
         part_number_norm: norm,
         part_name: existing?.part_name ?? comp?.name ?? "Part",
         position_key: positionKey,
-        match_kind: existing?.match_kind ?? "oem",
+        match_kind: kind.matchKind,
         trust_route: "owner_browser",
         evidence_read_ids: [readId],
         fits: { listings },

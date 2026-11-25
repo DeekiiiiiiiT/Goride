@@ -584,6 +584,23 @@ export function withoutPrices(text: string): string {
     .trim();
 }
 
+/**
+ * Owner 25 Nov: brand and kind for a number the owner confirmed in a browser check. On the car maker's own catalogue
+ * the number is the car maker's part (OEM), whatever the engine's earlier suggestion said (17801-21060 was saved as
+ * "aftermarket" and so never counted for readiness). On a part maker's page the suggestion's brand and kind stand.
+ */
+export function confirmedPartKind(
+  carMakerPage: boolean,
+  carMake: string | null | undefined,
+  existing: { brand?: string | null; match_kind?: string | null } | null | undefined,
+): { brand: string; matchKind: string } {
+  if (carMakerPage) return { brand: String(carMake ?? "").trim() || "OEM", matchKind: "oem" };
+  return {
+    brand: String(existing?.brand ?? "").trim() || String(carMake ?? "").trim() || "OEM",
+    matchKind: String(existing?.match_kind ?? "").trim() || "oem",
+  };
+}
+
 export function lineNamesCar(line: string, identity: string[]): boolean {
   const upper = line.toUpperCase();
   return identity.some((t) => t.trim().length >= 2 && containsToken(upper, t));
