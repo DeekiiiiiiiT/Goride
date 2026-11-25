@@ -1,8 +1,31 @@
 # Cloudflare R2 storage takeover — plan
 
-**Rev 2 · 16 Nov 2026** — replaces the Rev 1 team-review draft.
+**Rev 3 · 24 Nov 2026** — status checked on production; evidence slice built. (Rev 2, 16 Nov, replaced the Rev 1 team-review draft.)
 **Decision:** Cloudflare R2 stores and serves **every** file. Supabase keeps the database, logins and server functions only. No files stay on Supabase Storage.
 **Related:** [storage-audit.md](./storage-audit.md) — upload security rules that carry over unchanged.
+
+---
+
+## 0. START HERE (24 Nov 2026)
+
+**Where we are:** M1 and M2 done. M3 has 3 of ~12 slices: maker logos (live), vehicle pictures + certificates (live, own audit), and **evidence uploads (built 24 Nov, not live)**. M4–M7 not started.
+
+**Production check (24 Nov):** 427 files still in Supabase Storage (~180 MB): `ephemeral-evidence` 313 (50 MB, **12 new in the last 7 days**, the only bucket still growing), `make-37f42386-docs` 61 (125 MB), `merchant-assets` 23, `parts-imports` 17, `enterprise-freight-docs` 5, `courier-documents` 4, `merchant-documents` 3, `in-house-receipts` 1. `make-37f42386-vehicles` is empty (vehicle pictures audit).
+
+**Evidence slice (built 24 Nov, on `parts-auto-match`, not pushed):**
+- The Fleet / Driver / Dominion `/upload` route keeps its answer: one address per file. The apps don't change.
+- When switched on, the file goes to `roam-private` (`evidence/<org>/<type>/<uuid>.<ext>`, or `fleet-docs/<org>/driver-docs/<uuid>.<ext>` for permanent docs). The address is a **signed link** to the new `file-link` function (`verify_jwt = false`, because receipts show in plain `<img>` tags). It checks the signature and the 1-year expiry, then redirects to a 10-minute R2 link, so the bytes never pass through Supabase. Same trust model as the 1-year Supabase signed URLs it replaces.
+- **Switch:** the Supabase secret `FILE_LINK_SECRET` (plus the R2 keys, already set). Without it, uploads keep going to Supabase exactly as before, so deploying is safe.
+- `evidence_files.bucket_id = 'r2:private'` for these rows. The 14-day purge, record delete and both bulk deletes now delete from R2 too (`removeStoredFiles`).
+- Code: `_shared/objectStorage/fileLink.ts`, `supabase/functions/file-link/`, `_fleet-server/evidence_storage.ts`, `evidence_routes.ts`, the `/upload` route in `register_residual_monolith_routes.tsx`. Added to config.toml, the edge deploy list and the CI R2 test step.
+- **Proof:** 37 Deno tests pass (6 new link tests, 5 new evidence tests). Against the real R2: put → signed link → `file-link` run locally → 302 to R2 → same bytes; tampered link 404, expired 410, unsigned R2 request 400; test files removed.
+
+**Go-live for the evidence slice (in this order):**
+1. Push (deploys fleet-core + `file-link`; the config.toml change redeploys all functions). Nothing changes yet.
+2. Set the Supabase secret `FILE_LINK_SECRET` (64 random hex characters). From then on, new receipts go to R2.
+3. Real check: log one fuel receipt in Fleet. It shows on screen; `evidence_files` has a row with `bucket_id = 'r2:private'`; no new row in `storage.objects` for `ephemeral-evidence`.
+
+**Next slices (M3), in this order:** parts request photos (`fleet_find_parts_routes.ts`) → parts imports → merchant assets (public) → in-house receipts → customer avatars + issue photos → freight docs → courier docs, driver docs, merchant KYC (these three need `MALWARE_SCAN_API_KEY` first) → explorer, refinery sources. The courier and hauler apps upload straight to Supabase today and need the start/finish flow (`uploadToStorage`). Then M4 (copy the 427 old files), M5 (rewrite stored addresses, including old evidence links), M6, M7.
 
 ---
 
@@ -163,11 +186,11 @@ No code anywhere else calls `supabase.storage` after cutover. A CI check fails t
 | Step | What | Done when |
 |---|---|---|
 | **M1** | Create `roam-public` and `roam-private`, the API token, CORS, lifecycle rules, and `media.roamfleet.co` with its cache rule. Add the 4 secrets. | A test file uploads with a presigned link and opens from `media.roamfleet.co` with a cache HIT on the second load. |
-| | *16 Nov status:* **done** — both buckets (Eastern North America, Standard); `roam-server` account token (Object Read & Write, both buckets only); `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` in Supabase; roamfleet.co added to Cloudflare (Free), apex + www kept **DNS only** (Vercel), GoDaddy nameservers → `finley` / `sharon.ns.cloudflare.com`. **Done since:** zone Active, `media.roamfleet.co` connected (Active, answers from Cloudflare), CORS on both buckets, `pending/` 1-day rule. **Left:** `R2_PUBLIC_BASE_URL` secret. No rule on `parts-imports/`: Parts import still lets staff download a batch's source file at any time (`parts_import_routes.ts` download route), and the files are tiny. | |
+| | *16 Nov status:* **done** — both buckets (Eastern North America, Standard); `roam-server` account token (Object Read & Write, both buckets only); `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` in Supabase; roamfleet.co added to Cloudflare (Free), apex + www kept **DNS only** (Vercel), GoDaddy nameservers → `finley` / `sharon.ns.cloudflare.com`. **Done since:** zone Active, `media.roamfleet.co` connected (Active, answers from Cloudflare), CORS on both buckets, `pending/` 1-day rule. **Done 17 Nov:** `R2_PUBLIC_BASE_URL` set (vehicle pictures go-live). No rule on `parts-imports/`: Parts import still lets staff download a batch's source file at any time (`parts_import_routes.ts` download route), and the files are tiny. | |
 | **M2** | Build `objectStorage.ts` and the upload / finish / download routes. Add photo shrinking to every app upload. | Unit tests pass for presign, magic-byte rejection, prefix scoping and fail-closed virus scan. |
 | | *16 Nov status:* **code done** (§3.7). 24 Deno + 5 vitest tests pass. Not yet run against live R2: the first real upload is the first M3 route. | |
 | **M3** | Switch **all new uploads** to R2, bucket by bucket, in the §4 order. Reads check R2 first, then Supabase. | No new objects appear in `storage.objects` for 48 hours. |
-| | *16 Nov status — slice 1, maker logos:* **code done, not deployed.** Dominion "Edit maker" logo upload now uses `POST …/admin/catalog/makers/:make/logo/start` + `/finish` ([catalog_routes.ts](../supabase/functions/_fleet-server/catalog_routes.ts)), browser PUTs straight to R2, key saved in `catalog_maker.logo_storage_path` (`catalogue/logos/platform/<id>.<ext>`), the previous logo is deleted. The old multipart route that wrote to Supabase is removed. Reads: Dominion [MakerLogo.tsx](../apps/admin/src/components/admin/vehicle-catalog/MakerLogo.tsx) and Fleet `GET …/parts/catalog-makers` build `media.roamfleet.co` addresses. No fallback is needed: 0 of 56 makers had a logo. Tests: [catalog_maker_logo_routes.test.ts](../supabase/functions/_fleet-server/catalog_maker_logo_routes.test.ts) (in CI), admin typecheck 0 errors. **Live proof after deploy:** upload one logo in Dominion → it shows in Dominion and in Fleet Find parts, and the file is in `roam-public/catalogue/logos/platform/`. | |
+| | *24 Nov status:* logos **live** (in `3b9c9805`, 17 Nov); vehicle pictures + certificates **live** (own audit); evidence **built, not live** (§0). *16 Nov note — slice 1, maker logos:* Dominion "Edit maker" logo upload now uses `POST …/admin/catalog/makers/:make/logo/start` + `/finish` ([catalog_routes.ts](../supabase/functions/_fleet-server/catalog_routes.ts)), browser PUTs straight to R2, key saved in `catalog_maker.logo_storage_path` (`catalogue/logos/platform/<id>.<ext>`), the previous logo is deleted. The old multipart route that wrote to Supabase is removed. Reads: Dominion [MakerLogo.tsx](../apps/admin/src/components/admin/vehicle-catalog/MakerLogo.tsx) and Fleet `GET …/parts/catalog-makers` build `media.roamfleet.co` addresses. No fallback is needed: 0 of 56 makers had a logo. Tests: [catalog_maker_logo_routes.test.ts](../supabase/functions/_fleet-server/catalog_maker_logo_routes.test.ts) (in CI), admin typecheck 0 errors. **Live proof after deploy:** upload one logo in Dominion → it shows in Dominion and in Fleet Find parts, and the file is in `roam-public/catalogue/logos/platform/`. | |
 | **M4** | Copy the 413 existing files to their new keys with a one-off script (list → download → upload → compare size and count). | The R2 count matches 413 and every size matches. |
 | **M5** | One migration rewrites every database column that holds a Supabase storage path or URL to the new key. Find them by searching all text columns for `/storage/v1/object/` and the bucket names. | A search for `/storage/v1/object/` across all tables returns 0 rows. |
 | **M6** | Remove the Supabase fallback read. Add the CI check that blocks `storage.from(`. | Every screen with images or documents loads correctly on live with the fallback removed. |

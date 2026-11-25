@@ -17,6 +17,15 @@ export {
   StorageFlowError,
 } from "./uploadFlow.ts";
 export type { FinishedUpload, FlowDeps, ObjectStore, StartUploadResult } from "./uploadFlow.ts";
+export {
+  FILE_LINK_FUNCTION,
+  FILE_LINK_SECONDS,
+  keyFromFileLink,
+  R2_PRIVATE_BUCKET_ID,
+  signFileLink,
+  verifyFileLink,
+} from "./fileLink.ts";
+export type { FileLinkCheck } from "./fileLink.ts";
 
 /** Live dependencies from function secrets. */
 export function storageDepsFromEnv(): FlowDeps {
