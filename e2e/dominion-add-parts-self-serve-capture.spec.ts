@@ -66,21 +66,10 @@ async function shot(page: Page, folder: string, name: string, dark: boolean) {
 }
 
 async function scrollPhoneStep3ForProof(page: Page) {
-  await page.locator(".catalog-parts-mobile-bar").waitFor({ state: "visible", timeout: 60_000 });
-  const lastCard = page.locator(".catalog-parts-mobile-stack article").last();
-  await lastCard.waitFor({ state: "visible", timeout: 60_000 });
-  await lastCard.scrollIntoViewIfNeeded();
-  await page.evaluate(() => {
-    const bar = document.querySelector(".catalog-parts-mobile-bar");
-    const cards = document.querySelectorAll(".catalog-parts-mobile-stack article");
-    const last = cards[cards.length - 1];
-    if (!last || !bar) return;
-    const barTop = bar.getBoundingClientRect().top;
-    const lastBottom = last.getBoundingClientRect().bottom;
-    if (lastBottom > barTop - 8) {
-      window.scrollBy(0, lastBottom - barTop + 12);
-    }
-  });
+  // The redesigned Step 3 has one card per part (article "Part N") and no separate phone bar.
+  const cards = page.locator('.catalog-add-parts article[aria-label^="Part "]');
+  await cards.first().waitFor({ state: "visible", timeout: 60_000 });
+  await cards.last().scrollIntoViewIfNeeded();
   await page.waitForTimeout(200);
 }
 
