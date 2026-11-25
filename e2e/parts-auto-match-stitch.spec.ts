@@ -358,6 +358,11 @@ async function captureDominionScreenState(
   }
 }
 
+/** Pending catalog page with its "Auto-match conflicts" tab selected (Research engine Stitch, pending_catalog). */
+function conflictsTabSelected(page: import("@playwright/test").Page) {
+  return page.getByRole("tab", { name: /Auto-match conflicts/, selected: true });
+}
+
 function isDominionProject(projectName: string) {
   return projectName === "dominion-admin";
 }
@@ -411,8 +416,12 @@ test.describe("Dominion parts auto-match Stitch fidelity", () => {
 
   test("AM-S5 pending catalog auto-match conflicts", async ({ page }) => {
     await page.goto("/?page=pending-motor-vehicles&tab=conflicts");
-    await expect(page.getByRole("heading", { name: "Auto-match conflicts" })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("Automated cross-reference discrepancies", { exact: false })).toBeVisible();
+    // Research engine Stitch (pending_catalog) replaced the old AM-S5 page header: one "Pending catalog"
+    // header for the whole page, with "Auto-match conflicts" as its selected tab.
+    await expect(conflictsTabSelected(page)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: "Pending catalog" })).toBeVisible();
+    await expect(page.getByText("What Roam is researching, and what needs you.")).toBeVisible();
+    await expect(page.locator(".auto-match-conflicts-workspace")).toBeVisible();
     await expect(page.getByText("Same number, two parts").first()).toBeVisible();
     await expect(page.getByText("Toyota Roomy M900A").first()).toBeVisible();
     await assertNoForbidden(page, AM_DOMINION_FORBIDDEN, page.locator(".parts-database-stitch").first());
@@ -676,7 +685,7 @@ test.describe("Dominion AM screen states (light)", () => {
       "AM-S5",
       "loading",
       async () => { await page.goto("/?page=pending-motor-vehicles&tab=conflicts"); },
-      page.getByRole("heading", { name: "Auto-match conflicts" }),
+      conflictsTabSelected(page),
       "loading",
     );
     await captureDominionScreenState(
@@ -692,7 +701,7 @@ test.describe("Dominion AM screen states (light)", () => {
       "AM-S5",
       "error",
       async () => { await page.goto("/?page=pending-motor-vehicles&tab=conflicts"); },
-      page.getByRole("heading", { name: "Auto-match conflicts" }),
+      conflictsTabSelected(page),
       "error",
     );
   });
@@ -728,7 +737,7 @@ test.describe("Dominion AM screen states (light)", () => {
 dominionDescribe("empty", "Dominion auto-match empty states", () => {
   test("AM-S5 conflicts list can be empty", async ({ page }) => {
     await page.goto("/?page=pending-motor-vehicles&tab=conflicts");
-    await expect(page.getByRole("heading", { name: "Auto-match conflicts" })).toBeVisible({ timeout: 30_000 });
+    await expect(conflictsTabSelected(page)).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Open (0)")).toBeVisible();
     await expect(page.getByText("What Keep does")).toHaveCount(0);
   });
