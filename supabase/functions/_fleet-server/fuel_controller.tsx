@@ -3843,23 +3843,53 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
         !isDriverSubmitter && String(entry.metadata?.importSource || "") === "jaa_raw";
       const accepted = entry.metadata?.plausibilityAccepted === true;
       let previousOdometer = 0;
+      let nextOdometer = 0;
       const peerPrices: number[] = [];
       let duplicateOdometer = false;
       if (entry.vehicleId) {
         const { data: peers, error: peerError } = await getServiceClient()
           .from("fleet_fuel_entries")
-          .select("odometer, amount, liters")
+          .select("odometer, amount, liters, date, time:payload_json->>time")
           .eq("vehicle_id", String(entry.vehicleId))
           .order("date", { ascending: false })
           .limit(30);
         if (peerError) {
           console.warn("[fuel] peer fill lookup failed", peerError.message);
         }
+        // Compare only with fills made before this one, and check it is not
+        // above a fill made after it. A fill logged late (e.g. 7 AM entered
+        // after a 10 AM fill) must not be judged against the later reading.
+        // Day lives in `date`, clock time in payload `time`. Same day with an
+        // unknown time is not counted: we can't tell which fill came first.
+        const fillWhen = (date: unknown, time: unknown) => {
+          const raw = String(date || "");
+          const day = raw.slice(0, 10);
+          const clock = String(time || "").trim() || (raw.length > 10 ? raw.slice(11, 19) : "");
+          const m = clock.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+          return {
+            day,
+            clock: m ? `${m[1].padStart(2, "0")}:${m[2]}:${m[3] || "00"}` : "",
+          };
+        };
+        const entryWhen = fillWhen(entry.date, entry.time);
         for (const row of peers || []) {
           const odo = Number(row.odometer) || 0;
           const liters = Number(row.liters) || 0;
           const amount = Number(row.amount) || 0;
-          if (odo > previousOdometer) previousOdometer = odo;
+          const rowWhen = fillWhen(row.date, (row as { time?: unknown }).time);
+          const isBefore =
+            !entryWhen.day || !rowWhen.day
+              ? true
+              : rowWhen.day !== entryWhen.day
+                ? rowWhen.day < entryWhen.day
+                : Boolean(rowWhen.clock && entryWhen.clock && rowWhen.clock < entryWhen.clock);
+          const isAfter =
+            Boolean(entryWhen.day && rowWhen.day) &&
+            (rowWhen.day !== entryWhen.day
+              ? rowWhen.day > entryWhen.day
+              : Boolean(rowWhen.clock && entryWhen.clock && rowWhen.clock > entryWhen.clock));
+          if (isBefore && odo > previousOdometer) previousOdometer = odo;
+          if (isAfter && odo > 0 && (nextOdometer === 0 || odo < nextOdometer)) nextOdometer = odo;
           if (odo > 0 && odo === Number(entry.odometer)) duplicateOdometer = true;
           if (liters > 0 && amount > 0) peerPrices.push(amount / liters);
         }
@@ -3869,6 +3899,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
         liters: Number(entry.liters) || 0,
         odometer: Number(entry.odometer) || 0,
         previousOdometer,
+        nextOdometer,
         tankCapacityLiters: tank,
         peerPrices,
         duplicateOdometer,
