@@ -11,6 +11,8 @@ on:
       - 'packages/platform-ops-ui/src/places/**'
       - 'apps/admin/src/components/admin/places/**'
       - 'apps/admin/src/components/admin/fuel-prices/PriceEnginePage.tsx'
+      - 'apps/admin/src/components/admin/research-engine/**'
+      - 'apps/admin/src/services/researchEngineService.ts'
       - '.github/workflows/dominion-places-e2e.yml'
   push:
     branches: [main]
@@ -22,6 +24,8 @@ on:
       - 'packages/platform-ops-ui/src/places/**'
       - 'apps/admin/src/components/admin/places/**'
       - 'apps/admin/src/components/admin/fuel-prices/PriceEnginePage.tsx'
+      - 'apps/admin/src/components/admin/research-engine/**'
+      - 'apps/admin/src/services/researchEngineService.ts'
       - '.github/workflows/dominion-places-e2e.yml'
 
 jobs:
@@ -47,4 +51,29 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Places register
-        run: node node_modules/@playwright/test/cli.js test -c playwright.dominion.config.ts
+        # RE-40: the research screens run in their own job below, so a failure here can't skip them.
+        run: node node_modules/@playwright/test/cli.js test -c playwright.dominion.config.ts e2e/dominion-places.spec.ts e2e/dominion-find-parts-visual.spec.ts
+
+  research-engine-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Research engine screens
+        run: node node_modules/@playwright/test/cli.js test -c playwright.dominion.config.ts e2e/dominion-research-engine.spec.ts
