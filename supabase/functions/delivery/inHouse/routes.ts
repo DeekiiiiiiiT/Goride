@@ -41,11 +41,9 @@ import { applyConciergeOrderStatus } from "./applyStatus.ts";
 import { retryAllowed } from "./taskMachine.ts";
 import { validateMerchantCuisines, type CuisineRow } from "../admin/menuLibrary.ts";
 import { listActiveTemplates } from "../admin/menuLibraryRoutes.ts";
-import { isR2PrivateLinksEnabled } from "../../_shared/objectStorage/fileLink.ts";
+import { FILE_STORAGE_OFF_MESSAGE, isR2PrivateLinksEnabled } from "../../_shared/objectStorage/fileLink.ts";
 import {
   buildInHouseReceiptR2Key,
-  IN_HOUSE_RECEIPT_BUCKET,
-  legacyInHouseReceiptPath,
   putInHouseReceipt,
   removeInHouseReceipts,
   signInHouseReceiptAddress,
@@ -500,16 +498,9 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
       return c.json({ path: address, scan: scan.clean ? "clean" : "unconfigured" });
     }
 
-    const path = legacyInHouseReceiptPath(String(task.id), ext);
-    const { error } = await storage.storage.from(IN_HOUSE_RECEIPT_BUCKET).upload(path, bytes, { contentType: mime, upsert: false });
-    if (error) return c.json({ error: error.message }, 500);
-    const saved = await updateIfState(sb, task.id, String(task.state), {
-      receipt_path: path,
-      receipt_uploaded_at: now,
-      updated_at: now,
-    });
-    if (!saved.ok) return c.json({ error: "Someone else took this order" }, 409);
-    return c.json({ path, scan: scan.clean ? "clean" : "unconfigured" });
+    // M6: the old in-house-receipts bucket was deleted (test data, 25 Nov). With the R2 switch
+    // off there is nowhere to keep the receipt, so refuse clearly instead of a storage 500.
+    return c.json({ error: FILE_STORAGE_OFF_MESSAGE }, 503);
   });
 
   app.post("/admin/in-house/tasks/:id/approve", async (c) => {

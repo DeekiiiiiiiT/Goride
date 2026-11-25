@@ -863,7 +863,11 @@ app.get("/files/:id/url", async (c) => {
   const file = await getOrgFile(user.organizationId, c.req.param("id"));
   if (!file) return c.json({ error: "File not found" }, 404);
   const signed = await signedOrgFileUrl(file);
-  if ("error" in signed) return c.json({ error: signed.error }, 500);
+  if ("error" in signed) {
+    // M6: a row from the deleted old bucket has no bytes — that is "not available", not a 500.
+    const status = signed.error === "File not available" ? 404 : 500;
+    return c.json({ error: signed.error }, status);
+  }
   return c.json({ url: signed.url, file });
 });
 

@@ -10,10 +10,10 @@ import {
   R2_PRIVATE_BUCKET_ID,
 } from "../_shared/objectStorage/fileLink.ts";
 import { removeStoredFiles } from "../_shared/objectStorage/storedFiles.ts";
-import type { RemoveObjects } from "../_shared/objectStorage/storedFiles.ts";
+import type { RemoveObjects, RemoveR2Objects } from "../_shared/objectStorage/storedFiles.ts";
 
 export { R2_PRIVATE_BUCKET_ID, removeStoredFiles };
-export type { RemoveObjects };
+export type { RemoveObjects, RemoveR2Objects };
 
 export const EVIDENCE_RETENTION_DAYS = 14;
 export const EPHEMERAL_EVIDENCE_BUCKET = "ephemeral-evidence";
@@ -388,7 +388,7 @@ export async function runEvidenceCleanup(
   supabase: SupabaseClient,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   kv: { getByPrefix: (p: string) => Promise<any[]>; get: (k: string) => Promise<any>; set: (k: string, v: any) => Promise<void> },
-  options: { dryRun?: boolean; orgId?: string | null } = {},
+  options: { dryRun?: boolean; orgId?: string | null; r2Remove?: RemoveR2Objects } = {},
 ): Promise<EvidenceCleanupResult> {
   if (!isEvidenceTtlEnabled()) {
     return { purged: 0, kvPatched: 0, errors: [], dryRun: options.dryRun };
@@ -431,7 +431,7 @@ export async function runEvidenceCleanup(
   let filesDeleted = 0;
   const errors: string[] = [];
   for (const [bucket, paths] of byBucket) {
-    const res = await removeStoredFiles(supabase, bucket, paths);
+    const res = await removeStoredFiles(supabase, bucket, paths, options.r2Remove);
     filesDeleted += res.removed;
     errors.push(...res.errors);
   }

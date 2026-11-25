@@ -94,7 +94,7 @@ Deno.test("parts imports: both stored addresses parse (new R2 key and old Supaba
   assertEquals(parsePartsImportAddress("parts-imports/platform/../evil/source.csv"), null);
 });
 
-Deno.test("parts imports: the check job reads R2 for new batches and Supabase for old ones", async () => {
+Deno.test("parts imports: the check job reads R2 only — an old Supabase path is not read (M6)", async () => {
   const r2Calls: string[] = [];
   const r2Read = (key: string) => {
     r2Calls.push(key);
@@ -105,20 +105,29 @@ Deno.test("parts imports: the check job reads R2 for new batches and Supabase fo
   assertEquals(r2Calls, [KEY]);
   assertEquals(new TextDecoder().decode(bytes!), "vehicle,part_type\n…");
 
+  // Old form (bare/URL) has no bytes any more: the readers show "Upload the CSV first" and the
+  // Supabase bucket is never touched.
   const oldSupabase = fakeSupabase({
     download: async () => ({
       data: { arrayBuffer: async () => new TextEncoder().encode("old,csv").buffer },
       error: null,
     }),
   });
-  const oldBytes = await readPartsImportSource(oldSupabase, "batch-1/source.csv", r2Read);
-  assertEquals(new TextDecoder().decode(oldBytes!), "old,csv");
+  assertEquals(await readPartsImportSource(oldSupabase, "batch-1/source.csv", r2Read), null);
+  assertEquals(
+    await readPartsImportSource(
+      oldSupabase,
+      "https://x.supabase.co/storage/v1/object/sign/parts-imports/batch-1/source.csv?token=t",
+      r2Read,
+    ),
+    null,
+  );
   assertEquals(r2Calls, [KEY]); // still only the one R2 read above
-  assertEquals(oldSupabase.calls, [{ op: "download", bucket: PARTS_IMPORT_BUCKET, arg: "batch-1/source.csv" }]);
+  assertEquals(oldSupabase.calls, []); // no Supabase download attempted
 });
 
 Deno.test("parts imports: a missing or unreadable file is null, not a thrown error", async () => {
-  // Old batch whose Supabase object is gone.
+  // Old address: no Supabase fallback, answered as "not there".
   assertEquals(await readPartsImportSource(fakeSupabase(), "batch-1/source.csv"), null);
   // R2 read fails (network / bad key): the caller still answers "Upload the CSV first".
   assertEquals(

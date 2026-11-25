@@ -2,14 +2,17 @@
  * Parts import source files (Dominion → Parts database → Import, `part_import_batch.storage_path`).
  *
  * The app already POSTs the CSV to the server (`/admin/parts-import/batches/:id/source`), so the
- * app does not change. When R2 is switched on the bytes go to
- * `roam-private/parts-imports/platform/<batch>/source.csv` and the row stores that key; the two
- * readers — the check job (`runImportCheck`) and the staff download route — read whichever
- * storage the stored path names, so old batches keep working.
+ * app does not change. With R2 on the bytes go to
+ * `roam-private/parts-imports/platform/<batch>/source.csv` and the row stores that key. The two
+ * readers — the check job (`runImportCheck`) and the staff download route — read that key.
+ *
+ * M6 (docs/cloudflare-r2-storage-migration-audit.md): the old Supabase bucket is **not read any
+ * more**. M4 copied every batch to R2 and M5 rewrote every `storage_path`; an old address left in
+ * a row has no file behind it, so the readers answer "Upload the CSV first" / "Download failed".
+ * Deletes still route old paths to the old bucket until it is dropped in M7.
  *
  * Switch: the same as evidence (`isR2PrivateLinksEnabled` — R2 keys + FILE_LINK_SECRET +
- * SUPABASE_URL). Without it both routes keep the old Supabase path exactly as it was.
- * docs/cloudflare-r2-storage-migration-audit.md §0, slice 2.
+ * SUPABASE_URL). Without it the upload route keeps the old Supabase path exactly as it was.
  */
 import { isR2PrivateLinksEnabled } from "../_shared/objectStorage/fileLink.ts";
 import { UPLOAD_PURPOSES } from "../_shared/objectStorage/purposes.ts";
@@ -78,21 +81,22 @@ type SupabaseClient = any;
 export type ReadObject = (key: string) => Promise<Uint8Array>;
 
 /**
- * Bytes of a batch's source file, from R2 or the old Supabase bucket.
- * Returns null when it is not there (caller shows "Upload the CSV first" / "Download failed").
+ * Bytes of a batch's source file, from R2. Returns null when it is not there (caller shows
+ * "Upload the CSV first" / "Download failed").
+ *
+ * M6: the old `parts-imports` Supabase bucket is no longer read. Every batch was copied to R2
+ * and its `storage_path` rewritten in M5; a leftover old path means there is no file any more,
+ * so it returns null instead of falling back to Supabase.
  */
 export async function readPartsImportSource(
-  supabase: SupabaseClient,
+  _supabase: SupabaseClient,
   storagePath: string | null | undefined,
   r2Read: ReadObject = (key) => r2FromEnv().read("private", key),
 ): Promise<Uint8Array | null> {
   const address = parsePartsImportAddress(storagePath);
-  if (!address) return null;
+  if (!address || address.bucket !== "r2:private") return null;
   try {
-    if (address.bucket === "r2:private") return await r2Read(address.path);
-    const { data, error } = await supabase.storage.from(address.bucket).download(address.path);
-    if (error || !data) return null;
-    return new Uint8Array(await data.arrayBuffer());
+    return await r2Read(address.path);
   } catch (e) {
     console.warn(
       "[parts_import_storage] read failed:",

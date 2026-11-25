@@ -18,6 +18,11 @@ export const FILE_LINK_FUNCTION = "file-link";
 export const FILE_LINK_SECONDS = 365 * 24 * 60 * 60;
 /** Stored as evidence_files.bucket_id for files that live in roam-private. */
 export const R2_PRIVATE_BUCKET_ID = "r2:private";
+/**
+ * Answer for an upload route when the R2 switch is off. After M6 the old Supabase buckets are
+ * never read (some were deleted), so an upload must not fall back to them.
+ */
+export const FILE_STORAGE_OFF_MESSAGE = "File storage is switched off. Please try again later.";
 
 /**
  * The upload switch for every private slice: all three R2 keys, FILE_LINK_SECRET and
