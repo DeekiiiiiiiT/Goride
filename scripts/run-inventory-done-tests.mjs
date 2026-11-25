@@ -167,10 +167,10 @@ async function main() {
   assertLocalDatabaseUrl();
   const started = Date.now();
 
-  // fleet-core/index.ts is a git-ignored bundle. Build it BEFORE `supabase start`:
-  // the CLI reads every function in config.toml at start and fails with
-  // "failed to read file: open supabase/functions/fleet-core/index.ts" on a fresh checkout.
-  run('node', ['scripts/build-edge-bundle.mjs', 'fleet-core']);
+  // The fleet-* index.ts files are git-ignored bundles. Build them ALL before
+  // `supabase start`: the CLI reads every function in config.toml at start and fails
+  // with "failed to read file: open supabase/functions/<fn>/index.ts" on a fresh checkout.
+  run('node', ['scripts/build-edge-bundle.mjs', '--all']);
   run('npx', ['supabase', 'start', '-x', SUPABASE_START_EXCLUDE]);
   run('npx', ['supabase', 'db', 'reset']);
   run('node', ['scripts/bootstrap-inventory-local-db.mjs'], {
