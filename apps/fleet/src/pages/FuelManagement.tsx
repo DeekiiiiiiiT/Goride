@@ -118,7 +118,8 @@ import {
 import { countUnlinkedCardCharges } from '../utils/jaaFuelStatementMatcher';
 import { fuelCardMatchesLine } from '../utils/fuelCardServiceLine';
 import { integrityVehiclesForLine } from '../utils/fuelIntegrityServiceLine';
-import { FuelPhoneWaitingCard, useFuelPhoneOutbox } from '../components/fuel/phone-fills/FuelPhoneWaitingCard';
+import { FuelPhoneWaitingCard, FuelReviewTiles, useFuelPhoneOutbox } from '../components/fuel/phone-fills/FuelPhoneWaitingCard';
+import { isPendingTabRow } from '@roam/fuel-core';
 import {
   FuelNeedsLookPanel,
   isPhoneFillBeingRead,
@@ -415,6 +416,16 @@ function FuelManagementInner({
     }
     return map;
   }, [drivers]);
+  /** Plate + "Make Model" for the phone-fill rows (Stitch screens 1 and 2). */
+  const phoneFillVehicles = useMemo(() => {
+    const map: Record<string, { plate?: string; car?: string }> = {};
+    for (const v of vehicles) {
+      if (!v?.id) continue;
+      const car = [v.make, v.model].filter(Boolean).join(' ').trim();
+      map[String(v.id)] = { plate: v.licensePlate || v.plate || undefined, car: car || undefined };
+    }
+    return map;
+  }, [vehicles]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [scenarios, setScenarios] = useState<FuelScenario[]>([]);
   const [finalizedReports, setFinalizedReports] = useState<FinalizedFuelReport[]>([]);
@@ -1549,14 +1560,13 @@ function FuelManagementInner({
   const handleApproveLogReview = useCallback(async (id: string, odometer: number, notes?: string) => {
       try {
           const updated = await api.approveExpense(id, notes, odometer);
+          // RQ-08: update the one row; Transaction Logs loads its own list when opened.
           setTransactions(prev => prev.map(t => t.id === id ? updated : t));
-          // Refresh logs to pick up the new fuel_entry created by server
-          await loadLogsAndTransactions();
           invalidateReviewQueueCounts();
           toast.success("Posted to Transaction Logs");
       } catch (e) {
           console.error(e);
-          toast.error("Failed to approve log review");
+          toast.error(e instanceof Error && e.message ? e.message : "Could not approve this fill");
       }
   }, [loadLogsAndTransactions, invalidateReviewQueueCounts]);
 
@@ -1577,12 +1587,7 @@ function FuelManagementInner({
           setTransactions(prev => prev.map(t => t.id === id ? updated : t));
 
           if (updated.category === 'Fuel' || updated.category === 'Fuel Reimbursement') {
-              await fuelService.getFuelScenarios();
-              try {
-                  await loadLogsAndTransactions();
-              } catch {
-                  /* non-fatal */
-              }
+              // RQ-08: no 180-day reload after each approve — the row above is already updated.
               if (serviceLine) {
                 const fuelEntryId =
                   (updated.metadata as { fuelEntryId?: string } | undefined)?.fuelEntryId ||
@@ -1590,7 +1595,6 @@ function FuelManagementInner({
                 if (fuelEntryId) {
                   try {
                     await fuelService.setFuelEntriesServiceLine([String(fuelEntryId)], serviceLine);
-                    await loadLogsAndTransactions();
                   } catch (e) {
                     console.error('[approve] set service line failed', e);
                     toast.warning('Approved, but service line was not saved — set it from Transaction Logs.');
@@ -1604,7 +1608,7 @@ function FuelManagementInner({
           }
       } catch (e) {
           console.error(e);
-          toast.error("Failed to approve reimbursement");
+          toast.error(e instanceof Error && e.message ? e.message : "Could not approve this fill");
       }
   }, [transactions, loadLogsAndTransactions, invalidateReviewQueueCounts]);
 
@@ -1613,10 +1617,10 @@ function FuelManagementInner({
           const updated = await api.rejectExpense(id, reason);
           setTransactions(prev => prev.map(t => t.id === id ? updated : t));
           invalidateReviewQueueCounts();
-          toast.success("Reimbursement Rejected");
+          toast.success("Fill rejected");
       } catch (e) {
           console.error(e);
-          toast.error("Failed to reject reimbursement");
+          toast.error(e instanceof Error && e.message ? e.message : "Could not reject this fill");
       }
   }, [invalidateReviewQueueCounts]);
 
@@ -2254,15 +2258,20 @@ function FuelManagementInner({
               className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
               role="status"
             >
-              Review Queue loaded the maximum window of transactions. Older Pending items may be
-              missing from this list and the nav badge — narrow activity or raise the lookback only
-              with care.
+              Showing the newest fills only. Older ones are not in this list.
             </div>
           )}
-          <FuelPhoneWaitingCard rows={phoneOutbox.rows} />
+          <FuelReviewTiles
+              needsLook={transactions.filter(isPhoneFillNeedingLook).length}
+              waitingFills={phoneOutbox.rows.reduce((s, r) => s + (r.pendingCount || 0), 0)}
+              waitingDrivers={phoneOutbox.rows.length}
+              ready={transactions.filter((t) => isPendingTabRow(t) && !isPhoneFillNeedingLook(t) && !isPhoneFillBeingRead(t)).length}
+          />
+          <FuelPhoneWaitingCard rows={phoneOutbox.rows} vehicles={phoneFillVehicles} />
           <FuelNeedsLookPanel
               transactions={transactions}
               driverNames={driverNameById}
+              vehicles={phoneFillVehicles}
               onSaved={(updated) => setTransactions((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))}
               onApprove={(id, stationOpts) => handleApproveReimbursement(id, undefined, stationOpts)}
               onReject={handleRejectReimbursement}

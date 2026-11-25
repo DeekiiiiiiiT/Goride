@@ -4,6 +4,7 @@
 
 ## 0. Status (25 Nov 2026)
 
+- **Rev 4 (25 Nov): screens re-ported to Stitch.** The owner found the first build looser than the Stitch screens. Driver steps (odometer, how did you pay, pump, Gas Card, resume, where did you fuel), the fuel list pieces and the waiting-to-send list, plus the Fleet tiles, waiting card, needs-a-look row and station picker, now follow Stitch closely (behaviour unchanged; Stitch items the app does not have left out). Review Queue fixes: see `docs/fuel-review-queue-review.md` Rev 2. The first build is in commit af3b478a; this round is not committed yet.
 - **Rev 3 (25 Nov): BUILD COMPLETE — not live, not committed.** End-to-end on the local copy 25/25. Go-live steps at the end of this section.
 - Rev 2 (25 Nov): round 2 done, plan closed. Screens checked against the plan (section 9). Added FO-18 + S9: the driver can't delete anything waiting on the phone. Nothing is built yet; next is the Data layer.
 - Rev 1: review round 1.

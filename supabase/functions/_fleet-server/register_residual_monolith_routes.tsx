@@ -103,6 +103,8 @@ import {
   isLegacyOrgPlaceholder,
   type FilterStats,
 } from "./org_scope.ts";
+import { approveRefusal, rejectRefusal } from "./fuel_review_guards.ts";
+import { claimPendingTransaction, releaseTransactionClaim } from "./fuel_review_claim.ts";
 import { loadTollPlazaStats, attachPlazaStats } from "./toll_plaza_stats.ts";
 import { isTollCategory } from "./toll_category_flags.ts";
 import { assertExpectedUpdatedAt, stripConcurrencyToken } from "./optimistic_concurrency.ts";
@@ -4167,13 +4169,20 @@ export function registerResidualMonolithRoutes(app: Hono) {
   });
 
   app.post("/make-server-37f42386/expenses/approve", requireAuth(), requirePermission('fuel.approve'), async (c) => {
+    let claimedId: string | null = null;
+    let saved = false;
     try {
       const body = await c.req.json();
       const { id, notes, odometerReading, matchedStationId: adminMatchedStationId, stationLocation: adminStationLocation } = body;
       if (!id) return c.json({ error: "Transaction ID is required" }, 400);
 
       const tx = await kv.get(`transaction:${id}`);
-      if (!tx) return c.json({ error: "Transaction not found" }, 404);
+      // RQ-02: another company's fill looks the same as a missing one.
+      if (!tx || !belongsToOrg(tx as Record<string, unknown>, c)) return c.json({ error: "Transaction not found" }, 404);
+
+      // RQ-01 / RQ-03: never post a fill with no total, one still being read, or one already decided.
+      const refusal = approveRefusal(tx);
+      if (refusal) return c.json({ error: refusal.error, code: refusal.code }, refusal.status);
 
       const stationGateHeld =
         tx.metadata?.stationGateHold === true || tx.metadata?.stationGateHold === "true";
@@ -4186,6 +4195,15 @@ export function registerResidualMonolithRoutes(app: Hono) {
           409
         );
       }
+
+      // RQ-03: one approve at a time — a second click or a second tab gets 409, not a second fill.
+      if (!(await claimPendingTransaction(String(id)))) {
+        return c.json(
+          { error: "This fill is already being approved. Refresh the Review Queue.", code: "NOT_PENDING" },
+          409,
+        );
+      }
+      claimedId = String(id);
 
       /** Admin Review Queue: optional verified station (same workflow as manual log entry). */
       let adminResolvedStation: any = null;
@@ -4312,6 +4330,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
           console.log(`[FuelCredit] Skipped approve-time wallet credit for ${id} (Finalize-only settlement)`);
       }
       await kv.set(`transaction:${id}`, stampOrg(tx, c));
+      saved = true;
       const resolvedAt = new Date();
       const deleteAfter = await applyEvidenceResolution(supabase, "transaction", id, resolvedAt);
       if (deleteAfter) {
@@ -4321,6 +4340,9 @@ export function registerResidualMonolithRoutes(app: Hono) {
       return c.json({ success: true, data: tx });
     } catch (e: any) {
       return c.json({ error: e.message }, 500);
+    } finally {
+      // Approve stopped before saving (no car, posting failed, error): the fill goes back to Pending.
+      if (claimedId && !saved) await releaseTransactionClaim(claimedId);
     }
   });
 
@@ -4330,7 +4352,12 @@ export function registerResidualMonolithRoutes(app: Hono) {
       if (!id) return c.json({ error: "Transaction ID is required" }, 400);
 
       const tx = await kv.get(`transaction:${id}`);
-      if (!tx) return c.json({ error: "Transaction not found" }, 404);
+      // RQ-02: another company's fill looks the same as a missing one.
+      if (!tx || !belongsToOrg(tx as Record<string, unknown>, c)) return c.json({ error: "Transaction not found" }, 404);
+
+      // RQ-03 / RQ-11: only a Pending fill, and always with a reason the driver can read.
+      const refusal = rejectRefusal(tx, reason);
+      if (refusal) return c.json({ error: refusal.error, code: refusal.code }, refusal.status);
 
       const stationGateHeldReject =
         tx.metadata?.stationGateHold === true || tx.metadata?.stationGateHold === "true";
@@ -4344,17 +4371,28 @@ export function registerResidualMonolithRoutes(app: Hono) {
         );
       }
 
+      // RQ-03: an approve already running on this fill wins; reject waits for a refresh.
+      if (!(await claimPendingTransaction(String(id)))) {
+        return c.json(
+          { error: "This fill is being approved right now. Refresh the Review Queue.", code: "NOT_PENDING" },
+          409,
+        );
+      }
       tx.status = 'Rejected';
       const resolvedAt = new Date();
-      const deleteAfter = await applyEvidenceResolution(supabase, "transaction", id, resolvedAt);
-      tx.metadata = { 
-          ...tx.metadata, 
-          rejectedAt: resolvedAt.toISOString(), 
-          rejectionReason: reason,
-          ...(deleteAfter ? { evidenceDeleteAfter: deleteAfter } : {}),
-      };
-
-      await kv.set(`transaction:${id}`, stampOrg(tx, c));
+      try {
+        const deleteAfter = await applyEvidenceResolution(supabase, "transaction", id, resolvedAt);
+        tx.metadata = {
+            ...tx.metadata,
+            rejectedAt: resolvedAt.toISOString(),
+            rejectionReason: String(reason).trim(),
+            ...(deleteAfter ? { evidenceDeleteAfter: deleteAfter } : {}),
+        };
+        await kv.set(`transaction:${id}`, stampOrg(tx, c));
+      } catch (e) {
+        await releaseTransactionClaim(String(id));
+        throw e;
+      }
 
       // Clean up wallet credit if this was previously approved (fuel or toll)
       const fuelCreditKey = `transaction:fuel-credit-${id}`;

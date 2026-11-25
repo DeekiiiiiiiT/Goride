@@ -11,7 +11,6 @@
  * - Gas Card needs no lookup to save (FO-12). Gas Card + Cash needs the pump total and litres.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, Check, CloudOff, CreditCard, Banknote, History, MapPin, RotateCcw, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { withTimeout } from '@roam/fuel-core/phoneOutbox';
 import { api } from '../../../services/api';
@@ -392,24 +391,46 @@ export function FuelPhotoFlow({ user, driverRecord, lastOdometer, splitEnabled, 
   const price = pricePerLitre(parseNumber(totalText), parseNumber(litersText));
 
   // ---------------------------------------------------------------- screens
+  // Look: Stitch driver screens (docs/fuel-log-offline-first-audit.md section 9 Keep/Drop).
+
+  const driverName = String(driverRecord?.name || driverRecord?.driverName || user?.user_metadata?.name || '');
+  const C = {
+    page: 'min-h-full bg-[#f1f5f9] px-4 pb-8 pt-4 dark:bg-[#0b1220]',
+    card: 'rounded-2xl bg-white p-4 shadow-sm dark:bg-slate-900',
+    green: 'bg-[#006948]',
+    ink: 'text-[#131b2e] dark:text-slate-50',
+    soft: 'text-[#3d4a42] dark:text-slate-400',
+    tag: 'rounded-full bg-[#eaedff] px-2 py-0.5 text-[11px] font-semibold tracking-[0.04em] text-[#3d4a42] dark:bg-slate-800 dark:text-slate-300',
+  };
+  const Icon = ({ name, className = '', fill = false }: { name: string; className?: string; fill?: boolean }) => (
+    <span className={`material-symbols-outlined ${className}`} style={fill ? { fontVariationSettings: "'FILL' 1" } : undefined} aria-hidden="true">
+      {name}
+    </span>
+  );
 
   const header = (title: string, step?: string) => (
-    <div className="mb-4">
-      <h2 className="text-[22px] font-bold leading-tight text-slate-900 dark:text-slate-50">{title}</h2>
-      <div className="mt-1 flex flex-wrap items-center gap-2">
-        {step ? <span className="text-sm text-slate-500 dark:text-slate-400">{step}</span> : null}
+    <div className="mb-4 flex flex-col gap-1">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className={`text-[22px] font-semibold leading-7 tracking-[-0.015em] ${C.ink}`}>{title}</h2>
         {plate ? (
-          <span className="whitespace-nowrap rounded-lg bg-slate-200/70 px-2.5 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-            {carName ? `${carName} · ` : ''}{plate}
+          <span className="inline-flex shrink-0 items-center rounded-[6px] bg-[#e2e8f0] px-2 py-0.5 text-[11px] font-bold tracking-wider text-[#131b2e] dark:bg-slate-800 dark:text-slate-100">
+            {plate}
           </span>
         ) : null}
       </div>
+      {step || carName || driverName ? (
+        <div className={`flex items-center gap-2 text-[13px] font-medium ${C.soft}`}>
+          {step ? <span className="font-semibold text-[#006948] dark:text-emerald-400">{step}</span> : null}
+          {step && (carName || driverName) ? <span>•</span> : null}
+          <span className="truncate">{[carName, driverName].filter(Boolean).join(' · ')}</span>
+        </div>
+      ) : null}
     </div>
   );
 
   const signalPill = !isOnline ? (
-    <div className="mb-4 flex items-center gap-2 rounded-full bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-      <CloudOff className="h-4 w-4" /> No signal — saving on this phone
+    <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-[#fffbeb] px-3 py-1.5 text-[13px] font-semibold text-[#b45309] dark:bg-amber-950/40 dark:text-amber-300">
+      <Icon name="cloud_off" className="text-[18px]" /> No signal — saving on this phone
     </div>
   ) : null;
 
@@ -417,20 +438,30 @@ export function FuelPhotoFlow({ user, driverRecord, lastOdometer, splitEnabled, 
     <button
       type="button"
       onClick={() => void cancelFill()}
-      className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-red-300 bg-white text-base font-semibold text-red-600 dark:border-red-800 dark:bg-transparent dark:text-red-400"
+      className="mt-3 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-white text-[15px] font-semibold text-[#ba1a1a] shadow-sm active:bg-[#ffdad6]/50 dark:bg-slate-900 dark:text-red-400"
     >
-      <X className="h-4 w-4" /> Cancel this fill
+      <Icon name="close" className="text-[20px]" /> Cancel this fill
     </button>
   );
 
-  const primary = (label: string, onClick: () => void, enabled: boolean) => (
+  const secondary = (label: string, onClick: () => void) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`mt-3 flex h-[52px] w-full items-center justify-center rounded-xl bg-white text-[15px] font-semibold shadow-sm ring-1 ring-[#bccac0] dark:bg-slate-900 ${C.ink}`}
+    >
+      {label}
+    </button>
+  );
+
+  const primary = (label: string, onClick: () => void, enabled: boolean, icon = 'arrow_forward') => (
     <button
       type="button"
       onClick={onClick}
       disabled={!enabled}
-      className="mt-6 flex h-[52px] w-full items-center justify-center rounded-xl bg-emerald-600 text-base font-bold text-white disabled:opacity-50"
+      className={`mt-6 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl ${C.green} text-[15px] font-semibold text-white shadow-md disabled:bg-[#006948]/40 disabled:shadow-none`}
     >
-      {label}
+      {label} {icon ? <Icon name={icon} className="text-[20px]" /> : null}
     </button>
   );
 
@@ -438,29 +469,37 @@ export function FuelPhotoFlow({ user, driverRecord, lastOdometer, splitEnabled, 
     <button
       type="button"
       onClick={() => void takePhoto(kind)}
-      className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-emerald-600 bg-white px-4 py-10 text-center dark:bg-slate-900"
+      className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#006948] bg-white px-4 py-10 text-center dark:bg-slate-900"
     >
-      <span className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-        <Camera className="h-7 w-7" />
+      <span className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-[#85f8c4] text-[#005137]">
+        <Icon name="photo_camera" className="text-[34px]" />
       </span>
-      <span className="text-base font-semibold text-slate-900 dark:text-slate-50">Take a photo</span>
-      <span className="text-sm text-slate-500 dark:text-slate-400">{helper}</span>
+      <span className={`text-[16px] font-semibold ${C.ink}`}>Take a photo</span>
+      <span className={`text-[14px] ${C.soft}`}>{helper}</span>
     </button>
   );
 
   const photoTile = (url: string | null, kind: 'odometer' | 'pump', alt: string) => (
-    <div className="relative overflow-hidden rounded-xl bg-slate-900">
-      {url ? <img src={url} alt={alt} className="h-40 w-full object-cover" /> : <div className="h-40 w-full" />}
+    <div className="relative h-44 w-full overflow-hidden rounded-xl bg-[#eaedff] shadow-sm dark:bg-slate-800">
+      {url ? <img src={url} alt={alt} className="h-full w-full object-cover" /> : null}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
       <button
         type="button"
         onClick={() => void takePhoto(kind)}
-        className="absolute bottom-2 right-2 flex h-10 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900"
+        className="absolute bottom-2.5 right-2.5 inline-flex h-11 items-center gap-1.5 rounded-lg bg-white px-3 text-[13px] font-semibold text-[#131b2e] shadow-md active:scale-95"
       >
-        <RotateCcw className="h-4 w-4" /> Retake
+        <Icon name="sync" className="text-[18px]" /> Retake
       </button>
     </div>
   );
 
+  const tick = (
+    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#ecfdf5] text-[#059669]">
+      <Icon name="check" className="text-[18px] font-bold" />
+    </span>
+  );
+
+  /** Small white box (pump screen, two side by side). */
   const numberBox = (
     label: string,
     value: string,
@@ -470,75 +509,133 @@ export function FuelPhotoFlow({ user, driverRecord, lastOdometer, splitEnabled, 
     readFromPhoto: boolean,
     optional = true,
   ) => (
-    <label className="block">
-      <span className="mb-1.5 flex items-center justify-between text-sm font-semibold text-slate-800 dark:text-slate-200">
-        {label}
-        {optional ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">Optional</span> : null}
+    <label className="flex flex-col justify-between rounded-xl bg-white p-3 shadow-sm dark:bg-slate-900">
+      <span className="mb-1.5 flex items-center justify-between gap-2">
+        <span className={`text-[13px] font-medium ${C.soft}`}>{label}</span>
+        {optional ? <span className={C.tag}>Optional</span> : null}
       </span>
-      <span className="flex h-[52px] items-center rounded-xl border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-900">
+      <span className="flex items-center gap-2 pt-1">
         <input
           inputMode="decimal"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className="w-full bg-transparent text-lg font-semibold tabular-nums text-slate-900 outline-none placeholder:font-normal placeholder:text-slate-400 dark:text-slate-50"
+          className={`min-w-0 flex-1 bg-transparent text-[26px] font-semibold leading-8 tracking-[-0.02em] tabular-nums outline-none placeholder:text-[20px] placeholder:font-normal placeholder:text-slate-400 ${C.ink}`}
         />
-        {readFromPhoto && value ? (
-          <span className="ml-2 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-            <Check className="h-4 w-4" />
-          </span>
-        ) : null}
-        <span className="ml-2 text-sm text-slate-500">{unit}</span>
+        {readFromPhoto && value ? tick : unit ? <span className={`text-[15px] ${C.soft}`}>{unit}</span> : null}
       </span>
     </label>
+  );
+
+  /** Wide box inside a white card (odometer, Gas Card litres). */
+  const wideBox = (
+    label: string,
+    value: string,
+    onChange: (v: string) => void,
+    placeholder: string,
+    unit: string,
+    readFromPhoto: boolean,
+    helper: React.ReactNode,
+  ) => (
+    <div className={C.card}>
+      <label className="block">
+        <span className="mb-3 flex items-center justify-between">
+          <span className={`text-[16px] font-semibold ${C.ink}`}>{label}</span>
+          <span className={C.tag}>Optional</span>
+        </span>
+        <span className="flex h-[72px] items-center gap-3 rounded-xl bg-[#f2f3ff] px-5 shadow-inner dark:bg-slate-800">
+          <input
+            inputMode="decimal"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder}
+            className={`min-w-0 flex-1 bg-transparent text-[30px] font-bold leading-9 tracking-[-0.02em] tabular-nums outline-none placeholder:text-[22px] placeholder:font-medium placeholder:text-slate-400 ${C.ink}`}
+          />
+          {readFromPhoto && value ? tick : null}
+          <span className={`text-[16px] ${C.soft}`}>{unit}</span>
+        </span>
+      </label>
+      {helper}
+    </div>
+  );
+
+  const helperLine = (text: string, icon = 'auto_fix_high') => (
+    <p className={`mt-3 flex items-start gap-1.5 text-[14px] leading-5 ${C.soft}`}>
+      <Icon name={icon} className="mt-0.5 shrink-0 text-[18px] text-[#006948]" /> {text}
+    </p>
+  );
+
+  const odometerSummary = (sub: string) => (
+    <div className={`${C.card} mb-4`}>
+      <div className="flex items-center gap-4">
+        {odoUrl ? (
+          <img src={odoUrl} alt="Odometer" className="h-14 w-14 shrink-0 rounded-xl object-cover" />
+        ) : (
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[#eaedff] text-[#3d4a42]">
+            <Icon name="speed" className="text-[26px]" />
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className={`text-[26px] font-semibold leading-8 tracking-[-0.02em] tabular-nums ${C.ink}`}>
+            {draft.odometerKm ? (
+              <>
+                {formatKm(draft.odometerKm)} <span className={`text-[15px] font-normal ${C.soft}`}>km</span>
+              </>
+            ) : (
+              <span className="text-[18px]">Odometer photo</span>
+            )}
+          </p>
+          <p className={`text-[14px] ${C.soft}`}>{sub}</p>
+        </div>
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#ecfdf5] text-[#059669]">
+          <Icon name="check" className="text-[18px]" />
+        </span>
+      </div>
+    </div>
   );
 
   // Screen 12 — where did you fuel? (after Save; optional)
   if (stationAsk) {
     const picked = stationAsk.options.find((o) => o.id === stationPick) || null;
+    const row = (on: boolean) =>
+      `flex min-h-[64px] w-full items-center gap-3 rounded-xl p-4 text-left shadow-sm ${on ? 'bg-[#ecfdf5] ring-2 ring-[#006948] dark:bg-emerald-950/30' : 'bg-white dark:bg-slate-900'}`;
+    const dot = (on: boolean) => (
+      <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${on ? 'border-[#006948] bg-[#006948]' : 'border-[#bccac0]'}`}>
+        {on ? <Icon name="check" className="text-[16px] text-white" /> : null}
+      </span>
+    );
     return (
-      <div className="p-4">
-        <div className="rounded-2xl bg-white p-5 shadow-sm dark:bg-slate-900">
-          <h2 className="text-[22px] font-bold text-slate-900 dark:text-slate-50">Where did you fuel?</h2>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">One tap helps your fleet. You can skip it.</p>
-          <div className="mt-4 space-y-2">
-            {stationAsk.options.map((o) => {
-              const on = stationPick === o.id;
-              return (
-                <button
-                  key={o.id}
-                  type="button"
-                  onClick={() => setStationPick(o.id)}
-                  className={`flex w-full items-center gap-3 rounded-2xl border-2 p-4 text-left ${on ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/30' : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900'}`}
-                >
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"><MapPin className="h-5 w-5" /></span>
-                  <span className="flex-1">
-                    <span className="block text-base font-semibold text-slate-900 dark:text-slate-50">{o.name}</span>
-                    <span className="block text-sm text-slate-500 dark:text-slate-400">{distanceLabel(o.distanceM)}</span>
-                  </span>
-                  <span className={`flex h-6 w-6 items-center justify-center rounded-full border-2 ${on ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300'}`}>
-                    {on ? <Check className="h-3.5 w-3.5 text-white" /> : null}
-                  </span>
-                </button>
-              );
-            })}
-            <button
-              type="button"
-              onClick={() => setStationPick('elsewhere')}
-              className={`flex w-full items-center gap-3 rounded-2xl border-2 p-4 text-left ${stationPick === 'elsewhere' ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/30' : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900'}`}
-            >
-              <span className="flex-1 text-base font-semibold text-slate-900 dark:text-slate-50">Somewhere else</span>
-            </button>
-          </div>
-          {primary('Done', () => finishStationAsk(stationPick === 'elsewhere' ? 'elsewhere' : picked), !!stationPick)}
-          <button
-            type="button"
-            onClick={() => finishStationAsk(null)}
-            className="mt-3 flex h-12 w-full items-center justify-center rounded-xl border border-slate-300 bg-white text-base font-semibold text-slate-800 dark:border-slate-700 dark:bg-transparent dark:text-slate-100"
-          >
-            Skip
+      <div className={C.page}>
+        <div className="mb-4">
+          <h2 className={`text-[22px] font-semibold leading-7 tracking-[-0.015em] ${C.ink}`}>Where did you fuel?</h2>
+          <p className={`mt-1 text-[14px] ${C.soft}`}>One tap helps your fleet. You can skip it.</p>
+        </div>
+        <div className="space-y-3">
+          {stationAsk.options.map((o) => {
+            const on = stationPick === o.id;
+            return (
+              <button key={o.id} type="button" onClick={() => setStationPick(o.id)} className={row(on)}>
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#eaedff] text-[#006948] dark:bg-slate-800">
+                  <Icon name="local_gas_station" className="text-[22px]" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className={`block text-[16px] font-semibold ${C.ink}`}>{o.name}</span>
+                  {distanceLabel(o.distanceM) ? <span className={`block text-[13px] ${C.soft}`}>{distanceLabel(o.distanceM)}</span> : null}
+                </span>
+                {dot(on)}
+              </button>
+            );
+          })}
+          <button type="button" onClick={() => setStationPick('elsewhere')} className={row(stationPick === 'elsewhere')}>
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#eaedff] text-[#3d4a42] dark:bg-slate-800">
+              <Icon name="search" className="text-[22px]" />
+            </span>
+            <span className={`flex-1 text-[16px] font-semibold ${C.ink}`}>Somewhere else</span>
+            {dot(stationPick === 'elsewhere')}
           </button>
         </div>
+        {primary('Done', () => finishStationAsk(stationPick === 'elsewhere' ? 'elsewhere' : picked), !!stationPick, 'check_circle')}
+        {secondary('Skip', () => finishStationAsk(null))}
       </div>
     );
   }
@@ -546,18 +643,42 @@ export function FuelPhotoFlow({ user, driverRecord, lastOdometer, splitEnabled, 
   // Screen 11 — pick up where you left off
   if (showResume && resumable) {
     return (
-      <div className="p-4">
-        {header('Fuel')}
-        <div className="rounded-2xl border-l-4 border-emerald-600 bg-white p-4 shadow-sm dark:bg-slate-900">
-          <p className="text-[17px] font-semibold text-slate-900 dark:text-slate-50">Finish your fill from {timeOf(resumable.capturedAt)}</p>
-          <div className="mt-3 flex items-center gap-3">
-            {odoUrl ? <img src={odoUrl} alt="Odometer" className="h-12 w-12 rounded-lg object-cover" /> : null}
-            <p className="text-sm text-slate-600 dark:text-slate-300">
-              {resumable.odometerKm ? `${formatKm(resumable.odometerKm)} km · ` : ''}
-              {resumable.hasOdometerPhoto ? 'Odometer done' : 'Odometer photo next'}
-            </p>
+      <div className={C.page}>
+        <div className="mb-4 flex items-center gap-3 rounded-2xl bg-[#f2f3ff] p-3 dark:bg-slate-900">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#3d4a42] dark:bg-slate-800">
+            <Icon name="directions_car" className="text-[22px]" />
+          </span>
+          <div className="min-w-0 flex-1">
+            {driverName ? <p className={`truncate text-[15px] font-medium ${C.ink}`}>{driverName}</p> : null}
+            {carName ? <p className={`truncate text-[14px] ${C.soft}`}>{carName}</p> : null}
           </div>
-          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+          {plate ? <span className="rounded-[6px] bg-[#dae2fd] px-2.5 py-1 text-[13px] font-bold tracking-wider text-[#131b2e]">{plate}</span> : null}
+        </div>
+        <div className="relative overflow-hidden rounded-2xl bg-white p-5 shadow-md dark:bg-slate-900">
+          <div className="absolute inset-y-0 left-0 w-1.5 bg-[#006948]" />
+          <p className={`text-[22px] font-semibold leading-7 tracking-[-0.015em] ${C.ink}`}>Finish your fill from {timeOf(resumable.capturedAt)}</p>
+          <div className="mt-3 flex items-center gap-3 rounded-xl bg-[#f2f3ff] p-3 dark:bg-slate-800">
+            {odoUrl ? (
+              <img src={odoUrl} alt="Odometer" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
+            ) : (
+              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-white text-[#3d4a42]">
+                <Icon name="speed" className="text-[24px]" />
+              </span>
+            )}
+            <div>
+              {resumable.odometerKm ? (
+                <p className={`flex items-center gap-1.5 text-[20px] font-semibold tabular-nums ${C.ink}`}>
+                  {formatKm(resumable.odometerKm)} km
+                  {resumable.hasOdometerPhoto ? <Icon name="check_circle" className="text-[20px] text-[#006948]" /> : null}
+                </p>
+              ) : null}
+              <p className="text-[15px] font-medium text-[#006948] dark:text-emerald-400">
+                {resumable.hasOdometerPhoto ? 'Odometer done' : 'Odometer photo next'}
+              </p>
+            </div>
+          </div>
+          <p className={`mt-3 flex items-center gap-2 text-[15px] ${C.soft}`}>
+            <Icon name="arrow_circle_right" className="text-[20px] text-[#984300]" />
             {!resumable.hasOdometerPhoto
               ? 'Next: the odometer photo.'
               : resumable.step === 'gascard'
@@ -570,9 +691,9 @@ export function FuelPhotoFlow({ user, driverRecord, lastOdometer, splitEnabled, 
           <button
             type="button"
             onClick={() => void startFresh()}
-            className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-red-300 text-base font-semibold text-red-600"
+            className="mt-3 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-[#ffdad6] text-[15px] font-semibold text-[#ba1a1a]"
           >
-            <X className="h-4 w-4" /> Cancel this fill
+            <Icon name="close" className="text-[20px]" /> Cancel this fill
           </button>
         </div>
       </div>
@@ -583,31 +704,49 @@ export function FuelPhotoFlow({ user, driverRecord, lastOdometer, splitEnabled, 
   if (draft.step === 'odometer') {
     const readFromPhoto = draft.odometerSource === 'photo';
     return (
-      <div className="p-4">
+      <div className={C.page}>
         {header('Odometer', 'Step 1 of 3')}
         {signalPill}
         {draft.hasOdometerPhoto ? photoTile(odoUrl, 'odometer', 'Odometer') : photoButton('odometer', 'Get the whole odometer in the picture.')}
-        <div className="mt-5 space-y-2">
-          {numberBox('Kilometres', kmText, (v) => {
-            setKmText(v);
-            update({ odometerKm: parseNumber(v), odometerSource: v ? 'typed' : undefined });
-          }, 'e.g. 200,412', 'km', readFromPhoto)}
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {readFromPhoto && kmText
-              ? "Read from your photo. Change it if it's wrong."
-              : !isOnline && draft.hasOdometerPhoto
-                ? "You can leave it blank. We'll read it from the photo when you're back online."
-                : "Leave it blank and we'll read it from the photo."}
-          </p>
-          {lastOdometer && lastOdometer > 0 ? (
-            <div className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-3 dark:bg-slate-800/60">
-              <History className="h-5 w-5 text-slate-500" />
-              <p className="text-sm text-slate-700 dark:text-slate-200">
-                Last fill {formatKm(lastOdometer)} km
-                {kmDelta != null ? <span className={kmDelta < 0 ? ' font-semibold text-red-600' : ' font-semibold text-emerald-700'}> · {kmDelta > 0 ? '+' : ''}{formatKm(kmDelta)} km</span> : null}
-              </p>
-            </div>
-          ) : null}
+        <div className="mt-4">
+          {wideBox(
+            'Kilometres',
+            kmText,
+            (v) => {
+              setKmText(v);
+              update({ odometerKm: parseNumber(v), odometerSource: v ? 'typed' : undefined });
+            },
+            'e.g. 200,412',
+            'km',
+            readFromPhoto,
+            <>
+              {helperLine(
+                readFromPhoto && kmText
+                  ? "Read from your photo. Change it if it's wrong."
+                  : !isOnline && draft.hasOdometerPhoto
+                    ? "You can leave it blank. We'll read it from the photo when you're back online."
+                    : "Leave it blank and we'll read it from the photo.",
+                readFromPhoto && kmText ? 'auto_fix_high' : 'info',
+              )}
+              {lastOdometer && lastOdometer > 0 ? (
+                <div className="mt-4 flex items-center gap-3 rounded-xl bg-[#f2f3ff] p-4 dark:bg-slate-800/60">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eaedff] text-[#3d4a42] dark:bg-slate-700">
+                    <Icon name="history" className="text-[22px]" />
+                  </span>
+                  <div className="flex-1">
+                    <p className={`text-[13px] font-medium ${C.soft}`}>Last fill</p>
+                    <p className={`text-[16px] font-semibold tabular-nums ${C.ink}`}>{formatKm(lastOdometer)} km</p>
+                  </div>
+                  {kmDelta != null ? (
+                    <span className={`text-[16px] font-semibold tabular-nums ${kmDelta < 0 ? 'text-[#ba1a1a]' : 'text-[#006948]'}`}>
+                      {kmDelta > 0 ? '+' : ''}
+                      {formatKm(kmDelta)} km
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+            </>,
+          )}
         </div>
         {primary('Next', () => update({ step: 'pay' }), canLeaveOdometerStep(draft))}
         {cancelButton}
@@ -615,26 +754,20 @@ export function FuelPhotoFlow({ user, driverRecord, lastOdometer, splitEnabled, 
     );
   }
 
-  // Screen 5 — how did you pay?
+  // Screen 5 — how did you pay? (not made in Stitch; built in the same style)
   if (draft.step === 'pay') {
-    const options: Array<{ id: FuelPhotoPayment; title: string; helper: string; icon: React.ReactNode }> = [
-      { id: 'rideshare_cash', title: 'Cash', helper: 'I paid with cash from fares', icon: <Banknote className="h-5 w-5" /> },
-      { id: 'gas_card', title: 'Gas Card', helper: 'Company fuel card', icon: <CreditCard className="h-5 w-5" /> },
+    const options: Array<{ id: FuelPhotoPayment; title: string; helper: string; icon: string }> = [
+      { id: 'rideshare_cash', title: 'Cash', helper: 'I paid with cash from fares', icon: 'payments' },
+      { id: 'gas_card', title: 'Gas Card', helper: 'Company fuel card', icon: 'credit_card' },
       ...(splitEnabled
-        ? [{ id: 'gas_card_and_cash' as const, title: 'Gas Card + Cash', helper: 'Part on the card, part in cash', icon: <CreditCard className="h-5 w-5" /> }]
+        ? [{ id: 'gas_card_and_cash' as const, title: 'Gas Card + Cash', helper: 'Part on the card, part in cash', icon: 'call_split' }]
         : []),
     ];
     return (
-      <div className="p-4">
+      <div className={C.page}>
         {header('How did you pay?', 'Step 2 of 3')}
         {signalPill}
-        <div className="mb-4 flex items-center gap-3 rounded-xl bg-white px-3 py-2 shadow-sm dark:bg-slate-900">
-          {odoUrl ? <img src={odoUrl} alt="Odometer" className="h-10 w-10 rounded-lg object-cover" /> : null}
-          <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-            {draft.odometerKm ? `${formatKm(draft.odometerKm)} km` : 'Odometer photo'}
-          </span>
-          <Check className="ml-auto h-5 w-5 text-emerald-600" />
-        </div>
+        {odometerSummary('Odometer done')}
         <div className="space-y-3">
           {options.map((o) => {
             const on = draft.payment === o.id;
@@ -643,28 +776,24 @@ export function FuelPhotoFlow({ user, driverRecord, lastOdometer, splitEnabled, 
                 key={o.id}
                 type="button"
                 onClick={() => choosePayment(o.id)}
-                className={`flex w-full items-center gap-3 rounded-2xl border-2 p-4 text-left ${on ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/30' : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900'}`}
+                className={`flex min-h-[72px] w-full items-center gap-4 rounded-xl p-4 text-left shadow-sm ${on ? 'bg-[#ecfdf5] ring-2 ring-[#006948] dark:bg-emerald-950/30' : 'bg-white dark:bg-slate-900'}`}
               >
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200">{o.icon}</span>
-                <span className="flex-1">
-                  <span className="block text-base font-semibold text-slate-900 dark:text-slate-50">{o.title}</span>
-                  <span className="block text-sm text-slate-500 dark:text-slate-400">{o.helper}</span>
+                <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${on ? 'bg-[#85f8c4] text-[#005137]' : 'bg-[#eaedff] text-[#3d4a42] dark:bg-slate-800 dark:text-slate-200'}`}>
+                  <Icon name={o.icon} className="text-[22px]" />
                 </span>
-                <span className={`flex h-6 w-6 items-center justify-center rounded-full border-2 ${on ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300'}`}>
-                  {on ? <span className="h-2.5 w-2.5 rounded-full bg-white" /> : null}
+                <span className="flex-1">
+                  <span className={`block text-[16px] font-semibold ${C.ink}`}>{o.title}</span>
+                  <span className={`block text-[14px] ${C.soft}`}>{o.helper}</span>
+                </span>
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${on ? 'border-[#006948]' : 'border-[#bccac0]'}`}>
+                  {on ? <span className="h-3 w-3 rounded-full bg-[#006948]" /> : null}
                 </span>
               </button>
             );
           })}
         </div>
         {primary('Next', goNextFromPay, !!draft.payment)}
-        <button
-          type="button"
-          onClick={() => update({ step: 'odometer' })}
-          className="mt-3 flex h-12 w-full items-center justify-center rounded-xl border border-slate-300 bg-white text-base font-semibold text-slate-800 dark:border-slate-700 dark:bg-transparent dark:text-slate-100"
-        >
-          Back to the odometer
-        </button>
+        {secondary('Back to the odometer', () => update({ step: 'odometer' }))}
         {cancelButton}
       </div>
     );
@@ -673,31 +802,54 @@ export function FuelPhotoFlow({ user, driverRecord, lastOdometer, splitEnabled, 
   // Screen 13 — Gas Card, ready to save
   if (draft.step === 'gascard') {
     return (
-      <div className="p-4">
+      <div className={C.page}>
         {header('Gas Card fill', 'Step 3 of 3')}
         {signalPill}
-        <div className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-sm dark:bg-slate-900">
-          {odoUrl ? <img src={odoUrl} alt="Odometer" className="h-12 w-12 rounded-lg object-cover" /> : null}
+        <div className={`${C.card} mb-4`}>
+          <div className="flex items-center gap-4">
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#eaedff] text-[#3d4a42]">
+              {odoUrl ? <img src={odoUrl} alt="Odometer" className="h-full w-full object-cover" /> : <Icon name="speed" className="text-[26px]" />}
+            </span>
+            <div>
+              <p className={`text-[30px] font-bold leading-9 tracking-[-0.02em] tabular-nums ${C.ink}`}>
+                {draft.odometerKm ? (
+                  <>
+                    {formatKm(draft.odometerKm)} <span className={`text-[15px] font-normal ${C.soft}`}>km</span>
+                  </>
+                ) : (
+                  <span className="text-[18px] font-semibold">Odometer photo</span>
+                )}
+              </p>
+              {carName ? <p className={`text-[14px] ${C.soft}`}>{carName} odometer</p> : null}
+            </div>
+          </div>
+          <span className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#dce1ff] px-3 py-1.5 text-[14px] font-medium text-[#001551]">
+            <Icon name="credit_card" className="text-[18px]" /> Paid with Gas Card
+          </span>
+        </div>
+        <div className="mb-4 flex items-start gap-3 rounded-2xl bg-[#f2f3ff] p-4 dark:bg-slate-900/60">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#dce1ff] text-[#1d4ed8]">
+            <Icon name="receipt_long" className="text-[20px]" />
+          </span>
           <div>
-            <p className="text-base font-semibold text-slate-900 dark:text-slate-50">{draft.odometerKm ? `${formatKm(draft.odometerKm)} km` : 'Odometer photo'}</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Paid with Gas Card</p>
+            <p className={`text-[15px] font-semibold ${C.ink}`}>No pump photo needed</p>
+            <p className={`text-[14px] ${C.soft}`}>The amount comes from the card statement.</p>
           </div>
         </div>
-        <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">No pump photo needed. The amount comes from the card statement.</p>
-        <div className="mt-4">
-          {numberBox('Litres', litersText, (v) => {
+        {wideBox(
+          'Litres',
+          litersText,
+          (v) => {
             setLitersText(v);
             update({ liters: parseNumber(v) });
-          }, 'e.g. 23.69', 'L', false)}
-        </div>
-        {primary(saving ? 'Saving…' : 'Save', () => void save(), canSave(draft) && !saving)}
-        <button
-          type="button"
-          onClick={() => update({ step: 'pay' })}
-          className="mt-3 flex h-12 w-full items-center justify-center rounded-xl border border-slate-300 bg-white text-base font-semibold text-slate-800 dark:border-slate-700 dark:bg-transparent dark:text-slate-100"
-        >
-          Change how I paid
-        </button>
+          },
+          'e.g. 23.69',
+          'L',
+          false,
+          null,
+        )}
+        {primary(saving ? 'Saving…' : 'Save', () => void save(), canSave(draft) && !saving, 'check_circle')}
+        {secondary('Change how I paid', () => update({ step: 'pay' }))}
         {cancelButton}
       </div>
     );
@@ -707,11 +859,11 @@ export function FuelPhotoFlow({ user, driverRecord, lastOdometer, splitEnabled, 
   const readFromPhoto = draft.totalSource === 'photo';
   const isSplit = draft.payment === 'gas_card_and_cash';
   return (
-    <div className="p-4">
+    <div className={C.page}>
       {header('Pump or receipt', 'Step 3 of 3')}
       {signalPill}
       {draft.hasPumpPhoto ? photoTile(pumpUrl, 'pump', 'Pump or receipt') : photoButton('pump', 'The pump screen or the receipt. Total and litres must show.')}
-      <div className="mt-5 grid grid-cols-2 gap-3">
+      <div className="mt-4 grid grid-cols-2 gap-3">
         {numberBox('Total (J$)', totalText, (v) => {
           setTotalText(v);
           update({ total: parseNumber(v), totalSource: 'typed' });
@@ -721,22 +873,32 @@ export function FuelPhotoFlow({ user, driverRecord, lastOdometer, splitEnabled, 
           update({ liters: parseNumber(v), totalSource: 'typed' });
         }, '18.70', 'L', readFromPhoto, !isSplit)}
       </div>
-      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-        {readFromPhoto && (totalText || litersText)
+      {helperLine(
+        readFromPhoto && (totalText || litersText)
           ? "Read from your photo. Change them if they're wrong."
           : isSplit
-            ? 'For Gas Card + Cash we need the pump total and litres. The cash part comes from the card statement.'
-            : "Leave them blank and we'll read them from the photo."}
-      </p>
-      {price ? <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">J${price.toFixed(2)} a litre</p> : null}
-      {primary(saving ? 'Saving…' : 'Save', () => void save(), canSave(draft) && !saving)}
-      <button
-        type="button"
-        onClick={() => update({ step: 'pay' })}
-        className="mt-3 flex h-12 w-full items-center justify-center rounded-xl border border-slate-300 bg-white text-base font-semibold text-slate-800 dark:border-slate-700 dark:bg-transparent dark:text-slate-100"
-      >
-        Change how I paid
-      </button>
+            ? 'For Gas Card + Cash we need the pump total and litres.'
+            : "Leave them blank and we'll read them from the photo.",
+        readFromPhoto && (totalText || litersText) ? 'auto_fix_high' : 'info',
+      )}
+      {isSplit ? (
+        <div className="mt-3 flex items-start gap-3 rounded-xl bg-white p-4 shadow-sm dark:bg-slate-900">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#ffdbca] text-[#984300]">
+            <Icon name="payments" className="text-[20px]" />
+          </span>
+          <div>
+            <p className={`text-[15px] font-semibold ${C.ink}`}>Cash part</p>
+            <p className={`text-[14px] ${C.soft}`}>Worked out from the card statement. You don't type it.</p>
+          </div>
+        </div>
+      ) : null}
+      {price ? (
+        <div className={`mt-3 flex items-center justify-center gap-1.5 rounded-lg bg-[#f2f3ff] px-3 py-2 text-[16px] font-semibold tabular-nums dark:bg-slate-900 ${C.soft}`}>
+          <Icon name="local_gas_station" className="text-[18px]" /> J${formatMoney(price)} a litre
+        </div>
+      ) : null}
+      {primary(saving ? 'Saving…' : 'Save', () => void save(), canSave(draft) && !saving, 'check_circle')}
+      {secondary('Change how I paid', () => update({ step: 'pay' }))}
       {cancelButton}
     </div>
   );

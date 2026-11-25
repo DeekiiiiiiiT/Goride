@@ -4,37 +4,39 @@
  * Items waiting on the phone are shown but can never be deleted here (FO-18).
  */
 import React from 'react';
-import { ArrowUp, Check, Eye, Smartphone } from 'lucide-react';
+const Sym = ({ name, className = '' }: { name: string; className?: string }) => (
+  <span className={`material-symbols-outlined ${className}`} aria-hidden="true">{name}</span>
+);
 import type { OfflineAction } from '../../../types/offline';
 import type { FuelFillChip as Chip } from './fuelPhotoFill';
 
 const CHIP: Record<Chip, { label: string; className: string; icon: React.ReactNode }> = {
   on_phone: {
     label: 'On this phone',
-    className: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
-    icon: <Smartphone className="h-3 w-3" />,
+    className: 'bg-[#fffbeb] text-[#b45309] dark:bg-amber-950/40 dark:text-amber-300',
+    icon: <Sym name="smartphone" className="text-[14px]" />,
   },
   sent: {
     label: 'Sent',
     className: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
-    icon: <ArrowUp className="h-3 w-3" />,
+    icon: <Sym name="arrow_upward" className="text-[14px]" />,
   },
   read: {
     label: 'Read',
-    className: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
-    icon: <Check className="h-3 w-3" />,
+    className: 'bg-[#ecfdf5] text-[#006948] dark:bg-emerald-950/40 dark:text-emerald-300',
+    icon: <Sym name="check_circle" className="text-[14px]" />,
   },
   needs_look: {
     label: 'Needs a look',
-    className: 'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300',
-    icon: <Eye className="h-3 w-3" />,
+    className: 'bg-[#ffdad6] text-[#ba1a1a] dark:bg-red-950/40 dark:text-red-300',
+    icon: <Sym name="visibility" className="text-[14px]" />,
   },
 };
 
 export function FuelFillChip({ chip }: { chip: Chip }) {
   const c = CHIP[chip];
   return (
-    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${c.className}`}>
+    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-0.5 text-[12px] font-semibold tracking-[0.04em] ${c.className}`}>
       {c.icon}
       {c.label}
     </span>
@@ -44,20 +46,20 @@ export function FuelFillChip({ chip }: { chip: Chip }) {
 /** "1 fill on this phone · It sends by itself when you have signal · Send now". */
 export function FuelPhoneWaitingCard({ count, onSendNow }: { count: number; onSendNow: () => void }) {
   return (
-    <div className="flex items-center gap-3 rounded-2xl bg-amber-50 p-4 dark:bg-amber-950/30">
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
-        <Smartphone className="h-5 w-5" />
+    <div className="flex items-center gap-3 rounded-2xl bg-[#fffbeb] p-4 shadow-sm dark:bg-amber-950/30">
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#fef3c7] text-[#b45309] dark:bg-amber-900/50 dark:text-amber-300">
+        <Sym name="phonelink_ring" className="text-[24px]" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-base font-semibold text-slate-900 dark:text-slate-50">
+        <p className="text-[17px] font-semibold text-[#131b2e] dark:text-slate-50">
           {count} fill{count === 1 ? '' : 's'} on this phone
         </p>
-        <p className="text-sm text-slate-600 dark:text-slate-300">It sends by itself when you have signal.</p>
+        <p className="text-[14px] leading-5 text-[#3d4a42] dark:text-slate-300">It sends by itself when you have signal.</p>
       </div>
       <button
         type="button"
         onClick={onSendNow}
-        className="h-11 shrink-0 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+        className="h-11 shrink-0 rounded-xl bg-white px-4 text-[14px] font-semibold text-[#131b2e] shadow-sm dark:bg-slate-900 dark:text-slate-100"
       >
         Send now
       </button>
@@ -86,20 +88,26 @@ export function FuelPhoneHeldRows({ queue }: { queue: OfflineAction[] }) {
         const tx = item.type === 'SUBMIT_FUEL_EXPENSE' ? item.payload.transaction : null;
         const amount = tx && Number(tx.amount) ? Math.abs(Number(tx.amount)) : null;
         const liters = tx?.metadata?.fuelVolume ? Number(tx.metadata.fuelVolume) : null;
+        const plate = String(tx?.vehiclePlate || tx?.metadata?.vehiclePlate || '');
         return (
           <div key={item.id} className="rounded-2xl bg-white p-4 shadow-sm dark:bg-slate-900">
-            <p className="text-sm text-slate-500 dark:text-slate-400">
+            <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+            <p className="flex flex-wrap items-center gap-2 text-[14px] text-[#3d4a42] dark:text-slate-400">
               {day}, {time}
+              {plate ? <span className="rounded-[6px] bg-[#eaedff] px-2 py-0.5 text-[12px] font-bold tracking-wider text-[#131b2e]">{plate}</span> : null}
             </p>
-            <p className="mt-1 text-lg font-bold tabular-nums text-slate-900 dark:text-slate-50">
+            <p className="mt-1 text-[22px] font-bold tabular-nums text-[#131b2e] dark:text-slate-50">
               {amount ? `J$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : (
-                <span className="text-base font-normal italic text-slate-500">Amount coming</span>
+                <span className="text-[20px] font-normal italic text-[#3d4a42]">Amount coming</span>
               )}
-              {liters ? <span className="text-base font-normal text-slate-500"> · {liters} L</span> : null}
+              <span className="text-[18px] font-normal text-[#3d4a42]"> · {liters ? `${liters} L` : '— L'}</span>
             </p>
             <div className="mt-2 flex items-center gap-2">
               <FuelFillChip chip="on_phone" />
-              <span className="text-sm text-slate-500 dark:text-slate-400">{paid}</span>
+              <span className="text-[14px] text-[#3d4a42] dark:text-slate-400">{paid}</span>
+            </div>
+            </div>
             </div>
           </div>
         );
