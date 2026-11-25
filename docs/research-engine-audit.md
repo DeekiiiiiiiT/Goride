@@ -1,6 +1,7 @@
 # Research engine (cars, specs, parts) — audit
 
-**Rev 7.1 · 21 Nov 2026 · Status: LIVE, in practice mode** (engine on, shadow mode, US$1.35/day).
+**Rev 7.2 · 25 Nov 2026 · Status: LIVE, in practice mode** (engine on, shadow mode, US$1.35/day). Browser-check rebuild
+(25 Nov) is on the branch only, **not live** — see §1.
 Live: main `a6320fa7` (Dominion + platform-catalog + catalog-research). Branch `parts-auto-match` has the same research
 code. Every research migration up to `20261121193554` is on live with its logbook line.
 
@@ -16,7 +17,8 @@ is open.
    - **Nothing goes live without telling the owner first.** Commit on the branch; batch changes; say what is waiting
      and wait for "yes". Exception: a change the owner's next step needs (say so).
    - **Only change what the owner asks.** A question is a question, not a request to change the screen.
-   - On-screen text: one short line per step, in the **catalogue's own words** (e.g. Amayama's "Period").
+   - On-screen text: one short line per step, worded so it works on **any parts site** (owner 25 Nov: never one
+     site's layout words like "picture" or "Period column"; car-maker row words like "SHOCK, FRONT" are fine).
    - No codes for users to type: pick from dropdowns or tap suggestions. Car pickers = Make → Model → Year.
    - Never fetch a third-party site with a browser name; never try to get around a site's block.
    - Live database writes: ask the owner first; every hand-run migration gets its logbook line
@@ -30,28 +32,36 @@ is open.
      --offline` at the repo root. Never delete `node_modules/.deno` by hand.
 3. Tests to keep green: Deno (`deno test --no-check --allow-all` on `catalog_research_*.test.ts research_*.test.ts
    listings_for_vehicle.test.ts api_pricing.test.ts catalog_privacy.test.ts pending_parts_catalog_routes.test.ts` in
-   `supabase/functions/_fleet-server/` — 170), admin (`npx tsc --noEmit -p tsconfig.json`; `npx vitest run
-   src/components/admin/research-engine src/components/admin/vehicle-catalog src/components/admin/parts-database` — 62),
+   `supabase/functions/_fleet-server/` — 176), admin (`npx tsc --noEmit -p tsconfig.json`; `npx vitest run
+   src/components/admin/research-engine src/components/admin/vehicle-catalog src/components/admin/parts-database` — 114),
    screens (`pnpm test:e2e:dominion:research-engine` — 19).
 
-## 1. Where we stopped (21 Nov, evening)
+## 1. Where we stopped (25 Nov)
 
-The owner took a break while working through the **Toyota Roomy 2016–2020 2WD** (catalogue row
+The owner is working through the **Toyota Roomy 2016–2020 2WD** (catalogue row
 `3cd9cbf3-a804-4817-82db-400cf6abf13a`, Amayama version `M900A-AGBVE`).
-
 **Confirmed so far:** spark plugs 90048-51216, engine air filter 17801-21060 (plus brakes from earlier work).
+The 5 rows closed on 21 Nov now show **Closed** on the owner's screen (RE-73 checked 25 Nov).
 
-**Next for the owner** (Pending catalog → Parts, refresh first). Three browser checks are open:
-1. **Shock absorber, Front.** Amayama "Front spring & shock absorber" → "how many Period dates?" **Two** → Nov 2018:
-   front left 48520-B9285 / 48520-B9115, front right 48510-B9285 / 48510-B9115 (before / from).
-2. **Shock absorber, Rear.** "Rear spring & shock absorber" → **Two** → Nov 2018: both sides 48530-B9285 / 48530-B9165.
-3. **Cabin A/C Filter** (one Period date → **One**).
+**Browser check rebuilt on 25 Nov (owner asked, step by step).** Commits on the branch: `b9053b63` … `eab98416`.
+- One step per screen with Next / Back (`ResearchJobDrawer.tsx` `BrowserCheckCard`); wording fits any site.
+- Parts: each place lists **every number the site shows, each with its own dates** (year required, month if shown,
+  or "No dates shown"); "Add another number" as often as needed. Roam works out whether a place's dates cover the
+  build (`rangesCoverBuild`, client `researchModel.ts` + server `research_browser_check.ts`, same rule) and only
+  asks the dates question when a number shows no dates. Server takes `answers.numbers`; old shapes still accepted.
+- Shocks: step 3 says "Open the section for the rear shock absorber · a row with SHOCK, REAR in its name".
+- **Not live.** Local Dominion (:3001) talks to the live server, which doesn't know `answers.numbers` yet, so a part
+  Confirm from the new screen fails until `fleet-server` is deployed. Ship from a worktree off origin/main with only
+  the research commits (memory "golive-worktree-recipe"); tell the owner first.
+
+**Next for the owner** (after the deploy; Pending catalog → Parts, refresh first):
+1. **Shock absorber, Rear.** Both sides: 48530-B9285 dates 11.2016 – 11.2018, then Add another number 48530-B9165
+   dates 11.2018 – 09.2020.
+2. **Shock absorber, Front.** Front left 48520-B9285 (11.2016 – 11.2018) + 48520-B9115 (11.2018 – 09.2020); front
+   right 48510-B9285 + 48510-B9115, same dates.
+3. **Cabin A/C Filter** (one number, its dates).
 4. Then the 6 **Needs review** rows (coolant, tyre size, H4 bulb, thermostat, wheel bearing, drive belt): no source, so
    browser check or reject. Never "Looks right" on an unsourced row.
-
-**Unchecked on live:** the owner's last screenshot still showed "Failed" on the 5 rows closed on 21 Nov; RE-73 should
-show them as "Closed" with a note. If a refresh doesn't fix it, check that the job list route
-(`catalog_research_routes.ts`, `closedNote`) is the deployed one.
 
 **Decision waiting on the owner: sources (no more scraping shops).** Amayama, Partsouq and SB Parts block robots on
 purpose (banners on Pending catalog). The owner asked for a plan before any more automatic reading. Proposed:
@@ -128,10 +138,9 @@ and show as **Closed**.
 ## 3. Open work, in order
 
 1. **Sources decision** (§1). Nothing else in the "more sources" area until the owner picks.
-2. **Known gap (not asked for yet):** step 3 asks "Do you see ABSORBER ASSY, SHOCK?" but Amayama calls the row
-   "ABSORBER SET, SHOCK, FRONT RH". Row names come from `partFinder` (`researchModel.ts`).
-3. **Known gap:** one change date covers every place in a check. Fine now that front and rear are separate checks;
-   left and right changing at different dates isn't handled.
+2. **Deploy the 25 Nov browser-check rebuild** (§1): admin + `fleet-server`, from a worktree; tell the owner first.
+3. Only shocks have a front/rear section in `partFinder`; other parts with places (brakes, bearings) still use the
+   plain "Do you see …?" line. Add them when the owner checks one.
 4. **Small fixes (one round):** health route `GET /admin/catalog-research/health` (RE-45); research screen test in its
    own CI job (RE-40); `GET /admin/catalog/signals` + "Added. N companies were told…" panel (RE-41); Settings jobs/day,
    finish date, cap above the Google limit refused (RE-37, RE-50); cross-reference proof prefers the car's own engine
