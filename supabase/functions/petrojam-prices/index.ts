@@ -10,6 +10,12 @@ import { requirePlatformAdmin } from "../_shared/platformAdmin.ts";
 import { dominionCan } from "../../../packages/auth-client/src/dominionPermissions.ts";
 import { PETROJAM_PRICE_URL, type PetrojamSyncMode } from "./scrape.ts";
 import { syncActiveRefineries, syncOneRefinery, writeRefinerySnapshot, type ActiveRefinery } from "./refinerySync.ts";
+import {
+  buildRefinerySourceKey,
+  isR2RefinerySourcesEnabled,
+  putRefinerySource,
+  refinerySourceContentType,
+} from "./refinery_source_storage.ts";
 
 const app = new Hono().basePath("/petrojam-prices");
 
@@ -178,13 +184,28 @@ app.post("/admin/refineries/:slug/prices", async (c) => {
   let sourceUrl = (body.source_url || "").trim();
   if (body.document_base64 && body.document_name) {
     const bytes = Uint8Array.from(atob(body.document_base64), (ch) => ch.charCodeAt(0));
-    const path = `${refinery.slug}/${body.effective_date}/${body.document_name.replace(/[^\w.\-]+/g, "_")}`;
-    const { error: uploadError } = await db.storage.from("refinery-price-sources").upload(path, bytes, {
-      upsert: true,
-      contentType: body.document_name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream",
-    });
-    if (uploadError) return c.json(jsonError(uploadError.message), 400);
-    if (!sourceUrl) sourceUrl = path;
+    const contentType = refinerySourceContentType(body.document_name);
+    // Cloudflare R2 (roam-private/refinery-sources/platform/<slug>/<date>/<name>) when the switch
+    // is on. The key is stored where the old bucket path went; same name + date replaces the same
+    // object, exactly like the old upsert.
+    if (isR2RefinerySourcesEnabled()) {
+      const key = buildRefinerySourceKey(refinery.slug, body.effective_date, body.document_name);
+      try {
+        await putRefinerySource(key, bytes, contentType);
+      } catch (e) {
+        // Same answer shape as a failed Supabase upload.
+        return c.json(jsonError(e instanceof Error ? e.message : "Upload failed"), 400);
+      }
+      if (!sourceUrl) sourceUrl = key;
+    } else {
+      const path = `${refinery.slug}/${body.effective_date}/${body.document_name.replace(/[^\w.\-]+/g, "_")}`;
+      const { error: uploadError } = await db.storage.from("refinery-price-sources").upload(path, bytes, {
+        upsert: true,
+        contentType,
+      });
+      if (uploadError) return c.json(jsonError(uploadError.message), 400);
+      if (!sourceUrl) sourceUrl = path;
+    }
   }
   if (!sourceUrl) return c.json({ error: "invalid", message: "A source link or document is required" }, 400);
 

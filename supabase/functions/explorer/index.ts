@@ -24,6 +24,15 @@ import { priceStatusFor, resolvePlugGrade } from "../_shared/priceEngineMath.ts"
 import { requirePlatformAdmin } from "../_shared/platformAdmin.ts";
 import { registerPlaceAdmin } from "./place_admin.ts";
 import { registerPriceEngineAdmin } from "./price_engine_admin.ts";
+import {
+  buildExplorerPhotoKey,
+  EXPLORER_PHOTO_BUCKET,
+  EXPLORER_PHOTO_CONTENT_TYPE,
+  isExplorerPhotoOnR2,
+  isR2ExplorerPhotosEnabled,
+  putExplorerPhoto,
+  signExplorerPhotoUrl,
+} from "./explorer_photo_storage.ts";
 
 const app = new Hono().basePath("/explorer");
 app.use("*", cors());
@@ -699,12 +708,25 @@ app.post("/pins", async (c) => {
     }
     let photoPath: string | null = null;
     if (photo && "bytes" in photo) {
-      photoPath = `${placeId}/${crypto.randomUUID()}.jpg`;
-      const { error: uploadError } = await sb.storage.from("explorer-photos").upload(photoPath, photo.bytes, {
-        contentType: "image/jpeg",
-        upsert: false,
-      });
-      if (uploadError) photoPath = null;
+      // Cloudflare R2 (roam-private/explorer/<user>/<uuid>.jpg) when the switch is on. Same
+      // answer as before: the stored photo path, or null when the upload failed.
+      if (isR2ExplorerPhotosEnabled()) {
+        const key = buildExplorerPhotoKey(user.id);
+        try {
+          await putExplorerPhoto(key, photo.bytes, EXPLORER_PHOTO_CONTENT_TYPE);
+          photoPath = key;
+        } catch (uploadError) {
+          console.warn("[explorer] R2 photo upload failed:", uploadError instanceof Error ? uploadError.message : uploadError);
+          photoPath = null;
+        }
+      } else {
+        photoPath = `${placeId}/${crypto.randomUUID()}.jpg`;
+        const { error: uploadError } = await sb.storage.from(EXPLORER_PHOTO_BUCKET).upload(photoPath, photo.bytes, {
+          contentType: "image/jpeg",
+          upsert: false,
+        });
+        if (uploadError) photoPath = null;
+      }
     }
     await sb.schema("places").from("place_evidence").insert({
       place_id: placeId,
@@ -933,8 +955,17 @@ app.get("/admin/places", async (c) => {
       const payload = (item.payload || {}) as { photoPath?: string };
       let photoUrl: string | null = null;
       if (payload.photoPath) {
-        const signed = await sb.storage.from("explorer-photos").createSignedUrl(payload.photoPath, 600);
-        photoUrl = signed.data?.signedUrl || null;
+        // New rows hold a roam-private key; older ones a path in the old bucket.
+        if (isExplorerPhotoOnR2(payload.photoPath)) {
+          try {
+            photoUrl = await signExplorerPhotoUrl(payload.photoPath, 600);
+          } catch {
+            photoUrl = null;
+          }
+        } else {
+          const signed = await sb.storage.from(EXPLORER_PHOTO_BUCKET).createSignedUrl(payload.photoPath, 600);
+          photoUrl = signed.data?.signedUrl || null;
+        }
       }
       return { ...item, payload: { ...payload, photoUrl } };
     }));

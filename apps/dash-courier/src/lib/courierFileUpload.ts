@@ -5,11 +5,22 @@ import { normalizeStoragePath } from '@/lib/normalizeStoragePath';
 const BUCKET = 'courier-documents';
 const BASE = API_ENDPOINTS.delivery;
 
+type CourierFolder = 'proofs' | 'issues' | 'docs' | 'vehicles' | 'avatars';
+
 async function getUserId(): Promise<string | null> {
   const {
     data: { session },
   } = await supabase.auth.getSession();
   return session?.user?.id ?? null;
+}
+
+/**
+ * Identity documents ('docs') go through the scanned purpose; every other photo (delivery proofs,
+ * issue photos, avatars, vehicle photos) goes through the unscanned one, so a proof never waits on
+ * a virus check. Both are private R2 files behind a signed address.
+ */
+function purposeForFolder(folder: CourierFolder): 'courier-docs' | 'courier-photos' {
+  return folder === 'docs' ? 'courier-docs' : 'courier-photos';
 }
 
 type StartedUpload = {
@@ -20,24 +31,28 @@ type StartedUpload = {
 };
 
 /**
- * Ask our server for a one-time R2 upload link (courier docs are scanned before they are kept).
- * Returns null when the switch is off, the route is not deployed yet or the network failed — the
- * caller then keeps the old direct Supabase upload.
+ * Ask our server for a one-time R2 upload link. Returns null when that purpose's switch is off,
+ * the route is not deployed yet or the network failed — the caller then keeps the old direct
+ * Supabase upload.
  */
-async function startScannedUpload(contentType: string, size: number): Promise<StartedUpload | null> {
+async function startServerUpload(
+  purpose: string,
+  contentType: string,
+  size: number,
+): Promise<StartedUpload | null> {
   const {
     data: { session },
   } = await supabase.auth.getSession();
   if (!session?.access_token) return null;
   try {
-    const res = await fetch(`${BASE}/scanned-documents/start`, {
+    const res = await fetch(`${BASE}/app-uploads/start`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${session.access_token}`,
         apikey: publicAnonKey,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ purpose: 'courier-docs', contentType, size }),
+      body: JSON.stringify({ purpose, contentType, size }),
     });
     if (!res.ok) return null;
     const body = (await res.json()) as {
@@ -53,8 +68,8 @@ async function startScannedUpload(contentType: string, size: number): Promise<St
   }
 }
 
-/** Store the file on R2 and return the address to save. Null means the upload failed. */
-async function uploadScanned(file: File, started: StartedUpload): Promise<string | null> {
+/** Upload to R2 and return the address to save. Null means the upload failed. */
+async function uploadThroughServer(file: File, started: StartedUpload): Promise<string | null> {
   try {
     const put = await fetch(started.uploadUrl, {
       method: 'PUT',
@@ -66,7 +81,7 @@ async function uploadScanned(file: File, started: StartedUpload): Promise<string
       data: { session },
     } = await supabase.auth.getSession();
     if (!session?.access_token) return null;
-    const res = await fetch(`${BASE}/scanned-documents/finish`, {
+    const res = await fetch(`${BASE}/app-uploads/finish`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${session.access_token}`,
@@ -85,18 +100,14 @@ async function uploadScanned(file: File, started: StartedUpload): Promise<string
 
 export async function uploadAndGetProofUrl(
   file: File,
-  folder: 'proofs' | 'issues' | 'docs' | 'vehicles' | 'avatars' = 'proofs',
+  folder: CourierFolder = 'proofs',
 ): Promise<string | null> {
   const userId = await getUserId();
   if (!userId) return null;
 
-  // Only identity documents take the virus-scanned R2 path (when the server switches it on).
-  // Delivery proofs, issue, profile and vehicle photos never wait on the scanner: they keep the
-  // old upload below until their own unscanned slice moves them.
-  if (folder === 'docs') {
-    const started = await startScannedUpload(file.type || 'image/jpeg', file.size);
-    if (started) return uploadScanned(file, started);
-  }
+  // Server upload when that purpose is switched on; otherwise the old upload below.
+  const started = await startServerUpload(purposeForFolder(folder), file.type || 'image/jpeg', file.size);
+  if (started) return uploadThroughServer(file, started);
 
   const ext = file.name.split('.').pop() || 'jpg';
   const path = `${userId}/${folder}/${crypto.randomUUID()}.${ext}`;

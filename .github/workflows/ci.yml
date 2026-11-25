@@ -330,6 +330,8 @@ jobs:
           supabase/functions/freight/freight_docs_storage.test.ts
           supabase/functions/delivery/scanned_document_routes.test.ts
           supabase/functions/_shared/malwareScan.test.ts
+          supabase/functions/explorer/explorer_photo_storage.test.ts
+          supabase/functions/petrojam-prices/refinery_source_storage.test.ts
 
       - name: Deno test ledger read API parity
         run: >

@@ -7,6 +7,7 @@
 import { assert, assertEquals } from "jsr:@std/assert@1";
 import { Hono } from "npm:hono@4.3.11";
 import { registerScannedDocumentRoutes } from "./scannedDocumentRoutes.ts";
+import { UPLOAD_PURPOSES } from "../_shared/objectStorage/purposes.ts";
 
 const SWITCH_VARS = [
   "R2_ACCOUNT_ID",
@@ -63,6 +64,15 @@ async function start(app: Hono, body: Record<string, unknown>, token = "tok") {
   });
 }
 
+/** Same request against the current route name. */
+async function startAt(app: Hono, path: string, body: Record<string, unknown>, token = "tok") {
+  return await app.request(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(body),
+  });
+}
+
 Deno.test("scanned routes: shared switch on + no scan key → start says not enabled (old path)", async () => {
   await withEnv(SHARED_ON, async () => {
     const app = makeApp();
@@ -107,15 +117,26 @@ Deno.test("scanned routes: merchant KYC is not offered as an app upload", async 
   });
 });
 
-Deno.test("scanned routes: finish is refused while the scan key is missing", async () => {
-  await withEnv(SHARED_ON, async () => {
-    const res = await makeApp().request("/scanned-documents/finish", {
+Deno.test("app uploads: finish is refused when the shared switch is off, and forged tickets fail", async () => {
+  // Switch off → 409 with a stable code the apps can ignore.
+  await withEnv({}, async () => {
+    const res = await makeApp().request("/app-uploads/finish", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: "Bearer tok" },
       body: JSON.stringify({ ticket: "x.y" }),
     });
     assertEquals(res.status, 409);
-    assertEquals((await res.json() as { code?: string }).code, "scanned_uploads_off");
+    assertEquals((await res.json() as { code?: string }).code, "app_uploads_off");
+  });
+
+  // Switch on (photos, no scan key): a ticket we never issued is still refused.
+  await withEnv(SHARED_ON, async () => {
+    const res = await makeApp().request("/app-uploads/finish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer tok" },
+      body: JSON.stringify({ ticket: "x.y" }),
+    });
+    assertEquals(res.status, 400);
   });
 });
 
@@ -130,5 +151,67 @@ Deno.test("scanned routes: no session → 401 on both steps", async () => {
       body: JSON.stringify({ ticket: "x.y" }),
     });
     assertEquals(finished.status, 401);
+  });
+});
+
+Deno.test("app uploads: courier proof photos + driver photos use the shared switch, not the scan key", async () => {
+  await withEnv(SHARED_ON, async () => {
+    const app = makeApp();
+    for (const purpose of ["courier-photos", "driver-photos"]) {
+      const res = await startAt(app, "/app-uploads/start", { purpose, contentType: "image/jpeg", size: 100 });
+      assertEquals(res.status, 200, purpose);
+      const body = await res.json() as { enabled: boolean; uploadUrl: string; ticket: string };
+      assertEquals(body.enabled, true, purpose);
+      assert(body.uploadUrl.includes("/roam-private/pending/"), purpose);
+      assert(body.ticket.includes("."), purpose);
+    }
+    // The old route name still works for these purposes too.
+    const legacy = await startAt(app, "/scanned-documents/start", {
+      purpose: "courier-photos",
+      contentType: "image/jpeg",
+      size: 100,
+    });
+    assertEquals((await legacy.json() as { enabled?: boolean }).enabled, true);
+
+    // Identity documents keep waiting for the scan key.
+    const docs = await startAt(app, "/app-uploads/start", {
+      purpose: "courier-docs",
+      contentType: "image/jpeg",
+      size: 100,
+    });
+    assertEquals(await docs.json(), { enabled: false });
+  });
+});
+
+Deno.test("app uploads: photos are never scanned, so a proof never waits on the virus check", () => {
+  assertEquals(UPLOAD_PURPOSES["courier-photos"].scan, false);
+  assertEquals(UPLOAD_PURPOSES["courier-photos"].bucket, "private");
+  assertEquals(UPLOAD_PURPOSES["courier-photos"].maxBytes, 10 * 1024 * 1024);
+  assertEquals([...UPLOAD_PURPOSES["courier-photos"].mimes].sort(), ["image/jpeg", "image/png", "image/webp"]);
+  assertEquals(UPLOAD_PURPOSES["driver-photos"].scan, false);
+});
+
+Deno.test("app uploads: switch off for the photo purpose → old direct upload", async () => {
+  await withEnv({}, async () => {
+    const res = await startAt(makeApp(), "/app-uploads/start", {
+      purpose: "courier-photos",
+      contentType: "image/jpeg",
+      size: 100,
+    });
+    assertEquals(res.status, 200);
+    assertEquals(await res.json(), { enabled: false });
+  });
+});
+
+Deno.test("app uploads: anything that is not an app upload purpose is refused", async () => {
+  await withEnv({ ...SHARED_ON, MALWARE_SCAN_API_KEY: "scan-key" }, async () => {
+    for (const purpose of ["evidence", "merchant-kyc", "customer-issues", ""]) {
+      const res = await startAt(makeApp(), "/app-uploads/start", {
+        purpose,
+        contentType: "image/jpeg",
+        size: 100,
+      });
+      assertEquals(res.status, 400, purpose || "(empty)");
+    }
   });
 });

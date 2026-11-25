@@ -1,5 +1,6 @@
 import type { User } from '@supabase/supabase-js';
 import { supabase } from './supabase/client';
+import { uploadHaulerPhoto } from './haulerPhotoUpload';
 
 export type ProfileUpdateData = {
   fullName: string;
@@ -12,15 +13,8 @@ export async function updateHaulerProfile(user: User, data: ProfileUpdateData): 
   let photoUrl: string | undefined;
 
   if (data.photoFile) {
-    const ext = data.photoFile.name.split('.').pop() || 'jpg';
-    const path = `${user.id}/avatar.${ext}`;
-    const { error: uploadErr } = await supabase.storage
-      .from('driver-photos')
-      .upload(path, data.photoFile, { upsert: true });
-    if (!uploadErr) {
-      const { data: urlData } = supabase.storage.from('driver-photos').getPublicUrl(path);
-      photoUrl = urlData.publicUrl;
-    }
+    const url = await uploadHaulerPhoto(user.id, data.photoFile);
+    if (url) photoUrl = url;
   }
 
   const displayName = data.displayName.trim() || data.fullName.trim();

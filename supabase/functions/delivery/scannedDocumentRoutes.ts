@@ -1,17 +1,22 @@
 /**
- * Start / finish upload routes for the two app-direct scanned purposes: courier docs and driver docs
- * (the courier app and the hauler app upload those files themselves). Merchant KYC is uploaded
- * straight to its own server route, so it is not offered here.
+ * Start / finish upload routes for the files the apps upload themselves (courier app, hauler app).
  *
- *   start → { enabled: false }                     when the scanned-purpose switch is off
+ *   purpose            gate                                    scanned?
+ *   courier-docs       the scanned-purpose switch (+key)        yes
+ *   driver-docs        the scanned-purpose switch (+key)        yes
+ *   courier-photos     the shared R2 switch (already on in prod) no
+ *   driver-photos      the shared R2 switch (already on in prod) no
+ *
+ *   start → { enabled: false }                     when that purpose's gate is off
  *         → { enabled: true, uploadUrl, ticket }   when it is on (PUT the file to uploadUrl)
- *   finish → { enabled: true, key, address, … }    after PUT; the scan runs here and is fail-closed
+ *   finish → { enabled: true, key, address, … }    after PUT; a scanned purpose scans here
  *
- * The switch requires MALWARE_SCAN_API_KEY (see _shared/objectStorage/scannedPurposes.ts), so with
- * today's production secrets every start answers `{ enabled: false }` and the apps keep their old
- * Supabase upload. docs/cloudflare-r2-storage-migration-audit.md §0, slice 7.
+ * The scanned purposes require MALWARE_SCAN_API_KEY (see _shared/objectStorage/scannedPurposes.ts),
+ * so with today's production secrets their starts answer `{ enabled: false }` and those apps keep
+ * their old Supabase upload. Photos are never scanned, so a delivery proof never waits on the
+ * scanner. docs/cloudflare-r2-storage-migration-audit.md §0, slices 7 and 8.
  */
-import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
+import type { Context, Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   finishUpload,
@@ -19,35 +24,41 @@ import {
   storageDepsFromEnv,
   StorageFlowError,
 } from "../_shared/objectStorage/index.ts";
+import { isR2PrivateLinksEnabled } from "../_shared/objectStorage/fileLink.ts";
 import {
-  isScannedPurpose,
   isScannedR2Enabled,
   scannedDocAddress,
 } from "../_shared/objectStorage/scannedPurposes.ts";
 
-/** Courier docs and driver docs are uploaded by the app itself; merchant KYC is server-side. */
-const APP_UPLOAD_PURPOSES = new Set(["courier-docs", "driver-docs"]);
+type PurposeGate = "scanned" | "shared";
+
+/** Only these purposes can be uploaded by an app; everything else is a server-side route. */
+const APP_UPLOAD_PURPOSES: Record<string, PurposeGate> = {
+  "courier-docs": "scanned",
+  "driver-docs": "scanned",
+  "courier-photos": "shared",
+  "driver-photos": "shared",
+};
+
+function purposeEnabled(purpose: string): boolean {
+  return APP_UPLOAD_PURPOSES[purpose] === "scanned" ? isScannedR2Enabled() : isR2PrivateLinksEnabled();
+}
 
 export type ScannedDocumentDeps = {
   getSupabase: (authHeader: string) => SupabaseClient;
 };
 
 export function registerScannedDocumentRoutes(app: Hono, deps: ScannedDocumentDeps) {
-  const signedInUser = async (c: {
-    req: { header: (name: string) => string | undefined };
-  }): Promise<{ id: string } | null> => {
+  const signedInUser = async (c: Context): Promise<{ id: string } | null> => {
     const authHeader = c.req.header("Authorization");
     if (!authHeader) return null;
     const { data: { user } } = await deps.getSupabase(authHeader).auth.getUser();
     return user ? { id: user.id } : null;
   };
 
-  app.post("/scanned-documents/start", async (c) => {
+  const startHandler = async (c: Context) => {
     const user = await signedInUser(c);
     if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-    // Switch off (no scan key, or R2 not configured) → the app keeps its old direct upload.
-    if (!isScannedR2Enabled()) return c.json({ enabled: false });
 
     const body = (await c.req.json().catch(() => ({}))) as {
       purpose?: unknown;
@@ -55,9 +66,11 @@ export function registerScannedDocumentRoutes(app: Hono, deps: ScannedDocumentDe
       size?: unknown;
     };
     const purpose = String(body.purpose || "");
-    if (!isScannedPurpose(purpose) || !APP_UPLOAD_PURPOSES.has(purpose)) {
+    if (!Object.hasOwn(APP_UPLOAD_PURPOSES, purpose)) {
       return c.json({ error: "Unknown upload purpose" }, 400);
     }
+    // Switch off for this purpose → the app keeps its old direct upload.
+    if (!purposeEnabled(purpose)) return c.json({ enabled: false });
 
     try {
       const started = await startUpload(
@@ -73,17 +86,19 @@ export function registerScannedDocumentRoutes(app: Hono, deps: ScannedDocumentDe
       return c.json({ enabled: true, ...started });
     } catch (e) {
       if (e instanceof StorageFlowError) return c.json({ enabled: true, error: e.message }, e.status);
-      console.error("[scanned-documents] start failed:", e instanceof Error ? e.message : e);
+      console.error("[app-uploads] start failed:", e instanceof Error ? e.message : e);
       return c.json({ enabled: true, error: "Upload could not start" }, 500);
     }
-  });
+  };
 
-  app.post("/scanned-documents/finish", async (c) => {
+  const finishHandler = async (c: Context) => {
     const user = await signedInUser(c);
     if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-    if (!isScannedR2Enabled()) {
-      return c.json({ error: "Scanned uploads are not switched on", code: "scanned_uploads_off" }, 409);
+    // The scanned purposes fail closed inside finishUpload when the scan key is gone, so the
+    // shared switch is the right gate here.
+    if (!isR2PrivateLinksEnabled()) {
+      return c.json({ error: "App uploads are not switched on", code: "app_uploads_off" }, 409);
     }
 
     const body = (await c.req.json().catch(() => ({}))) as { ticket?: unknown };
@@ -102,8 +117,14 @@ export function registerScannedDocumentRoutes(app: Hono, deps: ScannedDocumentDe
       if (e instanceof StorageFlowError) {
         return c.json({ error: e.message, code: "upload_rejected" }, e.status);
       }
-      console.error("[scanned-documents] finish failed:", e instanceof Error ? e.message : e);
+      console.error("[app-uploads] finish failed:", e instanceof Error ? e.message : e);
       return c.json({ error: "Upload could not be completed" }, 500);
     }
-  });
+  };
+
+  // `/app-uploads` is the current name; `/scanned-documents` stays so a released app keeps working.
+  for (const prefix of ["/app-uploads", "/scanned-documents"]) {
+    app.post(`${prefix}/start`, startHandler);
+    app.post(`${prefix}/finish`, finishHandler);
+  }
 }
