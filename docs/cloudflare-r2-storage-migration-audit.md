@@ -8,7 +8,7 @@
 
 ## 0. START HERE (24 Nov 2026)
 
-**Where we are:** M1 and M2 done. M3 has 3 of ~12 slices: maker logos (live), vehicle pictures + certificates (live, own audit), and **evidence uploads (built 24 Nov, not live)**. M4–M7 not started.
+**Where we are:** M1 and M2 done. M3 has 3 of ~12 slices: maker logos (live), vehicle pictures + certificates (live, own audit), and **evidence uploads (LIVE + switched on 25 Nov ~00:21 UTC; waiting for the first real driver receipt)**. M4–M7 not started.
 
 **Production check (24 Nov):** 427 files still in Supabase Storage (~180 MB): `ephemeral-evidence` 313 (50 MB, **12 new in the last 7 days**, the only bucket still growing), `make-37f42386-docs` 61 (125 MB), `merchant-assets` 23, `parts-imports` 17, `enterprise-freight-docs` 5, `courier-documents` 4, `merchant-documents` 3, `in-house-receipts` 1. `make-37f42386-vehicles` is empty (vehicle pictures audit).
 
@@ -20,7 +20,10 @@
 - Code: `_shared/objectStorage/fileLink.ts`, `supabase/functions/file-link/`, `_fleet-server/evidence_storage.ts`, `evidence_routes.ts`, the `/upload` route in `register_residual_monolith_routes.tsx`. Added to config.toml, the edge deploy list and the CI R2 test step.
 - **Proof:** 37 Deno tests pass (6 new link tests, 5 new evidence tests). Against the real R2: put → signed link → `file-link` run locally → 302 to R2 → same bytes; tampered link 404, expired 410, unsigned R2 request 400; test files removed.
 
-**Go-live for the evidence slice (in this order):**
+**Go-live done (25 Nov):** pushed `2f45698a` to main (cherry-picked onto main, without this branch's unrelated "y" commit). Deploy Edge run 45516878276 green: `file-link` + `fleet-core` deployed, smoke passed. `FILE_LINK_SECRET` set through the Supabase Management API (the `npx supabase` CLI crashes on this machine), confirmed present; `file-link` now answers 404 to a fake link (it answered 503 before the secret). Snapshot at 00:21 UTC: 374 files in `ephemeral-evidence` + `make-37f42386-docs`, 0 `r2:private` rows.
+**Left: the first real upload.** Receipt photos come from the **Driver app** (DriverExpenses, fuel log, offline queue); in the Fleet app only Add driver uploads (licence photos), and the fuel screens upload nothing. Check after the next driver receipt: a new `evidence_files` row with `bucket_id = 'r2:private'`, no new `storage.objects` row, and the photo opens in Fleet.
+
+**Go-live steps that were followed:**
 1. Push (deploys fleet-core + `file-link`; the config.toml change redeploys all functions). Nothing changes yet.
 2. Set the Supabase secret `FILE_LINK_SECRET` (64 random hex characters). From then on, new receipts go to R2.
 3. Real check: log one fuel receipt in Fleet. It shows on screen; `evidence_files` has a row with `bucket_id = 'r2:private'`; no new row in `storage.objects` for `ephemeral-evidence`.
