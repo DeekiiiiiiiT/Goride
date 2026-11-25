@@ -143,8 +143,8 @@ and show as **Closed**.
    = 10min`) and `20261125151043` (RE-58: 4 listings now `owner`, function patched). Edge deploy green
    (platform-catalog), Dominion Vercel Ready, Supabase function tests green, Parts SQL checks green after `86b9db1a`
    (two SQL tests still refreshed the old materialized view), new `research-engine-ui` CI job green.
-   **Watch:** the first catch-up rebuild (flag set 25 Nov 15:42 UTC) and the 26 Nov 03:30 nightly in
-   `cron.job_run_details` should both succeed. Roomy cells after the rebuild: FILT-AIR, HVAC-CABIN, ENG-THERM, BELT-SERP
+   First catch-up rebuild **succeeded** 25 Nov 15:50 UTC (3 min 0 s; it would have been cut at 2 min before).
+   **Watch:** the 26 Nov 03:30 nightly `catalog-demand-readiness` in `cron.job_run_details` should succeed too. Roomy cells after the rebuild: FILT-AIR, HVAC-CABIN, ENG-THERM, BELT-SERP
    "missing" — FILT-AIR is odd (engine air filter 17801-21060 was confirmed 21 Nov); look at why it doesn't count.
 3. **RE-64 reconsidered (no change):** Amayama's `M900A-AGBVE` is the catalogue's own code (kept as the remembered
    version, which research uses). `vehicle_catalog.full_model_code` `DBA-M900A-GBME` may be the code on the car's own
