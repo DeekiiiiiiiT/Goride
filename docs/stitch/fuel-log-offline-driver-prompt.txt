@@ -1,0 +1,260 @@
+ROAM DRIVER — LOG FUEL WITH OR WITHOUT SIGNAL — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+HOW TO USE THIS FILE
+- First paste: everything from "FIRST PASTE" down to the end of SCREEN 2.
+- Then paste one SCREEN block at a time (SCREEN 3, SCREEN 4, …). Each block is complete on its own.
+- Never paste the section "FOR CLAUDE — DO NOT PASTE" at the bottom.
+
+
+
+==================== FIRST PASTE ====================
+
+Roam Driver - Log fuel with or without signal (Phone App, 390px, for drivers of fleet cars):
+
+Design high-fidelity phone screens for the new "Log fuel" flow in the Roam Driver app. A driver at the pump takes a photo of the odometer, picks how they paid, takes a photo of the pump or receipt, and taps Save. That's it. The fill is saved on the phone straight away, even with no signal, and sends by itself when the signal comes back. Roam reads the numbers from the photos, so typing is optional. Each fill in the list shows where it is: "On this phone", "Sent", "Read" or "Needs a look". If the app closes in the middle, the driver picks up where they left off with their photos still there. The tone is calm, short and reassuring: the driver should never wonder whether the fill was saved. The design must feel modern, calm and effortless, like the best consumer banking apps. Every screen is tall enough to show everything, with no inner scrolling. Draw only the screens asked for in this message.
+
+
+BRAND IDENTITY:
+- Match the existing Roam Driver app (do not redesign it):
+  - white cards on a light slate page, rounded corners, large touch targets (at least 48px tall)
+  - top bar: menu button on the left, "Roam" in the middle, profile circle on the right
+  - a page header under the top bar: back arrow, page title, and a small step line under it ("Step 1 of 3")
+- LIGHT MODE (default):
+  - Primary: Emerald 600 (#059669) — primary buttons, ticks, the active step
+  - Background: Slate 100 (#f1f5f9)
+  - Surface cards: White (#ffffff) with a soft shadow (0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(15,23,42,0.06)) and a hairline border #e2e8f0
+  - Text primary: Slate 900 (#0f172a)
+  - Muted text: Slate 600 (#475569)
+  - On this phone (waiting to send): Amber 700 (#b45309) on #fffbeb
+  - Sent: Blue 700 (#1d4ed8) on #eff6ff
+  - Read / done: Emerald 600 (#059669) on #ecfdf5
+  - Needs a look: Red 600 (#dc2626) on #fef2f2
+- DARK MODE:
+  - Background #0b1220, surface #1e293b, border #334155, text #f8fafc, muted #cbd5e1, primary #10b981
+  - Amber #fbbf24 on #451a03; blue #60a5fa on #172554; green #34d399 on #064e3b; red #f87171 on #450a0a
+- Shapes: cards 16px corner radius, buttons 12px, photo tiles 12px, chips fully rounded.
+- Typography: Inter. Page title 22px bold, card title 17px semibold, body 15px, helper text 13px. Money and km use tabular figures: "J$4,000.00", "18.70 L", "200,247 km".
+- The car plate is always shown in a small grey rounded box: "5179KZ".
+- Dates and times in plain words: "Tue 24 Nov, 7:03 AM". Never "2026-11-24", never codes or ids.
+- Status chips (small, fully rounded, icon + words):
+  - "On this phone" amber with a phone icon
+  - "Sent" blue with an up-arrow icon
+  - "Read" green with a tick
+  - "Needs a look" red with an eye icon
+- Signal pill (only when there's no signal): a small amber pill under the page header, "No signal — saving on this phone", with a cloud-off icon.
+- Buttons always look like buttons:
+  - Primary = solid emerald with white text, full width, 52px tall.
+  - Secondary = white with a visible #cbd5e1 border and dark text.
+  - Danger (Cancel this fill) = red border and red text.
+  - Never underlined text links, never grey text-only buttons. Confirms are in-app bottom sheets, never browser pop-ups.
+- The pieces used across these screens (draw them the same way every time):
+  - Big photo button: a tall white card with a dashed emerald border, a large camera icon, the words "Take a photo" and one helper line under it.
+  - Photo tile: the photo with 12px corners, 160px tall, a small "Retake" secondary button in the bottom right corner.
+  - Optional number box: label above ("Kilometres", "Total (J$)", "Litres"), a 52px tall input, and a muted "Optional" tag on the right of the label.
+  - Payment choice card: icon on the left, title, one helper line, a radio circle on the right; the chosen one has an emerald border and a soft emerald wash.
+  - Fill card in the list: line 1 date and time with the plate box; line 2 the amount big (or "Amount coming" in muted text when not read yet) and the litres beside it; line 3 the status chip and the payment ("Cash", "Gas Card", "Gas Card + Cash"); a chevron on the right.
+  - Toast: dark, rounded, bottom of the screen, a white tick, 2 seconds.
+- No gradients, glassmorphism or 3D. No AI badges, no sparkles.
+- Sample data (REAL, driver Kenny Gregory Rattray, car Toyota Roomy · 5179KZ):
+  - "Tue 24 Nov, 7:42 PM · Blaize Old Harbour Road · Cash · J$4,000.00 · 18.70 L · 200,247 km" — Read
+  - "Tue 24 Nov, 10:15 PM · TotalEnergies, Old Hope Road · Cash · J$1,500.00 · 6.99 L · 200,558 km" — Read
+  - "Thu 19 Nov, 11:40 AM · FESCO Beechwood · Gas Card · J$5,000.00 · 23.69 L · 199,231 km" — Read
+  - Today's fill: "Wed 25 Nov, 7:03 AM · 200,412 km" — On this phone
+
+
+DESIGN PRINCIPLES:
+- Three steps, one question each: odometer photo → how did you pay → pump photo → Save.
+- The photo is the main thing on every photo step. Typing is always optional and sits below the photo.
+- "Saved" always appears right away. Sending happens on its own and is shown only as a status chip, never as a spinner the driver has to wait on.
+- No loading screens anywhere in this flow. No "locking location", no "reading the photo" waits.
+- Never mention databases, servers, AI or "Roam is looking". Say what happened in plain words: "Saved on this phone", "Sent", "Your fleet will check it".
+- Large tap targets for one-handed use at the pump.
+- One view per screen.
+
+
+SCREEN 1: LOG NEW EXPENSE — PICK FUEL
+- Page header: back arrow, title "Log New Expense", step line "Step 1 of 3".
+- Four large choice cards in a 2×2 grid, each with an icon and a word: "Fuel" (fuel pump icon), "Tolls" (ticket icon), "Maintenance" (wrench icon), "Other" (receipt icon).
+- "Fuel" is drawn pressed: emerald border and a soft emerald wash.
+- Under the grid, the car line: "Toyota Roomy" and the plate box "5179KZ".
+- No other buttons.
+
+SCREEN 2: ODOMETER PHOTO — BEFORE THE PHOTO
+- Page header: back arrow, title "Odometer", step line "Step 1 of 3".
+- Big photo button: camera icon, "Take a photo", helper line "Get the whole odometer in the picture."
+- Optional number box below it: label "Kilometres" with the "Optional" tag, empty input with placeholder "e.g. 200,412".
+- Muted helper line under the box: "Leave it blank and we'll read it from the photo."
+- Bottom: primary button "Next", drawn disabled (soft emerald, 50% opacity) because there's no photo yet.
+- Secondary danger button under it: "Cancel this fill" (red border, red text).
+
+==================== END OF FIRST PASTE ====================
+
+
+
+SCREEN 3: ODOMETER PHOTO — PHOTO TAKEN, NUMBER READ
+Same Roam Driver app frame, colours, cards and style as the earlier screens in this project. Driver Kenny Gregory Rattray, car Toyota Roomy · 5179KZ. Phone, 390px, tall enough to show everything, no inner scrolling.
+- Page header: back arrow, title "Odometer", step line "Step 1 of 3".
+- Photo tile showing a car's digital odometer reading 200412 km, with a "Retake" secondary button in its corner.
+- Optional number box: label "Kilometres" with the "Optional" tag, value "200,412", with a small green tick at the right end of the input and a muted line under it: "Read from your photo. Change it if it's wrong."
+- Bottom: primary button "Next" (active).
+- Secondary danger button: "Cancel this fill".
+
+SCREEN 4: ODOMETER PHOTO — PHOTO TAKEN, NO SIGNAL
+Same Roam Driver app frame, colours, cards and style as the earlier screens in this project. Driver Kenny Gregory Rattray, car Toyota Roomy · 5179KZ. Phone, 390px, tall enough to show everything, no inner scrolling.
+- Page header: back arrow, title "Odometer", step line "Step 1 of 3".
+- Directly under the header, the amber signal pill: cloud-off icon, "No signal — saving on this phone".
+- Photo tile showing a car's odometer, with a "Retake" button.
+- Optional number box: label "Kilometres" with the "Optional" tag, empty, placeholder "e.g. 200,412".
+- Muted line under it: "You can leave it blank. We'll read it from the photo when you're back online."
+- Bottom: primary button "Next" (active).
+- Secondary danger button: "Cancel this fill".
+
+SCREEN 5: HOW DID YOU PAY?
+Same Roam Driver app frame, colours, cards and style as the earlier screens in this project. Driver Kenny Gregory Rattray, car Toyota Roomy · 5179KZ. Phone, 390px, tall enough to show everything, no inner scrolling.
+- Page header: back arrow, title "How did you pay?", step line "Step 2 of 3".
+- A small summary row at the top: a tiny thumbnail of the odometer photo, "200,412 km", and a green tick.
+- Three payment choice cards, stacked:
+  - "Cash" — cash icon — helper "I paid with cash from fares" — drawn selected (emerald border, soft emerald wash, filled radio).
+  - "Gas Card" — card icon — helper "Company fuel card".
+  - "Gas Card + Cash" — card-and-cash icon — helper "Part on the card, part in cash".
+- Bottom: primary button "Next".
+- Secondary danger button: "Cancel this fill".
+
+SCREEN 6: PUMP PHOTO — BEFORE THE PHOTO (CASH)
+Same Roam Driver app frame, colours, cards and style as the earlier screens in this project. Driver Kenny Gregory Rattray, car Toyota Roomy · 5179KZ. Phone, 390px, tall enough to show everything, no inner scrolling.
+- Page header: back arrow, title "Pump or receipt", step line "Step 3 of 3".
+- Big photo button: camera icon, "Take a photo", helper line "The pump screen or the receipt. Total and litres must show."
+- Two optional number boxes side by side: "Total (J$)" with the "Optional" tag (placeholder "4,000.00") and "Litres" with the "Optional" tag (placeholder "18.70").
+- Bottom: primary button "Save", drawn disabled because there's no photo yet.
+- Secondary danger button: "Cancel this fill".
+
+SCREEN 7: PUMP PHOTO — PHOTO TAKEN, READY TO SAVE
+Same Roam Driver app frame, colours, cards and style as the earlier screens in this project. Driver Kenny Gregory Rattray, car Toyota Roomy · 5179KZ. Phone, 390px, tall enough to show everything, no inner scrolling.
+- Page header: back arrow, title "Pump or receipt", step line "Step 3 of 3".
+- Photo tile showing a fuel pump display with "4000.00" and "18.70", with a "Retake" button.
+- Two optional number boxes side by side: "Total (J$)" value "4,000.00" and "Litres" value "18.70", each with a small green tick at the right end. Muted line under them: "Read from your photo. Change them if they're wrong."
+- A soft grey line under the boxes: "J$213.90 a litre".
+- Bottom: primary button "Save".
+- Secondary danger button: "Cancel this fill".
+
+SCREEN 8: SAVED — FUEL LIST
+Same Roam Driver app frame, colours, cards and style as the earlier screens in this project. Driver Kenny Gregory Rattray, car Toyota Roomy · 5179KZ. Phone, 390px, tall enough to show everything, no inner scrolling.
+- Page header: back arrow, title "Fuel", no step line.
+- Top: primary button "Log fuel" with a plus icon.
+- A soft amber card under it: phone icon, "1 fill on this phone", "It sends by itself when you have signal.", and a secondary button on the right "Send now".
+- The list of fill cards, newest first:
+  - "Wed 25 Nov, 7:03 AM" plate box 5179KZ · "Amount coming" (muted) · chip "On this phone" (amber) · "Cash"
+  - "Tue 24 Nov, 10:15 PM" · "J$1,500.00 · 6.99 L" · chip "Read" (green) · "Cash"
+  - "Tue 24 Nov, 7:42 PM" · "J$4,000.00 · 18.70 L" · chip "Read" (green) · "Cash"
+  - "Thu 19 Nov, 11:40 AM" · "J$5,000.00 · 23.69 L" · chip "Read" (green) · "Gas Card"
+- At the bottom, the toast: white tick, "Saved on this phone".
+
+SCREEN 9: ONE FILL — ON THIS PHONE
+Same Roam Driver app frame, colours, cards and style as the earlier screens in this project. Driver Kenny Gregory Rattray, car Toyota Roomy · 5179KZ. Phone, 390px, tall enough to show everything, no inner scrolling.
+- Page header: back arrow, title "Fuel · Wed 25 Nov".
+- Header card: "Wed 25 Nov, 7:03 AM", the plate box 5179KZ, the chip "On this phone" (amber), and the line "Waiting for signal. It sends by itself."
+- Two photo tiles side by side, 120px tall: "Odometer" and "Pump", each with its label under it.
+- Detail rows (label left, value right): "Odometer — 200,412 km", "Paid with — Cash", "Total — Coming from your photo" (muted), "Litres — Coming from your photo" (muted), "Location — Saved" with a small green pin.
+- Bottom: primary button "Send now". No remove or delete button.
+
+SCREEN 10: ONE FILL — NEEDS A LOOK
+Same Roam Driver app frame, colours, cards and style as the earlier screens in this project. Driver Kenny Gregory Rattray, car Toyota Roomy · 5179KZ. Phone, 390px, tall enough to show everything, no inner scrolling.
+- Page header: back arrow, title "Fuel · Mon 23 Nov".
+- Header card: "Mon 23 Nov, 6:20 PM", the plate box 5179KZ, the chip "Needs a look" (red), and the line "We couldn't read the total from the pump photo. Your fleet will check it."
+- Two photo tiles side by side: "Odometer" and "Pump" (the pump photo is drawn a little blurry).
+- Detail rows: "Odometer — 200,243 km", "Paid with — Cash", "Total — Not read", "Litres — Not read".
+- Optional number boxes under the rows: "Total (J$)" and "Litres", both empty, with the line "Know the numbers? Add them here."
+- Bottom: primary button "Add numbers".
+- Secondary button: "Retake pump photo".
+
+SCREEN 11: PICK UP WHERE YOU LEFT OFF
+Same Roam Driver app frame, colours, cards and style as the earlier screens in this project. Driver Kenny Gregory Rattray, car Toyota Roomy · 5179KZ. Phone, 390px, tall enough to show everything, no inner scrolling.
+- The app has just reopened after it closed in the middle of a fill.
+- Page header: back arrow, title "Fuel".
+- A white card with an emerald left edge at the top:
+  - Title "Finish your fill from 7:03 AM"
+  - A small thumbnail of the odometer photo and "200,412 km · Odometer done"
+  - Line "Next: how you paid and the pump photo."
+  - Primary button "Continue"
+  - Secondary danger button "Cancel this fill"
+- Under it, the normal fill list starting with "Tue 24 Nov, 10:15 PM · J$1,500.00 · 6.99 L · Read".
+
+SCREEN 12: WHERE DID YOU FUEL? (OPTIONAL, AFTER SAVE)
+Same Roam Driver app frame, colours, cards and style as the earlier screens in this project. Driver Kenny Gregory Rattray, car Toyota Roomy · 5179KZ. Phone, 390px, tall enough to show everything, no inner scrolling.
+- Background page: the Fuel list with today's fill at the top.
+- A bottom sheet over it: grab handle, title "Where did you fuel?", line "One tap helps your fleet. You can skip it."
+- Three large station rows, each with a pin icon and a radio circle: "Blaize Old Harbour Road" (selected), "RUBIS Old Harbour Road", "TotalEnergies, Old Hope Road".
+- Secondary row at the bottom of the list: "Somewhere else".
+- Buttons stacked full width: primary "Done", secondary "Skip".
+
+SCREEN 13: GAS CARD — READY TO SAVE
+Same Roam Driver app frame, colours, cards and style as the earlier screens in this project. Driver Kenny Gregory Rattray, car Toyota Roomy · 5179KZ. Phone, 390px, tall enough to show everything, no inner scrolling.
+- Page header: back arrow, title "Gas Card fill", step line "Step 3 of 3".
+- Summary card: tiny odometer photo thumbnail, "200,412 km", and "Paid with Gas Card".
+- Line: "No pump photo needed. The amount comes from the card statement."
+- Optional box: "Litres" with the "Optional" tag, placeholder "e.g. 23.69".
+- Bottom: primary button "Save".
+- Secondary danger button: "Cancel this fill".
+
+SCREEN 14: GAS CARD + CASH — PUMP PHOTO TAKEN
+Same Roam Driver app frame, colours, cards and style as the earlier screens in this project. Driver Kenny Gregory Rattray, car Toyota Roomy · 5179KZ. Phone, 390px, tall enough to show everything, no inner scrolling.
+- Page header: back arrow, title "Pump or receipt", step line "Step 3 of 3".
+- Photo tile showing a pump display "6000.00" and "28.05", with a "Retake" button.
+- Optional boxes: "Total (J$)" value "6,000.00", "Litres" value "28.05", both with green ticks.
+- Optional box below: "Cash part (J$)" with the "Optional" tag, placeholder "e.g. 1,000.00", and the line "Leave it blank and we'll work it out from the card statement."
+- Bottom: primary button "Save".
+- Secondary danger button: "Cancel this fill".
+
+SCREEN 15: WAITING TO SEND — LIST
+Same Roam Driver app frame, colours, cards and style as the earlier screens in this project. Driver Kenny Gregory Rattray, car Toyota Roomy · 5179KZ. Phone, 390px, tall enough to show everything, no inner scrolling.
+- Page header: back arrow, title "Waiting to send".
+- The amber signal pill under the header: "No signal — saving on this phone".
+- Summary line: "2 items on this phone".
+- Two white rows:
+  - "Fuel · Wed 25 Nov, 7:03 AM" · chip "On this phone" · muted line "Last try 7:10 AM · no signal"
+  - "Toll · Tue 24 Nov, 6:48 PM · Portmore" · chip "On this phone" · muted line "Last try 7:10 AM · no signal"
+- No remove or delete buttons. Nothing waiting can be deleted by the driver.
+- Bottom: primary button "Send now", and under it a muted line "Safe to close the app."
+
+
+
+==================== FOR CLAUDE — DO NOT PASTE ====================
+
+ADDITIONAL UI COMPONENTS:
+- Big photo button, photo tile, optional number box, payment choice card, fill card, status chips, signal pill, toast: as in BRAND IDENTITY.
+- Bottom sheet: grab handle, title, summary, body, buttons stacked full width.
+- Resume card: emerald left edge, title, thumbnail row, next-step line, Continue + Cancel this fill.
+
+INTERACTIONS:
+- Spec: docs/fuel-log-offline-first-audit.md (FO-01..FO-17, section 5 Screens).
+- The Fuel tile on Select Category starts the location in the background (20 s limit, FO-03). Location never shows on screen except the "Location — Saved / Not saved" row on a fill.
+- Take a photo = native camera, width 1600 (FO-02). The photo is written to the outbox at once (FO-01). Preview uses an object URL, never a data URL.
+- Number boxes are filled by the background reading only if it answers within 15 s (FO-04); the driver can type over it. A typed value always wins.
+- Next on Odometer is enabled once a photo exists. Save is enabled once the pump photo exists (Cash, Gas Card + Cash) or straight away (Gas Card).
+- Save writes the fill to the outbox, shows the "Saved on this phone" toast and opens the Fuel list. The outbox sends it (FO-05..FO-10). The chip moves On this phone → Sent → Read / Needs a look.
+- Send now runs the outbox at once. There is no remove or clear anywhere (FO-18); an item leaves the phone only when the server confirms it arrived.
+- Pick up where you left off appears when the outbox holds an unfinished fill (after a screen kill or app close, FO-01 / FO-17).
+- Where did you fuel? appears after Save only when a GPS fix arrived and no station is within range; Skip closes it.
+- Needs a look: Add numbers saves the typed total/litres onto the same fill (same captureId). Retake pump photo replaces the pump photo on the same fill.
+- The signal pill shows when the last send attempt failed or the phone reports no connection.
+- Same screens are reused in the Roam Fleet driver section (apps/fleet/src/components/driver-portal) through the shared package (FO-16).
+- Removed for good: "Locking your station location…", "Skip for now", "retry GPS", "Continue without GPS — pick station", "Reading the photo…", "Sync Now", "Force Retry All".
+
+Spec screens / Area
+| Screen | Area |
+| 1 | Log New Expense — Fuel tile |
+| 2 | Odometer — before the photo |
+| 3 | Odometer — photo taken, number read |
+| 4 | Odometer — photo taken, no signal |
+| 5 | How did you pay? |
+| 6 | Pump or receipt — before the photo |
+| 7 | Pump or receipt — photo taken, Save |
+| 8 | Fuel list — saved, 1 fill on this phone |
+| 9 | One fill — On this phone |
+| 10 | One fill — Needs a look |
+| 11 | Pick up where you left off |
+| 12 | Where did you fuel? (optional sheet) |
+| 13 | Gas Card — ready to save |
+| 14 | Gas Card + Cash — pump photo taken |
+| 15 | Waiting to send — list (no remove) |
+| 16 | (dropped — drivers cannot remove fills, FO-18) |

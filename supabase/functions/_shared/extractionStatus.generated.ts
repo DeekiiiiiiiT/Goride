@@ -6,7 +6,7 @@ export const extractionStatus = {
     "fuel": {
       "slug": "fleet-fuel",
       "cutover": "done",
-      "routeCount": 149
+      "routeCount": 154
     },
     "toll": {
       "slug": "fleet-toll",

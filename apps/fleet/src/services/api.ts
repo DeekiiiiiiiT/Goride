@@ -4447,7 +4447,11 @@ export const api = {
             ...(stationOpts?.stationLocation ? { stationLocation: stationOpts.stationLocation } : {}),
         })
     });
-    if (!response.ok) throw new Error("Failed to approve expense");
+    if (!response.ok) {
+      // Review Queue guards (RQ-01/02/03/11) explain why — show that, not a generic line.
+      const err = await response.json().catch(() => ({} as { error?: string; code?: string }));
+      throw Object.assign(new Error(err?.error || "Failed to approve expense"), { code: err?.code, status: response.status });
+    }
     const result = await response.json();
     return result.data || result;
   },
@@ -4458,7 +4462,11 @@ export const api = {
         headers: await requireAuthHeaders(),
         body: JSON.stringify({ id, reason })
     });
-    if (!response.ok) throw new Error("Failed to reject expense");
+    if (!response.ok) {
+      // Review Queue guards (RQ-01/02/03/11) explain why — show that, not a generic line.
+      const err = await response.json().catch(() => ({} as { error?: string; code?: string }));
+      throw Object.assign(new Error(err?.error || "Failed to reject expense"), { code: err?.code, status: response.status });
+    }
     const result = await response.json();
     return result.data || result;
   },

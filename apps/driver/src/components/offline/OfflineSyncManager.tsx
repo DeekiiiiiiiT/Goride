@@ -1,182 +1,152 @@
 import React from 'react';
 import { useOffline } from '../providers/OfflineProvider';
-import { Button } from '@roam/ui';
 import { ScrollArea } from '@roam/ui';
-import { AlertCircle, CheckCircle2, Trash2, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import type { OfflineAction } from '../../types/offline';
 import { isClosedWeekSaveError } from '../../utils/closedWeekTrip';
 
+/**
+ * Waiting to send (audit docs/fuel-log-offline-first-audit.md, screen 15; look: Stitch waiting_to_send_list).
+ * No Remove and no Clear all: nothing a driver saved is deleted on the phone (FO-18).
+ * An item leaves only when the server confirms it arrived.
+ */
+const Sym = ({ name, className = '' }: { name: string; className?: string }) => (
+  <span className={`material-symbols-outlined ${className}`} aria-hidden="true">
+    {name}
+  </span>
+);
+
 export function OfflineSyncManager() {
-  const { queue, isOnline, syncStatus, processQueue, removeFromQueue, clearQueue } = useOffline();
-
-  const handleRetry = () => {
-    void processQueue(true);
-  };
-
-  const handleClear = () => {
-    const held = queue.filter(
-      (item) => item.type === 'SUBMIT_TRIP' && isClosedWeekSaveError(item.lastError),
-    );
-    const rest = queue.filter((item) => !held.some((heldItem) => heldItem.id === item.id));
-    if (rest.length === 0) {
-      window.alert(
-        'This trip stays on the phone. Change the date to an open week, or discard this trip.',
-      );
-      return;
-    }
-    const note = held.length
-      ? ' Trips in a closed week stay until you change the date or discard that trip.'
-      : '';
-    if (
-      window.confirm(
-        `Are you sure you want to delete the other pending offline data? This cannot be undone.${note}`,
-      )
-    ) {
-      if (held.length === 0) clearQueue();
-      else rest.forEach((item) => removeFromQueue(item.id));
-    }
-  };
-
-  const handleDelete = (id: string) => {
-    removeFromQueue(id);
-  };
-
-  const suspendedCount = queue.filter(item => (item.retryCount || 0) >= 3).length;
+  const { queue, isOnline, syncStatus, processQueue } = useOffline();
+  const sending = syncStatus === 'SYNCING';
 
   return (
-    <div className="w-80">
-      <div className="flex items-center justify-between border-b bg-slate-50/50 p-4 dark:bg-slate-900/50">
-        <div className="flex items-center gap-2">
-          {isOnline ? <Wifi className="h-4 w-4 text-green-600" /> : <WifiOff className="h-4 w-4 text-amber-500" />}
-          <h4 className="text-sm font-semibold">Offline Queue</h4>
+    <div className="w-[min(22rem,calc(100vw-2rem))] bg-[#f1f5f9] p-3 dark:bg-[#0b1220]">
+      {isOnline ? (
+        <div className="mb-3 flex items-center gap-2 rounded-2xl bg-[#ecfdf5] px-4 py-3 text-[14px] font-semibold text-[#006948] dark:bg-emerald-950/40 dark:text-emerald-300">
+          <Sym name="wifi" className="text-[20px]" /> Online
         </div>
-        <div className="flex items-center gap-1">
-          <span className={`text-xs font-medium ${isOnline ? 'text-green-600' : 'text-amber-600'}`}>
-            {isOnline ? 'Online' : 'Offline'}
-          </span>
+      ) : (
+        <div className="mb-3 flex items-center gap-2 rounded-2xl bg-[#fffbeb] px-4 py-3 text-[14px] font-semibold text-[#b45309] shadow-sm dark:bg-amber-950/40 dark:text-amber-300">
+          <Sym name="cloud_off" className="text-[20px]" />
+          <span className="flex-1">No signal — saving on this phone</span>
+          <span className="h-2.5 w-2.5 rounded-full bg-[#cf6721]" />
         </div>
+      )}
+
+      <div className="mb-3 flex items-center gap-2 px-1">
+        <h4 className="text-[18px] font-semibold tracking-[-0.01em] text-[#131b2e] dark:text-slate-50">Items on this phone</h4>
+        <span className="flex h-7 min-w-7 items-center justify-center rounded-full bg-[#dce1ff] px-2 text-[13px] font-semibold text-[#131b2e]">
+          {queue.length}
+        </span>
       </div>
 
-      <div className="border-b bg-white p-4 dark:bg-slate-950">
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-xs font-medium text-slate-500">
-            {queue.length} items pending
-            {suspendedCount > 0 && <span className="ml-1 text-red-500">({suspendedCount} failed)</span>}
-          </span>
-          {queue.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClear}
-              className="h-6 px-2 text-xs text-red-500 hover:bg-red-50 hover:text-red-600"
-            >
-              Clear All
-            </Button>
-          )}
-        </div>
-        {queue.length > 0 ? (
-          <Button
-            size="sm"
-            className={`w-full text-white ${suspendedCount > 0 ? 'bg-amber-600 hover:bg-amber-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}
-            onClick={handleRetry}
-            disabled={syncStatus === 'SYNCING' || !isOnline}
-          >
-            {syncStatus === 'SYNCING' ? (
-              <>
-                <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> Syncing...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="mr-2 h-3 w-3" />
-                {isOnline ? (suspendedCount > 0 ? 'Force Retry All' : 'Sync Now') : 'Waiting for connection...'}
-              </>
-            )}
-          </Button>
-        ) : (
-          <div className="py-2 text-center text-xs text-slate-400">System is up to date</div>
-        )}
-      </div>
-
-      <ScrollArea className="h-[300px]">
+      <ScrollArea className="max-h-[320px]">
         {queue.length === 0 ? (
-          <div className="flex h-40 flex-col items-center justify-center text-slate-400">
-            <CheckCircle2 className="mb-2 h-8 w-8 opacity-20" />
-            <p className="text-sm text-slate-500">All synced!</p>
+          <div className="flex h-36 flex-col items-center justify-center rounded-2xl bg-white text-[#3d4a42] shadow-sm dark:bg-slate-900">
+            <Sym name="check_circle" className="mb-2 text-[32px] text-[#006948]" />
+            <p className="text-[14px] font-medium">All sent</p>
           </div>
         ) : (
-          <div className="divide-y">
-            {queue.map(item => {
-              const isSuspended = (item.retryCount || 0) >= 3;
+          <div className="space-y-3">
+            {queue.map((item) => {
+              const { icon, iconCls, title, amount, extra } = describe(item);
               return (
-                <div
-                  key={item.id}
-                  className={`group p-3 transition-colors ${isSuspended ? 'bg-red-50 dark:bg-red-950/20' : 'hover:bg-slate-50 dark:hover:bg-slate-900'}`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="min-w-0 flex-1 pr-2">
-                      <div className="mb-1 flex items-center gap-2">
-                        <span
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${isSuspended ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}
-                        >
-                          {isSuspended ? 'Failed' : item.type.replace('_', ' ')}
+                <div key={item.id} className="rounded-2xl bg-white p-4 shadow-sm dark:bg-slate-900">
+                  <div className="flex items-start gap-3">
+                    <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconCls}`}>
+                      <Sym name={icon} className="text-[22px]" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="truncate text-[15px] font-semibold text-[#131b2e] dark:text-slate-50">{title}</p>
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#fffbeb] px-2 py-0.5 text-[11px] font-semibold text-[#b45309]">
+                          <Sym name="smartphone" className="text-[13px]" /> On this phone
                         </span>
-                        <span className="text-[10px] text-slate-400">{timeAgo(item.timestamp)}</span>
                       </div>
-                      <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-300">
-                        {getDisplayTitle(item)}
-                      </p>
-                      {item.lastError && (
-                        <div className="mt-1 flex items-start gap-1 text-xs text-red-500">
-                          <AlertCircle className="mt-0.5 h-3 w-3 flex-shrink-0" />
-                          <span className="line-clamp-2 break-words">{item.lastError}</span>
-                        </div>
-                      )}
+                      {amount || extra ? (
+                        <p className="mt-0.5 text-[18px] font-bold tabular-nums text-[#131b2e] dark:text-slate-50">
+                          {amount}
+                          {extra ? <span className="text-[14px] font-normal text-[#3d4a42] dark:text-slate-400"> · {extra}</span> : null}
+                        </p>
+                      ) : null}
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 text-slate-300 opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
-                      onClick={() => handleDelete(item.id)}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
                   </div>
+                  <p className="mt-3 flex items-center gap-1.5 text-[13px] text-[#3d4a42] dark:text-slate-400">
+                    <Sym name="sync_problem" className="text-[16px]" /> {lastTryLine(item)}
+                  </p>
                 </div>
               );
             })}
           </div>
         )}
       </ScrollArea>
+
+      {queue.length > 0 ? (
+        <>
+          <div className="mt-3 flex items-center gap-3 rounded-2xl bg-[#eaedff] p-4 dark:bg-slate-900/70">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#dce1ff] text-[#1d4ed8]">
+              <Sym name="wifi_tethering" className="text-[20px]" />
+            </span>
+            <p className="text-[14px] leading-5 text-[#131b2e] dark:text-slate-200">It sends by itself when you have signal.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void processQueue(true)}
+            disabled={sending}
+            className="mt-3 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-[#006948] text-[15px] font-semibold text-white shadow-md disabled:opacity-60"
+          >
+            <Sym name="sync" className={`text-[20px] ${sending ? 'animate-spin' : ''}`} />
+            {sending ? 'Sending…' : 'Send now'}
+          </button>
+          <p className="mt-2 text-center text-[12px] font-semibold tracking-[0.02em] text-[#6d7a72]">Safe to close the app</p>
+        </>
+      ) : null}
     </div>
   );
 }
 
-function getDisplayTitle(item: OfflineAction) {
-  if (item.type === 'SUBMIT_TRIP') {
-    const data = item.payload.formData as { startLocation?: string; endLocation?: string };
-    return `${data.startLocation || 'Unknown'} ➝ ${data.endLocation || 'Unknown'}`;
-  }
-  if (item.type === 'SUBMIT_FUEL_EXPENSE') {
-    return item.payload.label || 'Fuel log';
-  }
-  if (item.type === 'SUBMIT_CASH_TOLL') {
-    return item.payload.label || 'Toll receipt';
-  }
-  if (item.type === 'SUBMIT_GAS_CARD_ANCHOR') {
-    return item.payload.label || 'Gas Card odometer log';
-  }
-  if (item.type === 'SUBMIT_SPLIT_FUEL_FILL') {
-    return item.payload.label || 'Gas Card + Cash fill';
-  }
-  return 'Unknown Action';
+function lastTryLine(item: OfflineAction): string {
+  if (isClosedWeekSaveError(item.lastError)) return item.lastError || 'Waiting for the week to be reopened';
+  if (!item.lastTryAt) return 'Not tried yet';
+  const at = new Date(item.lastTryAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  return `Last try ${at}${item.lastError ? ` · ${item.lastError}` : ''}`;
 }
 
-function timeAgo(date: number) {
-  const seconds = Math.floor((Date.now() - date) / 1000);
-  if (seconds < 60) return 'just now';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+function money(n: number) {
+  return `J$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function dayTime(ts: number) {
+  const d = new Date(ts);
+  return `${d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}, ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+}
+
+function describe(item: OfflineAction): { icon: string; iconCls: string; title: string; amount?: string; extra?: string } {
+  const fuel = 'bg-[#ecfdf5] text-[#006948]';
+  const when = dayTime(item.timestamp);
+  if (item.type === 'SUBMIT_FUEL_EXPENSE' || item.type === 'SUBMIT_GAS_CARD_ANCHOR' || item.type === 'SUBMIT_SPLIT_FUEL_FILL') {
+    const tx = item.type === 'SUBMIT_FUEL_EXPENSE' ? item.payload.transaction : null;
+    const amt = tx && Number(tx.amount) ? money(Number(tx.amount)) : undefined;
+    const litres = tx?.metadata?.fuelVolume ? `${Number(tx.metadata.fuelVolume)} L` : undefined;
+    const paid = item.type === 'SUBMIT_GAS_CARD_ANCHOR' ? 'Gas Card' : item.type === 'SUBMIT_SPLIT_FUEL_FILL' ? 'Gas Card + Cash' : undefined;
+    return { icon: 'local_gas_station', iconCls: fuel, title: `Fuel · ${when}`, amount: amt || (paid ? undefined : 'Amount coming'), extra: litres || paid };
+  }
+  if (item.type === 'SUBMIT_CASH_TOLL') {
+    const p = item.payload;
+    return {
+      icon: 'toll',
+      iconCls: 'bg-[#dce1ff] text-[#1d4ed8]',
+      title: `Toll · ${when}`,
+      amount: Number(p.amountMinor) ? money(Number(p.amountMinor) / 100) : undefined,
+      extra: p.plazaName || p.merchant || undefined,
+    };
+  }
+  if (item.type === 'SUBMIT_TRIP') {
+    const data = item.payload.formData as { startLocation?: string; endLocation?: string };
+    return { icon: 'route', iconCls: 'bg-[#eaedff] text-[#3d4a42]', title: `Trip · ${data.startLocation || 'Start'} → ${data.endLocation || 'End'}` };
+  }
+  if (item.type === 'SUBMIT_DRIVER_REPORT_UPDATE') {
+    return { icon: 'build', iconCls: 'bg-[#eaedff] text-[#3d4a42]', title: item.payload.label || 'Car kit update' };
+  }
+  return { icon: 'inventory_2', iconCls: 'bg-[#eaedff] text-[#3d4a42]', title: 'Item' };
 }

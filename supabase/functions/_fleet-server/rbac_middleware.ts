@@ -499,6 +499,8 @@ export function requireAuth(options?: RequireAuthOptions) {
       // checks the cron secret or service role; a user session is not one.
       path.includes("/fuel/period-jobs/sweep") ||
       path.includes("/fuel/periods/auto-close") ||
+      // Fuel offline-first S6 photo reader: fleet-fuel-cron; the route checks cron/service role.
+      path.endsWith("/fuel/photo-read/run") ||
       // Public Maps JS bootstrap (browser key only)
       path.includes("/maps-config") ||
       // Server Places proxy — Fleet address fields (key stays server-side).
@@ -760,4 +762,20 @@ export function assertPlatformStaffResponse(c: Context): Response | null {
     }, 403) as unknown as Response;
   }
   return platformMfaRequiredResponse(c, user);
+}/**
+ * The signed-in caller's company, from a bearer token. For routes the middleware skips
+ * (e.g. /upload). DSH CR-09: a fill photo's fixed key must use this, never a form field.
+ */
+export async function callerOrganizationIdFromToken(token: string | undefined | null): Promise<string | null> {
+  if (!token) return null;
+  try {
+    const { data, error } = await getSupabase().auth.getUser(token);
+    if (error || !data?.user) return null;
+    const decision = await resolveLoginAccess(data.user);
+    if (decision.organizationId) return decision.organizationId;
+    if (decision.rawRole === 'driver') return await healDriverOrganizationId(data.user.id);
+    return null;
+  } catch {
+    return null;
+  }
 }

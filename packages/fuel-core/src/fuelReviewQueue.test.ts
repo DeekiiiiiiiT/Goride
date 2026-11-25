@@ -6,6 +6,8 @@ import {
   isLogReviewEligible,
   isPendingFuelQueueRow,
   isPendingReadyForReview,
+  isPendingTabRow,
+  isStationHeldQueueRow,
   isStationGateHeld,
   isUnresolvedSplitVariance,
   listAwaitingCashStatement,
@@ -278,5 +280,39 @@ describe('countFuelReviewQueueWork', () => {
     });
     const now = new Date('2026-09-20T12:00:00Z');
     expect(listStaleAwaitingCashStatement([stale], now)).toHaveLength(1);
+  });
+});
+
+describe('RQ-04 / RQ-05 Pending tab rows', () => {
+  it('a fill waiting for an odometer check is not on the Pending tab', () => {
+    const odo = tx({ id: '1', metadata: { needsLogReview: true } });
+    expect(isLogReviewEligible(odo)).toBe(true);
+    expect(isPendingTabRow(odo)).toBe(false);
+  });
+
+  it('a fill with a phone-read odometer is on the Pending tab', () => {
+    expect(isPendingTabRow(tx({ id: '2', metadata: { odometerMethod: 'ai_verified' } }))).toBe(true);
+  });
+
+  it('a fill whose odometer the server photo reader read is on the Pending tab', () => {
+    const read = tx({ id: '3', metadata: { odometerMethod: 'photo_read' } });
+    expect(isLogReviewEligible(read)).toBe(false);
+    expect(isPendingTabRow(read)).toBe(true);
+  });
+
+  it('Pending tab count equals the badge Pending part', () => {
+    const rows = [
+      tx({ id: 'a', metadata: { needsLogReview: true } }),
+      tx({ id: 'b', metadata: { odometerMethod: 'ai_verified' } }),
+      tx({ id: 'c', metadata: { odometerMethod: 'ai_verified', stationGateHold: true } }),
+    ];
+    expect(rows.filter(isPendingTabRow).length).toBe(countFuelReviewQueueWork(rows).pendingReady);
+  });
+
+  it('station-held fills are listed for viewing, not as ready', () => {
+    const held = tx({ id: 'h', metadata: { stationGateHold: true } });
+    expect(isStationHeldQueueRow(held)).toBe(true);
+    expect(isPendingTabRow(held)).toBe(false);
+    expect(isStationHeldQueueRow(tx({ id: 'n' }))).toBe(false);
   });
 });

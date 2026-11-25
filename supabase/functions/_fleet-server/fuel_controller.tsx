@@ -114,6 +114,9 @@ import {
 import { splitCashAwaitingSaveBlocked } from "../../../packages/fuel-core/src/fuelSplitCashLifecycle.ts";
 import { assessFillPlausibility, fillPlausibilityBlocksSave } from "../../../packages/fuel-core/src/fillPlausibility.ts";
 import { getServiceClient } from "./service_client.ts";
+import { registerDriverPhoneOutboxRoutes } from "./driver_phone_outbox_routes.ts";
+import { registerFuelPhotoReaderRoutes } from "./fuel_photo_reader_routes.ts";
+import { buildRefusedFillReview, captureIdOf, pickActiveCardForFill } from "./fuel_offline_fill.ts";
 import {
   normalizeStatementWeeks,
   registerRoamStatementWeeks,
@@ -225,12 +228,68 @@ app.post(`${BASE_PATH}/fuel/ensure-posted-entries`, requirePermission("fuel.view
 
 /** Atomic Gas Card + Cash split fill (idempotent on fillGroupId). */
 app.post(`${BASE_PATH}/fuel/split-fill`, async (c) => {
+  // Fuel offline-first S9: a phone split fill (captureId) we would refuse for good is kept as a
+  // Needs a look row in the Review Queue instead, so nothing the driver sent is lost.
+  const keepRefusedSplit = async (body: Record<string, unknown>, code: string, reason: string) => {
+    const cash = (body.cashTransaction && typeof body.cashTransaction === "object")
+      ? body.cashTransaction as Record<string, unknown>
+      : {};
+    const card = (body.cardFuelEntry && typeof body.cardFuelEntry === "object")
+      ? body.cardFuelEntry as Record<string, unknown>
+      : {};
+    const review = buildRefusedFillReview({
+      payload: { ...card, ...cash, metadata: { ...(card.metadata as object || {}), ...(cash.metadata as object || {}) }, splitBody: body },
+      kind: "split",
+      reason,
+      code,
+      nowIso: new Date().toISOString(),
+    });
+    // DSH CR-05: a re-send never rewrites the kept row.
+    const kept = await kv.get(`transaction:${String(review.id)}`);
+    if (kept) return c.json({ success: true, needsLook: true, data: kept });
+    await kv.set(`transaction:${String(review.id)}`, stampOrg(review, c));
+    return c.json({ success: true, needsLook: true, data: review });
+  };
+  const rbacSplitUser = (c as unknown as { get: (key: string) => unknown }).get("rbacUser") as RbacUser | undefined;
+  const isDriverPhone = !!rbacSplitUser && !hasPermission(rbacSplitUser.resolvedRole, "fuel.create_entry");
   const gate = await assertSplitFillAllowedAsync(c);
-  if (!gate.allowed) return c.json(gate.body, gate.status);
+  if (!gate.allowed) {
+    if (isDriverPhone && (gate.body as Record<string, unknown>)?.code === "MODULE_DISABLED") {
+      const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+      const cash = body.cashTransaction as Record<string, unknown> | undefined;
+      if (cash && captureIdOf(cash)) {
+        return await keepRefusedSplit(body, "MODULE_DISABLED", "Gas Card + Cash isn't switched on for this company");
+      }
+    }
+    return c.json(gate.body, gate.status);
+  }
   try {
     const body = await c.req.json();
+    // FO-12: a phone Gas Card + Cash fill saved without signal may not know its card yet.
+    {
+      const cash = body?.cashTransaction as Record<string, unknown> | undefined;
+      const card = body?.cardFuelEntry as Record<string, unknown> | undefined;
+      if (isDriverPhone && cash && card && captureIdOf(cash) && !card.cardId) {
+        try {
+          const cards = filterByOrg(((await kv.getByPrefix("fuel_card:")) || []) as Record<string, unknown>[], c, {
+            endpoint: "/fuel/split-fill#attach-card",
+          });
+          const picked = pickActiveCardForFill(cards, card.vehicleId, [card.driverId, rbacSplitUser?.userId]);
+          if (picked?.id) {
+            card.cardId = String(picked.id);
+            card.metadata = { ...((card.metadata as object) || {}), cardAttachedByServer: true };
+          }
+        } catch (e) {
+          console.warn("[fuel-offline] split card attach failed", (e as Error)?.message);
+        }
+      }
+    }
     const result = await persistSplitFill(c, body);
     if (!result.ok) {
+      const cash = body?.cashTransaction as Record<string, unknown> | undefined;
+      if (isDriverPhone && result.status === 409 && cash && captureIdOf(cash)) {
+        return await keepRefusedSplit(body, String(result.code || "SPLIT_REFUSED"), String(result.error || "This fill couldn't be saved"));
+      }
       return c.json(
         { error: result.error, code: result.code },
         result.status as 400 | 409 | 500,
@@ -2263,6 +2322,11 @@ app.get(`${BASE_PATH}/fuel-entries/:id/corrections`, requirePermission("fuel.vie
   }
 });
 
+// --- Fuel offline-first S1/S2: items waiting on driver phones ---
+registerDriverPhoneOutboxRoutes(app, BASE_PATH);
+// --- Fuel offline-first S6 (photo reader, scheduler only) + S10 (driver adds numbers) ---
+registerFuelPhotoReaderRoutes(app, BASE_PATH);
+
 // --- Exception queue assignments (org-visible; service-role writes) ---
 app.get(`${BASE_PATH}/fuel/exception-assignments`, requirePermission("fuel.view"), async (c) => {
   try {
@@ -3632,6 +3696,64 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     const existingEntry = await kv.get(`fuel_entry:${entry.id}`);
     const isNewFuelEntry = !existingEntry;
 
+    // Fuel offline-first: phone fills (captureId) from a driver.
+    const phoneCaptureId = !canFleetCreate ? captureIdOf(entry as Record<string, unknown>) : "";
+    // S3: a re-send of a stored phone fill is the same fill at any age — hand it back unchanged.
+    if (
+      phoneCaptureId && existingEntry && typeof existingEntry === "object" &&
+      captureIdOf(existingEntry as Record<string, unknown>) === phoneCaptureId
+    ) {
+      return c.json({ success: true, data: existingEntry, repeatSaveOf: String(entry.id) });
+    }
+    // S3 (no location): a phone fill held for station review is stored as transaction:<id>.
+    // A re-send gets the same held answer instead of a second learnt location.
+    if (phoneCaptureId && isNewFuelEntry) {
+      const held = await kv.get(`transaction:${entry.id}`);
+      const hm = held && typeof held === "object" ? ((held as Record<string, unknown>).metadata as Record<string, unknown> | undefined) : undefined;
+      if (hm?.stationGateHold === true && captureIdOf(held as Record<string, unknown>) === phoneCaptureId) {
+        return c.json({
+          success: true,
+          gateHeld: true,
+          learntLocationId: hm.learntLocationId,
+          repeatSaveOf: String(entry.id),
+          message: "Fuel log has no GPS coordinates. It has been sent to the Learnt tab for admin review before it can be processed.",
+        });
+      }
+    }
+    // FO-12: a phone Gas Card fill saved without signal has no card yet — attach the active card.
+    if (phoneCaptureId && isNewFuelEntry && !entry.cardId && entry.paymentSource === "Gas_Card") {
+      try {
+        const cards = filterByOrg(((await kv.getByPrefix("fuel_card:")) || []) as Record<string, unknown>[], c, {
+          endpoint: "/fuel-entries#attach-card",
+        });
+        const card = pickActiveCardForFill(cards, entry.vehicleId, [entry.driverId, rbacUser.userId]);
+        if (card?.id) {
+          entry.cardId = String(card.id);
+          entry.metadata = { ...(entry.metadata || {}), cardAttachedByServer: true };
+        } else {
+          entry.metadata = { ...(entry.metadata || {}), cardNotFound: true };
+        }
+      } catch (e) {
+        console.warn("[fuel-offline] card attach failed", (e as Error)?.message);
+      }
+    }
+    // S9: a phone fill we would refuse for good is kept as a Needs a look row in the Review Queue.
+    const keepRefusedPhoneFill = async (code: string, reason: string) => {
+      const review = buildRefusedFillReview({
+        payload: entry as Record<string, unknown>,
+        kind: "gas_card",
+        reason,
+        code,
+        nowIso: new Date().toISOString(),
+      });
+      // DSH CR-05: a re-send never rewrites the kept row (the owner may have typed numbers or approved it).
+      const kept = await kv.get(`transaction:${String(review.id)}`);
+      if (kept) return c.json({ success: true, needsLook: true, data: kept });
+      await kv.set(`transaction:${String(review.id)}`, stampOrg(review, c));
+      console.log(`[fuel-offline] refused phone fill ${entry.id} (${code}) kept as ${review.id}`);
+      return c.json({ success: true, needsLook: true, data: review });
+    };
+
     if (existingEntry && typeof existingEntry === "object") {
       const cashGuard = splitCashAwaitingSaveBlocked(
         existingEntry as { amount?: number; status?: string; metadata?: Record<string, unknown> | null },
@@ -3676,6 +3798,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     if (isNewFuelEntry) {
       const gasConflict = await findConflictingGasCardAnchor(entry as Record<string, unknown>);
       if (gasConflict) {
+        if (phoneCaptureId) return await keepRefusedPhoneFill("DUPLICATE_GAS_CARD_ANCHOR", gasConflict.reason);
         return c.json(
           {
             error: gasConflict.reason,
@@ -3700,6 +3823,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
         entry.id,
       );
       if (unlinkedHalf) {
+        if (phoneCaptureId) return await keepRefusedPhoneFill(String(unlinkedHalf.code), unlinkedHalf.reason);
         return c.json(
           {
             error: unlinkedHalf.reason,
@@ -3752,6 +3876,9 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
       });
       if (fillPlausibilityBlocksSave(issues)) {
         const hard = issues.some((issue) => issue.severity === "block");
+        if (phoneCaptureId) {
+          return await keepRefusedPhoneFill("FILL_PLAUSIBILITY", issues[0]?.message || "This fill does not look right.");
+        }
         return c.json(
           { error: issues[0]?.message || "This fill does not look right.", code: "FILL_PLAUSIBILITY", issues },
           hard ? 422 : 409,
@@ -3930,6 +4057,8 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
                 verificationMethod: "none",
                 gateReason: entry.metadata?.gateReason || "No GPS coordinates ? station gate held",
                 learntLocationId: learntId,
+                // Keep the Gas Card (phone fills get it attached by the server, FO-12).
+                ...(entry.cardId ? { cardId: entry.cardId } : {}),
                 pricePerLiter: entry.pricePerLiter || 0,
                 fuelVolume: entry.liters || 0,
                 stationLocation: entry.stationAddress || entry.location || "",

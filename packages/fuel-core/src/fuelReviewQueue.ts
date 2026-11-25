@@ -143,7 +143,8 @@ export function isLogReviewEligible(t: FuelClassifyFields): boolean {
   if (isAdminManualFuelWithProvidedOdometer(t)) return false;
   if (t.metadata?.needsLogReview) return true;
   const method = t.metadata?.odometerMethod;
-  if (isFuelCategory(t) && (!method || method !== 'ai_verified')) return true;
+  // 'photo_read' = the server's photo reader read it (fuel_offline_fill applyPhotoRead) — same trust as the phone's read.
+  if (isFuelCategory(t) && method !== 'ai_verified' && method !== 'photo_read') return true;
   return false;
 }
 
@@ -164,6 +165,20 @@ export function isPendingReadyForReview(t: FuelClassifyFields): boolean {
     return false;
   }
   return true;
+}
+
+/**
+ * Pending tab rows (RQ-04, docs/fuel-review-queue-review.md): ready for review and NOT waiting
+ * for an odometer check. Log Review fills are approved only through the odometer window —
+ * the same split countFuelReviewQueueWork uses for the nav badge.
+ */
+export function isPendingTabRow(t: FuelClassifyFields): boolean {
+  return isPendingReadyForReview(t) && !isLogReviewEligible(t);
+}
+
+/** RQ-05: Pending fills held until the station is checked — shown for viewing only. */
+export function isStationHeldQueueRow(t: FuelClassifyFields): boolean {
+  return isPendingFuelQueueRow(t) && isStationGateHeld(t);
 }
 
 /** YYYY-MM-DD from tx.date (ISO or date-only). */

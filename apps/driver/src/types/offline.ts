@@ -83,7 +83,17 @@ export interface SubmitSplitFuelFillPayload {
   label?: string;
 }
 
-export type OfflineAction =
+/** Sending schedule shared by every waiting item (FO-06/FO-08; @roam/fuel-core/phoneOutbox). */
+export interface OfflineSendTiming {
+  /** Next automatic try (ms). Missing = due now. */
+  nextAttemptAt?: number;
+  /** Last try (ms), for "Last try 7:10 AM". */
+  lastTryAt?: number;
+  /** Waits for a change (e.g. a trip in a closed week); never deleted. */
+  held?: boolean;
+}
+
+export type OfflineAction = OfflineSendTiming & (
   | {
       id: string;
       type: 'SUBMIT_TRIP';
@@ -131,4 +141,5 @@ export type OfflineAction =
       timestamp: number;
       retryCount: number;
       lastError?: string;
-    };
+    }
+);

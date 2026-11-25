@@ -22,6 +22,7 @@
     "./tripRideshareKm": "./src/tripRideshareKm.ts",
     "./fuelBrainClassifyCore": "./src/fuelBrainClassifyCore.ts",
     "./fillPlausibility": "./src/fillPlausibility.ts",
+    "./phoneOutbox": "./src/phoneOutbox.ts",
     "./leftoverSplit": "./src/leftoverSplit.ts",
     "./fleetTime": "./src/fleetTime.ts",
     "./fuelEngine": "./src/fuelEngine.ts",

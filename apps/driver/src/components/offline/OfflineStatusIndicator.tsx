@@ -45,7 +45,7 @@ export function OfflineStatusIndicator() {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="end">
+      <PopoverContent className="w-auto overflow-hidden rounded-2xl p-0" align="end">
         <OfflineSyncManager />
       </PopoverContent>
     </Popover>

@@ -31,6 +31,8 @@ import {
     isLogReviewEligible,
     isPendingFuelQueueRow,
     isPendingReadyForReview,
+    isPendingTabRow,
+    isStationHeldQueueRow,
     isStationGateHeld,
     isUnresolvedSplitVariance,
     isAwaitingCashTx,
@@ -43,6 +45,7 @@ import {
     splitReconTolerance,
 } from '@roam/fuel-core';
 import { formatFuelMoney } from '../../utils/formatFuelMoney';
+import { ViewablePhoto } from './phone-fills/FuelPhotoViewer';
 import { fuelEntryMatchesLineFilter } from '../../utils/fuelServiceLineFilter';
 import { fuelServiceLineUiLabel } from '../../utils/vocabulary';
 import { Checkbox } from '../ui/checkbox';
@@ -381,7 +384,9 @@ export function FuelReimbursementTable({
 
     const pendingAll = scopedTransactions.filter((t) => isPendingFuelQueueRow(t));
     const pendingStationHoldCount = pendingAll.filter((t) => isStationGateHeld(t)).length;
-    const pendingReadyForReview = pendingAll.filter((t) => isPendingReadyForReview(t));
+    // RQ-04: odometer-check fills live in Log Review only. RQ-05: station-held fills listed, View only.
+    const pendingReadyForReview = pendingAll.filter((t) => isPendingTabRow(t));
+    const stationHeldRows = scopedTransactions.filter((t) => isStationHeldQueueRow(t));
 
     const logReview = scopedTransactions.filter((t) => isLogReviewEligible(t));
     const splitMismatchTxs = useMemo(
@@ -521,13 +526,14 @@ export function FuelReimbursementTable({
     // Phase 6: Helper to get a human-readable odometer method label
     const getOdometerMethodLabel = (method?: string) => {
         switch (method) {
-            case 'ai_verified': return 'AI Verified';
-            case 'manual_override': return 'Manual Override';
-            case 'photo_review': return 'Photo Review';
-            case 'manual_entry': return 'Manual Entry';
-            case 'Admin Photo Upload': return 'Admin Photo Upload';
-            case 'Direct Entry': return 'Direct Entry';
-            default: return method || 'Unknown';
+            case 'ai_verified': return 'Read from photo';
+            case 'photo_read': return 'Read from photo';
+            case 'manual_override': return 'Typed by driver';
+            case 'photo_review': return 'Photo check';
+            case 'manual_entry': return 'Typed';
+            case 'Admin Photo Upload': return 'Photo added in Fleet';
+            case 'Direct Entry': return 'Typed in Fleet';
+            default: return 'Not read';
         }
     };
 
@@ -549,7 +555,7 @@ export function FuelReimbursementTable({
             <>
                 {isStationGateHeld(tx) && (
                     <Badge variant="outline" className="text-[9px] h-5 px-1.5 font-normal bg-sky-50 text-sky-800 border-sky-200">
-                        Station hold
+                        Waiting for station check
                     </Badge>
                 )}
                 {metaFlagOn(tx.metadata?.automated) && (
@@ -591,7 +597,7 @@ export function FuelReimbursementTable({
             const name = linkedLog.vendor || linkedLog.location || linkedLog.stationName;
             if (name && !name.toLowerCase().includes('unknown')) return name;
         }
-        return 'Unverified Station';
+        return 'Station not known';
     };
 
     const toggleSelectTx = (txId: string, checked: boolean) => {
@@ -675,7 +681,7 @@ export function FuelReimbursementTable({
                 }
             }
             // Last resort -- show a cleaner label than "Unknown"
-            return `${tx.category || 'Fuel'} Expense - Unverified Station`;
+            return `${tx.category || 'Fuel'} — station not known`;
         };
 
         return (
@@ -701,23 +707,23 @@ export function FuelReimbursementTable({
                             <TableHead>Date</TableHead>
                             <TableHead>Driver</TableHead>
                             <TableHead>Amount</TableHead>
-                            <TableHead>Settled</TableHead>
                             <TableHead>Details</TableHead>
                             <TableHead>Receipt</TableHead>
-                            <TableHead>Status</TableHead>
+                            <TableHead>Why it's here</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {data.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={bulkSelectEnabled ? 9 : 8} className="h-24 text-center text-slate-500">
+                                <TableCell colSpan={bulkSelectEnabled ? 8 : 7} className="h-24 text-center text-slate-500">
                                     No records found.
                                 </TableCell>
                             </TableRow>
                         ) : (
                             data.map((tx) => {
                                 const vol = computeResolvedFuelLiters(tx);
+                                const rowActions = allowFinalizePendingActions && !isStationGateHeld(tx);
                                 return (
                                 <TableRow key={tx.id}>
                                     {bulkSelectEnabled ? (
@@ -754,66 +760,13 @@ export function FuelReimbursementTable({
                                     </TableCell>
                                     <TableCell className="font-semibold text-slate-900">
                                         <div className="flex flex-col">
-                                            <span>${Math.abs(Number(tx.amount) || Number(tx.metadata?.totalCost) || 0).toFixed(2)}</span>
+                                            <span>{formatFuelMoney(Math.abs(Number(tx.amount) || Number(tx.metadata?.totalCost) || 0))}</span>
                                             {tx.metadata?.paymentSource && tx.metadata.paymentSource !== 'driver_cash' && (
                                                 <span className="text-[9px] font-normal text-slate-400 uppercase">{tx.metadata.paymentSource === 'rideshare_cash' ? 'RideShare' : tx.metadata.paymentSource === 'company_card' ? 'Gas Card' : tx.metadata.paymentSource === 'petty_cash' ? 'Petty Cash' : tx.metadata.paymentSource}</span>
                                             )}
-                                            {(() => {
-                                                const linkedLog = logs.find(l => l.transactionId === tx.id || l.id === tx.metadata?.sourceId);
-                                                if (!linkedLog) return null;
-
-                                                const displayAmount = Math.abs(Number(tx.amount) || Number(tx.metadata?.totalCost) || 0);
-                                                const amountMismatch = Math.abs(displayAmount - linkedLog.amount) > 0.01;
-
-                                                return (
-                                                    <div className="flex items-center gap-1 mt-1">
-                                                        <Tooltip>
-                                                            <TooltipTrigger asChild>
-                                                                <Badge variant="outline" className={cn(
-                                                                    "text-[8px] h-3.5 px-1 font-bold tracking-tighter uppercase",
-                                                                    amountMismatch ? "border-amber-500 text-amber-600 bg-amber-50" : "border-slate-200 text-slate-400"
-                                                                )}>
-                                                                    {amountMismatch ? "Mismatch" : "Linked"}
-                                                                </Badge>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent>
-                                                                {amountMismatch ? (
-                                                                    <div className="space-y-1">
-                                                                        <p className="font-bold text-amber-600">Log Mismatch Detected</p>
-                                                                        <p className="text-xs text-slate-500">Ledger: ${Math.abs(tx.amount).toFixed(2)}</p>
-                                                                        <p className="text-xs text-slate-500">Log: ${linkedLog.amount.toFixed(2)}</p>
-                                                                        <p className="text-[10px] text-slate-400 mt-1 italic">Synchronization may be pending.</p>
-                                                                    </div>
-                                                                ) : (
-                                                                    <p className="text-xs">Synchronized with Fuel Log</p>
-                                                                )}
-                                                            </TooltipContent>
-                                                        </Tooltip>
-                                                    </div>
-                                                );
-                                            })()}
-                                        </div>
+                                                                                    </div>
                                     </TableCell>
-                                    <TableCell>
-                                        {tx.status === 'Approved' ? (
-                                            (() => {
-                                                const settlement = findSettlementTx(tx.id);
-                                                return settlement ? (
-                                                    <div className="flex flex-col">
-                                                        <span className="text-emerald-600 font-semibold">${settlement.amount.toFixed(2)}</span>
-                                                        <span className="text-[10px] text-slate-400">
-                                                            {settlement.category === 'Fuel Reimbursement Credit' ? 'Wallet Credit: OK' : 'Ledger Sync: OK'}
-                                                        </span>
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-slate-400 text-xs italic">Pending sync</span>
-                                                );
-                                            })()
-                                        ) : (
-                                            <span className="text-slate-300">-</span>
-                                        )}
-                                    </TableCell>
-                                    <TableCell>
+                                                                        <TableCell>
                                         <div className="flex flex-col max-w-[200px]">
                                             <div className="flex flex-wrap items-center gap-2 mb-1">
                                                 <span className="truncate text-sm font-medium">{resolveDescription(tx)}</span>
@@ -828,14 +781,12 @@ export function FuelReimbursementTable({
                                                     </Badge>
                                                 )}
                                             </div>
-                                            {tx.odometer && <span className="text-xs text-slate-500">Odo: {tx.odometer} km</span>}
+                                            {tx.odometer ? <span className="text-xs text-slate-500">Odometer: {Number(tx.odometer).toLocaleString('en-US')} km</span> : null}
                                             <div className="flex gap-2">
-                                                {vol != null && <span className="text-xs text-slate-500">Vol: {vol} L</span>}
+                                                {vol != null && <span className="text-xs text-slate-500">{vol} L</span>}
                                                 {(tx.metadata?.pricePerLiter || (vol != null && tx.amount)) && (
                                                     <span className="text-xs text-slate-400">
-                                                        @{tx.metadata?.pricePerLiter 
-                                                            ? Number(tx.metadata.pricePerLiter).toFixed(3) 
-                                                            : (vol != null ? (Math.abs(Number(tx.amount)) / vol).toFixed(2) : '-')}/L
+                                                        {formatFuelMoney(tx.metadata?.pricePerLiter ? Number(tx.metadata.pricePerLiter) : (vol ? Math.abs(Number(tx.amount)) / vol : 0))} a litre
                                                     </span>
                                                 )}
                                             </div>
@@ -870,7 +821,7 @@ export function FuelReimbursementTable({
                                                 <TooltipContent side="top" sideOffset={6}>View details</TooltipContent>
                                             </Tooltip>
 
-                                            {pendingQueueMode && showActions && allowFinalizePendingActions && isLogReviewEligible(tx) && onApproveLogReview && (
+                                            {pendingQueueMode && showActions && rowActions && isLogReviewEligible(tx) && onApproveLogReview && (
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>
                                                         <Button
@@ -887,7 +838,7 @@ export function FuelReimbursementTable({
                                             )}
 
                                             {/* Edit — not on Awaiting station (station hold); fleet waits on master station verification */}
-                                            {onEdit && allowFinalizePendingActions && (
+                                            {onEdit && rowActions && (
                                                 tx.metadata?.source === 'Manual' || 
                                                 tx.metadata?.source === 'Bulk Manual' || 
                                                 tx.metadata?.source === 'Manual Request' ||
@@ -908,7 +859,7 @@ export function FuelReimbursementTable({
                                                 </Tooltip>
                                             )}
                                             
-                                            {showActions && allowFinalizePendingActions && tx.status === 'Pending' && (tx.metadata?.source === 'Manual' || !tx.metadata?.source) && (
+                                            {showActions && rowActions && tx.status === 'Pending' && (tx.metadata?.source === 'Manual' || !tx.metadata?.source) && (
                                                 <>
                                                     {onDelete && (
                                                         <Tooltip>
@@ -917,13 +868,13 @@ export function FuelReimbursementTable({
                                                                     <Trash2 className="h-4 w-4" />
                                                                 </Button>
                                                             </TooltipTrigger>
-                                                            <TooltipContent side="top" sideOffset={6}>Delete — removes from ledger</TooltipContent>
+                                                            <TooltipContent side="top" sideOffset={6}>Delete this fill</TooltipContent>
                                                         </Tooltip>
                                                     )}
                                                 </>
                                             )}
 
-                                            {showActions && allowFinalizePendingActions && (
+                                            {showActions && rowActions && (
                                                 <>
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
@@ -931,7 +882,7 @@ export function FuelReimbursementTable({
                                                                 <Check className="h-4 w-4" />
                                                             </Button>
                                                         </TooltipTrigger>
-                                                        <TooltipContent side="top" sideOffset={6}>Approve reimbursement</TooltipContent>
+                                                        <TooltipContent side="top" sideOffset={6}>Approve</TooltipContent>
                                                     </Tooltip>
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
@@ -939,7 +890,7 @@ export function FuelReimbursementTable({
                                                                 <X className="h-4 w-4" />
                                                             </Button>
                                                         </TooltipTrigger>
-                                                        <TooltipContent side="top" sideOffset={6}>Reject — saved as denied</TooltipContent>
+                                                        <TooltipContent side="top" sideOffset={6}>Reject</TooltipContent>
                                                     </Tooltip>
                                                 </>
                                             )}
@@ -967,7 +918,7 @@ export function FuelReimbursementTable({
                             <TableHead>Amount</TableHead>
                             <TableHead>Volume</TableHead>
                             <TableHead>Station</TableHead>
-                            <TableHead>Capture Method</TableHead>
+                            <TableHead>Odometer</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead className="text-right">Action</TableHead>
                         </TableRow>
@@ -998,7 +949,7 @@ export function FuelReimbursementTable({
                                         </div>
                                     </TableCell>
                                     <TableCell className="font-semibold text-slate-900">
-                                        ${Math.abs(Number(tx.amount) || Number(tx.metadata?.totalCost) || 0).toFixed(2)}
+                                        {formatFuelMoney(Math.abs(Number(tx.amount) || Number(tx.metadata?.totalCost) || 0))}
                                     </TableCell>
                                     <TableCell>
                                         {resolvedVol != null ? `${resolvedVol} L` : '-'}
@@ -1169,7 +1120,7 @@ export function FuelReimbursementTable({
                         <div className="flex items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs text-sky-900">
                             <MapPin className="h-3.5 w-3.5 shrink-0" />
                             {pendingStationHoldCount} station hold
-                            {pendingStationHoldCount === 1 ? '' : 's'} — resolve in Station Database
+                            {pendingStationHoldCount === 1 ? '' : 's'} — listed at the bottom of Pending
                         </div>
                     )}
                 </div>
@@ -1178,7 +1129,7 @@ export function FuelReimbursementTable({
                     {logReview.length === 0 ? (
                         <div className="rounded-md border bg-white p-8 text-center text-slate-500">
                             <p className="text-sm">No fuel submissions awaiting odometer review.</p>
-                            <p className="text-xs text-slate-400 mt-1">Items appear here when the AI scanner fails and the driver submits an odometer photo for admin review.</p>
+                            <p className="text-xs text-slate-400 mt-1">Fills show here when the odometer couldn't be read from the photo.</p>
                         </div>
                     ) : (
                         renderLogReviewTable(logReview)
@@ -1189,10 +1140,10 @@ export function FuelReimbursementTable({
                     {isRefreshing && (
                         <div className="flex items-center gap-2 text-xs font-medium text-blue-600 bg-blue-50/50 p-2 rounded-md border border-blue-100 animate-pulse">
                             <Loader2 className="h-3 w-3 animate-spin" />
-                            Synchronizing ledger and verifying manual entries...
+                            Refreshing…
                         </div>
                     )}
-                    {pendingReadyForReview.length === 0 ? (
+                    {pendingReadyForReview.length === 0 && stationHeldRows.length === 0 ? (
                         <div className="rounded-md border border-slate-200 bg-white p-8 text-center space-y-2">
                             <p className="text-sm text-slate-600">No fuel items need your action.</p>
                             <p className="text-xs text-slate-400 max-w-md mx-auto">
@@ -1201,7 +1152,8 @@ export function FuelReimbursementTable({
                             </p>
                         </div>
                     ) : (
-                        renderTable(pendingReadyForReview, true, true, true)
+                        // RQ-05: held fills sit at the bottom with View only (rowActions is false for them).
+                        renderTable([...pendingReadyForReview, ...stationHeldRows], true, true, true)
                     )}
                 </TabsContent>
 
@@ -1424,9 +1376,9 @@ export function FuelReimbursementTable({
             <Dialog open={isDetailsOpen} onOpenChange={(open) => { if(!open) { setIsDetailsOpen(false); setAction(null); } }}>
                 <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
-                        <DialogTitle>Reimbursement Request</DialogTitle>
+                        <DialogTitle>Fuel fill</DialogTitle>
                         <DialogDescription>
-                            Review the details of this transaction.
+                            Check the photos and numbers, then approve or reject.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -1481,10 +1433,9 @@ export function FuelReimbursementTable({
                                 </div>
 
                                 <div className="space-y-1">
-                                    <Label className="text-slate-500 text-xs uppercase tracking-wider">Amount Claimed</Label>
+                                    <Label className="text-slate-500 text-xs uppercase tracking-wider">Total</Label>
                                     <div className="flex items-center gap-2 font-bold text-lg text-emerald-600">
-                                        <DollarSign className="h-5 w-5" />
-                                        {Math.abs(Number(selectedTx.amount) || Number(selectedTx.metadata?.totalCost) || 0).toFixed(2)}
+                                        {formatFuelMoney(Math.abs(Number(selectedTx.amount) || Number(selectedTx.metadata?.totalCost) || 0))}
                                     </div>
                                 </div>
 
@@ -1508,9 +1459,9 @@ export function FuelReimbursementTable({
                                         <span className="text-slate-500">Rate:</span>
                                         <span className="font-mono">
                                             {selectedTx.metadata?.pricePerLiter 
-                                                ? `$${Number(selectedTx.metadata.pricePerLiter).toFixed(3)}/L` 
+                                                ? `${formatFuelMoney(Number(selectedTx.metadata.pricePerLiter))} a litre` 
                                                 : (resolvedLiters && resolvedLiters > 0 && selectedTx.amount 
-                                                    ? `$${(Math.abs(Number(selectedTx.amount)) / resolvedLiters).toFixed(3)}/L` 
+                                                    ? `${formatFuelMoney(Math.abs(Number(selectedTx.amount)) / resolvedLiters)} a litre` 
                                                     : '-')}
                                         </span>
                                     </div>
@@ -1629,86 +1580,6 @@ export function FuelReimbursementTable({
                                     </div>
                                 )}
 
-                                {/* Fuel Posted vs reimbursement settlement (separate concerns) */}
-                                {selectedTx.status === 'Approved' && (
-                                    <div className="mt-4 space-y-3">
-                                        <div className="p-4 border border-emerald-100 bg-emerald-50/50 rounded-xl space-y-2">
-                                            <div className="flex items-center gap-2 text-emerald-700 font-semibold text-sm">
-                                                <div className="h-5 w-5 rounded-full bg-emerald-100 flex items-center justify-center">
-                                                    <Check className="h-3 w-3" />
-                                                </div>
-                                                Fuel status: Posted
-                                            </div>
-                                            <p className="text-xs text-slate-600">
-                                                This fill-up is approved and should appear in Transaction Logs
-                                                {selectedTx.metadata?.decisionReason
-                                                    ? ` (${String(selectedTx.metadata.decisionReason).replace(/_/g, ' ')})`
-                                                    : ''}.
-                                            </p>
-                                            {onViewInTransactionLogs && (
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    className="w-full mt-1 text-xs h-8 bg-white"
-                                                    onClick={() => {
-                                                        setIsDetailsOpen(false);
-                                                        onViewInTransactionLogs({
-                                                            fuelEntryId: selectedTx.metadata?.fuelEntryId as string | undefined,
-                                                            date: selectedTx.date,
-                                                            vehicleId: selectedTx.vehicleId,
-                                                        });
-                                                    }}
-                                                >
-                                                    View in Transaction Logs
-                                                </Button>
-                                            )}
-                                        </div>
-                                        <div className="p-4 border border-slate-200 bg-slate-50/80 rounded-xl space-y-3">
-                                        {(() => {
-                                            const settlement = findSettlementTx(selectedTx.id);
-                                            const isWalletCredit = settlement?.category === 'Fuel Reimbursement Credit';
-                                            return (
-                                                <>
-                                                    <div className="flex items-center gap-2 text-slate-700 font-semibold text-sm">
-                                                        Reimbursement settlement:{' '}
-                                                        {settlement ? (isWalletCredit ? 'Settled (wallet)' : 'Settled') : 'Not settled'}
-                                                    </div>
-                                                    
-                                                    {!settlement ? (
-                                                        <p className="text-xs text-slate-500">
-                                                            Money settles when the weekly statement is finalized — not when the fuel log is posted.
-                                                        </p>
-                                                    ) : (
-                                                        <>
-                                                            <div className="grid grid-cols-2 gap-2 text-xs">
-                                                                <div className="text-slate-500">{isWalletCredit ? 'Method:' : 'Coverage Applied:'}</div>
-                                                                <div className="font-medium text-right">
-                                                                    {isWalletCredit ? 'Cash Wallet Credit' : `${settlement.metadata?.coveragePercent?.toFixed(0)}%`}
-                                                                </div>
-                                                                <div className="text-slate-500">{isWalletCredit ? 'Credit Amount:' : 'Auto-Credit Amount:'}</div>
-                                                                <div className="font-bold text-right text-emerald-600">${settlement.amount.toFixed(2)}</div>
-                                                                <div className="text-slate-500">Ledger Entry:</div>
-                                                                <div className="font-mono text-right truncate">{settlement.id.split('-')[0]}...</div>
-                                                            </div>
-                                                            
-                                                            {onViewDriverLedger && (
-                                                                <Button 
-                                                                    variant="outline" 
-                                                                    size="sm" 
-                                                                    className="w-full mt-2 text-xs h-8 bg-white"
-                                                                    onClick={() => onViewDriverLedger(selectedTx.driverId!)}
-                                                                >
-                                                                    View Driver Ledger
-                                                                </Button>
-                                                            )}
-                                                        </>
-                                                    )}
-                                                </>
-                                            );
-                                        })()}
-                                        </div>
-                                    </div>
-                                )}
                             </div>
 
                             <div className="space-y-5">
@@ -1760,7 +1631,7 @@ export function FuelReimbursementTable({
                               </div>
                             ) : null}
                             <Label htmlFor="action-notes" className="mb-2 block">
-                                {action === 'approve' ? 'Approval Notes (Optional)' : 'Rejection Reason (Required)'}
+                                {action === 'approve' ? 'Approval Notes (Optional)' : 'Why reject? The driver sees this.'}
                             </Label>
                             <Textarea 
                                 id="action-notes"
@@ -1824,7 +1695,7 @@ export function FuelReimbursementTable({
                             Review Fuel Log {logReviewTx?.driverName ? `\u2014 ${logReviewTx.driverName}` : ''}
                         </DialogTitle>
                         <DialogDescription>
-                            The AI odometer scanner was unable to read this submission. Review the photo and enter the correct odometer reading to approve.
+                            The odometer couldn't be read from the photo. Type the reading to approve.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -1834,20 +1705,7 @@ export function FuelReimbursementTable({
                             <div className="space-y-2">
                                 <Label className="text-slate-500 text-xs uppercase tracking-wider">Odometer Photo</Label>
                                 {logReviewTx.metadata?.odometerProofUrl ? (
-                                    <div className="relative rounded-lg border-2 border-amber-200 bg-amber-50/30 overflow-hidden">
-                                        <a href={logReviewTx.metadata.odometerProofUrl} target="_blank" rel="noopener noreferrer" className="block">
-                                            <ImageWithFallback 
-                                                src={logReviewTx.metadata.odometerProofUrl} 
-                                                alt="Odometer Photo" 
-                                                className="w-full max-h-[300px] object-contain bg-black/5" 
-                                            />
-                                        </a>
-                                        <div className="absolute top-2 right-2">
-                                            <Badge className="bg-amber-600 text-white text-[10px]">
-                                                Click to enlarge
-                                            </Badge>
-                                        </div>
-                                    </div>
+                                    <ViewablePhoto url={logReviewTx.metadata.odometerProofUrl} label="Odometer photo" className="h-[300px]" />
                                 ) : (
                                     <div className="flex flex-col items-center justify-center h-40 bg-slate-50 rounded-lg border-2 border-dashed border-slate-200 text-slate-400">
                                         <Camera className="h-10 w-10 mb-2 opacity-40" />
@@ -1861,15 +1719,7 @@ export function FuelReimbursementTable({
                             {logReviewTx.receiptUrl && (
                                 <div className="space-y-2">
                                     <Label className="text-slate-500 text-xs uppercase tracking-wider">Receipt Photo</Label>
-                                    <div className="rounded-lg border border-slate-200 overflow-hidden">
-                                        <a href={logReviewTx.receiptUrl} target="_blank" rel="noopener noreferrer" className="block">
-                                            <ImageWithFallback 
-                                                src={logReviewTx.receiptUrl} 
-                                                alt="Receipt" 
-                                                className="w-full max-h-[200px] object-contain bg-black/5" 
-                                            />
-                                        </a>
-                                    </div>
+                                    <ViewablePhoto url={logReviewTx.receiptUrl} label="Receipt photo" className="h-[200px]" />
                                 </div>
                             )}
 
@@ -1885,8 +1735,7 @@ export function FuelReimbursementTable({
                                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                                     <Label className="text-slate-400 text-[10px] uppercase tracking-wider block mb-1">Amount</Label>
                                     <div className="flex items-center gap-1.5 text-sm font-bold text-emerald-600">
-                                        <DollarSign className="h-3.5 w-3.5" />
-                                        {Math.abs(Number(logReviewTx.amount) || Number(logReviewTx.metadata?.totalCost) || 0).toFixed(2)}
+                                        {formatFuelMoney(Math.abs(Number(logReviewTx.amount) || Number(logReviewTx.metadata?.totalCost) || 0))}
                                     </div>
                                 </div>
                                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
@@ -1923,7 +1772,7 @@ export function FuelReimbursementTable({
                                     <AlertTriangle className="h-4 w-4 text-purple-600 shrink-0" />
                                     <div>
                                         <span className="text-xs font-semibold text-purple-700">
-                                            Capture Method: {getOdometerMethodLabel(logReviewTx.metadata.odometerMethod)}
+                                            How the odometer was read: {getOdometerMethodLabel(logReviewTx.metadata.odometerMethod)}
                                         </span>
                                         {(logReviewTx.metadata?.logReviewReason || logReviewTx.metadata?.odometerManualReason) && (
                                             <p className="text-xs text-purple-600 mt-0.5">
@@ -1974,7 +1823,7 @@ export function FuelReimbursementTable({
                             {/* Admin Notes */}
                             <div className="space-y-2">
                                 <Label htmlFor="admin-log-notes" className="text-sm font-medium text-slate-700">
-                                    Admin Notes (Optional)
+                                    Notes (optional)
                                 </Label>
                                 <Textarea 
                                     id="admin-log-notes"

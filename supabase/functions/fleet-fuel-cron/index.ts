@@ -3,11 +3,14 @@ import { serviceKey } from "../_shared/serviceKey.ts";
  * Door for fuel database jobs. The database job has no user login.
  * Body {} (or no job) = close-job sweeper (hourly). Body {"job":"auto-close"} = daily auto-close of
  * eligible weeks for every company (moved here from GitHub Actions, 24 Nov 2026).
+ * Body {"job":"photo-read"} = fuel photo reader (fuel offline-first S6).
  */
 
 const JOBS: Record<string, string> = {
   sweep: "/fuel/period-jobs/sweep",
   "auto-close": "/fuel/periods/auto-close?orgId=all",
+  // Fuel offline-first S6: the photo reader (pg_cron fuel-photo-read, every 10 minutes).
+  "photo-read": "/fuel/photo-read/run",
 };
 
 function sameSecret(a: string, b: string): boolean {

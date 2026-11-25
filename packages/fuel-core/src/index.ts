@@ -163,6 +163,8 @@ export {
   isAdminManualFuelWithProvidedOdometer,
   isLogReviewEligible,
   isPendingReadyForReview,
+  isPendingTabRow,
+  isStationHeldQueueRow,
   fuelTxDateYmd,
   holdReasonForUnapprovedTx,
   listUnapprovedFuelTxInWindow,

@@ -223,7 +223,16 @@ export function clearCameraDraft(flowId: CaptureFlowId): void {
  * Open the in-app / Capacitor camera (native) or a hidden file input (web).
  * Call saveCameraDraft before this if the form has fields worth keeping.
  */
-export async function captureNativePhoto(flowId: CaptureFlowId): Promise<File | null> {
+export async function captureNativePhoto(
+  flowId: CaptureFlowId,
+  opts?: {
+    /**
+     * Longest side in pixels, done by the camera before the app sees the photo (FO-02).
+     * Keeps memory low on 4 GB phones, where full-size photos get the app's screen killed.
+     */
+    maxSize?: number;
+  },
+): Promise<File | null> {
   if (!Capacitor.isNativePlatform()) {
     return captureViaFileInput(true);
   }
@@ -236,6 +245,7 @@ export async function captureNativePhoto(flowId: CaptureFlowId): Promise<File | 
       resultType: CameraResultType.Uri,
       source: CameraSource.Camera,
       correctOrientation: true,
+      ...(opts?.maxSize ? { width: opts.maxSize, height: opts.maxSize } : {}),
     });
     const path = photo.path || photo.webPath;
     if (!path) {
