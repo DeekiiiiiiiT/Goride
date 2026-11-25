@@ -99,6 +99,7 @@ import { JaaFuelMatchReview } from '../fuel/JaaFuelMatchReview';
 import * as XLSX from 'xlsx';
 import { useFleetTimezone } from '../../utils/timezoneDisplay';
 import { readUberTollsIntoNewSystem, uberTollFilesFrom } from '../../utils/readUberTollsIntoNewSystem';
+import { TOLL_V2_WEEKS_KEY } from '../fleet-financials/recon/tolls-v2/useTollV2Weeks';
 import { Trip, FieldDefinition, FieldType, ParsedRow, DriverMetrics, VehicleMetrics, OrganizationMetrics, ImportAuditState, DisputeRefund } from '../../types/data';
 import { FuelEntry, FuelCard, JaaProgram } from '../../types/fuel';
 import { api } from '../../services/api';
@@ -1220,6 +1221,8 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
 
           // Uber toll paybacks and take-backs go to the new toll system (the old dispute-refund store is gone).
           await readUberTollsIntoNewSystem(uberTollFilesFrom(uploadedFiles as Array<FileData & { rawFile?: File }>));
+          // The just-read tolls change the weeks list (Toll Health, take-backs).
+          queryClient.invalidateQueries({ queryKey: TOLL_V2_WEEKS_KEY });
           setCommitProgress(95);
 
           queryClient.invalidateQueries({ queryKey: ['driverMetrics'] });

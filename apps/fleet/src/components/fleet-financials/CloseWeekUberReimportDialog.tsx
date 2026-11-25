@@ -4,10 +4,12 @@
  * Preview → commit; no auto week sync. Optional Rebuild is separate.
  */
 import React, { useCallback, useId, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import Papa from 'papaparse';
 import { Loader2, UploadCloud, FileText, X, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { readUberTollsIntoNewSystem } from '../../utils/readUberTollsIntoNewSystem';
+import { TOLL_V2_WEEKS_KEY } from './recon/tolls-v2/useTollV2Weeks';
 import { Button } from '../ui/button';
 import { cn } from '../ui/utils';
 import {
@@ -68,6 +70,7 @@ export function CloseWeekUberReimportDialog({
   /** Explicit reseal + rebuild — warn user Collect/Pay may reopen. */
   onRebuildWeek?: () => void | Promise<void>;
 }) {
+  const queryClient = useQueryClient();
   const inputId = useId();
   const [files, setFiles] = useState<FileData[]>([]);
   const [parsing, setParsing] = useState(false);
@@ -221,6 +224,8 @@ export function CloseWeekUberReimportDialog({
           await onUberFilesForToll(tollFiles);
         } else {
           await readUberTollsIntoNewSystem(tollFiles);
+          // The read tolls change the weeks list (Toll Health, take-backs) on every screen using this dialog.
+          void queryClient.invalidateQueries({ queryKey: TOLL_V2_WEEKS_KEY });
         }
       }
       // A timeline problem never undoes or blocks the Uber reports above. When one fails, the dialog stays

@@ -36,6 +36,7 @@ vi.mock('./useTollV2Switches', () => ({
 }));
 
 vi.mock('./useTollV2Weeks', () => ({
+  TOLL_V2_WEEKS_KEY: ['toll-v2-weeks'] as const,
   useTollV2Weeks: () => ({ data: { openWeek: '2026-11-16', takeBacks: [], weeks: [] } }),
 }));
 vi.mock('../../../../services/reconApi', () => ({ fetchTagAccountRollForward: vi.fn().mockResolvedValue(null) }));
