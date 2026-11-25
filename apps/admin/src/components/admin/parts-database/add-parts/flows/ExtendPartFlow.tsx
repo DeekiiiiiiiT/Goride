@@ -23,9 +23,11 @@ type ReviewPhase = "trust" | "save";
 export function ExtendPartFlow({
   onHome,
   onFindParts,
+  owner = false,
 }: {
   onHome: () => void;
   onFindParts: () => void;
+  owner?: boolean;
 }) {
   const [step, setStep] = useState<ExtendStep>(1);
   const [reviewPhase, setReviewPhase] = useState<ReviewPhase>("trust");
@@ -223,6 +225,7 @@ export function ExtendPartFlow({
             setDraft={setDraft}
             onNext={() => setStep(3)}
             onCancel={onHome}
+            owner={owner}
           />
         </div>
       ) : null}

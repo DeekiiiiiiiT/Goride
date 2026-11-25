@@ -263,7 +263,12 @@ Deno.test("parts add catalog-page POST calls save_self_serve_catalog_page", asyn
     rpc(name: string, args?: { p_input?: Record<string, unknown> }) {
       if (name === "save_self_serve_catalog_page") captured = { name, args };
       return Promise.resolve({
-        data: { batchId: "44444444-4444-4444-8444-444444444443", partCount: 3, fitCount: 6 },
+        data: {
+          batchId: "44444444-4444-4444-8444-444444444443",
+          partCount: 2,
+          fitCount: 6,
+          savedNames: ["Front oxygen sensor", "Rear oxygen sensor"],
+        },
         error: null,
       });
     },
@@ -294,17 +299,20 @@ Deno.test("parts add catalog-page POST calls save_self_serve_catalog_page", asyn
       { partTypeId: "a9000003-0000-4000-8000-000000000003", brand: "Toyota", partNumber: "46420-B1090", position: "rear", catalogueNumber: 2 },
     ],
   };
-  await save.handler(mockContext({ role: "platform_owner", jsonBody: body }));
+  const res = await save.handler(mockContext({ role: "platform_owner", jsonBody: body }));
   const cap = captured as { name: string; args: { p_input: Record<string, unknown> } };
   assertEquals(cap.name, "save_self_serve_catalog_page");
   assertEquals((cap.args.p_input.parts as unknown[]).length, 2);
   assertEquals((cap.args.p_input.vehicleListings as unknown[]).length, 2);
+  // F-07: the names the database wrote come back to the app, in input order.
+  const responseBody = res.body as Record<string, unknown>;
+  assertEquals(responseBody.savedNames, ["Front oxygen sensor", "Rear oxygen sensor"]);
 });
 
 Deno.test("link-hints GET forwards url to self_serve_link_hints", async () => {
   let captured: unknown;
   const supabase = {
-    rpc(name: string, args?: { p_url?: string }) {
+    rpc(name: string, args?: { p_url?: string; p_maker?: string | null }) {
       if (name === "self_serve_link_hints") captured = { name, args };
       return Promise.resolve({
         data: { ok: true, frameCodes: ["M900A"], trustedSite: true },
@@ -326,9 +334,45 @@ Deno.test("link-hints GET forwards url to self_serve_link_hints", async () => {
   if (!hints) throw new Error("link-hints route missing");
   const url = "https://partsouq.com/en/catalog/toyota/diagram/JP/2019/TANK-ROOMY/M900A-AGBGE/x";
   await hints.handler(mockContext({ role: "platform_owner", query: { url } }));
-  const cap = captured as { name: string; args: { p_url: string } };
+  const cap = captured as { name: string; args: { p_url: string; p_maker?: string | null } };
   assertEquals(cap.name, "self_serve_link_hints");
   assertEquals(cap.args.p_url, url);
+  // No maker asked for: the database gets null and runs exactly the old URL-only check (F-01).
+  assertEquals(cap.args.p_maker, null);
+});
+
+Deno.test("link-hints GET forwards the picked maker so trust is re-checked for it", async () => {
+  let captured: unknown;
+  const supabase = {
+    rpc(name: string, args?: { p_url?: string; p_maker?: string | null }) {
+      if (name === "self_serve_link_hints") captured = { name, args };
+      return Promise.resolve({
+        data: { ok: true, trustedSite: true, sourceTrust: "confirmed", trustMaker: "Toyota" },
+        error: null,
+      });
+    },
+    from() {
+      const b: Record<string, unknown> = {};
+      const self = () => b;
+      for (const k of ["select", "eq", "order", "limit"]) b[k] = self;
+      b.then = (resolve: (v: unknown) => unknown) => resolve({ data: [], error: null });
+      return b;
+    },
+    schema() { return this; },
+  } as unknown as SupabaseClient;
+  const { registered, route } = mockRoute();
+  registerCatalogRoutes(route, supabase);
+  const hints = registered.find((r) => r.method === "GET" && r.path.endsWith("/parts/add/link-hints"));
+  if (!hints) throw new Error("link-hints route missing");
+  const url = "https://www.toyodiy.com/parts/p_J_2019_TOYOTA_ROOMY_M900A_4601.html";
+  const res = await hints.handler(mockContext({ role: "platform_owner", query: { url, maker: "  Toyota  " } }));
+  const cap = captured as { name: string; args: { p_url: string; p_maker?: string | null } };
+  assertEquals(cap.name, "self_serve_link_hints");
+  assertEquals(cap.args.p_url, url);
+  assertEquals(cap.args.p_maker, "Toyota");
+  const body = res.body as Record<string, unknown>;
+  assertEquals(body.sourceTrust, "confirmed");
+  assertEquals(body.trustMaker, "Toyota");
 });
 
 Deno.test("car_specs CSV requires spec columns", () => {
