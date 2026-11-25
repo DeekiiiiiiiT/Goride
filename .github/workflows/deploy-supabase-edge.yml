@@ -94,6 +94,7 @@ jobs:
             fleet-toll-cron
             fleet-picture-cron
             file-link
+            file-link-resign
             parts-sourcing-drain
             catalog-research
             fleet-ops
