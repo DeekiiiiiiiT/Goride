@@ -492,14 +492,21 @@ function FillCard({
                 >
                   Save numbers
                 </button>
-                <button
-                  type="button"
-                  disabled={busy || !tot || !lit}
-                  onClick={() => void save(true)}
-                  className="flex h-11 items-center justify-center gap-2 rounded-xl bg-black px-6 text-[13px] font-medium text-white shadow-md disabled:opacity-40"
-                >
-                  <span className="material-symbols-outlined text-[18px] text-[#85f8c4]">check_circle</span> Save and approve
-                </button>
+                {odo ? (
+                  <button
+                    type="button"
+                    disabled={busy || !tot || !lit}
+                    onClick={() => void save(true)}
+                    className="flex h-11 items-center justify-center gap-2 rounded-xl bg-black px-6 text-[13px] font-medium text-white shadow-md disabled:opacity-40"
+                  >
+                    <span className="material-symbols-outlined text-[18px] text-[#85f8c4]">check_circle</span> Save and approve
+                  </button>
+                ) : (
+                  // DSH CR-06: no odometer yet — save the numbers here, approve in Log Review with the reading.
+                  <p className="max-w-[16rem] self-center text-[12px] font-semibold text-[#47464c] dark:text-zinc-400">
+                    No odometer reading. Save the numbers, then approve it in Log Review with the reading.
+                  </p>
+                )}
               </div>
             </>
           )}

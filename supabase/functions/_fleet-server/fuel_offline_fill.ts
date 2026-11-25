@@ -65,9 +65,17 @@ function hasAmount(tx: Rec): boolean {
   return Number.isFinite(n) && n > 0;
 }
 
-/** S5: a new-flow fuel fill with no total yet — store it and wait for the photo reader. */
+/** Litres on the fill (quantity or metadata.fuelVolume). */
+function hasLiters(tx: Rec): boolean {
+  return positive(tx.quantity) != null || positive(meta(tx).fuelVolume) != null;
+}
+
+/**
+ * S5: a new-flow fuel fill missing its total or its litres — store it and wait for the photo
+ * reader. DSH CR-03: a total with no litres must not post as 0 L.
+ */
 export function needsPhotoRead(tx: Rec): boolean {
-  return isFuelExpense(tx) && captureIdOf(tx) !== "" && !hasAmount(tx);
+  return isFuelExpense(tx) && captureIdOf(tx) !== "" && (!hasAmount(tx) || !hasLiters(tx));
 }
 
 /** S5: mark the fill as waiting for the photo reader. Pending, never approved, never posted. */
@@ -196,11 +204,14 @@ export function markNeedsLook(tx: Rec, reason: string, nowIso: string): Rec {
 
 /** Ready for the owner to approve in the Review Queue, with what came from where. */
 function markReadyForReview(tx: Rec, m: Rec, source: "photo" | "driver", nowIso: string): Rec {
+  // DSH CR-04: only send it to the odometer window (Log Review) when the odometer is missing or
+  // was typed rather than read; a read odometer goes to Pending, ready to approve.
+  const odoRead = positive(tx.odometer) != null && (m.odometerMethod === "ai_verified" || m.odometerMethod === "photo_read");
   const next: Rec = {
     ...m,
     photoReadStatus: PHOTO_READ_READ,
     photoReadAt: nowIso,
-    needsLogReview: true,
+    needsLogReview: odoRead ? undefined : true,
     logReviewReason: source === "photo"
       ? "Numbers read from the photos — check and approve"
       : "Numbers added by the driver — check and approve",

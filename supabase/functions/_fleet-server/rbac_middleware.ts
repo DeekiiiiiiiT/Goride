@@ -758,3 +758,20 @@ export function assertPlatformStaffResponse(c: Context): Response | null {
   }
   return platformMfaRequiredResponse(c, user);
 }
+/**
+ * The signed-in caller's company, from a bearer token. For routes the middleware skips
+ * (e.g. /upload). DSH CR-09: a fill photo's fixed key must use this, never a form field.
+ */
+export async function callerOrganizationIdFromToken(token: string | undefined | null): Promise<string | null> {
+  if (!token) return null;
+  try {
+    const { data, error } = await getSupabase().auth.getUser(token);
+    if (error || !data?.user) return null;
+    const decision = await resolveLoginAccess(data.user);
+    if (decision.organizationId) return decision.organizationId;
+    if (decision.rawRole === 'driver') return await healDriverOrganizationId(data.user.id);
+    return null;
+  } catch {
+    return null;
+  }
+}

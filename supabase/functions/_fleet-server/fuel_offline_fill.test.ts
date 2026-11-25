@@ -55,7 +55,10 @@ Deno.test("S5: new-flow fill with no total waits for the photo reader", () => {
   const photoOnly = { category: "Fuel", type: "Expense", metadata: { captureId: CAPTURE } };
   assertEquals(needsPhotoRead(photoOnly), true);
   assertEquals(needsPhotoRead({ ...photoOnly, amount: 0 }), true);
-  assertEquals(needsPhotoRead({ ...photoOnly, amount: -4000 }), false);
+  // DSH CR-03: a total with no litres still waits for the reader; both numbers = normal path.
+  assertEquals(needsPhotoRead({ ...photoOnly, amount: -4000 }), true);
+  assertEquals(needsPhotoRead({ ...photoOnly, amount: -4000, metadata: { captureId: CAPTURE, fuelVolume: 18.7 } }), false);
+  assertEquals(needsPhotoRead({ ...photoOnly, amount: -4000, quantity: 18.7 }), false);
   // Old app (no captureId) keeps today's path.
   assertEquals(needsPhotoRead({ category: "Fuel", type: "Expense" }), false);
 });
@@ -145,7 +148,17 @@ Deno.test("S6: total and litres read -> ready for review, J$ and price per litre
   assertEquals(m.photoReadStatus, "read");
   assertEquals(m.readFromPhoto, ["amount", "liters"]);
   assertEquals(m.decisionReason, "PHOTO_READ_REVIEW");
-  assertEquals(m.needsLogReview, true);
+  // DSH CR-04: the odometer was read, so it goes to Pending (not the odometer window).
+  assertEquals(m.needsLogReview, undefined);
+});
+
+Deno.test("CR-04: a typed or missing odometer still goes to the odometer window", () => {
+  const typed = { ...waitingFill, metadata: { ...waitingFill.metadata, odometerMethod: "manual_override" } };
+  assertEquals((applyPhotoRead(typed, { amount: 4000, liters: 18.7, odometer: null }, NOW).metadata as Record<string, unknown>).needsLogReview, true);
+  const none = { ...waitingFill, odometer: undefined };
+  assertEquals((applyPhotoRead(none, { amount: 4000, liters: 18.7, odometer: null }, NOW).metadata as Record<string, unknown>).needsLogReview, true);
+  const readNow = applyPhotoRead(none, { amount: 4000, liters: 18.7, odometer: 200500 }, NOW);
+  assertEquals((readNow.metadata as Record<string, unknown>).needsLogReview, undefined);
 });
 
 Deno.test("S6: odometer filled from the photo only when missing", () => {

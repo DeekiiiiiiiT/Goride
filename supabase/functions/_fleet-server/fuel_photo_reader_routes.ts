@@ -93,17 +93,16 @@ function productionDeps(): PhotoReaderDeps {
   };
 }
 
-/** Put a fill on the reader's queue. Never throws: the fill itself is already saved. */
+/**
+ * Put a fill on the reader's queue. DSH CR-07: throws on failure, so the request fails and the
+ * phone keeps the fill and sends it again (the re-send puts it on the queue then).
+ */
 export async function enqueueFuelPhotoRead(transactionId: string, organizationId: string | null | undefined): Promise<void> {
-  try {
-    const { error } = await getServiceClient().rpc("fuel_photo_read_enqueue", {
-      p_transaction_id: transactionId,
-      p_organization_id: organizationId ?? null,
-    });
-    if (error) console.warn("[photo-read] enqueue failed", transactionId, error.message);
-  } catch (e) {
-    console.warn("[photo-read] enqueue failed", transactionId, e instanceof Error ? e.message : e);
-  }
+  const { error } = await getServiceClient().rpc("fuel_photo_read_enqueue", {
+    p_transaction_id: transactionId,
+    p_organization_id: organizationId ?? null,
+  });
+  if (error) throw new Error(`photo read queue: ${error.message}`);
 }
 
 /** Every id the signed-in driver can appear under on a fill. */

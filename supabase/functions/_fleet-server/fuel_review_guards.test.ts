@@ -58,3 +58,13 @@ Deno.test("RQ-11 reject: blank reason is refused, a reason goes ahead", () => {
   assertEquals(rejectRefusal(fill(), undefined)?.code, "REASON_REQUIRED");
   assertEquals(rejectRefusal(fill(), "Receipt is for another car"), null);
 });
+
+Deno.test("CR-06 approve: a phone fill with no odometer is refused, unless a reading is given", () => {
+  assertEquals(approveRefusal(fill({ odometer: 0 }, { captureId: "c1", photoReadStatus: "read" }))?.code, "NO_ODOMETER");
+  assertEquals(approveRefusal(fill({ odometer: 0 }, { captureId: "c1", photoReadStatus: "read" }), 200500), null);
+  assertEquals(approveRefusal(fill({ odometer: 200500 }, { captureId: "c1", photoReadStatus: "read" })), null);
+});
+
+Deno.test("CR-06 approve: old-app fills without a captureId are unchanged (no odometer check)", () => {
+  assertEquals(approveRefusal(fill({ odometer: 0 })), null);
+});

@@ -84,6 +84,7 @@ import {
   platformMfaRequiredResponse,
   rbacUserFromSupabaseUser,
   resolveLoginAccess,
+  callerOrganizationIdFromToken,
   type RbacUser,
 } from "./rbac_middleware.ts";
 import { logAdminAction, getAuditLogs, getAuditLogsByActor } from "./audit_log.ts";
@@ -104,7 +105,7 @@ import {
   type FilterStats,
 } from "./org_scope.ts";
 import { approveRefusal, rejectRefusal } from "./fuel_review_guards.ts";
-import { claimPendingTransaction, releaseTransactionClaim } from "./fuel_review_claim.ts";
+import { claimPendingTransaction, releaseTransactionClaim, stillHoldsClaim } from "./fuel_review_claim.ts";
 import { loadTollPlazaStats, attachPlazaStats } from "./toll_plaza_stats.ts";
 import { isTollCategory } from "./toll_category_flags.ts";
 import { assertExpectedUpdatedAt, stripConcurrencyToken } from "./optimistic_concurrency.ts";
@@ -2872,6 +2873,11 @@ export function registerResidualMonolithRoutes(app: Hono) {
           typeof previousTransaction === "object" &&
           isSameFuelSaveResent(previousTransaction as Record<string, unknown>, Date.now())
         ) {
+          // DSH CR-07: same as the re-send below — a fill still waiting goes (back) on the queue.
+          if ((previousTransaction as { metadata?: Record<string, unknown> }).metadata?.photoReadStatus === "waiting") {
+            const prevOrg = getOrgId(c) || String((previousTransaction as { organizationId?: string }).organizationId || "");
+            await enqueueFuelPhotoRead(String(transaction.id), prevOrg || null);
+          }
           return c.json({ success: true, data: previousTransaction, repeatSaveOf: String(transaction.id) });
         }
         // S3 (fuel offline-first): a phone outbox re-send of a fill already stored with the same
@@ -2880,6 +2886,13 @@ export function registerResidualMonolithRoutes(app: Hono) {
           !canFleetEdit &&
           isOfflineFillResent(previousTransaction as Record<string, unknown> | null, transaction as Record<string, unknown>)
         ) {
+          // DSH CR-07: a fill still waiting for the reader goes (back) on the queue, so a first
+          // save whose queue step failed is picked up when the phone sends it again.
+          const prevMeta = (previousTransaction as { metadata?: Record<string, unknown> }).metadata || {};
+          if (prevMeta.photoReadStatus === "waiting") {
+            const prevOrg = getOrgId(c) || String((previousTransaction as { organizationId?: string }).organizationId || "");
+            await enqueueFuelPhotoRead(String(transaction.id), prevOrg || null);
+          }
           return c.json({ success: true, data: previousTransaction, repeatSaveOf: String(transaction.id) });
         }
       }
@@ -4170,6 +4183,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
 
   app.post("/make-server-37f42386/expenses/approve", requireAuth(), requirePermission('fuel.approve'), async (c) => {
     let claimedId: string | null = null;
+    let claimToken: string | null = null;
     let saved = false;
     try {
       const body = await c.req.json();
@@ -4181,7 +4195,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
       if (!tx || !belongsToOrg(tx as Record<string, unknown>, c)) return c.json({ error: "Transaction not found" }, 404);
 
       // RQ-01 / RQ-03: never post a fill with no total, one still being read, or one already decided.
-      const refusal = approveRefusal(tx);
+      const refusal = approveRefusal(tx, odometerReading);
       if (refusal) return c.json({ error: refusal.error, code: refusal.code }, refusal.status);
 
       const stationGateHeld =
@@ -4197,13 +4211,18 @@ export function registerResidualMonolithRoutes(app: Hono) {
       }
 
       // RQ-03: one approve at a time — a second click or a second tab gets 409, not a second fill.
-      if (!(await claimPendingTransaction(String(id)))) {
+      // The claim never changes the fill's status, so it stays in its Review Queue tab (CR-01).
+      claimToken = await claimPendingTransaction(String(id));
+      if (!claimToken) {
         return c.json(
           { error: "This fill is already being approved. Refresh the Review Queue.", code: "NOT_PENDING" },
           409,
         );
       }
       claimedId = String(id);
+      delete (tx as Record<string, unknown>).reviewClaim;
+      const lostClaim = () =>
+        c.json({ error: "Someone else decided this fill first. Refresh the Review Queue.", code: "NOT_PENDING" }, 409);
 
       /** Admin Review Queue: optional verified station (same workflow as manual log entry). */
       let adminResolvedStation: any = null;
@@ -4256,6 +4275,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
               if (!isNaN(odoVal) && odoVal > 0) tx.odometer = odoVal;
           }
 
+          // CR-02: never post on a claim someone else has taken.
+          if (!(await stillHoldsClaim(String(id), claimToken))) return lostClaim();
           const approveResult = await ensureFuelEntryForApprovedTx(tx, {
               source: 'Manual Approval',
               stationName: adminResolvedStation?.name,
@@ -4329,6 +4350,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
       if ((tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement') && tx.status === 'Approved') {
           console.log(`[FuelCredit] Skipped approve-time wallet credit for ${id} (Finalize-only settlement)`);
       }
+      // CR-02: the save also clears our claim (tx has no reviewClaim). Only the holder saves.
+      if (!(await stillHoldsClaim(String(id), claimToken))) return lostClaim();
       await kv.set(`transaction:${id}`, stampOrg(tx, c));
       saved = true;
       const resolvedAt = new Date();
@@ -4342,7 +4365,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
       return c.json({ error: e.message }, 500);
     } finally {
       // Approve stopped before saving (no car, posting failed, error): the fill goes back to Pending.
-      if (claimedId && !saved) await releaseTransactionClaim(claimedId);
+      if (claimedId && claimToken && !saved) await releaseTransactionClaim(claimedId, claimToken);
     }
   });
 
@@ -4372,12 +4395,14 @@ export function registerResidualMonolithRoutes(app: Hono) {
       }
 
       // RQ-03: an approve already running on this fill wins; reject waits for a refresh.
-      if (!(await claimPendingTransaction(String(id)))) {
+      const rejectToken = await claimPendingTransaction(String(id));
+      if (!rejectToken) {
         return c.json(
           { error: "This fill is being approved right now. Refresh the Review Queue.", code: "NOT_PENDING" },
           409,
         );
       }
+      delete (tx as Record<string, unknown>).reviewClaim;
       tx.status = 'Rejected';
       const resolvedAt = new Date();
       try {
@@ -4388,9 +4413,12 @@ export function registerResidualMonolithRoutes(app: Hono) {
             rejectionReason: String(reason).trim(),
             ...(deleteAfter ? { evidenceDeleteAfter: deleteAfter } : {}),
         };
+        if (!(await stillHoldsClaim(String(id), rejectToken))) {
+          return c.json({ error: "Someone else decided this fill first. Refresh the Review Queue.", code: "NOT_PENDING" }, 409);
+        }
         await kv.set(`transaction:${id}`, stampOrg(tx, c));
       } catch (e) {
-        await releaseTransactionClaim(String(id));
+        await releaseTransactionClaim(String(id), rejectToken);
         throw e;
       }
 
@@ -5029,6 +5057,16 @@ export function registerResidualMonolithRoutes(app: Hono) {
       // so a phone re-send replaces the file instead of leaving a copy behind.
       const fillCaptureId = body['captureId'];
       const fillPhotoKind = body['photoKind'];
+      // DSH CR-09: the fixed key overwrites, so it always uses the caller's own company —
+      // never the form's orgId — and a photo can only ever land in the sender's own folder.
+      if (typeof fillCaptureId === "string" && fillCaptureId && typeof fillPhotoKind === "string" && fillPhotoKind) {
+        const callerOrg = await callerOrganizationIdFromToken(c.req.header('Authorization')?.replace(/^Bearer\s+/i, ''));
+        if (!callerOrg) return c.json({ error: "Sign in to send fill photos" }, 401);
+        if (formOrgId && formOrgId !== callerOrg) {
+          console.warn(`[upload] fill photo orgId ${formOrgId} ignored; using the sender's company ${callerOrg}`);
+        }
+        resolvedOrgId = callerOrg;
+      }
       // Works with or without evidence retention switched on (EVIDENCE_TTL_ENABLED).
       const fixedFillKey = (layout: "r2" | "supabase") =>
         evidenceType

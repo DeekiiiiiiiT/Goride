@@ -1,6 +1,6 @@
 # Fuel Review Queue — full review
 
-**Rev 2 · 25 Nov 2026 · Roam Fleet `/fuel-reimbursements`**
+**Rev 3 · 25 Nov 2026 · Roam Fleet `/fuel-reimbursements`**
 
 Goal: the Review Queue is the one place where a fleet person approves or rejects a driver's fuel fill. Every fill there must be easy to check, impossible to post wrong, and look like the owner's Stitch screens.
 
@@ -12,6 +12,17 @@ The last full review was in September 2026 (`FUEL_REVIEW_QUEUE_AUDIT.md`, Rev 3)
 - **11 findings: 3 High, 5 Medium, 3 Low.** Each one has a fix below.
 - The screens part (section 3) uses the owner's Stitch screens in `Downloads/fleet log fuel/stitch_roam_fleet_fuel_review`.
   - Stitch has no screens yet for the 4 tabs, the table or the windows. The tables keep their current layout but take the new colours, money format and buttons until those screens exist.
+- **Rev 3 (25 Nov): DSH independent review, 9 findings (CR-01..CR-09), all checked real and fixed. Not live.**
+  - CR-01 (Critical) the lock wrote the fill's `status` column, which the queue reads, so a claimed fill vanished from every tab. Now the claim lives in `payload_json.reviewClaim` (token + time), taken with one conditional update on `updated_at`. `status` stays Pending.
+  - CR-02 (High) the claim could be taken over while the first approve was still running. The stale window is now 10 minutes (longer than an edge function can run), and the holder re-checks the claim right before posting and right before saving.
+  - CR-03 (High) a phone fill with a total but no litres skipped the reader and could post at 0 L. `needsPhotoRead` now needs both.
+  - CR-04 a server-finished fill always went to Log Review. Now it does only when the odometer is missing or was typed.
+  - CR-05 a re-sent refused fill rewrote the kept row. It is now written once only.
+  - CR-06 *Save and approve* could post a phone fill with no odometer. The server refuses it (`NO_ODOMETER`, phone fills only), and the row shows "approve it in Log Review with the reading" instead.
+  - CR-07 a failed reader-queue step was swallowed while the phone was told the fill arrived. The step now fails the request, and any re-send of a waiting fill puts it back on the queue.
+  - CR-08 no message when the camera didn't return a photo. Different fix from DSH's 20-second limit, which would cut off a driver still lining up the photo: after returning from the camera with no photo for 10 s, the driver is told to try again, and only the newest tap can attach a photo.
+  - CR-09 a fill photo's fixed key used the form's company. It now always uses the sender's own company.
+  - Local copy, real API path: 27/27 (the 17 from Rev 2 plus CR-01, 02, 03, 06, 07, 09). Server tests 41, Fleet 2,226, driver 77. No new type errors.
 - **Rev 2 (25 Nov): all 11 fixed in code. Not live, not committed.**
   - Server: `fuel_review_guards.ts` (RQ-01, RQ-03, RQ-11; 11 tests), `fuel_review_claim.ts` (RQ-03, one approve at a time: the typed `status` column on `fleet.transactions` goes Pending → Approving in one conditional update, given back on any early stop, and a claim older than 2 minutes can be taken again). `/expenses/approve` and `/expenses/reject` check the company (RQ-02).
   - Local copy, real API path, 17/17: J$0, needs-a-look and awaiting-statement fills refused; another company's fill 404 and untouched; two approves at once give 200 + 409 and exactly one posted fuel log; approve after reject, reject after approve, and a blank reason are refused; an approve that stops early (no car) leaves the fill Pending.

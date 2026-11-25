@@ -310,9 +310,34 @@ export function FuelPhotoFlow({ user, driverRecord, lastOdometer, splitEnabled, 
     }
   };
 
+  // DSH CR-08: the camera has no time limit on purpose (lining up a photo can take a while), but
+  // if the app comes back from the camera and no photo arrives, say so; the button stays live.
+  // Only the newest tap may attach a photo, so a late answer from an old tap is ignored.
+  const photoSeqRef = useRef(0);
   const takePhoto = async (kind: 'odometer' | 'pump') => {
-    const file = await captureNativePhoto('fuel', { maxSize: PHOTO_MAX_SIZE });
-    if (file) await attachPhoto(kind, file);
+    const seq = ++photoSeqRef.current;
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onBack = () => {
+      if (document.visibilityState !== 'visible' || settled) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (!settled && seq === photoSeqRef.current) {
+          toast.error("The camera didn't send a photo. Tap Take a photo again.");
+          reportFuelStep('camera', 'no photo after returning from the camera');
+        }
+      }, 10_000);
+    };
+    document.addEventListener('visibilitychange', onBack);
+    try {
+      const file = await captureNativePhoto('fuel', { maxSize: PHOTO_MAX_SIZE });
+      settled = true;
+      if (file && seq === photoSeqRef.current) await attachPhoto(kind, file);
+    } finally {
+      settled = true;
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onBack);
+    }
   };
 
   const cancelFill = async () => {

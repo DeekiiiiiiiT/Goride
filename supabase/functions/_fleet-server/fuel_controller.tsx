@@ -245,6 +245,9 @@ app.post(`${BASE_PATH}/fuel/split-fill`, async (c) => {
       code,
       nowIso: new Date().toISOString(),
     });
+    // DSH CR-05: a re-send never rewrites the kept row.
+    const kept = await kv.get(`transaction:${String(review.id)}`);
+    if (kept) return c.json({ success: true, needsLook: true, data: kept });
     await kv.set(`transaction:${String(review.id)}`, stampOrg(review, c));
     return c.json({ success: true, needsLook: true, data: review });
   };
@@ -4508,6 +4511,9 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
         code,
         nowIso: new Date().toISOString(),
       });
+      // DSH CR-05: a re-send never rewrites the kept row (the owner may have typed numbers or approved it).
+      const kept = await kv.get(`transaction:${String(review.id)}`);
+      if (kept) return c.json({ success: true, needsLook: true, data: kept });
       await kv.set(`transaction:${String(review.id)}`, stampOrg(review, c));
       console.log(`[fuel-offline] refused phone fill ${entry.id} (${code}) kept as ${review.id}`);
       return c.json({ success: true, needsLook: true, data: review });
