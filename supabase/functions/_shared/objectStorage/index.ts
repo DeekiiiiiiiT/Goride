@@ -20,12 +20,15 @@ export type { FinishedUpload, FlowDeps, ObjectStore, StartUploadResult } from ".
 export {
   FILE_LINK_FUNCTION,
   FILE_LINK_SECONDS,
+  isR2PrivateLinksEnabled,
   keyFromFileLink,
   R2_PRIVATE_BUCKET_ID,
   signFileLink,
   verifyFileLink,
 } from "./fileLink.ts";
 export type { FileLinkCheck } from "./fileLink.ts";
+export { removeStoredFiles } from "./storedFiles.ts";
+export type { RemoveObjects } from "./storedFiles.ts";
 
 /** Live dependencies from function secrets. */
 export function storageDepsFromEnv(): FlowDeps {
