@@ -7,9 +7,22 @@ import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supa
 import { detectFileMagicBytes, extForMime, IMAGE_MIMES } from "../_shared/fileMagic.ts";
 import { validateBody, z } from "../_shared/validateBody.ts";
 import { requireServiceKey } from "../_shared/serviceKey.ts";
+import {
+  avatarAddress,
+  AVATAR_BUCKET,
+  buildAvatarKey,
+  buildIssuePhotoKey,
+  isR2AvatarEnabled,
+  isR2IssuePhotoEnabled,
+  ISSUE_PHOTO_BUCKET,
+  issuePhotoAddress,
+  legacyAvatarPath,
+  legacyIssuePhotoPath,
+  putAvatar,
+  putIssuePhoto,
+  removeAvatars,
+} from "./customer_media_storage.ts";
 
-const AVATAR_BUCKET = "customer-avatars";
-const ISSUE_PHOTO_BUCKET = "customer-issue-photos";
 const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 
 export type CustomerAccountRoutesDeps = {
@@ -87,6 +100,20 @@ function getAuthAdmin() {
     Deno.env.get("SUPABASE_URL")!,
     requireServiceKey(),
   );
+}
+
+/** Mirror the avatar address onto the auth user; the profile row stays the source of truth. */
+async function syncAuthAvatarUrl(userId: string, publicUrl: string): Promise<void> {
+  try {
+    const admin = getAuthAdmin();
+    const { data: authUser } = await admin.auth.admin.getUserById(userId);
+    const prev = (authUser?.user?.user_metadata ?? {}) as Record<string, unknown>;
+    await admin.auth.admin.updateUserById(userId, {
+      user_metadata: { ...prev, avatar_url: publicUrl },
+    });
+  } catch {
+    // Profile row is source of truth
+  }
 }
 
 function splitName(full: string): { firstName: string; lastName: string } {
@@ -476,6 +503,7 @@ export function registerCustomerAccountRoutes(app: Hono, deps: CustomerAccountRo
   });
 
   // POST /customer/avatar — magic-byte check, then service-role write to customer-avatars
+  // (or roam-public + media.roamfleet.co when the R2 switch is on)
   app.post("/customer/avatar", async (c) => {
     const auth = await requireUser(c.req.header("Authorization"), getSupabase);
     if ("error" in auth) return c.json({ error: auth.error }, auth.status);
@@ -499,11 +527,43 @@ export function registerCustomerAccountRoutes(app: Hono, deps: CustomerAccountRo
     const { customer, error } = await ensureCustomer(serviceSb, auth.user);
     if (error || !customer) return c.json({ error: error || "profile_unavailable" }, 500);
 
-    const path = `${auth.user.id}/avatars/${crypto.randomUUID()}.${extForMime(detected)}`;
     const storage = createClient(
       Deno.env.get("SUPABASE_URL")!,
       requireServiceKey(),
     );
+
+    // Cloudflare R2 (roam-public/avatars/<user>/<hash>.<ext>) when switched on. The answer keeps
+    // its shape ({ profile }), so the app needs no change.
+    if (isR2AvatarEnabled()) {
+      try {
+        const key = await buildAvatarKey(auth.user.id, buffer, detected);
+        await putAvatar(key, buffer, detected);
+        const publicUrl = avatarAddress(key);
+        const { data: updated, error: updateErr } = await serviceSb
+          .from("customers")
+          .update({ avatar_url: publicUrl, avatar_path: key })
+          .eq("id", customer.id)
+          .select("*")
+          .single();
+        if (updateErr || !updated) {
+          await removeAvatars(storage, [key], { userId: auth.user.id });
+          return c.json({ error: updateErr?.message || "update_failed" }, 500);
+        }
+        // The old code replaced the previous avatar: keep doing that, but only now that the row
+        // points at the new one (and never the file we just wrote).
+        const previousPath = customer.avatar_path;
+        if (previousPath && previousPath !== key) {
+          await removeAvatars(storage, [previousPath], { userId: auth.user.id });
+        }
+        await syncAuthAvatarUrl(auth.user.id, publicUrl);
+        return c.json({ profile: profileDto(updated as CustomerRow) }, 201);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        return c.json({ error: message }, 500);
+      }
+    }
+
+    const path = legacyAvatarPath(auth.user.id, extForMime(detected));
     const { error: uploadError } = await storage.storage.from(AVATAR_BUCKET).upload(path, buffer, {
       contentType: detected,
       cacheControl: "3600",
@@ -511,11 +571,6 @@ export function registerCustomerAccountRoutes(app: Hono, deps: CustomerAccountRo
     });
     if (uploadError) {
       return c.json({ error: uploadError.message }, 500);
-    }
-
-    const previousPath = customer.avatar_path;
-    if (previousPath && previousPath.startsWith(`${auth.user.id}/`)) {
-      await storage.storage.from(AVATAR_BUCKET).remove([previousPath]);
     }
 
     const { data: { publicUrl } } = storage.storage.from(AVATAR_BUCKET).getPublicUrl(path);
@@ -530,21 +585,19 @@ export function registerCustomerAccountRoutes(app: Hono, deps: CustomerAccountRo
       return c.json({ error: updateErr?.message || "update_failed" }, 500);
     }
 
-    try {
-      const admin = getAuthAdmin();
-      const { data: authUser } = await admin.auth.admin.getUserById(auth.user.id);
-      const prev = (authUser?.user?.user_metadata ?? {}) as Record<string, unknown>;
-      await admin.auth.admin.updateUserById(auth.user.id, {
-        user_metadata: { ...prev, avatar_url: publicUrl },
-      });
-    } catch {
-      // Profile row is source of truth
+    // Same as before, but after the row points at the new file instead of before.
+    const previousPath = customer.avatar_path;
+    if (previousPath && previousPath !== path && previousPath.startsWith(`${auth.user.id}/`)) {
+      await storage.storage.from(AVATAR_BUCKET).remove([previousPath]);
     }
+
+    await syncAuthAvatarUrl(auth.user.id, publicUrl);
 
     return c.json({ profile: profileDto(updated as CustomerRow) }, 201);
   });
 
-  // POST /customer/issue-photo — private evidence; signed URL for preview only
+  // POST /customer/issue-photo — private evidence; one signed address for preview and for the
+  // value the app stores on the issue (so support staff can still open it later).
   app.post("/customer/issue-photo", async (c) => {
     const auth = await requireUser(c.req.header("Authorization"), getSupabase);
     if ("error" in auth) return c.json({ error: auth.error }, auth.status);
@@ -564,7 +617,20 @@ export function registerCustomerAccountRoutes(app: Hono, deps: CustomerAccountRo
       return c.json({ error: "Use a JPEG, PNG, or WebP photo" }, 400);
     }
 
-    const path = `${auth.user.id}/issues/${crypto.randomUUID()}.${extForMime(detected)}`;
+    // Cloudflare R2 (roam-private/customer-issues/<user>/<hash>.<ext>) when switched on.
+    if (isR2IssuePhotoEnabled()) {
+      try {
+        const key = await buildIssuePhotoKey(auth.user.id, buffer, detected);
+        await putIssuePhoto(key, buffer, detected);
+        const address = await issuePhotoAddress(key);
+        return c.json({ path: address, signedUrl: address }, 201);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        return c.json({ error: message }, 500);
+      }
+    }
+
+    const path = legacyIssuePhotoPath(auth.user.id, extForMime(detected));
     const storage = createClient(
       Deno.env.get("SUPABASE_URL")!,
       requireServiceKey(),

@@ -20,6 +20,7 @@ import { assertMerchantAcceptingOrders } from "./merchantOpenCheck.ts";
 import { ORDER_CUSTOMER_EMBED_WITH_USER } from "./orderSelectEmbeds.ts";
 import { processDispute } from "./disputeResolution/processDispute.ts";
 import { requireServiceKey } from "../_shared/serviceKey.ts";
+import { isOwnIssuePhoto } from "./customer_media_storage.ts";
 
 function asCoord(value: unknown): number | null {
   if (value == null || value === "") return null;
@@ -1222,7 +1223,9 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       : Array.isArray(body.item_ids)
       ? body.item_ids.map((id: unknown) => String(id)).filter(Boolean).slice(0, 40)
       : [];
-    if (photoPath && !photoPath.startsWith(`${user.id}/issues/`)) {
+    // Old Supabase path (<user>/issues/…) or, with R2 on, the signed link to the customer's own
+    // customer-issues/<user>/ key (docs/cloudflare-r2-storage-migration-audit.md, slice 5).
+    if (photoPath && !photoPath.startsWith(`${user.id}/issues/`) && !isOwnIssuePhoto(photoPath, user.id)) {
       return c.json({ error: "Invalid photo" }, 400);
     }
     if ((issueType === "missing" || issueType === "wrong") && itemIds.length === 0) {
