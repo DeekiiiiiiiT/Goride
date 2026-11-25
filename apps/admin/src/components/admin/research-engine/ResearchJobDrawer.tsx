@@ -754,7 +754,8 @@ function BrowserCheckCard({
         ) },
     ...(canSplit ? [{ id: "change", ok: !changed || Boolean(changeMonth && changeYear), node: (
           <div className="flex w-full flex-col gap-2" data-testid="q-change">
-              <p>Under the part, how many different Period dates?</p>
+              <p>Look at the Period column under the part. Is there one date range, or two?</p>
+              <p className="text-[13px]">Two looks like: 11.2016 – 11.2018 and 11.2018 – 09.2020.</p>
               <div className="flex flex-wrap gap-2">
                 <PartsButton
                   variant={!changed ? "primary" : "secondary"}
