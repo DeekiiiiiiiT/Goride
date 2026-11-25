@@ -3,6 +3,13 @@
 -- every refusal is proved to have written nothing, and the whole file is rolled back at the end.
 BEGIN;
 
+-- The save writes the actor as uploaded_by, which must be a real user (same test user as add_a_part_done_checks).
+INSERT INTO auth.users (id, email)
+SELECT '11111111-1111-4111-8111-111111111111'::uuid, 'ap-done-test@example.com'
+WHERE NOT EXISTS (
+  SELECT 1 FROM auth.users u WHERE u.id = '11111111-1111-4111-8111-111111111111'::uuid
+);
+
 -- 1) F-01: link hints re-check trust for the maker the person picked. -------------------------------------
 --    With no maker the answer must stay exactly as it was (same keys, same trust).
 DO $lh$
