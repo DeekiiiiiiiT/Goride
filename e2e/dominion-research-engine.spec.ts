@@ -524,7 +524,7 @@ test.describe("Research engine screens (layer 3)", () => {
     await d.getByTestId("browser-check-next").click();
     await d.getByTestId("q-part-yes").click();
     await d.getByTestId("browser-check-next").click();
-    await expect(d.getByTestId("q-change")).toContainText("Look at the Period column under the part. Is there one date range, or two?");
+    await expect(d.getByTestId("q-change")).toContainText("Look at the dates shown for this part. Is there one date range, or two?");
     await expect(d.getByTestId("q-change-one")).toHaveText("One");
     await expect(d.getByTestId("q-change-split")).toHaveText("Two");
     await d.getByTestId("q-change-split").click();
