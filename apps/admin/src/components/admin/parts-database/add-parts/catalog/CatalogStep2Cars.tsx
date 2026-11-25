@@ -5,14 +5,13 @@ import { MaterialIcon } from "../../import/MaterialIcon";
 import type { CatalogPageDraft, CatalogVehicleListing } from "../addPartsTypes";
 import { fetchSisterVehicles, searchAddPartVehicles, type AddPartVehicleRow } from "../addPartsApi";
 import { parseFrameCodesFromUrl } from "./linkFrameCodes";
-import { vehicleDiffLabel, vehicleYearsLabel } from "./vehicleDiffLabel";
-import { MakerLogo } from "../../../vehicle-catalog/MakerLogo";
-import { fetchCatalogMakers } from "../../../vehicle-catalog/vehiclesCatalogApi";
-import { D_MUTED, D_TINT, D_TXT, DCode, DFooter, DPill, DQuestion } from "./dominionKit";
+import { vehicleDiffLabel } from "./vehicleDiffLabel";
+import { D_MUTED, D_TINT, D_TXT, DFooter, DQuestion } from "./dominionKit";
 
 function catalogListingFromVehicle(
   v: AddPartVehicleRow,
-  trust?: CatalogVehicleListing["trust"],
+  trust: CatalogVehicleListing["trust"],
+  years: { from?: number; to?: number },
 ): CatalogVehicleListing {
   return {
     vehicleId: v.id,
@@ -20,25 +19,69 @@ function catalogListingFromVehicle(
     make: v.make,
     model: v.model,
     chassisCode: v.chassis_code,
-    yearFrom: v.production_start_year ?? undefined,
-    yearTo: v.production_end_year ?? undefined,
+    yearFrom: years.from,
+    yearTo: years.to,
     diffLabel: vehicleDiffLabel(v),
     trust,
   };
+}
+
+const YEAR_MIN = 1900;
+
+function badYear(y: number | null | undefined): boolean {
+  if (y == null) return false;
+  return !Number.isInteger(y) || y < YEAR_MIN || y > new Date().getFullYear() + 2;
+}
+
+/** Years the person typed must be real 4-digit years, and never end before they start (CR-04). */
+export function catalogPageYearsProblem(draft: CatalogPageDraft): string {
+  const from = draft.pageYearsFrom ?? null;
+  const to = draft.pageYearsStillMade ? null : (draft.pageYearsTo ?? null);
+  if (badYear(from) || badYear(to)) return "Type the page years as 4-digit years, like 2016.";
+  if (from != null && to != null && from > to) return `The page years end before they start (${from} to ${to}).`;
+  return "";
+}
+
+export function catalogCarYearsProblem(draft: CatalogPageDraft): string {
+  for (const l of draft.vehicleListings) {
+    if (badYear(l.yearFrom) || badYear(l.yearTo)) return `Type the years for ${l.label} as 4-digit years, like 2016.`;
+    if (l.yearFrom != null && l.yearTo != null && l.yearFrom > l.yearTo) {
+      return `The years for ${l.label} end before they start (${l.yearFrom} to ${l.yearTo}).`;
+    }
+  }
+  return "";
 }
 
 function makerInitial(make: string) {
   return (make.trim()[0] ?? "?").toUpperCase();
 }
 
-function useMakerLogos() {
-  const q = useQuery({ queryKey: ["catalog-makers"], queryFn: fetchCatalogMakers });
-  const map = new Map<string, string | null | undefined>();
-  for (const m of q.data?.items ?? []) map.set(m.make.toLowerCase(), m.logo_storage_path);
-  return map;
+/** Does this car's build range touch the years the page lists? */
+function overlapsPageYears(
+  v: AddPartVehicleRow,
+  from: number | null,
+  to: number | null,
+  stillMade: boolean,
+): boolean {
+  if (from == null) return true;
+  const lo = v.production_start_year ?? 0;
+  const hi = v.production_end_year ?? 9999;
+  const pageHi = stillMade || to == null ? 9999 : to;
+  return hi >= from && lo <= pageHi;
 }
 
-const FRAME_TOOLTIP = "Frame code from the car's ID plate — used to tell versions apart.";
+function outsidePageNote(
+  v: AddPartVehicleRow,
+  from: number | null,
+  to: number | null,
+  stillMade: boolean,
+): string {
+  if (from == null) return "";
+  const pageHi = stillMade || to == null ? null : to;
+  if (pageHi != null && (v.production_start_year ?? 0) > pageHi) return `After ${pageHi} — not on this page`;
+  if ((v.production_end_year ?? 9999) < from) return `Before ${from} — not on this page`;
+  return "";
+}
 
 export function CatalogStep2Cars({
   draft,
@@ -47,6 +90,8 @@ export function CatalogStep2Cars({
   onBack,
   framePreTickDone,
   setFramePreTickDone,
+  preselectLoading,
+  preselectError,
 }: {
   draft: CatalogPageDraft;
   setDraft: Dispatch<SetStateAction<CatalogPageDraft>>;
@@ -54,9 +99,18 @@ export function CatalogStep2Cars({
   onBack: () => void;
   framePreTickDone: boolean;
   setFramePreTickDone: (v: boolean) => void;
+  /** "Add parts to this car" is still loading that car's details. */
+  preselectLoading?: boolean;
+  /** That car could not be loaded, so nothing was added. */
+  preselectError?: string;
 }) {
   const [q, setQ] = useState("");
+  const [onlyPageYears, setOnlyPageYears] = useState(false);
   const [carError, setCarError] = useState("");
+
+  const from = draft.pageYearsFrom ?? null;
+  const to = draft.pageYearsTo ?? null;
+  const stillMade = draft.pageYearsStillMade === true;
 
   const codes = useMemo(
     () => draft.linkHints?.frameCodes?.length
@@ -87,302 +141,365 @@ export function CatalogStep2Cars({
 
   const selectedIds = useMemo(() => new Set(draft.vehicleListings.map((l) => l.vehicleId)), [draft.vehicleListings]);
 
+  function trustFor(): CatalogVehicleListing["trust"] {
+    return draft.linkHints?.trustedSite === true ? "confirmed" : "needs_checking";
+  }
+
+  function yearsFor(): { from?: number; to?: number } {
+    return { from: from ?? undefined, to: stillMade ? undefined : (to ?? undefined) };
+  }
+
+  // Pre-tick: exactly the versions the page covers, and only after the years are entered (plan §4 Step 2).
+  useEffect(() => {
+    if (framePreTickDone || !codes.length || !search.data?.length) return;
+    // Wait for the whole page range: ticking after "From" alone would tick versions the page does not cover.
+    if (from == null || (to == null && !stillMade)) return;
+    // CR-06: a half-typed year ("2", "202") is not a range yet: no tick, and the done flag stays off.
+    if (catalogPageYearsProblem(draft) !== "") return;
+    const toAdd: CatalogVehicleListing[] = [];
+    const have = new Set(draft.vehicleListings.map((l) => l.vehicleId));
+    for (const v of search.data) {
+      const code = (v.chassis_code ?? "").toUpperCase();
+      if (!codes.some((c) => code.includes(c.toUpperCase()))) continue;
+      if (have.has(v.id)) continue;
+      if (!overlapsPageYears(v, from, to, stillMade)) continue;
+      have.add(v.id);
+      toAdd.push(catalogListingFromVehicle(v, trustFor(), yearsFor()));
+    }
+    if (toAdd.length) {
+      setDraft({ ...draft, vehicleListings: [...draft.vehicleListings, ...toAdd] });
+    }
+    setFramePreTickDone(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [framePreTickDone, codes, search.data, from, to, stillMade]);
+
   const sisters = useQuery({
     queryKey: ["catalog-sisters", [...selectedIds].sort().join(",")],
     queryFn: () => fetchSisterVehicles([...selectedIds]),
     enabled: selectedIds.size > 0,
   });
 
-  useEffect(() => {
-    if (framePreTickDone || !codes.length || !search.data?.length) return;
-    const toAdd: CatalogVehicleListing[] = [];
-    const have = new Set(draft.vehicleListings.map((l) => l.vehicleId));
-    for (const v of search.data) {
-      const code = (v.chassis_code ?? "").toUpperCase().split(/[-\s]/)[0] ?? "";
-      if (codes.some((c) => code.startsWith(c) || code.includes(c))) {
-        if (!have.has(v.id)) {
-          have.add(v.id);
-          toAdd.push(
-            catalogListingFromVehicle(v, draft.linkHints?.trustedSite ? "confirmed" : "needs_checking"),
-          );
-        }
-      }
-    }
-    setFramePreTickDone(true);
-    if (toAdd.length) {
-      setDraft((prev) => ({ ...prev, vehicleListings: [...prev.vehicleListings, ...toAdd] }));
-    }
-  }, [codes, search.data, framePreTickDone, draft.linkHints?.trustedSite, draft.vehicleListings, setDraft, setFramePreTickDone]);
+  const visibleRows = useMemo(() => {
+    const rows = (search.data ?? []).filter((v) => !onlyPageYears || overlapsPageYears(v, from, to, stillMade));
+    return rows;
+  }, [search.data, onlyPageYears, from, to, stillMade]);
 
-  function toggle(v: AddPartVehicleRow) {
-    if (draft.vehicleListings.some((l) => l.vehicleId === v.id && l.locked)) return;
-    if (selectedIds.has(v.id)) {
-      setDraft({ ...draft, vehicleListings: draft.vehicleListings.filter((l) => l.vehicleId !== v.id) });
-    } else {
-      setDraft({
-        ...draft,
-        vehicleListings: [
-          ...draft.vehicleListings,
-          catalogListingFromVehicle(v, draft.linkHints?.trustedSite ? "confirmed" : undefined),
-        ],
-      });
+  const groups = useMemo(() => {
+    const m = new Map<string, AddPartVehicleRow[]>();
+    for (const v of visibleRows) {
+      const key = `${v.make} ${v.model}`;
+      const list = m.get(key) ?? [];
+      list.push(v);
+      m.set(key, list);
     }
+    return [...m.entries()]
+      .map(([label, rows]) => ({
+        label,
+        rows: rows.slice().sort((a, b) => (a.production_start_year ?? 0) - (b.production_start_year ?? 0)),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [visibleRows]);
+
+  function addListing(v: AddPartVehicleRow) {
+    if (selectedIds.has(v.id)) return;
+    setDraft({ ...draft, vehicleListings: [...draft.vehicleListings, catalogListingFromVehicle(v, trustFor(), yearsFor())] });
+    setCarError("");
   }
 
-  function addSisters() {
-    const sibs = sisters.data ?? [];
-    const next = [...draft.vehicleListings];
-    const have = new Set(next.map((l) => l.vehicleId));
-    for (const v of sibs) {
-      if (!have.has(v.id)) {
-        have.add(v.id);
-        next.push(catalogListingFromVehicle(v, draft.linkHints?.trustedSite ? "confirmed" : undefined));
-      }
-    }
-    setDraft({ ...draft, vehicleListings: next });
+  function removeListing(id: string) {
+    setDraft({ ...draft, vehicleListings: draft.vehicleListings.filter((l) => l.vehicleId !== id) });
   }
 
-  function tryNext() {
-    if (!draft.vehicleListings.length) {
-      setCarError("Pick at least one car this page is for.");
+  function toggleGroup(rows: AddPartVehicleRow[]) {
+    const allIn = rows.every((v) => selectedIds.has(v.id));
+    if (allIn) {
+      setDraft({ ...draft, vehicleListings: draft.vehicleListings.filter((l) => !rows.some((v) => v.id === l.vehicleId)) });
       return;
     }
+    const toAdd = rows
+      .filter((v) => !selectedIds.has(v.id))
+      .map((v) => catalogListingFromVehicle(v, trustFor(), yearsFor()));
+    setDraft({ ...draft, vehicleListings: [...draft.vehicleListings, ...toAdd] });
     setCarError("");
-    onNext();
   }
 
-  function updateListingYears(vehicleId: string, yearFrom?: number, yearTo?: number) {
+  function patchListing(id: string, patch: Partial<CatalogVehicleListing>) {
     setDraft({
       ...draft,
-      vehicleListings: draft.vehicleListings.map((l) =>
-        l.vehicleId === vehicleId ? { ...l, yearFrom, yearTo } : l),
+      vehicleListings: draft.vehicleListings.map((l) => (l.vehicleId === id ? { ...l, ...patch } : l)),
     });
   }
 
-  function toggleGroup(rows: AddPartVehicleRow[], selectAll: boolean) {
-    if (selectAll) {
-      const next = [...draft.vehicleListings];
-      const have = new Set(next.map((l) => l.vehicleId));
-      for (const v of rows) {
-        if (have.has(v.id)) continue;
-        if (draft.vehicleListings.some((l) => l.vehicleId === v.id && l.locked)) continue;
-        have.add(v.id);
-        next.push(catalogListingFromVehicle(v, draft.linkHints?.trustedSite ? "confirmed" : undefined));
-      }
-      setDraft({ ...draft, vehicleListings: next });
-    } else {
-      const ids = new Set(rows.map((r) => r.id));
-      setDraft({
-        ...draft,
-        vehicleListings: draft.vehicleListings.filter((l) => l.locked || !ids.has(l.vehicleId)),
-      });
-    }
-  }
+  const pageYearsError = catalogPageYearsProblem(draft);
+  const nextBlocker = draft.vehicleListings.length === 0
+    ? "Tick at least one car."
+    : pageYearsError || catalogCarYearsProblem(draft);
 
-  const grouped = useMemo(() => {
-    const m = new Map<string, AddPartVehicleRow[]>();
-    for (const v of search.data ?? []) {
-      const key = `${v.make}\0${v.model}`;
-      if (!m.has(key)) m.set(key, []);
-      m.get(key)!.push(v);
-    }
-    return m;
-  }, [search.data]);
-
-  const vehicleById = useMemo(() => {
-    const m = new Map<string, AddPartVehicleRow>();
-    for (const v of [...(search.data ?? []), ...(sisters.data ?? [])]) m.set(v.id, v);
-    return m;
-  }, [search.data, sisters.data]);
-
-  const makerLogos = useMakerLogos();
-
-  function resolveDiffLabel(l: CatalogVehicleListing): string {
-    if (l.diffLabel) return l.diffLabel;
-    const v = vehicleById.get(l.vehicleId);
-    return v ? vehicleDiffLabel(v) : "—";
-  }
-
-  const nextLabel = draft.extendMode ? "Next: review" : "Next: the parts";
   const nextBtn = (
-    <PartsButton variant="primary" onClick={tryNext}>
-      {nextLabel} <MaterialIcon name="arrow_forward" className="text-[18px]" />
-    </PartsButton>
+    <div className="flex flex-col items-end gap-1">
+      <PartsButton variant="primary" onClick={onNext} disabled={Boolean(nextBlocker)}>
+        Next: the parts <MaterialIcon name="arrow_forward" className="text-[18px]" />
+      </PartsButton>
+      {nextBlocker ? <p className="text-[13px] text-error">{nextBlocker}</p> : null}
+    </div>
   );
-  const foundCount = codes.length && search.data
-    ? search.data.filter((v) => codes.some((c) => (v.chassis_code ?? "").toUpperCase().includes(c))).length
-    : 0;
+
+  const pageYearsLabel = from == null
+    ? "No years yet"
+    : stillMade || to == null
+      ? `${from} to now`
+      : `${from}–${to}`;
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col gap-space-md max-w-[1120px]">
+      <p className="catalog-step-mobile-label font-body-sm text-on-surface-variant sm:hidden">Step 2 of 4 · Cars</p>
+      {preselectLoading ? (
+        <p className={`${D_TINT} p-4 text-[14px] ${D_MUTED}`}>Loading that car…</p>
+      ) : null}
+      {preselectError ? (
+        <p role="alert" className="rounded-xl border border-[#f3c0bf] bg-[#fdecec] p-4 text-[14px] text-[#a83836] dark:border-[#7f1d1d] dark:bg-[#450a0a]">
+          {preselectError}
+        </p>
+      ) : null}
       <DQuestion
-        title="Which cars does this page cover?"
-        hint={
-          <>
-            Type a model or paste the frame / chassis codes from the page — several at once is fine, e.g.{" "}
-            <DCode>M900A</DCode> , <DCode>M910A</DCode>.
-          </>
-        }
-        actions={<span className="hidden sm:inline-flex">{nextBtn}</span>}
+        title="Which cars is this page for?"
+        hint="The page you pasted carries a frame code. We found the versions with that code — tick the ones the page lists."
       />
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="flex flex-col gap-4 lg:col-span-2">
-          <div className={`${D_TINT} p-2`}>
-            <div className="relative">
-              <MaterialIcon name="manage_search" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[22px] text-[#5d5f68]" />
+      <div className="grid grid-cols-1 gap-space-md lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="flex flex-col gap-space-md">
+          <section className="rounded-xl border border-[#e6e7ee] bg-white p-4 dark:border-[#1e293b] dark:bg-[#111a2e]">
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <p className={`mb-2 text-[14px] font-semibold ${D_TXT}`}>Years on the page</p>
+                <div className="flex items-center gap-2">
+                  <label className="flex flex-col gap-1 text-[12px] text-[#5d5f68] dark:text-[#94a3b8]">
+                    From
+                    <input
+                      aria-label="Page year from"
+                      inputMode="numeric"
+                      className="h-10 w-[92px] rounded-lg border border-[#c5c6d0] bg-white px-2 text-[14px] dark:bg-[#0b1220] dark:border-[#1e293b]"
+                      placeholder="e.g. 2016"
+                      value={from ?? ""}
+                      onChange={(e) => {
+                        const n = Number.parseInt(e.target.value, 10);
+                        setDraft({ ...draft, pageYearsFrom: Number.isFinite(n) ? n : null });
+                      }}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-[12px] text-[#5d5f68] dark:text-[#94a3b8]">
+                    To
+                    <input
+                      aria-label="Page year to"
+                      inputMode="numeric"
+                      disabled={stillMade}
+                      className="h-10 w-[92px] rounded-lg border border-[#c5c6d0] bg-white px-2 text-[14px] disabled:opacity-50 dark:bg-[#0b1220] dark:border-[#1e293b]"
+                      placeholder={stillMade ? "now" : "e.g. 2020"}
+                      value={stillMade ? "" : (to ?? "")}
+                      onChange={(e) => {
+                        const n = Number.parseInt(e.target.value, 10);
+                        setDraft({ ...draft, pageYearsTo: Number.isFinite(n) ? n : null });
+                      }}
+                    />
+                  </label>
+                  <label className="flex min-h-[40px] items-center gap-2 text-[13px] text-[#30323b] dark:text-[#e2e8f0]">
+                    <input
+                      type="checkbox"
+                      checked={stillMade}
+                      onChange={(e) => setDraft({ ...draft, pageYearsStillMade: e.target.checked })}
+                    />
+                    Still made
+                  </label>
+                </div>
+              </div>
+              <p className={`ml-auto text-[13px] ${D_MUTED}`}>This page covers {pageYearsLabel}.</p>
+            </div>
+            {pageYearsError ? <p className="mt-2 text-[13px] text-error">{pageYearsError}</p> : null}
+            {codes.length ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className={`text-[13px] ${D_MUTED}`}>Frame codes:</span>
+                {codes.map((c) => (
+                  <span key={c} className="rounded-md bg-[#f3f4fb] px-2 py-1 font-mono text-[12px] text-[#30323b] dark:bg-[#0b1220] dark:text-[#e2e8f0]">
+                    {c}
+                  </span>
+                ))}
+                <span className={`text-[12px] ${D_MUTED}`}>These came from the link.</span>
+              </div>
+            ) : null}
+          </section>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-lg border border-[#e6e7ee] bg-white px-3 dark:border-[#1e293b] dark:bg-[#111a2e]">
+              <MaterialIcon name="search" className="text-[20px] text-[#5d5f68]" />
               <input
-                className={`h-12 w-full rounded-lg border bg-white pl-11 pr-4 text-[15px] dark:bg-[#111a2e] ${carError ? "border-error ring-2 ring-error/20" : "border-[#e6e7ee] dark:border-[#1e293b]"}`}
-                placeholder="Search a model, or paste codes — e.g. M900A, M910A"
+                aria-label="Search for a car"
+                className="min-w-0 flex-1 bg-transparent text-[14px] outline-none"
+                placeholder="Or search a car by name, model or frame code"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
               />
-            </div>
-            {carError ? <p className="mt-2 px-1 text-error font-body-sm">{carError}</p> : null}
-            {foundCount ? (
-              <p className="mt-2 flex items-center gap-2 px-1 text-[14px] text-[#006e31] dark:text-[#4ade80]">
-                <MaterialIcon name="check_circle" className="text-[18px]" />
-                Found {foundCount} version{foundCount === 1 ? "" : "s"} for {codes.join(" and ")}
-              </p>
+            </label>
+            {q ? (
+              <PartsButton variant="secondary" onClick={() => setQ("")}>
+                Clear
+              </PartsButton>
             ) : null}
           </div>
 
-          {(sisters.data?.length ?? 0) > 0 ? (
-            <div className="flex flex-col justify-between gap-4 rounded-xl border border-[#dbe1ff] bg-[#f3f6ff] p-5 dark:border-[#1e3a8a]/50 dark:bg-[#1e3a8a]/20 sm:flex-row sm:items-center">
-              <div className="flex flex-col gap-2">
-                <p className={`text-[18px] font-semibold ${D_TXT}`}>Same car, other badges</p>
-                <p className={`text-[14px] ${D_MUTED}`}>These are built on the same car. Add the matching versions?</p>
-                <div className="flex flex-wrap gap-2">
-                  {[...new Set((sisters.data ?? []).map((v) => `${v.make} ${v.model}`))].map((name) => (
-                    <span key={name} className={`inline-flex items-center gap-1.5 rounded-full border border-[#e6e7ee] bg-white px-2.5 py-1 text-[13px] dark:border-[#1e293b] dark:bg-[#111a2e] ${D_TXT}`}>
-                      <MakerLogo make={name.split(" ")[0]!} logoStoragePath={makerLogos.get(name.split(" ")[0]!.toLowerCase())} size={18} />
-                      {name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <PartsButton variant="secondary" className="shrink-0" onClick={addSisters}>
-                <MaterialIcon name="add_circle" className="text-[18px]" />
-                Add {sisters.data!.length} sister car{sisters.data!.length === 1 ? "" : "s"}
-              </PartsButton>
-            </div>
-          ) : null}
+          <label className={`flex min-h-[44px] items-center gap-2 text-[14px] ${D_TXT}`}>
+            <input type="checkbox" checked={onlyPageYears} onChange={(e) => setOnlyPageYears(e.target.checked)} />
+            Show only the versions in these years
+          </label>
 
-          <div className="flex flex-col gap-4">
-            {[...grouped.entries()].map(([key, rows]) => {
-              const [make, model] = key.split("\0");
-              const allOn = rows.length > 0 && rows.every((v) => selectedIds.has(v.id) || draft.vehicleListings.some((l) => l.vehicleId === v.id && l.locked));
-              return (
-                <div key={key} className="overflow-hidden rounded-xl border border-[#e6e7ee] dark:border-[#1e293b]">
-                  <div className="flex flex-wrap items-center justify-between gap-3 bg-[#f3f4fb] px-4 py-3 dark:bg-[#0b1220]">
-                    <div className="flex items-center gap-3">
-                      <MakerLogo make={make!} logoStoragePath={makerLogos.get(make!.toLowerCase())} size={36} />
-                      <p className={`text-[18px] font-semibold ${D_TXT}`}>{make} {model}</p>
-                    </div>
-                    <label className={`flex cursor-pointer items-center gap-2 rounded-lg border border-[#c5c6d0] bg-white px-3 py-1.5 text-[14px] dark:border-[#1e293b] dark:bg-[#111a2e] ${D_TXT}`}>
-                      <input type="checkbox" className="h-4 w-4 accent-[#0153dc]" checked={allOn} onChange={(e) => toggleGroup(rows, e.target.checked)} />
-                      Tick all {model} ({rows.length} version{rows.length === 1 ? "" : "s"})
-                    </label>
-                  </div>
-                  <div className="divide-y divide-[#e6e7ee] dark:divide-[#1e293b]">
-                    {rows.map((v) => {
-                      const locked = draft.vehicleListings.some((l) => l.vehicleId === v.id && l.locked);
-                      return (
-                        <label
-                          key={v.id}
-                          className={`flex items-center gap-3 px-4 py-3 ${locked ? "opacity-70" : "cursor-pointer hover:bg-[#f9f9fd] dark:hover:bg-[#0b1220]"}`}
-                        >
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 accent-[#0153dc]"
-                            checked={selectedIds.has(v.id)}
-                            disabled={locked}
-                            onChange={() => toggle(v)}
-                          />
-                          <span className={`text-[15px] ${D_TXT}`}>
-                            {model} · {vehicleYearsLabel(v)} · {vehicleDiffLabel(v)}
-                          </span>
-                          {v.chassis_code ? <span title={FRAME_TOOLTIP}><DCode>{v.chassis_code}</DCode></span> : null}
-                          {locked ? <DPill tone="grey">Already on file</DPill> : null}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <aside className="h-fit rounded-xl border border-[#e6e7ee] bg-white p-5 dark:border-[#1e293b] dark:bg-[#111a2e] lg:sticky lg:top-24">
-          {draft.extendMode ? (
-            <div className="mb-4 grid grid-cols-3 gap-2 border-b border-[#e6e7ee] pb-4 text-center dark:border-[#1e293b]">
-              <div><p className={`text-[20px] font-semibold ${D_TXT}`}>{draft.vehicleListings.filter((l) => l.locked).length}</p><p className={`text-[12px] ${D_MUTED}`}>Fits now</p></div>
-              <div><p className="text-[20px] font-semibold text-[#0153dc]">+{draft.vehicleListings.filter((l) => !l.locked).length}</p><p className={`text-[12px] ${D_MUTED}`}>Adding</p></div>
-              <div><p className={`text-[20px] font-semibold ${D_TXT}`}>{draft.vehicleListings.length}</p><p className={`text-[12px] ${D_MUTED}`}>After save</p></div>
-            </div>
-          ) : null}
-          <div className="mb-3 flex items-center gap-2">
-            <p className={`text-[20px] font-semibold ${D_TXT}`}>Selected</p>
-            <span className="rounded-full bg-[#0153dc] px-2.5 py-0.5 text-[13px] font-semibold text-white">
-              {draft.vehicleListings.length} car{draft.vehicleListings.length === 1 ? "" : "s"}
-            </span>
-          </div>
-          {draft.vehicleListings.length ? (
-            <ul className="flex max-h-[460px] flex-col gap-2 overflow-y-auto">
-              {draft.vehicleListings.map((l) => {
-                const make = l.make ?? l.label?.split(" ")[0] ?? "?";
+          {search.isLoading ? (
+            <p className={`${D_TINT} p-4 text-[14px] ${D_MUTED}`}>Looking for the versions on this page…</p>
+          ) : search.isError ? (
+            <p className="rounded-xl border border-[#f3c0bf] bg-[#fdecec] p-4 text-[14px] text-[#a83836]">
+              Could not read the car list. Check the link, or search for the car by name.
+            </p>
+          ) : groups.length === 0 ? (
+            <p className={`${D_TINT} p-4 text-[14px] ${D_MUTED}`}>
+              No versions came from this page yet. Paste the link again on the first step, or search for the car by name or frame code.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-space-md">
+              <p className={`text-[14px] ${D_MUTED}`}>{groups.reduce((n, g) => n + g.rows.length, 0)} versions found.</p>
+              {groups.map((g) => {
+                const allIn = g.rows.every((v) => selectedIds.has(v.id));
                 return (
-                  <li key={l.vehicleId} className={`${D_TINT} flex flex-col gap-2 p-3`}>
-                    <div className="flex items-start gap-2.5">
-                      <MakerLogo make={make} logoStoragePath={makerLogos.get(make.toLowerCase())} size={28} />
-                      <div className="min-w-0 flex-1">
-                        <p className={`text-[14px] font-semibold ${D_TXT}`}>{l.make ?? ""} {l.model ?? l.label ?? ""}</p>
-                        <p className={`text-[13px] ${D_MUTED}`}>{resolveDiffLabel(l)}</p>
-                        {l.chassisCode ? <DCode>{l.chassisCode}</DCode> : null}
+                  <section key={g.label} className="overflow-hidden rounded-xl border border-[#e6e7ee] bg-white dark:border-[#1e293b] dark:bg-[#111a2e]">
+                    <div className="flex flex-wrap items-center gap-2 border-b border-[#e6e7ee] px-4 py-3 dark:border-[#1e293b]">
+                      <p className={`text-[15px] font-semibold ${D_TXT}`}>{g.label}</p>
+                      <span className={`text-[13px] ${D_MUTED}`}>{g.rows.length} versions</span>
+                      <div className="ml-auto flex items-center gap-2">
+                        <label className="flex min-h-[36px] items-center gap-2 text-[13px] text-[#30323b] dark:text-[#e2e8f0]">
+                          <input type="checkbox" checked={allIn} onChange={() => toggleGroup(g.rows)} />
+                          Tick all {g.label.split(" ").pop()}
+                        </label>
                       </div>
-                      {l.locked ? null : (
-                        <PartsButton
-                          variant="danger"
-                          className="!h-8 !w-8 !p-0 shrink-0"
-                          aria-label={`Remove ${l.make ?? ""} ${l.model ?? ""}`}
-                          onClick={() => setDraft({ ...draft, vehicleListings: draft.vehicleListings.filter((x) => x.vehicleId !== l.vehicleId) })}
-                        >
-                          <MaterialIcon name="close" className="text-[16px]" />
-                        </PartsButton>
-                      )}
                     </div>
-                    <div className="flex items-center gap-2 pl-[38px]">
-                      <span className={`text-[12px] ${D_MUTED}`}>Years</span>
-                      <input
-                        type="number"
-                        aria-label="From year"
-                        className="h-8 w-[72px] rounded-lg border border-[#c5c6d0] bg-white px-2 text-[13px] dark:border-[#1e293b] dark:bg-[#111a2e]"
-                        value={l.yearFrom ?? ""}
-                        disabled={l.locked}
-                        onChange={(e) => updateListingYears(l.vehicleId, e.target.value ? Number(e.target.value) : undefined, l.yearTo)}
-                      />
-                      <span className={D_MUTED}>–</span>
-                      <input
-                        type="number"
-                        aria-label="To year"
-                        placeholder="on"
-                        className="h-8 w-[72px] rounded-lg border border-[#c5c6d0] bg-white px-2 text-[13px] dark:border-[#1e293b] dark:bg-[#111a2e]"
-                        value={l.yearTo && l.yearTo < 9999 ? l.yearTo : ""}
-                        disabled={l.locked}
-                        onChange={(e) => updateListingYears(l.vehicleId, l.yearFrom, e.target.value ? Number(e.target.value) : undefined)}
-                      />
-                    </div>
-                  </li>
+                    <ul className="divide-y divide-[#e6e7ee] dark:divide-[#1e293b]">
+                      {g.rows.map((v) => {
+                        const on = selectedIds.has(v.id);
+                        const note = outsidePageNote(v, from, to, stillMade);
+                        const years = v.production_start_year && v.production_end_year
+                          ? `${v.production_start_year}–${v.production_end_year}`
+                          : v.production_start_year
+                            ? `${v.production_start_year}–now`
+                            : "Years not on file";
+                        return (
+                          <li key={v.id} className="flex items-start gap-3 px-4 py-3">
+                            <input
+                              type="checkbox"
+                              className="mt-1"
+                              aria-label={`Tick ${v.make} ${v.model} ${v.chassis_code ?? ""} ${v.production_start_year ?? ""}`}
+                              checked={on}
+                              onChange={() => (on ? removeListing(v.id) : addListing(v))}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className={`text-[14px] font-medium ${D_TXT}`}>{years}</span>
+                                <span className="rounded-md bg-[#f3f4fb] px-2 py-0.5 font-mono text-[12px] text-[#30323b] dark:bg-[#0b1220] dark:text-[#e2e8f0]">
+                                  {v.chassis_code ?? "—"}
+                                </span>
+                                <span className={`text-[13px] ${D_MUTED}`}>{vehicleDiffLabel(v)}</span>
+                              </div>
+                              {note ? (
+                                <p className="mt-1 inline-flex rounded-full bg-[#fff4dc] px-2 py-0.5 text-[12px] text-[#8a5a00] dark:bg-[#451a03] dark:text-[#fbbf24]">
+                                  {note}
+                                </p>
+                              ) : null}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
                 );
               })}
+            </div>
+          )}
+        </div>
+
+        <aside className="flex h-fit flex-col gap-3 rounded-xl border border-[#e6e7ee] bg-white p-4 dark:border-[#1e293b] dark:bg-[#111a2e]">
+          <p className={`text-[15px] font-semibold ${D_TXT}`}>Selected · {draft.vehicleListings.length} cars</p>
+          {draft.vehicleListings.length > 0 ? (
+            <ul className="flex flex-col gap-3">
+              {draft.vehicleListings.map((l) => (
+                <li key={l.vehicleId} className="rounded-xl bg-[#f3f4fb] p-3 dark:bg-[#0b1220]">
+                  <div className="flex items-start gap-2">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#dbe1ff] text-[12px] font-semibold text-[#0153dc]">
+                      {makerInitial(l.make ?? l.label ?? "")}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-[14px] font-medium ${D_TXT}`}>{l.label}</p>
+                      <p className={`text-[12px] ${D_MUTED}`}>
+                        {l.chassisCode ?? ""}
+                        {l.diffLabel ? ` · ${l.diffLabel}` : ""}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${l.label}`}
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-[#5d5f68] hover:bg-white dark:hover:bg-[#111a2e]"
+                      onClick={() => removeListing(l.vehicleId)}
+                    >
+                      <MaterialIcon name="close" className="text-[18px]" />
+                    </button>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      aria-label={`${l.label} year from`}
+                      inputMode="numeric"
+                      className="h-9 w-[76px] rounded-md border border-[#c5c6d0] bg-white px-2 text-[13px] dark:bg-[#111a2e] dark:border-[#1e293b]"
+                      value={l.yearFrom ?? ""}
+                      onChange={(e) => {
+                        const n = Number.parseInt(e.target.value, 10);
+                        patchListing(l.vehicleId, { yearFrom: Number.isFinite(n) ? n : undefined });
+                      }}
+                    />
+                    <span className={D_MUTED}>to</span>
+                    <input
+                      aria-label={`${l.label} year to`}
+                      inputMode="numeric"
+                      className="h-9 w-[76px] rounded-md border border-[#c5c6d0] bg-white px-2 text-[13px] dark:bg-[#111a2e] dark:border-[#1e293b]"
+                      value={l.yearTo ?? ""}
+                      onChange={(e) => {
+                        const n = Number.parseInt(e.target.value, 10);
+                        patchListing(l.vehicleId, { yearTo: Number.isFinite(n) ? n : undefined });
+                      }}
+                    />
+                  </div>
+                </li>
+              ))}
             </ul>
           ) : (
-            <p className={`${D_TINT} p-4 text-[14px] ${D_MUTED}`}>Tick the cars this page is for.</p>
+            <p className={`${D_TINT} p-3 text-[14px] ${D_MUTED}`}>Tick the cars this page is for.</p>
           )}
           {draft.vehicleListings.length > 0 ? (
-            <PartsButton variant="danger" className="mt-3 w-full" onClick={() => setDraft({ ...draft, vehicleListings: [] })}>
+            <PartsButton variant="danger" className="w-full" onClick={() => setDraft({ ...draft, vehicleListings: [] })}>
               <MaterialIcon name="delete_sweep" className="text-[18px]" /> Clear all
             </PartsButton>
+          ) : null}
+          {carError ? <p className="text-[13px] text-error">{carError}</p> : null}
+          {sisters.data?.length ? (
+            <div className="rounded-xl border border-[#e6e7ee] p-3 dark:border-[#1e293b]">
+              <p className={`text-[14px] font-semibold ${D_TXT}`}>{sisters.data.length} sister cars</p>
+              <p className={`mt-1 text-[13px] ${D_MUTED}`}>
+                These are built on the same car. Add the matching versions?
+              </p>
+              <PartsButton
+                variant="secondary"
+                className="mt-2 w-full"
+                onClick={() => {
+                  const toAdd = sisters.data
+                    .filter((v) => !selectedIds.has(v.id))
+                    .map((v) => catalogListingFromVehicle(v, trustFor(), yearsFor()));
+                  if (toAdd.length) setDraft({ ...draft, vehicleListings: [...draft.vehicleListings, ...toAdd] });
+                }}
+              >
+                Add these cars
+              </PartsButton>
+            </div>
           ) : null}
         </aside>
       </div>

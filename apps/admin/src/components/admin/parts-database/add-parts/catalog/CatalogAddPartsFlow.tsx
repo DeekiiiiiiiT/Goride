@@ -13,11 +13,12 @@ import {
 } from "../../../../ui/alert-dialog";
 import { PartsButton } from "../../PartsButton";
 import { emptyCatalogDraft, type CatalogPageDraft } from "../addPartsTypes";
-import { fetchSelfServePartTypes, saveCatalogPage, undoSelfServePart } from "../addPartsApi";
+import { fetchAddPartVehicle, fetchSelfServePartTypes, saveCatalogPage, undoSelfServePart } from "../addPartsApi";
 import { CatalogStepper } from "./CatalogStepper";
 import { catalogCaptureDraft, catalogCaptureStepFor } from "./catalogCaptureFixtures";
+import { vehicleDiffLabel } from "./vehicleDiffLabel";
 import { CatalogStep1Page } from "./CatalogStep1Page";
-import { CatalogStep2Cars } from "./CatalogStep2Cars";
+import { CatalogStep2Cars, catalogCarYearsProblem, catalogPageYearsProblem } from "./CatalogStep2Cars";
 import { CatalogStep3Parts } from "./CatalogStep3Parts";
 import { CatalogStep4Save } from "./CatalogStep4Save";
 import { CatalogStep4Trust } from "./CatalogStep4Trust";
@@ -28,10 +29,12 @@ export function CatalogAddPartsFlow({
   singlePart,
   onHome,
   onFindParts,
+  owner = false,
 }: {
   singlePart?: boolean;
   onHome: () => void;
   onFindParts: () => void;
+  owner?: boolean;
 }) {
   const qc = useQueryClient();
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
@@ -42,35 +45,58 @@ export function CatalogAddPartsFlow({
   const [saveResult, setSaveResult] = useState<Record<string, unknown> | null>(null);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [reviewPhase, setReviewPhase] = useState<"trust" | "save">("trust");
+  const [preselectLoading, setPreselectLoading] = useState(false);
+  const [preselectError, setPreselectError] = useState("");
 
   const typesQuery = useQuery({ queryKey: ["self-serve-part-types"], queryFn: fetchSelfServePartTypes });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const preVehicle = params.get("vehiclesPreselectVehicleId")?.trim();
+    let cancelled = false;
     if (preVehicle) {
-      setDraft((prev) => ({
-        ...prev,
-        vehicleListings: [
-          {
-            vehicleId: preVehicle,
-            label: "This car",
-            make: "Toyota",
-            model: "Roomy",
-            chassisCode: "M900A",
-            diffLabel: "2WD · 1.0 petrol",
-            yearFrom: 2016,
-            yearTo: 2020,
-            locked: true,
-            trust: "confirmed",
-          },
-        ],
-      }));
+      // "Add parts to this car": open at Step 2 and load that car's real details, then add it.
       setStep(2);
       setFramePreTickDone(true);
+      setPreselectLoading(true);
+      setPreselectError("");
+      fetchAddPartVehicle(preVehicle)
+        .then((v) => {
+          if (cancelled) return;
+          if (!v) {
+            setPreselectError("We couldn't load that car. Search for it below, or go back and pick another car.");
+            return;
+          }
+          setDraft((prev) => ({
+            ...prev,
+            vehicleListings: [
+              ...prev.vehicleListings,
+              {
+                vehicleId: v.id,
+                label: `${v.make} ${v.model}`.trim(),
+                make: v.make,
+                model: v.model,
+                chassisCode: v.chassis_code ?? undefined,
+                diffLabel: vehicleDiffLabel(v),
+                yearFrom: v.production_start_year ?? undefined,
+                yearTo: v.production_end_year ?? undefined,
+                locked: true,
+                trust: "confirmed",
+              },
+            ],
+          }));
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setPreselectError("We couldn't load that car. Search for it below, or go back and pick another car.");
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setPreselectLoading(false);
+        });
     }
     const cap = params.get("addPartsCapture");
-    if (!cap) return;
+    if (!cap) return () => { cancelled = true; };
     const map = catalogCaptureStepFor(cap);
     const capDraft = catalogCaptureDraft(cap);
     if (map && capDraft) {
@@ -83,17 +109,45 @@ export function CatalogAddPartsFlow({
         setStep(5);
       }
     }
+    return () => { cancelled = true; };
   }, []);
 
   async function onSave() {
     setSaving(true);
     setSaveError("");
     try {
+      // F-09: a blank brand is never filled with the car maker's name.
+      if (draft.partKind === "aftermarket" && !(draft.brandDefault.trim() || draft.partRows.some((r) => r.brand.trim()))) {
+        setSaveError("Type or pick the brand before saving.");
+        return;
+      }
+      // CR-04: never save years that are not real years or that end before they start.
+      const yearsProblem = catalogPageYearsProblem(draft) || catalogCarYearsProblem(draft);
+      if (yearsProblem) {
+        setSaveError(`${yearsProblem} Fix it on the cars step.`);
+        return;
+      }
+      const listings = draft.vehicleListings.map((l) => ({
+        vehicleId: l.vehicleId,
+        label: l.label,
+        // F-04: the years the page lists apply to the cars ticked from it.
+        yearFrom: l.yearFrom ?? draft.pageYearsFrom ?? undefined,
+        yearTo: draft.pageYearsStillMade ? undefined : (l.yearTo ?? draft.pageYearsTo ?? undefined),
+        trust: l.trust,
+        reason: l.reason,
+      }));
+      const inverted = listings.find((l) => l.yearFrom != null && l.yearTo != null && l.yearFrom > l.yearTo);
+      if (inverted) {
+        setSaveError(
+          `The years for ${inverted.label} end before they start (${inverted.yearFrom} to ${inverted.yearTo}). Fix it on the cars step.`,
+        );
+        return;
+      }
       const parts = draft.partRows
         .filter((r) => r.partTypeId && r.partNumber.trim())
         .map((r) => ({
           partTypeId: r.partTypeId,
-          brand: r.brand || draft.brandDefault || draft.catalogCarMaker || "Toyota",
+          brand: r.brand.trim() || draft.brandDefault.trim(),
           partNumber: r.partNumber.trim(),
           position: r.position,
           side: r.side,
@@ -106,14 +160,8 @@ export function CatalogAddPartsFlow({
         sourceType: draft.sourceType,
         catalogCarMaker: draft.catalogCarMaker.trim() || undefined,
         partKind: draft.partKind,
-        brand: draft.brandDefault || draft.catalogCarMaker,
-        vehicleListings: draft.vehicleListings.map((l) => ({
-          vehicleId: l.vehicleId,
-          yearFrom: l.yearFrom,
-          yearTo: l.yearTo,
-          trust: l.trust,
-          reason: l.reason,
-        })),
+        brand: draft.brandDefault.trim() || undefined,
+        vehicleListings: listings.map(({ label: _label, ...rest }) => rest),
         parts,
       });
       setSaveResult(result);
@@ -137,6 +185,9 @@ export function CatalogAddPartsFlow({
       next.sourceType = draft.sourceType;
       next.partKind = draft.partKind;
       next.brandDefault = draft.brandDefault;
+      next.pageYearsFrom = draft.pageYearsFrom;
+      next.pageYearsTo = draft.pageYearsTo;
+      next.pageYearsStillMade = draft.pageYearsStillMade;
     }
     setDraft(next);
     setStep(keepCars ? 3 : 1);
@@ -200,7 +251,13 @@ export function CatalogAddPartsFlow({
       ) : null}
       <div className={`${D_CARD} p-5 sm:p-8`}>
       {step === 1 ? (
-        <CatalogStep1Page draft={draft} setDraft={setDraft} onNext={() => setStep(2)} onCancel={() => setLeaveOpen(true)} />
+        <CatalogStep1Page
+          draft={draft}
+          setDraft={setDraft}
+          onNext={() => setStep(2)}
+          onCancel={() => setLeaveOpen(true)}
+          owner={owner}
+        />
       ) : null}
       {step === 2 ? (
         <CatalogStep2Cars
@@ -210,6 +267,8 @@ export function CatalogAddPartsFlow({
           onBack={() => setStep(1)}
           framePreTickDone={framePreTickDone}
           setFramePreTickDone={setFramePreTickDone}
+          preselectLoading={preselectLoading}
+          preselectError={preselectError}
         />
       ) : null}
       {step === 3 ? (

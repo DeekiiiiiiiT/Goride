@@ -7,9 +7,8 @@ import { PartsButton } from "../../PartsButton";
 import { MaterialIcon } from "../../import/MaterialIcon";
 import { MakerLogo } from "../../../vehicle-catalog/MakerLogo";
 import type { CatalogPageDraft, CatalogPartRow, PartTypeRow } from "../addPartsTypes";
-import { defaultPartNamePreview, PartTypeIcon } from "../addPartsShared";
+import { PartTypeIcon, plainPlaceLabel, savedPartName } from "../addPartsShared";
 import { vehicleListingYearsLabel } from "./vehicleDiffLabel";
-import { catalystPositionsFor } from "@roam/types/partPositions";
 import { D_MONO, D_MUTED, D_TXT, DCode, DFooter, DPill } from "./dominionKit";
 
 export function CatalogStep4Save({
@@ -30,7 +29,9 @@ export function CatalogStep4Save({
   const rows = draft.partRows.filter((r) => r.partNumber.trim());
   const cars = draft.vehicleListings.length;
   const fits = rows.length * cars;
-  const saveLabel = saving ? "Saving…" : `Save all ${rows.length} part${rows.length === 1 ? "" : "s"}`;
+  const saveLabel = saving
+    ? "Saving…"
+    : `Save ${rows.length} part${rows.length === 1 ? "" : "s"} to ${cars} car${cars === 1 ? "" : "s"}`;
 
   return (
     <div className="flex flex-col gap-5">
@@ -40,13 +41,11 @@ export function CatalogStep4Save({
           <p className="text-[24px] font-semibold tabular-nums text-[#0153dc] dark:text-[#93b4ff]">
             {rows.length} part{rows.length === 1 ? "" : "s"} × {cars} car{cars === 1 ? "" : "s"} = {fits} fit{fits === 1 ? "" : "s"}
           </p>
+          <p className={`text-[14px] ${D_MUTED}`}>All parts go into the shared parts catalogue.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <PartsButton variant="secondary" onClick={() => window.open(draft.evidenceUrl, "_blank", "noopener")}>
             Open the page <MaterialIcon name="open_in_new" className="text-[16px]" />
-          </PartsButton>
-          <PartsButton variant="primary" onClick={onSave} disabled={saving || !rows.length}>
-            <MaterialIcon name="cloud_upload" className="text-[18px]" /> {saveLabel}
           </PartsButton>
         </div>
       </div>
@@ -55,8 +54,9 @@ export function CatalogStep4Save({
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#f3c4c3] bg-[#fdecec] p-4 dark:border-[#7f1d1d] dark:bg-[#450a0a]">
           <span className="flex items-center gap-2 text-[15px] text-[#a83836] dark:text-[#f87171]">
             <MaterialIcon name="error" className="text-[20px]" /> Nothing was saved. Your rows are still here.
+            {saveError ? <span className="font-normal"> {saveError}</span> : null}
           </span>
-          <PartsButton variant="secondary" onClick={onSave}>Try again</PartsButton>
+          <PartsButton variant="secondary" onClick={onSave} disabled={saving}>Try again</PartsButton>
         </div>
       ) : null}
 
@@ -66,12 +66,9 @@ export function CatalogStep4Save({
 
       <DFooter
         left={
-          <div className="flex flex-wrap gap-2">
-            <PartsButton variant="danger" onClick={onBack}>Cancel</PartsButton>
-            <PartsButton variant="secondary" onClick={onBack}>
-              <MaterialIcon name="arrow_back" className="text-[18px]" /> Back to trust
-            </PartsButton>
-          </div>
+          <PartsButton variant="secondary" onClick={onBack}>
+            <MaterialIcon name="arrow_back" className="text-[18px]" /> Back to parts
+          </PartsButton>
         }
         right={
           <PartsButton variant="primary" onClick={onSave} disabled={saving || !rows.length}>
@@ -93,19 +90,12 @@ function PartReviewCard({
   draft: CatalogPageDraft;
 }) {
   const type = row.partType ?? types.find((t) => t.id === row.partTypeId);
-  const name = type
-    ? defaultPartNamePreview(type.name, type.positionScheme, row.position, row.side, row.catalogueNumber)
-    : row.partNumber;
-  const brand = row.brand || draft.catalogCarMaker || "Toyota";
-  const genuine = draft.partKind === "oem" ? `Genuine ${brand}` : brand;
-  const where = [
-    row.position
-      ? catalystPositionsFor({ opCode: type?.opCode }).find((p) => p.id === row.position)?.label ??
-        row.position.charAt(0).toUpperCase() + row.position.slice(1)
-      : null,
-    row.side ? (row.side === "both" ? "Both sides" : row.side.charAt(0).toUpperCase() + row.side.slice(1)) : null,
-    row.catalogueNumber ? `No.${row.catalogueNumber}` : null,
-  ].filter(Boolean).join(" · ");
+  const name = type ? savedPartName(type, row) : row.partNumber;
+  // Never borrow the car maker's name for another brand (F-09).
+  const brand = row.brand.trim() || draft.brandDefault.trim() || (draft.partKind === "oem" ? draft.catalogCarMaker.trim() : "");
+  const genuine = draft.partKind === "oem" ? (brand ? `Genuine ${brand}` : "Genuine part") : (brand || "Another brand");
+  // Plain words only: never a raw place code (F-06).
+  const where = plainPlaceLabel(row.position, row.side, row.catalogueNumber);
   const nCars = draft.vehicleListings.length;
   return (
     <article className="rounded-2xl border border-[#e6e7ee] bg-white p-5 dark:border-[#1e293b] dark:bg-[#111a2e] sm:p-6">

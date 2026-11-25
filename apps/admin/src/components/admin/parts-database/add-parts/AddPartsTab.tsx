@@ -263,6 +263,7 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
     return (
       <CatalogAddPartsFlow
         singlePart={screen === "catalogOne"}
+        owner={owner}
         onHome={() => setScreen("home")}
         onFindParts={() => { window.location.search = "?page=parts-catalog&tab=find-parts"; }}
       />
@@ -276,6 +277,7 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
   if (screen === "extend") {
     return (
       <ExtendPartFlow
+        owner={owner}
         onHome={() => setScreen("home")}
         onFindParts={() => { window.location.search = "?page=parts-catalog&tab=find-parts"; }}
       />

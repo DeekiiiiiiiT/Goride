@@ -118,6 +118,33 @@ export async function fetchTopBrandsForPartType(partTypeId: string) {
   return data.brands ?? [];
 }
 
+/**
+ * One catalogue car by id, in the same shape as the vehicle search.
+ * Used when Add parts opens with ?vehiclesPreselectVehicleId= ("Add parts to this car").
+ */
+export async function fetchAddPartVehicle(vehicleId: string): Promise<AddPartVehicleRow | null> {
+  const res = await fetch(`${API_ENDPOINTS.admin}/catalog/v1/variants/${encodeURIComponent(vehicleId)}`, {
+    headers: await authHeaders(),
+  });
+  if (res.status === 404) return null;
+  const json = (await res.json().catch(() => ({}))) as { variant?: Record<string, unknown>; error?: string };
+  if (!res.ok) throw new Error(json.error || "Could not load that car");
+  const v = json.variant;
+  if (!v || !v.id) return null;
+  return {
+    id: String(v.id),
+    make: String(v.make ?? ""),
+    model: String(v.model ?? ""),
+    chassis_code: (v.chassis_code as string | null) ?? null,
+    engine_code: (v.engine_code as string | null) ?? null,
+    production_start_year: (v.production_start_year as number | null) ?? null,
+    production_end_year: (v.production_end_year as number | null) ?? null,
+    version_name: (v.version_name as string | null) ?? (v.trim_series as string | null) ?? null,
+    platform_id: (v.platform_id as string | null) ?? null,
+    drivetrain: (v.drivetrain as string | null) ?? null,
+  };
+}
+
 export async function fetchMyPartTypeRequests(status = "pending") {
   return catalogGet<{ items: Array<Record<string, unknown>> }>(`part-type-requests?mine=1&status=${encodeURIComponent(status)}`);
 }
@@ -235,8 +262,10 @@ export async function previewSelfServePart(input: {
   return catalogGet<SelfServePreview>(`parts/add/preview?${q}`);
 }
 
-export async function fetchSelfServeLinkHints(url: string): Promise<CatalogLinkHints> {
+export async function fetchSelfServeLinkHints(url: string, maker?: string): Promise<CatalogLinkHints> {
   const q = new URLSearchParams({ url });
+  // F-01: the maker the person picked on screen re-checks trust for that maker, in place.
+  if (maker && maker.trim()) q.set("maker", maker.trim());
   return catalogGet<CatalogLinkHints>(`parts/add/link-hints?${q}`);
 }
 
