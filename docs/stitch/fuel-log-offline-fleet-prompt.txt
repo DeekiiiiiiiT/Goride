@@ -1,0 +1,159 @@
+ROAM FLEET — FUEL FILLS FROM DRIVERS' PHONES — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+HOW TO USE THIS FILE
+- First paste: everything from "FIRST PASTE" down to the end of SCREEN 2.
+- Then paste one SCREEN block at a time (SCREEN 3, SCREEN 4, …). Each block is complete on its own.
+- Never paste the section "FOR CLAUDE — DO NOT PASTE" at the bottom.
+
+
+
+==================== FIRST PASTE ====================
+
+Roam Fleet - Fuel fills from drivers' phones (Desktop Web App, for the fleet owner and fleet manager):
+
+Design screens for how Roam Fleet shows fuel fills that drivers log from their phones. Drivers now log a fill by taking two photos (the odometer, then the pump or receipt) and tapping Save, even with no signal. The fill waits on the driver's phone and sends by itself when the signal comes back. Then Roam reads the total, litres and odometer from the photos. The owner needs to see two new things. First, which drivers still have fills waiting on their phone, and since when ("Kenny — 2 fills on his phone since 7:03 AM"). Second, in the Fuel Review Queue, the fills whose photos couldn't be read, with both photos side by side, what was read, what's missing, and a way to type in the missing numbers before approving. The person using this is not an accountant: every card says in plain words what it is for. The design must feel modern, calm and effortless, like the best business banking apps. Every screen is tall enough to show everything, with no inner scrolling. Draw only the screens asked for in this message.
+
+
+BRAND IDENTITY:
+- Keep the existing Roam Fleet app frame exactly as it is today (do not redesign it):
+  - Top: a white nav row with the black "Roam Fleet" app tile, then: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations, Delivery Operations, Analytics, Reports, Business Finance.
+  - Dark bar below it: a dark navy strip with a search box "Switch vehicle or search hub…" on the left, and on the right "07:20:14 AM EST" and "America/Jamaica".
+- Theme: "Calm finance desk" — clear, trustworthy, quiet and modern. Not a spreadsheet, not a developer tool.
+- LIGHT MODE (default):
+  - Primary: near-black #030213 — primary buttons, the active tab
+  - Page wash: #f8fafc; cards: #FFFFFF with a soft shadow (0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(15,23,42,0.06)) and a hairline border rgba(0,0,0,0.06)
+  - Text: #0b1c30; muted text: #47464c
+  - Read / approved: green #069669 on #ecfdf5
+  - Waiting on phone: amber #b45309 on #fffbeb
+  - Needs a look: red #ba1a1a on #fff1f2
+  - Info / no location: slate #475569 on #f1f5f9
+- DARK MODE:
+  - Page #1c1c1e, cards #2a2a2d, border #3a3a3d, text #fafafa, muted #a1a1aa, primary buttons white #fafafa with near-black text
+  - Green #34d399 on #064e3b; amber #fbbf24 on #451a03; red #f87171 on #450a0a; slate #cbd5e1 on #334155
+- Shapes: cards 16px corner radius, buttons and inputs 12px, photo tiles 12px, chips fully rounded.
+- Typography: Inter. Page title 28px bold, card title 20px semibold, subtitle 15px muted, body 15px, helper text 13px. Money and numbers use tabular figures, right-aligned: "J$4,000.00", "18.70 L", "200,247 km".
+- Car plates are always in a small grey rounded box: "5179KZ".
+- Dates in plain words: "Wed 25 Nov, 7:03 AM", "since 7:03 AM", "2 days ago". Never "2026-11-25", never codes, ids or internal words.
+- Buttons always look like buttons:
+  - Primary = solid near-black with white text.
+  - Secondary = white with a visible #cbd5e1 border and dark text.
+  - Danger (Reject) = red border and red text.
+  - Never underlined text links, never grey text-only buttons. Confirms are in-app dialogs, never browser pop-ups.
+- The pieces used across these screens (draw them the same way every time):
+  - Waiting-on-phone card: a white card with an amber left edge, a phone icon, the title "Fills waiting on drivers' phones", then one row per driver: driver name, the plate box, "2 fills · since 7:03 AM", "Phone last seen 7:10 AM" muted, and the app version as a small grey chip "App 1.0.30".
+  - Waiting chip (on a driver row): amber, phone icon, "2 on phone".
+  - Review row (white card): line 1 date and time, driver name, the plate box; line 2 the amount (or "Total not read" in red) and litres; line 3 chips: "Needs a look" red, the reason in words ("Pump photo not readable"), "Cash"; on the right two small photo thumbnails and a secondary button "Open".
+  - Photo pair: two photo tiles side by side, 220px tall, labelled "Odometer" and "Pump" under each, with a small "View full size" secondary button.
+  - Read-values list: label left, value right; values that came from the photo have a small grey "From photo" tag; missing values say "Not read" in red.
+- No gradients, glassmorphism or 3D. No AI badges, no sparkles.
+- Sample data (REAL drivers and stations, Rideshare, Toyota Roomy):
+  - Kenny Gregory Rattray · 5179KZ: fills "Wed 25 Nov, 7:03 AM · 200,412 km · Cash" (waiting on phone), "Tue 24 Nov, 7:42 PM · Blaize Old Harbour Road · J$4,000.00 · 18.70 L · 200,247 km" (read), "Mon 23 Nov, 6:20 PM · RUBIS Old Harbour Road · 200,243 km · pump photo blurry" (needs a look).
+  - Marlon Andre Sterling · 8421LA: 1 fill on his phone since Tue 24 Nov, 9:15 PM.
+
+
+DESIGN PRINCIPLES:
+- Each screen answers "what needs me now?" first: the waiting and needs-a-look counts at the top, then the list, oldest first.
+- Photos are always shown big enough to read the numbers without opening them.
+- A missing value is labelled, never hidden and never shown as J$0.00.
+- Calm, not alarming: red only for "Needs a look". Waiting on a phone is amber, not an error.
+- Plain words only: no "outbox", "queue item", "sync", "capture id", "OCR".
+- One view per screen.
+
+
+SCREEN 1: FUEL MANAGEMENT — WAITING ON PHONES CARD
+- Page title "Fuel Management", subtitle "Fills, cards and review for your fleet."
+- Tabs under the title: "Overview" (active), "Transaction Logs", "Review Queue" with a small red count "1".
+- First card: the waiting-on-phone card, two driver rows:
+  - "Kenny Gregory Rattray" · plate box 5179KZ · "2 fills · since 7:03 AM" · muted "Phone last seen 7:10 AM" · grey chip "App 1.0.30"
+  - "Marlon Andre Sterling" · plate box 8421LA · "1 fill · since Tue 9:15 PM" · muted "Phone last seen Tue 9:40 PM" · grey chip "App 1.0.30"
+- Muted line at the bottom of the card: "They send by themselves when the phone has signal."
+- Under it, the existing Overview cards (draw two simple placeholder summary cards: "This week · J$38,400.00 · 182.4 L" and "Review Queue · 1 needs a look").
+
+SCREEN 2: REVIEW QUEUE — FILL NEEDS A LOOK
+- Page title "Fuel Management", tabs with "Review Queue" active (red count "1").
+- Summary tiles in a row: "NEEDS A LOOK 1" (red tint), "WAITING ON PHONES 3" (amber tint), "READY TO APPROVE 0" (calm grey).
+- One review row:
+  - Line 1: "Mon 23 Nov, 6:20 PM", "Kenny Gregory Rattray", plate box 5179KZ.
+  - Line 2: "Total not read" in red · "Litres not read" in red · "200,243 km".
+  - Line 3 chips: "Needs a look" (red), "Pump photo not readable" (slate), "Cash" (slate), "RUBIS Old Harbour Road" (slate, pin icon).
+  - Right side: two small photo thumbnails (odometer, pump) and a secondary button "Open".
+
+==================== END OF FIRST PASTE ====================
+
+
+
+SCREEN 3: ONE FILL — NEEDS A LOOK (SIDE PANEL)
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- Background page: Fuel Management, Review Queue tab, dimmed on the left.
+- A wide white side panel on the right (560px):
+  - Header: "Fuel fill · Mon 23 Nov, 6:20 PM", "Kenny Gregory Rattray", plate box 5179KZ, red chip "Needs a look", and a close (X) icon button with a visible border.
+  - One line in a soft red box: "The pump photo couldn't be read. Check the photos and type the total and litres."
+  - Photo pair: "Odometer" (a clear digital odometer reading 200243) and "Pump" (a slightly blurry pump display), each with "View full size".
+  - Read-values list: "Odometer — 200,243 km" with "From photo" tag; "Paid with — Cash"; "Station — RUBIS Old Harbour Road" with "From location" tag; "Total — Not read" (red); "Litres — Not read" (red); "Logged on phone — Mon 23 Nov, 6:20 PM"; "Arrived — Mon 23 Nov, 6:52 PM".
+  - Two inputs side by side: "Total (J$)" placeholder "1,000.00", "Litres" placeholder "4.59".
+  - Buttons at the bottom, right-aligned: danger "Reject", secondary "Save numbers", primary "Save and approve".
+
+SCREEN 4: ONE FILL — NEEDS A LOOK, NUMBERS TYPED
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- Same side panel as a fill that needs a look, for "Mon 23 Nov, 6:20 PM · Kenny Gregory Rattray · 5179KZ".
+- Photo pair at the top: "Odometer" and "Pump".
+- Read-values list: "Odometer — 200,243 km" (From photo), "Paid with — Cash", "Station — RUBIS Old Harbour Road" (From location).
+- Inputs filled: "Total (J$)" = "1,000.00", "Litres" = "4.593", each with a small grey "Typed by you" tag under it.
+- A calm grey line under the inputs: "J$217.72 a litre".
+- Buttons at the bottom, right-aligned: danger "Reject", secondary "Save numbers", primary "Save and approve".
+
+SCREEN 5: REVIEW QUEUE — FILL WITH NO LOCATION
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- Page title "Fuel Management", tabs with "Review Queue" active.
+- One review row:
+  - Line 1: "Wed 25 Nov, 7:03 AM", "Kenny Gregory Rattray", plate box 5179KZ.
+  - Line 2: "J$3,000.00 · 14.02 L · 200,412 km", each with a small "From photo" tag.
+  - Line 3 chips: "Needs a look" (red), "No location from the phone" (slate, pin-off icon), "Cash" (slate).
+  - Right side: two photo thumbnails and secondary "Open".
+- Opened under the row (expanded), a station picker card: title "Where was this fill?", a search box "Search stations…", three station rows with radio circles: "Blaize Old Harbour Road", "RUBIS Old Harbour Road", "TotalEnergies, Old Hope Road", and a primary button "Use this station".
+
+SCREEN 6: DRIVERS — WAITING ON PHONE CHIP
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Desktop, tall enough to show everything, no inner scrolling.
+- Page title "Drivers", subtitle "Everyone driving for your fleet."
+- A list of white driver rows (name, plate box, status chip "Active", this week's trips):
+  - "Kenny Gregory Rattray" · 5179KZ · "Active" · "42 trips this week" · plus the amber chip "2 on phone" with a phone icon
+  - "Marlon Andre Sterling" · 8421LA · "Active" · "31 trips this week" · plus the amber chip "1 on phone"
+- Hovering the amber chip on Kenny's row shows a small dark tooltip: "2 fuel fills on his phone since 7:03 AM. They send when the phone has signal."
+
+SCREEN 7: PHONE 390px — FUEL MANAGEMENT, WAITING ON PHONES
+Same Roam Fleet app colours, cards and style as the earlier screens in this project, on a phone, 390px wide, tall enough to show everything, no inner scrolling.
+- Top: the Roam Fleet mobile header (menu button, "Roam Fleet", profile circle).
+- Page title "Fuel Management"; tabs as a horizontal row of pills: "Overview" (active), "Transaction Logs", "Review Queue 1".
+- The waiting-on-phone card, full width, rows stacked:
+  - "Kenny Gregory Rattray" · 5179KZ · "2 fills · since 7:03 AM" · "Phone last seen 7:10 AM"
+  - "Marlon Andre Sterling" · 8421LA · "1 fill · since Tue 9:15 PM" · "Phone last seen Tue 9:40 PM"
+- Under it, one review row for "Mon 23 Nov, 6:20 PM · Kenny Gregory Rattray · Total not read · Needs a look" with a full-width secondary button "Open".
+
+
+
+==================== FOR CLAUDE — DO NOT PASTE ====================
+
+ADDITIONAL UI COMPONENTS:
+- Waiting-on-phone card, waiting chip, review row, photo pair, read-values list: as in BRAND IDENTITY.
+- Side panel: 560px, header with close icon button, scrolling disabled (tall enough), buttons bottom right.
+- Tooltip: dark, rounded, 13px.
+
+INTERACTIONS:
+- Spec: docs/fuel-log-offline-first-audit.md (S1, S2, S6, S7, FO-14; section 5 "Roam Fleet — owner side").
+- The waiting-on-phone card and the driver chip read GET /fuel/phone-outbox (S2). Hidden when every count is 0.
+- "App 1.0.30" is app_version from the phone's report. "Phone last seen" is last_seen_at.
+- Review Queue "Needs a look" rows are fills with photoReadStatus = needs_look (S6) or no station after S7. The reason chip comes from the server reason in plain words.
+- "From photo" = value set by the photo reader; "From location" = station matched from the phone's GPS; "Typed by you" = entered in this panel.
+- Save numbers stores total and litres on the same fill and re-runs the fuel engine. Save and approve also runs the existing approve. Reject uses the existing reject (with its reason dialog).
+- Use this station sets the station on the fill (existing approve station link).
+- The Roam Fleet driver section (apps/fleet/src/components/driver-portal) gets the driver fuel screens from docs/stitch/fuel-log-offline-driver-prompt.txt through the shared package (FO-16). They aren't redrawn here.
+
+Spec screens / Area
+| Screen | Area |
+| 1 | Fuel Management — Overview, waiting-on-phones card |
+| 2 | Review Queue — a fill that needs a look |
+| 3 | One fill — needs a look, side panel |
+| 4 | One fill — numbers typed |
+| 5 | Review Queue — no location, pick the station |
+| 6 | Drivers — "2 on phone" chip |
+| 7 | Phone 390px — Fuel Management waiting card |

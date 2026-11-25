@@ -61,6 +61,9 @@ export interface UploadEvidenceMeta {
   retentionClass?: EvidenceRetentionClass;
   orgId?: string;
   parentStatus?: 'Pending' | 'Approved' | 'Rejected' | string;
+  /** Fuel offline-first S4: the fill's phone id; with photoKind the server keeps one file per photo. */
+  captureId?: string;
+  photoKind?: 'odometer' | 'pump' | 'receipt';
 }
 
 /** Append ephemeral upload fields to FormData (fleet + driver upload endpoints). */
@@ -75,6 +78,10 @@ export function appendUploadEvidenceMeta(
   formData.append('sourceId', meta.sourceId);
   if (meta.orgId) formData.append('orgId', meta.orgId);
   if (meta.parentStatus) formData.append('parentStatus', meta.parentStatus);
+  if (meta.captureId && meta.photoKind) {
+    formData.append('captureId', meta.captureId);
+    formData.append('photoKind', meta.photoKind);
+  }
 }
 
 export interface EvidenceStorageSummary {

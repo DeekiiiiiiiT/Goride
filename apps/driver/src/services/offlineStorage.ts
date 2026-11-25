@@ -37,6 +37,7 @@ export const offlineStorage = {
     }
   },
 
+  /** Only after the server confirmed this item arrived (OfflineProvider.processQueue). */
   removeFromQueue: (id: string) => {
     const queue = offlineStorage.getQueue();
     const item = queue.find(a => a.id === id);
@@ -68,31 +69,8 @@ export const offlineStorage = {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
   },
 
-  clearQueue: () => {
-    if (typeof window === 'undefined') return;
-    const queue = offlineStorage.getQueue();
-    for (const item of queue) {
-      if (item.type === 'SUBMIT_FUEL_EXPENSE') {
-        void offlineBlobStore.removeMany([
-          item.payload.odometerBlobKey,
-          item.payload.receiptBlobKey,
-        ]);
-      }
-      if (item.type === 'SUBMIT_GAS_CARD_ANCHOR') {
-        void offlineBlobStore.removeMany([item.payload.odometerBlobKey]);
-      }
-      if (item.type === 'SUBMIT_SPLIT_FUEL_FILL') {
-        void offlineBlobStore.removeMany([
-          item.payload.odometerBlobKey,
-          item.payload.receiptBlobKey,
-        ]);
-      }
-      if (item.type === 'SUBMIT_CASH_TOLL') {
-        void offlineBlobStore.removeMany([item.payload.receiptBlobKey]);
-      }
-    }
-    localStorage.removeItem(STORAGE_KEY);
-  },
+  // No "clear all": nothing a driver saved is deleted on the phone (FO-18). removeFromQueue is
+  // called only after the server confirms an item arrived.
 };
 
 export type { OfflineAction };

@@ -57,6 +57,12 @@ import { useOffline } from '../providers/OfflineProvider';
 import { offlineBlobStore } from '../../services/offlineBlobStore';
 import { offlineStorage } from '../../services/offlineStorage';
 import { useFuelSplitPaymentEnabled } from '../../hooks/useFuelSplitPaymentEnabled';
+import { useFuelPhotoFirstEnabled } from '../../hooks/useFuelPhotoFirstEnabled';
+import { FuelPhotoFlow } from './fuel-photo/FuelPhotoFlow';
+import { loadFuelPhotoDraft } from './fuel-photo/fuelPhotoDraftStore';
+import { FuelNeedsLookSheet, type NeedsLookFill } from './fuel-photo/FuelNeedsLookSheet';
+import { FuelFillChip, FuelPhoneHeldRows, FuelPhoneWaitingCard } from './fuel-photo/FuelListBits';
+import { fillChipForServerFill } from './fuel-photo/fuelPhotoFill';
 import {
   buildCardSplitMetadata,
   buildCashSplitMetadata,
@@ -94,6 +100,8 @@ interface ExpenseLoggerProps {
 type ViewState =
   | 'list'
   | 'category_select'
+  /** Fuel log, photos first (switch fuelPhotoFirstEnabled) — FuelPhotoFlow. */
+  | 'photo_first'
   | 'odometer_scan'
   | 'fuel_gps_locking'
   | 'fuel_gps_retry'
@@ -187,6 +195,11 @@ interface ExpenseItem {
   odometer?: number;
   volume?: number;
   receiptUrl?: string;
+  /** Fuel log photos-first: server photo-read state (waiting / read / needs_look). */
+  photoReadStatus?: string;
+  needsLookReason?: string;
+  captureId?: string;
+  paidWith?: string;
 }
 
 const FUEL_GRADE_OPTIONS = [
@@ -256,7 +269,13 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
   const { getLocation } = useGeolocation();
   const { enabled: fuelSplitEnabled, loading: fuelSplitLoading } = useFuelSplitPaymentEnabled();
   const isLogMode = mode === 'log' || (mode == null && defaultOpen);
-  const resumeBoot = initialViewForCameraResume(cameraResume);
+  const photoFirstOn = useFuelPhotoFirstEnabled();
+  const cameraBoot = initialViewForCameraResume(cameraResume);
+  // After the app was closed mid-fill, the photos-first flow picks the fill back up (FO-01).
+  const resumeBoot =
+    photoFirstOn && cameraBoot?.viewState === 'odometer_scan' && loadFuelPhotoDraft()
+      ? { ...cameraBoot, viewState: 'photo_first' as ViewState }
+      : cameraBoot;
   const pendingFuelOffline = queue.filter(
     (q) =>
       q.type === 'SUBMIT_FUEL_EXPENSE' ||
@@ -282,6 +301,8 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
   );
   const [fuelEntry, setFuelEntry] = useState<FuelEntryState>({});
   const [tankStatus, setTankStatus] = useState<any>(null);
+  /** Photos-first: the fill opened from the list because it needs a look (S10). */
+  const [needsLookFill, setNeedsLookFill] = useState<NeedsLookFill | null>(null);
   
   const [isScanning, setIsScanning] = useState(false);
   const [fuelPumpStep, setFuelPumpStep] = useState<FuelPumpStep>(resumeBoot?.fuelPumpStep ?? 'photo');
@@ -623,7 +644,17 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
             ? `Gas Card + Cash · cash portion — ${baseDesc}`
             : baseDesc,
           status: t.status || 'pending',
-          receiptUrl: t.receiptUrl
+          receiptUrl: t.receiptUrl,
+          ...(isFuelExpense && splitMeta?.captureId
+            ? {
+                photoReadStatus: String(splitMeta.photoReadStatus || ''),
+                needsLookReason: splitMeta.needsLookReason ? String(splitMeta.needsLookReason) : undefined,
+                captureId: String(splitMeta.captureId),
+                odometer: Number((t as unknown as { odometer?: number }).odometer) || undefined,
+                volume: Number(splitMeta.fuelVolume) || undefined,
+                paidWith: String(t.paymentMethod || '').toLowerCase().includes('card') ? 'Gas Card' : 'Cash',
+              }
+            : {}),
         });
       });
       
@@ -1756,7 +1787,7 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
     if (cat === 'Fuel') {
       setFuelGpsManualRetriesLeft(MAX_MANUAL_FUEL_GPS_RETRIES);
       setFuelProceedingWithoutGps(false);
-      setViewState('odometer_scan');
+      setViewState(photoFirstOn ? 'photo_first' : 'odometer_scan');
       if (driverRecord?.assignedVehicleId) {
         api.getVehicleTankStatus(driverRecord.assignedVehicleId)
           .then(setTankStatus)
@@ -2159,7 +2190,11 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
            </div>
         </div>
 
-        {pendingFuelOffline > 0 && (
+        {photoFirstOn && pendingFuelOffline > 0 ? (
+          <FuelPhoneWaitingCard count={pendingFuelOffline} onSendNow={() => void processQueue(true)} />
+        ) : null}
+
+        {!photoFirstOn && pendingFuelOffline > 0 && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             <p className="font-semibold">
               {pendingFuelOffline} fuel log{pendingFuelOffline === 1 ? '' : 's'} saved on this phone
@@ -2239,6 +2274,7 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
         </Card>
 
         <div className="space-y-4">
+           {photoFirstOn && listFilter === 'fuel' ? <FuelPhoneHeldRows queue={queue} /> : null}
            {listFilter == null ? null : loading ? (
               <div className="text-center py-10">
                  <Loader2 className="h-8 w-8 animate-spin mx-auto text-indigo-500" />
@@ -2248,8 +2284,27 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
               </div>
            ) : filteredExpenses.length > 0 ? (
               <div className="grid w-full min-w-0 max-w-full gap-3">
-                 {filteredExpenses.map(expense => (
-                    <Card key={expense.id} className="min-w-0 max-w-full overflow-hidden">
+                 {filteredExpenses.map(expense => {
+                    const chip = photoFirstOn && expense.type === 'fuel' ? fillChipForServerFill(expense.photoReadStatus) : null;
+                    const amountComing = chip != null && chip !== 'read' && !(expense.amount > 0);
+                    return (
+                    <Card
+                      key={expense.id}
+                      className={cn('min-w-0 max-w-full overflow-hidden', chip === 'needs_look' && 'cursor-pointer ring-1 ring-red-200 dark:ring-red-900')}
+                      onClick={
+                        chip === 'needs_look'
+                          ? () =>
+                              setNeedsLookFill({
+                                id: expense.id,
+                                date: expense.date,
+                                odometer: expense.odometer,
+                                reason: expense.needsLookReason,
+                                captureId: expense.captureId,
+                                paidWith: expense.paidWith || 'Cash',
+                              })
+                          : undefined
+                      }
+                    >
                        <CardContent className="p-0">
                           <div className="flex min-w-0 items-start gap-3 p-3 sm:p-4 sm:gap-4">
                              <div className={cn(
@@ -2281,9 +2336,13 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
                                        </h4>
                                      )}
                                    </div>
+                                   {amountComing ? (
+                                     <span className="shrink-0 text-right text-sm italic text-slate-500 dark:text-slate-400">Amount coming</span>
+                                   ) : (
                                    <span className="shrink-0 text-right text-sm font-bold tabular-nums text-slate-900 dark:text-slate-100 sm:text-base">
                                       ${Math.abs(expense.amount).toFixed(2)}
                                    </span>
+                                   )}
                                 </div>
                                 <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 gap-y-1.5 text-xs font-medium text-slate-600 dark:text-slate-400">
                                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
@@ -2307,13 +2366,16 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
                                    >
                                      {expense.status}
                                    </Badge>
+                                   ) : chip ? (
+                                     <FuelFillChip chip={chip} />
                                    ) : null}
                                 </div>
                              </div>
                           </div>
                        </CardContent>
                     </Card>
-                 ))}
+                    );
+                 })}
               </div>
            ) : (
               <p className="px-1 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
@@ -2321,6 +2383,15 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
               </p>
            )}
         </div>
+        <FuelNeedsLookSheet
+          fill={needsLookFill}
+          isOnline={isOnline}
+          onClose={() => setNeedsLookFill(null)}
+          onSaved={() => {
+            setNeedsLookFill(null);
+            void fetchTransactions();
+          }}
+        />
       </div>
     );
   }
@@ -2337,6 +2408,33 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
           : 'Station verification may take a moment (you may see "Verifying location" until it clears).'}
       </div>
     ) : null;
+
+  // Fuel log, photos first (switch fuelPhotoFirstEnabled): its own screens and header.
+  if (viewState === 'photo_first') {
+    return (
+      <div className="space-y-4 pb-40">
+        <Button variant="ghost" size="icon" onClick={() => setViewState('category_select')} aria-label="Back">
+          <ChevronLeft className="h-5 w-5" />
+        </Button>
+        <FuelPhotoFlow
+          user={user ?? null}
+          driverRecord={driverRecord}
+          lastOdometer={Number(tankStatus?.lastOdometer) || undefined}
+          splitEnabled={fuelSplitEnabled && !fuelSplitLoading}
+          stations={verifiedStations as any}
+          onDone={() => {
+            resetForm();
+            setViewState('list');
+            void fetchTransactions();
+          }}
+          onCancel={() => {
+            resetForm();
+            setViewState('category_select');
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 pb-40">

@@ -92,6 +92,10 @@ on:
       - 'supabase/tests/toll_sweep_logged_trips_test.sql'
       - 'supabase/migrations/20261118133523_toll_sweep_alert_logged_trips.sql'
       - 'supabase/tests/toll_screen_reads_disputes_test.sql'
+      - 'supabase/tests/driver_phone_outbox_checks.sql'
+      - 'supabase/migrations/20261125133536_driver_phone_outbox.sql'
+      - 'supabase/tests/fuel_photo_read_queue_checks.sql'
+      - 'supabase/migrations/20261125135228_fuel_photo_read_queue.sql'
       - 'supabase/migrations/20261118182336_toll_screen_reads_disputes.sql'
       - 'packages/toll-core/src/v2/weekRuleCases.json'
       - '.github/workflows/parts-sql-checks.yml'
@@ -183,6 +187,10 @@ on:
       - 'supabase/tests/toll_sweep_logged_trips_test.sql'
       - 'supabase/migrations/20261118133523_toll_sweep_alert_logged_trips.sql'
       - 'supabase/tests/toll_screen_reads_disputes_test.sql'
+      - 'supabase/tests/driver_phone_outbox_checks.sql'
+      - 'supabase/migrations/20261125133536_driver_phone_outbox.sql'
+      - 'supabase/tests/fuel_photo_read_queue_checks.sql'
+      - 'supabase/migrations/20261125135228_fuel_photo_read_queue.sql'
       - 'supabase/migrations/20261118182336_toll_screen_reads_disputes.sql'
       - 'packages/toll-core/src/v2/weekRuleCases.json'
       - '.github/workflows/parts-sql-checks.yml'
@@ -346,3 +354,7 @@ jobs:
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_sweep_logged_trips_test.sql
           docker cp supabase/tests/toll_screen_reads_disputes_test.sql "$db_container":/tmp/toll_screen_reads_disputes_test.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/toll_screen_reads_disputes_test.sql
+          docker cp supabase/tests/driver_phone_outbox_checks.sql "$db_container":/tmp/driver_phone_outbox_checks.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/driver_phone_outbox_checks.sql
+          docker cp supabase/tests/fuel_photo_read_queue_checks.sql "$db_container":/tmp/fuel_photo_read_queue_checks.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/fuel_photo_read_queue_checks.sql
