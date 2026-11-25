@@ -437,6 +437,44 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
     return c.json({ ok: true });
   });
 
+  // RE-45: a real health check (Dominion staff). Reads the database; answers 503 when it can't, never 401 for "running".
+  app.get(`${PREFIX}/health`, async (c: Context) => {
+    const denied = guardRead(c);
+    if (denied) return denied;
+    const started = Date.now();
+    const [settingsRes, spendRes, healthRes, newestRes, queuedRes, reviewRes, workingRes, checksRes] = await Promise.all([
+      supabase.from("catalog_research_settings").select("enabled, shadow_mode, paused, paused_reason, daily_spend_usd, max_open_browser_checks").eq("id", 1).single(),
+      supabase.rpc("catalog_research_spend_today"),
+      supabase.rpc("catalog_research_health"),
+      supabase.from("catalog_research_event").select("at").order("at", { ascending: false }).limit(1).maybeSingle(),
+      supabase.from("catalog_research_job").select("id", { count: "exact", head: true }).eq("state", "queued"),
+      supabase.from("catalog_research_job").select("id", { count: "exact", head: true }).eq("state", "needs_review"),
+      supabase.from("catalog_research_job").select("id", { count: "exact", head: true }).in("state", ["researching", "checking"]),
+      supabase.from("catalog_research_job").select("id", { count: "exact", head: true }).eq("state", "browser_check"),
+    ]);
+    const failedRead = [settingsRes, spendRes, healthRes, newestRes, queuedRes, reviewRes, workingRes, checksRes].find((r) => r.error);
+    if (failedRead) return c.json({ ok: false, error: "The research database can't be read right now." }, 503);
+    const settings = (settingsRes.data || {}) as Record<string, unknown>;
+    const newestAt = (newestRes.data as { at?: string } | null)?.at ?? null;
+    const queued = queuedRes.count ?? 0;
+    return c.json({
+      ok: true,
+      mode: settings.paused ? "paused" : !settings.enabled ? "off" : settings.shadow_mode !== false ? "practice" : "on",
+      pausedReason: settings.paused_reason ?? null,
+      spendTodayUsd: Number(spendRes.data ?? 0),
+      spendCapUsd: Number(settings.daily_spend_usd ?? 0),
+      jobsWaiting: { queued, needsReview: reviewRes.count ?? 0, working: workingRes.count ?? 0 },
+      openBrowserChecks: checksRes.count ?? 0,
+      maxOpenBrowserChecks: Number(settings.max_open_browser_checks ?? 0),
+      newestWorkerStepAt: newestAt,
+      // Jobs waiting but no worker step for 10 minutes: the worker isn't running.
+      workerStale: queued > 0 && settings.enabled === true && !settings.paused &&
+        (!newestAt || Date.now() - Date.parse(newestAt) > 10 * 60 * 1000),
+      status: healthStatus(settings as { paused?: boolean }, (healthRes.data || {}) as Record<string, unknown>),
+      answeredInMs: Date.now() - started,
+    });
+  });
+
   app.get(`${PREFIX}/strip`, async (c: Context) => {
     const denied = guardRead(c);
     if (denied) return denied;

@@ -31,7 +31,7 @@ describe("Added — pick the part (LC-09)", () => {
     fireEvent.click(screen.getByTestId("added-pick-part-confirm"));
     await waitFor(() => expect(onDone).toHaveBeenCalled());
     expect(svc.resolvePendingPartsGroupAdded).toHaveBeenCalledWith("t", "g1", "p1");
-    expect(toastMock.success).toHaveBeenCalledWith("Added. 2 companies were told the part is on file.");
+    expect(toastMock.success).toHaveBeenCalledWith("Added. The fleets that asked were told the part is on file.");
   });
 
   it("nothing on file yet: says so, Check again reloads", async () => {

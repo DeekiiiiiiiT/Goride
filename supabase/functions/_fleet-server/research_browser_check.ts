@@ -415,7 +415,7 @@ export function answersGate(input: {
     const bEnd = build?.endYear ? build.endYear * 12 + (build.endMonth ?? 12) : null;
     type Row = { axle: "front" | "rear" | null; side: "left" | "right" | null; detected: string; from: number | null; to: number | null; text: string | null; fy: number | null; ty: number | null };
     const rows: Row[] = [];
-    for (const n of a.numbers.slice(0, 24)) {
+    for (const n of (a.numbers ?? []).slice(0, 24)) {
       if (!String(n?.value ?? "").trim()) continue;
       let axle: "front" | "rear" | null = input.jobAxle ?? null;
       let side: "left" | "right" | null = null;
@@ -568,6 +568,20 @@ export function answersGate(input: {
     !positioned && input.needsSide ? `for the ${input.needsSide}` : null,
   ].filter(Boolean).join(" · ");
   return { ok: true, detected, versionCode, evidence: evidence.slice(0, 2000), ...(items ? { items } : {}) };
+}
+
+/**
+ * RE-59: pasted catalogue text keeps prices (Amayama rows end in e.g. "21.56"); Dominion never stores prices. Drops
+ * currency-marked amounts and bare 2-decimal amounts ("4.63", "1,204.50"); dates ("11.2016"), part numbers and
+ * one-decimal sizes are kept. Part checks only — a spec value may be "3.20".
+ */
+export function withoutPrices(text: string): string {
+  return String(text ?? "")
+    .replace(/(?:[$€£¥]|\b(?:USD|JMD|EUR|GBP|JPY|AED)\s?)\d[\d,]*(?:\.\d{1,2})?(?![\d.])/gi, " ")
+    .replace(/(?<![\w.,-])\d{1,3}(?:,\d{3})*\.\d{2}(?![\w.])(?:\s?(?:USD|JMD|EUR|GBP|JPY|AED)\b)?/gi, " ")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/ +\n/g, "\n")
+    .trim();
 }
 
 export function lineNamesCar(line: string, identity: string[]): boolean {
