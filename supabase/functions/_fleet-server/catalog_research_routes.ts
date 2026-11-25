@@ -122,7 +122,11 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
     if (typeof body.daily_job_limit === "number" && body.daily_job_limit >= 1 && body.daily_job_limit <= 500) {
       patch.daily_job_limit = Math.floor(body.daily_job_limit);
     }
-    if (typeof body.daily_spend_usd === "number" && body.daily_spend_usd >= 0 && body.daily_spend_usd <= 500) {
+    if (typeof body.daily_spend_usd === "number") {
+      // RE-50: Google allows 1,500 grounded searches a day (about US$21); a higher cap only buys pauses.
+      if (!(body.daily_spend_usd >= 0 && body.daily_spend_usd <= 21)) {
+        return c.json({ error: "The daily cap can be at most US$21: Google allows 1,500 searches a day." }, 400);
+      }
       patch.daily_spend_usd = Math.round(body.daily_spend_usd * 100) / 100;
     }
     if (typeof body.max_open_browser_checks === "number" && body.max_open_browser_checks >= 0 && body.max_open_browser_checks <= 500) {
