@@ -212,7 +212,27 @@ export type CheckAnswers = {
   changeAt?: { month: number; year: number } | null;
   valueFrom?: string | null;
   valueFromAgain?: string | null;
+  /**
+   * Owner 25 Nov: the dates the site shows next to the number(s), as the owner read them (first number, then the second
+   * when it changed during the build). Kept in the evidence; never a gate.
+   */
+  datesShown?: Array<{ fromMonth: number; fromYear: number; toMonth: number; toYear: number }> | null;
 };
+
+/** Owner 25 Nov: "11.2016 – 11.2018, 11.2018 – 09.2020" from the dates the owner read; bad entries are left out. */
+export function datesShownText(ranges: unknown): string {
+  if (!Array.isArray(ranges)) return "";
+  const ok = (m: unknown, y: unknown) =>
+    Number.isInteger(Number(m)) && Number(m) >= 1 && Number(m) <= 12 && Number.isInteger(Number(y)) && Number(y) >= 1950 && Number(y) <= 2100;
+  const mmYyyy = (m: unknown, y: unknown) => `${String(Number(m)).padStart(2, "0")}.${Number(y)}`;
+  return ranges
+    .slice(0, 2)
+    .filter((r) => r && typeof r === "object")
+    .map((r) => r as Record<string, unknown>)
+    .filter((r) => ok(r.fromMonth, r.fromYear) && ok(r.toMonth, r.toYear))
+    .map((r) => `${mmYyyy(r.fromMonth, r.fromYear)} – ${mmYyyy(r.toMonth, r.toYear)}`)
+    .join(", ");
+}
 
 export type PositionItem = {
   detected: string;
@@ -413,6 +433,7 @@ export function answersGate(input: {
     versionCode ?? input.knownCode ?? null,
     input.rowName ?? null,
     valueText,
+    datesShownText(a.datesShown) ? `dates shown ${datesShownText(a.datesShown)}` : null,
     changeAt
       ? `changed ${changeText}; dates together cover ${input.buildText || "the car's build"}`
       : input.buildText

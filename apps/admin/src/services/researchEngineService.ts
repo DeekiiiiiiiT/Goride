@@ -369,6 +369,8 @@ export type BrowserCheckAnswersPayload = {
     /** RE-70: the number for cars built from `changeAt` (parts without positions; `value` = before). */
     valueFrom?: string | null;
     valueFromAgain?: string | null;
+    /** Owner 25 Nov: the dates the site shows next to the first (and second) number. */
+    datesShown?: Array<{ fromMonth: number; fromYear: number; toMonth: number; toYear: number }> | null;
     datesOk: boolean;
     sideOk: boolean | null;
   };
