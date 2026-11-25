@@ -260,6 +260,3 @@ BEGIN
 END;
 $$;
 
-INSERT INTO supabase_migrations.schema_migrations (version, name)
-VALUES ('20261125090146', 'file_link_resign_schedule')
-ON CONFLICT (version) DO NOTHING;

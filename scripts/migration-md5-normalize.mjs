@@ -26,6 +26,10 @@ export const MIGRATION_SYNC_SKIP_VERSIONS = new Set([
   '20261030130902',
   '20261030210000',
   '20261031220000',
+  // 24 Nov key work: prod recorded these two migrations twice. The repo files are 20261124044708
+  // and 20261124132804 (also on prod); these are the second, same-SQL rows. Not separate migrations.
+  '20261124045514',
+  '20261124132819',
 ]);
 
 export function normalizeMigrationSqlForMd5(sql) {
