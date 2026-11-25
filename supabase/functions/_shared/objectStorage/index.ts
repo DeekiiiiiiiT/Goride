@@ -27,8 +27,8 @@ export {
   verifyFileLink,
 } from "./fileLink.ts";
 export type { FileLinkCheck } from "./fileLink.ts";
-export { removeStoredFiles } from "./storedFiles.ts";
-export type { RemoveObjects } from "./storedFiles.ts";
+export { removeStoredFiles, R2_PUBLIC_BUCKET_ID } from "./storedFiles.ts";
+export type { RemoveObjects, RemoveR2Objects } from "./storedFiles.ts";
 
 /** Live dependencies from function secrets. */
 export function storageDepsFromEnv(): FlowDeps {
