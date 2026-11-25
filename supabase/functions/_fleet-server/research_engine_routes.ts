@@ -284,7 +284,7 @@ export function registerResearchEngineRoutes(
         const msg: Record<string, string> = {
           version_no: "Answer the first question: is the page for this car?",
           part_not_found: "If the part isn't on the page, press Not on this page.",
-          dates_no: "If the dates don't include this car, press Not on this page.",
+          dates_no: "The dates don't cover this car's build. Add the missing number, or press Not on this page.",
           side_no: "If it isn't for that side, press Not on this page.",
           no_value: ctx.gateInput.jobType === "part" ? "Type the part number shown." : "That value doesn't look right for this item.",
           bad_number: "That isn't a part number (it looks like a car code or a year).",
@@ -293,6 +293,7 @@ export function registerResearchEngineRoutes(
           bad_position: "Those places don't fit this part. Refresh the page and answer again.",
           needs_positions: "This part comes in left and right: give the number for each place.",
           bad_change_date: "Pick a change month inside this car's build dates.",
+          bad_dates: "Check the dates: each needs a year, and the end can't be before the start.",
         };
         return c.json({ error: msg[ans.reason] ?? "Check your answers.", gate: ans }, 422);
       }

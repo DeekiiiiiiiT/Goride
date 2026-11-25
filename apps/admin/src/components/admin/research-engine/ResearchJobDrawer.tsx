@@ -32,7 +32,14 @@ import {
 } from "./ReKit";
 import {
   buildDates,
-  changeYearOptions,
+  buildRange,
+  EMPTY_ROW_DATES,
+  rangesCoverBuild,
+  rowCheck,
+  rowSpan,
+  type CheckPosition,
+  type RowCheck,
+  type RowDates,
   MONTHS,
   catalogueVersionRow,
   checkPositions,
@@ -525,24 +532,19 @@ function BrowserCheckCard({
   const [typedAgain, setTypedAgain] = useState("");
   const [datesOk, setDatesOk] = useState<boolean | null>(null);
   const [sideOk, setSideOk] = useState<boolean | null>(null);
-  // RE-69: one number per position (shocks, bearings, brakes…): tapped or typed (typed twice).
+  // One number entry (tapped or typed, typed twice), keyed "<place>#<row>".
   const [posVals, setPosVals] = useState<Record<string, { picked: string; typed: string; again: string }>>({});
-  // RE-70: the car maker changed the number during the build (e.g. Roomy shocks at 11.2018): a number for each period.
-  const [changed, setChanged] = useState<boolean | null>(null);
-  const [changeMonth, setChangeMonth] = useState(0);
-  const [changeYear, setChangeYear] = useState(0);
+  // Owner 25 Nov: every number the site lists, per place, each with the dates shown next to it (any site, any count).
+  const [rows, setRows] = useState<Record<string, number[]>>({});
+  const [nextRow, setNextRow] = useState(1);
+  const [rowDates, setRowDates] = useState<Record<string, RowDates>>({});
   const [stepAt, setStepAt] = useState(0);
-  // Owner 25 Nov: the dates the site shows next to the first number (from / to), and the second number's end date.
-  const [d1, setD1] = useState({ fm: 0, fy: 0, tm: 0, ty: 0 });
-  const [d2, setD2] = useState({ tm: 0, ty: 0 });
   // Another check opened in the same drawer starts clean (keyed on the job only, so a refetch keeps the answers).
   useEffect(() => {
     setStepAt(0);
-    setD1({ fm: 0, fy: 0, tm: 0, ty: 0 });
-    setD2({ tm: 0, ty: 0 });
-    setChanged(null);
-    setChangeMonth(0);
-    setChangeYear(0);
+    setRows({});
+    setNextRow(1);
+    setRowDates({});
     setVersionOk(null);
     setVersionCode("");
     setPartFound(null);
@@ -576,7 +578,7 @@ function BrowserCheckCard({
     ),
   ].slice(0, 6);
 
-  // The value: a tapped suggestion, else what was typed — typed values are typed twice (no typo becomes a number).
+  // Spec value: a tapped suggestion, else what was typed — typed values are typed twice (no typo becomes a value).
   const value = picked || typed.trim();
   const needsAgain = !picked && Boolean(typed.trim());
   const againOk = !needsAgain || typedAgain.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") === typed.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -590,12 +592,37 @@ function BrowserCheckCard({
     setPosVals((old) => ({ ...old, [k]: { ...(old[k] ?? { picked: "", typed: "", again: "" }), ...patch } }));
   const posValue = (k: string) => pv(k).picked || pv(k).typed.trim();
   const posAgainOk = (k: string) => Boolean(pv(k).picked) || !pv(k).typed.trim() || pv(k).again.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") === pv(k).typed.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-  const filledPositions = (positions ?? []).filter((p) => posValue(p.key));
-  const positionsOk = filledPositions.length > 0 && filledPositions.every((p) => posAgainOk(p.key));
-  // RE-70: with a change date, every place (or the one number) has a "before" and a "from" entry.
-  const canSplit = jobType === "part";
-  const split = canSplit && changed === true;
-  const changeYears = changeYearOptions(detail.car);
+
+  // Owner 25 Nov: the numbers list. A part without places has one place ("one").
+  const places: CheckPosition[] = positions ?? [{ key: "one", axle: (side as "front" | "rear" | null) ?? "front", side: null, label: "" }];
+  const rowIdsOf = (pk: string) => rows[pk] ?? [0];
+  const rk = (pk: string, id: number) => `${pk}#${id}`;
+  const rdOf = (k: string): RowDates => rowDates[k] ?? EMPTY_ROW_DATES;
+  const setRd = (k: string, patch: Partial<RowDates>) => setRowDates((old) => ({ ...old, [k]: { ...(old[k] ?? EMPTY_ROW_DATES), ...patch } }));
+  const build = buildRange(detail.car);
+  const placeStates = places.map((p) => {
+    const keys = rowIdsOf(p.key).map((id) => rk(p.key, id));
+    const filled = keys.filter((k) => posValue(k));
+    const rowState = (k: string) => rowCheck(rdOf(k), build);
+    const valid = filled.every((k) => posAgainOk(k) && rowState(k) === "ok");
+    const dated = filled.filter((k) => !rdOf(k).none);
+    const covered =
+      filled.length > 0 && valid && dated.length === filled.length
+        ? rangesCoverBuild(dated.map((k) => rowSpan(rdOf(k))!), build)
+        : null;
+    return { place: p, keys, filled, valid, covered, undated: filled.length - dated.length, rowState };
+  });
+  const anyFilled = placeStates.some((s) => s.filled.length > 0);
+  const numbersOk = anyFilled && placeStates.every((s) => s.valid && s.covered !== false);
+  // Roam works the dates out itself; it only asks when a number shows no dates (or the car's build isn't on file).
+  const needDatesAnswer = jobType === "spec" || placeStates.some((s) => s.undated > 0) || !build.start;
+  const canConfirm = Boolean(
+    openUrl &&
+      versionAnswered &&
+      partFound === true &&
+      (!needDatesAnswer || datesOk === true) &&
+      (jobType === "part" ? numbersOk && (positions || !side || sideOk === true) : Boolean(value) && againOk && (!side || sideOk === true)),
+  );
   const dateYears = (() => {
     const now = new Date().getFullYear();
     const from = (detail.car?.production_start_year || now - 30) - 10;
@@ -604,34 +631,9 @@ function BrowserCheckCard({
     for (let y = from; y <= to; y++) out.push(y);
     return out;
   })();
-  const changeText = changeMonth && changeYear ? `${MONTHS[changeMonth - 1]} ${changeYear}` : "the change";
-  const splitKeys = (positions ?? [{ key: "one", axle: null, side: null, label: "" }]).flatMap((p) => [
-    { place: p, period: "before" as const, key: p.key },
-    { place: p, period: "from" as const, key: `${p.key}|from` },
-  ]);
-  const filledSplit = splitKeys.filter((k) => posValue(k.key));
-  const splitOk = Boolean(changeMonth && changeYear) && filledSplit.length > 0 && filledSplit.every((k) => posAgainOk(k.key));
-  // Owner 25 Nov: a part's number is asked first (before any date question); one number when the part has no places.
-  const ym = (m: number, y: number) => y * 12 + m;
-  const d1Done = Boolean(d1.fm && d1.fy && d1.tm && d1.ty);
-  const d1Backwards = d1Done && ym(d1.tm, d1.ty) < ym(d1.fm, d1.fy);
-  const d2Done = Boolean(changeMonth && changeYear && d2.tm && d2.ty);
-  const d2Backwards = d2Done && ym(d2.tm, d2.ty) < ym(changeMonth, changeYear);
-  const firstOk = (positions ? positionsOk : Boolean(posValue("one")) && posAgainOk("one")) && d1Done && !d1Backwards;
-  const secondOk =
-    d2Done &&
-    !d2Backwards &&
-    splitKeys.filter((k) => k.period === "from" && posValue(k.key)).length > 0 &&
-    splitKeys.filter((k) => k.period === "from").every((k) => posAgainOk(k.key));
-  const canConfirm = Boolean(
-    openUrl &&
-      versionAnswered &&
-      partFound === true &&
-      datesOk === true &&
-      (jobType === "part"
-        ? firstOk && changed !== null && (!split || (splitOk && secondOk)) && (positions || !side || sideOk === true)
-        : Boolean(value) && againOk && (!side || sideOk === true)),
-  );
+  const input =
+    `h-10 w-full rounded-lg bg-white px-3 text-[14px] text-[#30323b] shadow-sm outline-none focus:ring-2 focus:ring-[#0153dc] dark:bg-[#0b1220] dark:text-[#e2e8f0] ${D_MONO}`;
+
   const numberPick = (k: string, testid: string) => (
     <>
       {suggestions.length ? (
@@ -678,19 +680,31 @@ function BrowserCheckCard({
     </>
   );
 
-  const monthYear = (m: number, setM: (v: number) => void, y: number, setY: (v: number) => void, id: string, years: number[] = dateYears) => (
+  const monthYear = (m: number, setM: (v: number) => void, y: number, setY: (v: number) => void, id: string, disabled = false) => (
     <>
-      <select value={m || ""} onChange={(e) => setM(Number(e.target.value) || 0)} className={`${input} !w-auto`} data-testid={`${id}-month`}>
-        <option value="">Month</option>
+      <select
+        value={m || ""}
+        onChange={(e) => setM(Number(e.target.value) || 0)}
+        disabled={disabled}
+        className={`${input} !w-auto`}
+        data-testid={`${id}-month`}
+      >
+        <option value="">Month (if shown)</option>
         {MONTHS.map((name, i) => (
           <option key={name} value={i + 1}>
             {name}
           </option>
         ))}
       </select>
-      <select value={y || ""} onChange={(e) => setY(Number(e.target.value) || 0)} className={`${input} !w-auto`} data-testid={`${id}-year`}>
+      <select
+        value={y || ""}
+        onChange={(e) => setY(Number(e.target.value) || 0)}
+        disabled={disabled}
+        className={`${input} !w-auto`}
+        data-testid={`${id}-year`}
+      >
         <option value="">Year</option>
-        {years.map((yr) => (
+        {dateYears.map((yr) => (
           <option key={yr} value={yr}>
             {yr}
           </option>
@@ -708,166 +722,191 @@ function BrowserCheckCard({
       </PartsButton>
     </div>
   );
-  const input =
-    `h-10 w-full rounded-lg bg-white px-3 text-[14px] text-[#30323b] shadow-sm outline-none focus:ring-2 focus:ring-[#0153dc] dark:bg-[#0b1220] dark:text-[#e2e8f0] ${D_MONO}`;
+
+  const numberRow = (pk: string, id: number, i: number, count: number, rowState: (k: string) => RowCheck) => {
+    const k = rk(pk, id);
+    const rd = rdOf(k);
+    const state = posValue(k) ? rowState(k) : "ok";
+    return (
+      <div key={k} className="flex flex-col gap-2 rounded-xl bg-white/60 p-3 dark:bg-[#0b1220]/40" data-testid="q-row">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[13px] font-medium">Number {i + 1}</span>
+          {count > 1 ? (
+            <PartsButton
+              variant="secondary"
+              className="!min-h-[32px]"
+              data-testid="q-remove-number"
+              onClick={() => setRows((old) => ({ ...old, [pk]: rowIdsOf(pk).filter((x) => x !== id) }))}
+            >
+              Remove
+            </PartsButton>
+          ) : null}
+        </div>
+        {numberPick(k, positions ? "q-position" : "q")}
+        <span>The dates shown next to it:</span>
+        <div className="flex flex-wrap items-center gap-2">
+          {monthYear(rd.fm, (v) => setRd(k, { fm: v }), rd.fy, (v) => setRd(k, { fy: v }), "q-row-from", rd.none)}
+          <span>to</span>
+          {monthYear(rd.tm, (v) => setRd(k, { tm: v }), rd.ty, (v) => setRd(k, { ty: v }), "q-row-to", rd.none)}
+        </div>
+        <div>
+          <PartsButton
+            variant={rd.none ? "primary" : "secondary"}
+            className="!min-h-[32px]"
+            data-testid="q-row-no-dates"
+            onClick={() => setRd(k, { none: !rd.none })}
+          >
+            No dates shown
+          </PartsButton>
+        </div>
+        {state === "backwards" ? <p className="text-[#a83836]">The end date is before the start date.</p> : null}
+        {state === "outside" ? (
+          <p className="text-[#a83836]">
+            These dates are outside your car&apos;s build ({dates}). Remove this number if it isn&apos;t for your car.
+          </p>
+        ) : null}
+      </div>
+    );
+  };
+
   // Owner 25 Nov: one question on screen at a time; Next moves on, Back goes back.
   type Step = { id: string; node: ReactNode; ok: boolean; no?: boolean };
   const steps: Step[] = [
     { id: "open", ok: Boolean(openUrl), node: (
-          <div className="flex w-full flex-col gap-2">
-          <p>Open the parts site. It opens in a new tab; come back here to answer.</p>
-          {openUrl ? (
-            <a
-              href={openUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="parts-btn parts-btn--primary !min-h-[40px] w-full justify-center md:w-auto"
-              data-testid="open-catalogue-page"
-            >
-              Open {site} <DIcon name="open_in_new" className="text-[16px]" />
-            </a>
-          ) : (
-            <span className={D_MUTED}>No {site} link for this one. Use Not on this page.</span>
-          )}
-          </div>
-        ) },
+      <div className="flex w-full flex-col gap-2">
+        <p>Open the parts site. It opens in a new tab; come back here to answer.</p>
+        {openUrl ? (
+          <a
+            href={openUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="parts-btn parts-btn--primary !min-h-[40px] w-full justify-center md:w-auto"
+            data-testid="open-catalogue-page"
+          >
+            Open {site} <DIcon name="open_in_new" className="text-[16px]" />
+          </a>
+        ) : (
+          <span className={D_MUTED}>No {site} link for this one. Use Not on this page.</span>
+        )}
+      </div>
+    ) },
     { id: "version", ok: versionAnswered, no: versionOk === false, node: (
-          <div className="flex w-full flex-col gap-2" data-testid="browser-check-instruction">
-            {known ? (
-              <>
-                <p>{known.url ? "Check the site shows your car:" : "Pick your car in the site's list:"}</p>
-                <ul className="flex flex-col gap-0.5" data-testid="guide-version-row">
-                  {catalogueVersionRow(detail.car, known).map((c) => (
-                    <li key={c.label}>
-                      {c.label}: <span className="font-semibold">{c.value}</span>
-                      {(c.label === "Model code" || c.label === "Engine") && c.value !== "—" ? <CopyIcon text={c.value} /> : null}
-                    </li>
-                  ))}
-                </ul>
-                {yesNo(versionOk, setVersionOk, "q-version")}
-              </>
-            ) : (
-              <>
-                <p>Pick the version of your car that has:</p>
-                <ul className="flex flex-col gap-0.5" data-testid="guide-version-row">
-                  {versionRow.map((c) => (
-                    <li key={c.label}>
-                      {c.label}: <span className="font-semibold">{c.value}</span>
-                      {(c.label === "Model code" || c.label === "Engine") && c.value !== "—" ? <CopyIcon text={c.value} /> : null}
-                    </li>
-                  ))}
-                </ul>
-                <label className="flex flex-col gap-1">
-                  <span>Type the model code the site shows for it:</span>
-                  <input value={versionCode} onChange={(e) => setVersionCode(e.target.value)} maxLength={40} className={input} data-testid="q-version-code" />
-                </label>
-              </>
-            )}
-          </div>
-        ) },
+      <div className="flex w-full flex-col gap-2" data-testid="browser-check-instruction">
+        {known ? (
+          <>
+            <p>{known.url ? "Check the site shows your car:" : "Pick your car in the site's list:"}</p>
+            <ul className="flex flex-col gap-0.5" data-testid="guide-version-row">
+              {catalogueVersionRow(detail.car, known).map((c) => (
+                <li key={c.label}>
+                  {c.label}: <span className="font-semibold">{c.value}</span>
+                  {(c.label === "Model code" || c.label === "Engine") && c.value !== "—" ? <CopyIcon text={c.value} /> : null}
+                </li>
+              ))}
+            </ul>
+            {yesNo(versionOk, setVersionOk, "q-version")}
+          </>
+        ) : (
+          <>
+            <p>Pick the version of your car that has:</p>
+            <ul className="flex flex-col gap-0.5" data-testid="guide-version-row">
+              {versionRow.map((c) => (
+                <li key={c.label}>
+                  {c.label}: <span className="font-semibold">{c.value}</span>
+                  {(c.label === "Model code" || c.label === "Engine") && c.value !== "—" ? <CopyIcon text={c.value} /> : null}
+                </li>
+              ))}
+            </ul>
+            <label className="flex flex-col gap-1">
+              <span>Type the model code the site shows for it:</span>
+              <input value={versionCode} onChange={(e) => setVersionCode(e.target.value)} maxLength={40} className={input} data-testid="q-version-code" />
+            </label>
+          </>
+        )}
+      </div>
+    ) },
     { id: "part", ok: partFound === true, no: partFound === false, node: (
-          <div className="flex w-full flex-col gap-2" data-testid="guide-find-part">
-            {jobType === "part" && finder.section ? (
-              <ul className="flex flex-col gap-1.5">
-                <li>
-                  Search <span className="font-semibold">{finder.search}</span>
-                  <CopyIcon text={finder.search} />
-                </li>
-                <li data-testid="guide-section">
-                  Open the section for the <span className="font-semibold">{finder.section}</span>
-                </li>
-                <li>
-                  Do you see a row with <span className="font-semibold">{finder.rowName}</span> in its name?
-                </li>
-              </ul>
+      <div className="flex w-full flex-col gap-2" data-testid="guide-find-part">
+        {jobType === "part" && finder.section ? (
+          <ul className="flex flex-col gap-1.5">
+            <li>
+              Search <span className="font-semibold">{finder.search}</span>
+              <CopyIcon text={finder.search} />
+            </li>
+            <li data-testid="guide-section">
+              Open the section for the <span className="font-semibold">{finder.section}</span>
+            </li>
+            <li>
+              Do you see a row with <span className="font-semibold">{finder.rowName}</span> in its name?
+            </li>
+          </ul>
+        ) : (
+          <p>
+            {jobType === "part" ? (
+              <>
+                Search <span className="font-semibold">{finder.search}</span>
+                <CopyIcon text={finder.search} />. Do you see{" "}
+                <span className="font-semibold">{finder.rowName ?? `the ${itemName.toLowerCase()}`}</span>
+                {finder.rowName ? <CopyIcon text={finder.rowName} /> : null}?
+              </>
             ) : (
-            <p>
-              {jobType === "part" ? (
-                <>
-                  Search <span className="font-semibold">{finder.search}</span>
-                  <CopyIcon text={finder.search} />. Do you see{" "}
-                  <span className="font-semibold">{finder.rowName ?? `the ${itemName.toLowerCase()}`}</span>
-                  {finder.rowName ? <CopyIcon text={finder.rowName} /> : null}?
-                </>
-              ) : (
-                <>
-                  Do you see the <span className="font-semibold">{specLabel}</span>?
-                </>
-              )}
-            </p>
+              <>
+                Do you see the <span className="font-semibold">{specLabel}</span>?
+              </>
             )}
-            {yesNo(partFound, setPartFound, "q-part")}
-          </div>
-        ) },
+          </p>
+        )}
+        {yesNo(partFound, setPartFound, "q-part")}
+      </div>
+    ) },
     ...(jobType === "part"
       ? [
-        { id: "numbers", ok: firstOk, node: (
-          <div className="flex w-full flex-col gap-3" data-testid={positions ? "q-positions" : "q-number"}>
-            <p>{positions ? "Type or tap the part number shown for each place:" : "Type or tap the part number shown:"}</p>
-            {(positions ?? [{ key: "one", axle: null, side: null, label: "" }]).map((p) => (
-              <div key={p.key} className="flex flex-col gap-1.5" data-testid={positions ? `q-position-${p.key}` : undefined}>
-                {p.label ? <span className="font-semibold">{p.label}:</span> : null}
-                {numberPick(p.key, positions ? "q-position" : "q")}
-              </div>
-            ))}
-            <div className="flex flex-col gap-1.5" data-testid="q-dates1">
-              <span className="font-semibold">{positions ? "The dates shown next to these numbers:" : "The dates shown next to it:"}</span>
-              <div className="flex flex-wrap items-center gap-2">
-                {monthYear(d1.fm, (v) => setD1((o) => ({ ...o, fm: v })), d1.fy, (v) => setD1((o) => ({ ...o, fy: v })), "q-dates1-from")}
-                <span>to</span>
-                {monthYear(d1.tm, (v) => setD1((o) => ({ ...o, tm: v })), d1.ty, (v) => setD1((o) => ({ ...o, ty: v })), "q-dates1-to")}
-              </div>
-              {d1Backwards ? <p className="text-[#a83836]">The end date is before the start date.</p> : null}
-            </div>
+        { id: "numbers", ok: numbersOk, node: (
+          <div className="flex w-full flex-col gap-4" data-testid={positions ? "q-positions" : "q-number"}>
+            <p>
+              {positions
+                ? "For each place, add every part number the site lists, with the dates shown next to it."
+                : "Add every part number the site lists, with the dates shown next to it."}
+            </p>
+            {placeStates.map((s) => {
+              const ids = rowIdsOf(s.place.key);
+              return (
+                <div key={s.place.key} className="flex flex-col gap-2" data-testid={positions ? `q-position-${s.place.key}` : "q-place-one"}>
+                  {s.place.label ? <span className="font-semibold">{s.place.label}:</span> : null}
+                  {ids.map((id, i) => numberRow(s.place.key, id, i, ids.length, s.rowState))}
+                  <div>
+                    <PartsButton
+                      variant="secondary"
+                      className="!min-h-[44px]"
+                      data-testid="q-add-number"
+                      onClick={() => {
+                        setRows((old) => ({ ...old, [s.place.key]: [...rowIdsOf(s.place.key), nextRow] }));
+                        setNextRow((n) => n + 1);
+                      }}
+                    >
+                      <DIcon name="add" className="text-[18px]" /> Add another number
+                    </PartsButton>
+                  </div>
+                  {s.covered === true && build.start ? (
+                    <p className="text-[13px] font-medium text-[#1f7a3a] dark:text-[#86efac]" data-testid="q-cover">
+                      These dates cover your car&apos;s build ({dates}).
+                    </p>
+                  ) : null}
+                  {s.covered === false ? (
+                    <p className="font-medium text-[#a83836]" data-testid="q-cover">
+                      These dates don&apos;t cover your car&apos;s whole build ({dates}). Add the number for the missing dates, or press
+                      Not on this page.
+                    </p>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         ) },
-        { id: "change", ok: changed !== null, node: (
-          <div className="flex w-full flex-col gap-2" data-testid="q-change">
-            <p>Is there another part number for it, with different dates?</p>
-            <p className="text-[13px]">For example: one number for 11.2016 – 11.2018 and another for 11.2018 – 09.2020.</p>
-            {yesNo(
-              changed,
-              (b) => {
-                setChanged(b);
-                // The second number's dates usually start where the first one's end.
-                if (b && !changeMonth && !changeYear && d1.tm && d1.ty) {
-                  setChangeMonth(d1.tm);
-                  setChangeYear(d1.ty);
-                }
-              },
-              "q-change",
-            )}
-          </div>
-        ) },
-        ...(split
-          ? [{ id: "second", ok: secondOk, node: (
-            <div className="flex w-full flex-col gap-3" data-testid="q-split">
-              <p>{positions ? "The second part number for each place:" : "The second part number:"}</p>
-              {splitKeys.filter((k) => k.period === "from").map((k) => (
-                <div key={k.key} className="flex flex-col gap-1.5" data-testid={`q-split-${k.key}`}>
-                  <span className="font-semibold">
-                    {k.place.label ? `${k.place.label}:` : null}
-                  </span>
-                  {numberPick(k.key, "q-split")}
-                </div>
-              ))}
-              <div className="flex flex-col gap-1.5" data-testid="q-dates2">
-                <span className="font-semibold">The dates shown next to it:</span>
-                <div className="flex flex-wrap items-center gap-2">
-                  {monthYear(changeMonth, setChangeMonth, changeYear, setChangeYear, "q-change", changeYears)}
-                  <span>to</span>
-                  {monthYear(d2.tm, (v) => setD2((o) => ({ ...o, tm: v })), d2.ty, (v) => setD2((o) => ({ ...o, ty: v })), "q-dates2-to")}
-                </div>
-                {d2Backwards ? <p className="text-[#a83836]">The end date is before the start date.</p> : null}
-              </div>
-            </div>
-          ) }]
-          : []),
       ]
       : [
         { id: "numbers", ok: Boolean(value) && againOk, node: (
           <div className="flex w-full flex-col gap-2">
-              <p>The value shown:</p>
+            <p>The value shown:</p>
             {suggestions.length ? (
               <p className={`text-[13px] ${D_MUTED}`}>Roam's guesses. Tap one only if it's exactly what the site shows; otherwise type it.</p>
             ) : null}
@@ -919,27 +958,43 @@ function BrowserCheckCard({
           </div>
         ) },
       ]),
-    { id: "dates", ok: datesOk === true, no: datesOk === false, node: (
-          <div className="flex w-full flex-col gap-2">
-            <p>
-              {split ? "Do their dates together cover " : "Do its dates include "}
-              <span className="font-semibold">{dates || "your car's years"}</span>?
-            </p>
-            {yesNo(datesOk, setDatesOk, "q-dates")}
-          </div>
-        ) },
+    ...(needDatesAnswer
+      ? [{ id: "dates", ok: datesOk === true, no: datesOk === false, node: (
+        <div className="flex w-full flex-col gap-2">
+          <p>
+            {jobType === "part" ? "Does the site say it fits your car, built " : "Do its dates include "}
+            <span className="font-semibold">{dates || "your car's years"}</span>?
+          </p>
+          {yesNo(datesOk, setDatesOk, "q-dates")}
+        </div>
+      ) }]
+      : []),
     ...(side && !positions ? [{ id: "side", ok: sideOk === true, no: sideOk === false, node: (
-          <div className="flex w-full flex-col gap-2">
-              <p>
-                Is it for the <span className="font-semibold">{side}</span>?
-              </p>
-              {yesNo(sideOk, setSideOk, "q-side")}
-          </div>
-        ) }] : []),
+      <div className="flex w-full flex-col gap-2">
+        <p>
+          Is it for the <span className="font-semibold">{side}</span>?
+        </p>
+        {yesNo(sideOk, setSideOk, "q-side")}
+      </div>
+    ) }] : []),
   ];
   const at = Math.min(stepAt, steps.length - 1);
   const cur = steps[at];
   const last = at === steps.length - 1;
+
+  const numbersPayload = () =>
+    placeStates.flatMap((s) =>
+      s.filled.map((k) => {
+        const rd = rdOf(k);
+        return {
+          axle: positions ? s.place.axle : null,
+          side: positions ? s.place.side : null,
+          value: posValue(k),
+          valueAgain: pv(k).picked ? null : pv(k).again.trim(),
+          dates: rd.none ? null : { fromMonth: rd.fm || null, fromYear: rd.fy, toMonth: rd.tm || null, toYear: rd.ty },
+        };
+      }),
+    );
 
   return (
     <div className="flex flex-col gap-6" data-testid="browser-check-card">
@@ -972,73 +1027,33 @@ function BrowserCheckCard({
             </PartsButton>
           ) : null}
           {last ? (
-          <PartsButton
-            variant="primary"
-            className="!min-h-[44px] flex-1"
-            disabled={busy || !canConfirm}
-            data-testid="browser-check-confirm"
-            onClick={() =>
-              openUrl &&
-              onConfirm({
-                url: openUrl,
-                answers: {
-                  versionOk: known ? versionOk === true : null,
-                  versionCode: known ? null : versionCode.trim(),
-                  partFound: partFound === true,
-                  ...(split
-                    ? {
-                      changeAt: { month: changeMonth, year: changeYear },
-                      value: positions ? "" : posValue("one"),
-                      valueAgain: positions || pv("one").picked ? null : pv("one").again.trim(),
-                      valueFrom: positions ? null : posValue("one|from") || null,
-                      valueFromAgain: positions || pv("one|from").picked ? null : pv("one|from").again.trim(),
-                      positions: positions
-                        ? filledSplit.map((k) => ({
-                          axle: k.place.axle as "front" | "rear",
-                          side: k.place.side,
-                          value: posValue(k.key),
-                          valueAgain: pv(k.key).picked ? null : pv(k.key).again.trim(),
-                          period: k.period,
-                        }))
-                        : null,
-                    }
-                    : {
-                      value: positions ? "" : jobType === "part" ? posValue("one") : value,
-                      valueAgain: positions
-                        ? null
-                        : jobType === "part"
-                        ? pv("one").picked || !pv("one").typed.trim() ? null : pv("one").again.trim()
-                        : needsAgain
-                        ? typedAgain.trim()
-                        : null,
-                      positions: positions
-                        ? filledPositions.map((p) => ({
-                          axle: p.axle,
-                          side: p.side,
-                          value: posValue(p.key),
-                          valueAgain: pv(p.key).picked ? null : pv(p.key).again.trim(),
-                        }))
-                        : null,
-                    }),
-                  ...(jobType === "part"
-                    ? {
-                      datesShown: [
-                        { fromMonth: d1.fm, fromYear: d1.fy, toMonth: d1.tm, toYear: d1.ty },
-                        ...(split ? [{ fromMonth: changeMonth, fromYear: changeYear, toMonth: d2.tm, toYear: d2.ty }] : []),
-                      ],
-                    }
-                    : {}),
-                  datesOk: datesOk === true,
-                  sideOk: side && !positions ? sideOk === true : null,
-                },
-                rowName: jobType === "part" ? finder.rowName : detail.spec?.label ?? null,
-                buildText: dates || null,
-                knownCode: known?.code ?? null,
-              })
-            }
-          >
-            <DIcon name="check" className="text-[18px]" /> Confirm
-          </PartsButton>
+            <PartsButton
+              variant="primary"
+              className="!min-h-[44px] flex-1"
+              disabled={busy || !canConfirm}
+              data-testid="browser-check-confirm"
+              onClick={() =>
+                openUrl &&
+                onConfirm({
+                  url: openUrl,
+                  answers: {
+                    versionOk: known ? versionOk === true : null,
+                    versionCode: known ? null : versionCode.trim(),
+                    partFound: partFound === true,
+                    ...(jobType === "part"
+                      ? { value: "", valueAgain: null, positions: null, numbers: numbersPayload() }
+                      : { value, valueAgain: needsAgain ? typedAgain.trim() : null, positions: null }),
+                    datesOk: needDatesAnswer ? datesOk === true : true,
+                    sideOk: side && !positions ? sideOk === true : null,
+                  },
+                  rowName: jobType === "part" ? finder.rowName : detail.spec?.label ?? null,
+                  buildText: dates || null,
+                  knownCode: known?.code ?? null,
+                })
+              }
+            >
+              <DIcon name="check" className="text-[18px]" /> Confirm
+            </PartsButton>
           ) : (
             <PartsButton
               variant="primary"

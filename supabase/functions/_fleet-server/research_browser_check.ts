@@ -217,7 +217,54 @@ export type CheckAnswers = {
    * when it changed during the build). Kept in the evidence; never a gate.
    */
   datesShown?: Array<{ fromMonth: number; fromYear: number; toMonth: number; toYear: number }> | null;
+  /**
+   * Owner 25 Nov: every number the site lists for the part, each with the place it's for (parts with places) and the
+   * dates the site shows next to it (year required, month only when shown; null = the site shows no dates). Any number
+   * of numbers per place. When present this replaces value / positions / changeAt.
+   */
+  numbers?: Array<{
+    axle?: "front" | "rear" | null;
+    side?: "left" | "right" | null;
+    value?: string | null;
+    valueAgain?: string | null;
+    dates?: { fromMonth?: number | null; fromYear: number; toMonth?: number | null; toYear: number } | null;
+  }> | null;
 };
+
+/** Owner 25 Nov: a month index (year × 12 + month) for a site's date; a missing month is the year's first or last. */
+function monthIndex(year: unknown, month: unknown, end: boolean): number | null {
+  const y = Number(year);
+  if (!Number.isInteger(y) || y < 1950 || y > 2100) return null;
+  if (month == null || month === "" || Number(month) === 0) return y * 12 + (end ? 12 : 1);
+  const m = Number(month);
+  if (!Number.isInteger(m) || m < 1 || m > 12) return null;
+  return y * 12 + m;
+}
+
+/** "11.2016" for a month index; "2016" when the site showed no month. */
+function siteDateText(year: number, month: number | null | undefined): string {
+  return month ? `${String(month).padStart(2, "0")}.${year}` : String(year);
+}
+
+/**
+ * Owner 25 Nov: do one place's dated ranges, joined, cover the car's build? Open ends (no end year on file) only need
+ * the start and no gaps. Unknown build → true (the owner's Yes stands).
+ */
+export function rangesCoverBuild(ranges: Array<{ from: number; to: number }>, build: CarBuild | null | undefined): boolean {
+  if (!build?.startYear) return true;
+  const start = build.startYear * 12 + (build.startMonth ?? 1);
+  const end = build.endYear ? build.endYear * 12 + (build.endMonth ?? 12) : null;
+  let reach = start - 1;
+  for (const r of [...ranges].sort((x, y) => x.from - y.from)) {
+    if (r.from > reach + 1) {
+      if (end != null && reach >= end) break;
+      return false;
+    }
+    reach = Math.max(reach, r.to);
+  }
+  // A number from 11.2016 to 11.2018 and the next from 11.2018: the change month is shared, so touching counts.
+  return reach >= start && (end == null ? true : reach >= end);
+}
 
 /** Owner 25 Nov: "11.2016 – 11.2018, 11.2018 – 09.2020" from the dates the owner read; bad entries are left out. */
 export function datesShownText(ranges: unknown): string {
@@ -286,7 +333,8 @@ export type AnswersResult =
       | "retype_mismatch"
       | "bad_position"
       | "needs_positions"
-      | "bad_change_date";
+      | "bad_change_date"
+      | "bad_dates";
   };
 
 /**
@@ -318,14 +366,17 @@ export function answersGate(input: {
   if (input.knownCode ? a.versionOk !== true : !String(a.versionCode ?? "").trim()) return { ok: false, reason: "version_no" };
   if (a.partFound !== true) return { ok: false, reason: "part_not_found" };
   if (a.datesOk !== true) return { ok: false, reason: "dates_no" };
+  const listed = input.jobType === "part" && Array.isArray(a.numbers) && a.numbers.length > 0;
   const positioned = input.jobType === "part" && Array.isArray(a.positions) && a.positions.length > 0;
   // RE-69: positions only for part types that have them; sided types (four corners, left/right) always need them.
   const scheme = String(input.positionScheme ?? "");
   const hasPositions = ["axle", "four_corners", "axle_left_right", "axle_inner_outer"].includes(scheme);
   const sided = scheme === "four_corners" || scheme === "axle_left_right";
   if (positioned && !hasPositions) return { ok: false, reason: "bad_position" };
-  if (!positioned && input.jobType === "part" && sided) return { ok: false, reason: "needs_positions" };
-  if (!positioned && input.needsSide && a.sideOk !== true) return { ok: false, reason: "side_no" };
+  // Owner 25 Nov: a numbers list carries its places itself when the part type has them.
+  const placed = positioned || (listed && hasPositions);
+  if (!placed && input.jobType === "part" && sided) return { ok: false, reason: "needs_positions" };
+  if (!placed && input.needsSide && a.sideOk !== true) return { ok: false, reason: "side_no" };
 
   let versionCode: string | null = null;
   if (!input.knownCode && a.versionCode && String(a.versionCode).trim()) {
@@ -356,6 +407,81 @@ export function answersGate(input: {
     if (!isSuggested(raw) && normV(again) !== normV(raw)) return { ok: false, reason: "retype_mismatch" };
     return { ok: true, detected };
   };
+
+  // Owner 25 Nov: a list of numbers, each with its own place and dates (any site, any number of numbers per place).
+  if (listed) {
+    const build = input.build ?? null;
+    const bStart = build?.startYear ? build.startYear * 12 + (build.startMonth ?? 1) : null;
+    const bEnd = build?.endYear ? build.endYear * 12 + (build.endMonth ?? 12) : null;
+    type Row = { axle: "front" | "rear" | null; side: "left" | "right" | null; detected: string; from: number | null; to: number | null; text: string | null; fy: number | null; ty: number | null };
+    const rows: Row[] = [];
+    for (const n of a.numbers.slice(0, 24)) {
+      if (!String(n?.value ?? "").trim()) continue;
+      let axle: "front" | "rear" | null = input.jobAxle ?? null;
+      let side: "left" | "right" | null = null;
+      if (hasPositions) {
+        axle = n.axle === "rear" ? "rear" : n.axle === "front" ? "front" : null;
+        if (!axle) return { ok: false, reason: "bad_position" };
+        side = n.side === "left" || n.side === "right" ? n.side : null;
+        if (input.jobAxle && axle !== input.jobAxle) return { ok: false, reason: "bad_position" };
+        if (sided ? !side : side) return { ok: false, reason: "bad_position" };
+      }
+      const r = check(n.value, n.valueAgain);
+      if (!r.ok) return { ok: false, reason: r.reason };
+      let from: number | null = null;
+      let to: number | null = null;
+      let text: string | null = null;
+      let fy: number | null = null;
+      let ty: number | null = null;
+      if (n.dates) {
+        from = monthIndex(n.dates.fromYear, n.dates.fromMonth, false);
+        to = monthIndex(n.dates.toYear, n.dates.toMonth, true);
+        if (from == null || to == null || to < from) return { ok: false, reason: "bad_dates" };
+        // A number whose dates miss the car's build altogether isn't for this car.
+        if ((bStart != null && to < bStart) || (bEnd != null && from > bEnd)) return { ok: false, reason: "dates_no" };
+        fy = Number(n.dates.fromYear);
+        ty = Number(n.dates.toYear);
+        text = `${siteDateText(fy, n.dates.fromMonth)} – ${siteDateText(ty, n.dates.toMonth)}`;
+      }
+      rows.push({ axle, side, detected: r.detected, from, to, text, fy, ty });
+    }
+    if (!rows.length) return { ok: false, reason: "no_value" };
+    // Every place whose numbers all show dates: those dates, joined, must cover the car's build.
+    const places = new Map<string, Row[]>();
+    for (const row of rows) places.set(`${row.axle ?? ""}|${row.side ?? ""}`, [...(places.get(`${row.axle ?? ""}|${row.side ?? ""}`) ?? []), row]);
+    for (const list of places.values()) {
+      if (list.every((x) => x.from != null && x.to != null) && !rangesCoverBuild(list.map((x) => ({ from: x.from!, to: x.to! })), build)) {
+        return { ok: false, reason: "dates_no" };
+      }
+    }
+    // Whole build years (a mid-year change lists both numbers for that year); open where the dates reach the build's ends.
+    const listItems: PositionItem[] = [];
+    for (const row of rows) {
+      const yearFrom = row.from == null || (bStart != null && row.from <= bStart) ? null : row.fy;
+      const yearTo = row.to == null || (bEnd != null && row.to >= bEnd) ? null : row.ty;
+      const twin = listItems.find((x) => x.axle === row.axle && x.side === row.side && normV(x.detected) === normV(row.detected));
+      if (twin) {
+        // The same number listed twice for a place: one listing for both date ranges.
+        twin.yearFrom = twin.yearFrom == null || yearFrom == null ? null : Math.min(twin.yearFrom, yearFrom);
+        twin.yearTo = twin.yearTo == null || yearTo == null ? null : Math.max(twin.yearTo, yearTo);
+        twin.periodText = [twin.periodText, row.text ? `dates ${row.text}` : null].filter(Boolean).join(", ") || null;
+        continue;
+      }
+      listItems.push({ detected: row.detected, axle: row.axle, side: row.side, yearFrom, yearTo, periodText: row.text ? `dates ${row.text}` : null });
+    }
+    const listText = listItems
+      .map((i) => [`${i.axle ?? ""}${i.side ? ` ${i.side}` : ""}`.trim(), i.detected, i.periodText ?? ""].filter(Boolean).join(" "))
+      .join(", ");
+    const listEvidence = [
+      `Owner checked on ${input.site}`,
+      versionCode ?? input.knownCode ?? null,
+      input.rowName ?? null,
+      listText,
+      input.buildText ? `dates cover ${input.buildText}` : "dates cover the car's build",
+      !hasPositions && input.needsSide ? `for the ${input.needsSide}` : null,
+    ].filter(Boolean).join(" · ");
+    return { ok: true, detected: listItems[0].detected, versionCode, evidence: listEvidence.slice(0, 2000), items: listItems };
+  }
 
   // RE-70: a number that changed during the build — the change month must fall inside the car's build.
   const split = a.changeAt != null && input.jobType === "part";
