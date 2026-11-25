@@ -189,6 +189,7 @@ import {
 } from "../ui/dialog";
 import { Label } from "../ui/label";
 import { WorkforceInvitePanel, WorkforcePendingInvitesButton } from '../workforce/WorkforceInvitePanel';
+import { FuelOnPhoneChip, useFuelPhoneOutbox } from '../fuel/phone-fills/FuelPhoneWaitingCard';
 // Interface for our View Model
 interface DriverProfile {
   id: string;
@@ -243,6 +244,13 @@ export function DriversPage({
   const { user } = useAuth();
   const currentOrgId = user?.user_metadata?.organizationId || user?.id;
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  // Fuel log photos-first: "2 on phone" chip per driver (S2; hidden when 0).
+  const phoneOutbox = useFuelPhoneOutbox();
+  const onPhoneByDriver = useMemo(() => {
+    const map: Record<string, { count: number; since: string | null }> = {};
+    for (const r of phoneOutbox.rows) map[r.driverId] = { count: r.pendingCount, since: r.oldestPendingAt };
+    return map;
+  }, [phoneOutbox.rows]);
 
   const showCourierTab = rushVisible;
   const showDriversTab = rideshareVisible;
@@ -1306,7 +1314,10 @@ export function DriversPage({
                                             </AvatarFallback>
                                         </Avatar>
                                         <div>
-                                            <p className="font-medium text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 transition-colors">{driver.name}</p>
+                                            <p className="flex items-center gap-2 font-medium text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 transition-colors">
+                                                {driver.name}
+                                                <FuelOnPhoneChip info={onPhoneByDriver[driver.id]} name={driver.name} />
+                                            </p>
                                             <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[160px] font-mono">
                                                 {driver.phone}
                                             </p>
@@ -1516,7 +1527,10 @@ export function DriversPage({
                       </AvatarFallback>
                     </Avatar>
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-slate-900 dark:text-slate-100">{driver.name}</p>
+                      <p className="flex items-center gap-2 truncate font-medium text-slate-900 dark:text-slate-100">
+                        {driver.name}
+                        <FuelOnPhoneChip info={onPhoneByDriver[driver.id]} name={driver.name} />
+                      </p>
                       <p className="truncate font-mono text-xs text-slate-500">{driver.phone}</p>
                     </div>
                   </div>

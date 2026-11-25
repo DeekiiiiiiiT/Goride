@@ -252,7 +252,7 @@ function buildPartsPanel(rows: CatalogPartRow[], types: PartTypeRow[], draft: Ca
     const name = type
       ? defaultPartNamePreview(type.name, type.positionScheme, row.position, row.side, row.catalogueNumber)
       : row.partNumber;
-    const numberLine = `${row.brand || draft.brandDefault || draft.catalogCarMaker || "Toyota"} ${row.partNumber}`;
+    const numberLine = `${row.brand.trim() || draft.brandDefault.trim() || draft.catalogCarMaker.trim() || ""} ${row.partNumber}`.trim();
     const fitLine = row.existingPartId
       ? `Already on file · adding ${nCars} car${nCars === 1 ? "" : "s"}`
       : `Fits ${nCars} car${nCars === 1 ? "" : "s"}`;

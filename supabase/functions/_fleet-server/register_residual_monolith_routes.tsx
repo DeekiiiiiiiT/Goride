@@ -11,6 +11,15 @@ import { registerTripAnalyticsRoutes } from "./trip_analytics_routes.ts";
 import { searchTripsFromFacts, tripCrossFleetMfaResponse, tripStatsFromFacts } from "./trip_facts_read.ts";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
 import { findRepeatFuelSave, isSameFuelSaveResent } from "./fuel_tx_repeat_save.ts";
+import {
+  captureIdOf,
+  fillPhotoKey,
+  isOfflineFillResent,
+  markWaitingForPhotoRead,
+  needsPhotoRead,
+  withFixAgeFromCapture,
+} from "./fuel_offline_fill.ts";
+import { enqueueFuelPhotoRead } from "./fuel_photo_reader_routes.ts";
 import { fleetSelect } from "./fleet_select.ts";
 import { countBy, listByBatch, queryFleet, fleetDb, fleetTable, rowToKvValue } from "./repos/baseRepo.ts";
 import OpenAI from "npm:openai";
@@ -2805,7 +2814,12 @@ export function registerResidualMonolithRoutes(app: Hono) {
           transaction.timestamp = new Date().toISOString();
       }
 
-      if (previousTransaction && typeof previousTransaction === "object") {
+      // S9 (fuel offline-first): a phone outbox re-send of a stored fill is never refused here;
+      // S3 below hands the stored fill back unchanged.
+      if (
+        previousTransaction && typeof previousTransaction === "object" &&
+        !isOfflineFillResent(previousTransaction as Record<string, unknown>, transaction as Record<string, unknown>)
+      ) {
         const cashGuard = splitCashAwaitingSaveBlocked(
           previousTransaction as { amount?: number; status?: string; metadata?: Record<string, unknown> | null },
           transaction as { amount?: number; status?: string; metadata?: Record<string, unknown> | null },
@@ -2855,6 +2869,14 @@ export function registerResidualMonolithRoutes(app: Hono) {
           previousTransaction &&
           typeof previousTransaction === "object" &&
           isSameFuelSaveResent(previousTransaction as Record<string, unknown>, Date.now())
+        ) {
+          return c.json({ success: true, data: previousTransaction, repeatSaveOf: String(transaction.id) });
+        }
+        // S3 (fuel offline-first): a phone outbox re-send of a fill already stored with the same
+        // captureId is the same fill at any age — hand it back, never re-run the save.
+        if (
+          !canFleetEdit &&
+          isOfflineFillResent(previousTransaction as Record<string, unknown> | null, transaction as Record<string, unknown>)
         ) {
           return c.json({ success: true, data: previousTransaction, repeatSaveOf: String(transaction.id) });
         }
@@ -2984,6 +3006,21 @@ export function registerResidualMonolithRoutes(app: Hono) {
           );
           return c.json({ success: true, data: firstSave, repeatSaveOf: String(firstSave.id) });
         }
+      }
+
+      // S5 (fuel offline-first): photos in, total not read yet. Store it as Pending and wait for
+      // the photo reader; never auto-approve or post a fill without its total.
+      // S7: a fill saved later keeps its GPS fix age measured against the photo time.
+      if (captureIdOf(transaction as Record<string, unknown>)) {
+        Object.assign(transaction, withFixAgeFromCapture(transaction as Record<string, unknown>));
+      }
+      if (needsPhotoRead(transaction as Record<string, unknown>)) {
+        const waiting = markWaitingForPhotoRead(transaction as Record<string, unknown>, new Date().toISOString());
+        Object.assign(transaction, waiting);
+        await kv.set(`transaction:${transaction.id}`, stampOrg(transaction, c));
+        await enqueueFuelPhotoRead(String(transaction.id), txOrgId || null);
+        console.log(`[fuel-offline] tx ${transaction.id} stored — waiting for photo read`);
+        return c.json({ success: true, data: transaction, waitingForPhotoRead: true });
       }
 
       // Auto-Approve Logic for AI Verified Fuel
@@ -4950,10 +4987,29 @@ export function registerResidualMonolithRoutes(app: Hono) {
       }
       const fileExt = extForMime(detected);
 
+      // S4 (fuel offline-first): a new-flow fill photo (captureId + photoKind) has one fixed key,
+      // so a phone re-send replaces the file instead of leaving a copy behind.
+      const fillCaptureId = body['captureId'];
+      const fillPhotoKind = body['photoKind'];
+      // Works with or without evidence retention switched on (EVIDENCE_TTL_ENABLED).
+      const fixedFillKey = (layout: "r2" | "supabase") =>
+        evidenceType
+          ? fillPhotoKey(resolvedOrgId, evidenceType, fillCaptureId, fillPhotoKind, fileExt, layout)
+          : null;
+      const evidenceAlreadyRegistered = async (storagePath: string) => {
+        const { data } = await supabase
+          .from("evidence_files")
+          .select("id")
+          .eq("storage_path", storagePath)
+          .limit(1);
+        return Array.isArray(data) && data.length > 0;
+      };
+
       // Cloudflare R2 (roam-private) when switched on (FILE_LINK_SECRET + R2 keys set).
       // The answer is still one address per file, so the apps need no change.
       if (isR2EvidenceEnabled()) {
-        const r2Key = buildR2UploadKey(
+        const fixedKey = fixedFillKey("r2");
+        const r2Key = fixedKey ?? buildR2UploadKey(
           resolvedOrgId,
           useEphemeral ? (evidenceType as EvidenceType) : null,
           fileExt,
@@ -4964,7 +5020,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
           secret: Deno.env.get("FILE_LINK_SECRET") ?? "",
           supabaseUrl: Deno.env.get("SUPABASE_URL") ?? "",
         });
-        if (useEphemeral) {
+        if (useEphemeral && !(fixedKey && (await evidenceAlreadyRegistered(r2Key)))) {
           await registerEvidenceFile(supabase, {
             bucketId: R2_PRIVATE_BUCKET_ID,
             storagePath: r2Key,
@@ -4987,15 +5043,16 @@ export function registerResidualMonolithRoutes(app: Hono) {
         supabase,
         useEphemeral ? "ephemeral-evidence" : "make-37f42386-docs",
       );
-      const filePath = useEphemeral
+      const fixedStorageKey = fixedFillKey("supabase");
+      const filePath = fixedStorageKey ?? (useEphemeral
         ? buildEphemeralStoragePath(resolvedOrgId, evidenceType as EvidenceType, fileExt)
-        : `driver-docs/${crypto.randomUUID()}.${fileExt}`;
+        : `driver-docs/${crypto.randomUUID()}.${fileExt}`);
 
       const { error } = await supabase.storage
           .from(bucketName)
           .upload(filePath, buffer, {
               contentType: detected,
-              upsert: false
+              upsert: Boolean(fixedStorageKey)
           });
 
       if (error) throw error;
@@ -5006,7 +5063,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
 
       const signedUrl = signedData?.signedUrl;
 
-      if (useEphemeral && signedUrl) {
+      if (useEphemeral && signedUrl && !(fixedStorageKey && (await evidenceAlreadyRegistered(filePath)))) {
         await registerEvidenceFile(supabase, {
           bucketId: bucketName,
           storagePath: filePath,

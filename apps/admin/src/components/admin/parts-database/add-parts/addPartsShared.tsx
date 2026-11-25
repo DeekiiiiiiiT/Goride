@@ -1,6 +1,7 @@
 import { MaterialIcon } from "../import/MaterialIcon";
+import { catalystPositionsFor, isOxygenSensorJob } from "@roam/types/partPositions";
 import type { SelfServePreview } from "./addPartsApi";
-import type { AddPartsDraft, FitMode, PartTypeRow, SourceType } from "./addPartsTypes";
+import type { AddPartsDraft, CatalogPartRow, FitMode, PartTypeRow, SourceType } from "./addPartsTypes";
 
 /** Maps DB icon_key values to valid Material Symbols names (audit V1). */
 const PART_TYPE_ICON_MAP: Record<string, string> = {
@@ -446,7 +447,6 @@ export const CAR_MAKER_CATALOGUE_OPTIONS = [
   "Mitsubishi",
   "Isuzu",
   "Lexus",
-  "FxTrustMaker6",
 ] as const;
 
 export function fitModeDisplay(mode: string | undefined): { label: string; icon: string } {
@@ -466,4 +466,81 @@ export function plainWordsSentence(draft: {
   const trust = trustLabelFromSource(draft.sourceType);
   const reach = draft.previewReach != null ? ` · about ${draft.previewReach} car version(s)` : "";
   return `${draft.brand} ${draft.partNumber} (${draft.partTypeName ?? "part"}) · ${draft.fitMode}${reach} · ${trust}`;
+}
+
+/* ---------------------------------------------------------------------------------------------------------
+ * Catalogue-page helpers (redesign plan §4, §5, F-06, F-07, F-10, F-12).
+ * One place decides the words for a place, the name a row will save as, and what still stops a row.
+ * ------------------------------------------------------------------------------------------------------ */
+
+/** Plain words for a place. Never a raw code: `before_cat` reads "Front (before converter)". */
+export function plainPlaceLabel(
+  position?: string | null,
+  side?: string | null,
+  catalogueNumber?: number | null,
+): string {
+  const p = String(position ?? "").trim().toLowerCase();
+  const base =
+    p === "before_cat" ? "Front (before converter)"
+      : p === "after_cat" ? "Rear (after converter)"
+        : p === "front" ? "Front"
+          : p === "rear" ? "Rear"
+            : p === "driver" ? "Driver"
+              : p === "passenger" ? "Passenger"
+                : p === "low" ? "Low beam"
+                  : p === "high" ? "High beam"
+                    : p === "side" ? "Side"
+                      : "";
+  if (!base) return "";
+  const bits = [base];
+  const s = String(side ?? "").trim().toLowerCase();
+  if ((p === "front" || p === "rear") && (s === "left" || s === "right")) bits.push(s);
+  if (catalogueNumber != null) bits.push(`No.${catalogueNumber}`);
+  return bits.join(" ");
+}
+
+/** The catalogue's own names for front/rear, shown under the place buttons (oxygen sensor only). */
+export function cataloguePlaceHint(type?: PartTypeRow | null): string | null {
+  if (!type || type.positionScheme !== "before_after_catalyst") return null;
+  if (!isOxygenSensorJob({ opCode: type.opCode })) return null;
+  const [front, rear] = catalystPositionsFor({ opCode: type.opCode });
+  const strip = (label: string) =>
+    label.replace(/^Front\s*\(/, "").replace(/^Rear\s*\(/, "").replace(/\)\s*$/, "").trim();
+  return `The catalogue calls these '${strip(front.label)}' (front) and '${strip(rear.label)}' (rear).`;
+}
+
+/** The name the save will write: the place first, then the type (same rule as the database). */
+export function savedPartName(type: PartTypeRow | null | undefined, row: CatalogPartRow): string {
+  if (!type) return "";
+  return defaultPartNamePreview(type.name, type.positionScheme, row.position, row.side, row.catalogueNumber);
+}
+
+export function normalizedPartNumber(number: string): string {
+  return number.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+/** What still stops this row from moving on, in plain words. Null when the row is ready. */
+export function catalogueRowBlocker(row: CatalogPartRow, types: PartTypeRow[]): string | null {
+  const type = row.partType ?? types.find((t) => t.id === row.partTypeId) ?? null;
+  if (!type) return "needs a type";
+  if (row.partNumber.trim().length < 4) return "needs a part number";
+  const scheme = type.positionScheme;
+  if (scheme !== "none" && !row.position) return "needs a place";
+  if ((scheme === "four_corners" || scheme === "axle_left_right") && !row.side) return "needs a place";
+  return null;
+}
+
+/** "Part 2 has the same number as part 1 (89467-B1040). Change one, or remove it." */
+export function duplicatePartNumberMessage(rows: CatalogPartRow[]): string | null {
+  const seen: string[] = [];
+  for (let i = 0; i < rows.length; i += 1) {
+    const key = normalizedPartNumber(rows[i].partNumber);
+    if (!key) continue;
+    const first = seen.indexOf(key);
+    if (first >= 0) {
+      return `Part ${i + 1} has the same number as part ${first + 1} (${rows[i].partNumber.trim()}). Change one, or remove it.`;
+    }
+    seen.push(key);
+  }
+  return null;
 }

@@ -6,7 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const KEYS = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_PROJECT_ID', 'VITE_SUPABASE_ANON_KEY'] as const;
+const KEYS = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_PROJECT_ID', 'VITE_SUPABASE_PUBLISHABLE_KEY'] as const;
 
 export default defineConfig(({ mode }) => {
   const fromFleet = loadEnv(mode, path.resolve(__dirname, '../fleet'), 'VITE_');

@@ -249,28 +249,28 @@ export async function getOrgFile(
 }
 
 /**
- * Read link for one stored document. Rows in roam-private get a short-lived R2 link;
- * rows written before the switch keep the Supabase signed URL.
+ * Read link for one stored document. Rows in roam-private get a short-lived R2 link.
+ *
+ * M6: the old `enterprise-freight-docs` bucket was deleted, so rows written before the switch
+ * have no bytes behind them. They are answered as "File not available" instead of falling back
+ * to a Supabase signed URL that cannot work.
  */
 export async function signedOrgFileUrl(
   file: OrgFileRow,
   expiresIn: number = FREIGHT_DOCS_LINK_SECONDS,
+  signR2: (key: string, seconds: number) => Promise<string> = signFreightDocUrl,
 ): Promise<{ url: string } | { error: string }> {
-  if (isFreightDocOnR2(file.bucket_id, file.storage_path)) {
-    try {
-      return { url: await signFreightDocUrl(file.storage_path, expiresIn) };
-    } catch (e) {
-      return { error: e instanceof Error ? e.message : "Could not create signed URL" };
-    }
+  if (!orgFileIsOnR2(file)) return { error: "File not available" };
+  try {
+    return { url: await signR2(file.storage_path, expiresIn) };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not create signed URL" };
   }
+}
 
-  const { data, error } = await serviceClient().storage
-    .from(file.bucket_id || ORG_FILES_BUCKET)
-    .createSignedUrl(file.storage_path, expiresIn);
-  if (error || !data?.signedUrl) {
-    return { error: error?.message || "Could not create signed URL" };
-  }
-  return { url: data.signedUrl };
+/** True when a row's bytes live in roam-private (the only storage read after M6). */
+export function orgFileIsOnR2(file: Pick<OrgFileRow, "bucket_id" | "storage_path">): boolean {
+  return isFreightDocOnR2(file.bucket_id, file.storage_path);
 }
 
 export type DeleteOrgFileResult =

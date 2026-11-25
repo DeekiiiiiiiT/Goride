@@ -124,5 +124,7 @@ functions-serve.log
 
 # DeepSeek Harness plugin state (agent-teams)
 .agent-teams/
+# R2 migration M4/M5 artifacts (manifests, plans, backups — a backup holds capability links)
+.r2-migration/
 # Local secret scratch files — never commit
 tmp_secrets*.txt

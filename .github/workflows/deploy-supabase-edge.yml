@@ -92,8 +92,10 @@ jobs:
             fleet-fuel
             fleet-toll
             fleet-toll-cron
+            fleet-fuel-cron
             fleet-picture-cron
             file-link
+            file-link-resign
             parts-sourcing-drain
             catalog-research
             fleet-ops

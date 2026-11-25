@@ -1,7 +1,7 @@
 {
   "slug": "fleet-core",
-  "generatedAt": "2026-11-20T16:01:19.969Z",
-  "routeCount": 840,
+  "generatedAt": "2026-11-25T14:27:46.698Z",
+  "routeCount": 843,
   "routes": [
     "ALL /make-server-37f42386/webhooks/wipay-fleet-modules",
     "DELETE ${ADMIN_CAT}/:id",
@@ -453,6 +453,9 @@
     "POST ${ADMIN}/vehicles/:id/oe-numbers",
     "POST ${BASE_PATH}/audit/logs",
     "POST ${BASE_PATH}/audit/verify-integrity",
+    "POST ${BASE_PATH}/fuel/driver-fill/:transactionId/numbers",
+    "POST ${BASE_PATH}/fuel/fill/:transactionId/numbers",
+    "POST ${BASE_PATH}/fuel/photo-read/run",
     "POST ${BASE}/acknowledge-cash-source",
     "POST ${BASE}/alerts/:id/acknowledge",
     "POST ${BASE}/api-center/billing/sync",

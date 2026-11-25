@@ -41,6 +41,9 @@ jobs:
       - name: Check no admin→fleet imports
         run: node scripts/check-no-admin-fleet-imports.mjs
 
+      - name: Check no new Supabase Storage uploads/downloads
+        run: node scripts/check-supabase-storage-calls.mjs
+
       - name: Check toll-core parity
         run: node scripts/check-toll-core-parity.mjs
 
@@ -322,16 +325,19 @@ jobs:
           supabase/functions/_shared/vehiclePictures/
           supabase/functions/_fleet-server/catalog_maker_logo_routes.test.ts
           supabase/functions/_fleet-server/evidence_storage_r2.test.ts
+          supabase/functions/_fleet-server/evidence_cleanup_purge.test.ts
           supabase/functions/_fleet-server/parts_request_photo_storage.test.ts
           supabase/functions/_fleet-server/parts_import_storage.test.ts
           supabase/functions/delivery/merchant_asset_storage.test.ts
           supabase/functions/delivery/inHouse/receipt_storage.test.ts
           supabase/functions/delivery/customer_media_storage.test.ts
           supabase/functions/freight/freight_docs_storage.test.ts
+          supabase/functions/freight/orgFiles_read.test.ts
           supabase/functions/delivery/scanned_document_routes.test.ts
           supabase/functions/_shared/malwareScan.test.ts
           supabase/functions/explorer/explorer_photo_storage.test.ts
           supabase/functions/petrojam-prices/refinery_source_storage.test.ts
+          scripts/r2-migration.test.ts
 
       - name: Deno test ledger read API parity
         run: >

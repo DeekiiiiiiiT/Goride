@@ -5,7 +5,7 @@
 import { PartsButton } from "../../PartsButton";
 import { MaterialIcon } from "../../import/MaterialIcon";
 import type { CatalogPageDraft, PartTypeRow } from "../addPartsTypes";
-import { defaultPartNamePreview } from "../addPartsShared";
+import { savedPartName } from "../addPartsShared";
 import { D_CARD, D_MONO, D_MUTED, D_TXT, DPill } from "./dominionKit";
 
 export function CatalogSaved({
@@ -30,13 +30,19 @@ export function CatalogSaved({
   const rows = draft.partRows.filter((r) => r.partNumber.trim());
   const partCount = Number(saveResult.partCount ?? rows.length ?? 0);
   const carCount = Number(saveResult.carCount ?? draft.vehicleListings.length ?? 0);
+  // F-07: the names the database actually wrote, in input order.
+  const savedNames = Array.isArray(saveResult.savedNames)
+    ? (saveResult.savedNames as unknown[]).map((n) => String(n ?? ""))
+    : [];
   const carsLine = draft.vehicleListings
     .map((v) => `${v.model ?? v.label ?? "Car"}${v.diffLabel ? ` ${v.diffLabel.split(" · ")[0]}` : ""}`)
     .join(" + ");
 
-  function savedName(r: CatalogPageDraft["partRows"][number]): string {
+  function savedName(r: CatalogPageDraft["partRows"][number], index: number): string {
+    const fromServer = savedNames[index];
+    if (fromServer && fromServer.trim()) return fromServer;
     const t = r.partType ?? types.find((x) => x.id === r.partTypeId);
-    return t ? defaultPartNamePreview(t.name, t.positionScheme, r.position, r.side, r.catalogueNumber) : "Part";
+    return t ? savedPartName(t, r) : "Part";
   }
 
   const nextCard = (opts: { icon: string; title: string; body: string; onClick: () => void; primary?: boolean }) => (
@@ -78,13 +84,13 @@ export function CatalogSaved({
         <div className="flex flex-col gap-2">
           <p className={`text-[14px] font-semibold ${D_MUTED}`}>Saved</p>
           <div className="flex flex-col gap-2 rounded-xl bg-[#f3f4fb] p-2 dark:bg-[#0b1220]">
-            {rows.map((r) => (
+            {rows.map((r, index) => (
               <div key={r.clientId} className="flex flex-wrap items-center gap-3 rounded-lg bg-white px-4 py-3 dark:bg-[#111a2e]">
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#e6f4ea] dark:bg-[#14532d]/40">
                   <MaterialIcon name="check" className="text-[18px] text-[#006e31] dark:text-[#4ade80]" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className={`text-[16px] font-semibold ${D_TXT}`}>{savedName(r)}</p>
+                  <p className={`text-[16px] font-semibold ${D_TXT}`}>{savedName(r, index)}</p>
                   <p className={`text-[14px] ${D_MONO} ${D_MUTED}`}>{r.partNumber}</p>
                 </div>
                 {carsLine ? <DPill tone="blue">{r.existingPartId ? "Cars added: " : ""}{carsLine}</DPill> : null}

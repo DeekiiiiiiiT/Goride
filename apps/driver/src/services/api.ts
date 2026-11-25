@@ -867,6 +867,48 @@ export const api = {
     return data;
   },
 
+  /** Fuel offline-first S10: the driver adds total + litres (or a new pump photo) to their own fill. */
+  async addFuelFillNumbers(
+    transactionId: string,
+    body: { total?: number; liters?: number; pumpPhotoUrl?: string },
+  ): Promise<Record<string, unknown>> {
+    const authHeaders = await getHeaders();
+    const response = await fetch(
+      `${API_ENDPOINTS.fuel}/fuel/driver-fill/${encodeURIComponent(transactionId)}/numbers`,
+      {
+        method: 'POST',
+        headers: { ...authHeaders, apikey: publicAnonKey },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(30_000),
+      },
+    );
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(String((json as { error?: string }).error || 'Could not save the numbers'));
+    return ((json as { data?: Record<string, unknown> }).data ?? {}) as Record<string, unknown>;
+  },
+
+  /** Fuel offline-first S1: tell Fleet how many items wait on this phone. Never throws. */
+  async reportPhoneOutbox(report: {
+    deviceId: string;
+    appVersion: string | null;
+    pendingCount: number;
+    oldestPendingAt: string | null;
+    lastError: string | null;
+  }): Promise<boolean> {
+    try {
+      const authHeaders = await getHeaders();
+      const response = await fetch(`${API_ENDPOINTS.fuel}/fuel/phone-outbox`, {
+        method: 'POST',
+        headers: { ...authHeaders, apikey: publicAnonKey },
+        body: JSON.stringify(report),
+        signal: AbortSignal.timeout(15_000),
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  },
+
   async saveTransaction(transaction: Partial<FinancialTransaction>) {
     const authHeaders = await getHeaders();
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/transactions`, {

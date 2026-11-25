@@ -1098,7 +1098,6 @@ export async function extendAdminMerchantDetail(
 ): Promise<{ documents: unknown[]; bankAccount: unknown | null }> {
   const serviceSb = getServiceSupabase();
   const payments = getPaymentsSupabase();
-  const storage = getStorageSupabase();
 
   const [{ data: documents }, { data: bankAccount }] = await Promise.all([
     serviceSb.from("merchant_documents").select("*").eq("merchant_id", merchantId),
@@ -1121,10 +1120,10 @@ export async function extendAdminMerchantDetail(
           return { ...doc, signedUrl: null };
         }
       }
-      const { data: signed } = await storage.storage
-        .from("merchant-documents")
-        .createSignedUrl(filePath, 3600);
-      return { ...doc, signedUrl: signed?.signedUrl || null };
+      // M6: merchant-documents was deleted. An old row has no bytes, so the list shows no link
+      // (the Dominion documents panel renders "Not available" for a null signedUrl) instead of a
+      // signed URL that cannot work.
+      return { ...doc, signedUrl: null };
     }),
   );
 

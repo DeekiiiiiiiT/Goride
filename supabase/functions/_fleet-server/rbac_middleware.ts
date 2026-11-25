@@ -494,6 +494,8 @@ export function requireAuth(options?: RequireAuthOptions) {
       // checks the cron secret or service role; a user session is not one.
       path.includes("/fuel/period-jobs/sweep") ||
       path.includes("/fuel/periods/auto-close") ||
+      // Fuel offline-first S6 photo reader: fleet-fuel-cron; the route checks cron/service role.
+      path.endsWith("/fuel/photo-read/run") ||
       // Public Maps JS bootstrap (browser key only)
       path.includes("/maps-config") ||
       // Server Places proxy — Fleet address fields (key stays server-side)

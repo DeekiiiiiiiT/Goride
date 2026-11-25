@@ -492,6 +492,12 @@ verify_jwt = false
 [functions.file-link]
 verify_jwt = false
 
+# Monthly re-sign of stored file links (pg_cron). Same door as the other cron jobs: the function
+# checks X-Fleet-Cron-Secret / a service-role caller via _shared/authorizeCronOrServiceRole.ts, so
+# the gateway JWT check is off (the cron header is not a JWT).
+[functions.file-link-resign]
+verify_jwt = false
+
 [functions.catalog-research]
 verify_jwt = false
 

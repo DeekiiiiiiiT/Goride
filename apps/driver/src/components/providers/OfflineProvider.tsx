@@ -18,75 +18,103 @@ import {
   type TollSyncError,
 } from '../../services/syncCashToll';
 import {
-  markRerunWhileSyncing,
-  shouldProcessQueueAfterSync,
-} from './offlineQueueRerun';
+  afterFailedTry,
+  buildOutboxReport,
+  isOutboxItemDue,
+  OUTBOX_MAX_DELAY_MS,
+  OUTBOX_RETRY_DELAYS_MS,
+  OUTBOX_SEND_TIMEOUT_MS,
+  OUTBOX_TICK_MS,
+  plainSendError,
+  withTimeout,
+} from '@roam/fuel-core/phoneOutbox';
 
 interface OfflineContextType {
   isOnline: boolean;
   queue: OfflineAction[];
   addToQueue: (action: Omit<OfflineAction, 'id' | 'timestamp' | 'retryCount'>) => OfflineAction;
   refreshQueue: () => void;
+  /** Send what is due; `true` = the driver tapped "Send now". Nothing here deletes an item (FO-18). */
   processQueue: (forceRetry?: boolean) => Promise<void>;
-  removeFromQueue: (id: string) => void;
-  clearQueue: () => void;
   syncStatus: 'IDLE' | 'SYNCING' | 'ERROR';
   setSyncStatus: (status: 'IDLE' | 'SYNCING' | 'ERROR') => void;
 }
 
-const OfflineContext = createContext<OfflineContextType | undefined>(undefined);
+/** Exported so tests and screen previews can supply their own waiting list. */
+export const OfflineContext = createContext<OfflineContextType | undefined>(undefined);
 
-const MAX_RETRIES = 3;
+/**
+ * Upload one waiting photo. New-flow fills (captureId) use one fixed file per photo (S4), so a
+ * re-send replaces it. A photo that is gone from the phone no longer blocks the fill forever:
+ * the fill is sent without it and the server sends it to review (FO-09).
+ */
+async function uploadQueuedPhoto(
+  blobKey: string | undefined,
+  fileName: string,
+  mimeType: string | undefined,
+  meta: Parameters<typeof uploadEvidenceFile>[1] & object,
+  captureId: string,
+  photoKind: 'odometer' | 'pump' | 'receipt',
+): Promise<{ url: string; missing: boolean }> {
+  if (!blobKey) return { url: '', missing: false };
+  const blob = await offlineBlobStore.get(blobKey);
+  if (!blob) return { url: '', missing: true };
+  const file = new File([blob], fileName, { type: mimeType || blob.type || 'image/jpeg' });
+  const res = await uploadEvidenceFile(file, {
+    ...meta,
+    ...(captureId ? { captureId, photoKind } : {}),
+  });
+  return { url: res.url, missing: false };
+}
+
+function captureIdOfPayload(record: Record<string, any> | undefined): string {
+  const id = record?.metadata?.captureId;
+  return typeof id === 'string' ? id : '';
+}
+
+function markMissingPhotos(record: Record<string, any>, missing: string[]): void {
+  if (!missing.length) return;
+  record.metadata = { ...(record.metadata || {}), photoMissingOnPhone: missing };
+}
 
 async function syncFuelExpense(action: Extract<OfflineAction, { type: 'SUBMIT_FUEL_EXPENSE' }>) {
   const { payload } = action;
   const tx = { ...payload.transaction };
   const txId = String(tx.id || crypto.randomUUID());
   tx.id = txId;
+  const captureId = captureIdOfPayload(tx);
+  const missing: string[] = [];
 
   let receiptUrl = tx.receiptUrl || '';
   let odometerProofUrl = tx.metadata?.odometerProofUrl || '';
 
-  if (payload.receiptBlobKey) {
-    const blob = await offlineBlobStore.get(payload.receiptBlobKey);
-    if (!blob) throw new Error('Offline receipt photo missing');
-    const file = new File(
-      [blob],
-      payload.receiptFileName || 'receipt.jpg',
-      { type: payload.receiptMimeType || blob.type || 'image/jpeg' },
-    );
-    const uploadRes = await uploadEvidenceFile(file, {
-      evidenceType: 'fuel_receipt',
-      sourceType: 'transaction',
-      sourceId: txId,
-      retentionClass: 'ephemeral',
-      parentStatus: 'Pending',
-    });
-    receiptUrl = uploadRes.url;
-  }
+  const receipt = await uploadQueuedPhoto(
+    payload.receiptBlobKey,
+    payload.receiptFileName || 'receipt.jpg',
+    payload.receiptMimeType,
+    { evidenceType: 'fuel_receipt', sourceType: 'transaction', sourceId: txId, retentionClass: 'ephemeral', parentStatus: 'Pending' },
+    captureId,
+    'pump',
+  );
+  if (receipt.url) receiptUrl = receipt.url;
+  if (receipt.missing) missing.push('pump');
 
-  if (payload.odometerBlobKey) {
-    const blob = await offlineBlobStore.get(payload.odometerBlobKey);
-    if (!blob) throw new Error('Offline odometer photo missing');
-    const file = new File(
-      [blob],
-      payload.odometerFileName || 'odometer.jpg',
-      { type: payload.odometerMimeType || blob.type || 'image/jpeg' },
-    );
-    const uploadRes = await uploadEvidenceFile(file, {
-      evidenceType: 'odometer_proof',
-      sourceType: 'transaction',
-      sourceId: txId,
-      retentionClass: 'ephemeral',
-      parentStatus: 'Pending',
-    });
-    odometerProofUrl = uploadRes.url;
-  }
+  const odo = await uploadQueuedPhoto(
+    payload.odometerBlobKey,
+    payload.odometerFileName || 'odometer.jpg',
+    payload.odometerMimeType,
+    { evidenceType: 'odometer_proof', sourceType: 'transaction', sourceId: txId, retentionClass: 'ephemeral', parentStatus: 'Pending' },
+    captureId,
+    'odometer',
+  );
+  if (odo.url) odometerProofUrl = odo.url;
+  if (odo.missing) missing.push('odometer');
 
   if (receiptUrl) tx.receiptUrl = receiptUrl;
   if (odometerProofUrl) {
     tx.metadata = { ...(tx.metadata || {}), odometerProofUrl };
   }
+  markMissingPhotos(tx, missing);
 
   await api.saveTransaction(tx);
   await offlineBlobStore.removeMany([payload.odometerBlobKey, payload.receiptBlobKey]);
@@ -172,27 +200,22 @@ async function syncGasCardAnchor(action: Extract<OfflineAction, { type: 'SUBMIT_
   const entryId = String(entry.id || crypto.randomUUID());
   entry.id = entryId;
 
-  if (payload.odometerBlobKey) {
-    const blob = await offlineBlobStore.get(payload.odometerBlobKey);
-    if (!blob) throw new Error('Offline odometer photo missing');
-    const file = new File(
-      [blob],
-      payload.odometerFileName || 'odometer.jpg',
-      { type: payload.odometerMimeType || blob.type || 'image/jpeg' },
-    );
-    const uploadRes = await uploadEvidenceFile(file, {
-      evidenceType: 'odometer_proof',
-      sourceType: 'fuel_entry',
-      sourceId: entryId,
-      retentionClass: 'ephemeral',
-      parentStatus: 'Pending',
-    });
-    entry.odometerImageUrl = uploadRes.url;
+  const odo = await uploadQueuedPhoto(
+    payload.odometerBlobKey,
+    payload.odometerFileName || 'odometer.jpg',
+    payload.odometerMimeType,
+    { evidenceType: 'odometer_proof', sourceType: 'fuel_entry', sourceId: entryId, retentionClass: 'ephemeral', parentStatus: 'Pending' },
+    captureIdOfPayload(entry),
+    'odometer',
+  );
+  if (odo.url) {
+    entry.odometerImageUrl = odo.url;
     entry.metadata = {
       ...(entry.metadata || {}),
-      odometerProofUrl: uploadRes.url,
+      odometerProofUrl: odo.url,
     };
   }
+  markMissingPhotos(entry, odo.missing ? ['odometer'] : []);
 
   const { fuelService } = await import('../../services/fuelService');
   await fuelService.saveFuelEntry(entry as any);
@@ -212,41 +235,30 @@ async function syncSplitFuelFill(action: Extract<OfflineAction, { type: 'SUBMIT_
   let odometerProofUrl =
     cashTx.metadata?.odometerProofUrl || cardEntry.odometerImageUrl || '';
 
-  if (payload.receiptBlobKey) {
-    const blob = await offlineBlobStore.get(payload.receiptBlobKey);
-    if (!blob) throw new Error('Offline receipt photo missing');
-    const file = new File(
-      [blob],
-      payload.receiptFileName || 'receipt.jpg',
-      { type: payload.receiptMimeType || blob.type || 'image/jpeg' },
-    );
-    const uploadRes = await uploadEvidenceFile(file, {
-      evidenceType: 'fuel_receipt',
-      sourceType: 'transaction',
-      sourceId: txId,
-      retentionClass: 'ephemeral',
-      parentStatus: 'Pending',
-    });
-    receiptUrl = uploadRes.url;
-  }
+  const captureId = captureIdOfPayload(cashTx);
+  const missing: string[] = [];
+  const receipt = await uploadQueuedPhoto(
+    payload.receiptBlobKey,
+    payload.receiptFileName || 'receipt.jpg',
+    payload.receiptMimeType,
+    { evidenceType: 'fuel_receipt', sourceType: 'transaction', sourceId: txId, retentionClass: 'ephemeral', parentStatus: 'Pending' },
+    captureId,
+    'pump',
+  );
+  if (receipt.url) receiptUrl = receipt.url;
+  if (receipt.missing) missing.push('pump');
 
-  if (payload.odometerBlobKey) {
-    const blob = await offlineBlobStore.get(payload.odometerBlobKey);
-    if (!blob) throw new Error('Offline odometer photo missing');
-    const file = new File(
-      [blob],
-      payload.odometerFileName || 'odometer.jpg',
-      { type: payload.odometerMimeType || blob.type || 'image/jpeg' },
-    );
-    const uploadRes = await uploadEvidenceFile(file, {
-      evidenceType: 'odometer_proof',
-      sourceType: 'fuel_entry',
-      sourceId: entryId,
-      retentionClass: 'ephemeral',
-      parentStatus: 'Pending',
-    });
-    odometerProofUrl = uploadRes.url;
-  }
+  const odo = await uploadQueuedPhoto(
+    payload.odometerBlobKey,
+    payload.odometerFileName || 'odometer.jpg',
+    payload.odometerMimeType,
+    { evidenceType: 'odometer_proof', sourceType: 'fuel_entry', sourceId: entryId, retentionClass: 'ephemeral', parentStatus: 'Pending' },
+    captureId,
+    'odometer',
+  );
+  if (odo.url) odometerProofUrl = odo.url;
+  if (odo.missing) missing.push('odometer');
+  markMissingPhotos(cashTx, missing);
 
   if (receiptUrl) cashTx.receiptUrl = receiptUrl;
   if (odometerProofUrl) {
@@ -267,12 +279,91 @@ async function syncSplitFuelFill(action: Extract<OfflineAction, { type: 'SUBMIT_
   await offlineBlobStore.removeMany([payload.odometerBlobKey, payload.receiptBlobKey]);
 }
 
+const DEVICE_ID_KEY = 'roam:driver:device-id';
+/** Re-send an unchanged report at most this often. */
+const REPORT_REPEAT_MS = 10 * 60_000;
+
+function phoneDeviceId(): string {
+  try {
+    let id = localStorage.getItem(DEVICE_ID_KEY);
+    if (!id || id.length < 8) {
+      id = crypto.randomUUID();
+      localStorage.setItem(DEVICE_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    return 'no-storage-device';
+  }
+}
+
+type SentKind = 'trip' | 'toll' | 'fuel' | 'other';
+
+async function sendOne(action: OfflineAction, user: NonNullable<ReturnType<typeof useAuth>['user']>): Promise<SentKind> {
+  if (action.type === 'SUBMIT_TRIP') {
+    const { formData, rawRoute } = action.payload;
+    // Snap to road when the route is long enough; a failure keeps the raw route.
+    if (rawRoute && rawRoute.length > 5) {
+      try {
+        const matchResult = await mapMatchService.snapToRoad(rawRoute);
+        if (matchResult) {
+          formData.distance = Number((matchResult.totalDistance / 1000).toFixed(2));
+          const baseTime = formData.date && formData.time
+            ? new Date(`${formData.date}T${formData.time}`).getTime()
+            : Date.now();
+          formData.route = matchResult.snappedRoute.map((pt: any, idx: number) => ({
+            lat: pt.lat,
+            lon: pt.lon,
+            timestamp: baseTime + (idx * 1000),
+            speed: 0,
+            heading: 0,
+            accuracy: 10,
+          }));
+        }
+      } catch (snapError) {
+        console.warn('Snap to road failed, using raw data', snapError);
+      }
+    }
+    const driverName = user.user_metadata?.name || user.email || 'Unknown Driver';
+    await api.saveTrips([createManualTrip(formData, user.id, driverName)]);
+    return 'trip';
+  }
+  if (action.type === 'SUBMIT_CASH_TOLL') {
+    await syncCashTollAction(action);
+    return 'toll';
+  }
+  if (action.type === 'SUBMIT_FUEL_EXPENSE') {
+    await syncFuelExpense(action);
+    return 'fuel';
+  }
+  if (action.type === 'SUBMIT_GAS_CARD_ANCHOR') {
+    await syncGasCardAnchor(action);
+    return 'fuel';
+  }
+  if (action.type === 'SUBMIT_SPLIT_FUEL_FILL') {
+    await syncSplitFuelFill(action);
+    return 'fuel';
+  }
+  if (action.type === 'SUBMIT_DRIVER_REPORT_UPDATE') {
+    await syncDriverReportUpdate(action);
+    return 'other';
+  }
+  return 'other';
+}
+
 export function OfflineProvider({ children }: { children: React.ReactNode }) {
-  const deferQueueRerunRef = useRef(false);
   const isOnline = useNetworkStatus();
   const { user } = useAuth();
   const [queue, setQueue] = useState<OfflineAction[]>([]);
   const [syncStatus, setSyncStatus] = useState<'IDLE' | 'SYNCING' | 'ERROR'>('IDLE');
+
+  // Refs so the timer and listeners always see the latest values (FO-07: never stuck "Syncing").
+  const runningRef = useRef(false);
+  const rerunRef = useRef<boolean | null>(null);
+  const isOnlineRef = useRef(isOnline);
+  isOnlineRef.current = isOnline;
+  const userRef = useRef(user);
+  userRef.current = user;
+  const lastReportRef = useRef<{ key: string; at: number }>({ key: '', at: 0 });
 
   const refreshQueue = () => {
     setQueue(offlineStorage.getQueue());
@@ -288,197 +379,153 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     return created;
   };
 
-  const removeFromQueue = (id: string) => {
-    offlineStorage.removeFromQueue(id);
-    refreshQueue();
-  };
-
-  const clearQueue = () => {
-    offlineStorage.clearQueue();
-    refreshQueue();
-  };
-  
   // Listen to storage changes (if other tabs update it)
   useEffect(() => {
-      const handleStorageChange = () => refreshQueue();
-      window.addEventListener('storage', handleStorageChange);
-      return () => window.removeEventListener('storage', handleStorageChange);
+    const handleStorageChange = () => refreshQueue();
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
-  const processQueue = async (forceRetry = false) => {
-      const currentQueue = offlineStorage.getQueue();
-      if (!isOnline || currentQueue.length === 0 || !user) return;
-      if (syncStatus === 'SYNCING') {
-        deferQueueRerunRef.current = markRerunWhileSyncing(deferQueueRerunRef.current, true);
-        return;
-      }
-
-      setSyncStatus('SYNCING');
-      
-      const processedIds: string[] = [];
-      let errorCount = 0;
-      let tripSuccess = 0;
-      let fuelSuccess = 0;
-      let tollSuccess = 0;
-
-      // Filter actionable items first
-      const itemsToProcess = currentQueue.filter(item => {
-          if (isClosedWeekSaveError(item.lastError)) return false;
-          return forceRetry || (item.retryCount || 0) < MAX_RETRIES;
-      });
-
-      if (itemsToProcess.length === 0) {
-          setSyncStatus('IDLE');
-          return;
-      }
-
-      for (const action of itemsToProcess) {
-          try {
-              if (action.type === 'SUBMIT_TRIP') {
-                  let { formData, rawRoute } = action.payload;
-                  
-                  // Attempt Snap to Road if we have a route and it's substantial
-                  if (rawRoute && rawRoute.length > 5) {
-                      try {
-                          const matchResult = await mapMatchService.snapToRoad(rawRoute);
-                          if (matchResult) {
-                              // Update distance
-                              formData.distance = Number((matchResult.totalDistance / 1000).toFixed(2));
-                              
-                              // Base time for fake timestamps (approximate)
-                              const baseTime = formData.date && formData.time 
-                                  ? new Date(`${formData.date}T${formData.time}`).getTime() 
-                                  : Date.now();
-
-                              // Map back to RoutePoint
-                              formData.route = matchResult.snappedRoute.map((pt: any, idx: number) => ({
-                                  lat: pt.lat,
-                                  lon: pt.lon,
-                                  timestamp: baseTime + (idx * 1000),
-                                  speed: 0,
-                                  heading: 0,
-                                  accuracy: 10
-                              }));
-                          }
-                      } catch (snapError) {
-                          console.warn("Snap to road failed, using raw data", snapError);
-                      }
-                  }
-                  
-                  const driverName = user.user_metadata?.name || user.email || 'Unknown Driver';
-                  const trip = createManualTrip(formData, user.id, driverName);
-                  
-                  await api.saveTrips([trip]);
-                  processedIds.push(action.id);
-                  tripSuccess++;
-              } else if (action.type === 'SUBMIT_CASH_TOLL') {
-                  await syncCashTollAction(action);
-                  processedIds.push(action.id);
-                  tollSuccess++;
-              } else if (action.type === 'SUBMIT_FUEL_EXPENSE') {
-                  await syncFuelExpense(action);
-                  processedIds.push(action.id);
-                  fuelSuccess++;
-              } else if (action.type === 'SUBMIT_GAS_CARD_ANCHOR') {
-                  await syncGasCardAnchor(action);
-                  processedIds.push(action.id);
-                  fuelSuccess++;
-              } else if (action.type === 'SUBMIT_SPLIT_FUEL_FILL') {
-                  await syncSplitFuelFill(action);
-                  processedIds.push(action.id);
-                  fuelSuccess++;
-              } else if (action.type === 'SUBMIT_DRIVER_REPORT_UPDATE') {
-                  await syncDriverReportUpdate(action);
-                  processedIds.push(action.id);
-              }
-          } catch (e: any) {
-              console.error("Sync failed for action", action.id, e);
-
-              const code = String(e?.code || "");
-              const msg = String(e?.message || "");
-              const closedWeek = code === "CLOSED_WEEK" || isClosedWeekSaveError(e);
-              const tollPermanent =
-                action.type === "SUBMIT_CASH_TOLL" && isPermanentTollSyncError(e);
-              const permanent =
-                closedWeek ||
-                tollPermanent ||
-                code === "MODULE_DISABLED" ||
-                /MODULE_DISABLED/i.test(msg) ||
-                /not enabled for this organization/i.test(msg);
-
-              const tollMsg =
-                tollPermanent
-                  ? tollSyncPermanentMessage(
-                      (e as TollSyncError).code,
-                      msg,
-                    )
-                  : undefined;
-
-              offlineStorage.updateAction(action.id, {
-                  retryCount: permanent ? MAX_RETRIES : (action.retryCount || 0) + 1,
-                  lastError: closedWeek
-                    ? CLOSED_WEEK_TRIP_MESSAGE
-                    : tollMsg
-                    ? tollMsg
-                    : permanent
-                    ? (msg || "Split fills are not enabled for this fleet")
-                    : (msg || "Unknown error"),
-              });
-              if (closedWeek) {
-                toast.error(CLOSED_WEEK_TRIP_MESSAGE);
-              } else {
-                errorCount++;
-                if (tollPermanent) {
-                  toast.error(tollMsg || msg);
-                } else if (permanent && action.type === "SUBMIT_SPLIT_FUEL_FILL") {
-                  toast.error("Split fuel fill is not available for your fleet");
-                }
-              }
-          }
-      }
-
-      if (processedIds.length > 0) {
-          processedIds.forEach(id => offlineStorage.removeFromQueue(id));
-          const parts: string[] = [];
-          if (tripSuccess > 0) parts.push(`${tripSuccess} trip${tripSuccess === 1 ? '' : 's'}`);
-          if (tollSuccess > 0) parts.push(`${tollSuccess} toll${tollSuccess === 1 ? '' : 's'}`);
-          if (fuelSuccess > 0) parts.push(`${fuelSuccess} fuel log${fuelSuccess === 1 ? '' : 's'}`);
-          toast.success(`Synced ${parts.join(' and ') || `${processedIds.length} items`}`);
-          refreshQueue();
-      }
-      
-      if (errorCount > 0) {
-          toast.error(`Failed to sync ${errorCount} items`);
-      }
-
-      const nextStatus = errorCount > 0 ? 'ERROR' : 'IDLE';
-      setSyncStatus(nextStatus);
-
-      const deferred = deferQueueRerunRef.current;
-      deferQueueRerunRef.current = false;
-      const pendingRetryable = offlineStorage.getQueue().some(
-        (item) => (item.retryCount || 0) < MAX_RETRIES && !isClosedWeekSaveError(item.lastError),
-      );
-      if (shouldProcessQueueAfterSync(deferred, pendingRetryable)) {
-        void processQueue(false);
-      }
+  /** S1: tell Fleet how many items wait here. Changed reports go at once, the same one every 10 min. */
+  const reportToFleet = async () => {
+    if (!userRef.current || !isOnlineRef.current) return;
+    const report = buildOutboxReport(offlineStorage.getQueue());
+    const key = JSON.stringify(report);
+    const now = Date.now();
+    if (key === lastReportRef.current.key && now - lastReportRef.current.at < REPORT_REPEAT_MS) return;
+    const ok = await withTimeout(
+      api.reportPhoneOutbox({
+        deviceId: phoneDeviceId(),
+        appVersion: import.meta.env.VITE_APP_VERSION || null,
+        ...report,
+      }),
+      20_000,
+      'Report',
+    ).catch(() => false);
+    if (ok) lastReportRef.current = { key, at: now };
   };
 
-  // Auto-sync when coming online
-  useEffect(() => {
-      if (isOnline && user) {
-          const currentQueue = offlineStorage.getQueue();
-          // Only auto-sync items that haven't failed too many times
-          const hasPendingItems = currentQueue.some(item => (item.retryCount || 0) < MAX_RETRIES);
-          
-          if (hasPendingItems) {
-              processQueue(false); // Do not force retry on auto-sync
+  /**
+   * Send what is due. `forceRetry` = the driver tapped "Send now": the waits are skipped.
+   * An item leaves the phone only when the server confirms it (FO-18).
+   */
+  const processQueue = async (forceRetry = false): Promise<void> => {
+    const currentUser = userRef.current;
+    if (!currentUser) return;
+    if (!isOnlineRef.current && !forceRetry) return;
+    if (runningRef.current) {
+      rerunRef.current = (rerunRef.current ?? false) || forceRetry;
+      return;
+    }
+    runningRef.current = true;
+    setSyncStatus('SYNCING');
+
+    let errorCount = 0;
+    const sent: Record<SentKind, number> = { trip: 0, toll: 0, fuel: 0, other: 0 };
+    try {
+      const now = Date.now();
+      const due = offlineStorage.getQueue().filter(
+        (item) => !isClosedWeekSaveError(item.lastError) && isOutboxItemDue(item, now, forceRetry),
+      );
+
+      for (const action of due) {
+        try {
+          const kind = await withTimeout(sendOne(action, currentUser), OUTBOX_SEND_TIMEOUT_MS, 'Sending');
+          offlineStorage.removeFromQueue(action.id);
+          sent[kind]++;
+        } catch (e: any) {
+          console.error('Sync failed for action', action.id, e);
+          const code = String(e?.code || '');
+          const msg = String(e?.message || '');
+          const closedWeek = code === 'CLOSED_WEEK' || isClosedWeekSaveError(e);
+          const tollPermanent = action.type === 'SUBMIT_CASH_TOLL' && isPermanentTollSyncError(e);
+          const permanent =
+            tollPermanent ||
+            code === 'MODULE_DISABLED' ||
+            /MODULE_DISABLED/i.test(msg) ||
+            /not enabled for this organization/i.test(msg);
+          const tollMsg = tollPermanent
+            ? tollSyncPermanentMessage((e as TollSyncError).code, msg)
+            : undefined;
+
+          const failed = afterFailedTry(action, plainSendError(e), Date.now());
+          offlineStorage.updateAction(action.id, {
+            // A refusal the server keeps giving waits an hour between tries; nothing is parked or dropped.
+            retryCount: permanent ? Math.max(failed.retryCount, OUTBOX_RETRY_DELAYS_MS.length) : failed.retryCount,
+            nextAttemptAt: permanent ? Date.now() + OUTBOX_MAX_DELAY_MS : failed.nextAttemptAt,
+            lastTryAt: Date.now(),
+            held: closedWeek ? true : undefined,
+            lastError: closedWeek ? CLOSED_WEEK_TRIP_MESSAGE : tollMsg || failed.lastError,
+          });
+          if (closedWeek) {
+            toast.error(CLOSED_WEEK_TRIP_MESSAGE);
+          } else {
+            errorCount++;
+            if (forceRetry && tollPermanent) toast.error(tollMsg || msg);
           }
+        }
       }
-  }, [isOnline, user]);
+
+      const parts: string[] = [];
+      if (sent.trip > 0) parts.push(`${sent.trip} trip${sent.trip === 1 ? '' : 's'}`);
+      if (sent.toll > 0) parts.push(`${sent.toll} toll${sent.toll === 1 ? '' : 's'}`);
+      if (sent.fuel > 0) parts.push(`${sent.fuel} fuel log${sent.fuel === 1 ? '' : 's'}`);
+      const total = sent.trip + sent.toll + sent.fuel + sent.other;
+      if (total > 0) toast.success(`Sent ${parts.join(' and ') || `${total} item${total === 1 ? '' : 's'}`}`);
+      // Quiet on the timer; only a tap on "Send now" gets told that something is still waiting.
+      if (errorCount > 0 && forceRetry) {
+        toast.message(`${errorCount} item${errorCount === 1 ? '' : 's'} still on this phone. It sends by itself when you have signal.`);
+      }
+    } finally {
+      runningRef.current = false;
+      setSyncStatus(errorCount > 0 ? 'ERROR' : 'IDLE');
+      refreshQueue();
+      void reportToFleet();
+      const again = rerunRef.current;
+      rerunRef.current = null;
+      if (again !== null) void processQueue(again);
+    }
+  };
+
+  // FO-08: try on start, every minute while open, and when the app comes back to the front.
+  useEffect(() => {
+    if (!user?.id) return;
+    void processQueue(false);
+    const timer = setInterval(() => void processQueue(false), OUTBOX_TICK_MS);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void processQueue(false);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    let removeAppListener: (() => void) | undefined;
+    void (async () => {
+      try {
+        const { Capacitor } = await import('@capacitor/core');
+        if (!Capacitor.isNativePlatform()) return;
+        const { App } = await import('@capacitor/app');
+        const handle = await App.addListener('appStateChange', ({ isActive }) => {
+          if (isActive) void processQueue(false);
+        });
+        removeAppListener = () => void handle.remove();
+      } catch {
+        /* web */
+      }
+    })();
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+      removeAppListener?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  // Signal came back: try at once.
+  useEffect(() => {
+    if (isOnline && user) void processQueue(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOnline]);
 
   return (
-    <OfflineContext.Provider value={{ isOnline, queue, addToQueue, refreshQueue, processQueue, removeFromQueue, clearQueue, syncStatus, setSyncStatus }}>
+    <OfflineContext.Provider value={{ isOnline, queue, addToQueue, refreshQueue, processQueue, syncStatus, setSyncStatus }}>
       {children}
     </OfflineContext.Provider>
   );

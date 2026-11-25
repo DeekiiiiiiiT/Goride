@@ -12,7 +12,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SUPABASE_ENV_KEYS = [
   'VITE_SUPABASE_URL',
   'VITE_SUPABASE_PROJECT_ID',
-  'VITE_SUPABASE_ANON_KEY',
+  'VITE_SUPABASE_PUBLISHABLE_KEY',
 ] as const;
 
 function androidVersionName(): string {

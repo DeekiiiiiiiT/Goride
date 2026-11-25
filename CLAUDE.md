@@ -35,6 +35,9 @@ Every new file in `supabase/migrations/` is named with the **current UTC date an
 - Create it with `npx supabase migration new <short_name>`, or use the real current UTC time.
 - Never pick the date by adding to the newest existing file's date.
 - Never put a date in the future. CI (`scripts/validate-migration-sql.mjs`) fails on future dates.
+- The owner applies migrations by pasting them into the Supabase SQL editor, which never records them. End **the SQL that gets pasted or run on production** with its logbook line, or CI's "migration version list matches production" check goes red:
+  `INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES ('<version>', '<short_name>') ON CONFLICT (version) DO NOTHING;`
+- **Never put that line in the committed file** under `supabase/migrations/`. `supabase db start` records each version itself, so the line makes CI replay fail with "duplicate key … schema_migrations_pkey" (Parts SQL checks red, 25 Nov twice).
 
 ## Supabase sign-in URLs
 

@@ -118,6 +118,12 @@ import {
 import { countUnlinkedCardCharges } from '../utils/jaaFuelStatementMatcher';
 import { fuelCardMatchesLine } from '../utils/fuelCardServiceLine';
 import { integrityVehiclesForLine } from '../utils/fuelIntegrityServiceLine';
+import { FuelPhoneWaitingCard, useFuelPhoneOutbox } from '../components/fuel/phone-fills/FuelPhoneWaitingCard';
+import {
+  FuelNeedsLookPanel,
+  isPhoneFillBeingRead,
+  isPhoneFillNeedingLook,
+} from '../components/fuel/phone-fills/FuelNeedsLookPanel';
 
 export function FuelManagement(props: {
   defaultTab?: string;
@@ -398,6 +404,17 @@ function FuelManagementInner({
   // Assignment Data
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [drivers, setDrivers] = useState<any[]>([]);
+  // Fuel log photos-first: fills waiting on drivers' phones + driver names for the review panel.
+  const phoneOutbox = useFuelPhoneOutbox();
+  const driverNameById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const d of drivers) {
+      const name = String(d?.name || d?.driverName || '');
+      if (!name) continue;
+      for (const id of [d?.id, d?.driverId, d?.userId, d?.user_id]) if (id) map[String(id)] = name;
+    }
+    return map;
+  }, [drivers]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [scenarios, setScenarios] = useState<FuelScenario[]>([]);
   const [finalizedReports, setFinalizedReports] = useState<FinalizedFuelReport[]>([]);
@@ -2242,8 +2259,17 @@ function FuelManagementInner({
               with care.
             </div>
           )}
-          <FuelReimbursementTable 
+          <FuelPhoneWaitingCard rows={phoneOutbox.rows} />
+          <FuelNeedsLookPanel
               transactions={transactions}
+              driverNames={driverNameById}
+              onSaved={(updated) => setTransactions((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))}
+              onApprove={(id, stationOpts) => handleApproveReimbursement(id, undefined, stationOpts)}
+              onReject={handleRejectReimbursement}
+          />
+          <FuelReimbursementTable
+              // Phone fills still being read or needing numbers are handled above, never approved at J$0 here.
+              transactions={transactions.filter((t) => !isPhoneFillNeedingLook(t) && !isPhoneFillBeingRead(t))}
               logs={logs}
               onApprove={handleApproveReimbursement}
               onReject={handleRejectReimbursement}

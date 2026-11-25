@@ -13,6 +13,7 @@ import {
   readPartsImportSource,
   removePartsImportSources,
 } from "./parts_import_storage.ts";
+import { FILE_STORAGE_OFF_MESSAGE } from "../_shared/objectStorage/fileLink.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -380,25 +381,9 @@ export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseCli
         return c.json({ ok: true, bytes: bytes.length, path: key });
       }
 
-      const path = previousPath || legacyPartsImportPath(batchId);
-      const { error: upErr } = await supabase.storage.from("parts-imports").upload(path, bytes, {
-        contentType: "text/csv; charset=utf-8",
-        upsert: true,
-      });
-      if (upErr) throw upErr;
-
-      await supabase
-        .from("part_import_batch")
-        .update({
-          storage_path: path,
-          status: "uploaded",
-          failure_message: null,
-          file_bytes: null,
-          file_sha256: null,
-        })
-        .eq("id", batchId);
-
-      return c.json({ ok: true, bytes: bytes.length, path });
+      // M6: the old `parts-imports` bucket is never read any more, so a CSV written there could
+      // never be checked or exported. With the R2 switch off, refuse clearly instead.
+      return c.json({ error: FILE_STORAGE_OFF_MESSAGE }, 503);
     } catch (e) {
       return fail(c, e);
     }

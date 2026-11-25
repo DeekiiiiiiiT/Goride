@@ -1,0 +1,161 @@
+{
+  "note": "M6 ratchet: existing Supabase Storage call sites (any storage.from call). Each entry is the exact number of calls allowed in that file. New files or extra calls fail CI. Remove an entry when its switch-off branch goes at M7.",
+  "allow": [
+    "scripts/vehicle-pictures-reset.mjs",
+    "scripts/vehicle-pictures-reset-t22.mjs"
+  ],
+  "legacy": {
+    "apps/dash-courier/src/lib/courierFileUpload.ts": {
+      "count": 2,
+      "kinds": [
+        "upload:117",
+        "createSignedUrl:129"
+      ],
+      "reason": "outside focus (courier/haul); old direct upload until slice 7's scan key + their next release"
+    },
+    "apps/haul/src/utils/haulerPhotoUpload.ts": {
+      "count": 2,
+      "kinds": [
+        "upload:76",
+        "getPublicUrl:78"
+      ],
+      "reason": "outside focus (courier/haul); old direct upload until slice 7's scan key + their next release"
+    },
+    "apps/haul/src/utils/saveHaulerDocuments.ts": {
+      "count": 1,
+      "kinds": [
+        "upload:86"
+      ],
+      "reason": "outside focus (courier/haul); old direct upload until slice 7's scan key + their next release"
+    },
+    "supabase/functions/_fleet-server/evidence_routes.ts": {
+      "count": 4,
+      "kinds": [
+        "list:78",
+        "list:143",
+        "list:195",
+        "remove:215"
+      ],
+      "reason": "switch-off branch of a migrated route, kept until the old buckets go at M7"
+    },
+    "supabase/functions/_fleet-server/fleet_admin_storage_routes.ts": {
+      "count": 6,
+      "kinds": [
+        "list:49",
+        "list:76",
+        "list:121",
+        "list:496",
+        "list:594",
+        "remove:622"
+      ],
+      "reason": "switch-off branch of a migrated route, kept until the old buckets go at M7"
+    },
+    "supabase/functions/_fleet-server/fleet_find_parts_routes.ts": {
+      "count": 1,
+      "kinds": [
+        "upload:703"
+      ],
+      "reason": "switch-off branch of a migrated route, kept until the old buckets go at M7"
+    },
+    "supabase/functions/_fleet-server/parts_import_routes.ts": {
+      "count": 1,
+      "kinds": [
+        "upload:384"
+      ],
+      "reason": "switch-off branch of a migrated route, kept until the old buckets go at M7"
+    },
+    "supabase/functions/_fleet-server/register_residual_monolith_routes.tsx": {
+      "count": 2,
+      "kinds": [
+        "upload:4994",
+        "createSignedUrl:5003"
+      ],
+      "reason": "switch-off branch of a migrated route, kept until the old buckets go at M7"
+    },
+    "supabase/functions/_shared/objectStorage/storedFiles.ts": {
+      "count": 1,
+      "kinds": [
+        "remove:40"
+      ],
+      "reason": "switch-off branch of a migrated route, kept until the old buckets go at M7"
+    },
+    "supabase/functions/delivery/customerAccountRoutes.ts": {
+      "count": 5,
+      "kinds": [
+        "upload:566",
+        "getPublicUrl:575",
+        "remove:590",
+        "upload:637",
+        "createSignedUrl:646"
+      ],
+      "reason": "switch-off branch of a migrated route, kept until the old buckets go at M7"
+    },
+    "supabase/functions/delivery/inHouse/routes.ts": {
+      "count": 1,
+      "kinds": [
+        "upload:504"
+      ],
+      "reason": "switch-off branch of a migrated route, kept until the old buckets go at M7"
+    },
+    "supabase/functions/delivery/merchant_application_routes.ts": {
+      "count": 1,
+      "kinds": [
+        "upload:725"
+      ],
+      "reason": "switch-off branch of a migrated route, kept until the old buckets go at M7"
+    },
+    "supabase/functions/delivery/merchantAssetsUpload.ts": {
+      "count": 2,
+      "kinds": [
+        "upload:101",
+        "getPublicUrl:110"
+      ],
+      "reason": "switch-off branch of a migrated route, kept until the old buckets go at M7"
+    },
+    "supabase/functions/explorer/index.ts": {
+      "count": 2,
+      "kinds": [
+        "upload:724",
+        "createSignedUrl:966"
+      ],
+      "reason": "switch-off branch of a migrated route, kept until the old buckets go at M7"
+    },
+    "supabase/functions/fleet-core/index.ts": {
+      "count": 17,
+      "kinds": [
+        "remove:64",
+        "list:64",
+        "list:64",
+        "list:64",
+        "remove:64",
+        "list:64",
+        "list:64",
+        "list:64",
+        "list:64",
+        "list:64",
+        "remove:64",
+        "download:64",
+        "upload:66",
+        "download:66",
+        "upload:70",
+        "upload:139",
+        "createSignedUrl:139"
+      ],
+      "reason": "switch-off branch of a migrated route, kept until the old buckets go at M7"
+    },
+    "supabase/functions/freight/orgFiles.ts": {
+      "count": 1,
+      "kinds": [
+        "upload:136"
+      ],
+      "reason": "switch-off branch of a migrated route, kept until the old buckets go at M7"
+    },
+    "supabase/functions/petrojam-prices/index.ts": {
+      "count": 1,
+      "kinds": [
+        "upload:202"
+      ],
+      "reason": "switch-off branch of a migrated route, kept until the old buckets go at M7"
+    }
+  }
+}

@@ -1115,7 +1115,12 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
     try {
       const url = (c.req.query("url") ?? "").trim();
       if (!url) return c.json({ error: "Paste a link first" }, 400);
-      const { data, error } = await supabase.rpc("self_serve_link_hints", { p_url: url });
+      // The maker the person picked on screen (F-01): when present, trust is checked for that maker.
+      const maker = (c.req.query("maker") ?? "").trim();
+      const { data, error } = await supabase.rpc("self_serve_link_hints", {
+        p_url: url,
+        p_maker: maker || null,
+      });
       if (error) return c.json({ error: error.message }, 400);
       return staffJson(c, (data ?? {}) as Record<string, unknown>);
     } catch (error) {

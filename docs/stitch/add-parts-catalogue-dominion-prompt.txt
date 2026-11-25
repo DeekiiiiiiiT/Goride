@@ -1,0 +1,248 @@
+ROAM DOMINION — PARTS FROM A CATALOGUE PAGE (REDESIGN) — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+HOW TO USE: First paste = everything from the intro down to END OF FIRST PASTE (Screens 1 and 2). Then paste one SCREEN block at a time, in order. Never paste the last section ("FOR CLAUDE — DO NOT PASTE").
+
+
+==================== FIRST PASTE ====================
+
+Roam Dominion — Parts database, "Add parts → Parts from a catalogue page" (desktop admin console for the owner and catalog editors, who are not mechanics):
+
+Design a complete, modern, high-fidelity redesign of the flow that records parts from a catalogue page. The real job: the owner has a catalogue site open (for example Toyota's own catalogue on Partsouq) showing a diagram and a list of part numbers for one car. They need to get every part on that page into the database, for the cars the page covers, with the right name and the right place (front sensor, rear sensor). A first-time user must finish it alone, with no one to ask: the screen itself says where to find the part number, which years the page covers, and why a name reads "Front oxygen sensor". Make each screen tall enough to show everything — no inner scrolling anywhere, no cut-off boxes. Draw only the screens asked for in this message. Dominion is the master reference database: no fleet names or plates, and no prices, suppliers, stock or quantities anywhere.
+
+
+BRAND IDENTITY (take from the live Dominion parts database — do not invent):
+- Keep the Dominion console frame exactly as it is:
+  - dark navy left sidebar "Dominion · Roam Admin Console" with groups MASTER DATA (Overview, Vehicles active, Places and Maps, Fuel, Tolls, Tax and Vendors), ENGINES (Fuel Brain, Toll Brain, Matching Brain), DISTRIBUTION (Apps, Data API, Change requests), PLATFORM (Staff and roles, Activity log, Platform Ops, Global settings), BACK OFFICE (GCT registrations, Ledger, Remittance)
+  - top bar: search "Search entities, engines, routes…" with a ⌘K chip, moon icon, user "Deeki T · Owner"
+  - page title "Parts database", tabs "Find parts", "Full database", "Add parts" (selected), "Trusted sources"; primary button "+ Add parts" top right; one muted line under the title: "Every part, and every car it fits."
+- LIGHT MODE:
+  - Primary #0153dc; primary tint #dbe1ff; page background #faf8ff; cards #ffffff
+  - Text #30323b; muted #5d5f68; hairlines #e6e7ee; input borders #c5c6d0
+  - Verified #006e31 on #e6f4ea; Needs checking #8a5a00 on #fff4dc; error #a83836 on #fdecec; grey pill #5d5f68 on #eef0f6
+  - Tint panels (answer rows, selected cars, type list) #f3f4fb, 12px radius
+- DARK MODE:
+  - Page #0b1220; cards #111a2e; tints #0b1220 and #172033; hairlines #1e293b
+  - Text #e2e8f0; muted #94a3b8; primary #5b8def; Verified #4ade80; Needs checking #fbbf24; error #f87171
+- Cards: white, 16px radius, 1px #e6e7ee hairline, very soft shadow 0 4px 16px rgba(1,83,220,0.04). Content column max 960px, centred.
+- Step strip (a white card above each step): four cells "1 The page · 2 Cars · 3 Parts · 4 Review". Done = 32px green circle with a tick (#e6f4ea circle, #006e31 tick) and clickable; current = tinted #dbe1ff cell with a solid #0153dc circle and white number; later = grey #eef0f6 circle, muted label.
+- Buttons always look like buttons — never underlined text links (links only for outside websites):
+  - Primary: solid #0153dc, white text, 36px tall, 8px radius, semibold
+  - Secondary: white fill, visible #c5c6d0 border, dark text
+  - Danger (Cancel, Remove, Clear all, Undo): white fill, #a83836 border and text; solid red #dc2626 only for a final destructive confirm
+  - Disabled: 50% opacity, never hidden
+- Inputs: white, 40–44px tall, 8px radius, 1px #c5c6d0 border, muted placeholder; focus ring #0153dc.
+- Pills: rounded-full, 12px semibold — Verified (green, shield tick icon), Needs checking (amber, clock icon), blue info pill (#0153dc on #dbe1ff), grey pill, red pill.
+- Typography: Inter. Page question 22px semibold with a small #0153dc dot to its left; step titles 30px; card titles 20px; body 15px; hints 13px muted. Part numbers, chassis codes and years in JetBrains Mono with tabular numerals.
+- Icons: Material Symbols Outlined, 20–24px. Part types show in a 44px soft #dbe1ff rounded square with a blue icon. Car makers show a small round logo tile.
+- Every confirmation is an in-app dialog over a dimmed page (40% black), white card 480px wide, 20px radius, title 22px, buttons right-aligned. Never a browser pop-up.
+- Plain words only — never show internal codes. Say "Front (before converter)", "Rear (after converter)", "Front", "Rear", "Left", "Right".
+- Sample data for every screen: the same Toyota Roomy page — Partsouq, Toyota's own catalogue, page years 2016–2020, frame codes M900A and M910A, two oxygen sensors: 89467-B1040 Front, 89465-B1120 Rear. Cars: Toyota Roomy 2WD 2016–2020 M900A, Toyota Roomy 4WD 2016–2020 M910A, Toyota Tank 2WD 2016–2020 M900A. Out-of-page versions, visible and never ticked here: Toyota Roomy 4WD 1.0 turbo 2021–2022 M910A, Toyota Tank 2WD 1.0 turbo 2021–2022 M900A.
+
+
+DESIGN PRINCIPLES (only what changes the drawing):
+- One question card at a time, answering as much as possible itself; every answer it worked out sits under the input with "Worked out from your link" and a Change button.
+- The person never leaves this flow to fix something: trusting a site, changing a maker, choosing years and choosing a place all happen in place.
+- The parts step is cards, never a table: one full-width card per part number, on every width. Nothing on the parts step scrolls sideways; the part-type list is always fully visible, inside the page.
+- A place is a first-class field: its buttons read "Front (before converter)" / "Rear (after converter)" for catalyst parts, and the saved name always shows the place first.
+- One save action only, in a sticky bar at the bottom of the check page; the top-right of that page carries "Open the page" instead.
+- Every state is drawn when it matters: link with no maker, no years entered, part-type list loading, save failed.
+- 8px spacing grid, 44px touch targets, phone width 390px: each step stacks to one column; the parts cards are single column; the save bar sits at the bottom.
+
+
+SCREEN 1: STEP 1 — THE PAGE (link read, maker found, site trusted)
+Same Dominion console frame, colours and style.
+- Step strip: "1 The page" current; "2 Cars", "3 Parts", "4 Review" grey.
+- White step card, 32px padding. Question header: blue dot, "Paste the page you're looking at" (22px), hint under it in 15px: "The catalogue page that shows the part numbers — e.g. a Partsouq, Amayama or Megazip diagram, or the part maker's own website."
+- Link row inside a #f3f4fb panel: a 44px white input with a link icon at the left showing a long truncated address "https://partsouq.com/en/catalog/toyota/diagram/JP/2019/TANK-ROOMY/M900A-AGBGE/category/2/diagram/4601/illustration/461556B", and a secondary "Paste" button (paste icon) at its right.
+- Under the link row, a small secondary button with a book icon: "How to find the part number".
+- "What we worked out" (15px semibold), then a #f3f4fb panel with three answer rows, each: 36px blue icon tile, two lines of text, a muted 12px note "Worked out from your link", and a secondary "Change" button at the right:
+  - globe icon — "Site: Partsouq" with a green "Trusted site" pill; note under: "Partsouq is trusted for Toyota."
+  - book icon — "Whose catalogue: Toyota's own catalogue" with the Toyota logo tile.
+  - factory icon — "Genuine Toyota parts (made by the car maker)".
+- Footer inside the card, above a hairline: left danger "Cancel"; right primary "Next: the cars →".
+
+SCREEN 2: STEP 1 — A LINK THAT DOES NOT NAME THE MAKER (Needs checking, maker picker shown)
+Same Dominion console frame, colours and style.
+- Step strip: "1 The page" current; "2 Cars", "3 Parts", "4 Review" grey.
+- The same white step card and the same question "Paste the page you're looking at" with its hint. The link input now shows "https://www.toyodiy.com/parts/p_J_2019_TOYOTA_ROOMY_M900A_4601.html".
+- Answer rows:
+  - globe icon — "Site: Toyodiy" with an amber "Needs checking" pill; note under: "This site is not on the trusted list."
+  - book icon — "Whose catalogue:" then the maker question appears here (see below) instead of an answer.
+- Maker question block inside the same card, on a #f3f4fb panel: "Which car maker are these parts for?" (18px semibold) with the muted line "We could not read the maker from this link. Pick the maker the page belongs to."
+  - A row of six maker tiles, each a white bordered card with the logo and the name underneath: Toyota (selected: #0153dc border, 2px ring, blue text), Daihatsu, Subaru, Suzuki, Honda, Nissan; then an "Other maker" tile with a small text field "Type the maker".
+  - Under the tiles, the answer row now reads: "Whose catalogue: Toyota's own catalogue" with a green "Worked out" note.
+- "Who made these parts?" two large choice cards side by side, one selected:
+  - "The car maker (genuine)" — "Original factory parts" — selected, #0153dc border and a blue tick.
+  - "Another brand" — "A part maker's own parts".
+  - When "Another brand" is chosen, a brand field appears under the cards: a search input "Type the brand" with quick chips NiBK, SB, Brembo, Akebono, KYB, MANN-FILTER, Denso, NGK.
+- Amber note panel (#fff4dc, #f5d28a border, 12px radius): warning icon and "This site isn't on your trusted list, so these fits will save as Needs checking." A secondary "Trust this site" button at the right of the note.
+- Footer: left danger "Cancel"; right primary "Next: the cars →".
+
+
+END OF FIRST PASTE
+
+
+SCREEN 3: TRUST THIS SITE — AN IN-PLACE DIALOG (owner)
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the dialog, dimmed: the Step 1 card with the Toyodiy link, the Toyota maker tiles and the amber "Needs checking" note.
+- Centred white dialog, 480px wide, 20px radius, soft shadow, 28px padding. Title "Trust this site?" (22px semibold) and a muted line "Nothing you typed is lost."
+- Inside, three detail rows with labels on the left and values on the right: "Site" → "toyodiy.com"; "Maker" → "Toyota" with the Toyota logo tile; "Trust it as" → three selectable chips: "Car-maker catalogue" (selected, solid #0153dc, white text), "Part maker", "Reference only".
+- Under the chips, a #f3f4fb note with an info icon: "Verified means we trust this site to confirm a part for Toyota. Reference sites can suggest a number but never confirm one."
+- A muted 13px line: "Only the platform owner can change trusted sites."
+- Footer of the dialog: right-aligned secondary "Cancel" and primary "Trust this site". No other buttons.
+
+
+SCREEN 4: STEP 2 — THE CARS (years entered, matching versions ticked)
+Same Dominion console frame, colours and style.
+- Step strip: "1 The page" done with a green tick; "2 Cars" current; "3 Parts", "4 Review" grey.
+- Question "Which cars does this page cover?" with the hint "Type a model, or tick the versions the page lists. The years come from the page."
+- Frame codes line: two mono chips "M900A" and "M910A", each with a small × , and the muted line "These came from the link".
+- "Years this page covers" card (full width, #f3f4fb, 12px radius, 20px padding): the label (15px semibold) with the muted hint "The years printed next to the part on the page — e.g. 2016–2020."; a From input showing "2016", a dash, a To input showing "2020", and a checkbox "Still made". All in one row.
+- Search input (44px): "Search a model, or paste codes — e.g. M900A, M910A". Under it a green line with a tick: "Found 5 versions for M900A and M910A".
+- Results, grouped in bordered white blocks. Group header (light #f3f4fb strip): Toyota logo, "Roomy" (18px semibold), the muted count "3 versions", and at the right a bordered checkbox "Tick all Roomy", plus a small toggle "Show only the versions in these years" switched OFF, so the versions outside these years stay visible and unticked.
+  Version rows, one line each, 48px tall, with a checkbox at the left:
+  - ticked — "Roomy · 2016–2020 · 2WD · 1.0 petrol" with mono chip "M900A"
+  - ticked — "Roomy · 2016–2020 · 4WD · 1.0 petrol" with mono chip "M910A"
+  - not ticked, muted — "Roomy · 2021–2022 · 4WD · 1.0 turbo" with mono chip "M910A" and an amber pill "After 2020 — not on this page"
+- Second group: Toyota Tank — "2 versions", tick-all off, toggle OFF, two rows: "ticked — Tank · 2016–2020 · 2WD · 1.0 petrol · M900A"; "not ticked — Tank · 2021–2022 · 2WD · 1.0 turbo · M900A" with the same amber pill.
+- Suggestion card (soft blue #f3f6ff): "Same car, other badges" with a muted line "These are built on the same car. Add the matching versions?" and two maker chips "Daihatsu Thor", "Subaru Justy"; secondary button "Add 2 sister cars".
+- Right sticky panel "Selected · 3 cars" (white card, 20px padding): a blue count pill "3 cars"; three tinted rows, each with a maker logo, "Toyota Roomy 2WD" (or 4WD / Tank 2WD), the mono code, a small editable years field "2016–2020" and a 32px red-outline × button; then a full-width red-outline "Clear all".
+- Footer: left secondary "← Back: the page"; right primary "Next: the parts →".
+
+
+SCREEN 5: STEP 2 — NO YEARS ENTERED (nothing ticked yet)
+Same Dominion console frame, colours, cards and style as the earlier screens in this project.
+- Step strip: "1 The page" done with a green tick; "2 Cars" current; "3 Parts", "4 Review" grey.
+- The same question "Which cars does this page cover?" with the hint "Type a model, or tick the versions the page lists. The years come from the page." The same search input and the two frame-code chips "M900A" and "M910A" with the muted line "These came from the link".
+- "Years this page covers" card: both inputs empty with grey placeholders "e.g. 2016" and "e.g. 2020"; the "Still made" checkbox unticked; a blue info line under the card with an info icon: "Enter the years the page lists and we will tick the matching versions."
+- Results groups are drawn but every version is unticked; the "Show only the versions in these years" toggle is OFF and greyed; the group headers show "Tick all Roomy" unticked.
+- Right panel "Selected · 0 cars": a muted line "Tick the cars this page is for." and a full-width red-outline "Clear all" that is disabled.
+- Footer: left secondary "← Back: the page"; right primary "Next: the parts →" disabled (50% opacity), with a red 13px line under it: "Tick at least one car."
+
+
+SCREEN 6: STEP 3 — THE PARTS (one card per part number, no table)
+Same Dominion console frame, colours and style.
+- Step strip: "1 The page" and "2 Cars" done with green ticks; "3 Parts" current; "4 Review" grey.
+- Source strip card above the step card: a link chip with a link icon "partsouq.com · Toyota's own catalogue" and a secondary "Change link"; under it "Cars:" with three outlined chips "Roomy 2WD 2016–2020 · M900A", "Roomy 4WD 2016–2020 · M910A", "Tank 2WD 2016–2020 · M900A" and a small secondary "Edit cars".
+- Question "Add each part on the page" with the hint "One part number per row. Front and rear are different parts — add both."
+- PART CARD 1 (white, 16px radius, hairline, 24px padding):
+  - header row: muted "Part 1"; at the right a 36px red-outline icon button with a bin icon (aria "Remove").
+  - "Part type" label; a 44px white select-style button with a blue icon tile, "Oxygen sensor", chevron. The list is OPEN under it, full card width, white, hairline, 12px radius: a search field "Search types…", the muted count "52 types", then rows with a type icon tile and the name — "Brake pad", "Oil filter", "Oxygen sensor" (selected: #dbe1ff tint, blue tick), "Wheel bearing", "Handbrake cable" — and the last row "Can't find it? Ask to add a part type" in blue.
+  - "Part number" label; a 44px input in JetBrains Mono showing "89467-B1040"; hint under it "Copy it exactly as printed."; a blue info line with an info icon: "Already on file as 'Front oxygen sensor' (4 cars). We'll add these cars to it."
+  - "Where on the car" label with a small "?" help button; two 44px buttons side by side: "Front (before converter)" selected (solid #0153dc, white), "Rear (after converter)" outlined; under them a muted 13px line: "The catalogue calls these 'Air fuel ratio sensor' (front) and 'Oxygen sensor No.2' (rear)."
+  - "Years" row: "Same as the cars (2016–2020)" with a secondary "Change".
+  - A tinted #f3f4fb pill-row with a label icon: "Saves as " and semibold "Front oxygen sensor".
+- PART CARD 2: header "Part 2" and the remove button; type field showing "Oxygen sensor" with the list CLOSED; number "89465-B1120" in mono with no info line; place buttons with "Rear (after converter)" selected; years "Same as the cars (2016–2020)"; "Saves as Rear oxygen sensor".
+- Under the cards: secondary "+ Add another part number" and secondary "Paste several numbers", side by side.
+- "Where to find the part number" panel (open, #f3f4fb, 12px radius): title (16px semibold) with a book icon and a secondary "Close"; four numbered steps in 15px:
+  1 "Open the diagram or parts list on the catalogue page."
+  2 "Find the part on the picture — or in the list beside it."
+  3 "Copy the number exactly: letters and digits, like 89467-B1040."
+  4 "Front and rear are different parts. Add both, one row each."
+  A muted line under: "Paste the numbers here and we will ask which is which on each row."
+- Footer: left secondary "← Back: the cars"; right primary "Next: review →".
+
+
+SCREEN 7: STEP 3 — PART-TYPE LIST LOADING, AND A ROW THAT STILL NEEDS ITS PLACE
+Same Dominion console frame, colours, cards and style as the earlier screens in this project.
+- Step strip: "1 The page" and "2 Cars" done with green ticks; "3 Parts" current; "4 Review" grey.
+- Source strip card above the step card: a link chip with a link icon "partsouq.com · Toyota's own catalogue" and a secondary "Change link"; under it "Cars:" with three outlined chips "Roomy 2WD 2016–2020 · M900A", "Roomy 4WD 2016–2020 · M910A", "Tank 2WD 2016–2020 · M900A" and a small secondary "Edit cars".
+- PART CARD 1: the type field shows a grey skeleton bar with a small spinner and the word "Loading types…"; the number field shows "89467-B1040"; the place buttons are drawn but unselected; the "Saves as" line is absent.
+- PART CARD 2 (from "Paste several numbers"): header "Part 2"; type field empty with the muted "Choose type…"; number "89465-B1120" in mono; place buttons unselected; an amber line under the buttons with a clock icon: "Part 2 needs a place. The page lists two — one front, one rear."
+- Under the cards, a red 14px line with a warning icon: "Almost there — part 2 needs a place." and the footer primary "Next: review →" disabled at 50% opacity.
+- The "Add another part number" and "Paste several numbers" buttons and the open "Where to find the part number" panel sit below, with the same four numbered steps.
+
+
+SCREEN 8: STEP 4 — TRUST FOR EACH CAR
+Same Dominion console frame, colours, cards and style as the earlier screens in this project.
+- Step strip: "1 The page", "2 Cars", "3 Parts" done with green ticks; "4 Review" current.
+- Two columns, 7/12 and 5/12.
+- Left card: question "Trust for each car" (22px) with the hint "Set Verified or Needs checking before you save." Top right of the card: secondary "Mark many" with a tune icon.
+  A green panel (#e6f4ea, #b7dfc4 border, 12px radius): shield icon and "All 3 cars are Verified — Toyota's own catalogue lists them." with a secondary "Mark some as Needs checking" under it, and a muted 13px line at the bottom: "Changing years never changes trust."
+- Right aside (tinted #f3f4fb, 20px radius, 20px padding): "Parts to be added" (18px semibold) with a blue pill "2 parts"; two white rows: part icon tile, muted "Oxygen sensor", blue 12px "Fits 3 cars"; a mono number line "Toyota 89467-B1040"; and a muted line "Saves as 'Front oxygen sensor'". Second row the same with "89465-B1120" and "Saves as 'Rear oxygen sensor'".
+- Footer: left secondary "← Back to parts"; right primary "Next: check and save →".
+
+
+SCREEN 9: STEP 4 — CHECK AND SAVE (one save button)
+Same Dominion console frame, colours, cards and style as the earlier screens in this project.
+- Step strip: "1 The page", "2 Cars" and "3 Parts" done with green ticks; "4 Review" current.
+- Header row: title "Check and save" (30px semibold); under it a large blue line "2 parts × 3 cars = 6 fits" (24px semibold). At the right, only a secondary "Open the page ↗".
+- A muted 15px line: "These parts go into the shared catalogue — every company sees them."
+- PART CARD: blue part-icon tile, "Front oxygen sensor" (20px semibold) beside a mono number pill "89467-B1040" and a grey pill "Genuine Toyota"; a muted line "Front — before the converter"; then "Fits 3 cars" (13px semibold) and three light rows, each with a maker logo, "Toyota Roomy 2WD · 2016–2020" with a mono chip "M900A" and a green "Verified" pill; "Toyota Roomy 4WD · 2016–2020 · M910A"; "Toyota Tank 2WD · 2016–2020 · M900A".
+- PART CARD 2: "Rear oxygen sensor", mono "89465-B1120", grey pill "Genuine Toyota", muted line "Rear — after the converter", the same three car rows with Verified pills.
+- Sticky bottom bar (white, top hairline, 20px padding, full width of the content column): left secondary "Back to parts"; right primary "Save 2 parts to 3 cars". No other save button anywhere on the page, and no red button in this bar.
+
+
+SCREEN 10: STEP 4 — SAVE FAILED (nothing was saved)
+Same Dominion console frame, colours, cards and style as the earlier screens in this project.
+- Step strip: "1 The page", "2 Cars" and "3 Parts" done with green ticks; "4 Review" current.
+- The check-and-save page: title "Check and save", the blue line "2 parts × 3 cars = 6 fits", the secondary "Open the page ↗" at the right, the muted shared-catalogue line, and the two part cards "Front oxygen sensor" (89467-B1040) and "Rear oxygen sensor" (89465-B1120), each with its three car rows and Verified pills.
+- The one change sits directly under the "These parts go into the shared catalogue" line: a soft red panel (#fdecec, #f3c4c3 border, 12px radius) with an error icon, "Nothing was saved. Your rows are still here." (15px) and a secondary "Try again" button at the right.
+- The sticky bottom bar keeps the secondary "Back to parts" on the left and the primary "Save 2 parts to 3 cars" on the right (enabled, not spinning).
+- No red outline on any field: the failure is a server problem, not the person's.
+
+
+SCREEN 11: SAVED
+Same Dominion console frame, colours, cards and style as the earlier screens in this project.
+- One centred white card, max 900px: a 64px green circle with a tick; heading "2 parts saved to 3 cars" (28px semibold); muted line "Every part and car is in. You can undo the whole save from Recently added."
+- "Saved" (14px semibold muted), then a #f3f4fb panel with two white rows, each: a small green tick circle, "Front oxygen sensor" (16px semibold) over the mono number "89467-B1040", and a blue pill at the right "Roomy 2WD + Roomy 4WD + Tank 2WD". Second row: "Rear oxygen sensor", "89465-B1120", same blue pill.
+- "What next?" (14px semibold muted), then three full-width choice buttons stacked, each with an icon tile, a bold title and a muted one-line description, and an arrow at the right:
+  - primary solid blue: "Add more from this page" — "Keeps the page and the cars, clears the part rows."
+  - secondary white: "Same cars, new page" — "Keeps the cars and asks for a new catalogue page."
+  - secondary white: "See them in Find parts" — "Open the parts you just saved."
+- Bottom bar (#f3f4fb): muted "Changed your mind? Undo from Recently added." with a secondary "Back to Add parts" and a red-outline "Undo save" at the right.
+
+
+==================== FOR CLAUDE — DO NOT PASTE ====================
+
+EXTRA COMPONENTS USED ABOVE
+- Step strip (four cells, done / current / later) — existing component, unchanged.
+- Source strip above steps 3 and 4: site chip + Change link, car chips + Edit cars.
+- Answer row: icon tile, one or two lines, "Worked out from your link", Change button.
+- Maker tile (logo + name, selected ring), choice card (genuine / another brand), brand quick chips.
+- Frame-code chip with ×, year range field (From / To + Still made), version row with checkbox, plain difference, mono code, amber "not on this page" pill, group header with tick-all and a "only these years" toggle.
+- Part card: type picker (full list in the page, search, count, selected row, "Ask to add a part type"), mono number field, place buttons, years row, "Saves as" preview, remove icon.
+- "Where to find the part number" guide panel (four steps + the paste line).
+- Bulk trust bar (tick cars → Verified / Needs checking → reason pick list → Apply) — existing, unchanged from today's screen.
+- Review part card (name with place, number, maker pill, plain place line, car rows with Verified / Needs checking pills and mono codes).
+- Sticky save bar with one primary action.
+- In-app trust dialog (dimmed page behind, kind chips, plain explanation).
+- In-app confirm dialog for "Leave without saving?" and "Undo this save?" — existing, unchanged.
+
+INTERACTIONS AND DATA (for the builder, not Stitch)
+- Paste or type the link → read it at once (`GET …/parts/add/link-hints?url=`): returns the site, whether it is trusted, the maker, the frame codes. Fill every answer that came back; show a Change on each.
+- Change maker → call the same link-hints route with the extra `maker` value and re-render the Site row's pill and its reason, in place. No page reload. Nothing typed is lost.
+- Trust this site (owner only) → dialog → `POST …/catalog-research/trusted-sites` with domain, maker, kind → on success re-read the link and close; the Site row becomes Verified. A non-owner sees the amber note without the button, plus the line "Ask the owner to trust this site" and can carry on as Needs checking.
+- Years this page covers → pre-tick only versions whose frame code matches AND whose catalogue years overlap the entered years; every other version stays visible and unticked with the amber "not on this page" pill. With no years entered, nothing is ticked.
+- Selected cars save with the page's years by default; the crew can edit them per car; editing years never changes trust.
+- Part type picked → the place buttons switch to that type's places (Front / Rear, corners, left/right, No.1–No.3) and the "Saves as" name updates ("Front oxygen sensor").
+- Place buttons for catalyst parts read "Front (before converter)" / "Rear (after converter)" with the catalogue's own names on the muted line under them. Every screen prints place labels through one shared helper — never a raw code.
+- Part number typed → look it up as you type; "Already on file as 'Front oxygen sensor' (4 cars). We'll add these cars to it." when found.
+- Next on the parts step → blocked until every card has a type, a 4+ character number and a place where the type has one; the message names the card ("Part 2 needs a place."). A number repeated on the page is blocked with both row numbers.
+- Save → one `POST …/parts/add/catalog-page` for the whole page; the answer carries the saved names (`savedNames`), which the Saved screen shows. On failure nothing is saved, every card stays, the red panel appears with "Try again".
+- Undo (Saved, or Recently added) → in-app dialog, then `POST …/parts/undo` with the batch id; the whole batch (parts and fits) is removed.
+- Phone 390px: one column everywhere; the step strip collapses to "Step 3 of 4 · Parts"; the parts cards stack; the save bar sits at the bottom above the safe area; the type list opens full width; no horizontal scrolling anywhere.
+- The "only these years" filter starts ON when the page's years are entered (Screen 4 shows it OFF so the out-of-page versions are visible).
+
+INTERNAL CODES — never drawn on screen, translate to plain words before display:
+`before_cat`, `after_cat`, `axle_numbered`, `front_rear_side`, `driver_passenger_rear`, `low_high_beam`, `four_corners`, `axle_left_right`, `axle_inner_outer`, `axle`, `none`.
+
+NOT DRAWN (existing, unchanged)
+- Add parts home ("What are you adding?" three cards, Just one part, Recently added with Open and Undo).
+- The expanded trust table with the bulk bar (the "Mark many" path), the leave-without-saving dialog, the undo dialog, the "Ask to add a part type" form.
+- The other Add parts flows (one part, add cars to a part, fluid / size, bulk upload) and the Trusted sources tab page.
+- The out-of-page hint over a car's code ("Frame code from the car's ID plate — used to tell versions apart.") — exists today, keep it.
+
+SCREENS → AREAS
+| Screen | Area |
+|---|---|
+| 1 | Step 1 — the page: link read, trusted site, maker and genuine answers |
+| 2 | Step 1 — link with no maker: maker picker, genuine / another brand, Needs checking note |
+| 3 | Trust this site — in-place dialog (owner) |
+| 4 | Step 2 — the cars: page years, matched versions ticked, out-of-page versions visible and unticked |
+| 5 | Step 2 — no years entered: nothing ticked, Next disabled with the reason |
+| 6 | Step 3 — the parts: cards, open type list, Front / Rear (before / after converter), Saves as, part-number guide |
+| 7 | Step 3 — type list loading, and a row that still needs its place |
+| 8 | Step 4 — trust for each car: all Verified panel, parts to be added |
+| 9 | Step 4 — check and save: one save button, shared-catalogue line |
+| 10 | Step 4 — save failed: red panel, rows kept, Try again |
+| 11 | Saved — names with places, three next steps, undo |

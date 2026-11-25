@@ -1,4 +1,12 @@
-/** Door for the fuel close sweeper. The database job has no user login. */
+/**
+ * Door for the fuel database jobs (they have no user login).
+ * Body {} (default) = fuel close sweeper. Body {"job":"photo-read"} = photo reader (S6, fuel offline-first).
+ */
+
+const JOB_PATHS: Record<string, string> = {
+  sweep: "fuel/period-jobs/sweep",
+  "photo-read": "fuel/photo-read/run",
+};
 
 function sameSecret(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -21,7 +29,9 @@ Deno.serve(async (req) => {
   if (!base || !key) {
     return new Response(JSON.stringify({ error: "server_misconfigured" }), { status: 500 });
   }
-  const res = await fetch(`${base}/functions/v1/fleet-fuel/fuel/period-jobs/sweep`, {
+  const body = await req.json().catch(() => ({})) as { job?: unknown };
+  const job = typeof body.job === "string" && body.job in JOB_PATHS ? body.job : "sweep";
+  const res = await fetch(`${base}/functions/v1/fleet-fuel/${JOB_PATHS[job]}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

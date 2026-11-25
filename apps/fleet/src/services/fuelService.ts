@@ -42,6 +42,39 @@ async function fetchWithRetryInner(url: string, options: RequestInit = {}, retri
 
 export const fuelService = {
   // --- Fuel Cards ---
+  /** Fuel log photos-first S2: drivers whose phones still hold fills, oldest first. */
+  async getPhoneOutbox(): Promise<{
+    drivers: Array<{
+      driverId: string;
+      driverName: string | null;
+      vehicleId: string | null;
+      pendingCount: number;
+      oldestPendingAt: string | null;
+      lastSeenAt: string | null;
+      appVersion: string | null;
+      lastError: string | null;
+      phones: number;
+    }>;
+    totalPending: number;
+  }> {
+    const response = await fetch(`${API_ENDPOINTS.fuel}/fuel/phone-outbox`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) throw new Error('Could not load waiting phones');
+    return response.json();
+  },
+
+  /** Fuel log photos-first: Review Queue "Save numbers" on a fill from a driver's phone. */
+  async saveFillNumbers(transactionId: string, body: { total: number; liters: number }): Promise<FinancialTransaction> {
+    const response = await fetch(
+      `${API_ENDPOINTS.fuel}/fuel/fill/${encodeURIComponent(transactionId)}/numbers`,
+      { method: 'POST', headers: await requireAuthHeaders(), body: JSON.stringify(body) },
+    );
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(String((json as { error?: string }).error || 'Could not save the numbers'));
+    return (json as { data: FinancialTransaction }).data;
+  },
+
   async getFuelCards(): Promise<FuelCard[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-cards`, {
       headers: await requireAuthHeaders(null)

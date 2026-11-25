@@ -101,6 +101,8 @@ export type CatalogLinkHints = {
   catalogMaker?: string | null;
   frameCodes?: string[];
   sourceTrust?: string;
+  /** Set only when the trust check was asked for a maker the person picked (F-01). */
+  trustMaker?: string | null;
   error?: string;
 };
 
@@ -114,6 +116,11 @@ export type CatalogPageDraft = {
   vehicleListings: CatalogVehicleListing[];
   partRows: CatalogPartRow[];
   brandDefault: string;
+  /** Years the catalogue page covers, as printed next to the part (Step 2). */
+  pageYearsFrom?: number | null;
+  pageYearsTo?: number | null;
+  /** The page is for cars still being made: no end year. */
+  pageYearsStillMade?: boolean;
   /** A8 extend part flow */
   extendMode?: boolean;
   extendPartId?: string | null;
@@ -132,6 +139,9 @@ export function emptyCatalogDraft(): CatalogPageDraft {
     vehicleListings: [],
     partRows: [],
     brandDefault: "",
+    pageYearsFrom: null,
+    pageYearsTo: null,
+    pageYearsStillMade: false,
   };
 }
 
