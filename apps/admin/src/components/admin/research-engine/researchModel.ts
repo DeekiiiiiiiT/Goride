@@ -573,3 +573,24 @@ export function rangesCoverBuild(ranges: Array<{ from: number; to: number }>, bu
   }
   return reach >= build.start && (build.end == null ? true : reach >= build.end);
 }
+
+/** Owner 25 Nov: the parts of the car's build no range covers, as month indexes (same touching rule as above). */
+export function missingRanges(ranges: Array<{ from: number; to: number }>, build: BuildRange): Array<{ from: number; to: number }> {
+  if (build.start == null) return [];
+  const out: Array<{ from: number; to: number }> = [];
+  let reach = build.start - 1;
+  for (const r of [...ranges].sort((x, y) => x.from - y.from)) {
+    if (build.end != null && reach >= build.end) break;
+    if (r.from > reach + 1) out.push({ from: reach + 1, to: build.end != null ? Math.min(r.from - 1, build.end) : r.from - 1 });
+    reach = Math.max(reach, r.to);
+  }
+  if (build.end != null && reach < build.end) out.push({ from: Math.max(reach + 1, build.start), to: build.end });
+  return out;
+}
+
+/** "11.2016" for a month index (year × 12 + month). */
+export function monthIndexText(i: number): string {
+  const y = Math.floor((i - 1) / 12);
+  const m = i - y * 12;
+  return `${String(m).padStart(2, "0")}.${y}`;
+}
