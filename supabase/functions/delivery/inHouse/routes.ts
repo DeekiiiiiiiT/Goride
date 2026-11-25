@@ -471,7 +471,9 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
       return c.json({ error: "Receipt must be a photo or PDF" }, 400);
     }
     const scan = await scanForMalware(bytes);
-    if (!scan.clean && scan.reason !== "scanner not configured") {
+    // Only a real detection blocks a receipt; "check unavailable" (no key, busy, error) lets it
+    // through, as before the key existed — an in-house order cannot be placed without its receipt.
+    if (!scan.clean && !scan.unavailable && scan.reason !== "scanner not configured") {
       return c.json({ error: "Receipt was rejected" }, 400);
     }
     const ext = mime === "application/pdf" ? "pdf" : mime.split("/")[1];
