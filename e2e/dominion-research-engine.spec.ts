@@ -390,9 +390,9 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect(d.getByTestId("q-part-yes")).toHaveCount(0);
     await d.getByTestId("browser-check-next").click();
     // No remembered version: the row to click in the catalogue's own column words, never a frame code to read.
-    await expect(d.getByTestId("browser-check-instruction")).toContainText("Click the row with:");
+    await expect(d.getByTestId("browser-check-instruction")).toContainText("Pick the version of your car that has:");
     await expect(d.getByTestId("guide-version-row")).toContainText("Engine: 1KRFE");
-    await expect(d.getByTestId("guide-version-row")).toContainText("Prod period:");
+    await expect(d.getByTestId("guide-version-row")).toContainText("Built:");
     await expect(d.getByTestId("browser-check-counter")).toContainText("7 of 25");
     await expect(d.getByTestId("browser-check-next")).toBeDisabled();
     await d.getByTestId("q-version-code").fill("M900A-AGBVE");
@@ -437,8 +437,8 @@ test.describe("Research engine screens (layer 3)", () => {
     await page.getByTestId("parts-row").filter({ hasText: "Spark plugs" }).getByTestId("row-open-browser-check").click();
     const d = page.getByTestId("research-drawer");
     await d.getByTestId("browser-check-next").click();
-    await expect(d.getByTestId("browser-check-instruction")).toContainText("Check it's this one:");
-    await expect(d.getByTestId("guide-version-row")).toContainText("Model: M900A-AGBVE");
+    await expect(d.getByTestId("browser-check-instruction")).toContainText("Check the site shows your car:");
+    await expect(d.getByTestId("guide-version-row")).toContainText("Model code: M900A-AGBVE");
     await d.getByTestId("q-version-yes").click();
     await d.getByTestId("browser-check-next").click();
     await expect(d.getByTestId("guide-find-part")).toContainText("Search spark plug");
@@ -532,7 +532,7 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect(d.getByTestId("browser-check-next")).toBeDisabled();
     await d.getByTestId("q-change-month").selectOption("11");
     await d.getByTestId("q-change-year").selectOption("2018");
-    await expect(d.getByTestId("q-change")).toContainText("The second Period starts:");
+    await expect(d.getByTestId("q-change")).toContainText("The second date range starts:");
     await d.getByTestId("browser-check-next").click();
     await expect(d.getByTestId("q-positions")).toHaveCount(0);
     await expect(d.getByTestId("q-split-front-left|before")).toContainText("Front left, built before Nov 2018:");

@@ -556,7 +556,7 @@ function BrowserCheckCard({
   const jobType = detail.job.job_type === "spec" ? "spec" : "part";
   const finder = partFinder(itemName, detail.car?.make, detail.job.fit_descriptor);
   const known = detail.knownVersion ?? null;
-  const versionRow = catalogueVersionRow(detail.car, known).filter((c) => c.label !== "Model" && c.value !== "—");
+  const versionRow = catalogueVersionRow(detail.car, known).filter((c) => c.label !== "Model code" && c.value !== "—");
   const dates = buildDates(detail.car);
   const fit = String(detail.job.fit_descriptor ?? "").toLowerCase();
   const side = fit.includes("rear") ? "rear" : fit.includes("front") ? "front" : null;
@@ -611,6 +611,9 @@ function BrowserCheckCard({
   );
   const numberPick = (k: string, testid: string) => (
     <>
+      {suggestions.length ? (
+        <p className={`text-[13px] ${D_MUTED}`}>Roam's guesses. Tap one only if it's exactly what the site shows; otherwise type it.</p>
+      ) : null}
       {suggestions.length ? (
         <div className="flex flex-wrap gap-2">
           {suggestions.map((sug) => (
@@ -669,6 +672,7 @@ function BrowserCheckCard({
   const steps: Step[] = [
     { id: "open", ok: Boolean(openUrl), node: (
           <div className="flex w-full flex-col gap-2">
+          <p>Open the parts site. It opens in a new tab; come back here to answer.</p>
           {openUrl ? (
             <a
               href={openUrl}
@@ -688,12 +692,12 @@ function BrowserCheckCard({
           <div className="flex w-full flex-col gap-2" data-testid="browser-check-instruction">
             {known ? (
               <>
-                <p>{known.url ? "Check it's this one:" : "Click this one in the list:"}</p>
+                <p>{known.url ? "Check the site shows your car:" : "Pick your car in the site's list:"}</p>
                 <ul className="flex flex-col gap-0.5" data-testid="guide-version-row">
                   {catalogueVersionRow(detail.car, known).map((c) => (
                     <li key={c.label}>
                       {c.label}: <span className="font-semibold">{c.value}</span>
-                      {(c.label === "Model" || c.label === "Engine") && c.value !== "—" ? <CopyIcon text={c.value} /> : null}
+                      {(c.label === "Model code" || c.label === "Engine") && c.value !== "—" ? <CopyIcon text={c.value} /> : null}
                     </li>
                   ))}
                 </ul>
@@ -701,17 +705,17 @@ function BrowserCheckCard({
               </>
             ) : (
               <>
-                <p>Click the row with:</p>
+                <p>Pick the version of your car that has:</p>
                 <ul className="flex flex-col gap-0.5" data-testid="guide-version-row">
                   {versionRow.map((c) => (
                     <li key={c.label}>
                       {c.label}: <span className="font-semibold">{c.value}</span>
-                      {(c.label === "Model" || c.label === "Engine") && c.value !== "—" ? <CopyIcon text={c.value} /> : null}
+                      {(c.label === "Model code" || c.label === "Engine") && c.value !== "—" ? <CopyIcon text={c.value} /> : null}
                     </li>
                   ))}
                 </ul>
                 <label className="flex flex-col gap-1">
-                  <span>Type the Model shown at the top:</span>
+                  <span>Type the model code the site shows for it:</span>
                   <input value={versionCode} onChange={(e) => setVersionCode(e.target.value)} maxLength={40} className={input} data-testid="q-version-code" />
                 </label>
               </>
@@ -776,7 +780,7 @@ function BrowserCheckCard({
               </div>
               {changed ? (
                 <div className="flex flex-wrap items-center gap-2">
-                  <span>The second Period starts:</span>
+                  <span>The second date range starts:</span>
                   <select
                     value={changeMonth || ""}
                     onChange={(e) => setChangeMonth(Number(e.target.value) || 0)}
@@ -810,7 +814,7 @@ function BrowserCheckCard({
     split
       ? { id: "numbers", ok: splitOk, node: (
           <div className="flex w-full flex-col gap-3" data-testid="q-split">
-              <p>{positions ? "Its numbers for each place:" : "Its numbers:"}</p>
+              <p>{positions ? "The part number for each place and date range:" : "The part number for each date range:"}</p>
               {splitKeys.map((k) => (
                 <div key={k.key} className="flex flex-col gap-1.5" data-testid={`q-split-${k.key}`}>
                   <span className="font-semibold">
@@ -825,7 +829,7 @@ function BrowserCheckCard({
       : positions
       ? { id: "numbers", ok: positionsOk, node: (
           <div className="flex w-full flex-col gap-3" data-testid="q-positions">
-              <p>Its number for each place:</p>
+              <p>The part number for each place:</p>
               {positions.map((p) => (
                 <div key={p.key} className="flex flex-col gap-1.5" data-testid={`q-position-${p.key}`}>
                   <span className="font-semibold">{p.label}:</span>
@@ -836,7 +840,10 @@ function BrowserCheckCard({
         ) }
       : { id: "numbers", ok: Boolean(value) && againOk, node: (
           <div className="flex w-full flex-col gap-2">
-              <p>{jobType === "part" ? "Its number:" : "The value shown:"}</p>
+              <p>{jobType === "part" ? "The part number shown:" : "The value shown:"}</p>
+            {suggestions.length ? (
+              <p className={`text-[13px] ${D_MUTED}`}>Roam's guesses. Tap one only if it's exactly what the site shows; otherwise type it.</p>
+            ) : null}
             {suggestions.length ? (
               <div className="flex flex-wrap gap-2" data-testid="q-suggestions">
                 {suggestions.map((s) => (

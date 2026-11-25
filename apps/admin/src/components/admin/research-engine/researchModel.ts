@@ -481,7 +481,7 @@ export function versionRowWords(car: ResearchCar | null): string | null {
 }
 
 /**
- * RE-67: the version's row in the catalogue's own columns (Model · Engine · Prod period · Grade · Transm), from the
+ * RE-67 / owner 25 Nov: the car's version in words any parts site uses (Model code · Engine · Built · Grade · Gearbox), from the
  * stored catalogue words when Roam has them, else Dominion's own values; "—" when unknown.
  */
 export function catalogueVersionRow(
@@ -490,11 +490,11 @@ export function catalogueVersionRow(
 ): Array<{ label: string; value: string }> {
   const or = (...v: Array<string | null | undefined>) => v.map((x) => String(x ?? "").trim()).find(Boolean) || "—";
   return [
-    { label: "Model", value: or(known?.code) },
+    { label: "Model code", value: or(known?.code) },
     { label: "Engine", value: or(known?.engine, catalogueEngineCode(car?.engine_code)) },
-    { label: "Prod period", value: or(known?.prodPeriod, buildDates(car)) },
+    { label: "Built", value: or(known?.prodPeriod, buildDates(car)) },
     { label: "Grade", value: or(known?.grade, car?.catalog_trim) },
-    { label: "Transm", value: or(known?.transmission, car?.transmission) },
+    { label: "Gearbox", value: or(known?.transmission, car?.transmission) },
   ];
 }
 
