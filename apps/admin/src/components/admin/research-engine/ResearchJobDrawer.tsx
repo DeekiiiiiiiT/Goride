@@ -858,7 +858,16 @@ function BrowserCheckCard({
               Open the section for the <span className="font-semibold">{finder.section}</span>
             </li>
             <li>
-              Do you see a row with <span className="font-semibold">{finder.rowName}</span> in its name?
+              {finder.rowContains ? (
+                <>
+                  Do you see a row with <span className="font-semibold">{finder.rowName}</span> in its name?
+                </>
+              ) : (
+                <>
+                  Do you see <span className="font-semibold">{finder.rowName ?? `the ${finder.section}`}</span>
+                  {finder.rowName ? <CopyIcon text={finder.rowName} /> : null}?
+                </>
+              )}
             </li>
           </ul>
         ) : (

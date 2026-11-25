@@ -437,6 +437,17 @@ export type PartFinder = { search: string; rowName: string | null; section?: str
  * name there. Only names seen in those catalogues; other parts fall back to the part's own name.
  */
 export function partFinder(itemName: string, make: string | null | undefined, fitDescriptor?: string | null): PartFinder {
+  const found = makerPartFinder(itemName, make, fitDescriptor);
+  if (found.section) return found;
+  // Owner 25 Nov: a front / rear check says which section to open, on any site, for any part (brakes, bearings…).
+  const fit = String(fitDescriptor ?? "").toLowerCase();
+  const axle = fit.includes("rear") ? "rear" : fit.includes("front") ? "front" : null;
+  if (!axle) return found;
+  const part = itemName.toLowerCase().replace(/\b(front|rear)\b/g, "").replace(/\s+/g, " ").trim() || itemName.toLowerCase();
+  return { ...found, section: `${axle} ${part}` };
+}
+
+function makerPartFinder(itemName: string, make: string | null | undefined, fitDescriptor?: string | null): PartFinder {
   const n = itemName.toLowerCase();
   const japanese = /toyota|daihatsu|lexus/i.test(String(make ?? ""));
   const plain = { search: itemName.toLowerCase(), rowName: null };
