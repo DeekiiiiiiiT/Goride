@@ -238,7 +238,9 @@ No use of Supabase's built-in image transformation query parameters (`?width=`, 
 
 ### ?? Malware / payload scanning
 
-No virus or malware scanning exists anywhere in this codebase, and it doesn't need to for most of what's stored (evidence photos and vehicle images are effectively self-serve, not shared with other end users). The two buckets where this actually matters are `merchant-documents` and `driver-documents` ? real third-party-supplied files (KYC documents, licenses) that staff members will open and view. Given the low volume of these specific uploads, a lightweight scan-on-upload is a reasonable, low-cost addition rather than a hard requirement:
+No virus or malware scanning exists anywhere in this codebase, and it doesn't need to for most of what's stored (evidence photos and vehicle images are effectively self-serve, not shared with other end users). The two buckets where this actually matters are `merchant-documents` and `driver-documents` ? real third-party-supplied files (KYC documents, licenses) that staff members will open and view. Given the low volume of these specific uploads, a lightweight scan-on-upload is a reasonable, low-cost addition rather than a hard requirement. The skeleton below is the original reasoning; what actually shipped is described in the note.
+
+> **Update (24 Nov 2026):** the scanner shipped, but **not** as the upload skeleton below. `supabase/functions/_shared/malwareScan.ts` now does a **private fingerprint lookup** — it hashes the bytes locally (SHA-256) and calls `GET https://www.virustotal.com/api/v3/files/<sha256>`. The file itself is never uploaded and is never shared with VirusTotal or its partners. 404 (never seen) is clean, a flagged fingerprint is refused, a rate limit is retried once, everything else is fail-closed, and a missing `MALWARE_SCAN_API_KEY` refuses the upload. The skeleton is kept below only as the original reasoning.
 
 ```ts
 // skeleton: scan-on-upload via a third-party API (e.g. VirusTotal, or a self-hosted ClamAV REST wrapper)
@@ -284,7 +286,7 @@ This one's about protecting your staff, not your users ? nobody uploads a virus 
 | 4 Fleet ensureBucket | Done | `storage_buckets.ts` shared helper |
 | 5 ephemeral-evidence | Done | Bucket present on prod |
 | 6 Docs + Notion | Done | This section |
-| 7 Malware stub | Done | `malwareScan.ts` on KYC (fail-open without `MALWARE_SCAN_API_KEY`) |
+| 7 Malware stub | Done | `malwareScan.ts` sha256 fingerprint lookup on KYC/courier/driver documents (fail-closed without `MALWARE_SCAN_API_KEY`; the file is never uploaded) |
 | 8 Commit/push | Gated | Wait for explicit ask |
 
 **Live policy note:** Before Wave 0, any authenticated user could INSERT/UPDATE/DELETE any object in `merchant-assets`. That hole is closed.

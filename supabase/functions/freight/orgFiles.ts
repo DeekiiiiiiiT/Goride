@@ -93,7 +93,7 @@ export async function uploadOrgFile(
     if (!scan.clean) {
       // Magic-byte validation already ran. KYC uses fail-closed malwareScan;
       // org Files stay usable when VirusTotal isn't provisioned on the project.
-      if (scan.reason === "scanner not configured") {
+      if (scan.unavailable || scan.reason === "scanner not configured") {
         console.warn(
           "[orgFiles] MALWARE_SCAN_API_KEY unset — allowing upload after type check",
         );
