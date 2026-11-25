@@ -521,3 +521,55 @@ export function checkPositions(scheme: string | null | undefined, fitDescriptor:
   }
   return out;
 }
+
+/**
+ * Owner 25 Nov: the dates a site shows next to one part number — year required, month only when the site shows one;
+ * `none` = the site shows no dates for it. Mirrors the server's numbers list (research_browser_check.ts).
+ */
+export type RowDates = { fm: number; fy: number; tm: number; ty: number; none: boolean };
+export const EMPTY_ROW_DATES: RowDates = { fm: 0, fy: 0, tm: 0, ty: 0, none: false };
+export type BuildRange = { start: number | null; end: number | null };
+export type RowCheck = "ok" | "missing" | "backwards" | "outside";
+
+/** The car's build as month indexes (year × 12 + month); a missing month is the year's first / last. */
+export function buildRange(car: ResearchCar | null): BuildRange {
+  const s = car?.production_start_year;
+  const e = car?.production_end_year;
+  return {
+    start: s ? s * 12 + (car?.production_start_month || 1) : null,
+    end: e ? e * 12 + (car?.production_end_month || 12) : null,
+  };
+}
+
+/** A row's dates as month indexes, or null when they're not complete (or the site shows none). */
+export function rowSpan(d: RowDates): { from: number; to: number } | null {
+  if (d.none || !d.fy || !d.ty) return null;
+  return { from: d.fy * 12 + (d.fm || 1), to: d.ty * 12 + (d.tm || 12) };
+}
+
+/** Is one row's dates usable: both years given, end not before start, and touching the car's build. */
+export function rowCheck(d: RowDates, build: BuildRange): RowCheck {
+  if (d.none) return "ok";
+  const span = rowSpan(d);
+  if (!span) return "missing";
+  if (span.to < span.from) return "backwards";
+  if ((build.start != null && span.to < build.start) || (build.end != null && span.from > build.end)) return "outside";
+  return "ok";
+}
+
+/**
+ * Do these ranges, joined, cover the car's build? Touching ranges count (a change month is shown on both numbers).
+ * Unknown build → true; no end on file → only the start and no gaps. Same rule as the server's `rangesCoverBuild`.
+ */
+export function rangesCoverBuild(ranges: Array<{ from: number; to: number }>, build: BuildRange): boolean {
+  if (build.start == null) return true;
+  let reach = build.start - 1;
+  for (const r of [...ranges].sort((x, y) => x.from - y.from)) {
+    if (r.from > reach + 1) {
+      if (build.end != null && reach >= build.end) break;
+      return false;
+    }
+    reach = Math.max(reach, r.to);
+  }
+  return reach >= build.start && (build.end == null ? true : reach >= build.end);
+}

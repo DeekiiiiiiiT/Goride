@@ -230,3 +230,23 @@ describe("RE-73: jobs the owner closed", () => {
     expect(filterForState("failed", null)).toBe("failed");
   });
 });
+
+import { buildRange, rangesCoverBuild, rowCheck, EMPTY_ROW_DATES } from "./researchModel";
+
+describe("numbers list dates (owner 25 Nov)", () => {
+  const roomy = buildRange({ production_start_year: 2016, production_start_month: 11, production_end_year: 2020, production_end_month: 8 } as never);
+  const m = (y: number, mo: number) => y * 12 + mo;
+  it("two numbers that hand over in Nov 2018 cover the Roomy; a gap or a short end doesn't", () => {
+    expect(rangesCoverBuild([{ from: m(2016, 11), to: m(2018, 11) }, { from: m(2018, 11), to: m(2020, 9) }], roomy)).toBe(true);
+    expect(rangesCoverBuild([{ from: m(2016, 11), to: m(2018, 9) }, { from: m(2018, 11), to: m(2020, 9) }], roomy)).toBe(false);
+    expect(rangesCoverBuild([{ from: m(2016, 11), to: m(2018, 11) }], roomy)).toBe(false);
+    expect(rangesCoverBuild([], buildRange(null))).toBe(true);
+  });
+  it("years only work; backwards and outside-the-build dates are flagged", () => {
+    expect(rowCheck({ ...EMPTY_ROW_DATES, fy: 2016, ty: 2020 }, roomy)).toBe("ok");
+    expect(rowCheck({ ...EMPTY_ROW_DATES, fy: 2016 }, roomy)).toBe("missing");
+    expect(rowCheck({ ...EMPTY_ROW_DATES, fy: 2020, ty: 2016 }, roomy)).toBe("backwards");
+    expect(rowCheck({ ...EMPTY_ROW_DATES, fy: 2010, ty: 2014 }, roomy)).toBe("outside");
+    expect(rowCheck({ ...EMPTY_ROW_DATES, none: true }, roomy)).toBe("ok");
+  });
+});

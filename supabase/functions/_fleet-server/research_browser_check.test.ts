@@ -454,3 +454,116 @@ Deno.test("RE-70: a part without places — one number before, another from", ()
     { ok: false, reason: "retype_mismatch" },
   );
 });
+
+// Owner 25 Nov: a list of numbers per place, each with the dates the site shows (any site, any number of numbers).
+import { rangesCoverBuild } from "./research_browser_check.ts";
+
+const ROOMY_BUILD_NL = { startYear: 2016, startMonth: 11, endYear: 2020, endMonth: 9 };
+const SHOCKS = {
+  ...ANS_BASE,
+  rowName: "SHOCK, REAR",
+  suggestions: ["48530-B9285", "48530-B9165"],
+  positionScheme: "four_corners",
+  jobAxle: "rear" as const,
+  build: ROOMY_BUILD_NL,
+  buildText: "11.2016 – 09.2020",
+};
+
+Deno.test("numbers list: Roomy rear shocks — two numbers per side, each with its dates → years per number", () => {
+  const d1 = { fromMonth: 11, fromYear: 2016, toMonth: 11, toYear: 2018 };
+  const d2 = { fromMonth: 11, fromYear: 2018, toMonth: 9, toYear: 2020 };
+  const r = answersGate({
+    ...SHOCKS,
+    answers: {
+      ...YES,
+      numbers: [
+        { axle: "rear", side: "left", value: "48530-B9285", dates: d1 },
+        { axle: "rear", side: "left", value: "48530-B9165", dates: d2 },
+        { axle: "rear", side: "right", value: "48530-B9285", dates: d1 },
+        { axle: "rear", side: "right", value: "48530-B9165", dates: d2 },
+      ],
+    },
+  });
+  assertEquals(r.ok, true);
+  if (r.ok) {
+    assertEquals(r.items, [
+      { detected: "48530-B9285", axle: "rear", side: "left", yearFrom: null, yearTo: 2018, periodText: "dates 11.2016 – 11.2018" },
+      { detected: "48530-B9165", axle: "rear", side: "left", yearFrom: 2018, yearTo: null, periodText: "dates 11.2018 – 09.2020" },
+      { detected: "48530-B9285", axle: "rear", side: "right", yearFrom: null, yearTo: 2018, periodText: "dates 11.2016 – 11.2018" },
+      { detected: "48530-B9165", axle: "rear", side: "right", yearFrom: 2018, yearTo: null, periodText: "dates 11.2018 – 09.2020" },
+    ]);
+    assertEquals(r.evidence.endsWith("dates cover 11.2016 – 09.2020"), true);
+  }
+});
+
+Deno.test("numbers list: years only, left and right on different dates, three numbers — all fine", () => {
+  const r = answersGate({
+    ...SHOCKS,
+    answers: {
+      ...YES,
+      numbers: [
+        { axle: "rear", side: "left", value: "48530-B9285", dates: { fromYear: 2016, toYear: 2017 } },
+        { axle: "rear", side: "left", value: "48530-B9165", dates: { fromYear: 2017, toYear: 2018 } },
+        { axle: "rear", side: "left", value: "48530-B9175", valueAgain: "48530-B9175", dates: { fromYear: 2019, toYear: 2020 } },
+        { axle: "rear", side: "right", value: "48530-B9285", dates: { fromMonth: 11, fromYear: 2016, toMonth: 9, toYear: 2020 } },
+      ],
+    },
+  });
+  assertEquals(r.ok, true);
+  if (r.ok) {
+    assertEquals(r.items?.length, 4);
+    assertEquals(r.items?.[3], { detected: "48530-B9285", axle: "rear", side: "right", yearFrom: null, yearTo: null, periodText: "dates 11.2016 – 09.2020" });
+    assertEquals(r.items?.[0].periodText, "dates 2016 – 2017");
+  }
+});
+
+Deno.test("numbers list: a gap in the dates, dates outside the build, or backwards dates stop Confirm", () => {
+  const gap = answersGate({
+    ...SHOCKS,
+    answers: { ...YES, numbers: [{ axle: "rear", side: "left", value: "48530-B9285", dates: { fromMonth: 11, fromYear: 2016, toMonth: 11, toYear: 2018 } }] },
+  });
+  assertEquals(gap, { ok: false, reason: "dates_no" });
+  const outside = answersGate({
+    ...SHOCKS,
+    answers: {
+      ...YES,
+      numbers: [
+        { axle: "rear", side: "left", value: "48530-B9285", dates: { fromMonth: 11, fromYear: 2016, toMonth: 9, toYear: 2020 } },
+        { axle: "rear", side: "left", value: "48530-B9165", dates: { fromYear: 2010, toYear: 2014 } },
+      ],
+    },
+  });
+  assertEquals(outside, { ok: false, reason: "dates_no" });
+  const backwards = answersGate({
+    ...SHOCKS,
+    answers: { ...YES, numbers: [{ axle: "rear", side: "left", value: "48530-B9285", dates: { fromYear: 2020, toYear: 2016 } }] },
+  });
+  assertEquals(backwards, { ok: false, reason: "bad_dates" });
+  // No dates shown: the owner's "Yes, it fits" stands; the number is saved for every year.
+  const undated = answersGate({ ...SHOCKS, answers: { ...YES, numbers: [{ axle: "rear", side: "left", value: "48530-B9285", dates: null }] } });
+  assertEquals(undated.ok, true);
+  if (undated.ok) assertEquals(undated.items, [{ detected: "48530-B9285", axle: "rear", side: "left", yearFrom: null, yearTo: null, periodText: null }]);
+  // The wrong axle for this check, or a sided part without a side, is refused.
+  assertEquals(answersGate({ ...SHOCKS, answers: { ...YES, numbers: [{ axle: "front", side: "left", value: "48530-B9285" }] } }), { ok: false, reason: "bad_position" });
+  assertEquals(answersGate({ ...SHOCKS, answers: { ...YES, numbers: [{ axle: "rear", side: null, value: "48530-B9285" }] } }), { ok: false, reason: "bad_position" });
+});
+
+Deno.test("numbers list: a part without places", () => {
+  const r = answersGate({
+    ...ANS_BASE,
+    build: ROOMY_BUILD_NL,
+    answers: { ...YES, numbers: [{ value: "17801-21060", dates: { fromMonth: 11, fromYear: 2016, toYear: 2020 } }] },
+  });
+  assertEquals(r.ok, true);
+  if (r.ok) assertEquals(r.items, [{ detected: "17801-21060", axle: null, side: null, yearFrom: null, yearTo: null, periodText: "dates 11.2016 – 2020" }]);
+});
+
+Deno.test("rangesCoverBuild: touching ranges cover; gaps and short ends don't; open-ended builds need no end", () => {
+  const m = (y: number, mo: number) => y * 12 + mo;
+  assertEquals(rangesCoverBuild([{ from: m(2016, 11), to: m(2018, 11) }, { from: m(2018, 11), to: m(2020, 9) }], ROOMY_BUILD_NL), true);
+  assertEquals(rangesCoverBuild([{ from: m(2016, 11), to: m(2018, 10) }, { from: m(2018, 11), to: m(2020, 9) }], ROOMY_BUILD_NL), true);
+  assertEquals(rangesCoverBuild([{ from: m(2016, 11), to: m(2018, 9) }, { from: m(2018, 11), to: m(2020, 9) }], ROOMY_BUILD_NL), false);
+  assertEquals(rangesCoverBuild([{ from: m(2017, 1), to: m(2020, 9) }], ROOMY_BUILD_NL), false);
+  assertEquals(rangesCoverBuild([{ from: m(2016, 1), to: m(2030, 12) }], { startYear: 2016, endYear: null }), true);
+  assertEquals(rangesCoverBuild([], null), true);
+});

@@ -371,6 +371,17 @@ export type BrowserCheckAnswersPayload = {
     valueFromAgain?: string | null;
     /** Owner 25 Nov: the dates the site shows next to the first (and second) number. */
     datesShown?: Array<{ fromMonth: number; fromYear: number; toMonth: number; toYear: number }> | null;
+    /**
+     * Owner 25 Nov: every number the site lists, with its place (parts with places) and the dates shown next to it
+     * (month only when shown; null = no dates shown). Replaces value / positions / changeAt for parts.
+     */
+    numbers?: Array<{
+      axle: "front" | "rear" | null;
+      side: "left" | "right" | null;
+      value: string;
+      valueAgain: string | null;
+      dates: { fromMonth: number | null; fromYear: number; toMonth: number | null; toYear: number } | null;
+    }> | null;
     datesOk: boolean;
     sideOk: boolean | null;
   };
