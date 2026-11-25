@@ -60,6 +60,10 @@ export default defineConfig(({ mode }) => {
     build: {
       target: 'esnext',
       outDir: 'dist',
+      // Terser, not esbuild, compresses the output: esbuild sends chunks over 1 MB through a temp
+      // file and on Windows its cleanup fails ("remove …\Temp\esbuild-…: Access is denied"), which
+      // stopped the Play build on 25 Nov.
+      minify: 'terser',
     },
     server: {
       port: 3002,
