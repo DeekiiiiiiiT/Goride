@@ -4,6 +4,15 @@ import { requireAuth, requirePermission } from "./rbac_middleware.ts";
 import { logAdminAction } from "./audit_log.ts";
 import { detectBadUpload, detectBadUploadDetail, parsePartsImportCsv, sha256Hex } from "./parts_import_csv.ts";
 import { resolveImportBatchVehicles } from "./parts_import_vehicle_resolve.ts";
+import {
+  buildPartsImportR2Key,
+  isPartsImportR2Key,
+  isR2PrivateLinksEnabled,
+  legacyPartsImportPath,
+  putPartsImportSource,
+  readPartsImportSource,
+  removePartsImportSources,
+} from "./parts_import_storage.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -64,10 +73,8 @@ async function runImportCheck(supabase: SupabaseClient, batchId: string, who: { 
   if (bErr || !batch) throw new Error("Batch not found");
 
   await setCheckStage(supabase, batchId, "Reading file");
-  const path = batch.storage_path as string;
-  const { data: file, error: dErr } = await supabase.storage.from("parts-imports").download(path);
-  if (dErr || !file) throw new Error("Upload the CSV first");
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  const bytes = await readPartsImportSource(supabase, batch.storage_path as string | null);
+  if (!bytes) throw new Error("Upload the CSV first");
   const bad = detectBadUpload(bytes);
   if (bad) {
     await supabase.from("part_import_batch").update({ status: "failed", failure_message: bad }).eq("id", batchId);
@@ -319,7 +326,10 @@ export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseCli
         .select("*")
         .single();
       if (error) throw error;
-      const path = `${batch.id}/source.csv`;
+      // The app uploads the file to the next route; the stored path names where it goes.
+      const path = isR2PrivateLinksEnabled()
+        ? buildPartsImportR2Key(batch.id)
+        : legacyPartsImportPath(batch.id);
       await supabase.from("part_import_batch").update({ storage_path: path }).eq("id", batch.id);
       return c.json({ batch: { ...batch, storage_path: path }, path });
     } catch (e) {
@@ -347,7 +357,30 @@ export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseCli
       const bad = detectBadUploadDetail(bytes);
       if (bad) return c.json({ error: bad.message, hexPrefix: bad.hexPrefix, detectedType: bad.detectedType }, 422);
 
-      const path = (batch.storage_path as string | null) || `${batchId}/source.csv`;
+      // Cloudflare R2 (roam-private/parts-imports/platform/<batch>/source.csv) when switched
+      // on. The answer keeps its shape, so the app needs no change.
+      const previousPath = (batch.storage_path as string | null) || "";
+      if (isR2PrivateLinksEnabled()) {
+        const key = await putPartsImportSource(batchId, bytes);
+        const { error: rowErr } = await supabase
+          .from("part_import_batch")
+          .update({
+            storage_path: key,
+            status: "uploaded",
+            failure_message: null,
+            file_bytes: null,
+            file_sha256: null,
+          })
+          .eq("id", batchId);
+        if (rowErr) throw rowErr;
+        // Only after the row points at R2: drop the copy that still sits in the old bucket.
+        if (previousPath && !isPartsImportR2Key(previousPath)) {
+          await removePartsImportSources(supabase, [previousPath]);
+        }
+        return c.json({ ok: true, bytes: bytes.length, path: key });
+      }
+
+      const path = previousPath || legacyPartsImportPath(batchId);
       const { error: upErr } = await supabase.storage.from("parts-imports").upload(path, bytes, {
         contentType: "text/csv; charset=utf-8",
         upsert: true,
@@ -623,10 +656,11 @@ export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseCli
       const batchId = c.req.param("id");
       const { data: batch } = await supabase.from("part_import_batch").select("storage_path").eq("id", batchId).single();
       if (!batch?.storage_path) return c.json({ error: "No file" }, 404);
-      const { data: file, error } = await supabase.storage.from("parts-imports").download(batch.storage_path as string);
-      if (error || !file) return c.json({ error: "Download failed" }, 404);
+      // Reads whichever storage the stored path names, so old batches still download.
+      const bytes = await readPartsImportSource(supabase, batch.storage_path as string);
+      if (!bytes) return c.json({ error: "Download failed" }, 404);
       c.header("Content-Type", "text/csv; charset=utf-8");
-      return c.body(await file.text());
+      return c.body(new TextDecoder().decode(bytes));
     } catch (e) {
       return fail(c, e);
     }
