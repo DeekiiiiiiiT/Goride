@@ -40,6 +40,7 @@ import { Button } from '../../ui/button';
 import { cn } from '../../ui/utils';
 import { toast } from 'sonner';
 import { useTollV2Desk } from './tolls-v2/useTollV2Desk';
+import { TOLL_V2_WEEKS_KEY } from './tolls-v2/useTollV2Weeks';
 import { resolveTollsStepVariant, TOLLS_STEP_QUESTION } from './tolls-v2/resolveTollsStep';
 
 const FuelManagementLazy = lazy(() =>
@@ -263,6 +264,8 @@ export function ReconRunPage({
         queryClient.setQueryData(runQueryKey, payload);
       }
       await queryClient.invalidateQueries({ queryKey: ['recon-weeks'] });
+      // A toll file just imported (step 1's toll upload / Uber re-import) changes the weeks list too.
+      void queryClient.invalidateQueries({ queryKey: TOLL_V2_WEEKS_KEY });
       await queryClient.refetchQueries({ queryKey: runQueryKey });
     },
     [queryClient, runQueryKey],
