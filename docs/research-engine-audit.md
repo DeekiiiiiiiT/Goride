@@ -1,7 +1,7 @@
 # Research engine (cars, specs, parts) — audit
 
 **Rev 7.2 · 25 Nov 2026 · Status: LIVE, in practice mode** (engine on, shadow mode, US$1.35/day). Browser-check rebuild
-(25 Nov) is on the branch only, **not live** — see §1.
+(25 Nov) is **LIVE**: main `dd288f00` (platform-catalog + Dominion deployed 25 Nov 13:36 UTC) — see §1.
 Live: main `a6320fa7` (Dominion + platform-catalog + catalog-research). Branch `parts-auto-match` has the same research
 code. Every research migration up to `20261121193554` is on live with its logbook line.
 
@@ -50,11 +50,11 @@ The 5 rows closed on 21 Nov now show **Closed** on the owner's screen (RE-73 che
   build (`rangesCoverBuild`, client `researchModel.ts` + server `research_browser_check.ts`, same rule) and only
   asks the dates question when a number shows no dates. Server takes `answers.numbers`; old shapes still accepted.
 - Shocks: step 3 says "Open the section for the rear shock absorber · a row with SHOCK, REAR in its name".
-- **Not live.** Local Dominion (:3001) talks to the live server, which doesn't know `answers.numbers` yet, so a part
-  Confirm from the new screen fails until `fleet-server` is deployed. Ship from a worktree off origin/main with only
-  the research commits (memory "golive-worktree-recipe"); tell the owner first.
+- **Live** 25 Nov on main `dd288f00` (pushed from a worktree off origin/main, research commits only). Edge deploy
+  green (platform-catalog deployed), Dominion Vercel Ready, Supabase function tests green. "Dominion places checks"
+  red only on the old find-parts visual test (§3 item 9, not research).
 
-**Next for the owner** (after the deploy; Pending catalog → Parts, refresh first):
+**Next for the owner** (Pending catalog → Parts, refresh first):
 1. **Shock absorber, Rear.** Both sides: 48530-B9285 dates 11.2016 – 11.2018, then Add another number 48530-B9165
    dates 11.2018 – 09.2020.
 2. **Shock absorber, Front.** Front left 48520-B9285 (11.2016 – 11.2018) + 48520-B9115 (11.2018 – 09.2020); front
@@ -138,7 +138,8 @@ and show as **Closed**.
 ## 3. Open work, in order
 
 1. **Sources decision** (§1). Nothing else in the "more sources" area until the owner picks.
-2. **Deploy the 25 Nov browser-check rebuild** (§1): admin + `fleet-server`, from a worktree; tell the owner first.
+2. **First real save from the new screen:** after the owner confirms the rear shock, check the listings on live
+   carry the years per number (48530-B9285 up to 2018, 48530-B9165 from 2018) and the evidence text.
 3. Only shocks have a front/rear section in `partFinder`; other parts with places (brakes, bearings) still use the
    plain "Do you see …?" line. Add them when the owner checks one.
 4. **Small fixes (one round):** health route `GET /admin/catalog-research/health` (RE-45); research screen test in its
