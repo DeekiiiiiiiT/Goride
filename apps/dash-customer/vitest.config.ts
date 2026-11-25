@@ -4,7 +4,7 @@ import { defineConfig } from 'vitest/config';
 const testSupabaseEnv = {
   VITE_SUPABASE_URL: 'https://test-project.supabase.co',
   VITE_SUPABASE_PROJECT_ID: 'test-project',
-  VITE_SUPABASE_ANON_KEY: 'test-anon-key',
+  VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test',
 };
 
 export default defineConfig({
