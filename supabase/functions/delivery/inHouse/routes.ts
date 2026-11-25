@@ -41,6 +41,15 @@ import { applyConciergeOrderStatus } from "./applyStatus.ts";
 import { retryAllowed } from "./taskMachine.ts";
 import { validateMerchantCuisines, type CuisineRow } from "../admin/menuLibrary.ts";
 import { listActiveTemplates } from "../admin/menuLibraryRoutes.ts";
+import { isR2PrivateLinksEnabled } from "../../_shared/objectStorage/fileLink.ts";
+import {
+  buildInHouseReceiptR2Key,
+  IN_HOUSE_RECEIPT_BUCKET,
+  legacyInHouseReceiptPath,
+  putInHouseReceipt,
+  removeInHouseReceipts,
+  signInHouseReceiptAddress,
+} from "./receipt_storage.ts";
 
 // deno-lint-ignore no-explicit-any
 type Sb = SupabaseClient | { from: (table: string) => any; schema?: (name: string) => any };
@@ -438,7 +447,7 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
     const admin = await requireDesk(c, CONCIERGE_ROLES);
     if (admin instanceof Response) return admin;
     const sb = deps.getServiceSupabase();
-    const { data: task } = await sb.from("procurement_tasks").select("id, state, claimed_by").eq("id", c.req.param("id")).maybeSingle();
+    const { data: task } = await sb.from("procurement_tasks").select("id, state, claimed_by, merchant_id, receipt_path").eq("id", c.req.param("id")).maybeSingle();
     if (!task) return c.json({ error: "Task not found" }, 404);
     const loaded = await taskEvents(sb, task.id);
     if (!loaded.ok) return c.json({ error: loaded.error }, 500);
@@ -466,11 +475,32 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
       return c.json({ error: "Receipt was rejected" }, 400);
     }
     const ext = mime === "application/pdf" ? "pdf" : mime.split("/")[1];
-    const path = `${c.req.param("id")}/${crypto.randomUUID()}.${ext}`;
     const storage = publicJournalClient();
-    const { error } = await storage.storage.from("in-house-receipts").upload(path, bytes, { contentType: mime, upsert: false });
-    if (error) return c.json({ error: error.message }, 500);
     const now = new Date().toISOString();
+
+    // Cloudflare R2 (roam-private/in-house-receipts/<merchant>/<task>-<uuid>.<ext>) when switched
+    // on. receipt_path then holds the signed file-link address, so staff can still open it later.
+    if (isR2PrivateLinksEnabled()) {
+      const key = buildInHouseReceiptR2Key(task.merchant_id as string | null, String(task.id), ext);
+      await putInHouseReceipt(key, bytes, mime);
+      const address = await signInHouseReceiptAddress(key);
+      const savedR2 = await updateIfState(sb, task.id, String(task.state), {
+        receipt_path: address,
+        receipt_uploaded_at: now,
+        updated_at: now,
+      });
+      if (!savedR2.ok) {
+        // Nobody points at the new file yet, so it can go.
+        await removeInHouseReceipts(storage, [address]);
+        return c.json({ error: "Someone else took this order" }, 409);
+      }
+      // A replaced receipt is kept (same as before R2): it backs real card spend.
+      return c.json({ path: address, scan: scan.clean ? "clean" : "unconfigured" });
+    }
+
+    const path = legacyInHouseReceiptPath(String(task.id), ext);
+    const { error } = await storage.storage.from(IN_HOUSE_RECEIPT_BUCKET).upload(path, bytes, { contentType: mime, upsert: false });
+    if (error) return c.json({ error: error.message }, 500);
     const saved = await updateIfState(sb, task.id, String(task.state), {
       receipt_path: path,
       receipt_uploaded_at: now,
