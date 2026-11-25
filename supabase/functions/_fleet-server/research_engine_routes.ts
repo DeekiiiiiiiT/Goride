@@ -17,6 +17,7 @@ import {
   versionCodeOnLine,
   versionListLink,
   versionPageUrl,
+  withoutPrices,
 } from "./research_browser_check.ts";
 import { identityTokens } from "./research_part_job.ts";
 import { siteDomain } from "./research_page_reader.ts";
@@ -258,7 +259,8 @@ export function registerResearchEngineRoutes(
 
     // RE-68: the owner answers the check's questions (new screen); pasted text (older screen) still works.
     let detected = "";
-    let evidenceText = pasted;
+    // RE-59: no prices in saved evidence (part checks; a spec value may look like an amount).
+    let evidenceText = ctx.gateInput.jobType === "part" ? withoutPrices(pasted) : pasted;
     let answeredVersion: string | null = null;
     let positionItems: PositionItem[] | null = null;
     if (b.answers && typeof b.answers === "object") {

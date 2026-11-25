@@ -62,11 +62,8 @@ export function AddedPickPartPanel({
     setBusy(true);
     try {
       const res = await resolvePendingPartsGroupAdded(accessToken, groupId, picked);
-      toast.success(
-        res.companies === 1
-          ? "Added. 1 company was told the part is on file."
-          : `Added. ${res.companies} companies were told the part is on file.`,
-      );
+      // RE-41: no company count in Dominion.
+      toast.success("Added. The fleets that asked were told the part is on file.");
       onDone();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save. Try again.");

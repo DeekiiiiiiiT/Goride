@@ -269,6 +269,9 @@ export function findCrossReferenceRow(html: string, finalUrl: string, check: Blo
   const want = normNumber(check.number);
 
   const frame = check.frame?.trim();
+  // RE-55: among rows that pass, keep the one naming most of the car (its engine code, then its model), not the first.
+  const others = check.identity.filter((id) => id.trim() && (!frame || id.trim().toUpperCase() !== frame.toUpperCase()));
+  let best: { block: string; score: number } | null = null;
   for (const row of extractElements(clean, "tr")) {
     const text = htmlText(row);
     if (frame ? !containsToken(text, frame) : !check.identity.some((id) => containsToken(text, id))) continue;
@@ -285,9 +288,10 @@ export function findCrossReferenceRow(html: string, finalUrl: string, check: Blo
       .map((c) => (c.label && c.label.toUpperCase() !== c.text.toUpperCase() ? `${c.label}: ${c.text}` : c.text))
       .join(" · ");
     const xref = shown ? numberContext(htmlText(clean), shown) : hit.text;
-    return { block: `Cross-reference: ${xref} · Fits: ${fits}`.slice(0, 2000) };
+    const score = others.filter((id) => containsToken(text, id)).length;
+    if (!best || score > best.score) best = { block: `Cross-reference: ${xref} · Fits: ${fits}`.slice(0, 2000), score };
   }
-  return null;
+  return best ? { block: best.block } : null;
 }
 
 /** Same-row proof first (RE-03), then the cross-reference proof (RE-31). */

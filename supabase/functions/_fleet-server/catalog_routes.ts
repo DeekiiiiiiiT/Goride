@@ -228,10 +228,11 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
     try {
       const variantId = c.req.query("variantId")?.trim() || "";
       const [demand, fit, unmatched, partDemand, tasks] = await Promise.all([
-        supabase.from("catalog_signal_variant_demand").select("variant_id, vehicle_count, fleet_count, refreshed_at"),
+        // RE-41: Dominion never sees fleet or vehicle counts (master-data rule); which cars and parts are asked for is enough.
+        supabase.from("catalog_signal_variant_demand").select("variant_id, refreshed_at"),
         supabase.from("catalog_signal_fit").select("part_id, variant_id, fit_count, no_fit_count, modified_count"),
         supabase.from("catalog_signal_unmatched_numbers").select("part_number, component_id, variant_id, occurrences"),
-        supabase.from("catalog_signal_part_demand").select("variant_id, component_id, open_count, fleet_count"),
+        supabase.from("catalog_signal_part_demand").select("variant_id, component_id"),
         supabase.from("catalog_task").select("id, vehicle_catalog_id, component_id, kind, note, status, created_at").eq("status", "open").order("created_at", { ascending: false }).limit(100),
       ]);
       const body = {

@@ -242,3 +242,18 @@ Deno.test("review: a form answered in place (no redirect) is never evidence", as
   assertEquals(out.kind, "not_found");
   if (out.kind === "not_found") assertEquals(out.reason, "form_answered_in_place");
 });
+
+Deno.test("RE-55: two rows for the frame (turbo first) → the evidence is the car's own engine row", () => {
+  const link = (href: string, text: string) => `<a href="${href}" class="parts">${text}</a>`;
+  const row = (engine: string) => `
+    <tr>
+      <td class="tdYear" data-title="YEAR">11.16~</td>
+      <td class="tdEngineNo" data-title="ENGINE">${engine}</td>
+      <td class="tdBody" data-title="BODY">M900A</td>
+      <td class="tdParts" data-title="Front Brake">${link(SELF, "PN7001")}</td>
+    </tr>`;
+  const hit = findCrossReferenceRow(productPage({ rows: row("1KR-VET") + row("1KR-FE") }), SELF, { ...CAR, position: ["front"] });
+  assert(hit);
+  assert(hit.block.includes("ENGINE: 1KR-FE"), hit.block);
+  assert(!hit.block.includes("1KR-VET"), hit.block);
+});
