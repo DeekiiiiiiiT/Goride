@@ -473,33 +473,41 @@ test.describe("Research engine screens (layer 3)", () => {
     });
   });
 
-  test("RE-69 — a four-corner part: numbers per place, No dates shown asks the dates question; the button names the site", async ({ page }) => {
+  test("RE-69 — a four-corner part: one step per place with how-to; No dates shown asks the dates question; the button names the site", async ({ page }) => {
     const calls: Calls = [];
     await install(page, calls);
     await openParts(page);
     await page.getByTestId("parts-row").filter({ hasText: "Shock absorber" }).getByTestId("row-open-browser-check").click();
     const d = page.getByTestId("research-drawer");
+    const next = () => d.getByTestId("browser-check-next").click();
     await expect(d.getByTestId("open-catalogue-page")).toContainText("Open Amayama");
-    await d.getByTestId("browser-check-next").click();
-    // Copy icons, step by step: Model code + Engine, then the search words + row name, then every number in every place (3 × 4).
+    await next();
+    // Copy icons, step by step: Model code + Engine, then the search words + row name, then Roam's 3 numbers per place.
     await expect(d.getByTestId("copy-icon")).toHaveCount(2);
     await expect(d.getByRole("button", { name: "Copy M900A-AGBVE" })).toBeVisible();
     await d.getByTestId("q-version-yes").click();
-    await d.getByTestId("browser-check-next").click();
+    await next();
     await expect(d.getByTestId("copy-icon")).toHaveCount(2);
     await d.getByTestId("q-part-yes").click();
-    await d.getByTestId("browser-check-next").click();
-    await expect(d.getByTestId("q-positions")).toContainText("Front left:");
-    await expect(d.getByTestId("q-positions")).toContainText("Rear right:");
-    await expect(d.getByTestId("copy-icon")).toHaveCount(12);
-    await shot(page, "20-copy-icons");
+    await next();
+    // Owner 25 Nov: one place per step, each saying how to read the site.
     const fl = d.getByTestId("q-position-front-left");
+    await expect(fl.getByTestId("q-place-title")).toHaveText("Front left: add its part numbers");
+    await expect(fl.getByTestId("q-place-howto")).toContainText("sites often write LH for left");
+    await expect(fl.getByTestId("q-place-howto")).toContainText("Enter the number with the earliest dates first");
+    await expect(d.getByTestId("q-same-as")).toHaveCount(0);
+    await expect(d.getByTestId("copy-icon")).toHaveCount(3);
+    await shot(page, "20-copy-icons");
     await fl.getByTestId("q-position-suggestion").filter({ hasText: "00000-S0002" }).click();
     await fl.getByTestId("q-row-from-year").selectOption("2016");
     await fl.getByTestId("q-row-to-year").selectOption("2020");
+    await next();
     const fr = d.getByTestId("q-position-front-right");
+    await expect(fr.getByTestId("q-place-howto")).toContainText("sites often write RH for right");
+    await expect(fr.getByTestId("q-same-as")).toContainText("Same as front left");
     await fr.getByTestId("q-position-suggestion").filter({ hasText: "00000-S0001" }).click();
     await fr.getByTestId("q-row-no-dates").click();
+    await next();
     const rl = d.getByTestId("q-position-rear-left");
     await rl.getByTestId("q-position-value").fill("00000-S0009");
     await rl.getByTestId("q-row-from-year").selectOption("2016");
@@ -508,7 +516,10 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect(d.getByTestId("browser-check-next")).toBeDisabled();
     await rl.getByTestId("q-position-again").fill("00000-S0009");
     await shot(page, "19-four-corner-check");
-    await d.getByTestId("browser-check-next").click();
+    await next();
+    // A place the site doesn't list may be left empty.
+    await expect(d.getByTestId("q-position-rear-right")).toContainText("Leave this empty only if the site doesn't list this place.");
+    await next();
     // One number showed no dates, so the owner is asked whether the site says it fits.
     await expect(d.getByText("Does the site say it fits your car, built")).toBeVisible();
     await d.getByTestId("q-dates-yes").click();
@@ -537,25 +548,26 @@ test.describe("Research engine screens (layer 3)", () => {
     });
   });
 
-  test("Owner 25 Nov — a number that changed during the build: Add another number, each with its own dates", async ({ page }) => {
+  test("Owner 25 Nov — a number that changed during the build: Add another number, missing dates named, Same as copies", async ({ page }) => {
     const calls: Calls = [];
     await install(page, calls);
     await openParts(page);
     await page.getByTestId("parts-row").filter({ hasText: "Shock absorber" }).getByTestId("row-open-browser-check").click();
     const d = page.getByTestId("research-drawer");
-    await d.getByTestId("browser-check-next").click();
+    const next = () => d.getByTestId("browser-check-next").click();
+    await next();
     await d.getByTestId("q-version-yes").click();
-    await d.getByTestId("browser-check-next").click();
+    await next();
     await d.getByTestId("q-part-yes").click();
-    await d.getByTestId("browser-check-next").click();
+    await next();
     const fl = d.getByTestId("q-position-front-left");
     await fl.getByTestId("q-position-suggestion").filter({ hasText: "00000-S0002" }).click();
     await fl.getByTestId("q-row-from-year").selectOption("2016");
     await fl.getByTestId("q-row-to-month").selectOption("11");
     await fl.getByTestId("q-row-to-year").selectOption("2018");
-    // The first number stops in Nov 2018: Roam says the dates don't cover the build, and Confirm waits.
+    // The first number stops in Nov 2018: Roam names the missing dates, and Next waits.
     await expect(fl.getByTestId("q-cover")).toContainText("Missing: 12.2018 – 12.2020");
-    await expect(d.getByTestId("browser-check-confirm")).toBeDisabled();
+    await expect(d.getByTestId("browser-check-next")).toBeDisabled();
     await fl.getByTestId("q-add-number").click();
     await expect(fl.getByTestId("q-row")).toHaveCount(2);
     const second = fl.getByTestId("q-row").nth(1);
@@ -573,12 +585,23 @@ test.describe("Research engine screens (layer 3)", () => {
     await third.getByTestId("q-row-from-year").selectOption("2020");
     await third.getByTestId("q-row-to-year").selectOption("2017");
     await expect(third).toContainText("The end date is before the start date.");
-    await expect(d.getByTestId("browser-check-confirm")).toBeDisabled();
+    await expect(d.getByTestId("browser-check-next")).toBeDisabled();
     await third.getByTestId("q-remove-number").click();
     await expect(fl.getByTestId("q-row")).toHaveCount(2);
     await shot(page, "21-changed-during-build");
+    await next();
+    // Same as front left copies both numbers and their dates.
+    const fr = d.getByTestId("q-position-front-right");
+    await fr.getByTestId("q-same-as").click();
+    await expect(fr.getByTestId("q-row")).toHaveCount(2);
+    await expect(fr.getByTestId("q-row").nth(1).getByTestId("q-position-value")).toHaveValue("00000-S0012");
+    await expect(fr.getByTestId("q-cover")).toContainText("These dates cover your car's build");
+    await next();
+    await next();
     await expect(d.getByTestId("browser-check-confirm")).toBeEnabled();
     await d.getByTestId("browser-check-confirm").click();
+    const firstDates = { fromMonth: null, fromYear: 2016, toMonth: 11, toYear: 2018 };
+    const secondDates = { fromMonth: 11, fromYear: 2018, toMonth: null, toYear: 2020 };
     await expect.poll(() => calls.find((c) => c.path === "/browser-checks/job-bcs/confirm")?.body).toEqual({
       url: "https://www.amayama.com/en/part/toyota/roomy-m900a-agbve",
       answers: {
@@ -589,8 +612,10 @@ test.describe("Research engine screens (layer 3)", () => {
         valueAgain: null,
         positions: null,
         numbers: [
-          { axle: "front", side: "left", value: "00000-S0002", valueAgain: null, dates: { fromMonth: null, fromYear: 2016, toMonth: 11, toYear: 2018 } },
-          { axle: "front", side: "left", value: "00000-S0012", valueAgain: "00000-S0012", dates: { fromMonth: 11, fromYear: 2018, toMonth: null, toYear: 2020 } },
+          { axle: "front", side: "left", value: "00000-S0002", valueAgain: null, dates: firstDates },
+          { axle: "front", side: "left", value: "00000-S0012", valueAgain: "00000-S0012", dates: secondDates },
+          { axle: "front", side: "right", value: "00000-S0002", valueAgain: null, dates: firstDates },
+          { axle: "front", side: "right", value: "00000-S0012", valueAgain: "00000-S0012", dates: secondDates },
         ],
         datesOk: true,
         sideOk: null,

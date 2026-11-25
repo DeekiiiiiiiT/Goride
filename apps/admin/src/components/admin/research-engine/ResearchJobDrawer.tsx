@@ -601,6 +601,21 @@ function BrowserCheckCard({
   const rk = (pk: string, id: number) => `${pk}#${id}`;
   const rdOf = (k: string): RowDates => rowDates[k] ?? EMPTY_ROW_DATES;
   const setRd = (k: string, patch: Partial<RowDates>) => setRowDates((old) => ({ ...old, [k]: { ...(old[k] ?? EMPTY_ROW_DATES), ...patch } }));
+  // Owner 25 Nov: "Same as rear left" copies that place's numbers and dates; the owner then changes what differs.
+  const copyPlace = (fromPk: string, toPk: string) => {
+    const ids = rowIdsOf(fromPk);
+    setRows((old) => ({ ...old, [toPk]: [...ids] }));
+    setPosVals((old) => {
+      const next = { ...old };
+      for (const id of ids) next[rk(toPk, id)] = { ...(old[rk(fromPk, id)] ?? { picked: "", typed: "", again: "" }) };
+      return next;
+    });
+    setRowDates((old) => {
+      const next = { ...old };
+      for (const id of ids) next[rk(toPk, id)] = { ...(old[rk(fromPk, id)] ?? EMPTY_ROW_DATES) };
+      return next;
+    });
+  };
   const build = buildRange(detail.car);
   const placeStates = places.map((p) => {
     const keys = rowIdsOf(p.key).map((id) => rk(p.key, id));
@@ -867,48 +882,73 @@ function BrowserCheckCard({
     ) },
     ...(jobType === "part"
       ? [
-        { id: "numbers", ok: numbersOk, node: (
-          <div className="flex w-full flex-col gap-4" data-testid={positions ? "q-positions" : "q-number"}>
-            <p>
-              {positions
-                ? "For each place, add every part number the site lists, with the dates shown next to it."
-                : "Add every part number the site lists, with the dates shown next to it."}
-            </p>
-            {placeStates.map((s) => {
-              const ids = rowIdsOf(s.place.key);
-              return (
-                <div key={s.place.key} className="flex flex-col gap-2" data-testid={positions ? `q-position-${s.place.key}` : "q-place-one"}>
-                  {s.place.label ? <span className="font-semibold">{s.place.label}:</span> : null}
-                  {ids.map((id, i) => numberRow(s.place.key, id, i, ids.length, s.rowState))}
-                  <div>
-                    <PartsButton
-                      variant="secondary"
-                      className="!min-h-[44px]"
-                      data-testid="q-add-number"
-                      onClick={() => {
-                        setRows((old) => ({ ...old, [s.place.key]: [...rowIdsOf(s.place.key), nextRow] }));
-                        setNextRow((n) => n + 1);
-                      }}
-                    >
-                      <DIcon name="add" className="text-[18px]" /> Add another number
-                    </PartsButton>
-                  </div>
-                  {s.covered === true && build.start ? (
-                    <p className="text-[13px] font-medium text-[#1f7a3a] dark:text-[#86efac]" data-testid="q-cover">
-                      These dates cover your car&apos;s build ({dates}).
-                    </p>
-                  ) : null}
-                  {s.covered === false ? (
-                    <p className="font-medium text-[#a83836]" data-testid="q-cover">
-                      Missing: {s.missing.join(", ")}. Your car was built {dates}; add the number for those dates, or press Not on
-                      this page.
-                    </p>
-                  ) : null}
+        // Owner 25 Nov: one step per place, each saying how to read the site; a later place can copy the one before.
+        ...placeStates.map((s, i) => ({
+          id: positions ? `numbers-${s.place.key}` : "numbers",
+          // An empty place may be skipped (Confirm still needs a number somewhere); a part without places needs one.
+          ok: s.filled.length === 0 ? Boolean(positions) : s.valid && s.covered !== false,
+          node: (
+            <div className="flex w-full flex-col gap-3" data-testid={positions ? `q-position-${s.place.key}` : "q-number"}>
+              <p className="font-semibold" data-testid="q-place-title">
+                {s.place.label ? `${s.place.label}: add its part numbers` : "Add the part numbers"}
+              </p>
+              <ul className="flex list-disc flex-col gap-1 pl-5" data-testid="q-place-howto">
+                {s.place.label ? (
+                  <li>
+                    Find the row for the <span className="font-semibold">{s.place.label.toLowerCase()}</span>
+                    {s.place.side ? ` (sites often write ${s.place.side === "left" ? "LH" : "RH"} for ${s.place.side})` : ""}.
+                  </li>
+                ) : null}
+                <li>Under that row the site lists one or more part numbers, each with its own dates.</li>
+                <li>Enter the number with the earliest dates first, with the dates shown next to it.</li>
+                <li>
+                  If there&apos;s another number under the row, press <span className="font-semibold">Add another number</span> and enter
+                  it the same way.
+                </li>
+              </ul>
+              {i > 0 && positions ? (
+                <div>
+                  <PartsButton
+                    variant="secondary"
+                    className="!min-h-[44px]"
+                    data-testid="q-same-as"
+                    onClick={() => copyPlace(placeStates[i - 1].place.key, s.place.key)}
+                  >
+                    <DIcon name="content_copy" className="text-[18px]" /> Same as {placeStates[i - 1].place.label.toLowerCase()}
+                  </PartsButton>
                 </div>
-              );
-            })}
-          </div>
-        ) },
+              ) : null}
+              {rowIdsOf(s.place.key).map((id, n) => numberRow(s.place.key, id, n, rowIdsOf(s.place.key).length, s.rowState))}
+              <div>
+                <PartsButton
+                  variant="secondary"
+                  className="!min-h-[44px]"
+                  data-testid="q-add-number"
+                  onClick={() => {
+                    setRows((old) => ({ ...old, [s.place.key]: [...rowIdsOf(s.place.key), nextRow] }));
+                    setNextRow((x) => x + 1);
+                  }}
+                >
+                  <DIcon name="add" className="text-[18px]" /> Add another number
+                </PartsButton>
+              </div>
+              {s.covered === true && build.start ? (
+                <p className="text-[13px] font-medium text-[#1f7a3a] dark:text-[#86efac]" data-testid="q-cover">
+                  These dates cover your car&apos;s build ({dates}).
+                </p>
+              ) : null}
+              {s.covered === false ? (
+                <p className="font-medium text-[#a83836]" data-testid="q-cover">
+                  Missing: {s.missing.join(", ")}. Your car was built {dates}; add the number for those dates, or press Not on this
+                  page.
+                </p>
+              ) : null}
+              {positions && s.filled.length === 0 ? (
+                <p className={`text-[13px] ${D_MUTED}`}>Leave this empty only if the site doesn&apos;t list this place.</p>
+              ) : null}
+            </div>
+          ),
+        })),
       ]
       : [
         { id: "numbers", ok: Boolean(value) && againOk, node: (
