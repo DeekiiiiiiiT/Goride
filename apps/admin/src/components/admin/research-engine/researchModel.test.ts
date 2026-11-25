@@ -149,6 +149,14 @@ describe("browser-check guide (RE-63)", () => {
     expect(partFinder("Spark Plugs", "Toyota")).toEqual({ search: "spark plug", rowName: "PLUG, SPARK" });
     expect(partFinder("Cabin A/C Filter", "Daihatsu").search).toBe("air filter");
     expect(partFinder("Shock absorber", "Toyota").rowName).toBe("ABSORBER ASSY, SHOCK");
+    // Owner 25 Nov: a front / rear check names Amayama's picture and the words every such row has.
+    expect(partFinder("Shock absorber", "Toyota", "Front")).toEqual({
+      search: "shock absorber",
+      picture: "Front spring & shock absorber",
+      rowName: "SHOCK, FRONT",
+      rowContains: true,
+    });
+    expect(partFinder("Shock absorber", "Toyota", "rear").picture).toBe("Rear spring & shock absorber");
   });
 
   it("falls back to the part's own name for other makers and unknown parts", () => {

@@ -554,7 +554,7 @@ function BrowserCheckCard({
   // The button names the site it really opens (RE-69: it said Partsouq while opening the remembered Amayama page).
   const site = siteName(openUrl);
   const jobType = detail.job.job_type === "spec" ? "spec" : "part";
-  const finder = partFinder(itemName, detail.car?.make);
+  const finder = partFinder(itemName, detail.car?.make, detail.job.fit_descriptor);
   const known = detail.knownVersion ?? null;
   const versionRow = catalogueVersionRow(detail.car, known).filter((c) => c.label !== "Model" && c.value !== "—");
   const dates = buildDates(detail.car);
@@ -720,6 +720,20 @@ function BrowserCheckCard({
         ) },
     { id: "part", ok: partFound === true, no: partFound === false, node: (
           <div className="flex w-full flex-col gap-2" data-testid="guide-find-part">
+            {jobType === "part" && finder.picture ? (
+              <ul className="flex flex-col gap-1.5">
+                <li>
+                  Search <span className="font-semibold">{finder.search}</span>
+                  <CopyIcon text={finder.search} />
+                </li>
+                <li data-testid="guide-picture">
+                  Open the picture <span className="font-semibold">{finder.picture}</span>
+                </li>
+                <li>
+                  Do you see a row with <span className="font-semibold">{finder.rowName}</span> in its name?
+                </li>
+              </ul>
+            ) : (
             <p>
               {jobType === "part" ? (
                 <>
@@ -734,6 +748,7 @@ function BrowserCheckCard({
                 </>
               )}
             </p>
+            )}
             {yesNo(partFound, setPartFound, "q-part")}
           </div>
         ) },
