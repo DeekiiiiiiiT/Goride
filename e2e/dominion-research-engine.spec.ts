@@ -737,6 +737,16 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect(s.getByTestId("streak")).toHaveText("6 of 20");
     await expect(s.getByTestId("cost-per-job")).toHaveText("US$0.075 / job");
     await expect(s.getByTestId("spend-today")).toContainText("US$0.31");
+    // RE-37: jobs a day at the cap; RE-50: the cap refuses more than Google's daily limit allows.
+    await expect(s.getByTestId("jobs-per-day")).toHaveText("About 18 jobs a day at this cap.");
+    await s.getByTestId("cap-change").click();
+    await s.getByTestId("cap-input").fill("30");
+    await expect(s.getByTestId("cap-too-high")).toContainText("The most that helps is US$21.00 a day");
+    await expect(s.getByTestId("cap-save")).toBeDisabled();
+    await s.getByTestId("cap-input").fill("3");
+    await expect(s.getByTestId("cap-editor")).toContainText("About 40 jobs a day.");
+    await s.getByTestId("cap-save").click();
+    await expect.poll(() => calls.some((c) => c.path === "/settings" && JSON.stringify(c.body) === JSON.stringify({ daily_spend_usd: 3 }))).toBe(true);
     await expect(s.getByTestId("fill-goal")).toContainText("18 Feb 2027");
     await expect(s.getByText("On track")).toBeVisible();
     await expect(s.getByTestId("expected-finish")).toContainText("30 Jan 2027");
@@ -746,7 +756,7 @@ test.describe("Research engine screens (layer 3)", () => {
     await shot(page, "09-research-settings-health");
     await noDropWords(page);
     await s.getByTestId("engine-pause").click();
-    await expect.poll(() => calls.find((c) => c.path === "/settings")?.body).toEqual({ paused: true });
+    await expect.poll(() => calls.some((c) => c.path === "/settings" && JSON.stringify(c.body) === JSON.stringify({ paused: true }))).toBe(true);
     await s.getByTestId("practice-toggle").click();
     await expect.poll(() => calls.some((c) => JSON.stringify(c.body) === JSON.stringify({ shadow_mode: false }))).toBe(true);
     await s.getByTestId("engine-toggle").click();

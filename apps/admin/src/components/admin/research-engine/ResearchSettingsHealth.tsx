@@ -19,6 +19,11 @@ import { openTrustedSources } from "./ResearchNoticeBanners";
 import { onTrack, shortDate, siteName, usd } from "./researchModel";
 
 const SHADOW_GOAL = 20;
+/**
+ * RE-50: Google allows 1,500 grounded searches a day at US$0.014 each, so a cap above about US$21 a day can't buy more
+ * research — only "grounding limit" pauses. The cap field refuses more (the server does too).
+ */
+export const CAP_CEILING_USD = 21;
 
 function Toggle({ checked, onChange, disabled, testId, label }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; testId: string; label: string }) {
   return (
@@ -64,6 +69,8 @@ export function ResearchSettingsHealth() {
   const [confirmOff, setConfirmOff] = useState(false);
   const [editGoal, setEditGoal] = useState(false);
   const [goal, setGoal] = useState("");
+  const [editCap, setEditCap] = useState(false);
+  const [capInput, setCapInput] = useState("");
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -126,6 +133,12 @@ export function ResearchSettingsHealth() {
   const cap = Number(summary.dailySpendUsd ?? settings.daily_spend_usd ?? 0);
   const spent = Number(summary.spendTodayUsd ?? 0);
   const spentPct = cap > 0 ? Math.min(100, (spent / cap) * 100) : 0;
+  // RE-37: how many jobs a day the cap buys at this week's cost per job.
+  const perJob = Number(summary.costPerJob7dUsd ?? 0);
+  const jobsPerDay = cap > 0 && perJob > 0 ? Math.floor(cap / perJob) : null;
+  const capValue = Number(capInput);
+  const capBad = capInput.trim() === "" || !Number.isFinite(capValue) || capValue < 0;
+  const capTooHigh = !capBad && capValue > CAP_CEILING_USD;
   const track = onTrack(summary.fillTargetDate, summary.expectedFinishDate);
   const pending = summary.remainingJobs;
   const groups = { car_maker: 0, part_maker: 0, reference: 0 } as Record<string, number>;
@@ -260,6 +273,65 @@ export function ResearchSettingsHealth() {
                 {usd(spent)} <span className={`font-normal ${D_MUTED}`}>/ {usd(cap)} cap</span>
               </span>
             </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className={`text-[13px] ${D_MUTED}`} data-testid="jobs-per-day">
+                {jobsPerDay != null ? `About ${jobsPerDay.toLocaleString("en-GB")} jobs a day at this cap.` : "Jobs a day: shown once jobs have run this week."}
+              </span>
+              {editCap ? null : (
+                <PartsButton
+                  variant="secondary"
+                  className="!min-h-[32px] !px-2"
+                  data-testid="cap-change"
+                  onClick={() => {
+                    setCapInput(String(cap));
+                    setEditCap(true);
+                  }}
+                >
+                  Change cap
+                </PartsButton>
+              )}
+            </div>
+            {editCap ? (
+              <div className="flex flex-col gap-2" data-testid="cap-editor">
+                <label className="flex items-center gap-2">
+                  <span className={`text-[13px] ${D_TXT}`}>Daily cap (US$)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={CAP_CEILING_USD}
+                    step="0.05"
+                    value={capInput}
+                    onChange={(e) => setCapInput(e.target.value)}
+                    className="h-10 w-28 rounded-lg border border-[#c5c6d0] bg-white px-2 text-[13px] dark:border-[#334155] dark:bg-[#0b1220] dark:text-[#e2e8f0]"
+                    data-testid="cap-input"
+                  />
+                </label>
+                {capTooHigh ? (
+                  <p className="text-[13px] text-[#a83836]" data-testid="cap-too-high">
+                    The most that helps is {usd(CAP_CEILING_USD)} a day: Google allows 1,500 searches a day. A higher cap only buys pauses.
+                  </p>
+                ) : !capBad && perJob > 0 ? (
+                  <p className={`text-[13px] ${D_MUTED}`}>About {Math.floor(capValue / perJob).toLocaleString("en-GB")} jobs a day.</p>
+                ) : null}
+                <div className="flex gap-2">
+                  <PartsButton
+                    variant="primary"
+                    className="!min-h-[44px]"
+                    disabled={busy || capBad || capTooHigh}
+                    data-testid="cap-save"
+                    onClick={() => {
+                      setEditCap(false);
+                      void patch({ daily_spend_usd: Math.round(capValue * 100) / 100 }, "Cap saved");
+                    }}
+                  >
+                    Save
+                  </PartsButton>
+                  <PartsButton variant="secondary" className="!min-h-[44px]" onClick={() => setEditCap(false)}>
+                    Cancel
+                  </PartsButton>
+                </div>
+              </div>
+            ) : null}
             <div className="h-2.5 w-full overflow-hidden rounded-full bg-[#ededf9] dark:bg-[#1e293b]">
               <div className="h-full rounded-full bg-[#003ea9] dark:bg-[#5b8def]" style={{ width: `${spentPct}%` }} />
             </div>
