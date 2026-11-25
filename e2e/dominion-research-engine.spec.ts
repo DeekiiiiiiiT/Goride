@@ -446,6 +446,12 @@ test.describe("Research engine screens (layer 3)", () => {
     await d.getByTestId("q-part-yes").click();
     await d.getByTestId("browser-check-next").click();
     await d.getByTestId("q-suggestion").filter({ hasText: "00000-T0009" }).click();
+    // The dates shown next to the number, on the same step (owner, 25 Nov).
+    await expect(d.getByTestId("browser-check-next")).toBeDisabled();
+    await d.getByTestId("q-dates1-from-month").selectOption("11");
+    await d.getByTestId("q-dates1-from-year").selectOption("2016");
+    await d.getByTestId("q-dates1-to-month").selectOption("9");
+    await d.getByTestId("q-dates1-to-year").selectOption("2020");
     await d.getByTestId("browser-check-next").click();
     // The second-number question has no default answer.
     await expect(d.getByTestId("browser-check-next")).toBeDisabled();
@@ -456,7 +462,17 @@ test.describe("Research engine screens (layer 3)", () => {
     await d.getByTestId("browser-check-confirm").click();
     await expect.poll(() => calls.find((c) => c.path === "/browser-checks/job-bcp/confirm")?.body).toEqual({
       url: "https://www.amayama.com/en/part/toyota/roomy-m900a-plugs",
-      answers: { versionOk: true, versionCode: null, partFound: true, value: "00000-T0009", valueAgain: null, positions: null, datesOk: true, sideOk: null },
+      answers: {
+        versionOk: true,
+        versionCode: null,
+        partFound: true,
+        value: "00000-T0009",
+        valueAgain: null,
+        positions: null,
+        datesShown: [{ fromMonth: 11, fromYear: 2016, toMonth: 9, toYear: 2020 }],
+        datesOk: true,
+        sideOk: null,
+      },
       rowName: "PLUG, SPARK",
       buildText: "2016 – 2020",
       knownCode: "M900A-AGBVE",
@@ -489,6 +505,12 @@ test.describe("Research engine screens (layer 3)", () => {
     // A typed number needs typing twice before Next.
     await expect(d.getByTestId("browser-check-next")).toBeDisabled();
     await d.getByTestId("q-position-rear-left").getByTestId("q-position-again").fill("00000-S0009");
+    // The dates shown next to the number, on the same step (owner, 25 Nov).
+    await expect(d.getByTestId("browser-check-next")).toBeDisabled();
+    await d.getByTestId("q-dates1-from-month").selectOption("11");
+    await d.getByTestId("q-dates1-from-year").selectOption("2016");
+    await d.getByTestId("q-dates1-to-month").selectOption("9");
+    await d.getByTestId("q-dates1-to-year").selectOption("2020");
     await shot(page, "19-four-corner-check");
     await d.getByTestId("browser-check-next").click();
     await d.getByTestId("q-change-no").click();
@@ -508,6 +530,7 @@ test.describe("Research engine screens (layer 3)", () => {
           { axle: "front", side: "right", value: "00000-S0001", valueAgain: null },
           { axle: "rear", side: "left", value: "00000-S0009", valueAgain: "00000-S0009" },
         ],
+        datesShown: [{ fromMonth: 11, fromYear: 2016, toMonth: 9, toYear: 2020 }],
         datesOk: true,
         sideOk: null,
       },
@@ -530,16 +553,24 @@ test.describe("Research engine screens (layer 3)", () => {
     await d.getByTestId("browser-check-next").click();
     // The number first (owner, 25 Nov), then whether there is a second one.
     await d.getByTestId("q-position-front-left").getByTestId("q-position-suggestion").filter({ hasText: "00000-S0002" }).click();
+    // The dates shown next to the number, on the same step (owner, 25 Nov).
+    await expect(d.getByTestId("browser-check-next")).toBeDisabled();
+    await d.getByTestId("q-dates1-from-month").selectOption("11");
+    await d.getByTestId("q-dates1-from-year").selectOption("2016");
+    await d.getByTestId("q-dates1-to-month").selectOption("11");
+    await d.getByTestId("q-dates1-to-year").selectOption("2018");
     await d.getByTestId("browser-check-next").click();
     await expect(d.getByTestId("q-change")).toContainText("Is there another part number for it, with different dates?");
     await d.getByTestId("q-change-yes").click();
     await d.getByTestId("browser-check-next").click();
-    // The second number needs its start month and year, and a number, before Next.
+    // The second number's dates start where the first one's end (filled in); it needs its end date and a number.
+    await expect(d.getByTestId("q-change-month")).toHaveValue("11");
+    await expect(d.getByTestId("q-change-year")).toHaveValue("2018");
+    await expect(d.getByTestId("q-split")).toContainText("The second part number for each place:");
+    await expect(d.getByTestId("q-split-front-left|from")).toContainText("Front left:");
     await expect(d.getByTestId("browser-check-next")).toBeDisabled();
-    await d.getByTestId("q-change-month").selectOption("11");
-    await d.getByTestId("q-change-year").selectOption("2018");
-    await expect(d.getByTestId("q-split")).toContainText("The second number's dates start:");
-    await expect(d.getByTestId("q-split-front-left|from")).toContainText("Front left, from Nov 2018:");
+    await d.getByTestId("q-dates2-to-month").selectOption("9");
+    await d.getByTestId("q-dates2-to-year").selectOption("2020");
     await expect(d.getByTestId("browser-check-next")).toBeDisabled();
     await d.getByTestId("q-split-front-left|from").getByTestId("q-split-value").fill("00000-S0012");
     await d.getByTestId("q-split-front-left|from").getByTestId("q-split-again").fill("00000-S0012");
@@ -562,6 +593,10 @@ test.describe("Research engine screens (layer 3)", () => {
         positions: [
           { axle: "front", side: "left", value: "00000-S0002", valueAgain: null, period: "before" },
           { axle: "front", side: "left", value: "00000-S0012", valueAgain: "00000-S0012", period: "from" },
+        ],
+        datesShown: [
+          { fromMonth: 11, fromYear: 2016, toMonth: 11, toYear: 2018 },
+          { fromMonth: 11, fromYear: 2018, toMonth: 9, toYear: 2020 },
         ],
         datesOk: true,
         sideOk: null,

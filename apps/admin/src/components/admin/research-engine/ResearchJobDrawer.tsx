@@ -532,9 +532,14 @@ function BrowserCheckCard({
   const [changeMonth, setChangeMonth] = useState(0);
   const [changeYear, setChangeYear] = useState(0);
   const [stepAt, setStepAt] = useState(0);
+  // Owner 25 Nov: the dates the site shows next to the first number (from / to), and the second number's end date.
+  const [d1, setD1] = useState({ fm: 0, fy: 0, tm: 0, ty: 0 });
+  const [d2, setD2] = useState({ tm: 0, ty: 0 });
   // Another check opened in the same drawer starts clean (keyed on the job only, so a refetch keeps the answers).
   useEffect(() => {
     setStepAt(0);
+    setD1({ fm: 0, fy: 0, tm: 0, ty: 0 });
+    setD2({ tm: 0, ty: 0 });
     setChanged(null);
     setChangeMonth(0);
     setChangeYear(0);
@@ -591,6 +596,14 @@ function BrowserCheckCard({
   const canSplit = jobType === "part";
   const split = canSplit && changed === true;
   const changeYears = changeYearOptions(detail.car);
+  const dateYears = (() => {
+    const now = new Date().getFullYear();
+    const from = (detail.car?.production_start_year || now - 30) - 10;
+    const to = Math.min((detail.car?.production_end_year || now) + 10, now + 1);
+    const out: number[] = [];
+    for (let y = from; y <= to; y++) out.push(y);
+    return out;
+  })();
   const changeText = changeMonth && changeYear ? `${MONTHS[changeMonth - 1]} ${changeYear}` : "the change";
   const splitKeys = (positions ?? [{ key: "one", axle: null, side: null, label: "" }]).flatMap((p) => [
     { place: p, period: "before" as const, key: p.key },
@@ -599,9 +612,15 @@ function BrowserCheckCard({
   const filledSplit = splitKeys.filter((k) => posValue(k.key));
   const splitOk = Boolean(changeMonth && changeYear) && filledSplit.length > 0 && filledSplit.every((k) => posAgainOk(k.key));
   // Owner 25 Nov: a part's number is asked first (before any date question); one number when the part has no places.
-  const firstOk = positions ? positionsOk : Boolean(posValue("one")) && posAgainOk("one");
+  const ym = (m: number, y: number) => y * 12 + m;
+  const d1Done = Boolean(d1.fm && d1.fy && d1.tm && d1.ty);
+  const d1Backwards = d1Done && ym(d1.tm, d1.ty) < ym(d1.fm, d1.fy);
+  const d2Done = Boolean(changeMonth && changeYear && d2.tm && d2.ty);
+  const d2Backwards = d2Done && ym(d2.tm, d2.ty) < ym(changeMonth, changeYear);
+  const firstOk = (positions ? positionsOk : Boolean(posValue("one")) && posAgainOk("one")) && d1Done && !d1Backwards;
   const secondOk =
-    Boolean(changeMonth && changeYear) &&
+    d2Done &&
+    !d2Backwards &&
     splitKeys.filter((k) => k.period === "from" && posValue(k.key)).length > 0 &&
     splitKeys.filter((k) => k.period === "from").every((k) => posAgainOk(k.key));
   const canConfirm = Boolean(
@@ -659,6 +678,26 @@ function BrowserCheckCard({
     </>
   );
 
+  const monthYear = (m: number, setM: (v: number) => void, y: number, setY: (v: number) => void, id: string, years: number[] = dateYears) => (
+    <>
+      <select value={m || ""} onChange={(e) => setM(Number(e.target.value) || 0)} className={`${input} !w-auto`} data-testid={`${id}-month`}>
+        <option value="">Month</option>
+        {MONTHS.map((name, i) => (
+          <option key={name} value={i + 1}>
+            {name}
+          </option>
+        ))}
+      </select>
+      <select value={y || ""} onChange={(e) => setY(Number(e.target.value) || 0)} className={`${input} !w-auto`} data-testid={`${id}-year`}>
+        <option value="">Year</option>
+        {years.map((yr) => (
+          <option key={yr} value={yr}>
+            {yr}
+          </option>
+        ))}
+      </select>
+    </>
+  );
   const yesNo = (v: boolean | null, set: (b: boolean) => void, id: string, noLabel = "No") => (
     <div className="flex gap-2">
       <PartsButton variant={v === true ? "primary" : "secondary"} className="!min-h-[32px]" onClick={() => set(true)} data-testid={`${id}-yes`}>
@@ -771,57 +810,56 @@ function BrowserCheckCard({
                 {numberPick(p.key, positions ? "q-position" : "q")}
               </div>
             ))}
+            <div className="flex flex-col gap-1.5" data-testid="q-dates1">
+              <span className="font-semibold">{positions ? "The dates shown next to these numbers:" : "The dates shown next to it:"}</span>
+              <div className="flex flex-wrap items-center gap-2">
+                {monthYear(d1.fm, (v) => setD1((o) => ({ ...o, fm: v })), d1.fy, (v) => setD1((o) => ({ ...o, fy: v })), "q-dates1-from")}
+                <span>to</span>
+                {monthYear(d1.tm, (v) => setD1((o) => ({ ...o, tm: v })), d1.ty, (v) => setD1((o) => ({ ...o, ty: v })), "q-dates1-to")}
+              </div>
+              {d1Backwards ? <p className="text-[#a83836]">The end date is before the start date.</p> : null}
+            </div>
           </div>
         ) },
         { id: "change", ok: changed !== null, node: (
           <div className="flex w-full flex-col gap-2" data-testid="q-change">
             <p>Is there another part number for it, with different dates?</p>
             <p className="text-[13px]">For example: one number for 11.2016 – 11.2018 and another for 11.2018 – 09.2020.</p>
-            {yesNo(changed, setChanged, "q-change")}
+            {yesNo(
+              changed,
+              (b) => {
+                setChanged(b);
+                // The second number's dates usually start where the first one's end.
+                if (b && !changeMonth && !changeYear && d1.tm && d1.ty) {
+                  setChangeMonth(d1.tm);
+                  setChangeYear(d1.ty);
+                }
+              },
+              "q-change",
+            )}
           </div>
         ) },
         ...(split
           ? [{ id: "second", ok: secondOk, node: (
             <div className="flex w-full flex-col gap-3" data-testid="q-split">
-              <div className="flex flex-wrap items-center gap-2">
-                <span>The second number's dates start:</span>
-                <select
-                  value={changeMonth || ""}
-                  onChange={(e) => setChangeMonth(Number(e.target.value) || 0)}
-                  className={`${input} !w-auto`}
-                  data-testid="q-change-month"
-                >
-                  <option value="">Month</option>
-                  {MONTHS.map((m, i) => (
-                    <option key={m} value={i + 1}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={changeYear || ""}
-                  onChange={(e) => setChangeYear(Number(e.target.value) || 0)}
-                  className={`${input} !w-auto`}
-                  data-testid="q-change-year"
-                >
-                  <option value="">Year</option>
-                  {changeYears.map((y) => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
-              </div>
               <p>{positions ? "The second part number for each place:" : "The second part number:"}</p>
               {splitKeys.filter((k) => k.period === "from").map((k) => (
                 <div key={k.key} className="flex flex-col gap-1.5" data-testid={`q-split-${k.key}`}>
                   <span className="font-semibold">
-                    {k.place.label ? `${k.place.label}, from ` : "From "}
-                    {changeText}:
+                    {k.place.label ? `${k.place.label}:` : null}
                   </span>
                   {numberPick(k.key, "q-split")}
                 </div>
               ))}
+              <div className="flex flex-col gap-1.5" data-testid="q-dates2">
+                <span className="font-semibold">The dates shown next to it:</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  {monthYear(changeMonth, setChangeMonth, changeYear, setChangeYear, "q-change", changeYears)}
+                  <span>to</span>
+                  {monthYear(d2.tm, (v) => setD2((o) => ({ ...o, tm: v })), d2.ty, (v) => setD2((o) => ({ ...o, ty: v })), "q-dates2-to")}
+                </div>
+                {d2Backwards ? <p className="text-[#a83836]">The end date is before the start date.</p> : null}
+              </div>
             </div>
           ) }]
           : []),
@@ -982,6 +1020,14 @@ function BrowserCheckCard({
                         }))
                         : null,
                     }),
+                  ...(jobType === "part"
+                    ? {
+                      datesShown: [
+                        { fromMonth: d1.fm, fromYear: d1.fy, toMonth: d1.tm, toYear: d1.ty },
+                        ...(split ? [{ fromMonth: changeMonth, fromYear: changeYear, toMonth: d2.tm, toYear: d2.ty }] : []),
+                      ],
+                    }
+                    : {}),
                   datesOk: datesOk === true,
                   sideOk: side && !positions ? sideOk === true : null,
                 },

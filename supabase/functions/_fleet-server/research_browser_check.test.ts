@@ -267,6 +267,18 @@ Deno.test("RE-68: four Yes answers and a number → confirmed, with the answers 
   }
 });
 
+Deno.test("Owner 25 Nov: the dates the owner read go into the evidence; bad ones are left out, never a gate", () => {
+  const r = answersGate({
+    ...ANS_BASE,
+    answers: { ...YES, value: "17801-21060", datesShown: [{ fromMonth: 11, fromYear: 2016, toMonth: 9, toYear: 2020 }] },
+  });
+  assertEquals(r.ok, true);
+  if (r.ok) assertEquals(r.evidence.includes("17801-21060 · dates shown 11.2016 – 09.2020 · dates include"), true);
+  const bad = answersGate({ ...ANS_BASE, answers: { ...YES, value: "17801-21060", datesShown: [{ fromMonth: 13, fromYear: 2016, toMonth: 9, toYear: 2020 }] } });
+  assertEquals(bad.ok, true);
+  if (bad.ok) assertEquals(bad.evidence.includes("dates shown"), false);
+});
+
 Deno.test("RE-68: any No stops Confirm; a frame code, year or engine code is never a number", () => {
   assertEquals(answersGate({ ...ANS_BASE, answers: { ...YES, datesOk: false, value: "17801-21060" } }), { ok: false, reason: "dates_no" });
   assertEquals(answersGate({ ...ANS_BASE, answers: { ...YES, versionOk: false, value: "17801-21060" } }), { ok: false, reason: "version_no" });
