@@ -3,6 +3,7 @@
  * Plan: docs/cloudflare-r2-storage-migration-audit.md
  */
 import { assertSafeKey, r2ConfigFromEnv, r2FromEnv } from "./r2Client.ts";
+import { isR2PrivateLinksEnabled } from "./fileLink.ts";
 import type { FlowDeps } from "./uploadFlow.ts";
 
 export { assertSafeKey, R2_BUCKETS, R2Client, r2ConfigFromEnv, r2FromEnv } from "./r2Client.ts";
@@ -52,4 +53,15 @@ export function publicMediaUrl(
     return null;
   }
   return `${base}/${k.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+/**
+ * The switch for public purposes (merchant pictures, customer avatars, profile photos): the shared
+ * R2 switch **plus `R2_PUBLIC_BASE_URL`**, because a public file is useless without its media
+ * address — and that address is permanent (no expiry), unlike a signed private link.
+ */
+export function isR2PublicAssetsEnabled(
+  env: (name: string) => string | undefined = (n) => Deno.env.get(n),
+): boolean {
+  return isR2PrivateLinksEnabled(env) && !!env("R2_PUBLIC_BASE_URL")?.trim();
 }

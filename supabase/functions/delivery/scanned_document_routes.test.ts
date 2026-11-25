@@ -15,6 +15,7 @@ const SWITCH_VARS = [
   "R2_SECRET_ACCESS_KEY",
   "FILE_LINK_SECRET",
   "SUPABASE_URL",
+  "R2_PUBLIC_BASE_URL",
   "MALWARE_SCAN_API_KEY",
   "MALWARE_SCAN_FAIL_OPEN",
 ];
@@ -42,6 +43,9 @@ const SHARED_ON: Record<string, string> = {
   FILE_LINK_SECRET: "link-secret",
   SUPABASE_URL: "https://x.supabase.co",
 };
+
+/** Public purposes additionally need the media base address (also set in production). */
+const PUBLIC_ON: Record<string, string> = { ...SHARED_ON, R2_PUBLIC_BASE_URL: "https://media.roamfleet.co" };
 
 function makeApp(userId: string | null = "user-1") {
   const app = new Hono();
@@ -154,18 +158,18 @@ Deno.test("scanned routes: no session → 401 on both steps", async () => {
   });
 });
 
-Deno.test("app uploads: courier proof photos + driver photos use the shared switch, not the scan key", async () => {
+Deno.test("app uploads: courier proof photos use the shared switch; profile photos need the media base", async () => {
+  // Proofs / issue photos: the shared switch is enough.
   await withEnv(SHARED_ON, async () => {
     const app = makeApp();
-    for (const purpose of ["courier-photos", "driver-photos"]) {
-      const res = await startAt(app, "/app-uploads/start", { purpose, contentType: "image/jpeg", size: 100 });
-      assertEquals(res.status, 200, purpose);
-      const body = await res.json() as { enabled: boolean; uploadUrl: string; ticket: string };
-      assertEquals(body.enabled, true, purpose);
-      assert(body.uploadUrl.includes("/roam-private/pending/"), purpose);
-      assert(body.ticket.includes("."), purpose);
-    }
-    // The old route name still works for these purposes too.
+    const res = await startAt(app, "/app-uploads/start", { purpose: "courier-photos", contentType: "image/jpeg", size: 100 });
+    assertEquals(res.status, 200);
+    const body = await res.json() as { enabled: boolean; uploadUrl: string; ticket: string };
+    assertEquals(body.enabled, true);
+    assert(body.uploadUrl.includes("/roam-private/pending/"), body.uploadUrl);
+    assert(body.ticket.includes("."), body.ticket);
+
+    // The old route name still works too.
     const legacy = await startAt(app, "/scanned-documents/start", {
       purpose: "courier-photos",
       contentType: "image/jpeg",
@@ -181,14 +185,38 @@ Deno.test("app uploads: courier proof photos + driver photos use the shared swit
     });
     assertEquals(await docs.json(), { enabled: false });
   });
+
+  // Profile photos (public purposes) also need R2_PUBLIC_BASE_URL: without it they keep the old path.
+  await withEnv(SHARED_ON, async () => {
+    for (const purpose of ["driver-photos", "courier-profile"]) {
+      const res = await startAt(makeApp(), "/app-uploads/start", { purpose, contentType: "image/jpeg", size: 100 });
+      assertEquals(await res.json(), { enabled: false }, purpose);
+    }
+  });
+  await withEnv(PUBLIC_ON, async () => {
+    for (const purpose of ["driver-photos", "courier-profile"]) {
+      const res = await startAt(makeApp(), "/app-uploads/start", { purpose, contentType: "image/jpeg", size: 100 });
+      const body = await res.json() as { enabled?: boolean; uploadUrl?: string };
+      assertEquals(body.enabled, true, purpose);
+      assert(String(body.uploadUrl).includes("/roam-private/pending/"), purpose);
+    }
+  });
 });
 
-Deno.test("app uploads: photos are never scanned, so a proof never waits on the virus check", () => {
-  assertEquals(UPLOAD_PURPOSES["courier-photos"].scan, false);
+Deno.test("app uploads: proofs and issue photos stay private; profile photos are public", () => {
+  // Proofs / issue photos: private, never scanned.
   assertEquals(UPLOAD_PURPOSES["courier-photos"].bucket, "private");
+  assertEquals(UPLOAD_PURPOSES["courier-photos"].scan, false);
   assertEquals(UPLOAD_PURPOSES["courier-photos"].maxBytes, 10 * 1024 * 1024);
   assertEquals([...UPLOAD_PURPOSES["courier-photos"].mimes].sort(), ["image/jpeg", "image/png", "image/webp"]);
-  assertEquals(UPLOAD_PURPOSES["driver-photos"].scan, false);
+
+  // Profile photos: public + media address, so the saved value never expires.
+  for (const purpose of ["courier-profile", "driver-photos"]) {
+    assertEquals(UPLOAD_PURPOSES[purpose].bucket, "public", purpose);
+    assertEquals(UPLOAD_PURPOSES[purpose].scan, false, purpose);
+  }
+  assertEquals(UPLOAD_PURPOSES["driver-photos"].maxBytes, 5 * 1024 * 1024);
+  assertEquals(UPLOAD_PURPOSES["courier-profile"].maxBytes, 10 * 1024 * 1024);
 });
 
 Deno.test("app uploads: switch off for the photo purpose → old direct upload", async () => {

@@ -1,15 +1,20 @@
 /**
  * Start / finish upload routes for the files the apps upload themselves (courier app, hauler app).
  *
- *   purpose            gate                                    scanned?
- *   courier-docs       the scanned-purpose switch (+key)        yes
- *   driver-docs        the scanned-purpose switch (+key)        yes
- *   courier-photos     the shared R2 switch (already on in prod) no
- *   driver-photos      the shared R2 switch (already on in prod) no
+ *   purpose            gate                                        scanned?  stored address
+ *   courier-docs       the scanned-purpose switch (+scan key)        yes      signed link
+ *   driver-docs        the scanned-purpose switch (+scan key)        yes      signed link
+ *   courier-photos     the shared R2 switch (on in prod)             no       signed link
+ *   courier-profile    the shared switch + R2_PUBLIC_BASE_URL        no       media address
+ *   driver-photos      the shared switch + R2_PUBLIC_BASE_URL        no       media address
  *
  *   start → { enabled: false }                     when that purpose's gate is off
  *         → { enabled: true, uploadUrl, ticket }   when it is on (PUT the file to uploadUrl)
  *   finish → { enabled: true, key, address, … }    after PUT; a scanned purpose scans here
+ *
+ * `courier-profile` and `driver-photos` are public on purpose: their addresses are saved once and
+ * shown indefinitely (passengers, staff), so they must be permanent media addresses and never a
+ * signed link that expires.
  *
  * The scanned purposes require MALWARE_SCAN_API_KEY (see _shared/objectStorage/scannedPurposes.ts),
  * so with today's production secrets their starts answer `{ enabled: false }` and those apps keep
@@ -19,7 +24,9 @@
 import type { Context, Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
+  FILE_LINK_SECONDS,
   finishUpload,
+  isR2PublicAssetsEnabled,
   startUpload,
   storageDepsFromEnv,
   StorageFlowError,
@@ -30,18 +37,27 @@ import {
   scannedDocAddress,
 } from "../_shared/objectStorage/scannedPurposes.ts";
 
-type PurposeGate = "scanned" | "shared";
+type PurposeGate = "scanned" | "shared-private" | "public";
 
 /** Only these purposes can be uploaded by an app; everything else is a server-side route. */
 const APP_UPLOAD_PURPOSES: Record<string, PurposeGate> = {
   "courier-docs": "scanned",
   "driver-docs": "scanned",
-  "courier-photos": "shared",
-  "driver-photos": "shared",
+  "courier-photos": "shared-private",
+  "courier-profile": "public",
+  "driver-photos": "public",
 };
 
 function purposeEnabled(purpose: string): boolean {
-  return APP_UPLOAD_PURPOSES[purpose] === "scanned" ? isScannedR2Enabled() : isR2PrivateLinksEnabled();
+  const gate = APP_UPLOAD_PURPOSES[purpose];
+  if (gate === "scanned") return isScannedR2Enabled();
+  if (gate === "public") return isR2PublicAssetsEnabled();
+  return isR2PrivateLinksEnabled();
+}
+
+/** Public purposes answer a permanent media address; private ones answer a signed link. */
+function isPublicPurpose(purpose: string): boolean {
+  return APP_UPLOAD_PURPOSES[purpose] === "public";
 }
 
 export type ScannedDocumentDeps = {
@@ -104,12 +120,18 @@ export function registerScannedDocumentRoutes(app: Hono, deps: ScannedDocumentDe
     const body = (await c.req.json().catch(() => ({}))) as { ticket?: unknown };
     try {
       const done = await finishUpload({ ticket: String(body.ticket || ""), userId: user.id }, storageDepsFromEnv());
-      // The app stores this address, so old readers (which already accept an http address) keep working.
-      const address = await scannedDocAddress(done.key);
+      // Public purposes (profile photos) get the permanent media address — never a link that
+      // expires, because the row keeps it for good. Private ones get a signed address, which the
+      // old readers already accept as an http value.
+      const address = isPublicPurpose(done.purpose) && done.publicUrl
+        ? done.publicUrl
+        : await scannedDocAddress(done.key);
       return c.json({
         enabled: true,
         key: done.key,
         address,
+        publicUrl: done.publicUrl,
+        expiresInSeconds: isPublicPurpose(done.purpose) ? null : FILE_LINK_SECONDS,
         size: done.size,
         contentType: done.contentType,
       });

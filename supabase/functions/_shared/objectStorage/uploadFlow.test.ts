@@ -103,6 +103,36 @@ Deno.test("catalogue image is public, cached for a year, and gets a media addres
   assertEquals(f.objects.get(`public:${done.key}`)?.cacheControl, PUBLIC_CACHE);
 });
 
+Deno.test("profile photos are public: permanent media address, never a link that expires", async () => {
+  for (const purpose of ["driver-photos", "courier-profile"]) {
+    const f = fakeStore();
+    const d = deps(f.store);
+    const s = await startUpload({ purpose, scopeId: USER, userId: USER, contentType: "image/jpeg", size: 14 }, d);
+    f.put(pendingKeyOf(s.uploadUrl), JPEG, "image/jpeg");
+    const done = await finishUpload({ ticket: s.ticket, userId: USER }, d);
+
+    assertEquals(done.bucket, "public", purpose);
+    assert(done.key.startsWith(`${purpose}/${USER}/`), done.key);
+    // A plain media address: no query string, no signature, no expiry.
+    assertEquals(done.publicUrl, `https://media.test/${done.key}`);
+    assert(!String(done.publicUrl).includes("?"), String(done.publicUrl));
+    // Kept in roam-public with the one-year immutable cache header.
+    assertEquals(f.objects.get(`public:${done.key}`)?.cacheControl, PUBLIC_CACHE);
+    assertEquals(f.objects.has(`private:${done.key}`), false);
+  }
+});
+
+Deno.test("delivery proofs stay private: no public address for courier photos", async () => {
+  const f = fakeStore();
+  const d = deps(f.store);
+  const s = await startUpload({ purpose: "courier-photos", scopeId: USER, userId: USER, contentType: "image/jpeg", size: 14 }, d);
+  f.put(pendingKeyOf(s.uploadUrl), JPEG, "image/jpeg");
+  const done = await finishUpload({ ticket: s.ticket, userId: USER }, d);
+  assertEquals(done.bucket, "private");
+  assertEquals(done.publicUrl, null);
+  assertEquals(f.objects.get(`private:${done.key}`)?.cacheControl, PRIVATE_CACHE);
+});
+
 Deno.test("start refuses unknown purpose, wrong type, oversize and bad scope", async () => {
   const d = deps(fakeStore().store);
   const base = { purpose: "evidence", scopeId: ORG_A, userId: USER, contentType: "image/jpeg", size: 100 };
