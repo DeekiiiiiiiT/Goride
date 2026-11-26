@@ -42,6 +42,8 @@ export async function readPartsBrowse(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from("maintenance_service_categories")
     .select("id, name, plain_name, icon_key, parent_id, is_part, common_rank, position_aware, kind, op_code, description")
+    // G9: a draft type is not in the parts browser or a person's type picker.
+    .eq("part_type_status", "active")
     .order("name");
   if (error) throw error;
   return shapeBrowse((data || []) as Array<Record<string, unknown>>);
@@ -261,7 +263,9 @@ export async function readPartTerm(supabase: SupabaseClient, q: string, catalogI
   const like = searchLike(needle);
   const norm = partNorm(needle);
   const [{ data: names, error: nameError }, { data: synonyms, error: synonymError }, { data: numbers, error: numberError }, exactResult] = await Promise.all([
-    supabase.from("maintenance_service_categories").select("id, name, plain_name").or(`name.ilike.${like},plain_name.ilike.${like}`).limit(16),
+    supabase.from("maintenance_service_categories").select("id, name, plain_name")
+      .eq("part_type_status", "active")
+      .or(`name.ilike.${like},plain_name.ilike.${like}`).limit(16),
     supabase.from("part_term_synonym").select("term, maintenance_component_id, canonical").ilike("term", like).limit(16),
     supabase.from("part_master").select(PART_TERM_COLUMNS).or(`name.ilike.${like},oem_part_number.ilike.${like}`).limit(16),
     norm.length >= 4
@@ -276,7 +280,8 @@ export async function readPartTerm(supabase: SupabaseClient, q: string, catalogI
   const synonymRows = (synonyms || []) as TermSynonym[];
   const missing = [...new Set(synonymRows.map((row) => String(row.maintenance_component_id || "")).filter((id) => id && !components.some((row) => row.id === id)))];
   if (missing.length) {
-    const { data, error } = await supabase.from("maintenance_service_categories").select("id, name, plain_name").in("id", missing);
+    const { data, error } = await supabase.from("maintenance_service_categories").select("id, name, plain_name")
+      .eq("part_type_status", "active").in("id", missing);
     if (error) throw error;
     components.push(...((data || []) as TermComponent[]));
   }

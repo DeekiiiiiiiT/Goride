@@ -12,8 +12,10 @@ import { registerPendingVehicleCatalogRoutes } from "../_fleet-server/pending_ve
 import { registerPendingPartsCatalogRoutes } from "../_fleet-server/pending_parts_catalog_routes.ts";
 import { registerCatalogResearchRoutes } from "../_fleet-server/catalog_research_routes.ts";
 import { registerResearchEngineRoutes } from "../_fleet-server/research_engine_routes.ts";
-import { registerResearchSavedPageRoutes } from "../_fleet-server/research_saved_page_routes.ts";
+import { productionPictureDeps, registerResearchSavedPageRoutes } from "../_fleet-server/research_saved_page_routes.ts";
 import { registerSavedPagePartTypeRoutes } from "../_fleet-server/saved_page_part_type_routes.ts";
+import { registerSavedPagePartNamesRoutes } from "../_fleet-server/saved_page_part_names_routes.ts";
+import { readSortWithGemini } from "../_fleet-server/saved_page_sort_ai.ts";
 import { registerPartPictureInternalRoutes } from "../_fleet-server/part_picture_routes.ts";
 import { registerPartPictureAdminRoutes } from "../_fleet-server/part_picture_admin_routes.ts";
 import { withPrivacyGuard } from "../_fleet-server/research_privacy.ts";
@@ -374,9 +376,11 @@ try {
   registerPendingPartsCatalogRoutes(withPrivacyGuard(app, ["notes"]), writer);
   registerCatalogResearchRoutes(withPrivacyGuard(app), writer);
   registerResearchEngineRoutes(withPrivacyGuard(app), writer);
-  registerResearchSavedPageRoutes(withPrivacyGuard(app), writer);
+  registerResearchSavedPageRoutes(withPrivacyGuard(app), writer, { sortAi: readSortWithGemini });
   // R5 / R6 / R11: add the part type a saved page suggested, dismiss a phrase, and the hidden list.
   registerSavedPagePartTypeRoutes(withPrivacyGuard(app), writer);
+  // R4: the "Sorted by Roam" review list; track / don't track.
+  registerSavedPagePartNamesRoutes(withPrivacyGuard(app), writer, { pictures: productionPictureDeps() });
   // The part-picture worker's door: cron relay only, X-Fleet-Cron-Secret (see part_picture_routes.ts).
   registerPartPictureInternalRoutes(app, writer);
   // Dominion part pictures (§3.5): staff read; owner for the templates, the bulk remake and the settings.

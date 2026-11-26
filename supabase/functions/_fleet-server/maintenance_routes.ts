@@ -14,6 +14,7 @@ import {
   bootstrapVehicleComponentSchedules,
   getPackageChecklist,
 } from "./maintenance_service_ledger_core.ts";
+import { readUsedDraftTypeIds, visiblePartTypes } from "./maintenance_category_visibility.ts";
 import {
   canonicalOdometerForVehicle,
   canonicalOdometerFromMaps,
@@ -1596,6 +1597,9 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
       try {
         const orgId = getOrgId(c);
         const kindFilter = parseCategoryKind(c.req.query("kind"));
+        // G9 (S1b): a draft is hidden from the Log service only when nothing uses it. If the check cannot run,
+        // keep every draft visible rather than lose a job/package that is already logged against it.
+        const usedDrafts = await readUsedDraftTypeIds(supabase).catch(() => null);
         let q = supabase
           .from("maintenance_service_categories")
           .select("*")
@@ -1603,7 +1607,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (kindFilter) q = q.eq("kind", kindFilter);
         const { data, error } = await q;
         if (error) throw error;
-        const baseItems = (data || []) as Record<string, unknown>[];
+        const baseItems = visiblePartTypes(
+          (data || []) as Array<{ id: string; part_type_status?: string | null }>,
+          usedDrafts,
+        ) as Record<string, unknown>[];
         const fitCtx = orgId ? await loadJobFitContext(c, supabase, orgId) : { mode: "off" as const };
         if (fitCtx instanceof Response) return fitCtx;
         if (fitCtx.mode === "off") {
@@ -1690,6 +1697,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const orgId = getOrgId(c);
         const systemId = c.req.param("systemId")?.trim() ?? "";
         if (!isUuid(systemId)) return c.json({ error: "Invalid system id" }, 400);
+        // G9 (S1b): same rule as the category list — a used draft stays, an unused draft is hidden.
+        const usedDrafts = await readUsedDraftTypeIds(supabase).catch(() => null);
         const { data, error } = await supabase
           .from("maintenance_service_categories")
           .select("*")
@@ -1697,7 +1706,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .eq("parent_id", systemId)
           .order("sort_order", { ascending: true });
         if (error) throw error;
-        const baseItems = (data || []) as Record<string, unknown>[];
+        const baseItems = visiblePartTypes(
+          (data || []) as Array<{ id: string; part_type_status?: string | null }>,
+          usedDrafts,
+        ) as Record<string, unknown>[];
         const fitCtx = orgId ? await loadJobFitContext(c, supabase, orgId) : { mode: "off" as const };
         if (fitCtx instanceof Response) return fitCtx;
         if (fitCtx.mode === "off") {

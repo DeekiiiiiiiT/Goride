@@ -313,6 +313,7 @@ jobs:
           supabase/functions/_fleet-server/pending_parts_catalog_routes.test.ts
           supabase/functions/_fleet-server/canonical_from_ops_maintenance.test.ts
           supabase/functions/_fleet-server/maintenance_routes_policy.test.ts
+          supabase/functions/_fleet-server/maintenance_category_visibility.test.ts
           supabase/functions/_fleet-server/log_service_positions.test.ts
           supabase/functions/_fleet-server/inspection_findings.test.ts
           supabase/functions/_fleet-server/log_service_find_ask.test.ts
@@ -369,6 +370,8 @@ jobs:
           supabase/functions/_fleet-server/research_saved_page_routes.test.ts
           supabase/functions/_fleet-server/saved_page_suggest.test.ts
           supabase/functions/_fleet-server/saved_page_diagrams.test.ts
+          supabase/functions/_fleet-server/saved_page_auto_sort.test.ts
+          supabase/functions/_fleet-server/saved_page_sort_ai.test.ts
           supabase/functions/_fleet-server/saved_page_text.test.ts
           supabase/functions/_fleet-server/catalog_trusted_source_block.test.ts
           supabase/functions/_fleet-server/parts_sourcing_request_build.test.ts

@@ -38,7 +38,11 @@ import {
   type ProvenRow,
   versionDatesFit,
 } from "./saved_page_proof.ts";
+import { buildText } from "./saved_page_build_text.ts";
 import { buildSuggestions, type Suggestion } from "./saved_page_suggest.ts";
+import { normalisePhrase, pagePhraseFromGroupLine } from "./saved_page_phrases.ts";
+import { sortSavedPage } from "./saved_page_auto_sort_run.ts";
+import type { SavedPageSortAi } from "./saved_page_sort_ai.ts";
 import { loadPageDrawings, storePageDrawings, type SavedPageDiagramStore } from "./saved_page_diagrams.ts";
 import { formatBytes, humanFileKind, isWebPage, readSingleFileImages, type SavedPageImages, savedPageText } from "./saved_page_text.ts";
 import {
@@ -84,6 +88,8 @@ export type SavedPageResult = {
   stop?: { code: string; detail: string };
   /** §3.2 pictures. Absent on old results and when AI part pictures are off. */
   pictures?: PicturesResult;
+  /** R5: when the name sorter last tried an AI call for this page (the worker's one-an-hour gate). */
+  sortAt?: string;
 };
 export const emptyCounts = (): Counts => ({ saved: 0, already: 0, held: 0, not_roam_type: 0 });
 
@@ -153,6 +159,10 @@ export type SavedPageDeps = {
   pictures?: PartPictureQueueDeps | null;
   /** §3.5 point 7: the blockers the saved-page result's picture states come from. Default reads the row + the budget. */
   pictureBlockers?: () => Promise<PictureBlockers>;
+  /**
+   * R3: the name sorter. Undefined = do not sort (direct callers and old tests); the HTTP route passes the live one.
+   */
+  sortAi?: SavedPageSortAi | null;
 };
 
 import { type OnFile, overlaps, parseOnFile, placeMatches } from "./saved_page_on_file.ts";
@@ -179,6 +189,8 @@ export type ResultRow = {
   placeOk: boolean;
   /** D1/D2: the suggestion this row belongs to (unknown rows only), or null. */
   suggestion: string | null;
+  /** R1/AS-17: the normalised page phrase, the answer key shared by every page. */
+  phraseKey: string | null;
 };
 
 function stripQuery(url: URL): string {
@@ -210,20 +222,8 @@ function unknownPartLabel(row: ProvenRow): string {
   return "Unknown part";
 }
 
-function buildText(car: CarRow): string {
-  const p2 = (n: number | null) => (n == null ? "" : String(n).padStart(2, "0"));
-  if (!car.production_start_year) return "";
-  const start = `${car.production_start_month ? `${p2(car.production_start_month)}.` : ""}${car.production_start_year}`;
-  const end = car.production_end_year
-    ? `${car.production_end_month ? `${p2(car.production_end_month)}.` : ""}${car.production_end_year}`
-    : "now";
-  return `${start} – ${end}`;
-}
-
-/** The car's build as plain words, for the evidence the Add route writes too (R5 step 7). */
-export function savedPageBuildText(car: Record<string, unknown>): string {
-  return buildText(car as unknown as CarRow);
-}
+/** The car's build as plain words, shared with the auto-sort core (saved_page_build_text.ts). */
+export { savedPageBuildText } from "./saved_page_build_text.ts";
 
 // ---------------------------------------------------------------- R5: the two Gemini reads
 
@@ -389,12 +389,17 @@ export function parseAiRows(text: string): AiPartRow[] {
 
 // ---------------------------------------------------------------- R1–R9: one page
 
+/** The inline name sort runs its AI call only while the upload is younger than this (R3 / G6). */
+export const INLINE_SORT_BUDGET_MS = 60_000;
+
 export async function runSavedPage(
   supabase: SupabaseClient,
   input: SavedPageInput,
   deps: SavedPageDeps = {},
 ): Promise<SavedPageOutcome> {
   const now = deps.now?.() ?? new Date();
+  // The real clock (deps.now may be fixed in tests): the inline name sort must not push the upload past the edge limit.
+  const startedMs = Date.now();
   const ai: SavedPageAi = deps.ai ?? ((page) => readSavedPageWithGemini(page));
   const actor = input.actor;
   if (!actor || !UUID.test(actor)) return { kind: "error", status: 401, error: "Sign in again" };
@@ -910,7 +915,8 @@ export async function runSavedPage(
     }
 
     // R2: one suggestion per catalogue group row among the unknown rows (D2). A dismissed phrase is skipped here.
-    const suggestionBuild = buildSuggestions({ rows: proven, types, groups: partGroups, dismissed });
+    // R3: the 20-card limit goes, so every unknown name is a suggestion the sorter can answer.
+    const suggestionBuild = buildSuggestions({ rows: proven, types, groups: partGroups, dismissed, max: MAX_RESULT_ROWS });
 
     // Result rows + counts.
     const rows: ResultRow[] = [];
@@ -938,6 +944,7 @@ export async function runSavedPage(
         datesOk: r.datesOk,
         placeOk: r.placeOk,
         suggestion: suggestionBuild.keyByLine.get(r.lineNo) ?? null,
+        phraseKey: r.groupLine ? normalisePhrase(pagePhraseFromGroupLine(r.groupLine)) || null : null,
       });
     }
     const counts = emptyCounts();
@@ -987,7 +994,7 @@ export async function runSavedPage(
       );
     }
 
-    const result: SavedPageResult = {
+    let result: SavedPageResult = {
       counts,
       rows,
       suggestions: suggestionBuild.suggestions,
@@ -1001,6 +1008,29 @@ export async function runSavedPage(
       ai_cost_usd: aiCost,
       result,
     });
+
+    // R3: the page is stored before the sorter runs, so a slow or failed sort never loses the upload. The route
+    // passes the live sorter; a direct caller that passes none skips this step (the old tests stay as they were).
+    if (deps.sortAi) {
+      try {
+        await sortSavedPage(supabase, row.id, {
+          sortAi: deps.sortAi,
+          pictures: deps.pictures ?? null,
+          // Over a minute already spent on the two reads: answer what is remembered, leave the rest waiting for the
+          // worker (R5) rather than risk the 150 s edge limit (the 26 Nov 504).
+          allowAi: Date.now() - startedMs < INLINE_SORT_BUDGET_MS,
+          cap,
+          spendNow,
+        });
+        const { data: fresh } = await supabase.from("research_saved_page")
+          .select("result").eq("id", row.id).maybeSingle();
+        const stored = (fresh as { result?: SavedPageResult } | null)?.result;
+        if (stored) result = stored;
+      } catch (err) {
+        console.error("saved page auto sort failed", err);
+      }
+    }
+
     return { kind: "done", row: { ...row, status: "done", result } };
   } catch (err) {
     console.error("saved page failed", err);
