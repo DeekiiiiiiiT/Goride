@@ -207,6 +207,12 @@ function savedPagePrompt(input: SavedPageAiInput): string {
   ].join("\n");
 }
 
+/**
+ * One read gives up after this long, so the server always answers (and marks the upload stopped)
+ * before the 150s edge limit turns it into a bare "HTTP 504" with the upload stuck on "reading".
+ */
+export const SAVED_PAGE_READ_TIMEOUT_MS = 100_000;
+
 /** R5: one Gemini read through trackedProviderCall, JSON schema output, route catalog_research/saved_page_read. */
 export async function readSavedPageWithGemini(input: SavedPageAiInput): Promise<AiPartRow[]> {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
@@ -217,6 +223,9 @@ export async function readSavedPageWithGemini(input: SavedPageAiInput): Promise<
       temperature: 0.1,
       responseMimeType: "application/json",
       responseSchema: RESPONSE_SCHEMA,
+      // Copying numbers off a page needs little reasoning. Default thinking took 24s a read and the
+      // live upload ran past the 150s server limit (26 Nov); "low" reads the same rows in ~14s.
+      thinkingConfig: { thinkingLevel: "low" },
     },
   };
   const result = await trackedProviderCall({
@@ -227,7 +236,12 @@ export async function readSavedPageWithGemini(input: SavedPageAiInput): Promise<
     run: async () => {
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(SAVED_PAGE_READ_TIMEOUT_MS),
+        },
       );
       if (!res.ok) {
         const text = await res.text();
@@ -511,15 +525,19 @@ export async function runSavedPage(
     let read1: AiPartRow[];
     let read2: AiPartRow[];
     try {
-      read1 = await ai({ route: "catalog_research/saved_page_read", lines: page.lines, partTypes: types, car: carFacts, buildText: carBuildText, instruction: 1 });
-      const spendMid = await spendNow();
-      if (cap > 0 && spendMid >= cap) return await stopReading("cap_reached", "Try again tomorrow.", spendMid - spendStart);
-      read2 = await ai({ route: "catalog_research/saved_page_read", lines: page.lines, partTypes: types, car: carFacts, buildText: carBuildText, instruction: 2 });
+      // The two reads are independent (SP-29 still counts both toward the cap), so they run at the same
+      // time: one after the other took twice as long and pushed the upload past the server limit.
+      const read = (instruction: 1 | 2) =>
+        ai({ route: "catalog_research/saved_page_read", lines: page.lines, partTypes: types, car: carFacts, buildText: carBuildText, instruction });
+      [read1, read2] = await Promise.all([read(1), read(2)]);
     } catch (err) {
       // SP-45: the raw provider text stays in the server log; the screen only ever gets the plain line.
       console.error("saved page read failed", err);
-      await stopReading("ai_failed", "The page couldn't be read. Try again.", 0);
-      return { kind: "error", status: 500, error: "The page couldn't be read. Try again." };
+      const slow = err instanceof DOMException && (err.name === "TimeoutError" || err.name === "AbortError");
+      const message = slow ? "Reading the page took too long. Try again." : "The page couldn't be read. Try again.";
+      const spendFail = await spendNow().catch(() => spendStart);
+      await stopReading("ai_failed", message, Math.max(0, spendFail - spendStart));
+      return { kind: "error", status: slow ? 504 : 500, error: message };
     }
     const spendEnd = await spendNow();
     const aiCost = Math.round(Math.max(0, spendEnd - spendStart) * 10000) / 10000;
