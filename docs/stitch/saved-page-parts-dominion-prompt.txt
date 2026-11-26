@@ -1,0 +1,197 @@
+ROAM DOMINION — PARTS FROM A SAVED PAGE — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+HOW TO USE: First paste = everything from the intro down to END OF FIRST PASTE (Screens 1 and 2). Then paste one SCREEN block at a time, in order. Never paste the last section ("FOR CLAUDE — DO NOT PASTE").
+Plan: docs/saved-page-parts-audit.md (Rev 2), §6 S1–S6.
+
+
+==================== FIRST PASTE ====================
+
+Roam Dominion - Research Engine, "Add from a saved page" (desktop admin console for the owner, who is not a mechanic):
+
+Design high-fidelity, modern screens for a new way to add parts to a car in the Roam Dominion admin console. Today the owner adds a part with a step-by-step "browser check": they open a catalogue website, look at the page and answer Roam's questions one number at a time. The new way is faster. The owner opens the car's page on any catalogue website, presses Ctrl+S to save it, and uploads that one file. Roam reads every part on the page, checks each number, side and date against the page's own text, and saves the parts that pass by itself. Only the rows that fail a check come back to the owner, each with a one-line reason and one button to fix it. It must feel effortless and trustworthy, like a premium consumer app: upload, a short calm wait, then a clear result. The wording must fit every catalogue website. Never name one site's layout, columns or section titles. Make each screen tall enough to show everything, with no inner scrolling and no cut-off boxes. Draw only the screens asked for in this message. Dominion is the master reference database: no fleet names, plates, prices, suppliers, stock or quantities anywhere.
+
+
+BRAND IDENTITY (take from the live Dominion research engine screens — do not invent):
+- Keep the Dominion console frame exactly as it is:
+  - dark navy left sidebar "Dominion · Roam Admin Console" with groups MASTER DATA (Overview, Vehicles active, Places and Maps, Fuel, Tolls, Tax and Vendors), ENGINES, DISTRIBUTION, PLATFORM, BACK OFFICE
+  - top bar: search "Search entities, engines, routes…" with a ⌘K chip, moon icon, user "Deeki T · Owner"
+  - everything right of the sidebar and below the top bar is the design
+- Theme: "Calm modern workspace". Generous spacing, 16px rounded cards, soft shadows, larger type, clear hierarchy, few codes.
+- LIGHT MODE (draw every screen in light mode):
+  - Primary #0153dc; primary container #dbe1ff
+  - Background #faf8fe; cards #ffffff, 16px radius, 1px #e6e7ee hairline, soft shadow 0 4px 16px rgba(1,83,220,0.04)
+  - Text #30323b; muted #5d5f68; input borders #c5c6d0; tint panels #f3f4fb with 12px radius
+  - Success #006e31 on #e6f4ea; warning #8a5a00 on #fff4dc; error #a83836 on #fdecec; slate #475569 on #f1f5f9
+- DARK MODE (for the theme switch): background #0b1220; cards #111a2e; hairlines #1e293b; text #e2e8f0; muted #94a3b8; primary #5b8def; success #4ade80; warning #fbbf24; error #f87171.
+- Trust pills, one style everywhere: "Confirmed" (green with a small check), "Confirmed · you checked it" (green outline with a small person icon), "Needs checking" (amber), "Browser check" (blue on #dbe1ff with a small window icon), "Not started yet" (slate).
+- Result group pills: "Saved" (green), "Already on file" (slate), "Needs you" (amber), "Not a Roam part type" (grey outline).
+- Buttons always look like buttons, never underlined text links:
+  - Primary: solid #0153dc, white text, 44px tall, 10px radius, semibold
+  - Secondary: white fill, visible #c5c6d0 border, dark text
+  - Danger (Cancel, Not on this page): white fill, #a83836 border and red text
+  - Disabled: 50% opacity, never hidden
+- Inputs: white, 44px tall, 10px radius, 1px #c5c6d0 border; focus ring #0153dc.
+- Typography: Inter. Titles 26px semibold, section titles 18px semibold, body 15px, hints 13px muted. JetBrains Mono with tabular numerals only for part numbers, frame codes and dates, always after the plain words.
+- Icons: Material Symbols Outlined, 20–24px. Part types show in a 44px soft #dbe1ff rounded square with a blue icon. Car makers show a round logo tile, logo first.
+- Every overlay is in-app: a centred white card over a page dimmed 40%, 20px radius, 32px padding. Never a browser pop-up.
+- Sample data (real, from the owner's page):
+  - Car: Toyota Roomy 2016–2020 · 2WD · 1.0 petrol · frame M900A · engine 1KR-FE · built 11.2016 – 08.2020. Catalogue version on file: M900A-AGBVE.
+  - Saved file: "Front spring & shock absorber for Toyota Tank_Roomy M900A-AGBVE….html" (123 KB). The site is shown only by its address, "amayama.com".
+  - Front shock absorber: right 48510-B9285 (11.2016 – 11.2018) and 48510-B9115 (11.2018 – 09.2020); left 48520-B9285 and 48520-B9115, same dates.
+  - Front stabilizer link: 48820-B1010 and 48820-B1011, both 11.2016 – 09.2020. Front stabilizer bar: 48811-B1070, 11.2016 – 09.2020.
+  - 23 other rows on the page are not Roam part types: front coil spring, spring seat, upper support, bump stopper, dust cover, bushes, brackets, nuts and bolts.
+
+
+DESIGN PRINCIPLES (only what changes the drawing):
+- Desktop-first at 1440px; content column max 1120px. Overlays 640px wide.
+- One clear next action per screen. The saved-page way is always the secondary choice beside the existing way, never replacing it.
+- Rows that passed need no action: they are shown as done, in green, with no buttons.
+- Every held row says why in one short line, in plain words, and has exactly one button: "Check this part".
+- Plain words first: "Front shock absorber · front right", then the number in mono, then the dates in mono.
+- Waiting is calm: the reading screen is a soft blue card with ticking steps, never a spinner alone.
+- 8px spacing grid, 44px touch targets.
+
+
+SCREEN 1: CAR PAGE — COVERAGE, WITH "ADD FROM A SAVED PAGE"
+Same Dominion console frame, colours and style.
+- Car page header: Toyota logo tile, "Toyota Roomy 2016–2020 · 2WD · 1.0 petrol" (26px), muted line "M900A · 1KR-FE · built 11.2016 – 08.2020", and a progress ring "4 of 10 key parts ready".
+- Header buttons in one row on the right: primary "Fill this car" (magic wand icon); secondary "Add from a saved page" (upload-file icon).
+- Section "Key parts" (18px): a grid of 10 white tiles, each with its part-type icon square, name and a trust pill: Front brake pads "Confirmed"; Rear brake shoes "Needs checking"; Oil filter "Confirmed"; Air filter "Confirmed"; Cabin filter "Browser check"; Spark plugs "Confirmed"; Front shock absorber "Browser check"; Wheel bearings "Needs checking"; Drive belt "Needs checking"; Battery "Not started yet".
+- Section "Saved pages read" (18px) under the grid: a white card with a short muted line "Pages you saved and uploaded for this car. Nothing from the file is kept except the part facts." and two rows, each a full-width row with a document icon tile, a chevron on the right and a hairline between:
+  - "25 Nov 2026 · amayama.com" — under it three small pills: green "Saved 7", amber "Needs you 0", grey outline "Not a Roam part type 23".
+  - "24 Nov 2026 · megazip.net" — pills: green "Saved 2", amber "Needs you 1", grey outline "Not a Roam part type 11".
+- Toast area empty.
+
+SCREEN 2: UPLOAD A SAVED PAGE — FILE CHOSEN, LINK FOUND
+Same Dominion console frame, colours and style. Behind the overlay, dimmed 40%: the Toyota Roomy car page with its key-parts grid.
+- Centred white overlay card, 640px wide. Title "Add parts from a saved page" (24px semibold), muted line "Toyota Roomy 2016–2020 · 2WD · M900A".
+- "How to save the page" panel (#f3f4fb, 12px radius) with three numbered rows, each a 28px blue circle with a white number:
+  1. "Open the page for this car on the catalogue website."
+  2. "Press Ctrl+S (Cmd+S on a Mac)."
+  3. "Save it as Webpage. Either kind works."
+- File picker block: a large dashed-border drop zone (2px dashed #c5c6d0, 12px radius, 120px tall) now filled: a document icon tile, the file name truncated in one line "Front spring & shock absorber for Toyota Tank_Roomy M900A-AGBVE…", muted "123 KB · saved web page", a green check, and a secondary "Choose another file" button on the right.
+- "Page link" field (label 15px semibold): a 44px input with a link icon showing "https://www.amayama.com/en/genuine-catalogs/epc/toyota-japan/tank-roomy/m900a/147989/chassis/4803". Under it, a small green note with a check icon: "Found in the file".
+- A soft blue info line (#dbe1ff, 12px radius): shield icon, "Rows that pass every check are saved as Confirmed. Rows that don't come back to you."
+- Footer, right-aligned: danger "Cancel"; primary "Read page".
+
+
+END OF FIRST PASTE
+
+
+SCREEN 3: BROWSER CHECK DRAWER — FIRST STEP, WITH "USE A SAVED PAGE"
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the drawer, dimmed: the Toyota Roomy car page with its key-parts grid. Draw tall enough to show everything, no inner scrolling.
+- Right-side drawer, 560px wide, white, over a soft scrim. Header: part-type icon square, "Front shock absorber" (22px), muted "Toyota Roomy 2016–2020 · 2WD · M900A", blue pill "Browser check" with a window icon, and a 32px bordered close button.
+- Step strip: "Step 1 of 5" with five small dots, the first filled #0153dc.
+- Question card (#f3f4fb panel): "Open the catalogue page for this car" (18px semibold), hint "Then open the section for the front shock absorber." A primary button "Open the page" with an "opens in a new tab" arrow, and under it one muted line "Roam remembers this car's version: M900A-AGBVE".
+- Bottom row of the existing steps: primary "Next"; danger "Not on this page".
+- Under a hairline, a new soft card with an upload-file icon tile: "Faster: upload the page instead" (16px semibold), muted "Save the page with Ctrl+S and upload it. Roam fills in every number and date for you." and a secondary button "Use a saved page".
+- Footer note in muted 13px: "Browser checks waiting for you: 2 of 25".
+
+SCREEN 4: UPLOAD A SAVED PAGE — NO LINK IN THE FILE
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the overlay, dimmed 40%: the Toyota Roomy car page. Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 640px wide. Title "Add parts from a saved page", muted line "Toyota Roomy 2016–2020 · 2WD · M900A".
+- The three-step "How to save the page" panel: "Open the page for this car on the catalogue website." · "Press Ctrl+S (Cmd+S on a Mac)." · "Save it as Webpage. Either kind works."
+- Filled drop zone: document icon, file name "roomy-front-suspension.mhtml", muted "210 KB · saved web page", green check, secondary "Choose another file".
+- "Page link" field, empty, with a red #a83836 border and the placeholder "https://…". Under it, a red line with an error icon: "Paste the page's link from the address bar."
+- Info line: "Rows that pass every check are saved as Confirmed. Rows that don't come back to you."
+- Footer: danger "Cancel"; primary "Read page" shown disabled at 50% opacity.
+
+SCREEN 5: READING THE PAGE
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the overlay, dimmed 40%: the Toyota Roomy car page. Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 640px wide. Title "Reading the page…" (24px semibold), muted line "Checking each number against the page. This takes up to a minute."
+- A soft blue card (#dbe1ff tint at 50%, 16px radius) with four steps in a vertical list, each with a 28px circle on the left and a thin connecting line:
+  1. "Page is for this car" — green circle with a white tick; muted under it "M900A-AGBVE · 11.2016 – 09.2020".
+  2. "Reading the parts" — green tick; muted "26 part rows found".
+  3. "Checking numbers, sides and dates" — solid #0153dc circle with a soft pulse ring (current).
+  4. "Saving" — grey #eef0f6 circle, muted label.
+- A slim progress bar under the card, 60% filled #0153dc.
+- No buttons on this screen. One muted 13px line at the bottom: "You can keep this open. Nothing is saved until every check is done."
+
+SCREEN 6: RESULT — EVERYTHING ON THE PAGE SAVED
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the overlay, dimmed 40%: the Toyota Roomy car page. Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 640px wide. A 56px green circle with a white tick at the top. Title "7 parts saved" (26px semibold), muted line "From amayama.com · read 25 Nov 2026 · Toyota Roomy 2016–2020 · 2WD".
+- Three summary pills in a row: green "Saved 7", amber "Needs you 0", grey outline "Not a Roam part type 23".
+- Group "Saved" (18px, green pill): a white card with rows, each row = part-type icon square, plain words, then the number in mono, then the dates in mono, then a green "Confirmed" pill:
+  - Front shock absorber · front right · 48510-B9285 · 11.2016 – 11.2018
+  - Front shock absorber · front right · 48510-B9115 · 11.2018 – 09.2020
+  - Front shock absorber · front left · 48520-B9285 · 11.2016 – 11.2018
+  - Front shock absorber · front left · 48520-B9115 · 11.2018 – 09.2020
+  - Front stabilizer link · 48820-B1010 · 11.2016 – 09.2020
+  - Front stabilizer link · 48820-B1011 · 11.2016 – 09.2020
+  - Front stabilizer bar · 48811-B1070 · 11.2016 – 09.2020
+- Group "Not a Roam part type" as a collapsed row with a chevron: "23 rows · coil spring, spring seat, upper support, bump stopper, dust cover, bushes and others". No buttons.
+- Footer, right-aligned: primary "Done".
+
+SCREEN 7: RESULT — SOME ROWS NEED YOU
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the overlay, dimmed 40%: the Toyota Roomy car page. Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 640px wide. A 56px amber circle with a white exclamation at the top. Title "2 parts saved · 3 need you" (26px semibold), muted line "From megazip.net · read 24 Nov 2026 · Toyota Roomy 2016–2020 · 2WD".
+- Summary pills: green "Saved 2", slate "Already on file 1", amber "Needs you 3", grey outline "Not a Roam part type 11".
+- Group "Saved": two rows with green "Confirmed" pills:
+  - Rear stabilizer link · 48830-B1020 · 11.2016 – 09.2020
+  - Front stabilizer bar · 48811-B1070 · 11.2016 – 09.2020
+- Group "Already on file": one row, slate pill "Already on file": Front shock absorber · front right · 48510-B9285 · 11.2016 – 11.2018.
+- Group "Needs you" (amber pill): a white card; each row has the plain words, the number in mono, the dates in mono, one amber line with a small warning icon giving the reason, and a secondary button "Check this part" on the right:
+  - Rear shock absorber · rear right · 48531-B9A10 · 11.2016 – 11.2018 — reason: "Dates don't cover 2019–2020"
+  - Rear shock absorber · rear left · 48541-B9A10 · 11.2016 – 09.2020 — reason: "Waits with the right side, so both sides save together"
+  - Front stabilizer link · 48820-B1012 · 11.2016 – 09.2020 — reason: "The two reads didn't agree on this number"
+- Under the group, one muted 13px line: "Check this part opens the usual check with the numbers from the page already listed."
+- Collapsed row "Not a Roam part type · 11 rows".
+- Footer: primary "Done".
+
+SCREEN 8: UPLOAD A SAVED PAGE — THIS PAGE WAS ALREADY READ
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the overlay, dimmed 40%: the Toyota Roomy car page. Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 640px wide. Title "You've read this page before" (24px semibold), muted line "Toyota Roomy 2016–2020 · 2WD · M900A".
+- A white card for the earlier read: document icon tile, "Read on 25 Nov 2026 · amayama.com", pills green "Saved 7", amber "Needs you 0", grey outline "Not a Roam part type 23", and a secondary "See the result" button.
+- A soft #f3f4fb note: "Reading it again checks every row once more. Parts already saved show as Already on file, and nothing is added twice."
+- Footer: danger "Cancel"; secondary "Read again"; primary "See the result".
+
+SCREEN 9: STOPPED — STATES
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Draw as one board of six small white overlay cards in a 3 × 2 grid on the dimmed car page, each 420px wide, each with a 44px icon circle, a title, one plain line and its buttons. Draw tall enough to show everything, no inner scrolling.
+- Red circle, car icon — "This page is for a different car" — "It shows M910A-AGBGE. Open the page for the Toyota Roomy M900A." Buttons: secondary "Choose another file".
+- Red circle, shield icon — "That site isn't on the trusted list for this car" — "Use a page from the car maker's catalogue or a trusted part maker." Buttons: secondary "Choose another file".
+- Amber circle, wallet icon — "Today's research budget is used up" — "Try again tomorrow." Buttons: primary "Done".
+- Red circle, file icon — "This file is too big" — "Saved pages up to 5 MB can be read." Buttons: secondary "Choose another file".
+- Red circle, file icon — "That isn't a saved web page" — "Save the page with Ctrl+S, as Webpage." Buttons: secondary "Choose another file".
+- Slate circle, search icon — "Roam couldn't find any part rows on this page" — "Open the section that lists the part numbers, then save it again." Buttons: secondary "Choose another file".
+
+SCREEN 10: PHONE — RESULT (390px)
+Same Roam Dominion app colours, cards and style as the earlier screens in this project, at phone width 390px, as a bottom sheet over the dimmed car page. Draw tall enough to show everything, no inner scrolling.
+- Sheet with a drag handle, 24px top radius. Green tick circle, title "7 parts saved" (22px), muted "amayama.com · 25 Nov 2026".
+- Pills wrap onto two lines: green "Saved 7", amber "Needs you 0", grey outline "Not a Roam part type 23".
+- Saved rows stacked as single-column cards: plain words on the first line, number and dates in mono on the second, green "Confirmed" pill on the right. Same seven rows as the desktop result: four front shock absorber rows, two front stabilizer link rows, one front stabilizer bar row.
+- Collapsed row "Not a Roam part type · 23 rows".
+- Full-width primary "Done" at the bottom, 48px tall.
+
+
+==================== FOR CLAUDE — DO NOT PASTE ====================
+
+ADDITIONAL UI COMPONENTS
+- SavedPageUploadOverlay (S3, Screens 2, 4, 8, 9): file input accepts .html / .htm / .mhtml; drop zone; page-link field pre-filled from the server's read of the file; error lines.
+- SavedPageReading (S4, Screen 5): four steps; steps 1–2 tick from the server's reply stages, or animate on a timer if the call is a single request (S4 has no buttons).
+- SavedPageResult (S5, Screens 6, 7, 10): groups Saved / Already on file / Needs you / Not a Roam part type; reasons come from the server (`result.rows[].reason`), never built on screen.
+- Coverage tab additions (S2, Screen 1): header button "Add from a saved page"; "Saved pages read" card listing the newest 20 uploads.
+- Browser check drawer addition (S1, Screen 3): "Use a saved page" card under the existing step buttons; opens the overlay with this car, job and part type.
+- Screen 7's "Waits with the right side" row is SP-24 (one axle saves together). Screen 7's "Check this part" uses SP-28 (held numbers are open suggestions, so the drawer lists them to tap).
+
+INTERACTIONS
+- Read page → `POST /admin/catalog-research/saved-pages` (multipart: file, vehicleCatalogId, jobId?, url?, again?) → result row (R1).
+- Coverage "Saved pages read" → `GET /admin/catalog-research/saved-pages?vehicleCatalogId=` (R10); a row opens Screen 6/7 for that upload.
+- Same file again → server returns the earlier row → Screen 8; "Read again" sends again=true (R9).
+- Check this part → opens ResearchJobDrawer for that job (D3 / SP-26 made it a browser check).
+- Done → closes, refreshes coverage and readiness.
+- Error codes → Screen 9 cards: wrong_car, untrusted_site, cap_reached, too_big, not_web_page, no_rows.
+- Overlays are in-app; Esc and Cancel close; no browser pop-ups.
+
+Spec screens / Area
+| Screen | Plan | Area |
+|---|---|---|
+| 1 Car page coverage | S2 | CarCoverageTab.tsx |
+| 2 Upload, link found | S3 | new overlay in research-engine/ |
+| 3 Browser check first step | S1 | ResearchJobDrawer.tsx |
+| 4 Upload, no link | S3 error | overlay |
+| 5 Reading | S4 | overlay |
+| 6 Result, all saved | S5 | overlay |
+| 7 Result, some need you | S5 | overlay |
+| 8 Already read | R9 | overlay |
+| 9 Stopped states | S6 / S3 errors | overlay |
+| 10 Phone result | S6 | overlay at 390px |
