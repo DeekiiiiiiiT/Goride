@@ -14,6 +14,9 @@ import {
 } from "../../../services/researchEngineService";
 import { D_MONO, D_MUTED, D_TXT, DIcon, PartsButton, RE_SOFT, RePill } from "./ReKit";
 import { PartPictureFrame, PictureStatePill, pictureWord } from "../part-pictures/PartPictureBits";
+import { listTemplates } from "../part-pictures/partPicturesApi";
+import { newTypeKeys, SavedPageSuggestions, SortSummary, sortedByRoam, type PickerGroup } from "./SavedPageSuggestions";
+import { SortedByRoam } from "./SortedByRoam";
 
 /** S1 "See pictures": open the Part pictures page filtered to this upload (same switch the page links use). */
 export function openPartPicturesFor(savedPageId: string) {
@@ -53,6 +56,8 @@ type Props = {
   onChanged: () => void;
   /** S5 "Check this part": open the normal browser check for that job. */
   onCheckPart: (jobId: string, partType: string) => void;
+  /** Owner login: may press Add part type / Not a part we track (docs/part-type-learning-audit.md S1). */
+  owner?: boolean;
 };
 
 type Stop = { code: SavedPageStopCode; detail: string };
@@ -140,7 +145,7 @@ const TONE_CIRCLE = {
   green: "bg-[#e6f4ea] text-[#006e31] dark:bg-[#14532d]/60 dark:text-[#4ade80]",
 } as const;
 
-export function SavedPageOverlay({ token, carId, carLabel, jobId, savedPageId, onClose, onChanged, onCheckPart }: Props) {
+export function SavedPageOverlay({ token, carId, carLabel, jobId, savedPageId, onClose, onChanged, onCheckPart, owner = false }: Props) {
   const [view, setView] = useState<View>(savedPageId ? { kind: "loading" } : { kind: "pick" });
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState("");
@@ -151,6 +156,9 @@ export function SavedPageOverlay({ token, carId, carLabel, jobId, savedPageId, o
   const inputRef = useRef<HTMLInputElement>(null);
   const reading = view.kind === "reading";
   const [picturesAiOn, setPicturesAiOn] = useState(false);
+  const [groups, setGroups] = useState<PickerGroup[]>([]);
+  // Auto-sort S1 -> S2: "Review" shows Roam's answers inside this overlay (Back returns to the result).
+  const [reviewing, setReviewing] = useState(false);
 
   // S1 pictures: read the rows with their pictures once the result shows, then every 10 s while one is being made.
   const resultId = view.kind === "result" ? view.page.id : null;
@@ -177,6 +185,31 @@ export function SavedPageOverlay({ token, carId, carLabel, jobId, savedPageId, o
     const t = window.setInterval(() => void refreshPictures(resultId), 10_000);
     return () => window.clearInterval(t);
   }, [resultId, makingAny, refreshPictures]);
+
+  // Part-type cards: the 13 part groups and whether each makes pictures, read once when a result has cards.
+  const hasCards = view.kind === "result" && (view.page.result?.suggestions ?? []).some((x) => x.kind !== "fixings");
+  useEffect(() => {
+    if (!hasCards || groups.length) return;
+    let live = true;
+    listTemplates()
+      .then((items) => live && setGroups(items.map((t) => ({ id: t.catalogGroupId, name: t.name, pictures: t.enabled })).sort((a, b) => a.name.localeCompare(b.name))))
+      .catch(() => {
+        // The card still offers the suggestion's own group.
+      });
+    return () => {
+      live = false;
+    };
+  }, [hasCards, groups.length]);
+
+  const actOnSuggestion = useCallback(
+    async (id: string, body: { key: string; action: "add" | "dismiss"; name?: string; groupId?: string }) => {
+      const reply = await researchApi.savedPagePartType(token, id, body);
+      setPicturesAiOn(Boolean(reply.picturesAiOn));
+      setView((v) => (v.kind === "result" && v.page.id === id ? { kind: "result", page: reply.savedPage } : v));
+      onChanged();
+    },
+    [token, onChanged],
+  );
 
   // S2 row → that upload's result.
   useEffect(() => {
@@ -434,10 +467,46 @@ export function SavedPageOverlay({ token, carId, carLabel, jobId, savedPageId, o
         </p>
       </>
     );
+  } else if (view.kind === "result" && reviewing) {
+    body = (
+      <>
+        <Header title="Roam's answers" sub={carLabel} />
+        <SortedByRoam token={token} owner={owner} />
+      </>
+    );
+    footer = (
+      <>
+        <PartsButton variant="secondary" className="!min-h-[44px]" onClick={() => setReviewing(false)} data-testid="sorted-back">
+          <DIcon name="arrow_back" className="text-[18px]" /> Back
+        </PartsButton>
+        <PartsButton
+          variant="primary"
+          className="!min-h-[44px]"
+          onClick={() => {
+            onChanged();
+            onClose();
+          }}
+        >
+          Done
+        </PartsButton>
+      </>
+    );
   } else if (view.kind === "result") {
     const resultPage = view.page;
     const hasPictures = picturesAiOn && (resultPage.result?.rows ?? []).some((r) => r.picture);
-    body = <Result page={resultPage} aiOn={picturesAiOn} showOther={showOther} setShowOther={setShowOther} onCheckPart={onCheckPart} />;
+    body = (
+      <Result
+        page={resultPage}
+        aiOn={picturesAiOn}
+        showOther={showOther}
+        setShowOther={setShowOther}
+        onCheckPart={onCheckPart}
+        owner={owner}
+        groups={groups}
+        onAct={(b) => actOnSuggestion(resultPage.id, b)}
+        onReview={() => setReviewing(true)}
+      />
+    );
     footer = (
       <>
         {hasPictures ? (
@@ -501,11 +570,11 @@ export function SavedPageOverlay({ token, carId, carLabel, jobId, savedPageId, o
           Cancel
         </PartsButton>
         <div className="flex flex-wrap gap-2">
-          <PartsButton variant="secondary" className="!min-h-[44px]" onClick={() => void read(true)} data-testid="saved-page-read-again">
-            <DIcon name="refresh" className="text-[18px]" /> Read again
+          <PartsButton variant="secondary" className="!min-h-[44px]" onClick={() => setView({ kind: "result", page })} data-testid="saved-page-see-result">
+            See the old result
           </PartsButton>
-          <PartsButton variant="primary" className="!min-h-[44px]" onClick={() => setView({ kind: "result", page })} data-testid="saved-page-see-result">
-            See the result <DIcon name="arrow_forward" className="text-[18px]" />
+          <PartsButton variant="primary" className="!min-h-[44px]" onClick={() => void read(true)} data-testid="saved-page-read-again">
+            <DIcon name="refresh" className="text-[18px]" /> Read again
           </PartsButton>
         </div>
       </>
@@ -651,12 +720,20 @@ function Result({
   showOther,
   setShowOther,
   onCheckPart,
+  owner,
+  groups,
+  onAct,
+  onReview,
 }: {
   page: SavedPage;
   aiOn: boolean;
   showOther: boolean;
   setShowOther: (v: boolean) => void;
   onCheckPart: (jobId: string, partType: string) => void;
+  owner: boolean;
+  groups: PickerGroup[];
+  onAct: (body: { key: string; action: "add" | "dismiss"; name?: string; groupId?: string }) => Promise<void>;
+  onReview: () => void;
 }) {
   const counts = { ...EMPTY, ...(page.result?.counts ?? {}) };
   const rows = page.result?.rows ?? [];
@@ -672,6 +749,23 @@ function Result({
         ? `${counts.saved} ${counts.saved === 1 ? "part" : "parts"} saved · ${counts.held} need you`
         : `${counts.saved} ${counts.saved === 1 ? "part" : "parts"} saved`;
   const other = of("not_roam_type");
+  const heldLine = (r: SavedPageRow, i: number) => (
+    <ResultLine
+      key={`h${i}`}
+      row={r}
+      reason={r.reason}
+      right={
+        r.jobId ? (
+          <PartsButton variant="secondary" className="!min-h-[44px]" onClick={() => onCheckPart(r.jobId!, r.partType)} data-testid="saved-page-check-part">
+            Check this part
+          </PartsButton>
+        ) : null
+      }
+    />
+  );
+  // Results read after the part-type round carry suggestions; older ones keep the folded list.
+  const learning = Array.isArray(page.result?.suggestions);
+  const madeHere = newTypeKeys(page);
   const names = page.result?.otherTypes?.length ? page.result.otherTypes : [...new Set(other.map((r) => r.partType))].slice(0, 5);
 
   return (
@@ -701,7 +795,13 @@ function Result({
 
       <Group title="Saved" count={of("saved").length} testId="group-saved">
         {of("saved").map((r, i) => (
-          <ResultLine key={`s${i}`} row={r} picture={aiOn ? pictureFor(page, r) : undefined} right={<RePill tone="green" icon="check">Confirmed</RePill>} />
+          <ResultLine
+            key={`s${i}`}
+            row={r}
+            picture={aiOn ? pictureFor(page, r) : undefined}
+            newType={Boolean(r.suggestion && madeHere.has(r.suggestion))}
+            right={<RePill tone="green" icon="check">Confirmed</RePill>}
+          />
         ))}
       </Group>
 
@@ -712,26 +812,17 @@ function Result({
       </Group>
 
       <Group title="Needs you" count={of("held").length} testId="group-held">
-        {of("held").map((r, i) => (
-          <ResultLine
-            key={`h${i}`}
-            row={r}
-            reason={r.reason}
-            right={
-              r.jobId ? (
-                <PartsButton variant="secondary" className="!min-h-[44px]" onClick={() => onCheckPart(r.jobId!, r.partType)} data-testid="saved-page-check-part">
-                  Check this part
-                </PartsButton>
-              ) : null
-            }
-          />
-        ))}
+        {of("held").map(heldLine)}
         {of("held").length ? (
           <p className={`px-1 pt-1 text-[13px] ${D_MUTED}`}>Check this part opens the usual check with the numbers from the page already listed.</p>
         ) : null}
       </Group>
 
-      {other.length ? (
+      {learning && sortedByRoam(page) ? (
+        <SortSummary page={page} onReview={onReview} />
+      ) : learning ? (
+        <SavedPageSuggestions page={page} owner={owner} groups={groups} aiOn={aiOn} onAct={onAct} renderHeldRow={heldLine} />
+      ) : other.length ? (
         <div className={`rounded-xl ${RE_SOFT}`} data-testid="group-other">
           <button
             type="button"
@@ -829,11 +920,14 @@ function ResultLine({
   right,
   reason,
   picture,
+  newType,
 }: {
   row: SavedPageRow;
   right?: ReactNode;
   reason?: string | null;
   picture?: { noDiagram: boolean };
+  /** Auto-sort S1: Roam made this row's part type on this upload. */
+  newType?: boolean;
 }) {
   const word = picture ? pictureWord(row.picture ?? null, picture.noDiagram) : null;
   const waits = Boolean(reason && /^Waits\b/.test(reason));
@@ -854,6 +948,11 @@ function ResultLine({
               {row.partType}
               {row.place ? ` · ${row.place}` : ""}
             </span>
+            {newType ? (
+              <RePill tone="grey" testId="saved-page-new-type">
+                New part type
+              </RePill>
+            ) : null}
           </span>
           <span className={`text-[13px] ${D_MONO} ${D_MUTED}`}>{[row.number, row.dates].filter(Boolean).join(" · ")}</span>
           {reason ? (

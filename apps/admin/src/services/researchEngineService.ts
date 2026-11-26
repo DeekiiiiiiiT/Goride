@@ -26,7 +26,7 @@ async function getJson<T>(token: string, path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-async function send<T>(token: string, method: "POST" | "PATCH", path: string, body?: unknown): Promise<T> {
+async function send<T>(token: string, method: "POST" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: headers(token, body !== undefined),
@@ -207,7 +207,12 @@ export type ResearchJobDetail = {
     grade?: string | null;
     transmission?: string | null;
   } | null;
-  reads: Array<{ id: string; domain: string | null; path: "direct" | "owner_browser"; read_at: string }>;
+  reads: Array<{
+    id: string;
+    domain: string | null;
+    path: "direct" | "owner_browser" | "roam_saved_page";
+    read_at: string;
+  }>;
   proposals: PartProposal[];
   vehicleProposals: VehicleProposal[];
   specProposals: SpecProposal[];
@@ -341,7 +346,8 @@ export type LookupRecipe = {
 export type SiteRead = {
   id: string;
   purpose: "job" | "recipe_test" | "recheck";
-  path: "direct" | "owner_browser";
+  /** Who read the page: the robot itself, a person's browser check, or Roam saving from an uploaded saved page. */
+  path: "direct" | "owner_browser" | "roam_saved_page";
   url: string;
   httpStatus: number | null;
   foundRow: boolean;
@@ -408,6 +414,8 @@ export type SavedPageRow = {
   /** Plain reason from the server (held rows only); the screen never makes its own wording. */
   reason: string | null;
   jobId: string | null;
+  /** The suggestion this unknown row belongs to (docs/part-type-learning-audit.md D1/D2), or null. */
+  suggestion?: string | null;
   /** Part pictures (docs/part-pictures-audit.md §3.5 point 7): only on GET saved-pages/:id. */
   picture?: PartPicture | null;
 };
@@ -419,6 +427,54 @@ export type SavedPagePictures = {
   failed: boolean;
   rows: Array<{ number: string; status: "queued" | "alreadyHave" | "noDiagram" | "templateOff" }>;
 };
+/** One "Parts Roam doesn't know yet" card (docs/part-type-learning-audit.md D2). Every word comes from the server. */
+export type SavedPageSuggestion = {
+  key: string;
+  /** The suggested plain name; for kind "existing", the existing type's own name. */
+  name: string;
+  groupId: string | null;
+  groupName: string;
+  kind: "new" | "existing" | "fixings";
+  existingTypeId: string | null;
+  positionScheme: "none" | "axle" | "axle_left_right";
+  /** The catalogue's own words, e.g. "INLET, AIR CLEANER, NO.1". */
+  pagePhrase: string;
+  numbers: string[];
+  rowCount: number;
+  numberCount: number;
+  /** open/dismissed = the owner decides (older uploads); added/skipped/waiting = Roam sorted it (auto-sort plan). */
+  status: "open" | "added" | "dismissed" | "skipped" | "waiting";
+  typeId: string | null;
+  typeName: string | null;
+  /** Why the last Add didn't finish, in plain words. */
+  reason: string | null;
+};
+/** One "not a part we track" phrase (Part types → Hidden from saved pages). */
+export type HiddenPartTypePhrase = {
+  id: string;
+  phrase: string;
+  groupId: string | null;
+  groupName: string | null;
+  dismissedBy: string | null;
+  dismissedByName: string | null;
+  dismissedAt: string;
+};
+/** One answer on the "Sorted by Roam" review list (docs/part-type-auto-sort-audit.md R4). */
+export type PartNameItem = {
+  key: string;
+  /** Added: the search word (the plain name); Not tracked: the catalogue words as the page wrote them. */
+  phrase: string;
+  name: string | null;
+  typeId: string | null;
+  typeName: string | null;
+  groupName: string | null;
+  reason: string | null;
+  setBy: "owner" | "roam";
+  at: string;
+  uploads: number;
+};
+export type PartNamesTab = "added" | "not_tracked";
+export type TrackPartNameReply = { ok: true; saved: number; pages: number; remaining: number; busy: boolean; type: { id: string; name: string } | null };
 export type SavedPageStopCode =
   | "wrong_car"
   | "untrusted_site"
@@ -439,7 +495,18 @@ export type SavedPage = {
   file_name: string | null;
   status: "reading" | "done" | "stopped";
   stop_reason: string | null;
-  result: { counts?: SavedPageCounts; rows?: SavedPageRow[]; otherTypes?: string[]; stop?: { code: string; detail: string }; pictures?: SavedPagePictures };
+  result: {
+    counts?: SavedPageCounts;
+    rows?: SavedPageRow[];
+    otherTypes?: string[];
+    stop?: { code: string; detail: string };
+    pictures?: SavedPagePictures;
+    suggestions?: SavedPageSuggestion[];
+    /** Unknown rows beyond the 20 cards. */
+    moreUnknownRows?: number;
+    /** When Roam last sorted this upload's unknown names (auto-sort plan R3/R5). */
+    sortAt?: string;
+  };
   created_at: string;
 };
 export type SavedPageReply = {
@@ -478,6 +545,20 @@ export const researchApi = {
   /** The same page with each row's picture, and whether AI part pictures are on (S1). */
   savedPageWithPictures: (t: string, id: string) =>
     getJson<{ savedPage: SavedPage; picturesAiOn?: boolean }>(t, `/saved-pages/${encodeURIComponent(id)}`),
+  /** R5/R6: Add part type, or Not a part we track. Answers the whole page, as GET saved-pages/:id does. */
+  savedPagePartType: (t: string, id: string, body: { key: string; action: "add" | "dismiss"; name?: string; groupId?: string }) =>
+    send<{ savedPage: SavedPage; picturesAiOn?: boolean }>(t, "POST", `/saved-pages/${encodeURIComponent(id)}/part-type`, body),
+  hiddenPartTypePhrases: (t: string) =>
+    getJson<{ items: HiddenPartTypePhrase[] }>(t, "/hidden-part-type-phrases").then((r) => r.items ?? []),
+  partNames: (t: string, tab: PartNamesTab, cursor?: string | null) =>
+    getJson<{ items: PartNameItem[]; nextCursor: string | null }>(
+      t,
+      `/part-names?tab=${tab}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+    ),
+  trackPartName: (t: string, key: string) => send<TrackPartNameReply>(t, "POST", `/part-names/${encodeURIComponent(key)}/track`),
+  skipPartName: (t: string, key: string) =>
+    send<{ ok: true; drafted: boolean; pages: number }>(t, "POST", `/part-names/${encodeURIComponent(key)}/skip`),
+  suggestPartTypeAgain: (t: string, id: string) => send<{ deleted: string }>(t, "DELETE", `/hidden-part-type-phrases/${encodeURIComponent(id)}`),
   summary: (t: string) => getJson<ResearchSummary>(t, "/summary"),
   notices: (t: string) => getJson<{ items: ResearchNotice[] }>(t, "/notices").then((r) => r.items ?? []),
   coverage: (t: string, carId: string) => getJson<CarCoverage>(t, `/coverage/${encodeURIComponent(carId)}`),

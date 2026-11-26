@@ -7,9 +7,32 @@
  * the head noun and the group guess (R2).
  */
 
-/** The phrase key used everywhere: upper case, letters and digits only — exactly what D3's CHECK requires. */
+/**
+ * Side words: the catalogue writes the left and right of one part as two rows ("INSULATOR, FRONT COIL SPRING, UPPER RH"
+ * and "… LH"). The side is the row's place, not part of the part's name, so it never reaches a key or a name — both
+ * rows become one part type saved for both sides (26 Nov: four "rh"/"lh" types that could never save). Front and rear
+ * stay in the name: Roam keeps front and rear parts as their own types.
+ */
+const SIDE_WORD = /(^|[^A-Za-z0-9])(RIGHT[ -]HAND|LEFT[ -]HAND|R\/H|L\/H|RH|LH|RIGHT|LEFT)(?=[^A-Za-z0-9]|$)/gi;
+
+/** The text without its side words (see SIDE_WORD). */
+export function withoutSideWords(text: string | null | undefined): string {
+  return String(text ?? "")
+    .replace(SIDE_WORD, "$1")
+    .replace(/\(\s*\)/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/\s+,/g, ",")
+    .replace(/,\s*,/g, ",")
+    .replace(/[,\s]+$/, "")
+    .trim();
+}
+
+/**
+ * The phrase key used everywhere: side words removed, then upper case, letters and digits only — exactly what D3's
+ * CHECK requires. "…, UPPER RH" and "…, UPPER LH" share one key.
+ */
 export function normalisePhrase(text: string | null | undefined): string {
-  return String(text ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return withoutSideWords(text).toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
 /**
@@ -61,7 +84,7 @@ export type GroupPhrase = {
  * catalogue's own order); filler segments ("SET", "ASSY") are dropped.
  */
 export function parseGroupPhrase(line: string | null | undefined): GroupPhrase | null {
-  const phrase = pagePhraseFromGroupLine(line);
+  const phrase = withoutSideWords(pagePhraseFromGroupLine(line));
   if (!phrase) return null;
   const raw = phrase.split(",").map((s) => s.trim()).filter(Boolean);
   const segments = raw.filter((s) => !FILLER.test(s) && !NO_SEGMENT.test(s));

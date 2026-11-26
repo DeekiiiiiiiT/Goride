@@ -53,7 +53,7 @@ type Props = {
 };
 
 export function CarCoverageTab({ carId, make, model, onOpenParts }: Props) {
-  const { session } = useAuth();
+  const { session, role } = useAuth();
   const token = session?.access_token ?? "";
   const [cov, setCov] = useState<CarCoverage | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -363,6 +363,7 @@ export function CarCoverageTab({ carId, make, model, onOpenParts }: Props) {
           carId={carId}
           carLabel={[`${cov.make} ${cov.model}`.trim(), cov.chassisCode].filter(Boolean).join(" · ")}
           savedPageId={savedPage.id}
+          owner={role === "platform_owner"}
           onClose={() => setSavedPage(null)}
           onChanged={() => {
             void load();

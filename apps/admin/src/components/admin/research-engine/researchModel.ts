@@ -463,7 +463,7 @@ function makerPartFinder(itemName: string, make: string | null | undefined, fitD
   }
   // Parts that only sit near these (mounts, sensors, timing belts, A/C compressors…) get no row name: better none than wrong.
   if (/mount|sensor|switch|timing|compressor|bearing|hose|cover|bracket|gasket/.test(n)) return plain;
-  if (/\bcabin\b|a\/c filter|air ?con(ditioning)? filter/.test(n)) return { search: "air filter", rowName: "ELEMENT, CLEAN AIR FILTER (or AIR REFINER)" };
+  if (/\bcabin\b|a\/c filter|air ?con(ditioning)? filter/.test(n)) return { search: "air filter", section: "heater and air conditioning", rowName: "ELEMENT, CLEAN AIR FILTER (or AIR REFINER)" };
   if (/engine air filter|^air filter$|air cleaner/.test(n)) return { search: "air cleaner", rowName: "ELEMENT SUB-ASSY, AIR CLEANER FILTER" };
   if (/spark plug/.test(n)) return { search: "spark plug", rowName: "PLUG, SPARK" };
   if (/shock absorber|^shocks?$/.test(n)) return { search: "shock absorber", rowName: "ABSORBER ASSY, SHOCK" };

@@ -148,6 +148,8 @@ describe("browser-check guide (RE-63)", () => {
     expect(partFinder("Engine Air Filter", "Toyota")).toEqual({ search: "air cleaner", rowName: "ELEMENT SUB-ASSY, AIR CLEANER FILTER" });
     expect(partFinder("Spark Plugs", "Toyota")).toEqual({ search: "spark plug", rowName: "PLUG, SPARK" });
     expect(partFinder("Cabin A/C Filter", "Daihatsu").search).toBe("air filter");
+    // 26 Nov: "air filter" also finds the engine's air cleaner; the cabin filter sits with the heater and air con.
+    expect(partFinder("Cabin A/C Filter", "Toyota").section).toBe("heater and air conditioning");
     expect(partFinder("Shock absorber", "Toyota").rowName).toBe("ABSORBER ASSY, SHOCK");
     // Owner 25 Nov: a front / rear check names the section to open and the words every such row has.
     expect(partFinder("Shock absorber", "Toyota", "Front")).toEqual({

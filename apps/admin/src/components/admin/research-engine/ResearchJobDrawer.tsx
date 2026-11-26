@@ -15,6 +15,7 @@ import {
 import { patchPendingPartsGroup, type PendingPartsQueueGroup } from "../../../services/pendingPartsCatalogService";
 import { AddedPickPartPanel } from "../vehicle-catalog/pending-parts/AddedPickPartPanel";
 import { SavedPageOverlay } from "./SavedPageOverlay";
+import { useAuth } from "../../auth/AuthContext";
 import { picturesForNumbers, type PartPicture } from "../part-pictures/partPicturesApi";
 import {
   AI_LINE,
@@ -90,6 +91,7 @@ type Props = {
 export function ResearchJobDrawer({ token, jobId: jobIdProp, group, fallbackTitle, fallbackCar, browserChecks, onClose, onChanged }: Props) {
   // Saved pages (docs/saved-page-parts-audit.md S1 / S5): "Check this part" may open another job in this same drawer.
   const [jobOverride, setJobOverride] = useState<string | null>(null);
+  const { role } = useAuth();
   useEffect(() => setJobOverride(null), [jobIdProp]);
   const jobId = jobOverride ?? jobIdProp;
   const [savedPageOpen, setSavedPageOpen] = useState(false);
@@ -437,6 +439,7 @@ export function ResearchJobDrawer({ token, jobId: jobIdProp, group, fallbackTitl
         carId={savedPageCarId}
         carLabel={[detail?.car ? `${detail.car.make} ${detail.car.model}` : carName, detail?.car?.chassis_code].filter(Boolean).join(" · ")}
         jobId={jobId}
+        owner={role === "platform_owner"}
         onClose={() => setSavedPageOpen(false)}
         onChanged={() => {
           onChanged();
@@ -1278,14 +1281,15 @@ function BrowserCheckCard({
             Not on this page
           </PartsButton>
         </div>
-        {at === 0 && onUseSavedPage ? (
+        {/* Owner 26 Nov: offer the upload once the user is on the parts page (the number steps), not on step 1. */}
+        {cur?.id.startsWith("numbers") && onUseSavedPage ? (
           <div className="mt-2 flex flex-col gap-3 rounded-2xl border border-[#e6e7ee] p-4 sm:flex-row sm:items-center dark:border-[#1e293b]" data-testid="use-saved-page-card">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#dbe1ff] text-[#0153dc] dark:bg-[#1e3a8a]/50 dark:text-[#93b4ff]">
               <DIcon name="upload_file" className="text-[20px]" />
             </span>
             <div className="flex min-w-0 flex-1 flex-col">
               <span className={`text-[15px] font-semibold ${D_TXT}`}>Faster: upload the page instead</span>
-              <span className={`text-[13px] ${D_MUTED}`}>Save the page with Ctrl+S and upload it. Roam fills in every number and date for you.</span>
+              <span className={`text-[13px] ${D_MUTED}`}>You&apos;re on the right page now. Save it with Ctrl+S and upload it, and Roam fills in every number and date for you.</span>
             </div>
             <PartsButton variant="secondary" className="!min-h-[44px]" disabled={busy} onClick={onUseSavedPage} data-testid="use-saved-page">
               <DIcon name="upload" className="text-[18px]" /> Use a saved page

@@ -24,8 +24,36 @@ const BANNED = [
 type Calls = Array<{ method: string; path: string; body: string }>;
 type Mode = {
   list?: "rows" | "empty" | "slow";
-  upload?: "saved" | "held" | "read_before" | "wrong_car" | "part_maker_page" | "slow";
+  upload?: "saved" | "held" | "read_before" | "wrong_car" | "part_maker_page" | "slow" | "learning";
 };
+
+// docs/part-type-learning-audit.md S1: one upload with a part Roam doesn't know yet, and a fixing.
+const KEY = "INLET, AIR CLEANER, NO.1";
+const LEARN_ROWS = [
+  { partType: "Inlet, air cleaner", place: null, number: "00000-N0001", dates: "11.2016 – 12.2019", group: "not_roam_type", reason: null, jobId: null, suggestion: KEY },
+  { partType: "Inlet, air cleaner", place: null, number: "00000-N0001", dates: "01.2020 – 09.2020", group: "not_roam_type", reason: null, jobId: null, suggestion: KEY },
+  { partType: "Clip, hose", place: null, number: "00000-N0009", dates: "11.2016 – 09.2020", group: "not_roam_type", reason: null, jobId: null, suggestion: "CLIP, HOSE" },
+];
+const suggestion = (over: Record<string, unknown> = {}) => ({
+  key: KEY, name: "Air cleaner inlet", groupId: "g-engine", groupName: "Engine", kind: "new", existingTypeId: null, positionScheme: "none",
+  pagePhrase: KEY, numbers: ["00000-N0001"], rowCount: 2, numberCount: 1, status: "open", typeId: null, typeName: null, reason: null, ...over,
+});
+const FIXING = suggestion({ key: "CLIP, HOSE", name: "Hose clip", kind: "fixings", pagePhrase: "CLIP, HOSE", numbers: ["00000-N0009"], rowCount: 1 });
+const learnPage = (added: boolean) => {
+  const rows = added ? LEARN_ROWS.map((r) => (r.suggestion === KEY ? { ...r, group: "saved", partType: "Air cleaner inlet", jobId: "job-n" } : r)) : LEARN_ROWS;
+  return page1(rows as typeof SAVED_ROWS, {
+    result: {
+      counts: count(rows),
+      rows,
+      otherTypes: ["Air cleaner inlet"],
+      suggestions: [added ? suggestion({ status: "added", typeId: "t-new", typeName: "Air cleaner inlet" }) : suggestion(), FIXING],
+    },
+  });
+};
+const TEMPLATES = [
+  { catalogGroupId: "g-engine", name: "Engine", materials: "", enabled: true, version: 1, updatedBy: null, updatedByName: null, updatedAt: "2026-11-26T10:00:00Z" },
+  { catalogGroupId: "g-fluids", name: "Fluids", materials: "", enabled: false, version: 1, updatedBy: null, updatedByName: null, updatedAt: "2026-11-26T10:00:00Z" },
+];
 
 const SAVED_ROWS = [
   { partType: "Shock absorber", place: "front right", number: "00000-S1001", dates: "11.2016 – 11.2018", group: "saved", reason: null, jobId: "job-s" },
@@ -113,8 +141,12 @@ async function install(page: Page, calls: Calls, mode: Mode = {}) {
         return route.fulfill({ json: { savedPage: page1([], { status: "stopped", stop_reason: "part_maker_page" }), stop: { code: "part_maker_page", detail: "Use the browser check for this site." } } });
       }
       if (mode.upload === "held") return route.fulfill({ json: { savedPage: page1(HELD_ROWS) } });
+      if (mode.upload === "learning") return route.fulfill({ json: { savedPage: learnPage(false) } });
       return route.fulfill({ json: { savedPage: page1(SAVED_ROWS) } });
     }
+    if (method === "POST" && rel.startsWith("/saved-pages/") && rel.endsWith("/part-type")) return route.fulfill({ json: { savedPage: learnPage(true), picturesAiOn: true } });
+    if (method === "GET" && rel.startsWith("/saved-pages/") && mode.upload === "learning") return route.fulfill({ json: { savedPage: learnPage(false), picturesAiOn: true } });
+    if (method === "GET" && path.endsWith("/admin/part-picture-templates")) return route.fulfill({ json: { items: TEMPLATES } });
     if (method === "GET" && rel.startsWith("/saved-pages/")) return route.fulfill({ json: { savedPage: page1(HELD_ROWS, { id: rel.split("/").pop() }) } });
     if (method === "GET" && rel === "/saved-pages") {
       if (mode.list === "slow") await new Promise((r) => setTimeout(r, 4000));
@@ -362,8 +394,15 @@ test.describe("Saved catalogue pages (S1–S6)", () => {
     await page.locator('[data-testid="coverage-tile"][data-state="browser_check"]').getByRole("button", { name: "Open browser check" }).click();
     const d = page.getByTestId("research-drawer");
     const card = d.getByTestId("use-saved-page-card");
+    // Owner 26 Nov: the upload is offered on the part-number steps, not on step 1.
+    await expect(card).toHaveCount(0);
+    await d.getByTestId("browser-check-next").click();
+    await d.getByTestId("q-version-yes").click();
+    await d.getByTestId("browser-check-next").click();
+    await d.getByTestId("q-part-yes").click();
+    await d.getByTestId("browser-check-next").click();
     await expect(card).toContainText("Faster: upload the page instead");
-    await expect(card).toContainText("Save the page with Ctrl+S and upload it. Roam fills in every number and date for you.");
+    await expect(card).toContainText("You're on the right page now. Save it with Ctrl+S and upload it, and Roam fills in every number and date for you.");
     await expect(d.getByTestId("browser-check-next")).toBeVisible();
     await expect(d.getByTestId("not-on-page")).toBeVisible();
     await shot(page, "03-browser-check-use-saved-page");
@@ -375,6 +414,40 @@ test.describe("Saved catalogue pages (S1–S6)", () => {
     await o.getByTestId("saved-page-read").click();
     await expect(o.getByTestId("saved-page-result-title")).toHaveText("7 parts saved");
     expect(calls.find((c) => c.method === "POST" && c.path === "/saved-pages")!.body).toContain(`name="jobId"\r\n\r\n${JOB}`);
+    await o.getByTestId("saved-page-done").click();
+    await expect(o).toHaveCount(0);
+  });
+
+  test("Part types learned from the page — card, group picker, fixings line, Add part type, Added", async ({ page }) => {
+    const calls: Calls = [];
+    await install(page, calls, { upload: "learning" });
+    await openCoverage(page);
+    await page.getByTestId("add-from-saved-page").click();
+    const o = page.getByTestId("saved-page-overlay");
+    await chooseFile(page);
+    await o.getByTestId("saved-page-read").click();
+    const unknown = o.getByTestId("group-unknown");
+    await expect(unknown).toContainText("Parts Roam doesn't know yet");
+    const card = unknown.getByTestId("suggestion-card");
+    await expect(card).toHaveAttribute("data-state", "ready");
+    await expect(card.getByTestId("suggestion-name")).toHaveValue("Air cleaner inlet");
+    await expect(card).toContainText(KEY);
+    await expect(card.getByTestId("suggestion-rows")).toContainText("2 rows · 00000-N0001");
+    await expect(card.getByTestId("suggestion-rows")).toContainText("11.2016 – 12.2019 and 01.2020 – 09.2020");
+    await expect(card.getByTestId("suggestion-group").locator("option", { hasText: "Fluids — no picture" })).toHaveCount(1);
+    await expect(unknown.getByTestId("saved-page-fixings")).toContainText("1 fixing (hose clip) — Roam doesn't track these");
+    const add = card.getByTestId("suggestion-add");
+    expect((await add.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await shot(page, "11-part-type-suggestion");
+    await noDropWords(page);
+    await add.click();
+    await expect(card).toHaveAttribute("data-state", "added");
+    await expect(card).toContainText("Added");
+    await expect(card.getByTestId("suggestion-added-line")).toContainText("2 parts saved");
+    await expect(o.getByTestId("count-saved")).toHaveText("Saved 2");
+    const sent = calls.find((c) => c.method === "POST" && c.path.endsWith("/part-type"))!;
+    expect(JSON.parse(sent.body)).toEqual({ key: KEY, action: "add", name: "Air cleaner inlet", groupId: "g-engine" });
+    await shot(page, "12-part-type-added");
     await o.getByTestId("saved-page-done").click();
     await expect(o).toHaveCount(0);
   });

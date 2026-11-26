@@ -84,6 +84,32 @@ Deno.test("R2.4: the trailing NO.n is dropped, unless the page has another NO. o
   assertEquals(withOther.suggestions.length, 2);
 });
 
+Deno.test("side words: an RH row and an LH row are one part — one key, one name with no side, both sides", () => {
+  // 26 Nov: the catalogue wrote the left and right as two group rows; Roam made two "rh"/"lh" types that never saved.
+  assertEquals(normalisePhrase("INSULATOR, EXAMPLE SPRING, UPPER RH"), normalisePhrase("INSULATOR, EXAMPLE SPRING, UPPER LH"));
+  assertEquals(plainNameFromPhrase("99001 - INSULATOR, EXAMPLE SPRING, UPPER RH"), "Example spring upper insulator");
+  assertEquals(plainNameFromPhrase("99002 - BUMPER, EXAMPLE SPRING, LH"), "Example spring bumper");
+  assertEquals(plainNameFromPhrase("99003 - MIRROR, EXAMPLE VIEW, RIGHT HAND"), "Example view mirror");
+  assertEquals(plainNameFromPhrase("99004 - HOSE, EXAMPLE BRAKE, REAR (R/H)"), "Example brake rear hose");
+  // Front and rear stay: Roam keeps front and rear parts as their own types.
+  assert(plainNameFromPhrase("99005 - BUMPER, FRONT EXAMPLE, LH").startsWith("Front"));
+  // A word that merely contains RH / LH / RIGHT / LEFT is untouched.
+  assertEquals(plainNameFromPhrase("99006 - BRACKET, BRIGHTNESS EXAMPLE"), "Brightness example bracket");
+
+  const build = buildSuggestions({
+    rows: [
+      row(2, "99001 - INSULATOR, EXAMPLE SPRING, UPPER RH", "99999-Z0601", { axle: "front", side: "right" }),
+      row(4, "99002 - INSULATOR, EXAMPLE SPRING, UPPER LH", "99999-Z0601", { axle: "front", side: "left" }),
+    ],
+    types: [],
+    groups: GROUPS,
+  });
+  assertEquals(build.suggestions.length, 1);
+  assertEquals(build.suggestions[0].name, "Example spring upper insulator");
+  assertEquals(build.suggestions[0].rowCount, 2);
+  assertEquals(build.suggestions[0].positionScheme, "axle_left_right");
+});
+
 Deno.test("R2.2: rows sharing a group row are one suggestion; numbers stay in page order and unique", () => {
   const build = buildSuggestions({
     rows: [row(2, "10001 - HOSE, AIR CLEANER, NO.1", "99999-Z0301"), row(4, "10001 - HOSE, AIR CLEANER, NO.1", "99999-Z0302"), row(6, "10001 - HOSE, AIR CLEANER, NO.1", "99999-Z0301")],
