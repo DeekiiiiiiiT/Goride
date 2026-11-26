@@ -794,6 +794,21 @@ Deno.test("§9 test 11: a different engine drops the row; model lists, plant cod
 
 // ---------------------------------------------------------------- 12–14: saving, on file, jobs
 
+Deno.test("a save marks the car's parts readiness out of date; a page with nothing new does not", async () => {
+  const db = new FakeDb();
+  const out = await shockRun(db, pageHtml());
+  assertEquals(out.kind, "done");
+  if (out.kind === "done") assert(out.row.result.counts.saved > 0);
+  assert(db.rpcCalls.some((c) => c.name === "refresh_variant_parts_readiness"), "readiness not marked after a save");
+
+  const again = new FakeDb();
+  for (const [number, side] of [["11111-A1001", "right"], ["11111-B1002", "right"], ["22222-A1001", "left"], ["22222-B1002", "left"]]) {
+    again.seedListing({ number, position: "front", side, year_from: 2016, year_to: 2020 });
+  }
+  await shockRun(again, pageHtml());
+  assertEquals(again.rpcCalls.filter((c) => c.name === "refresh_variant_parts_readiness").length, 0);
+});
+
 Deno.test("§9 test 12: the same page twice is 'Read on', Read again shows Already on file and adds nothing", async () => {
   const db = new FakeDb();
   const page = pageHtml();
