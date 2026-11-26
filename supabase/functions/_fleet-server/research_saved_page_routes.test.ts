@@ -1371,6 +1371,25 @@ Deno.test("§3.2 an already-on-file row is queued too (PP-08)", async () => {
   assertEquals(db.table("part_picture").length, 4);
 });
 
+Deno.test("a page whose numbers are all already on file opens no browser check", async () => {
+  const db = new FakeDb();
+  for (const [number, side] of [["11111-A1001", "right"], ["11111-B1002", "right"], ["22222-A1001", "left"], ["22222-B1002", "left"]]) {
+    db.seedListing({ number, position: "front", side, year_from: 2016, year_to: 2020 });
+  }
+  let jobCalls = 0;
+  const original = db.rpc.bind(db);
+  db.rpc = ((name: string, args: Record<string, unknown>) => {
+    if (name === "research_saved_page_job") jobCalls += 1;
+    return original(name, args);
+  }) as typeof db.rpc;
+  const out = await run(db, diagramPage());
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  assertEquals(out.row.result.counts.already, 4);
+  assertEquals(jobCalls, 0);
+  assert(out.row.result.rows.every((r) => r.group !== "already" || r.jobId === null), JSON.stringify(out.row.result.rows));
+});
+
 Deno.test("§3.2 template off queues nothing, an existing picture is already-have, a .html page has no diagram", async () => {
   // 1. The group's template is off (Fluids / tyres): nothing queued, nothing counted.
   let db = new FakeDb();

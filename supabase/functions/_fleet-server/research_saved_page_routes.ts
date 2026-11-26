@@ -716,6 +716,12 @@ export async function runSavedPage(
     }
 
     for (const g of groups.values()) {
+      // Every row's number is already Confirmed for its place: nothing to save and nothing to check, so no browser
+      // check is opened (one opened here was never closed and sat in Pending catalog as "Browser check").
+      if (g.rows.every((r) => decision.get(r.lineNo)?.same)) {
+        for (const r of g.rows) outcome.set(r.lineNo, { group: "already", reason: null, jobId: null });
+        continue;
+      }
       const positionAware = POSITION_SCHEMES.has(String(g.type.scheme ?? ""));
       const canHaveJob = !positionAware || g.axle != null;
       let job: { jobId: string; state: string } | null = null;
