@@ -4,6 +4,7 @@
  * place) and the save/hold decision per axle live with the route.
  */
 import { type CarBuild, periodsOnLine, typedLooksLikePartNumber, wholeNumberOnLine } from "./research_browser_check.ts";
+import { pageNameFromGroupLine } from "./saved_page_phrases.ts";
 
 export type AiDates = { fromMonth?: number | null; fromYear: number; toMonth?: number | null; toYear?: number | null };
 
@@ -39,6 +40,12 @@ export type ProvenRow = {
   groupLineNo: number | null;
   partTypeName: string;
   type: PartType | null;
+  /** D1: the page's own group row as written (null when the row has no accepted group). */
+  groupLine: string | null;
+  /** D1: the page's own name for the part, from that group row, e.g. "Hose, air cleaner, no.1". */
+  pageName: string | null;
+  /** D1: the row's own line as written, prices already removed, cut at 300 characters. */
+  lineText: string;
   axle: "front" | "rear" | null;
   side: "left" | "right" | "both" | null;
   /** The number as the page writes it (never the AI's spelling when the page splits it). */
@@ -53,11 +60,30 @@ export type ProvenRow = {
   numberOk: boolean;
   /** P5 passed: both reads agree on this row. */
   readsAgree: boolean;
+  /** P2 passed: exactly one date range on the row, inside the car's build. */
+  datesOk: boolean;
+  /**
+   * The place check: the page carries the front/rear (and left/right) words the row needs. A known position-aware
+   * row that fails it is held; an unknown row keeps only a place the page itself writes (R1).
+   */
+  placeOk: boolean;
   /** Not this car (another engine, dates outside the build): dropped, never held and never shown (SP-23). */
   dropped: boolean;
   /** The lines that prove it, for research_page_read.block_text (prices already removed). */
   evidence: string;
 };
+
+/** D1: every kept line is cut here. The plan's limit (§2 D1); far more than either sample page needs. */
+export const MAX_RESULT_LINE = 300;
+
+// The page's own name for a part is read from its group row by the phrases module, so the proof and the suggestion
+// builder share one rule (§3 R2.4).
+export { pageNameFromGroupLine };
+
+/** True for the AI's "other" (and its usual spellings), which is never a part's name (D1). */
+export function isOtherTypeName(name: string | null | undefined): boolean {
+  return /^(other|unknown|none)$/i.test(String(name ?? "").trim());
+}
 
 const norm = (s: string | null | undefined) => String(s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 const SIDED = new Set(["four_corners", "axle_left_right"]);
@@ -99,6 +125,23 @@ export function typeWords(type: PartType, make: string | null | undefined): stri
 /** The word lists P3 looks for. */
 const AXLE_WORDS: Record<"front" | "rear", string[]> = { front: ["FRONT", "FR"], rear: ["REAR", "RR"] };
 const SIDE_WORDS: Record<"left" | "right", string[]> = { left: ["LEFT", "LH"], right: ["RIGHT", "RH"] };
+
+/** The plain words a held row gets when the page doesn't say its place (shared with the Add route's re-check). */
+export const PLACE_AXLE_REASON = "The page doesn't say front or rear on that row";
+export const PLACE_SIDE_REASON = "The page doesn't say left or right on that row";
+
+/**
+ * R5 step 5 / P4: does the row's own words (its group row and its line) carry the part type's words? This is the one
+ * check that waited at upload — it needs the type, which only exists after Add.
+ */
+export function rowNamesType(
+  type: PartType,
+  make: string | null | undefined,
+  groupLine: string | null | undefined,
+  lineText: string | null | undefined,
+): boolean {
+  return hasWord(`${groupLine ?? ""} | ${lineText ?? ""}`, typeWords(type, make));
+}
 
 function hasWord(text: string, words: string[]): boolean {
   const upper = String(text ?? "").toUpperCase();
@@ -262,6 +305,9 @@ export function proveRows(input: {
       groupLineNo: null,
       partTypeName: typeName,
       type,
+      groupLine: null,
+      pageName: null,
+      lineText: rowLine.slice(0, MAX_RESULT_LINE),
       axle: null,
       side: null,
       number: String(chosen.number ?? "").trim(),
@@ -272,17 +318,16 @@ export function proveRows(input: {
       reason: null,
       numberOk: false,
       readsAgree: false,
+      datesOk: false,
+      placeOk: true,
       dropped: false,
       evidence: rowLine,
     };
-    // "other" (or a name Roam doesn't know) is listed as Not a Roam part type; nothing to prove or save.
-    if (!type) {
-      out.push(row);
-      continue;
-    }
 
     const group = acceptedGroup(lines, containers, lineNo, chosen.groupLineNo);
     row.groupLineNo = group;
+    // D1: a kept line is cut at 300 characters, the group row included.
+    row.groupLine = group ? lines[group - 1].slice(0, MAX_RESULT_LINE) : null;
     const evidence = group ? `${lines[group - 1]}\n${rowLine}` : rowLine;
     row.evidence = evidence;
     const text = group ? `${lines[group - 1]} | ${rowLine}` : rowLine;
@@ -290,15 +335,87 @@ export function proveRows(input: {
       if (!row.reason) row.reason = reason;
     };
 
+    // R1 (§3): a row Roam has no type for keeps the page's own name, number, dates, place and the lines that prove
+    // them, and goes through the same checks a known row does (P1, P2, P5, P6, and the place words when written).
+    // Only P4 — the part type's own words — has nothing to check against yet, so it is the one thing that waits.
+    if (!type) {
+      row.pageName = pageNameFromGroupLine(row.groupLine) ?? (isOtherTypeName(typeName) ? null : typeName.trim() || null);
+
+      // Place: kept only when the page itself says it. A row whose page says no place is not held: a later
+      // non-positional type is fine with that.
+      const wantAxle = chosen.axle === "rear" ? "rear" : chosen.axle === "front" ? "front" : null;
+      if (wantAxle && hasWord(text, AXLE_WORDS[wantAxle])) row.axle = wantAxle;
+      const wantSide = chosen.side === "left" || chosen.side === "right" || chosen.side === "both" ? chosen.side : null;
+      if (wantSide && (wantSide === "both" || hasWord(text, SIDE_WORDS[wantSide]))) row.side = wantSide;
+      row.placeOk = (!wantAxle || row.axle === wantAxle) && (!wantSide || row.side === wantSide);
+
+      // P1 number: the same rule as a known row, including "never the group's own code".
+      const asWritten = row.number ? wholeNumberOnLine(rowLine, row.number) : null;
+      if (!row.number) fail("No part number on that row");
+      else if (!asWritten) fail("The number isn't written on that row");
+      else if (!typedLooksLikePartNumber(row.number, rowLine, [car.frame, car.engineCode, car.model, car.make].filter((x): x is string => Boolean(x)))) {
+        fail("That doesn't look like a part number");
+      } else if (group && wholeNumberOnLine(lines[group - 1], row.number)) {
+        fail("That number is the group's own code, not a part number");
+      } else {
+        row.number = asWritten;
+        row.numberOk = true;
+      }
+
+      // P2 dates: one range, written on the row; dates that miss the build drop the row as another car.
+      const dates = readRowDates(rowLine, car.build);
+      if (dates.kind === "none") fail("No dates shown on the page");
+      else if (dates.kind === "many") fail("This row shows more than one set of dates");
+      else if (dates.kind === "outside") row.dropped = true;
+      else {
+        row.from = dates.from;
+        row.to = dates.to;
+        row.datesText = dateRangeText(dates.from, dates.to);
+        row.datesOk = true;
+      }
+
+      // P5 the two reads agree (SP-22), on the same fields a known row is compared on.
+      const same = Boolean(a && b)
+        && norm(a!.number) === norm(b!.number)
+        && norm(a!.partType) === norm(b!.partType)
+        && (a!.axle ?? null) === (b!.axle ?? null)
+        && (a!.side ?? null) === (b!.side ?? null)
+        && datesKey(a!.dates) === datesKey(b!.dates);
+      if (!same) fail("The two reads don't agree");
+      else row.readsAgree = true;
+
+      // P6 fits this car: only engine/gearbox/option codes in the note are compared (SP-20).
+      if (!row.reason && !row.dropped) {
+        const problem = fitNoteProblem(row.fitNote, car, header);
+        if (problem) {
+          row.dropped = true;
+          row.reason = problem;
+        }
+      }
+
+      out.push(row);
+      continue;
+    }
+
     // P3 place: a position-aware type says front/rear (and left/right when it comes in sides) on the row or group.
     if (type.scheme && ["axle", "four_corners", "axle_left_right", "axle_inner_outer", "axle_numbered"].includes(type.scheme)) {
       row.axle = chosen.axle === "rear" ? "rear" : chosen.axle === "front" ? "front" : null;
-      if (!row.axle) fail("The page doesn't say front or rear on that row");
-      else if (!hasWord(text, AXLE_WORDS[row.axle])) fail("The page doesn't say front or rear on that row");
+      if (!row.axle) {
+        row.placeOk = false;
+        fail(PLACE_AXLE_REASON);
+      } else if (!hasWord(text, AXLE_WORDS[row.axle])) {
+        row.placeOk = false;
+        fail(PLACE_AXLE_REASON);
+      }
       if (SIDED.has(type.scheme)) {
         row.side = chosen.side === "left" || chosen.side === "right" || chosen.side === "both" ? chosen.side : null;
-        if (!row.side) fail("The page doesn't say left or right on that row");
-        else if (row.side !== "both" && !hasWord(text, SIDE_WORDS[row.side])) fail("The page doesn't say left or right on that row");
+        if (!row.side) {
+          row.placeOk = false;
+          fail(PLACE_SIDE_REASON);
+        } else if (row.side !== "both" && !hasWord(text, SIDE_WORDS[row.side])) {
+          row.placeOk = false;
+          fail(PLACE_SIDE_REASON);
+        }
       }
     }
 
@@ -325,6 +442,7 @@ export function proveRows(input: {
         row.from = dates.from;
         row.to = dates.to;
         row.datesText = dateRangeText(dates.from, dates.to);
+        row.datesOk = true;
       }
     }
 

@@ -31,13 +31,16 @@ import {
   dateRangeText,
   headerFacts,
   headerLineCount,
+  isOtherTypeName,
   type PartType,
   placeGap,
   proveRows,
   type ProvenRow,
   versionDatesFit,
 } from "./saved_page_proof.ts";
-import { formatBytes, humanFileKind, isWebPage, savedPageText } from "./saved_page_text.ts";
+import { buildSuggestions, type Suggestion } from "./saved_page_suggest.ts";
+import { loadPageDrawings, storePageDrawings, type SavedPageDiagramStore } from "./saved_page_diagrams.ts";
+import { formatBytes, humanFileKind, isWebPage, readSingleFileImages, type SavedPageImages, savedPageText } from "./saved_page_text.ts";
 import {
   type PartDiagramStore,
   type PartPictureQueueDeps,
@@ -46,6 +49,7 @@ import {
   queuePartPictures,
 } from "./part_pictures_queue.ts";
 import { loadPartPicturesSettings } from "./part_pictures_settings.ts";
+import { readPartGroups } from "./parts_catalog_read.ts";
 import {
   readPictureBlockers,
   withSavedPagePictures,
@@ -55,25 +59,35 @@ import { R2Client, r2ConfigFromEnv } from "../_shared/objectStorage/index.ts";
 
 const PREFIX = "/make-server-37f42386/admin/catalog-research";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** The same prefix, for the routes that build on a saved page (R5 / R6 / R11). */
+export const SAVED_PAGE_PREFIX = PREFIX;
+/** The same id shape, for those routes. */
+export const SAVED_PAGE_ID = UUID;
 // PP-02: a single-file page of the owner's sample is about 4.9 MB; 8 MB leaves room without straining the function.
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const DAILY_PAGES = 40;
+/** D1: at most this many rows are kept in one result (far more than either sample page: 9 and 32). */
+const MAX_RESULT_ROWS = 400;
 const SIDED = new Set(["four_corners", "axle_left_right"]);
 const POSITION_SCHEMES = new Set(["axle", "four_corners", "axle_left_right", "axle_inner_outer", "axle_numbered"]);
 
 const norm = (s: string | null | undefined) => String(s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 type Counts = { saved: number; already: number; held: number; not_roam_type: number };
-type SavedPageResult = {
+export type SavedPageResult = {
   counts: Counts;
   rows: ResultRow[];
+  /** D2 / R2: one entry per catalogue group row among the unknown rows. Absent on results stored before 26 Nov. */
+  suggestions?: Suggestion[];
   otherTypes: string[];
+  /** R2.7: rows Roam doesn't know beyond the 20 suggestions, for the screen's one line. */
+  moreUnknownRows?: number;
   stop?: { code: string; detail: string };
   /** §3.2 pictures. Absent on old results and when AI part pictures are off. */
   pictures?: PicturesResult;
 };
-const emptyCounts = (): Counts => ({ saved: 0, already: 0, held: 0, not_roam_type: 0 });
+export const emptyCounts = (): Counts => ({ saved: 0, already: 0, held: 0, not_roam_type: 0 });
 
-type SavedPageRow = {
+export type SavedPageRow = {
   id: string;
   vehicle_catalog_id: string;
   job_id: string | null;
@@ -141,9 +155,9 @@ export type SavedPageDeps = {
   pictureBlockers?: () => Promise<PictureBlockers>;
 };
 
-type OnFile = { componentId: string; number: string; position: string | null; side: string | null; from: number | null; to: number | null };
+import { type OnFile, overlaps, parseOnFile, placeMatches } from "./saved_page_on_file.ts";
 
-type ResultRow = {
+export type ResultRow = {
   partType: string;
   place: string | null;
   number: string | null;
@@ -151,6 +165,20 @@ type ResultRow = {
   group: "saved" | "already" | "held" | "not_roam_type";
   reason: string | null;
   jobId: string | null;
+  // D1 (26 Nov): everything about the row, kept for every row, so a part type can be added later without the file.
+  groupLine: string | null;
+  lineText: string;
+  lineNo: number;
+  groupLineNo: number | null;
+  from: string | null;
+  to: string | null;
+  datesText: string | null;
+  numberOk: boolean;
+  readsAgree: boolean;
+  datesOk: boolean;
+  placeOk: boolean;
+  /** D1/D2: the suggestion this row belongs to (unknown rows only), or null. */
+  suggestion: string | null;
 };
 
 function stripQuery(url: URL): string {
@@ -165,6 +193,23 @@ function yearOf(index: number): number {
   return Math.floor((index - 1) / 12);
 }
 
+/** D1: the date range as ISO days — the first day of the from month, the last day of the to month. */
+function isoMonthStart(index: number | null): string | null {
+  if (index == null) return null;
+  return `${yearOf(index)}-${String(monthOf(index)).padStart(2, "0")}-01`;
+}
+function isoMonthEnd(index: number | null): string | null {
+  if (index == null) return null;
+  return new Date(Date.UTC(yearOf(index), monthOf(index), 0)).toISOString().slice(0, 10);
+}
+
+/** D1: a row Roam has no type for is named by the page itself — never the AI's word "other". */
+function unknownPartLabel(row: ProvenRow): string {
+  if (row.pageName) return row.pageName;
+  if (row.partTypeName && !isOtherTypeName(row.partTypeName)) return row.partTypeName;
+  return "Unknown part";
+}
+
 function buildText(car: CarRow): string {
   const p2 = (n: number | null) => (n == null ? "" : String(n).padStart(2, "0"));
   if (!car.production_start_year) return "";
@@ -173,6 +218,11 @@ function buildText(car: CarRow): string {
     ? `${car.production_end_month ? `${p2(car.production_end_month)}.` : ""}${car.production_end_year}`
     : "now";
   return `${start} – ${end}`;
+}
+
+/** The car's build as plain words, for the evidence the Add route writes too (R5 step 7). */
+export function savedPageBuildText(car: Record<string, unknown>): string {
+  return buildText(car as unknown as CarRow);
 }
 
 // ---------------------------------------------------------------- R5: the two Gemini reads
@@ -211,7 +261,8 @@ const RESPONSE_SCHEMA = {
 };
 
 function savedPagePrompt(input: SavedPageAiInput): string {
-  const types = input.partTypes.slice(0, 120).map((t) => {
+  // R8: every active part type is shown — no slice. The read is capped at 500 and the route logs when it is hit.
+  const types = input.partTypes.map((t) => {
     const position = POSITION_SCHEMES.has(String(t.scheme ?? ""));
     const words = axleWordsFor(t).join("/");
     return `- ${t.name}${position ? ` (sits at a place: ${words})` : ""}`;
@@ -525,11 +576,29 @@ export async function runSavedPage(
       return { kind: "stopped", row: { ...row, status: "stopped", stop_reason: code, ai_cost_usd: cost, result }, code, detail };
     };
 
+    // R8: every active part type, up to 500. The prompt no longer slices the list, so one log line says when the
+    // limit was reached rather than silently holding a type back from the AI.
     const { data: typeRows } = await supabase.from("maintenance_service_categories")
       .select("id, name, position_scheme").eq("kind", "component").eq("is_part", true).eq("part_type_status", "active")
-      .order("name").limit(200);
+      .order("name").limit(500);
     const types: PartType[] = ((typeRows ?? []) as Array<{ id: string; name: string; position_scheme: string | null }>)
       .map((t) => ({ id: String(t.id), name: String(t.name), scheme: t.position_scheme ?? null }));
+    if ((typeRows ?? []).length >= 500) {
+      console.warn("saved page: the active part type list reached its 500 read limit; the page was read with the first 500");
+    }
+
+    // R2.5: the part groups on file, so a suggestion can carry the group it would be created under. A database with
+    // fewer groups simply hands the screen a null group id for a missing one (the owner can pick another).
+    let partGroups: Array<{ id: string; name: string }> = [];
+    try {
+      partGroups = await readPartGroups(supabase);
+    } catch (err) {
+      console.error("saved page part groups not read", err);
+    }
+
+    // R2 / D3: a phrase the owner marked "not a part we track" is never offered again, on any page, for any car.
+    const { data: dismissalRows } = await supabase.from("part_type_suggestion_dismissal").select("phrase_key").limit(1000);
+    const dismissed = new Set(((dismissalRows ?? []) as Array<{ phrase_key: string }>).map((d) => String(d.phrase_key)));
     const carFacts: CarFacts = {
       make: car.make,
       model: car.model,
@@ -575,7 +644,7 @@ export async function runSavedPage(
       return await stopReading("no_rows", "Open the section that lists the part numbers, then save it again.", aiCost);
     }
 
-    // R6: prove the rows on the page.
+    // R6: prove the rows on the page. D1 caps the kept rows at 400, so a pathological page can never grow the result.
     const proven = proveRows({
       reads: [read1, read2],
       lines: page.lines,
@@ -583,7 +652,7 @@ export async function runSavedPage(
       types,
       car: carFacts,
       header: headerFacts(headerLines),
-    });
+    }).slice(0, MAX_RESULT_ROWS);
     if (!proven.length) {
       return await stopReading("no_rows", "Open the section that lists the part numbers, then save it again.", aiCost);
     }
@@ -593,23 +662,6 @@ export async function runSavedPage(
       .select("position, side, year_from, year_to, part_interchange_group ( part_master ( oem_part_number, maintenance_component_id ) )")
       .eq("vehicle_catalog_id", car.id).eq("trust", "confirmed").limit(2000);
     const onFile = parseOnFile(listingData);
-    const overlapping = (a: OnFile, r: ProvenRow) => {
-      const rf = r.from;
-      const rt = r.to;
-      const af = a.from ?? Number.NEGATIVE_INFINITY;
-      const at = a.to ?? Number.POSITIVE_INFINITY;
-      if (rf != null && at < rf) return false;
-      if (rt != null && af > rt) return false;
-      return true;
-    };
-    const placeMatches = (a: OnFile, r: ProvenRow) => {
-      if (r.type && POSITION_SCHEMES.has(String(r.type.scheme ?? ""))) {
-        if ((a.position ?? null) !== (r.axle ?? null)) return false;
-      } else if (a.position != null) return false;
-      if (r.side == null) return a.side == null || a.side === "both";
-      if (r.side === "both") return a.side === "both" || a.side === "left" || a.side === "right";
-      return a.side === r.side || a.side === "both" || a.side == null;
-    };
     // The page's own numbers for each place: a split's two numbers are both on the page, so an on-file sibling is
     // never "Roam already has…" (SP-25 / SP-44).
     const pageNumbers = new Map<string, Set<string>>();
@@ -626,7 +678,7 @@ export async function runSavedPage(
         decision.set(r.lineNo, { onFile: null, same: false, conflict: false });
         continue;
       }
-      const hits = onFile.filter((a) => a.componentId === r.type!.id && placeMatches(a, r) && overlapping(a, r));
+      const hits = onFile.filter((a) => a.componentId === r.type!.id && placeMatches(a, r) && overlaps(a, r));
       // The same number wins over any other: a frame split is two different numbers on purpose (SP-25), so a row
       // whose own number is already on file is "Already on file", never a conflict with its sibling.
       const sameHit = hits.find((a) => norm(a.number) === norm(r.number)) ?? null;
@@ -851,24 +903,41 @@ export async function runSavedPage(
       }
     }
 
+    // R2: one suggestion per catalogue group row among the unknown rows (D2). A dismissed phrase is skipped here.
+    const suggestionBuild = buildSuggestions({ rows: proven, types, groups: partGroups, dismissed });
+
     // Result rows + counts.
     const rows: ResultRow[] = [];
     for (const r of proven) {
       const o = outcome.get(r.lineNo);
       if (!o) continue; // dropped as not this car
       rows.push({
-        partType: r.partTypeName,
+        // D1: the type's own name when Roam has it, otherwise the page's own name — never the word "other".
+        partType: r.type ? r.type.name : unknownPartLabel(r),
         place: [r.axle, r.side].filter(Boolean).join(" ") || null,
         number: r.number || null,
         dates: r.datesText,
         group: o.group,
         reason: o.group === "saved" || o.group === "already" || o.group === "not_roam_type" ? null : o.reason,
         jobId: o.jobId,
+        groupLine: r.groupLine,
+        lineText: r.lineText,
+        lineNo: r.lineNo,
+        groupLineNo: r.groupLineNo,
+        from: isoMonthStart(r.from),
+        to: isoMonthEnd(r.to),
+        datesText: r.datesText,
+        numberOk: r.numberOk,
+        readsAgree: r.readsAgree,
+        datesOk: r.datesOk,
+        placeOk: r.placeOk,
+        suggestion: suggestionBuild.keyByLine.get(r.lineNo) ?? null,
       });
     }
     const counts = emptyCounts();
     for (const r of rows) counts[r.group]++;
-    const otherTypes = [...new Set(proven.filter((r) => !r.type).map((r) => r.partTypeName).filter(Boolean))].slice(0, 5);
+    // R3: otherTypes stays for old results; it is now the list of suggestion names rather than ["other"].
+    const otherTypes = suggestionBuild.suggestions.map((s) => s.name).filter(Boolean).slice(0, 20);
 
     // §3.2 pictures: every proven Roam-type row that ended saved OR already on file (PP-08), best effort.
     // The upload never fails because of a picture (PP-25), and nothing is drawn here (PP-12).
@@ -887,11 +956,23 @@ export async function runSavedPage(
           componentId: r.type.id,
         });
       }
+      // R7 / D4: read the page's drawings once, keep up to 3 privately for a part type added later, and hand the same
+      // set to the picture queue. No drawings (an .html page, or no object storage) → the rows are noDiagram and the
+      // parts still save.
+      let drawings: SavedPageImages = { images: [], maps: {} };
+      try {
+        drawings = await storePageDrawings(supabase, {
+          savedPageId: row.id,
+          images: readSingleFileImages(input.bytes, input.fileName),
+          r2: pictureDeps.r2 as SavedPageDiagramStore | null,
+        });
+      } catch (err) {
+        console.error("saved page drawings not stored", err);
+      }
       pictures = await queuePartPictures(
         supabase,
         {
-          bytes: input.bytes,
-          fileName: input.fileName,
+          drawings,
           savedPageId: row.id,
           carMake: car.make,
           rows: queueRows,
@@ -903,7 +984,9 @@ export async function runSavedPage(
     const result: SavedPageResult = {
       counts,
       rows,
+      suggestions: suggestionBuild.suggestions,
       otherTypes,
+      ...(suggestionBuild.moreUnknownRows > 0 ? { moreUnknownRows: suggestionBuild.moreUnknownRows } : {}),
       ...(pictures ? { pictures } : {}),
     };
     await updateRow(row.id, {
@@ -949,31 +1032,6 @@ async function writeSuggestions(
   }
 }
 
-function parseOnFile(data: unknown): OnFile[] {
-  const out: OnFile[] = [];
-  for (const listing of (data ?? []) as Array<Record<string, unknown>>) {
-    const groups = listing.part_interchange_group as { part_master?: Array<Record<string, unknown>> } | null;
-    const parts = groups?.part_master ?? [];
-    for (const p of parts) {
-      if (!p || p.catalog_decision === "rejected") continue;
-      const number = String(p.oem_part_number ?? "").trim();
-      const componentId = p.maintenance_component_id == null ? "" : String(p.maintenance_component_id);
-      if (!number || !componentId) continue;
-      const yearFrom = listing.year_from == null ? null : Number(listing.year_from);
-      const yearTo = listing.year_to == null ? null : Number(listing.year_to);
-      out.push({
-        componentId,
-        number,
-        position: listing.position == null ? null : String(listing.position),
-        side: listing.side == null ? null : String(listing.side),
-        from: yearFrom == null ? null : yearFrom * 12 + 1,
-        to: yearTo == null ? null : yearTo * 12 + 12,
-      });
-    }
-  }
-  return out;
-}
-
 async function sha256Bytes(bytes: Uint8Array): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", bytes as unknown as BufferSource);
   return [...new Uint8Array(buf)].map((x) => x.toString(16).padStart(2, "0")).join("");
@@ -992,7 +1050,7 @@ function apiSavedPage(row: SavedPageRow): Omit<SavedPageRow, "uploaded_by"> {
  * Live picture deps for the upload route: R2 from function secrets (null when unset, and then no diagram can be
  * stored) and the settings row. Built once per function instance.
  */
-function productionPictureDeps(): PartPictureQueueDeps {
+export function productionPictureDeps(): PartPictureQueueDeps {
   let r2: PartDiagramStore | null = null;
   try {
     r2 = new R2Client(r2ConfigFromEnv());
@@ -1079,33 +1137,55 @@ export function registerResearchSavedPageRoutes(
     if (denied) return denied;
     const id = c.req.param("id") ?? "";
     if (!UUID.test(id)) return c.json({ error: "Bad id" }, 400);
-    const { data, error } = await supabase.from("research_saved_page")
-      .select("id, vehicle_catalog_id, job_id, domain, source_url, file_name, status, stop_reason, result, created_at")
-      .eq("id", id).maybeSingle();
-    if (error) return c.json({ error: error.message }, 500);
-    if (!data) return c.json({ error: "Not found" }, 404);
-
-    // §3.5 point 7: each row carries its picture, so S1 can show the thumbnail and the state (also for a row that
-    // was already on file). Best effort: a picture problem never hides the upload's own result (PP-25).
-    const row = data as SavedPageRow;
-    let result: SavedPageResult = row.result;
-    let picturesAiOn: boolean | null = null;
+    let answer: SavedPageAnswer | null;
     try {
-      const blockers = await (routeDeps.pictureBlockers ??
-        (async () => (await readPictureBlockers(supabase)).blockers))();
-      const decorated = await withSavedPagePictures(
-        supabase,
-        result as unknown as Record<string, unknown>,
-        blockers,
-      );
-      if (decorated) result = decorated as unknown as SavedPageResult;
-      picturesAiOn = blockers.aiOn;
+      answer = await loadSavedPageAnswer(supabase, id, routeDeps.pictureBlockers);
     } catch (err) {
-      console.error("saved page pictures not attached", err);
+      return c.json({ error: (err as Error).message }, 500);
     }
-    return c.json({
-      savedPage: apiSavedPage({ ...row, result }),
-      ...(picturesAiOn !== null ? { picturesAiOn } : {}),
-    });
+    if (!answer) return c.json({ error: "Not found" }, 404);
+    return c.json(answer);
   });
+}
+
+/** What one upload's answer carries: the row (never the uploader) and, best effort, whether AI pictures are on. */
+export type SavedPageAnswer = {
+  savedPage: Omit<SavedPageRow, "uploaded_by">;
+  picturesAiOn?: boolean;
+};
+
+/**
+ * R5 step 10: the whole page as GET saved-pages/:id answers it, so the Add route redraws the screen from one reply.
+ * The picture state is best effort: a picture problem never hides the upload's own result (PP-25).
+ */
+export async function loadSavedPageAnswer(
+  supabase: SupabaseClient,
+  id: string,
+  pictureBlockers?: () => Promise<PictureBlockers>,
+): Promise<SavedPageAnswer | null> {
+  const { data, error } = await supabase.from("research_saved_page")
+    .select("id, vehicle_catalog_id, job_id, domain, source_url, file_name, status, stop_reason, result, created_at")
+    .eq("id", id).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+
+  const row = data as SavedPageRow;
+  let result: SavedPageResult = row.result;
+  let picturesAiOn: boolean | null = null;
+  try {
+    const blockers = await (pictureBlockers ?? (async () => (await readPictureBlockers(supabase)).blockers))();
+    const decorated = await withSavedPagePictures(
+      supabase,
+      result as unknown as Record<string, unknown>,
+      blockers,
+    );
+    if (decorated) result = decorated as unknown as SavedPageResult;
+    picturesAiOn = blockers.aiOn;
+  } catch (err) {
+    console.error("saved page pictures not attached", err);
+  }
+  return {
+    savedPage: apiSavedPage({ ...row, result }),
+    ...(picturesAiOn !== null ? { picturesAiOn } : {}),
+  };
 }

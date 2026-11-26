@@ -58,6 +58,26 @@ export async function runPartPictureCleanup(opts: {
     }
   }
 
+  // R7 (part-type learning §3): the drawings one upload kept go 30 days after the upload, even when no picture used
+  // them — otherwise every upload would leave private files behind for ever.
+  if (db.savedPageDiagramCleanupCandidates && db.markSavedPageDiagramDeleted) {
+    let duePages: Array<{ id: string; r2Key: string }> = [];
+    try {
+      duePages = await db.savedPageDiagramCleanupCandidates(MAX_DELETES_PER_RUN, now.toISOString());
+    } catch (err) {
+      console.error("saved page diagram cleanup candidates failed", err);
+    }
+    for (const row of duePages) {
+      try {
+        await r2.remove("private", [row.r2Key]);
+        await db.markSavedPageDiagramDeleted(row.id, deletedAtIso);
+        result.diagrams += 1;
+      } catch {
+        // Leave the row unmarked: the next run tries again.
+      }
+    }
+  }
+
   if (opts.saveSettings) {
     await opts.saveSettings({ part_picture_cleanup_last_run_at: now.toISOString() });
   }

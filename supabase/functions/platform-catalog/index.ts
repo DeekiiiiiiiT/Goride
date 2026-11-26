@@ -13,6 +13,7 @@ import { registerPendingPartsCatalogRoutes } from "../_fleet-server/pending_part
 import { registerCatalogResearchRoutes } from "../_fleet-server/catalog_research_routes.ts";
 import { registerResearchEngineRoutes } from "../_fleet-server/research_engine_routes.ts";
 import { registerResearchSavedPageRoutes } from "../_fleet-server/research_saved_page_routes.ts";
+import { registerSavedPagePartTypeRoutes } from "../_fleet-server/saved_page_part_type_routes.ts";
 import { registerPartPictureInternalRoutes } from "../_fleet-server/part_picture_routes.ts";
 import { registerPartPictureAdminRoutes } from "../_fleet-server/part_picture_admin_routes.ts";
 import { withPrivacyGuard } from "../_fleet-server/research_privacy.ts";
@@ -374,6 +375,8 @@ try {
   registerCatalogResearchRoutes(withPrivacyGuard(app), writer);
   registerResearchEngineRoutes(withPrivacyGuard(app), writer);
   registerResearchSavedPageRoutes(withPrivacyGuard(app), writer);
+  // R5 / R6 / R11: add the part type a saved page suggested, dismiss a phrase, and the hidden list.
+  registerSavedPagePartTypeRoutes(withPrivacyGuard(app), writer);
   // The part-picture worker's door: cron relay only, X-Fleet-Cron-Secret (see part_picture_routes.ts).
   registerPartPictureInternalRoutes(app, writer);
   // Dominion part pictures (§3.5): staff read; owner for the templates, the bulk remake and the settings.

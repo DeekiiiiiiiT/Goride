@@ -6,6 +6,7 @@
  * updates that could race another run.
  */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { duePageDrawings, markPageDrawingDeleted } from "./saved_page_diagrams.ts";
 
 /** Explicit column lists — the only shape this module selects. */
 export const PART_PICTURE_COLUMNS =
@@ -92,6 +93,12 @@ export type PartPictureDb = {
   cleanupCandidates(retentionDays: number, limit: number): Promise<PartPictureCleanupCandidate[]>;
   markVersionFileDeleted(refId: string, deletedAtIso: string): Promise<void>;
   markDiagramDeleted(refId: string, deletedAtIso: string): Promise<void>;
+  /**
+   * R7: the drawings a saved page kept (research_saved_page_diagram) past their 30 days. Optional so a caller that
+   * only knows part_picture* (an older test fake) still works; the live db always has them.
+   */
+  savedPageDiagramCleanupCandidates?(limit: number, nowIso: string): Promise<Array<{ id: string; r2Key: string }>>;
+  markSavedPageDiagramDeleted?(id: string, deletedAtIso: string): Promise<void>;
 };
 
 function mapRow(data: Record<string, unknown>): PartPictureRow {
@@ -278,6 +285,15 @@ export function createPartPictureDb(supabase: SupabaseClient): PartPictureDb {
         .update({ deleted_at: deletedAtIso })
         .eq("id", refId);
       if (error) throw error;
+    },
+
+    // R7: the drawings a saved page keeps go 30 days after the upload, even when no picture used them.
+    savedPageDiagramCleanupCandidates(limit, nowIso) {
+      return duePageDrawings(supabase, limit, nowIso);
+    },
+
+    markSavedPageDiagramDeleted(id, deletedAtIso) {
+      return markPageDrawingDeleted(supabase, id, deletedAtIso);
     },
   };
 }

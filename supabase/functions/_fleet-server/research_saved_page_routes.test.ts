@@ -9,6 +9,9 @@ import { runSavedPage, type SavedPageAi, type SavedPageAiInput } from "./researc
 import type { PartPictureQueueDeps } from "./part_pictures_queue.ts";
 import { pictureBlockers } from "./part_picture_reads.ts";
 import { mergePartPicturesSettings } from "./part_pictures_settings.ts";
+import { addSuggestedPartType, registerSavedPagePartTypeRoutes } from "./saved_page_part_type_routes.ts";
+import { registerCatalogRoutes } from "./catalog_routes.ts";
+import { normalisePhrase } from "./saved_page_phrases.ts";
 
 // ---------------------------------------------------------------- fixtures
 
@@ -18,6 +21,9 @@ const LATER_CAR = "33333333-3333-4333-8333-333333333333";
 const SHOCK = "44444444-4444-4444-8444-444444444444";
 const BAR = "55555555-5555-4555-8555-555555555555";
 const SUS_GROUP = "66666666-6666-4666-8666-666666666666";
+/** Round S1 fixtures: the part group a suggestion lands in, and a type that already covers "Air cleaner hose". */
+const BELTS_GROUP = "88888888-8888-4888-8888-888888888888";
+const AIR_HOSE = "99999999-9999-4999-8999-999999999999";
 
 const RIGHT_GROUP = "GROUP 77777U - ABSORBER SET, SHOCK, FRONT RH";
 const LEFT_GROUP = "GROUP 77778U - ABSORBER SET, SHOCK, FRONT LH";
@@ -193,7 +199,7 @@ class Q {
   private orderBy?: [string, boolean];
   private limitN?: number;
   private opts: { count?: string; head?: boolean } = {};
-  private action: "select" | "insert" | "update" | "upsert" = "select";
+  private action: "select" | "insert" | "update" | "upsert" | "delete" = "select";
   private payload: Row = {};
   private singleRow = false;
   private maybeRow = false;
@@ -218,6 +224,10 @@ class Q {
     this.action = "upsert";
     this.payload = row;
     this.upsertOpts = opts ?? {};
+    return this;
+  }
+  delete() {
+    this.action = "delete";
     return this;
   }
   eq(col: string, val: unknown) {
@@ -287,6 +297,11 @@ class Q {
       for (const row of rows) if (this.matches(row)) Object.assign(row, this.payload);
       return { data: null, error: null };
     }
+    if (this.action === "delete") {
+      const keep = rows.filter((row) => !this.matches(row));
+      rows.splice(0, rows.length, ...keep);
+      return { data: null, error: null };
+    }
     const keys = (this.upsertOpts.onConflict ?? "id").split(",").map((s) => s.trim());
     const found = rows.find((r) => keys.every((k) => r[k] === this.payload[k]));
     if (found) {
@@ -317,6 +332,9 @@ class FakeDb {
       { id: SUS_GROUP, code: "SUS", name: "Suspension & steering", kind: "system", is_part: true, part_type_status: "active", position_scheme: "none", parent_id: null },
       { id: SHOCK, code: "SUS-SHOCK", name: "Shock absorber", kind: "component", is_part: true, part_type_status: "active", position_scheme: "four_corners", parent_id: SUS_GROUP },
       { id: BAR, code: "SUS-BAR", name: "Stabilizer bar", kind: "component", is_part: true, part_type_status: "active", position_scheme: "axle", parent_id: SUS_GROUP },
+      // Round S1: the group a suggested part would be created under, and one type that already covers a page phrase.
+      { id: BELTS_GROUP, code: "SYS-BELTS", name: "Belts & hoses", kind: "system", is_part: true, part_type_status: "active", position_scheme: "none", parent_id: null },
+      { id: AIR_HOSE, code: "air_cleaner_hose", name: "Air cleaner hose", kind: "component", is_part: true, part_type_status: "active", position_scheme: "none", parent_id: BELTS_GROUP },
     ],
     // Part pictures (§3.2): the part behind each number, its template, and the queue itself.
     part_master: [
@@ -342,6 +360,10 @@ class FakeDb {
     part_listing: [],
     research_page_read: [],
     research_number_conflict: [],
+    // Round S1: the two tables of the learning round and the phrase a page already wrote.
+    part_term_synonym: [],
+    part_type_suggestion_dismissal: [],
+    research_saved_page_diagram: [],
   };
   table(name: string): Row[] {
     return (this.tables[name] ??= []);
@@ -370,13 +392,49 @@ class FakeDb {
       part_interchange_group: { part_master: [{ id: `master-${this.seq++}`, oem_part_number: number, maintenance_component_id: componentId }] },
     });
   }
+  /** R11: the owner's name for the hidden list (best effort, the route falls back to null). */
+  auth = {
+    admin: {
+      getUserById: (id: string) =>
+        Promise.resolve({ data: { user: { id, user_metadata: { full_name: "PTL Owner" } } }, error: null }),
+    },
+  };
   async rpc(name: string, args: Record<string, unknown> = {}): Promise<any> {
     this.rpcCalls.push({ name, args });
     if (name === "catalog_research_spend_today") return { data: this.spend, error: null };
     if (name === "catalog_research_expire_browser_checks") return { data: null, error: null };
     if (name === "research_saved_page_job") return { data: this.savedPageJob(args), error: null };
     if (name === "promote_part_proposal") return { data: await this.promote(args), error: null };
+    // R5 step 3: the same function the Part types screen uses creates a part type.
+    if (name === "upsert_self_serve_part_type") {
+      const result = this.selfServePartType(args) as Row;
+      return result.error ? { data: null, error: result.error } : { data: result, error: null };
+    }
     return { data: null, error: null };
+  }
+  private selfServePartType(args: Record<string, unknown>) {
+    const input = (args.p_input ?? {}) as Row;
+    const op = String(input.opCode ?? "").toUpperCase();
+    const taken = this.table("maintenance_service_categories")
+      .some((c) => c.is_part === true && String(c.op_code ?? "").toUpperCase() === op);
+    if (!input.areaId) return { error: { message: "Choose an area" } };
+    if (!op || taken) return { error: { message: op ? "Op code already in use" : "Op code is required for new types" } };
+    const row = {
+      id: `type-${this.seq++}`,
+      code: op.toLowerCase().replace(/-/g, "_"),
+      name: String(input.name ?? ""),
+      plain_name: String(input.name ?? ""),
+      op_code: op,
+      kind: "component",
+      is_part: true,
+      part_type_status: String(input.status ?? "active"),
+      position_scheme: String(input.positionScheme ?? "none"),
+      default_fit_mode: String(input.defaultFitMode ?? "specific"),
+      default_action: "replace",
+      parent_id: input.areaId,
+    };
+    this.table("maintenance_service_categories").push(row);
+    return { id: row.id, specFieldCount: 0 };
   }
   private savedPageJob(args: Record<string, unknown>) {
     const want = axleOf(String(args.p_axle ?? ""));
@@ -508,7 +566,8 @@ Deno.test("§9 test 3: a page for another model stops with wrong_car and writes 
 
 Deno.test("§9 test 4: a frame number in a help link above the parts is not the version (SP-12)", async () => {
   const db = new FakeDb();
-  const out = await shockRun(db, pageHtml({ header: `<p>Help: frame ZZ900-0344862</p>` }));
+  // Made-up serial: the fixture's identity is a made-up car (ZZ900), never a real frame number.
+  const out = await shockRun(db, pageHtml({ header: `<p>Help: frame ZZ900-0000001</p>` }));
   assertEquals(out.kind, "done");
   if (out.kind === "done") assertEquals(out.row.result.counts.saved, 4);
 });
@@ -1267,9 +1326,25 @@ Deno.test("§3.2 saved rows queue a picture and the diagram goes to the private 
   assert(rows.every((r) => r.catalog_group_id === SUS_GROUP && r.component_id === SHOCK));
   assert(rows.every((r) => r.label === null), "a group line of \"GROUP 77777U\" carries no callout label");
 
-  assertEquals(r2.puts.length, 4);
+  // R7: the page's own drawing is kept once for this upload (so a part type added later can be pictured), and each
+  // picture still keeps its own copy at "part-diagrams/<pictureId>/…".
+  const pagePuts = r2.puts.filter((p) => p.key.startsWith("part-diagrams/pages/"));
+  const picturePuts = r2.puts.filter((p) => !p.key.startsWith("part-diagrams/pages/"));
+  assertEquals(r2.puts.length, 5);
+  assertEquals(pagePuts.length, 1);
+  assert(pagePuts.every((p) => p.bucket === "private" && p.key.includes(`/pages/${out.row.id}/`)), JSON.stringify(pagePuts.map((p) => p.key)));
+  assertEquals(picturePuts.length, 4);
   assert(r2.puts.every((p) => p.bucket === "private" && p.key.startsWith("part-diagrams/")), JSON.stringify(r2.puts.map((p) => p.bucket)));
   assert(r2.puts.every((p) => p.contentType === "image/png" && p.bytes.length === 33));
+
+  const keptDrawings = db.table("research_saved_page_diagram");
+  assertEquals(keptDrawings.length, 1);
+  assertEquals(keptDrawings[0].saved_page_id, out.row.id);
+  assertEquals([keptDrawings[0].content_type, keptDrawings[0].width, keptDrawings[0].height], ["image/png", 400, 400]);
+  assertEquals(keptDrawings[0].map_box, { x1: 1, y1: 2, x2: 3, y2: 4 });
+  assert(keptDrawings[0].r2_key.startsWith(`part-diagrams/pages/${out.row.id}/`), keptDrawings[0].r2_key);
+  // The table's own 30-day default fills delete_after, so the server never sends one (D4 says 30 days).
+  assertEquals("delete_after" in keptDrawings[0], false);
 
   const diagrams = db.table("part_picture_diagram");
   assertEquals(diagrams.length, 4);
@@ -1387,4 +1462,677 @@ Deno.test("§3.2 a failed picture is re-queued on the same row, never a second r
   const retried = rows.find((r) => r.interchange_group_id === "group-11111-A1001")!;
   assertEquals(retried.id, "pic-failed");
   assertEquals([retried.status, retried.attempts, retried.last_error], ["queued", 0, null]);
+});
+
+// ---------------------------------------------------------------- R1–R11 (round S1): learning new part types
+
+/** A made-up page with three unknown rows under two group rows. Number 99999-Z030x is invented. */
+const LEARN_HTML = `<html><head><title>Check Catalogue ZZ900-AAAA 11.2016 - 09.2020</title></head><body>
+<!-- saved from url=(0045)https://catalog.example/parts/ZZ900 -->
+<h2>Air cleaner</h2>
+<table>
+<tr><td>17881 - HOSE, AIR CLEANER, NO.1</td></tr>
+<tr><td>99999-Z0301</td><td>11.2016</td><td>09.2020</td><td>1.00</td></tr>
+<tr><td>17751 - INLET, AIR CLEANER, NO.1</td></tr>
+<tr><td>99999-Z0302</td><td>11.2016</td><td>09.2020</td><td>1.00</td></tr>
+<tr><td>17875C - CLIP, HOSE</td></tr>
+<tr><td>99999-Z0303</td><td>11.2016</td><td>09.2020</td><td>1.00</td></tr>
+</table>
+</body></html>`;
+
+const LEARN_ROWS: RowSpec[] = [
+  { number: "99999-Z0301", type: "other", axle: null, side: null, group: "HOSE, AIR CLEANER, NO.1", from: [2016, 11], to: [2020, 9] },
+  { number: "99999-Z0302", type: "other", axle: null, side: null, group: "INLET, AIR CLEANER, NO.1", from: [2016, 11], to: [2020, 9] },
+  { number: "99999-Z0303", type: "other", axle: null, side: null, group: "CLIP, HOSE", from: [2016, 11], to: [2020, 9] },
+];
+
+const HOSE_KEY = "HOSEAIRCLEANERNO1";
+const INLET_KEY = "INLETAIRCLEANERNO1";
+const CLIP_KEY = "CLIPHOSE";
+
+const learnRun = (db: FakeDb, opts: { again?: boolean } = {}) =>
+  run(db, LEARN_HTML, { ...opts, ai: fakeAi(db, LEARN_ROWS) });
+
+function resultOfPage(db: FakeDb, id: string): Record<string, any> {
+  const page = db.table("research_saved_page").find((row) => row.id === id);
+  return (page?.result ?? {}) as Record<string, any>;
+}
+
+function suggestionOf(db: FakeDb, id: string, key: string): Record<string, any> | undefined {
+  return ((resultOfPage(db, id).suggestions ?? []) as Array<Record<string, any>>).find((s) => s.key === key);
+}
+
+function rowsOfPage(db: FakeDb, id: string): Array<Record<string, any>> {
+  return (resultOfPage(db, id).rows ?? []) as Array<Record<string, any>>;
+}
+
+const addBody = (key: string, patch: Record<string, unknown> = {}) => ({ key, action: "add", ...patch });
+
+function addPartType(db: FakeDb, pageId: string, body: Record<string, unknown>, owner = true) {
+  return addSuggestedPartType(db as unknown as SupabaseClient, {
+    savedPageId: pageId,
+    body,
+    actor: ACTOR,
+    owner,
+    deps: { pictures: null },
+  });
+}
+
+Deno.test("R1 + R3: an unknown row keeps the page's own name, number, dates, place and lines", async () => {
+  const db = new FakeDb();
+  const out = await learnRun(db);
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  const id = out.row.id;
+
+  assertEquals(out.row.result.counts.not_roam_type, 3);
+  const rows = rowsOfPage(db, id);
+  const hose = rows.find((r) => r.number === "99999-Z0301")!;
+  assertEquals(hose.partType, "Hose, air cleaner, no.1");
+  assertEquals(hose.groupLine, "17881 - HOSE, AIR CLEANER, NO.1");
+  assert(String(hose.lineText).includes("99999-Z0301"), JSON.stringify(hose.lineText));
+  assertEquals([hose.from, hose.to], ["2016-11-01", "2020-09-30"]);
+  assertEquals(hose.datesText, "11.2016 – 09.2020");
+  assertEquals([hose.numberOk, hose.readsAgree, hose.datesOk, hose.placeOk], [true, true, true, true]);
+  assertEquals(hose.suggestion, HOSE_KEY);
+  // D1: never the word "other".
+  assert(rows.every((r) => String(r.partType).toLowerCase() !== "other"), JSON.stringify(rows.map((r) => r.partType)));
+
+  // D2: one suggestion per group row, with the page's words, the numbers and the row count.
+  const suggestions = resultOfPage(db, id).suggestions as Array<Record<string, any>>;
+  assertEquals(suggestions.length, 3);
+  const inlet = suggestionOf(db, id, INLET_KEY)!;
+  assertEquals(
+    [inlet.name, inlet.kind, inlet.groupName, inlet.positionScheme, inlet.pagePhrase, inlet.status],
+    ["Air cleaner inlet", "new", "Engine", "none", "INLET, AIR CLEANER, NO.1", "open"],
+  );
+  assertEquals([inlet.rowCount, inlet.numberCount, inlet.numbers], [1, 1, ["99999-Z0302"]]);
+  // R2.1: an existing type wins — "Air cleaner hose" is on file.
+  const hoseSuggestion = suggestionOf(db, id, HOSE_KEY)!;
+  assertEquals([hoseSuggestion.kind, hoseSuggestion.existingTypeId, hoseSuggestion.name], ["existing", AIR_HOSE, "Air cleaner hose"]);
+  // PT-05: a clip is a fixing, never a card.
+  assertEquals(suggestionOf(db, id, CLIP_KEY)!.kind, "fixings");
+  // R3: otherTypes is now the suggestion names.
+  assert((resultOfPage(db, id).otherTypes as string[]).includes("Air cleaner inlet"));
+});
+
+Deno.test("R1: a place the page prints is kept; a place it doesn't say is not held", async () => {
+  const db = new FakeDb();
+  const specs: RowSpec[] = [
+    { number: "99999-Z0301", type: "other", axle: "front", side: "left", group: "HOSE, AIR CLEANER, NO.1", from: [2016, 11], to: [2020, 9] },
+  ];
+  const page = `<html><head><title>Check Catalogue ZZ900-AAAA 11.2016 - 09.2020</title></head><body>
+<!-- saved from url=(0045)https://catalog.example/parts/ZZ900 -->
+<h2>Front left</h2>
+<table>
+<tr><td>17881 - HOSE, AIR CLEANER, NO.1</td></tr>
+<tr><td>99999-Z0301</td><td>FRONT LH</td><td>11.2016</td><td>09.2020</td><td>1.00</td></tr>
+</table>
+</body></html>`;
+  const out = await run(db, page, { ai: fakeAi(db, specs) });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  const row = rowsOfPage(db, out.row.id).find((r) => r.number === "99999-Z0301")!;
+  assertEquals(row.place, "front left");
+  assertEquals(row.placeOk, true);
+  assertEquals(suggestionOf(db, out.row.id, HOSE_KEY)!.positionScheme, "axle_left_right");
+});
+
+Deno.test("R1: a row the page doesn't date is held, never suggested (SP-42 unchanged)", async () => {
+  const db = new FakeDb();
+  const page = `<html><head><title>Check Catalogue ZZ900-AAAA 11.2016 - 09.2020</title></head><body>
+<!-- saved from url=(0045)https://catalog.example/parts/ZZ900 -->
+<h2>Air cleaner</h2>
+<table>
+<tr><td>17881 - HOSE, AIR CLEANER, NO.1</td></tr>
+<tr><td>99999-Z0301</td><td>1.00</td></tr>
+</table>
+</body></html>`;
+  const out = await run(db, page, { ai: fakeAi(db, [LEARN_ROWS[0]]) });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  const row = rowsOfPage(db, out.row.id).find((r) => r.number === "99999-Z0301")!;
+  // SP-42 unchanged: the row is held (its dates check failed) and it is not part of any suggestion.
+  assertEquals([row.datesOk, row.suggestion], [false, null]);
+  assertEquals(resultOfPage(db, out.row.id).suggestions, []);
+});
+
+Deno.test("R2 + D3: a dismissed phrase is never suggested again on any page", async () => {
+  const db = new FakeDb();
+  db.table("part_type_suggestion_dismissal").push({
+    id: "dismissal-1",
+    phrase_key: INLET_KEY,
+    phrase: "INLET, AIR CLEANER, NO.1",
+    group_id: null,
+    dismissed_by: ACTOR,
+    dismissed_at: "2026-11-25T10:00:00Z",
+  });
+  const out = await learnRun(db);
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  assertEquals(resultOfPage(db, out.row.id).suggestions.length, 2);
+  assertEquals(suggestionOf(db, out.row.id, INLET_KEY), undefined);
+  const row = rowsOfPage(db, out.row.id).find((r) => r.number === "99999-Z0302")!;
+  assertEquals(row.suggestion, null);
+});
+
+Deno.test("R8: every active part type goes to the AI — no 120 slice — and the read limit is 500", async () => {
+  const db = new FakeDb();
+  const before = db.table("maintenance_service_categories")
+    .filter((c) => c.kind === "component" && c.is_part === true && c.part_type_status === "active").length;
+  await learnRun(db);
+  assertEquals(db.aiCalls.length, 2);
+  assertEquals(db.aiCalls[0].partTypes.length, before);
+  assert(db.aiCalls[0].partTypes.length > 0, "the AI must be shown the whole list");
+
+  // 500 types is the read's cap, and hitting it writes one log line (never silently).
+  const many = new FakeDb();
+  for (let i = 0; i < 500; i += 1) {
+    many.table("maintenance_service_categories").push({
+      id: `many-${i}`,
+      code: `many_${i}`,
+      name: `Made up type ${i}`,
+      kind: "component",
+      is_part: true,
+      part_type_status: "active",
+      position_scheme: "none",
+      parent_id: SUS_GROUP,
+    });
+  }
+  const warns: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    warns.push(args.map(String).join(" "));
+  };
+  try {
+    await learnRun(many);
+  } finally {
+    console.warn = originalWarn;
+  }
+  assertEquals(many.aiCalls[0].partTypes.length, 500);
+  assert(warns.some((line) => line.includes("500")), JSON.stringify(warns));
+});
+
+Deno.test("R5: Add creates the type through the shared function, saves the rows and answers the page", async () => {
+  const db = new FakeDb();
+  const out = await learnRun(db);
+  if (out.kind !== "done") return;
+  const id = out.row.id;
+  const before = db.table("maintenance_service_categories").length;
+
+  const result = await addPartType(db, id, addBody(INLET_KEY, { groupId: BELTS_GROUP }));
+  assertEquals(result.kind, "answer");
+
+  const created = db.table("maintenance_service_categories")
+    .filter((c) => c.name === "Air cleaner inlet");
+  assertEquals(created.length, 1);
+  assertEquals(db.table("maintenance_service_categories").length, before + 1);
+  const type = created[0];
+  assertEquals(
+    [type.code, type.op_code, type.parent_id, type.kind, type.is_part, type.part_type_status, type.position_scheme, type.default_action],
+    ["air_cleaner_inlet", "AIR_CLEANER_INLET", BELTS_GROUP, "component", true, "active", "none", "replace"],
+  );
+
+  // D7: the page's own words become the synonym.
+  const synonym = db.table("part_term_synonym").find((s) => s.maintenance_component_id === type.id);
+  assertEquals([synonym?.term, synonym?.canonical], ["inlet, air cleaner, no.1", "Air cleaner inlet"]);
+
+  // R5 step 7: the row is saved for this car with the page's own dates.
+  const listing = db.table("part_listing").find((l) => l.part_interchange_group.part_master[0].oem_part_number === "99999-Z0302");
+  // The page's own period covers the whole build, so the listing is open at both ends (the save path's own rule);
+  // the page's dates themselves are kept in the evidence.
+  assertEquals([listing?.vehicle_catalog_id, listing?.year_from, listing?.year_to], [CAR, null, null]);
+  assert(String(db.table("research_page_read")[0].block_text).includes("11.2016"), String(db.table("research_page_read")[0].block_text));
+  assertEquals(db.table("research_page_read").length, 1);
+  assertEquals(db.table("research_page_read")[0].saved_page_id, id);
+
+  // R5 step 9: the row moved out of "Roam doesn't know", the counts were recounted, the suggestion is added.
+  const rows = rowsOfPage(db, id);
+  const saved = rows.find((r) => r.number === "99999-Z0302")!;
+  assertEquals([saved.group, saved.partType, saved.reason], ["saved", "Air cleaner inlet", null]);
+  assertEquals(resultOfPage(db, id).counts, { saved: 1, already: 0, held: 0, not_roam_type: 2 });
+  const suggestion = suggestionOf(db, id, INLET_KEY)!;
+  assertEquals([suggestion.status, suggestion.typeId, suggestion.typeName], ["added", type.id, "Air cleaner inlet"]);
+
+  // R5 step 10: the answer carries the whole page, without the uploader.
+  if (result.kind === "answer") {
+    const answered = result.answer.savedPage as Record<string, any>;
+    assertEquals(answered.id, id);
+    assertEquals(answered.result.counts.saved, 1);
+    assert(!("uploaded_by" in answered), "the answer never carries the uploader");
+  }
+});
+
+Deno.test("R5: pressing Add twice makes one type and changes nothing the second time", async () => {
+  const db = new FakeDb();
+  const out = await learnRun(db);
+  if (out.kind !== "done") return;
+  const id = out.row.id;
+  await addPartType(db, id, addBody(INLET_KEY, { groupId: BELTS_GROUP }));
+  const afterFirst = db.table("maintenance_service_categories").length;
+  const listings = db.table("part_listing").length;
+  const second = await addPartType(db, id, addBody(INLET_KEY, { groupId: BELTS_GROUP }));
+  assertEquals(second.kind, "answer");
+  assertEquals(db.table("maintenance_service_categories").length, afterFirst);
+  assertEquals(db.table("part_listing").length, listings);
+});
+
+Deno.test("R5 step 2: an existing type is used and nothing is created (Hose clamp case)", async () => {
+  const db = new FakeDb();
+  const out = await learnRun(db);
+  if (out.kind !== "done") return;
+  const id = out.row.id;
+  const before = db.table("maintenance_service_categories").length;
+  const result = await addPartType(db, id, addBody(HOSE_KEY));
+  assertEquals(result.kind, "answer");
+  assertEquals(db.table("maintenance_service_categories").length, before);
+  // The rows save under the existing type, and a synonym now carries the page's words.
+  const row = rowsOfPage(db, id).find((r) => r.number === "99999-Z0301")!;
+  assertEquals([row.group, row.partType], ["saved", "Air cleaner hose"]);
+  assertEquals(suggestionOf(db, id, HOSE_KEY)!.typeId, AIR_HOSE);
+  assert(db.table("part_term_synonym").some((s) => s.maintenance_component_id === AIR_HOSE));
+});
+
+Deno.test("R5: a part-way failure keeps the type so the next press continues it, never a second one", async () => {
+  const db = new FakeDb();
+  const out = await learnRun(db);
+  if (out.kind !== "done") return;
+  const id = out.row.id;
+
+  // The type is made, then the browser check cannot be found: nothing is saved.
+  const original = db.rpc.bind(db);
+  db.rpc = async (name: string, args: Record<string, unknown> = {}) =>
+    name === "research_saved_page_job"
+      ? { data: { jobId: "job-that-vanished", state: "browser_check" }, error: null }
+      : original(name, args);
+  try {
+    const first = await addPartType(db, id, addBody(INLET_KEY, { groupId: BELTS_GROUP }));
+    assertEquals(first.kind, "answer");
+  } finally {
+    db.rpc = original;
+  }
+
+  const typeId = suggestionOf(db, id, INLET_KEY)!.typeId;
+  assert(typeId, "the made type is kept on the suggestion");
+  assertEquals(suggestionOf(db, id, INLET_KEY)!.status, "open");
+  assert(String(suggestionOf(db, id, INLET_KEY)!.reason).length > 0, "the card gets a plain reason");
+  const madeCount = db.table("maintenance_service_categories").filter((c) => c.name === "Air cleaner inlet").length;
+  assertEquals(madeCount, 1);
+
+  // Press again: it continues from that type.
+  const second = await addPartType(db, id, addBody(INLET_KEY, { groupId: BELTS_GROUP }));
+  assertEquals(second.kind, "answer");
+  assertEquals(db.table("maintenance_service_categories").filter((c) => c.name === "Air cleaner inlet").length, 1);
+  assertEquals(suggestionOf(db, id, INLET_KEY)!.status, "added");
+  assertEquals(rowsOfPage(db, id).find((r) => r.number === "99999-Z0302")!.group, "saved");
+});
+
+Deno.test("R5 step 6: a different number already on file holds the row and creates nothing new", async () => {
+  const db = new FakeDb();
+  db.seedListing({ number: "99999-Z0399", componentId: AIR_HOSE, position: null, side: null, year_from: 2016, year_to: 2020 });
+  const out = await learnRun(db);
+  if (out.kind !== "done") return;
+  const id = out.row.id;
+  const before = db.table("maintenance_service_categories").length;
+  await addPartType(db, id, addBody(HOSE_KEY));
+  assertEquals(db.table("maintenance_service_categories").length, before);
+  const row = rowsOfPage(db, id).find((r) => r.number === "99999-Z0301")!;
+  assertEquals(row.group, "held");
+  assertEquals(row.reason, "Roam already has 99999-Z0399 for these years");
+  assertEquals(db.table("part_listing").length, 1);
+});
+
+Deno.test("R5 step 6: the same number already on file is 'Already on file' and still counts as added", async () => {
+  const db = new FakeDb();
+  db.seedListing({ number: "99999-Z0301", componentId: AIR_HOSE, position: null, side: null, year_from: 2016, year_to: 2020 });
+  const out = await learnRun(db);
+  if (out.kind !== "done") return;
+  const id = out.row.id;
+  await addPartType(db, id, addBody(HOSE_KEY));
+  const row = rowsOfPage(db, id).find((r) => r.number === "99999-Z0301")!;
+  assertEquals([row.group, row.reason], ["already", null]);
+  assertEquals(suggestionOf(db, id, HOSE_KEY)!.status, "added");
+  assertEquals(db.table("part_listing").length, 1);
+});
+
+Deno.test("R5 checks: owner only, a done upload, the name, the group and fixings — each with its own answer", async () => {
+  const db = new FakeDb();
+  const out = await learnRun(db);
+  if (out.kind !== "done") return;
+  const id = out.row.id;
+
+  const notOwner = await addPartType(db, id, addBody(INLET_KEY, { groupId: BELTS_GROUP }), false);
+  assertEquals([notOwner.kind, notOwner.kind === "error" ? notOwner.status : 0], ["error", 403]);
+  assertEquals(notOwner.kind === "error" ? notOwner.error : "", "Only the owner can add a part type");
+
+  const stopped = new FakeDb();
+  const stoppedRun = await stoppedRunPage(stopped);
+  const notReady = await addPartType(stopped, stoppedRun, addBody(INLET_KEY));
+  assertEquals([notReady.kind, notReady.kind === "error" ? notReady.status : 0, notReady.kind === "error" ? notReady.error : ""], ["error", 404, "That upload isn't ready"]);
+
+  const shortName = await addPartType(db, id, addBody(INLET_KEY, { groupId: BELTS_GROUP, name: "ab" }));
+  assertEquals([shortName.kind === "error" ? shortName.status : 0, shortName.kind === "error" ? shortName.error : ""], [400, "Give the part type a name"]);
+
+  const noGroup = await addPartType(db, id, addBody(INLET_KEY));
+  assertEquals([noGroup.kind === "error" ? noGroup.status : 0, noGroup.kind === "error" ? noGroup.error : ""], [400, "Choose a part group"]);
+
+  const badGroup = await addPartType(db, id, addBody(INLET_KEY, { groupId: "11111111-1111-4111-8111-000000000000" }));
+  assertEquals([badGroup.kind === "error" ? badGroup.status : 0, badGroup.kind === "error" ? badGroup.error : ""], [400, "Choose a part group"]);
+
+  const fixings = await addPartType(db, id, addBody(CLIP_KEY, { groupId: BELTS_GROUP }));
+  assertEquals([fixings.kind === "error" ? fixings.status : 0, fixings.kind === "error" ? fixings.error : ""], [400, "Fixings aren't parts Roam tracks"]);
+});
+
+/** A stopped upload (untrusted site), for the "not ready" case. */
+async function stoppedRunPage(db: FakeDb): Promise<string> {
+  const out = await run(db, LEARN_HTML, { url: "https://untrusted.example/parts/ZZ900", ai: fakeAi(db, LEARN_ROWS) });
+  return out.kind === "stopped" ? out.row.id : "";
+}
+
+Deno.test("R6: Dismiss remembers the phrase and the next upload never offers it", async () => {
+  const db = new FakeDb();
+  const out = await learnRun(db);
+  if (out.kind !== "done") return;
+  const id = out.row.id;
+  const result = await addPartType(db, id, { key: INLET_KEY, action: "dismiss" });
+  assertEquals(result.kind, "answer");
+
+  const dismissal = db.table("part_type_suggestion_dismissal")[0];
+  assertEquals([dismissal.phrase_key, dismissal.phrase], [INLET_KEY, "INLET, AIR CLEANER, NO.1"]);
+  assertEquals(dismissal.dismissed_by, ACTOR);
+  assertEquals(suggestionOf(db, id, INLET_KEY)!.status, "dismissed");
+  assertEquals(rowsOfPage(db, id).find((r) => r.number === "99999-Z0302")!.group, "not_roam_type");
+
+  const again = await learnRun(db, { again: true });
+  if (again.kind !== "done") return;
+  assertEquals(resultOfPage(db, again.row.id).suggestions.length, 2);
+  assertEquals(suggestionOf(db, again.row.id, INLET_KEY), undefined);
+});
+
+// ---------------------------------------------------------------- R11: the hidden list and Suggest again
+
+const OWNER = {
+  id: ACTOR,
+  userId: ACTOR,
+  resolvedRole: "platform_owner",
+  role: "platform_owner",
+  mfaVerified: true,
+  aal: "aal2",
+};
+
+function routeCtx(opts: { body?: unknown; param?: Record<string, string>; owner?: typeof OWNER | Record<string, unknown> } = {}) {
+  return {
+    req: {
+      param: (name: string) => opts.param?.[name] ?? "",
+      query: () => "",
+      json: async () => opts.body ?? {},
+      header: () =>
+        `Bearer ${btoa(JSON.stringify({ alg: "none" }))}.${btoa(JSON.stringify({ aal: "aal2", sub: ACTOR }))}.sig`,
+    },
+    get: (key: string) => (key === "rbacUser" ? opts.owner ?? OWNER : undefined),
+    json: (body: unknown, status = 200) => ({ body, status }),
+  };
+}
+
+function partTypeApp() {
+  const routes: Array<{ method: string; path: string; handler: (c: any) => Promise<any> }> = [];
+  const record = (method: string) => (path: string, handler: any) => routes.push({ method, path, handler });
+  return {
+    routes,
+    app: { get: record("GET"), post: record("POST"), delete: record("DELETE") },
+  };
+}
+
+Deno.test("R11: the hidden list is owner only, names its group and who hid it, and Suggest again deletes it", async () => {
+  const db = new FakeDb();
+  const { routes, app } = partTypeApp();
+  registerSavedPagePartTypeRoutes(app as never, db as unknown as SupabaseClient);
+  const get = routes.find((r) => r.method === "GET" && r.path.endsWith("/hidden-part-type-phrases"))!;
+  const del = routes.find((r) => r.method === "DELETE" && r.path.endsWith("/hidden-part-type-phrases/:id"))!;
+  assert(get && del, "the hidden list routes must be registered");
+
+  db.table("part_type_suggestion_dismissal").push({
+    id: "0b7a6c1e-3333-4222-8333-444455556666",
+    phrase_key: HOSE_KEY,
+    phrase: "HOSE, AIR CLEANER, NO.1",
+    group_id: BELTS_GROUP,
+    dismissed_by: ACTOR,
+    dismissed_at: "2026-11-25T10:00:00Z",
+  });
+
+  const list = await get.handler(routeCtx()) as { status: number; body: { items: Array<Record<string, any>> } };
+  assertEquals(list.status, 200);
+  assertEquals(list.body.items.length, 1);
+  assertEquals(
+    [list.body.items[0].phrase, list.body.items[0].groupName, list.body.items[0].dismissedByName],
+    ["HOSE, AIR CLEANER, NO.1", "Belts & hoses", "PTL Owner"],
+  );
+
+  const denied = await get.handler(routeCtx({ owner: { id: ACTOR, resolvedRole: "platform_support" } as never })) as { status: number };
+  assertEquals(denied.status, 403);
+
+  const removed = await del.handler(routeCtx({ param: { id: "0b7a6c1e-3333-4222-8333-444455556666" } })) as { status: number };
+  assertEquals(removed.status, 200);
+  assertEquals(db.table("part_type_suggestion_dismissal").length, 0);
+});
+
+Deno.test("R11: the Part types create route refuses a part type with no part group", async () => {
+  const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+  const groups: Row[] = [{ id: BELTS_GROUP, name: "Belts & hoses", kind: "system", is_part: true, parent_id: null }];
+  const supabase = {
+    from() {
+      const b: Record<string, any> = {};
+      const self = () => b;
+      for (const k of ["select", "eq", "is", "order", "limit"]) b[k] = self;
+      b.then = (resolve: (v: unknown) => unknown) => resolve({ data: groups, error: null });
+      b.maybeSingle = () => Promise.resolve({ data: null, error: null });
+      return b;
+    },
+    rpc(name: string, args: Record<string, unknown>) {
+      calls.push({ name, args });
+      return Promise.resolve({ data: { id: "type-new" }, error: null });
+    },
+  } as unknown as SupabaseClient;
+  const { registered, route } = mockCatalogRoute();
+  registerCatalogRoutes(route, supabase);
+  const create = registered.find((r) => r.method === "POST" && r.path.endsWith("/part-types"))!;
+  assert(create, "part-types POST missing");
+
+  const noGroup = await create.handler(mockCatalogCtx({ name: "Made up type", opCode: "TST-1" })) as { status: number; body: { error: string } };
+  assertEquals([noGroup.status, noGroup.body.error], [400, "Choose a part group"]);
+
+  const unknownGroup = await create.handler(mockCatalogCtx({ name: "Made up type", opCode: "TST-1", areaId: "11111111-1111-4111-8111-000000000000" })) as { status: number; body: { error: string } };
+  assertEquals([unknownGroup.status, unknownGroup.body.error], [400, "Choose a part group"]);
+  assertEquals(calls.length, 0);
+
+  const ok = await create.handler(mockCatalogCtx({ name: "Made up type", opCode: "TST-1", areaId: BELTS_GROUP })) as { status: number };
+  assertEquals(ok.status, 200);
+  assertEquals(calls.length, 1);
+  assertEquals((calls[0].args.p_input as Record<string, unknown>).areaId, BELTS_GROUP);
+});
+
+function mockCatalogRoute() {
+  const registered: Array<{ method: string; path: string; handler: (c: any) => Promise<any> }> = [];
+  const route = {
+    get: (path: string, ...handlers: unknown[]) => registered.push({ method: "GET", path, handler: handlers[handlers.length - 1] as never }),
+    post: (path: string, ...handlers: unknown[]) => registered.push({ method: "POST", path, handler: handlers[handlers.length - 1] as never }),
+    patch: (path: string, ...handlers: unknown[]) => registered.push({ method: "PATCH", path, handler: handlers[handlers.length - 1] as never }),
+    delete: (path: string, ...handlers: unknown[]) => registered.push({ method: "DELETE", path, handler: handlers[handlers.length - 1] as never }),
+  };
+  return { registered, route };
+}
+
+function mockCatalogCtx(body: Record<string, unknown>) {
+  return {
+    req: {
+      json: async () => body,
+      query: () => "",
+      param: () => "",
+      header: () => `Bearer ${btoa(JSON.stringify({ alg: "none" }))}.${btoa(JSON.stringify({ aal: "aal2", sub: ACTOR }))}.sig`,
+    },
+    get: (key: string) => (key === "rbacUser" ? OWNER : undefined),
+    json: (payload: unknown, status = 200) => ({ body: payload, status }),
+  };
+}
+
+Deno.test("R5 HTTP: the part-type route is registered, owner only, and answers the whole page", async () => {
+  const db = new FakeDb();
+  const out = await learnRun(db);
+  if (out.kind !== "done") return;
+  // The fake database makes short ids; the route checks the id's shape, so give this upload a real one.
+  const pageId = "0b7a6c1e-4444-4222-8333-444455556666";
+  db.table("research_saved_page").find((row) => row.id === out.row.id)!.id = pageId;
+  const { routes, app } = partTypeApp();
+  registerSavedPagePartTypeRoutes(app as never, db as unknown as SupabaseClient, { pictures: null });
+  const post = routes.find((r) => r.method === "POST" && r.path.endsWith("/saved-pages/:id/part-type"))!;
+  assert(post, "part-type POST missing");
+
+  const denied = await post.handler(routeCtx({
+    body: addBody(INLET_KEY, { groupId: BELTS_GROUP }),
+    param: { id: pageId },
+    owner: { id: ACTOR, resolvedRole: "platform_support" } as never,
+  })) as { status: number; body: { error: string } };
+  assertEquals([denied.status, denied.body.error], [403, "Only the owner can add a part type"]);
+
+  const ok = await post.handler(routeCtx({
+    body: addBody(INLET_KEY, { groupId: BELTS_GROUP }),
+    param: { id: pageId },
+  })) as { status: number; body: { savedPage: Record<string, any> } };
+  assertEquals(ok.status, 200);
+  assertEquals(ok.body.savedPage.result.counts.saved, 1);
+});
+// ---------------------------------------------------------------- S1b: the three fixes
+
+Deno.test("S1b fix 1: renaming the card to words the page never printed still saves the rows", async () => {
+  const db = new FakeDb();
+  const out = await learnRun(db);
+  if (out.kind !== "done") return;
+  const id = out.row.id;
+
+  // Rule 11 (§4b): the owner may change the name before pressing Add. "Breather tube" is on no line of the page.
+  const result = await addPartType(db, id, addBody(INLET_KEY, { groupId: BELTS_GROUP, name: "Breather tube" }));
+  assertEquals(result.kind, "answer");
+
+  const created = db.table("maintenance_service_categories").filter((c) => c.name === "Breather tube");
+  assertEquals(created.length, 1);
+  assertEquals(created[0].op_code, "BREATHER_TUBE");
+
+  // P4 passes through the suggestion's own page phrase ("INLET, AIR CLEANER, NO.1"): the row saves, never held.
+  const row = rowsOfPage(db, id).find((r) => r.number === "99999-Z0302")!;
+  assertEquals([row.group, row.partType, row.reason], ["saved", "Breather tube", null]);
+  assertEquals(suggestionOf(db, id, INLET_KEY)!.status, "added");
+  // The synonym still carries the page's own words, so Fleet finds the renamed type by them.
+  const synonym = db.table("part_term_synonym").find((s) => s.maintenance_component_id === created[0].id);
+  assertEquals([synonym?.term, synonym?.canonical], ["inlet, air cleaner, no.1", "Breather tube"]);
+});
+
+Deno.test("S1b fix 2: a row held because of the page still ends 'added' (Added, needs you)", async () => {
+  const db = new FakeDb();
+  db.seedListing({ number: "99999-Z0399", componentId: AIR_HOSE, position: null, side: null, year_from: 2016, year_to: 2020 });
+  const out = await learnRun(db);
+  if (out.kind !== "done") return;
+  const id = out.row.id;
+
+  await addPartType(db, id, addBody(HOSE_KEY));
+
+  // A different number already on file for these years is a fact about the page: a second press cannot change it.
+  const suggestion = suggestionOf(db, id, HOSE_KEY)!;
+  assertEquals([suggestion.status, suggestion.typeId, suggestion.reason], ["added", AIR_HOSE, null]);
+  const row = rowsOfPage(db, id).find((r) => r.number === "99999-Z0301")!;
+  assertEquals([row.group, row.reason], ["held", "Roam already has 99999-Z0399 for these years"]);
+
+  // The card is finished: pressing again changes nothing and makes no second type.
+  const types = db.table("maintenance_service_categories").length;
+  const listings = db.table("part_listing").length;
+  await addPartType(db, id, addBody(HOSE_KEY));
+  assertEquals([db.table("maintenance_service_categories").length, db.table("part_listing").length], [types, listings]);
+  assertEquals(suggestionOf(db, id, HOSE_KEY)!.status, "added");
+});
+
+Deno.test("S1b fix 2: a page that can't say left or right still ends 'added', with the row held", async () => {
+  const db = new FakeDb();
+  const page = `<html><head><title>Check Catalogue ZZ900-AAAA 11.2016 - 09.2020</title></head><body>
+<!-- saved from url=(0045)https://catalog.example/parts/ZZ900 -->
+<h2>Front shock absorber</h2>
+<table>
+<tr><td>10001 - ABSORBER, FRONT LH</td></tr>
+<tr><td>99999-Z0401</td><td>FRONT LH</td><td>11.2016</td><td>09.2020</td><td>1.00</td></tr>
+<tr><td>99999-Z0402</td><td>FRONT</td><td>11.2016</td><td>09.2020</td><td>1.00</td></tr>
+</table>
+</body></html>`;
+  const specs: RowSpec[] = [
+    { number: "99999-Z0401", type: "other", axle: "front", side: "left", group: "ABSORBER, FRONT LH", from: [2016, 11], to: [2020, 9] },
+    { number: "99999-Z0402", type: "other", axle: "front", side: null, group: "ABSORBER, FRONT LH", from: [2016, 11], to: [2020, 9] },
+  ];
+  const out = await run(db, page, { ai: fakeAi(db, specs) });
+  if (out.kind !== "done") return;
+  const id = out.row.id;
+  const key = normalisePhrase("ABSORBER, FRONT LH");
+  const suggestion = suggestionOf(db, id, key)!;
+  assertEquals([suggestion.kind, suggestion.positionScheme], ["new", "axle_left_right"]);
+
+  await addPartType(db, id, addBody(key, { groupId: BELTS_GROUP }));
+
+  const rows = rowsOfPage(db, id);
+  assertEquals([rows.find((r) => r.number === "99999-Z0401")!.group], ["saved"]);
+  const unplaced = rows.find((r) => r.number === "99999-Z0402")!;
+  assertEquals([unplaced.group, unplaced.reason], ["held", "The page doesn't say left or right on that row"]);
+  assertEquals(suggestionOf(db, id, key)!.status, "added");
+  assertEquals(resultOfPage(db, id).counts, { saved: 1, already: 0, held: 1, not_roam_type: 0 });
+});
+
+Deno.test("S1b fix 2: a failure a retry can fix keeps the card open, and the next press finishes it", async () => {
+  const db = new FakeDb();
+  const out = await learnRun(db);
+  if (out.kind !== "done") return;
+  const id = out.row.id;
+
+  const original = db.rpc.bind(db);
+  db.rpc = async (name: string, args: Record<string, unknown> = {}) =>
+    name === "research_saved_page_job" ? { data: { busy: true }, error: null } : original(name, args);
+  try {
+    await addPartType(db, id, addBody(INLET_KEY, { groupId: BELTS_GROUP }));
+  } finally {
+    db.rpc = original;
+  }
+
+  const suggestion = suggestionOf(db, id, INLET_KEY)!;
+  assertEquals([suggestion.status, suggestion.reason], ["open", "Roam is checking this part now. Try again in a few minutes."]);
+  const row = rowsOfPage(db, id).find((r) => r.number === "99999-Z0302")!;
+  assertEquals([row.group, row.reason], ["held", "Roam is checking this part now. Try again in a few minutes."]);
+
+  // The type was made; pressing again continues it and saves the row.
+  await addPartType(db, id, addBody(INLET_KEY, { groupId: BELTS_GROUP }));
+  assertEquals(suggestionOf(db, id, INLET_KEY)!.status, "added");
+  assertEquals(rowsOfPage(db, id).find((r) => r.number === "99999-Z0302")!.group, "saved");
+  assertEquals(db.table("maintenance_service_categories").filter((c) => c.name === "Air cleaner inlet").length, 1);
+});
+
+Deno.test("S1b fix 3: two presses at once make one type, and the second never undoes the first", async () => {
+  const db = new FakeDb();
+  const out = await learnRun(db);
+  if (out.kind !== "done") return;
+  const id = out.row.id;
+  const body = addBody(INLET_KEY, { groupId: BELTS_GROUP });
+
+  const [first, second] = await Promise.all([addPartType(db, id, body), addPartType(db, id, body)]);
+  assertEquals([first.kind, second.kind], ["answer", "answer"]);
+
+  // The second press really raced the create: both called the shared function, and one hit the unique op code.
+  assertEquals(db.rpcCalls.filter((call) => call.name === "upsert_self_serve_part_type").length, 2);
+  // One type, one saved number, and the suggestion ends "added" — the second press's failure does not put it back.
+  assertEquals(db.table("maintenance_service_categories").filter((c) => c.name === "Air cleaner inlet").length, 1);
+  const saved = db.table("part_listing")
+    .filter((l) => l.part_interchange_group?.part_master?.[0]?.oem_part_number === "99999-Z0302");
+  assertEquals(saved.length, 1);
+  const suggestion = suggestionOf(db, id, INLET_KEY)!;
+  assertEquals(suggestion.status, "added");
+  assertEquals(rowsOfPage(db, id).find((r) => r.number === "99999-Z0302")!.group, "saved");
+
+  // And the finished card stays finished: a later press changes nothing at all.
+  const types = db.table("maintenance_service_categories").length;
+  const listings = db.table("part_listing").length;
+  await addPartType(db, id, body);
+  assertEquals([db.table("maintenance_service_categories").length, db.table("part_listing").length], [types, listings]);
+  assertEquals(suggestionOf(db, id, INLET_KEY)!.status, "added");
 });

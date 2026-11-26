@@ -18,7 +18,7 @@ import {
 } from "./catalog_api.ts";
 import { FEATURE_FLAGS, setFeatureFlag } from "./feature_flags.ts";
 import { findParts } from "./parts_finder.ts";
-import { readFindPartsCoverage, readPartTerm, readPartsBrowse, readSymptoms } from "./parts_catalog_read.ts";
+import { readFindPartsCoverage, readPartGroups, readPartTerm, readPartsBrowse, readSymptoms } from "./parts_catalog_read.ts";
 import { enrichCatalogMasterPart, enrichCatalogMasterSearch } from "./catalog_master_enrich.ts";
 import {
   finishUpload,
@@ -1482,6 +1482,12 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
     }
     try {
       const body = await c.req.json() as Record<string, unknown>;
+      // R11 (docs/part-type-learning-audit.md §3, PT-07): a part type always sits under a part group. There is no
+      // Engine fallback any more — the screen sends the group the owner picked and the server refuses a missing one.
+      const areaId = String(body.areaId ?? "").trim();
+      if (!UUID_RE.test(areaId)) return c.json({ error: "Choose a part group" }, 400);
+      const groups = await readPartGroups(supabase);
+      if (!groups.some((group) => group.id === areaId)) return c.json({ error: "Choose a part group" }, 400);
       const { data, error } = await supabase.rpc("upsert_self_serve_part_type", { p_input: body });
       if (error) return c.json({ error: error.message }, 400);
       return staffJson(c, data ?? {});
