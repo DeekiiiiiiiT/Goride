@@ -1,0 +1,132 @@
+ROAM DOMINION — ROAM SORTS UNKNOWN PARTS BY ITSELF — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+HOW TO USE: First paste = everything from the intro down to END OF FIRST PASTE (Screens 1 and 2). Then paste one SCREEN block at a time, in order. Never paste the last section ("FOR CLAUDE — DO NOT PASTE").
+Plan: docs/part-type-auto-sort-audit.md (Rev 2), §5 S1–S2.
+
+
+==================== FIRST PASTE ====================
+
+Roam Dominion - Roam sorts unknown parts by itself (desktop admin console for the owner, who is not a mechanic):
+
+Design high-fidelity, modern screens for the Roam Dominion admin console. The owner uploads a page saved from a car maker's parts catalogue, and Roam saves every part on it. Until now, every part Roam had no type for became a card the owner had to judge ("Add part type" or "Not a part we track") — 62 of them on one heater page, which nobody but a mechanic could answer. Now Roam decides by itself, once per part name, and remembers the answer for every car after: parts a workshop replaces on their own (a blower motor, an expansion valve) become new part types and are saved with their pictures; ducts, brackets, covers and fixings are simply not tracked. The owner is never asked. The result shows one calm summary line, and a review list on the Part types page lets the owner flip any answer with one button. It must feel effortless and trustworthy, like a premium consumer app: no cards to judge, one quiet line, a clear list. Make each screen tall enough to show everything, with no inner scrolling and no cut-off boxes. Draw only the screens asked for in this message. Dominion is the master reference database: no fleet names, plates, drivers, vehicle counts, "used by", prices, suppliers, stock or quantities anywhere.
+
+
+BRAND IDENTITY (take from the live Dominion screens — do not invent):
+- Keep the Dominion console frame exactly as it is:
+  - dark navy left sidebar "Dominion · Roam Admin Console" with groups MASTER DATA (Overview, Vehicles active, Places and Maps, Fuel, Tolls, Tax and Vendors), ENGINES, DISTRIBUTION, PLATFORM, BACK OFFICE
+  - top bar: search "Search entities, engines, routes…" with a ⌘K chip, moon icon, user "Deeki T · Owner"
+  - everything right of the sidebar and below the top bar is the design
+- Theme: "Calm modern workspace". Generous spacing, 16px rounded cards, soft shadows, larger type, clear hierarchy, few codes.
+- LIGHT MODE (draw every screen in light mode):
+  - Primary #0153dc; primary container #dbe1ff
+  - Background #faf8fe; cards #ffffff, 16px radius, 1px #e6e7ee hairline, soft shadow 0 4px 16px rgba(1,83,220,0.04)
+  - Text #30323b; muted #5d5f68; input borders #c5c6d0; tint panels #f3f4fb with 12px radius
+  - Success #006e31 on #e6f4ea; warning #8a5a00 on #fff4dc; error #a83836 on #fdecec; slate #475569 on #f1f5f9
+- DARK MODE (for the theme switch): background #0b1220; cards #111a2e; hairlines #1e293b; text #e2e8f0; muted #94a3b8; primary #5b8def; success #4ade80; warning #fbbf24; error #f87171.
+- The saved-page result overlay (already live): a centred white overlay 640px wide over the car page dimmed 40%, 20px radius, 32px padding. At the top a 56px circle with a tick, the title, the muted line "From amayama.com · read 26 Nov 2026", then four count pills in a row: green "Saved", slate "Already on file", amber "Needs you", grey outline "Not a Roam part type". Under them the line "Pictures: 6 being made" with an image icon. Then result groups, each a heading with a small count and a white card of rows (a 40px picture tile or part-type icon square, the plain name, the number and dates in mono, a pill on the right). Footer: secondary "See pictures" on the left, primary "Done" on the right.
+- The sort summary (new, replaces the old suggestion cards): one tint panel (#f3f4fb, 12px radius, 16px padding) under the result groups, with the Material icon "category" in a 36px #dbe1ff rounded square, then one line of plain text and a secondary button "Review" on the right. No other buttons.
+- Buttons always look like buttons, never underlined text links:
+  - Primary: solid #0153dc, white text, 44px tall, 10px radius, semibold
+  - Secondary: white fill, visible #c5c6d0 border, dark text
+  - Danger: white fill, #a83836 border and red text
+  - Disabled: 50% opacity, never hidden, with a small muted line under it saying why
+- Typography: Inter. Titles 26px semibold, section titles 18px semibold, body 15px, hints 13px muted. JetBrains Mono with tabular numerals only for part numbers, dates and the catalogue's own words, always after the plain words.
+- Icons: Material Symbols Outlined, 20–24px. Part groups show in a 36px soft #dbe1ff rounded square with a blue icon.
+- Every overlay is in-app. Never a browser pop-up.
+- Sample data (from the owner's saved page "Heating & air conditioning – cooler unit" for a Toyota Roomy 2016–2020 · 2WD · frame M900A, site amayama.com):
+  - Saved by Roam as new part types: "Blower motor" (MOTOR SUB-ASSY, BLOWER · 87103-B1040 · 11.2016 – 09.2020, group HVAC), "Blower resistor" (RESISTOR, BLOWER · 87138-B1010, HVAC), "Cooler expansion valve" (VALVE, COOLER EXPANSION · 88515-B1020, HVAC), "Cooler evaporator" (EVAPORATOR SUB-ASSY, COOLER · 88501-B1110, HVAC).
+  - Already on file: Cabin A/C Filter · 87139-50100 and 87139-52040 · 11.2016 – 09.2020.
+  - Not tracked by Roam (with Roam's reason): DUCT, AIR ("Part of the heater unit"), HOSE, DRAIN COOLER ("Part of the heater unit"), BRACKET, COOLER UNIT ("A bracket"), COVER, COOLER UNIT ("A cover"), PACKING, COOLING UNIT ("A seal inside the unit"), CASE, COOLER UNIT ("Part of the heater unit").
+  - Fixings: BOLT(FOR COOLER EXPANSION VALVE), GROMMET (FOR DRAIN HOSE), CLIP, HOSE.
+  - The 13 part groups: Engine, Filters, Brakes, Suspension & steering, Battery & electrical, Exhaust & emissions, Lighting & visibility, HVAC, Belts & hoses, Transmission, Hybrid & electric, Fluids, Tires & wheels.
+
+
+DESIGN PRINCIPLES (only what changes the drawing):
+- Desktop-first at 1440px. The result overlay is 640px wide; on a phone it is a bottom sheet.
+- The owner is never asked to judge a part. The result has no suggestion cards and no part-type buttons.
+- Every number on the summary line is a real count from the result; plain words, short, one line (wrapping is fine).
+- On the review list, the catalogue's own words are shown in mono, the plain name and group in normal text, Roam's reason in muted text.
+- One button per review row. Owner answers are marked "You set this".
+- 8px spacing grid, 44px touch targets.
+
+
+SCREEN 1: RESULT — ROAM SORTED THE PAGE
+Same Dominion console frame, colours and style. Behind the overlay, dimmed 40%: the Toyota Roomy car page. Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 640px wide. A 56px green circle with a white tick. Title "6 parts saved" (26px semibold), muted line "From amayama.com · read 26 Nov 2026".
+- Count pills: green "Saved 6", slate "Already on file 2", amber "Needs you 0", grey outline "Not a Roam part type 34". Under them: "Pictures: 6 being made".
+- Group "Saved" (count 6): six rows — Blower motor 87103-B1040, Blower resistor 87138-B1010, Cooler expansion valve 88515-B1020, Cooler evaporator 88501-B1110, and two more HVAC rows — each with a 40px picture tile showing a blue "Making" pill, the name, the number and "11.2016 – 09.2020" in mono, and a green "Confirmed" pill. Next to the name of each of the four new ones, a small slate pill "New part type".
+- Group "Already on file" (count 2): Cabin A/C Filter 87139-50100 and 87139-52040.
+- The sort summary panel under the groups: the line "Roam sorted 40 rows · 4 new part types · 3 fixings · 12 names not tracked", and the secondary button "Review" on the right.
+- Footer: secondary "See pictures" on the left; primary "Done" on the right.
+
+SCREEN 2: RESULT — SORT STILL WAITING
+Same Dominion console frame, colours and style. Behind the overlay, dimmed 40%: the Toyota Roomy car page. Draw tall enough to show everything, no inner scrolling.
+- The same overlay, title "2 parts saved", count pills green "Saved 2", slate "Already on file 0", amber "Needs you 0", grey outline "Not a Roam part type 38".
+- Group "Saved" with the two Cabin A/C Filter rows, green "Confirmed" pills.
+- The sort summary panel in its waiting look: a small clock icon instead of the category icon, the line "Roam will sort 12 names shortly. Nothing is lost — the parts are kept.", and no buttons.
+- Footer: "See pictures" and "Done".
+
+END OF FIRST PASTE
+
+
+SCREEN 3: PHONE — RESULT, ROAM SORTED THE PAGE (390px)
+Same Dominion console frame, colours, cards and style as the earlier screens in this project, on a 390px phone: the result is a bottom sheet with a small grab bar at the top, rounded top corners. Draw tall enough to show everything, no inner scrolling.
+- Title "6 parts saved", the count pills wrapping onto two lines, "Pictures: 6 being made".
+- The Saved and Already on file groups full width, names wrapping, never cut off.
+- The sort summary panel full width: the line wraps onto two lines, and "Review" sits under it full width.
+- Full-width "Done" and "See pictures" at the bottom.
+
+SCREEN 4: PART TYPES — SORTED BY ROAM, ADDED TAB
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. The page is Vehicles › Parts database › Add parts › Part types. Draw tall enough to show everything, no inner scrolling.
+- Page title "Part types", muted line "The kinds of parts Roam keeps. Only the owner can add or change one." Above the new card, the existing part-type list drawn short and collapsed ("106 part types" with a chevron).
+- A white card "Sorted by Roam" (18px) with the muted line "Roam decides which parts on a saved page are worth keeping. Change any answer here — it applies to every car."
+- Two tabs at the top of the card: "Added 4" (selected, blue underline) and "Not tracked 12".
+- Four rows, a hairline between each:
+  - left: the plain name "Blower motor" (15px medium) with a small HVAC group chip (icon + "HVAC"), under it the catalogue's words "MOTOR SUB-ASSY, BLOWER" in small mono, under that a muted line "Replaced on its own · on 1 upload · 26 Nov 2026"
+  - right: a secondary button "Don't track"
+  - the other three: Blower resistor (RESISTOR, BLOWER), Cooler expansion valve (VALVE, COOLER EXPANSION), Cooler evaporator (EVAPORATOR SUB-ASSY, COOLER).
+- Under the rows, a centred secondary button "Show more".
+
+SCREEN 5: PART TYPES — SORTED BY ROAM, NOT TRACKED TAB
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. The page is Vehicles › Parts database › Add parts › Part types. Draw tall enough to show everything, no inner scrolling.
+- The same "Sorted by Roam" card, the tab "Not tracked 12" selected.
+- Rows: the catalogue's words in mono as the main line ("DUCT, AIR", "HOSE, DRAIN COOLER", "BRACKET, COOLER UNIT", "COVER, COOLER UNIT", "PACKING, COOLING UNIT"), under each a muted line with Roam's reason and when ("Part of the heater unit · on 1 upload · 26 Nov 2026"), and on the right a secondary button "Track it".
+- One row in a different state: "WASHER, PLATE" with the muted line "You set this · 20 Nov 2026" and its "Track it" button still there.
+- One row just after "Track it" was pressed: "HOSE, DRAIN COOLER" with a green "Tracked on 10 uploads" pill and a secondary button "Track on 24 more uploads".
+
+SCREEN 6: PART TYPES — SORTED BY ROAM, STAFF VIEW
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. The top bar shows a staff member (role "Staff"). The page is Vehicles › Parts database › Add parts › Part types.
+- The "Sorted by Roam" card on the Added tab, as in Screen 4, with every "Don't track" button disabled at 50% and one muted line under the tabs: "Only the owner can change this".
+
+SCREEN 7: PART TYPES — SORTED BY ROAM, NOTHING YET
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. The page is Vehicles › Parts database › Add parts › Part types.
+- The "Sorted by Roam" card with both tabs at 0, and inside it one centred muted line with a category icon: "Nothing sorted yet." and under it, smaller: "When you upload a saved page, Roam's answers show here."
+
+SCREEN 8: PART TYPES — SORTED BY ROAM, COULDN'T LOAD
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. The page is Vehicles › Parts database › Add parts › Part types.
+- The "Sorted by Roam" card with one red line and an error icon "Couldn't load Roam's answers." and a secondary button "Try again" (refresh icon).
+
+
+==================== FOR CLAUDE — DO NOT PASTE ====================
+
+ADDITIONAL UI COMPONENTS:
+- SortSummary (plan §5 S1): category icon, one line built only from the result's own counts (rows sorted, new part types, fixings, names not tracked, need you when > 0), secondary "Review" → Part types filtered to this upload. Waiting look: clock icon, "Roam will sort {n} names shortly…", no button. Old results (with open cards) keep the live SavedPageSuggestions cards.
+- "New part type" pill on Saved rows whose type Roam made on this upload.
+- SortedByRoam card (plan §5 S2): replaces HiddenPartTypePhrases. Tabs Added / Not tracked with counts; rows with plain name + group chip (Added), catalogue words (mono), reason · uploads · date; "You set this" for owner answers; one button per row (Don't track / Track it); after Track it, "Tracked on n uploads" + "Track on {remaining} more uploads" while remaining > 0. Keyset 50 a page with Show more. Loading = two grey placeholder rows; empty; error + Try again. Staff: list shown, buttons disabled, one line.
+
+INTERACTIONS:
+- Review → Part types page, Sorted by Roam card, filtered to that saved page.
+- Don't track → POST part-names/:key/skip (plan R4); row moves to Not tracked; if Roam made the type and nothing else uses it, the type is hidden from Fleet lists (G9); its saved parts stay.
+- Track it → POST part-names/:key/track; saves on at most 10 uploads per press and answers `remaining`; button then reads "Track on {remaining} more uploads".
+- Note: Screen 1's counts are illustrative; the built screen shows the result's own numbers.
+
+Spec screens / Area:
+| Screen | Plan | Area |
+|---|---|---|
+| 1 | S1 sorted | SavedPageOverlay result → SortSummary |
+| 2 | S1 waiting | SavedPageOverlay |
+| 3 | S1 phone | SavedPageOverlay bottom sheet |
+| 4 | S2 Added tab | PartTypesSettings → SortedByRoam |
+| 5 | S2 Not tracked tab + after Track it + owner answer | PartTypesSettings |
+| 6 | S2 staff | PartTypesSettings |
+| 7–8 | S2 empty / error | PartTypesSettings |
