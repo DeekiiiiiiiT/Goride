@@ -13,9 +13,10 @@ import { registerPendingPartsCatalogRoutes } from "../_fleet-server/pending_part
 import { registerCatalogResearchRoutes } from "../_fleet-server/catalog_research_routes.ts";
 import { registerResearchEngineRoutes } from "../_fleet-server/research_engine_routes.ts";
 import { registerResearchSavedPageRoutes } from "../_fleet-server/research_saved_page_routes.ts";
+import { registerPartPictureInternalRoutes } from "../_fleet-server/part_picture_routes.ts";
+import { registerPartPictureAdminRoutes } from "../_fleet-server/part_picture_admin_routes.ts";
 import { withPrivacyGuard } from "../_fleet-server/research_privacy.ts";
 import { registerVehicleCatalogWriteRoutes } from "../_fleet-server/vehicle_catalog_write_routes.ts";
-import { serviceKey } from "../_shared/serviceKey.ts";
 
 const app = new Hono().basePath("/platform-catalog");
 
@@ -46,7 +47,7 @@ app.use("*", async (c, next) => {
 
 function admin() {
   const url = Deno.env.get("SUPABASE_URL");
-  const key = serviceKey();
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !key) throw new Error("Supabase is not configured");
   return createClient(url, key);
 }
@@ -373,6 +374,10 @@ try {
   registerCatalogResearchRoutes(withPrivacyGuard(app), writer);
   registerResearchEngineRoutes(withPrivacyGuard(app), writer);
   registerResearchSavedPageRoutes(withPrivacyGuard(app), writer);
+  // The part-picture worker's door: cron relay only, X-Fleet-Cron-Secret (see part_picture_routes.ts).
+  registerPartPictureInternalRoutes(app, writer);
+  // Dominion part pictures (§3.5): staff read; owner for the templates, the bulk remake and the settings.
+  registerPartPictureAdminRoutes(app, writer);
   registerVehicleCatalogWriteRoutes(app, writer);
 } catch (err) {
   console.error("catalog master writes not mounted", err instanceof Error ? err.message : err);

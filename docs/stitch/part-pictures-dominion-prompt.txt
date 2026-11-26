@@ -1,0 +1,229 @@
+ROAM DOMINION — PART PICTURES — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+HOW TO USE: First paste = everything from the intro down to END OF FIRST PASTE (Screens 1 and 2). Then paste one SCREEN block at a time, in order. Never paste the last section ("FOR CLAUDE — DO NOT PASTE").
+Plan: docs/part-pictures-audit.md (Rev 2), §4 S1–S3.
+
+
+==================== FIRST PASTE ====================
+
+Roam Dominion - Part pictures (desktop admin console for the owner, who is not a mechanic):
+
+Design high-fidelity, modern screens that add realistic part pictures to the Roam Dominion admin console. Today the owner uploads a page they saved from a catalogue website, and Roam reads every part number on it. Now, when the page is saved as one single file, Roam also takes the maker's line drawing from inside it and makes a realistic studio photo of each part — the air filter, a shock absorber, a brake pad — so anyone looking up that part can see what it looks like. The pictures are made by AI a minute or two after the upload, stored once per part, and reused for every car that uses that part. The owner can look at each picture, remake it, or hide it from Roam Fleet with one click, and can edit the short "materials" description Roam uses for each group of parts (brakes, filters, suspension…). It must feel effortless and premium, like a modern photo library: big clear pictures, calm states, one obvious next step. Make each screen tall enough to show everything, with no inner scrolling and no cut-off boxes. Draw only the screens asked for in this message. Dominion is the master reference database: no fleet names, plates, drivers, vehicle counts, "used by", prices, suppliers, stock or quantities anywhere.
+
+
+BRAND IDENTITY (take from the live Dominion screens — do not invent):
+- Keep the Dominion console frame exactly as it is:
+  - dark navy left sidebar "Dominion · Roam Admin Console" with groups MASTER DATA (Overview, Vehicles active, Places and Maps, Fuel, Tolls, Tax and Vendors), ENGINES, DISTRIBUTION, PLATFORM, BACK OFFICE
+  - top bar: search "Search entities, engines, routes…" with a ⌘K chip, moon icon, user "Deeki T · Owner"
+  - everything right of the sidebar and below the top bar is the design
+- Theme: "Calm modern workspace". Generous spacing, 16px rounded cards, soft shadows, larger type, clear hierarchy, few codes.
+- LIGHT MODE (draw every screen in light mode):
+  - Primary #0153dc; primary container #dbe1ff
+  - Background #faf8fe; cards #ffffff, 16px radius, 1px #e6e7ee hairline, soft shadow 0 4px 16px rgba(1,83,220,0.04)
+  - Text #30323b; muted #5d5f68; input borders #c5c6d0; tint panels #f3f4fb with 12px radius
+  - Success #006e31 on #e6f4ea; warning #8a5a00 on #fff4dc; error #a83836 on #fdecec; slate #475569 on #f1f5f9
+- DARK MODE (for the theme switch): background #0b1220; cards #111a2e; hairlines #1e293b; text #e2e8f0; muted #94a3b8; primary #5b8def; success #4ade80; warning #fbbf24; error #f87171.
+- The part picture, one look everywhere: a square frame with 12px radius, light-grey studio background #f3f4f6, the part photographed from above, centred, with a soft natural shadow, realistic materials (black molded plastic, pleated filter paper with an orange rubber edge, chrome shock rods, cast metal), and NO words, numbers, logos or brand names on the part. Under the frame, a muted 13px line: "Made by AI from the maker's diagram · 26 Nov 2026".
+- Picture state words, one style everywhere (small rounded pills): "Made" (green), "Making" (blue on #dbe1ff with a soft pulse dot), "Waiting" (amber with a small pause icon), "Failed" (red), "Hidden from Fleet" (slate with an eye-off icon), "No diagram" (grey outline).
+- When there is no picture: the same square frame with a #f3f4fb fill, a large soft outline icon of the part type in #c5c6d0, and the state pill under it. Never an empty white box.
+- Result group pills (from the saved-page screens): "Saved" (green), "Already on file" (slate), "Needs you" (amber), "Not a Roam part type" (grey outline).
+- Buttons always look like buttons, never underlined text links:
+  - Primary: solid #0153dc, white text, 44px tall, 10px radius, semibold
+  - Secondary: white fill, visible #c5c6d0 border, dark text
+  - Danger (Hide from Fleet, Cancel): white fill, #a83836 border and red text
+  - Disabled: 50% opacity, never hidden, with a small muted line under it saying why
+- Switch: a rounded toggle with the words "On" / "Off" beside it, never the toggle alone.
+- Inputs and text boxes: white, 10px radius, 1px #c5c6d0 border; focus ring #0153dc.
+- Typography: Inter. Titles 26px semibold, section titles 18px semibold, body 15px, hints 13px muted. JetBrains Mono with tabular numerals only for part numbers, dates and money, always after the plain words.
+- Icons: Material Symbols Outlined, 20–24px. Part types show in a 44px soft #dbe1ff rounded square with a blue icon.
+- Every overlay is in-app: a centred white card over the page dimmed 40%, 20px radius, 32px padding. Never a browser pop-up.
+- Sample data (real, from Roam's database):
+  - Car: Toyota Roomy 2016–2020 · 2WD · 1.0 petrol · frame M900A.
+  - Saved file: "Air cleaner for Toyota Tank_Roomy M900A-AGBVE….mhtml" (4.9 MB, saved web page, single file). The site is shown only by its address, "amayama.com".
+  - Air filter: 17801-21060, genuine Toyota, 11.2016 – 09.2020 — already on file. Its picture: a flat rectangular panel filter, pleated white paper with an orange rubber edge.
+  - 8 other rows on that page are not Roam part types: ventilation pipe, air cleaner cap, air cleaner inlet (3 rows), hose clip, air cleaner hose, hose clamp.
+  - Front shock absorber: right 48510-B9285 (11.2016 – 11.2018) and 48510-B9115 (11.2018 – 09.2020); left 48520-B9285 and 48520-B9115, same dates. Picture: a black twin-tube front strut with a polished chrome rod and a mounting bracket at the bottom.
+  - Front brake pads 04465-B1190 (picture: a set of four grey pads on steel backing plates). Front stabilizer link 48820-B1010 (picture: a short steel rod with a ball joint and black rubber boot at each end).
+  - Part groups: Filters, Engine, Brakes, Suspension & steering, Battery & electrical, Exhaust & emissions, Lighting & visibility, HVAC, Belts & hoses, Transmission, Hybrid & electric, Fluids, Tires & wheels.
+  - Spend: "Made today: 3 of 50"; "This month: US$0.16 on part pictures · US$0.31 of the US$80 Gemini budget".
+
+
+DESIGN PRINCIPLES (only what changes the drawing):
+- Desktop-first at 1440px; content column max 1120px. Overlays 640px wide; the job panel is a 560px right drawer.
+- The picture is the hero of every card: square, big, at the top or the left, never a tiny icon.
+- The plain words come first ("Front shock absorber · front right"), then the number in mono, then the dates in mono.
+- One clear next action per screen. Picture buttons are secondary; "Hide from Fleet" is the only danger button.
+- Waiting is calm: soft pulse for "Making", a plain one-line reason for "Waiting", never a spinner alone.
+- 8px spacing grid, 44px touch targets.
+
+
+SCREEN 1: UPLOAD A SAVED PAGE — SINGLE FILE CHOSEN
+Same Roam Dominion console frame, colours, cards and style. Behind the overlay, dimmed 40%: the Toyota Roomy car page with its "Key parts" grid. Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 640px wide. Title "Add parts from a saved page", muted line "Toyota Roomy 2016–2020 · 2WD · M900A".
+- A "How to save the page" panel (tint #f3f4fb, three numbered steps): "Open the page for this car on the catalogue website." · "Press Ctrl+S (Cmd+S on a Mac)." · "Save it as **Webpage, Single File**. That also brings the drawing, so Roam can make a picture of each part."
+- Filled drop zone: document icon, file name "Air cleaner for Toyota Tank_Roomy M900A-AGBVE….mhtml", muted "4.9 MB · saved web page · single file", a green check. Secondary button "Choose another file".
+- "Page link" field, filled: "https://www.amayama.com/en/genuine-catalogs/epc/toyota-japan/tank-roomy/m900a/147989/engine/1703", with a green check and a muted line "Found in the file".
+- Info line with an info icon: "Rows that pass every check are saved as Confirmed. Each Roam part also gets a picture a minute or two later."
+- Muted 13px line at the bottom: "Saved pages up to 8 MB can be read."
+- Footer: danger "Cancel"; primary "Read page".
+
+SCREEN 2: RESULT — ALREADY ON FILE, PICTURE BEING MADE
+Same Roam Dominion console frame, colours, cards and style. Behind the overlay, dimmed 40%: the Toyota Roomy car page. Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 640px wide. A 56px slate circle with a white check at the top. Title "Nothing new to save" (26px semibold), muted line "From amayama.com · read 26 Nov 2026 · Toyota Roomy 2016–2020 · 2WD".
+- Summary pills in a row: green "Saved 0", slate "Already on file 1", amber "Needs you 0", grey outline "Not a Roam part type 8".
+- Under the pills, one line with a small image icon: "Pictures: 1 being made".
+- Group "Already on file" (18px, slate pill): a white card with one row: a 40px square picture thumbnail in its "no picture yet" look (outline filter icon on #f3f4fb) with the blue "Making" pill beside it, then "Air filter", "17801-21060" in mono, "11.2016 – 09.2020" in mono, and the slate "Already on file" pill on the right.
+- Group "Not a Roam part type" as a collapsed row with a chevron: "8 rows · ventilation pipe, air cleaner cap, inlet, hose clip, hose, hose clamp". No buttons.
+- Footer: secondary "See pictures" (image icon) on the left; primary "Done" on the right.
+
+END OF FIRST PASTE
+
+
+SCREEN 3: RESULT — PARTS SAVED, PICTURES MADE
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the overlay, dimmed 40%: the Toyota Roomy car page. Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 640px wide. A 56px green circle with a white tick. Title "4 parts saved" (26px semibold), muted line "From amayama.com · read 26 Nov 2026 · Toyota Roomy 2016–2020 · 2WD".
+- Summary pills: green "Saved 4", slate "Already on file 2", amber "Needs you 0", grey outline "Not a Roam part type 23".
+- Line with an image icon: "Pictures: 4 made · 2 being made".
+- Group "Saved" (green pill): a white card; each row = a 40px square picture thumbnail (real studio photo of the part), a small state pill under or beside it, then the plain words, the number in mono, the dates in mono, and a green "Confirmed" pill on the right:
+  - thumbnail of a black strut, "Made" · Front shock absorber · front right · 48510-B9285 · 11.2016 – 11.2018
+  - thumbnail of a black strut, "Made" · Front shock absorber · front right · 48510-B9115 · 11.2018 – 09.2020
+  - thumbnail of a black strut (mirrored), "Made" · Front shock absorber · front left · 48520-B9285 · 11.2016 – 11.2018
+  - thumbnail of a black strut (mirrored), "Made" · Front shock absorber · front left · 48520-B9115 · 11.2018 – 09.2020
+- Group "Already on file" (slate pill): two rows, each with the "no picture yet" thumbnail and a blue "Making" pill:
+  - Front stabilizer link · 48820-B1010 · 11.2016 – 09.2020
+  - Front stabilizer link · 48820-B1011 · 11.2016 – 09.2020
+- Collapsed row "Not a Roam part type · 23 rows".
+- Footer: secondary "See pictures" on the left; primary "Done" on the right.
+
+SCREEN 4: RESULT — SAVED AS A NORMAL WEB PAGE (NO DRAWING)
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the overlay, dimmed 40%: the Toyota Roomy car page. Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 640px wide. A 56px slate circle with a white check. Title "Nothing new to save", muted line "From amayama.com · read 26 Nov 2026 · Toyota Roomy 2016–2020 · 2WD".
+- Summary pills: green "Saved 0", slate "Already on file 1", amber "Needs you 0", grey outline "Not a Roam part type 8".
+- A soft blue notice card (#dbe1ff tint, info icon, 12px radius) under the pills: bold "Pictures need the drawing." and the line "Next time, save the page in Chrome as Webpage, Single File and upload that." No button.
+- Group "Already on file": one row with the "no picture yet" thumbnail and the grey outline "No diagram" pill: Air filter · 17801-21060 · 11.2016 – 09.2020 · slate "Already on file".
+- Collapsed row "Not a Roam part type · 8 rows".
+- Footer: primary "Done" only (no "See pictures").
+
+SCREEN 5: JOB PANEL — AIR FILTER, PICTURE MADE
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the drawer, dimmed: the "Pending catalog" page with its parts table. Draw tall enough to show everything, no inner scrolling.
+- Right drawer, 560px wide, white, soft shadow. Header: "Engine air filter" (20px semibold) with a green "Added" pill, muted line "Toyota Roomy 2016–2020 · 2WD", a close icon on the right.
+- Section label "ROAM FOUND" (12px, letter-spaced, muted).
+- One part card (white, 16px radius):
+  - At the top, a 96px square picture frame: realistic top-down studio photo of a flat rectangular panel air filter, pleated white paper with an orange rubber edge, no words on it. Under it the muted line "Made by AI from the maker's diagram · 26 Nov 2026" and the green "Made" pill.
+  - "Toyota 17801-21060" in mono 18px semibold, with a green "Added" pill on the right.
+  - A tint box: "Fits: Toyota Roomy 2016–2020 2WD · frame M900A".
+  - A site chip "amayama.com" and the muted "Read on 26 Nov 2026".
+  - A tint line with an info icon: "You checked it on the car maker's catalogue."
+  - A row of two buttons under the picture: secondary "Remake" (refresh icon), danger "Hide from Fleet" (eye-off icon).
+
+SCREEN 6: JOB PANEL — FRONT SHOCK ABSORBER, FOUR PICTURES IN DIFFERENT STATES
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the drawer, dimmed: the "Pending catalog" page. Draw tall enough to show all four cards, no inner scrolling.
+- Right drawer, 560px. Header: "Shock absorber" with a green "Added" pill, muted line "Toyota Roomy 2016–2020 2WD · Front".
+- Section label "ROAM FOUND". Four part cards stacked, each with its 96px picture frame at the top, the number in mono, the green "Added" pill and the "Fits" tint box:
+  1. "Toyota 48510-B9285" — picture of a black front strut with a chrome rod; muted "Made by AI from the maker's diagram · 26 Nov 2026"; green "Made"; buttons secondary "Remake", danger "Hide from Fleet".
+  2. "Toyota 48510-B9115" — "no picture yet" frame with a soft pulse; blue "Making" pill and the line "Making the picture". No buttons.
+  3. "Toyota 48520-B9285" — "no picture yet" frame; amber "Waiting" pill with a pause icon and the line "Today's budget is used up". No buttons.
+  4. "Toyota 48520-B9115" — the strut picture greyed to 40%; slate "Hidden from Fleet" pill; muted line "Roam Fleet doesn't show this picture."; button secondary "Show in Fleet" (eye icon).
+
+SCREEN 7: PICTURE — LARGE VIEW
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the overlay, dimmed 40%: the job panel for the air filter. Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 720px wide, 20px radius.
+- A large square picture (640px): the realistic studio photo of the flat panel air filter, pleated white paper with an orange rubber edge, soft shadow, no words.
+- Under it: "Air filter" (20px semibold), "Toyota 17801-21060" in mono, a muted line "Made by AI from the maker's diagram · 26 Nov 2026 · version 1 · Filters template version 1".
+- Footer: secondary "Remake", danger "Hide from Fleet" on the left; primary "Close" on the right.
+
+SCREEN 8: PART PICTURES PAGE — PICTURES TAB
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Draw tall enough to show everything, no inner scrolling.
+- Breadcrumb "Vehicles › Part pictures", title "Part pictures" (26px), muted line "Realistic pictures of each part, made by AI from the maker's diagram. One picture per part, shared by every car that uses it."
+- A settings card on the right of the title row: the switch "AI part pictures: On"; "Made today: 3 of 50"; a spend bar "This month US$0.16 on part pictures · US$0.31 of the US$80 Gemini budget" (blue).
+- Two tabs: "Pictures" (active, blue underline) and "Templates".
+- A row of five count tiles, each a button with a soft coloured left edge: "Made 41" (green), "Being made 2" (blue), "Waiting 1" (amber), "Failed 1" (red), "Hidden 1" (slate).
+- A filter row: search box "Search a part number or name…", a "Part group" dropdown ("All groups"), a "State" dropdown ("All states").
+- A grid of picture cards, 4 per row (draw 8). Each card: the square picture frame on top; the part name (16px semibold); the number in mono; the part group as a small slate chip; "Made 26 Nov 2026" muted; the state pill; and a row of buttons. Cards:
+  - Air filter · 17801-21060 · Filters · Made — "Remake", "Hide from Fleet"
+  - Front shock absorber · 48510-B9285 · Suspension & steering · Made — "Remake", "Hide from Fleet"
+  - Front shock absorber · 48510-B9115 · Suspension & steering · Making (no-picture frame with pulse) — no buttons
+  - Front shock absorber · 48520-B9285 · Suspension & steering · Waiting, "Today's budget is used up" — no buttons
+  - Front shock absorber · 48520-B9115 · Suspension & steering · Hidden from Fleet (greyed picture) — "Show in Fleet"
+  - Front brake pads · 04465-B1190 · Brakes · Made (four grey pads on steel backing plates) — "Remake", "Hide from Fleet"
+  - Front stabilizer link · 48820-B1010 · Suspension & steering · Made (steel rod with a ball joint at each end) — "Remake", "Hide from Fleet"
+  - Spark plug · 90048-51216 · Engine · Failed, red line "The picture couldn't be made" — "Remake"
+- Paging at the bottom: "Showing 1–24 of 46" with secondary "Newer" and "Older" buttons.
+
+SCREEN 9: PART PICTURES PAGE — TEMPLATES TAB
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Draw tall enough to show everything, no inner scrolling.
+- Same page header and settings card as the Pictures tab ("Part pictures", switch "AI part pictures: On", "Made today: 3 of 50", spend bar). Tabs: "Pictures", "Templates" (active).
+- A muted line under the tabs: "Each part group has a short description of its materials. Roam adds it to every picture it makes for that group."
+- A list of template cards, one per part group, full width (draw 4):
+  1. "Filters" (part-type icon square with a filter icon). Switch "On". A text box with: "Molded black polypropylene housings, pleated white/off-white filter media with orange/amber rubber gasket trim, stamped steel clips." Muted "Version 2 · last edited by Deeki T on 26 Nov 2026". Buttons: primary "Save"; secondary "Remake pictures made with an older version" with a muted line under it "3 pictures · about US$0.12 · about 1 day at 50 a day".
+  2. "Brakes". Switch "On". Text box: "Machined cast-iron rotors with a cross-hatched friction surface, cast aluminium or iron calipers, ceramic/semi-metallic pads on steel backing plates, braided steel or rubber hoses with brass/steel fittings, zinc-plated pins and rubber dust boots." Muted "Version 1 · set up by Roam". Primary "Save" (disabled, muted "No changes"); no remake line.
+  3. "Suspension & steering". Switch "On". Text box: "Satin-black stamped steel or forged aluminium arms, painted shock absorbers with polished chrome rods, powder-coated coil springs, black rubber or polyurethane bushings, ball joints with black rubber boots, zinc-plated nuts and bolts." Muted "Version 1 · set up by Roam". Primary "Save" (disabled, "No changes").
+  4. "Fluids". Switch "Off". Text box empty with placeholder "Describe the materials, for example: clear plastic bottle with a coloured cap." Muted "Off — Fluids parts get no picture." Primary "Save" (disabled, "No changes").
+
+SCREEN 10: REMAKE PICTURES MADE WITH AN OLDER VERSION (DIALOG)
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the dialog, dimmed 40%: the Templates tab. Draw tall enough to show everything, no inner scrolling.
+- Centred white dialog, 560px wide. Refresh icon in a 56px #dbe1ff circle. Title "Remake 3 Filters pictures?" (22px semibold).
+- Body: "These pictures were made with Filters version 1. Roam will make them again with version 2."
+- A tint box with three lines, numbers in mono: "Pictures to remake: 3" · "About US$0.12" · "About 1 day at 50 a day".
+- A muted line: "1 more picture needs its page uploaded again as a single file — its drawing is older than 30 days."
+- A muted line: "The old pictures stay for 30 days."
+- Footer: danger "Cancel"; primary "Remake 3 pictures".
+
+SCREEN 11: PART PICTURES PAGE — PICTURES OFF, STAFF VIEW
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Signed in as a staff member (top bar shows "Staff"). Draw tall enough to show everything, no inner scrolling.
+- Same page header ("Part pictures") with the Pictures tab active.
+- A full-width amber banner card at the top (pause icon): bold "AI part pictures are off." and the line "New uploads don't queue pictures. Pictures already made still show in Roam Fleet." No button.
+- The settings card: switch "AI part pictures: Off" shown disabled at 50% with a muted line "Only the owner can change this"; "Made today: 0 of 50"; the spend bar.
+- Count tiles: "Made 41", "Being made 0", "Waiting 1", "Failed 1", "Hidden 1".
+- The picture grid (draw 4 cards: Air filter Made; Front shock absorber 48510-B9285 Made; Front shock absorber 48520-B9285 Waiting with the line "AI pictures are off"; Front brake pads Made). Staff still see "Remake", "Hide from Fleet" and "Show in Fleet" buttons on each card.
+
+SCREEN 12: PART PICTURES PAGE — LOADING
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project.
+- Page header "Part pictures" and the two tabs. Under them, two rows of grey rounded placeholder cards (soft shimmer) where the count tiles and picture cards will be. No spinner.
+
+SCREEN 13: PART PICTURES PAGE — COULDN'T LOAD
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project.
+- Page header "Part pictures" and the two tabs. One centred white card: cloud-off icon in a 56px #fdecec circle, "Couldn't load the pictures" (18px semibold), muted "Check your connection and try again.", and a secondary "Try again" button (refresh icon).
+
+SCREEN 14: PART PICTURES PAGE — NO PICTURES YET
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project.
+- Page header "Part pictures", the settings card (switch "AI part pictures: On", "Made today: 0 of 50"), the two tabs, all count tiles at 0.
+- One centred white card: an image icon in a 56px #dbe1ff circle, "No part pictures yet" (18px semibold), muted line "Upload a saved page as a single file to make the first ones." No button.
+
+
+==================== FOR CLAUDE — DO NOT PASTE ====================
+
+ADDITIONAL UI COMPONENTS:
+- PartPictureFrame: square, 12px radius, #f3f4f6 inside; sizes 40px (S1 rows), 96px (S2 cards), card width (S3 grid), 640px (large view). No-picture look = #f3f4fb fill + outline part-type icon. Tap opens the large view (Screen 7) when a picture exists.
+- PictureStatePill: Made / Making / Waiting / Failed / Hidden from Fleet / No diagram, colours as in BRAND IDENTITY. Waiting always carries its one-line reason: "AI pictures are off" · "Today's budget is used up" · "The picture service refused the key" · "Paused until 14:30".
+- Count tile: big number, label, coloured left edge; selected = primary border; click toggles the State filter.
+- Template card: group icon square, name, On/Off switch, text box, version line, Save, remake line + button.
+- Banners at the top of S3 (same words as the Vehicle pictures page): key refused, paused (reason + time), AI off, 80% of the Gemini budget.
+- Dark mode: use exact colour values (text-[#…]), never Tailwind colour names (globals.css remaps them in .dark).
+
+INTERACTIONS:
+- S1 "See pictures" opens the Part pictures page (S3) filtered to this upload (`savedPageId`); "Done" closes as today.
+- S1 rows update by themselves while the overlay is open (poll the upload's picture rows every 10 s while any is Making; stop when none is).
+- S2 "Remake": in-app confirm "Make this picture again? About US$0.04." (Cancel danger, Remake primary) → card shows Making. With no diagram left: button disabled, muted "Upload the page again as a single file to remake this".
+- "Hide from Fleet" acts at once (no confirm), card greys, pill "Hidden from Fleet"; "Show in Fleet" undoes at once.
+- Clicking a picture opens the large view (Screen 7); Escape or "Close" shuts it.
+- S3 count tiles filter; second click clears. Search matches number or name. "Newer"/"Older" page by 24.
+- Template "Save" is disabled until the text or switch changes; on save the version goes up by 1 and the remake line appears. "Remake pictures made with an older version" opens Screen 10.
+- Owner-only (disabled with "Only the owner can change this" for staff): the switch, template Save, template switch, bulk remake. Staff can Remake / Hide / Show one picture.
+- Routes: GET part-pictures, POST part-pictures/:id/remake|hide|show, GET/PUT part-picture-templates(/:catalogGroupId), GET/POST part-picture-templates/:catalogGroupId/remake-older, GET/PUT part-pictures/settings (plan §3.5).
+
+Spec screens / Area:
+| Screen | Plan | Area |
+|---|---|---|
+| 1 | S1 (upload how-to + 8 MB line) | SavedPageOverlay, choose-file step |
+| 2 | S1 | SavedPageOverlay, result step (already on file + Making) |
+| 3 | S1 | SavedPageOverlay, result step (saved + Made thumbnails) |
+| 4 | S1 (.html notice) | SavedPageOverlay, result step |
+| 5 | S2 ready | ResearchJobDrawer → RoamFoundCard |
+| 6 | S2 states | ResearchJobDrawer → RoamFoundCard |
+| 7 | S2/S3 large view | shared PartPictureOverlay |
+| 8 | S3 Pictures tab | new page id part-pictures |
+| 9 | S3 Templates tab | part-pictures |
+| 10 | S3 bulk remake | part-pictures dialog |
+| 11 | S3 off banner + staff | part-pictures |
+| 12–14 | S3 loading / error / empty | part-pictures |

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_tab" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100%;margin:0;padding:0;background-color:#f8f9ff;}body{overscroll-behavior-y:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "error": "#ba1a1a", "secondary-fixed": "#85f8c4", "secondary-fixed-dim": "#68dba9", "surface-tint": "#5e5c74", "on-error": "#ffffff", "on-surface": "#0b1c30", "on-error-container": "#93000a", "background": "#f8f9ff", "on-secondary-container": "#00714e", "on-background": "#0b1c30", "tertiary-container": "#331200", "on-secondary-fixed": "#002114", "outline-variant": "#c9c5cd", "inverse-on-surface": "#eaf1ff", "secondary-container": "#82f5c1", "tertiary-fixed-dim": "#ffb68e", "surface-container-low": "#eff4ff", "on-primary": "#ffffff", "on-secondary-fixed-variant": "#005137", "surface-container-high": "#dce9ff", "on-primary-fixed-variant": "#46445b", "on-secondary": "#ffffff", "surface-container-highest": "#d3e4fe", "surface-container-lowest": "#ffffff", "outline": "#78767d", "primary": "#000000", "surface-bright": "#f8f9ff", "tertiary-fixed": "#ffdbca", "on-tertiary-container": "#cf6721", "surface-dim": "#cbdbf5", "on-tertiary": "#ffffff", "surface": "#f8f9ff", "on-primary-fixed": "#1b192e", "surface-container": "#e5eeff", "inverse-primary": "#c8c3df", "on-tertiary-fixed-variant": "#763300", "tertiary": "#000000", "primary-fixed": "#e4dffc", "secondary": "#006c4a", "on-tertiary-fixed": "#331200", "primary-fixed-dim": "#c8c3df", "surface-variant": "#d3e4fe", "on-surface-variant": "#47464c", "error-container": "#ffdad6", "inverse-surface": "#213145", "on-primary-container": "#84819a", "primary-container": "#1b192e" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-md": "1rem", "gutter": "1.5rem", "space-xl": "2rem", "space-sm": "0.5rem", "space-lg": "1.5rem", "margin": "1.5rem", "space-xs": "0.25rem" }, "fontFamily": { "body-lg": ["Inter"], "label-md": ["Inter"], "body-md": ["Inter"], "part-number": ["JetBrains Mono"], "card-title": ["Inter"], "page-title": ["Inter"], "badge-text": ["Inter"], "page-title-mobile": ["Inter"], "helper-text": ["Inter"] }, "fontSize": { "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }], "label-md": ["14px", { "lineHeight": "20px", "fontWeight": "600" }], "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "500" }], "part-number": ["22px", { "lineHeight": "28px", "letterSpacing": "0.08em", "fontWeight": "500" }], "card-title": ["20px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "page-title": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.02em", "fontWeight": "600" }], "badge-text": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" }], "page-title-mobile": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600" }], "helper-text": ["14px", { "lineHeight": "20px", "fontWeight": "400" }] } } } };</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface text-on-surface min-h-screen flex flex-col antialiased selection:bg-secondary-fixed selection:text-on-secondary-fixed"><header class="fixed top-0 w-full z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] pt-safe"><div class="h-16 px-margin flex items-center justify-between"><div class="flex items-center gap-space-sm"><div class="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-on-primary shadow-[0_1px_4px_rgba(0,0,0,0.12)]"><span class="material-symbols-outlined text-[20px]">local_shipping</span></div><div class="flex flex-col"><span class="font-label-md text-label-md text-on-surface leading-tight tracking-tight">Roam Fleet</span><span class="font-badge-text text-badge-text text-on-surface-variant font-medium">Fleet Maintenance</span></div></div><div class="flex items-center gap-space-xs"><button aria-label="Menu" class="w-11 h-11 flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[24px]">menu</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col relative w-full pt-16 pb-28 bg-surface px-margin"><div class="flex flex-col w-full pb-8">
+<!-- Breadcrumb Navigation -->
+<div class="flex items-center gap-space-xs py-space-sm">
+<a class="inline-flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface transition-colors py-2 group" href="#">
+<span class="material-symbols-outlined text-[20px] transition-transform group-hover:-translate-x-0.5">arrow_back</span>
+<span class="font-label-md text-label-md">Back to Brakes</span>
+</a>
+</div>
+<!-- Screen Heading -->
+<div class="flex flex-col gap-0.5 mb-space-md">
+<h1 class="font-page-title-mobile text-page-title-mobile text-on-surface tracking-tight">Front brake pads</h1>
+<p class="font-helper-text text-helper-text text-on-surface-variant">for your Toyota Roomy 2019 · 5179KZ</p>
+</div>
+<!-- Mobile Part Answer Card -->
+<div class="w-full bg-surface-container-lowest rounded-[20px] shadow-sm p-4 flex flex-col gap-space-md">
+<!-- Image Media Tile -->
+<div class="w-full">
+<div class="w-full aspect-square bg-surface-container-low rounded-2xl overflow-hidden flex items-center justify-center p-4">
+<img class="w-full h-full object-contain" data-alt="Studio catalog photograph shot directly from above on a clean seamless pale neutral background showing four automotive ceramic front brake pads neatly arranged in a two-by-two grid. Matte dark grey friction surfaces, metallic caliper mounting clips, crisp clean product photography, soft ambient shadows, automotive catalog style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDloM-tTeI78lMyKDCfNG22-nclckz_WahITabpqHlP7lm4Cw22gANxzGaDCVEQJY8XVvvpEvyyQKjYKCizLKoDuk4ymD9HZSMFi0naO0GGlp5l_u7RPeUlC42csXAUZqggjXtf2FzE_nOaWbSit0k0htefZ1P2_lCmsgGG7wrwpv0qkM98VnIZQoZ8TlQlszcgHTlBm3wZ45unDpZgbCRhtqisfV01pelsVr_2p6de"/>
+</div>
+<p class="font-helper-text text-[13px] leading-snug text-on-surface-variant mt-2 text-center">
+        Picture made by AI from the maker’s diagram — the real part may look different.
+      </p>
+</div>
+<!-- Axle / Wheel Location Indicator -->
+<div class="bg-surface-container-low rounded-xl p-3 flex items-center gap-3">
+<div class="w-12 h-14 shrink-0 bg-surface-container-lowest rounded-lg p-1 flex items-center justify-center">
+<svg class="w-10 h-12" fill="none" viewbox="0 0 48 56" xmlns="http://www.w3.org/2000/svg">
+<!-- Simplified Chassis Frame -->
+<rect fill="#c9c5cd" height="36" rx="2" width="4" x="22" y="10"></rect>
+<line stroke="#c9c5cd" stroke-linecap="round" stroke-width="2.5" x1="12" x2="36" y1="16" y2="16"></line>
+<line stroke="#c9c5cd" stroke-linecap="round" stroke-width="2.5" x1="12" x2="36" y1="40" y2="40"></line>
+<!-- Rear Wheels (Neutral) -->
+<rect fill="#c9c5cd" height="12" rx="2" width="6" x="7" y="34"></rect>
+<rect fill="#c9c5cd" height="12" rx="2" width="6" x="35" y="34"></rect>
+<!-- Front Wheels (Highlighted Secondary) -->
+<rect fill="#006c4a" height="12" rx="2" width="6" x="7" y="10"></rect>
+<rect fill="#006c4a" height="12" rx="2" width="6" x="35" y="10"></rect>
+<!-- Indicator Pulses -->
+<circle cx="10" cy="16" opacity="0.8" r="8" stroke="#82f5c1" stroke-dasharray="2 2" stroke-width="1.5"></circle>
+<circle cx="38" cy="16" opacity="0.8" r="8" stroke="#82f5c1" stroke-dasharray="2 2" stroke-width="1.5"></circle>
+</svg>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface">Both front wheels</span>
+<span class="font-helper-text text-helper-text text-on-surface-variant">Replaced as an axle set of 4 pads</span>
+</div>
+</div>
+<!-- Title & Trust Pill -->
+<div class="flex flex-col gap-1.5 pt-1">
+<div class="flex items-center justify-between gap-2 flex-wrap">
+<h2 class="font-card-title text-card-title text-on-surface">Front brake pads</h2>
+<!-- Verified Pill -->
+<span class="inline-flex items-center gap-1 bg-secondary-fixed text-on-secondary-fixed font-badge-text text-badge-text px-2.5 py-1 rounded-full">
+<span class="material-symbols-outlined text-[15px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+          Verified
+        </span>
+</div>
+<p class="font-helper-text text-helper-text text-on-surface-variant">Genuine Toyota part · set of 4 pads</p>
+</div>
+<!-- Highlighted Part Number Box -->
+<div class="bg-surface-container-low rounded-[14px] p-4 flex flex-col gap-3">
+<div class="flex flex-col gap-1">
+<span class="font-badge-text text-badge-text text-on-surface-variant uppercase tracking-wider">Give the store this number</span>
+<span class="font-part-number text-part-number text-on-surface select-all">04465-B1190</span>
+</div>
+<button class="w-full min-h-[44px] bg-primary text-on-primary rounded-xl px-5 py-3 font-label-md text-label-md flex items-center justify-center gap-2 active:scale-[0.99] transition-all shadow-sm" id="copy-btn" onclick="navigator.clipboard.writeText('04465-B1190'); const label = document.getElementById('copy-label'); const icon = document.getElementById('copy-icon'); label.innerText = 'Copied to clipboard!'; icon.innerText = 'check'; setTimeout(() =&gt; { label.innerText = 'Copy number'; icon.innerText = 'content_copy'; }, 2200);">
+<span class="material-symbols-outlined text-[18px]" id="copy-icon">content_copy</span>
+<span id="copy-label">Copy number</span>
+</button>
+</div>
+<!-- Folded Row: Other numbers stores may use -->
+<div class="bg-surface-container-low rounded-xl overflow-hidden transition-all">
+<button class="w-full min-h-[44px] p-3.5 flex items-center justify-between text-left text-on-surface font-label-md text-label-md hover:bg-surface-container-high transition-colors" onclick="const drawer = document.getElementById('alt-numbers'); const chevron = document.getElementById('chevron-icon'); drawer.classList.toggle('hidden'); chevron.classList.toggle('rotate-180');">
+<span>Other numbers stores may use (5)</span>
+<span class="material-symbols-outlined text-on-surface-variant transition-transform duration-200" id="chevron-icon">expand_more</span>
+</button>
+<div class="hidden px-3.5 pb-3.5 pt-1 flex flex-col gap-2" id="alt-numbers">
+<div class="flex items-center justify-between py-1.5 px-2 bg-surface-container-lowest rounded-lg">
+<span class="font-part-number text-[14px] text-on-surface font-medium">04465-B1170</span>
+<span class="font-helper-text text-[12px] text-on-surface-variant">Factory alternate</span>
+</div>
+<div class="flex items-center justify-between py-1.5 px-2 bg-surface-container-lowest rounded-lg">
+<span class="font-part-number text-[14px] text-on-surface font-medium">04465-B1180</span>
+<span class="font-helper-text text-[12px] text-on-surface-variant">Daihatsu build</span>
+</div>
+<div class="flex items-center justify-between py-1.5 px-2 bg-surface-container-lowest rounded-lg">
+<span class="font-part-number text-[14px] text-on-surface font-medium">04465-B1010</span>
+<span class="font-helper-text text-[12px] text-on-surface-variant">Assembly revision</span>
+</div>
+<div class="flex items-center justify-between py-1.5 px-2 bg-surface-container-lowest rounded-lg">
+<span class="font-part-number text-[14px] text-on-surface font-medium">04465-B1260</span>
+<span class="font-helper-text text-[12px] text-on-surface-variant">Later revision</span>
+</div>
+<div class="flex items-center justify-between py-1.5 px-2 bg-surface-container-lowest rounded-lg">
+<span class="font-part-number text-[14px] text-on-surface font-medium">04491-97202</span>
+<span class="font-helper-text text-[12px] text-on-surface-variant">Regional code</span>
+</div>
+</div>
+</div>
+<!-- Compatibility Section -->
+<div class="bg-surface-container-low rounded-xl p-3.5 flex flex-col gap-3">
+<div class="flex items-center justify-between gap-2">
+<div class="flex items-center gap-2">
+<!-- Overlapping Brand Dots -->
+<div class="flex -space-x-1.5 overflow-hidden py-0.5">
+<span class="w-6 h-6 rounded-full bg-surface-container-lowest flex items-center justify-center text-[10px] font-bold text-on-surface shadow-xs">T</span>
+<span class="w-6 h-6 rounded-full bg-surface-container-lowest flex items-center justify-center text-[10px] font-bold text-on-surface shadow-xs">D</span>
+<span class="w-6 h-6 rounded-full bg-surface-container-lowest flex items-center justify-center text-[10px] font-bold text-on-surface shadow-xs">S</span>
+</div>
+<span class="font-label-md text-label-md text-on-surface">Also fits 33 other cars</span>
+</div>
+<span class="font-badge-text text-[11px] text-on-surface-variant bg-surface-container-lowest px-2 py-0.5 rounded-full">3 makes</span>
+</div>
+<button class="w-full min-h-[44px] bg-surface-container-lowest text-on-surface rounded-xl px-4 py-2.5 font-label-md text-label-md flex items-center justify-center gap-1.5 hover:bg-surface-container-high transition-colors">
+<span>See every car</span>
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+<!-- Bottom Secondary Action -->
+<div class="pt-1">
+<button class="w-full min-h-[44px] bg-surface-container-lowest text-on-surface rounded-xl px-5 py-3 font-label-md text-label-md flex items-center justify-center gap-2 hover:bg-surface-container-low active:scale-[0.99] transition-all">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">history_edu</span>
+<span>Use in a service log</span>
+</button>
+</div>
+</div>
+</div><footer class="mt-auto py-space-lg flex flex-col items-center justify-center text-center"><p class="font-helper-text text-helper-text text-on-surface-variant">© 2025 Roam Fleet. All rights reserved.</p></footer></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/90 backdrop-blur-xl shadow-[0_-2px_12px_rgba(0,0,0,0.05)]" data-active-classes="text-primary font-semibold"><div class="flex justify-around items-center h-16 px-space-sm"><a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-space-xs text-on-surface-variant hover:text-on-surface transition-colors" data-path="fleet-overview" href="#"><span class="material-symbols-outlined text-[22px]">dashboard</span><span class="font-badge-text text-badge-text">Fleet</span></a><a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-space-xs text-on-surface-variant hover:text-on-surface transition-colors" data-path="maintenance-schedules" href="#"><span class="material-symbols-outlined text-[22px]">build_circle</span><span class="font-badge-text text-badge-text">Service</span></a><a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-space-xs text-on-surface-variant hover:text-on-surface transition-colors" data-path="inspections-log" href="#"><span class="material-symbols-outlined text-[22px]">checklist</span><span class="font-badge-text text-badge-text">Logs</span></a><a aria-current="page" class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-space-xs transition-colors text-primary font-semibold" data-path="parts-inventory" href="#"><span class="material-symbols-outlined text-[22px]">inventory_2</span><span class="font-badge-text text-badge-text">Parts</span></a></div></nav></body></html>

@@ -15,6 +15,18 @@ import {
 import { patchPendingPartsGroup, type PendingPartsQueueGroup } from "../../../services/pendingPartsCatalogService";
 import { AddedPickPartPanel } from "../vehicle-catalog/pending-parts/AddedPickPartPanel";
 import { SavedPageOverlay } from "./SavedPageOverlay";
+import { picturesForNumbers, type PartPicture } from "../part-pictures/partPicturesApi";
+import {
+  AI_LINE,
+  PartPictureFrame,
+  PartPictureOverlay,
+  PictureButtons,
+  PictureStatePill,
+  pictureWord,
+  plainDay as pictureDay,
+  usePictureActions,
+  waitingLine,
+} from "../part-pictures/PartPictureBits";
 import {
   D_CARD,
   D_MONO,
@@ -125,6 +137,37 @@ export function ResearchJobDrawer({ token, jobId: jobIdProp, group, fallbackTitl
     return live.length ? live : [];
   }, [detail]);
   const reviewProposal = shownProposals.find((p) => p.status === "open") ?? null;
+
+  // S2 part pictures: the picture of each number this job added; every 10 s while one is being made.
+  const [pictures, setPictures] = useState<{ aiOn: boolean; byNumber: Map<string, PartPicture | null> }>({ aiOn: false, byNumber: new Map() });
+  const addedNumbers = useMemo(
+    () => shownProposals.filter((p) => p.status === "promoted" && p.part_number).map((p) => String(p.part_number)),
+    [shownProposals],
+  );
+  const loadPictures = useCallback(async () => {
+    if (!addedNumbers.length) return;
+    try {
+      const r = await picturesForNumbers(addedNumbers);
+      setPictures({ aiOn: r.aiPicturesOn, byNumber: new Map(r.items.map((i) => [i.number, i.picture])) });
+    } catch {
+      // Pictures are extra: the card shows as before.
+    }
+  }, [addedNumbers]);
+  useEffect(() => {
+    void loadPictures();
+  }, [loadPictures]);
+  const pictureMaking = [...pictures.byNumber.values()].some((p) => p?.status === "being_made");
+  useEffect(() => {
+    if (!pictureMaking) return;
+    const t = window.setInterval(() => void loadPictures(), 10_000);
+    return () => window.clearInterval(t);
+  }, [pictureMaking, loadPictures]);
+  const setPicture = (picture: PartPicture) =>
+    setPictures((cur) => {
+      const next = new Map(cur.byNumber);
+      for (const [n, p] of next) if (p?.id === picture.id) next.set(n, picture);
+      return { ...cur, byNumber: next };
+    });
   const openSpec = (detail?.specProposals ?? []).find((p) => p.status === "open") ?? null;
   const promotedSpec = (detail?.specProposals ?? []).find((p) => p.status === "promoted") ?? null;
 
@@ -318,7 +361,18 @@ export function ResearchJobDrawer({ token, jobId: jobIdProp, group, fallbackTitl
           {shownProposals.length > 0 ? (
             <ReSection title="Roam found">
               {shownProposals.map((p) => (
-                <RoamFoundCard key={p.id} p={p} carName={carName} chassis={detail.car?.chassis_code ?? null} readAt={readAt} />
+                <RoamFoundCard
+                  key={p.id}
+                  p={p}
+                  carName={carName}
+                  chassis={detail.car?.chassis_code ?? null}
+                  readAt={readAt}
+                  picture={
+                    p.status === "promoted" && p.part_number && (pictures.aiOn || pictures.byNumber.get(String(p.part_number)))
+                      ? { value: pictures.byNumber.get(String(p.part_number)) ?? null, onChanged: setPicture }
+                      : undefined
+                  }
+                />
               ))}
             </ReSection>
           ) : null}
@@ -401,8 +455,69 @@ export function ResearchJobDrawer({ token, jobId: jobIdProp, group, fallbackTitl
 
 // ------------------------------------------------------------------ Screen 2: Roam found
 
-function RoamFoundCard({ p, carName, chassis, readAt }: { p: PartProposal; carName: string; chassis: string | null; readAt: Map<string, string> }) {
+/** S2: picture tile beside the number (Stitch screen 5), its state line, and Remake / Hide from Fleet / Show in Fleet. */
+function useCardPicture(slot: { value: PartPicture | null; onChanged: (p: PartPicture) => void } | undefined) {
+  const [open, setOpen] = useState(false);
+  const actions = usePictureActions((p) => slot?.onChanged(p));
+  if (!slot) return null;
+  const picture = slot.value;
+  const icon = "category";
+  const word = pictureWord(picture);
+  const line = !picture
+    ? "No picture yet"
+    : picture.status === "made" || picture.status === "hidden"
+      ? [AI_LINE, pictureDay(picture.madeAt)].filter(Boolean).join(" · ")
+      : picture.status === "being_made"
+        ? "Making the picture"
+        : picture.status === "waiting"
+          ? waitingLine(picture.waitingReason)
+          : "The picture couldn't be made";
+  const buttons = picture ? (
+    <PictureButtons
+      picture={picture}
+      busy={actions.busy}
+      onRemake={() => actions.askRemake(picture)}
+      onHide={() => void actions.hide(picture)}
+      onShow={() => void actions.show(picture)}
+    />
+  ) : null;
+  return {
+    tile: (
+      <PartPictureFrame picture={picture} size={112} icon={icon} onOpen={picture?.url ? () => setOpen(true) : undefined} />
+    ),
+    state: (
+      <div className="flex flex-wrap items-center gap-2" data-testid="card-picture-state">
+        {word ? <PictureStatePill word={word} /> : null}
+        <span className={`text-[13px] ${D_MUTED}`}>{line}</span>
+        {picture?.status === "hidden" ? <span className={`w-full text-[13px] ${D_MUTED}`}>Roam Fleet doesn&apos;t show this picture.</span> : null}
+      </div>
+    ),
+    footer: (
+      <>
+        {buttons ? <div data-testid="card-picture-buttons">{buttons}</div> : null}
+        {actions.error ? <p className="text-[13px] text-[#a83836] dark:text-[#f87171]">{actions.error}</p> : null}
+        {actions.confirm}
+        {open && picture ? <PartPictureOverlay picture={picture} onClose={() => setOpen(false)} actions={buttons} /> : null}
+      </>
+    ),
+  };
+}
+
+function RoamFoundCard({
+  p,
+  carName,
+  chassis,
+  readAt,
+  picture,
+}: {
+  p: PartProposal;
+  carName: string;
+  chassis: string | null;
+  readAt: Map<string, string>;
+  picture?: { value: PartPicture | null; onChanged: (p: PartPicture) => void };
+}) {
   const [showText, setShowText] = useState(false);
+  const pic = useCardPicture(picture);
   const kept = keptSources(p);
   const first = kept[0];
   const confirmed = proposalConfirmed(p);
@@ -411,17 +526,23 @@ function RoamFoundCard({ p, carName, chassis, readAt }: { p: PartProposal; carNa
   const firstRead = first?.readId ? readAt.get(first.readId) : undefined;
   return (
     <div className={`${D_CARD} flex flex-col gap-4 p-6`} data-testid="roam-found-card">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className={`text-[18px] font-semibold tracking-tight ${D_MONO} ${D_TXT}`} data-testid="found-number">
-          {[p.brand, p.part_number].filter(Boolean).join(" ")}
-        </span>
-        {p.status === "promoted" ? (
-          <RePill tone="green" icon="check">Added</RePill>
-        ) : confirmed ? (
-          <RePill tone="green" icon="check">Confirmed</RePill>
-        ) : (
-          <RePill tone="amber">Needs checking</RePill>
-        )}
+      <div className="flex items-start gap-4">
+        {pic?.tile}
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          {pic?.state}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className={`text-[18px] font-semibold tracking-tight ${D_MONO} ${D_TXT}`} data-testid="found-number">
+              {[p.brand, p.part_number].filter(Boolean).join(" ")}
+            </span>
+            {p.status === "promoted" ? (
+              <RePill tone="green" icon="check">Added</RePill>
+            ) : confirmed ? (
+              <RePill tone="green" icon="check">Confirmed</RePill>
+            ) : (
+              <RePill tone="amber">Needs checking</RePill>
+            )}
+          </div>
+        </div>
       </div>
       <div className={`rounded-xl p-4 ${RE_SOFT}`}>
         <p className={`text-[14px] ${D_TXT}`}>
@@ -461,6 +582,7 @@ function RoamFoundCard({ p, carName, chassis, readAt }: { p: PartProposal; carNa
           {howSureLine(p)}
         </p>
       </div>
+      {pic?.footer}
     </div>
   );
 }

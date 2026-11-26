@@ -3,8 +3,71 @@
  */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { assertNoCustomerIdentity } from "./catalog_parts_shape.ts";
+import { partPictureUrlFromKey, type PictureUrl } from "./part_picture_urls.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** §3.6: one picture for the answer's interchange group, and only while it is ready (a hidden one is not). */
+export type FleetPartPicture = { url: PictureUrl; urlDetail: PictureUrl } | null;
+
+/**
+ * The group's picture, or null. `status = 'ready'` is the whole rule: queued, making, failed and hidden pictures are
+ * never shown in Fleet (§3.6), and a read problem must never hide the part itself.
+ */
+export async function readFleetPartPicture(
+  supabase: SupabaseClient,
+  groupId: string | null,
+): Promise<FleetPartPicture> {
+  if (!groupId || !UUID_RE.test(groupId)) return null;
+  try {
+    const { data, error } = await supabase
+      .from("part_picture")
+      .select("r2_key, status")
+      .eq("interchange_group_id", groupId)
+      .eq("status", "ready")
+      .maybeSingle();
+    if (error || !data) return null;
+    const row = data as { r2_key?: string | null; status?: string | null };
+    if (row.status !== "ready" || !row.r2_key) return null;
+    const url = partPictureUrlFromKey(row.r2_key, "card");
+    const urlDetail = partPictureUrlFromKey(row.r2_key, "detail");
+    return url && urlDetail ? { url, urlDetail } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * §3.6 for the multi-card answers (calipers, cables, shoes): one read for every card's group, the same ready-only
+ * rule. Each item in `sections[].items[]` gets `picture` (null when none). A read problem leaves the cards as they were.
+ */
+export async function attachFleetPartPictures<T extends { sections?: Array<{ items?: Array<Record<string, unknown>> }> }>(
+  supabase: SupabaseClient,
+  body: T,
+): Promise<T> {
+  const items = (body.sections ?? []).flatMap((s) => s.items ?? []);
+  const groupIds = [...new Set(items.map((i) => String(i.groupId ?? "")).filter((id) => UUID_RE.test(id)))];
+  if (!groupIds.length) return body;
+  try {
+    const { data, error } = await supabase
+      .from("part_picture")
+      .select("interchange_group_id, r2_key, status")
+      .in("interchange_group_id", groupIds)
+      .eq("status", "ready");
+    if (error) return body;
+    const byGroup = new Map<string, FleetPartPicture>();
+    for (const row of (data ?? []) as Array<{ interchange_group_id?: string; r2_key?: string | null; status?: string }>) {
+      if (row.status !== "ready" || !row.r2_key || !row.interchange_group_id) continue;
+      const url = partPictureUrlFromKey(row.r2_key, "card");
+      const urlDetail = partPictureUrlFromKey(row.r2_key, "detail");
+      if (url && urlDetail) byGroup.set(row.interchange_group_id, { url, urlDetail });
+    }
+    for (const item of items) item.picture = byGroup.get(String(item.groupId ?? "")) ?? null;
+    return body;
+  } catch {
+    return body;
+  }
+}
 
 function trustLabel(raw: unknown, status?: unknown): { trust: string; reason: string | null } {
   const t = String(raw ?? "").toLowerCase();
@@ -108,6 +171,10 @@ export async function readFleetPartLookup(supabase: SupabaseClient, input: Fleet
   const mainUrl = body.evidenceUrl != null ? String(body.evidenceUrl).trim() : "";
   if (mainUrl) sources.push({ label: reference.brand || "Catalogue", url: mainUrl });
 
+  const groupId = body.groupId != null ? String(body.groupId) : null;
+  // §3.6: the answer's own interchange group; the other compatible numbers get no picture of their own.
+  const picture = await readFleetPartPicture(supabase, groupId);
+
   const payload = {
     found: true,
     reference,
@@ -115,7 +182,8 @@ export async function readFleetPartLookup(supabase: SupabaseClient, input: Fleet
     alsoFits,
     alsoFitsCount: alsoFits.length,
     sources,
-    groupId: body.groupId != null ? String(body.groupId) : null,
+    groupId,
+    picture,
     wva: body.wva != null ? String(body.wva) : null,
   };
 

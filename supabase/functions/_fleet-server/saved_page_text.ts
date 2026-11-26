@@ -549,3 +549,324 @@ export function savedPageText(bytes: Uint8Array, fileName: string): SavedPageTex
   const parsed = htmlToSavedPage(html);
   return { kind: "html", ...parsed };
 }
+
+// ---------------------------------------------------------------- §3.1 pictures inside the file
+//
+// A Chrome "Webpage, Single File" page packs every resource into one MIME file. The text reader above only ever
+// hands back the HTML part, so the drawings and the image map were thrown away (PP-18). This section reads the raw
+// bytes instead: it walks the parts, keeps each one's bytes, Content-ID and Content-Location, and links
+// <img usemap="#m"> → <map name="m"> → the <area> whose title (or callout code) names the part.
+//
+// The whole file is decoded one byte to one character (latin1), never as UTF-8: a binary part would lose bytes.
+// The HTML part is quoted-printable, so it is decoded before any tag is matched.
+
+/** One picture inside the saved page. */
+export type SavedPageImage = {
+  contentType: string;
+  bytes: Uint8Array;
+  /** 0 when the bytes carry no readable size. */
+  width: number;
+  height: number;
+  /** The map this image is wired to on the page (no "#"), or null when no <img> names one. */
+  usemap: string | null;
+  /** The <img src> or Content-Location the image was found by. */
+  source: string;
+};
+
+/** One clickable region of an image map. */
+export type SavedPageMapArea = {
+  title: string;
+  /** Every attribute as one string, so a callout code in data-* can be matched. */
+  attrs: string;
+  /** The part's rectangle as the page writes it. A HINT ONLY: Chrome scales these between .html and .mhtml. */
+  box: { x1: number; y1: number; x2: number; y2: number } | null;
+};
+
+export type SavedPageImages = { images: SavedPageImage[]; maps: Record<string, SavedPageMapArea[]> };
+
+export type PartDiagram = { image: SavedPageImage; mapBox: SavedPageMapArea["box"] };
+
+const IMAGE_EXT: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/webp": "webp",
+  "image/gif": "gif",
+};
+
+/** File extension for an image content type ("" when it is not a picture we store). */
+export function imageExtension(contentType: string): string {
+  return IMAGE_EXT[String(contentType ?? "").toLowerCase().split(";")[0].trim()] ?? "";
+}
+
+/** One byte = one character, in chunks (a spread over a whole 8 MB file would overflow the stack). */
+function latin1String(bytes: Uint8Array): string {
+  const CHUNK = 0x4000;
+  const parts: string[] = [];
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    parts.push(String.fromCharCode(...bytes.subarray(i, Math.min(i + CHUNK, bytes.length))));
+  }
+  return parts.join("");
+}
+
+function splitHeadBody(part: string): { head: string; body: string } {
+  const s = part.match(/\r?\n\r?\n/);
+  if (!s) return { head: part, body: "" };
+  return { head: part.slice(0, s.index), body: part.slice((s.index ?? 0) + s[0].length) };
+}
+
+/** The MIME parts' text blocks, split on the boundary at line starts only (a body may contain "--"). */
+function mimePartTexts(raw: string): string[] {
+  const firstBreak = raw.match(/\r?\n\r?\n/);
+  const head = firstBreak ? raw.slice(0, firstBreak.index) : "";
+  const bodyStart = firstBreak ? (firstBreak.index ?? 0) + firstBreak[0].length : 0;
+  const boundary = parseHeaders(head).get("content-type")?.match(/boundary\s*=\s*"?([^";]+)"?/i)?.[1];
+  const contentType = parseHeaders(head).get("content-type") ?? "";
+  if (!boundary || !/multipart\//i.test(contentType)) return [raw];
+
+  const marker = `--${boundary}`;
+  const parts: string[] = [];
+  let start = -1;
+  let at = raw.indexOf(marker, bodyStart);
+  while (at >= 0) {
+    const lineStart = at === 0 || raw[at - 1] === "\n";
+    if (!lineStart) {
+      at = raw.indexOf(marker, at + marker.length);
+      continue;
+    }
+    if (start >= 0) parts.push(raw.slice(start, at).replace(/^\r?\n/, "").replace(/\r?\n$/, ""));
+    if (raw.slice(at + marker.length, at + marker.length + 2) === "--") {
+      start = -1;
+      break;
+    }
+    start = at + marker.length;
+    at = raw.indexOf(marker, at + marker.length);
+  }
+  return parts;
+}
+
+function attribute(tag: string, name: string): string | null {
+  const m = tag.match(new RegExp(`\\b${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s"'>]+))`, "i"));
+  return m ? (m[2] ?? m[3] ?? m[4] ?? "") : null;
+}
+
+function decodeUrl(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function locationMatches(location: string, src: string): boolean {
+  const a = decodeUrl(location).split("?")[0].split("#")[0];
+  const b = decodeUrl(src).split("?")[0].split("#")[0];
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const base = (s: string) => s.slice(s.lastIndexOf("/") + 1).toLowerCase();
+  return base(a) === base(b) && base(a) !== "";
+}
+
+function contentIdMatches(id: string, src: string): boolean {
+  const clean = (s: string) => s.trim().replace(/^</, "").replace(/>$/, "").toLowerCase();
+  return clean(id) === clean(src.replace(/^cid:/i, ""));
+}
+
+function normalizedName(value: string | null | undefined): string {
+  return String(value ?? "").toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
+}
+
+/** Label from a group line ("17801 - ELEMENT SUB-ASSY…" → "17801"): the 3–5 character token before " - ". */
+export function partLabelFromGroupLine(line: string | null | undefined): string | null {
+  const text = String(line ?? "").trim();
+  const dash = text.search(/\s+-\s+/);
+  if (dash < 0) return null;
+  const head = text.slice(0, dash).trim();
+  return /^[A-Z0-9]{3,5}$/i.test(head) ? head : null;
+}
+
+/** The part's own name from a group line ("17801 - ELEMENT SUB-ASSY…" → "ELEMENT SUB-ASSY…"). */
+export function partAreaTitleFromGroupLine(line: string | null | undefined): string | null {
+  const text = String(line ?? "").trim();
+  const dash = text.search(/\s+-\s+/);
+  if (dash < 0) return null;
+  const tail = text.slice(dash).replace(/^\s+-\s+/, "").trim();
+  return tail || null;
+}
+
+/** Width and height from the picture's own bytes (PNG, JPEG, GIF, WebP). 0/0 when unknown. */
+export function imageSize(bytes: Uint8Array): { width: number; height: number } {
+  const be32 = (i: number) => ((bytes[i] << 24) | (bytes[i + 1] << 16) | (bytes[i + 2] << 8) | bytes[i + 3]) >>> 0;
+  const be16 = (i: number) => (bytes[i] << 8) | bytes[i + 1];
+  if (bytes.length > 24 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e) {
+    return { width: be32(16), height: be32(20) };
+  }
+  if (bytes.length >= 10 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
+    return { width: bytes[6] | (bytes[7] << 8), height: bytes[8] | (bytes[9] << 8) };
+  }
+  if (bytes.length > 30 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[8] === 0x57 && bytes[9] === 0x45) {
+    // "RIFF"…"WEBP"
+    if (bytes[12] === 0x56 && bytes[13] === 0x50 && bytes[14] === 0x38 && bytes[15] === 0x58) {
+      return { width: 1 + (bytes[24] | (bytes[25] << 8) | (bytes[26] << 16)), height: 1 + (bytes[27] | (bytes[28] << 8) | (bytes[29] << 16)) };
+    }
+    return { width: 0, height: 0 };
+  }
+  if (bytes.length > 4 && bytes[0] === 0xff && bytes[1] === 0xd8) {
+    let i = 2;
+    while (i + 9 < bytes.length) {
+      if (bytes[i] !== 0xff) {
+        i += 1;
+        continue;
+      }
+      const marker = bytes[i + 1];
+      const size = be16(i + 2);
+      const isFrame = marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+      if (isFrame) return { width: be16(i + 7), height: be16(i + 5) };
+      if (size < 2) break;
+      i += 2 + size;
+    }
+  }
+  return { width: 0, height: 0 };
+}
+
+/** One part's body as its real bytes: base64, quoted-printable, or raw. Never a UTF-8 round trip. */
+function partBytes(body: string, encoding: string): Uint8Array {
+  const enc = encoding.trim().toLowerCase();
+  if (enc === "base64") {
+    try {
+      return bytesFromBinaryString(atob(body.replace(/\s+/g, "")));
+    } catch {
+      return bytesFromBinaryString(body);
+    }
+  }
+  if (enc === "quoted-printable") return decodeQuotedPrintable(body);
+  return bytesFromBinaryString(body);
+}
+
+/**
+ * Every picture and image map inside a Chrome single-file page (§3.1). Never throws: a file it cannot read comes
+ * back empty, and the upload simply queues no pictures.
+ */
+export function readSingleFileImages(bytes: Uint8Array, fileName = "page.mhtml"): SavedPageImages {
+  const empty: SavedPageImages = { images: [], maps: {} };
+  try {
+    if (fileKindInfo(bytes, fileName) !== "mhtml") return empty;
+    const raw = latin1String(bytes);
+    const decoded: Array<{ contentType: string; contentId: string; contentLocation: string; bytes: Uint8Array }> = [];
+    for (const text of mimePartTexts(raw)) {
+      const { head, body } = splitHeadBody(text);
+      if (!head.trim()) continue;
+      const headers = parseHeaders(head);
+      const contentType = (headers.get("content-type") ?? "").toLowerCase();
+      if (!contentType) continue;
+      decoded.push({
+        contentType,
+        contentId: headers.get("content-id") ?? "",
+        contentLocation: headers.get("content-location") ?? "",
+        bytes: partBytes(body, headers.get("content-transfer-encoding") ?? ""),
+      });
+    }
+    const htmlPart = decoded.find((p) => p.contentType.startsWith("text/html"));
+    if (!htmlPart) return empty;
+    const html = textWithCharset(htmlPart.bytes, charsetOf(htmlPart.contentType));
+
+    // <img> tags: which image part each one points at, and the map it is wired to.
+    const imgParts = new Map<string, { usemap: string | null; width: number; height: number; src: string }>();
+    for (const tag of html.match(/<img\b[^>]*>/gi) ?? []) {
+      const src = attribute(tag, "src");
+      if (!src) continue;
+      const part = /^cid:/i.test(src)
+        ? decoded.find((p) => contentIdMatches(p.contentId, src))
+        : decoded.find((p) => locationMatches(p.contentLocation, src));
+      if (!part) continue;
+      const usemap = attribute(tag, "usemap");
+      imgParts.set(part.contentLocation || part.contentId, {
+        usemap: usemap ? usemap.replace(/^#/, "") : null,
+        width: Number(attribute(tag, "width") ?? 0) || 0,
+        height: Number(attribute(tag, "height") ?? 0) || 0,
+        src,
+      });
+    }
+
+    const maps: Record<string, SavedPageMapArea[]> = {};
+    for (const mapTag of html.match(/<map\b[^>]*>[\s\S]*?<\/map>/gi) ?? []) {
+      const name = attribute(mapTag.match(/<map\b[^>]*>/i)?.[0] ?? "", "name");
+      if (!name) continue;
+      for (const areaTag of mapTag.match(/<area\b[^>]*>/gi) ?? []) {
+        const coords = (attribute(areaTag, "coords") ?? "").split(",").map((v) => Number(v.trim()));
+        const box = coords.length >= 4 && coords.slice(0, 4).every((n) => Number.isFinite(n))
+          ? { x1: coords[0], y1: coords[1], x2: coords[2], y2: coords[3] }
+          : null;
+        (maps[name] ??= []).push({
+          title: decodeEntities(attribute(areaTag, "title") ?? ""),
+          attrs: areaTag,
+          box,
+        });
+      }
+    }
+
+    const images: SavedPageImage[] = [];
+    for (const part of decoded) {
+      const contentType = part.contentType.split(";")[0].trim();
+      if (!imageExtension(contentType)) continue;
+      const src = part.contentLocation || part.contentId;
+      if (!src) continue;
+      const wired = imgParts.get(part.contentLocation || part.contentId);
+      const size = imageSize(part.bytes);
+      images.push({
+        contentType,
+        bytes: part.bytes,
+        width: size.width || wired?.width || 0,
+        height: size.height || wired?.height || 0,
+        usemap: wired?.usemap ?? null,
+        source: src,
+      });
+    }
+    return { images, maps };
+  } catch (err) {
+    console.error("single-file pictures unreadable", err);
+    return empty;
+  }
+}
+
+function areaNamesPart(area: SavedPageMapArea, wantedTitle: string, label: string | null): boolean {
+  const areaTitle = normalizedName(area.title);
+  if (wantedTitle && areaTitle) {
+    if (areaTitle === wantedTitle) return true;
+    if (wantedTitle.length >= 8 && (areaTitle.includes(wantedTitle) || wantedTitle.includes(areaTitle))) return true;
+  }
+  if (label) {
+    const pattern = new RegExp(`(^|[^A-Z0-9])${label.replace(/[^A-Z0-9]/gi, "")}([^A-Z0-9]|$)`, "i");
+    if (pattern.test(area.attrs)) return true;
+  }
+  return false;
+}
+
+/**
+ * The drawing(s) for one part (§3.1): the image whose map names this part first, otherwise the largest images at
+ * least 300 px each way. At most 3. No site names anywhere in the rule.
+ */
+export function diagramsForPart(
+  set: SavedPageImages,
+  part: { label?: string | null; groupLine?: string | null; partName?: string | null },
+): PartDiagram[] {
+  const wantedTitle = normalizedName(partAreaTitleFromGroupLine(part.groupLine) ?? part.partName ?? "");
+  const label = String(part.label ?? "").trim().toUpperCase() || null;
+  // One picture per image, even when several of its areas name the part: the same PNG is never sent twice.
+  const foundByImage = new Map<string, PartDiagram>();
+  for (const image of set.images) {
+    if (!image.usemap) continue;
+    for (const area of set.maps[image.usemap] ?? []) {
+      if (!areaNamesPart(area, wantedTitle, label)) continue;
+      if (foundByImage.has(image.source)) continue;
+      foundByImage.set(image.source, { image, mapBox: area.box });
+    }
+  }
+  if (foundByImage.size) return [...foundByImage.values()].slice(0, 3);
+  return set.images
+    .filter((i) => i.width >= 300 && i.height >= 300)
+    .sort((a, b) => b.width * b.height - a.width * a.height)
+    .slice(0, 3)
+    .map((image) => ({ image, mapBox: null }));
+}
+

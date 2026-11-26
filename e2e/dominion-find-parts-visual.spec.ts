@@ -152,12 +152,17 @@ test("parts database keeps the tab in the address bar", async ({ page }) => {
   });
   await page.goto("/?page=parts-catalog&tab=import");
   await expect(page.getByRole("navigation", { name: "Database sections" }).getByRole("button", { name: /Add parts/ })).toHaveAttribute("aria-current", "page");
-  await expect(page.getByText("Match types off")).toBeVisible();
+  // Add parts (Stitch port 83fad398) has no match-types label and no Advanced tune button; Full database has the button,
+  // and the Advanced tune view shows the label.
+  await expect(page.getByText("Match types off")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Advanced tune" })).toHaveCount(0);
+  await page.goto("/?page=parts-catalog&tab=database");
   await page.getByRole("button", { name: "Advanced tune" }).click();
   await expect(page).toHaveURL(/tab=advanced/);
-  await expect(page.getByRole("button", { name: "Advanced tune" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Advanced tune" }).first()).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText("Match types off")).toBeVisible();
   await page.goBack();
-  await expect(page).toHaveURL(/tab=import/);
+  await expect(page).toHaveURL(/tab=database/);
   await page.goto("/?page=parts-catalog&tab=vehicle");
   await expect(page).toHaveURL(/tab=database/);
   await expect(page.getByRole("navigation", { name: "Database sections" }).getByRole("button", { name: "Full database" })).toHaveAttribute("aria-current", "page");

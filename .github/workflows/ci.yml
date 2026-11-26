@@ -353,7 +353,7 @@ jobs:
 
       - name: Deno test find parts
         run: >
-          deno test --no-check
+          deno test --no-check --allow-env
           supabase/functions/_fleet-server/parts_finder.test.ts
           supabase/functions/_fleet-server/parts_catalog_read.test.ts
           supabase/functions/_fleet-server/vehicleVariantLabel.test.ts

@@ -35,6 +35,7 @@ import {
   partIcon,
 } from "./stitchKit";
 import { CablePathDiagram, GenericPartGlyph, ShockIllustration } from "./stitchDrawings";
+import { PartPictureTile, type FleetPartPicture } from "./PartPictureTile";
 import {
   EVERYDAY_CAPTURE_PLATE,
   EVERYDAY_CAPTURE_VARIANT_ID,
@@ -221,6 +222,8 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
     brandNumbers?: Array<{ brand: string; number: string; trust: string }>;
     alsoFits?: Array<Record<string, unknown>>;
     sources?: Array<{ label: string; url: string }>;
+    /** F1: the answer's AI picture, ready only (§3.6). */
+    picture?: FleetPartPicture;
   } | undefined;
 
   const requestItems = (activity?.requests?.items || []) as Array<Record<string, unknown>>;
@@ -1008,6 +1011,8 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
       const cards = (findQ.data as { sections?: Array<{ items?: Array<Record<string, unknown>> }> })?.sections?.[0]?.items || [];
       const partOf = (item: Record<string, unknown>) =>
         (item.part || {}) as { name?: string; oem_part_number?: string; catalog_decision?: string };
+      /** F1: each card's own ready picture (§3.6), or the drawing. */
+      const pictureOf = (item: Record<string, unknown> | undefined) => (item?.picture ?? null) as FleetPartPicture;
       const numberBox = (num: string, partName?: string, compact?: boolean) => (
         <div className={`${TILE} flex flex-wrap items-center justify-between gap-3 p-4`}>
           <div className="flex flex-col gap-1">
@@ -1033,6 +1038,13 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
                 const right = side === "right";
                 return (
                   <div key={String(item.groupId)} className={`${CARD} flex flex-col gap-5 p-6`}>
+                    <PartPictureTile
+                      picture={pictureOf(item)}
+                      fallback={<GenericPartGlyph icon="album" />}
+                      partName={part.name || (right ? "Right front caliper" : "Left front caliper")}
+                      partNumber={String(part.oem_part_number || "")}
+                      square
+                    />
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-4">
                         <div className={`${TILE} flex h-20 w-16 items-center justify-center p-1.5`}>
@@ -1066,8 +1078,14 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
                 const part = partOf(item);
                 return (
                   <div key={String(item.groupId)} className={`${CARD} flex flex-col gap-4 p-6`}>
-                    <div className="flex items-start justify-between gap-2">
-                      <IconBox name="cable" size="sm" />
+                    <PartPictureTile
+                      picture={pictureOf(item)}
+                      fallback={<GenericPartGlyph icon="cable" />}
+                      partName={part.name || "Handbrake cable"}
+                      partNumber={String(part.oem_part_number || "")}
+                      square
+                    />
+                    <div className="flex items-start justify-end gap-2">
                       <TrustBadge trust={mapTrustLabel(part.catalog_decision === "confirmed" ? "Confirmed" : "Needs checking")} />
                     </div>
                     <p className={`text-[18px] font-semibold ${TXT}`}>{part.name}</p>
@@ -1086,8 +1104,17 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
       return (
         <div className="flex flex-col gap-5">
           {current ? (
-            <div className={`${CARD} grid grid-cols-1 items-center gap-6 p-6 sm:p-8 lg:grid-cols-12`}>
-              <div className="flex flex-col gap-3 lg:col-span-7">
+            <div className={`${CARD} grid grid-cols-1 items-start gap-6 p-6 sm:p-8 lg:grid-cols-12`}>
+              <div className="lg:col-span-4">
+                <PartPictureTile
+                  picture={pictureOf(cards[0])}
+                  fallback={<GenericPartGlyph icon="donut_large" />}
+                  partName={current.name || "Rear brake shoes"}
+                  partNumber={String(current.oem_part_number || "")}
+                  square
+                />
+              </div>
+              <div className="flex flex-col gap-3 lg:col-span-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <TrustBadge trust={mapTrustLabel(current.catalog_decision === "confirmed" ? "Confirmed" : "Needs checking")} />
                   <span className={`text-sm ${MUTED}`}>· Set of 4 shoes (both rear wheels)</span>
@@ -1101,7 +1128,7 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
                   <p className={`text-[15px] font-semibold ${TXT}`}>Both rear wheels</p>
                 </div>
               </div>
-              <div className="lg:col-span-5">
+              <div className="lg:col-span-4">
                 <div className={`${TILE} flex flex-col gap-3 p-5`}>
                   <span className={`text-[12px] font-semibold uppercase tracking-wider ${MUTED}`}>Your part info</span>
                   <span className={`${MONO} text-[24px] ${TXT}`}>{String(current.oem_part_number || "")}</span>
@@ -1114,7 +1141,16 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
           ) : null}
           {older ? (
             <div className={`${CARD} flex flex-col justify-between gap-5 border border-[#fde68a] p-6 dark:border-[#78350f] md:flex-row md:items-center`}>
-              <div className="flex flex-col gap-2">
+              <div className="w-28 shrink-0">
+                <PartPictureTile
+                  picture={pictureOf(cards[1])}
+                  fallback={<GenericPartGlyph icon="donut_large" />}
+                  partName={older.name || "Rear brake shoes"}
+                  partNumber={String(older.oem_part_number || "")}
+                  square="small"
+                />
+              </div>
+              <div className="flex flex-1 flex-col gap-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <TrustBadge trust="check" />
                   <span className={`text-sm ${MUTED}`}>Older number</span>
@@ -1152,6 +1188,7 @@ export function EverydayFindPartsFlow({ cars, capture, onUseInService }: Props) 
         fits={fits}
         defaultAltsOpen={otherNumbersOpen || Boolean(capture)}
         partInfo={yourPartInfo(ref?.name || "Front brake pads")}
+        picture={lookup?.picture ?? null}
         onCopy={(text, brand) =>
           void copy(
             storeText(ref?.name || "Front brake pads", text, brand || ref?.brand, lookupBrandNumbers()),
