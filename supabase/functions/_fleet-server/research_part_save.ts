@@ -1,9 +1,10 @@
 /**
  * SP-01 (docs/saved-page-parts-audit.md §4 R8): the one save path for a browser check's answers.
  *
- * The step-by-step check (research_engine_routes.ts) and the saved-page route both call savePartAnswers, so a number is
- * proved, proposed, promoted and listed in exactly one place. Saved pages add their own row reference (savedPageId) to
- * the evidence read; nothing else differs.
+ * The step-by-step check (research_engine_routes.ts), the saved-page route and the auto-sort's Track it all call
+ * savePartAnswers, so a number is proved, proposed, promoted and listed in exactly one place. A saved page adds its
+ * own row reference (savedPageId) to the evidence read, and a save with no person behind it is marked as Roam's own
+ * (`roam_saved_page`), never as somebody's browser check (S1c bug 1).
  */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { autoResolveFromBatch } from "./catalog_request_autoresolve.ts";
@@ -45,6 +46,28 @@ export type SaveResult = {
   /** What was saved before the failing number, as before. */
   saved: Array<{ number: string; places: string[]; result: unknown }>;
 };
+
+/**
+ * Who a page read belongs to, and the one rule the database enforces on it (`research_page_read`):
+ *  - 'owner_browser': a person checked the page in their browser — checked_by is their login, required.
+ *  - 'roam_saved_page': Roam saved from a page the owner had already uploaded — checked_by is NULL, because Roam is
+ *    not a user (migration 20261126201702, S1c bug 1).
+ *  - 'direct': the robot fetched the page itself — checked_by is NULL.
+ */
+export type ResearchReadPath = "direct" | "owner_browser" | "roam_saved_page";
+
+export const ROAM_FROM_SAVED_PAGE: ResearchReadPath = "roam_saved_page";
+
+/**
+ * S1c bug 1: the honest identity of this save. A person's save names them (`owner_browser`). A save with no person
+ * is Roam's, and only a saved page can honestly carry one; without a saved page there is no identity to write, so
+ * the save is refused rather than claimed as somebody's browser check.
+ */
+function readPathFor(actor: string | null, savedPageId: string | null): ResearchReadPath | null {
+  if (actor) return "owner_browser";
+  if (savedPageId) return ROAM_FROM_SAVED_PAGE;
+  return null;
+}
 
 export async function sha256(text: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -98,16 +121,21 @@ export async function savePartAnswers(
   const detected = answers.detected;
   const positionItems = answers.items ?? null;
 
+  const readPath = readPathFor(actor, savedPageId);
+  if (!readPath) {
+    return { ok: false, error: "A person has to check this page before Roam can save it", saved: [] };
+  }
+
   const { data: read, error: readErr } = await supabase.from("research_page_read").insert({
     job_id: jobId,
     purpose: "job",
-    path: "owner_browser",
+    path: readPath,
     domain: host,
     url,
     final_url: url,
     block_text: evidence,
     block_hash: await sha256(evidence),
-    checked_by: actor,
+    checked_by: readPath === "owner_browser" ? actor : null,
     saved_page_id: savedPageId,
   }).select("id").single();
   if (readErr) return { ok: false, error: readErr.message, saved: [] };

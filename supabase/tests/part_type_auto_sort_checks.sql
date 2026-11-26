@@ -1,7 +1,8 @@
--- Roam sorts unknown parts by itself — database checks (docs/part-type-auto-sort-audit.md Rev 3, §4 D1).
+-- Roam sorts unknown parts by itself — database checks (docs/part-type-auto-sort-audit.md Rev 4, §4 D1 and AS-29).
 -- One transaction, rolled back. Safe on the local copy and in CI's migration replay; nothing is kept.
--- Fixtures use made-up values only: the phrase "EXAMPLE PART, NO.1", a made-up part type ("Example check part")
--- and a made-up synonym word. Never a real part number, a car frame number, a user name or a path from this PC.
+-- Fixtures use made-up values only: the phrase "EXAMPLE PART, NO.1", a made-up part type ("Example check part"),
+-- a made-up synonym word and made-up URLs under example.test. Never a real part number, a car frame number, a user
+-- name or a path from this PC.
 BEGIN;
 
 CREATE TEMP TABLE _part_type_auto_sort_checks (
@@ -491,6 +492,93 @@ SELECT 'every_part_group_has_catalogue_area', NOT EXISTS (
       SELECT 1 FROM public.part_category pc WHERE pc.area_id = g.id
     )
 );
+
+-- ---------------------------------------------------------------------------
+-- AS-29 (S1c bug 1): a page read names who read it — a person, or nobody (the robot, or Roam from a saved page)
+-- ---------------------------------------------------------------------------
+INSERT INTO _part_type_auto_sort_checks (check_name, ok)
+SELECT 'read_path_check_values', EXISTS (
+  SELECT 1
+  FROM pg_constraint c
+  JOIN pg_class t ON t.oid = c.conrelid
+  JOIN pg_namespace n ON n.oid = t.relnamespace
+  WHERE n.nspname = 'public' AND t.relname = 'research_page_read' AND c.contype = 'c'
+    AND pg_get_constraintdef(c.oid) LIKE '%roam_saved_page%'
+    AND pg_get_constraintdef(c.oid) LIKE '%owner_browser%'
+    AND pg_get_constraintdef(c.oid) LIKE '%direct%'
+);
+
+INSERT INTO _part_type_auto_sort_checks (check_name, ok)
+SELECT 'owner_browser_read_still_needs_its_checker', EXISTS (
+  SELECT 1
+  FROM pg_constraint c
+  JOIN pg_class t ON t.oid = c.conrelid
+  JOIN pg_namespace n ON n.oid = t.relnamespace
+  WHERE n.nspname = 'public' AND t.relname = 'research_page_read' AND c.contype = 'c'
+    AND pg_get_constraintdef(c.oid) LIKE '%owner_browser%'
+    AND pg_get_constraintdef(c.oid) LIKE '%checked_by IS NOT NULL%'
+    AND pg_get_constraintdef(c.oid) LIKE '%roam_saved_page%'
+    AND pg_get_constraintdef(c.oid) LIKE '%checked_by IS NULL%'
+);
+
+DO $$
+DECLARE
+  v_owner_ok boolean := false;
+  v_owner_refused boolean := false;
+  v_roam_ok boolean := false;
+  v_roam_refused boolean := false;
+  v_direct_ok boolean := false;
+BEGIN
+  -- A person's browser check names them: unchanged.
+  BEGIN
+    INSERT INTO public.research_page_read (purpose, path, url, checked_by)
+    VALUES ('job', 'owner_browser', 'https://example.test/read-one', '00000000-0000-4000-8000-000000000001');
+    v_owner_ok := true;
+  EXCEPTION WHEN others THEN
+    v_owner_ok := false;
+  END;
+
+  -- A browser check with no person behind it is still refused (the rule is never weakened).
+  BEGIN
+    INSERT INTO public.research_page_read (purpose, path, url, checked_by)
+    VALUES ('job', 'owner_browser', 'https://example.test/read-two', NULL);
+    v_owner_refused := false;
+  EXCEPTION WHEN check_violation THEN
+    v_owner_refused := true;
+  END;
+
+  -- Roam, from a saved page: a valid read that names no user (S1c bug 1's fix).
+  BEGIN
+    INSERT INTO public.research_page_read (purpose, path, url, checked_by)
+    VALUES ('job', 'roam_saved_page', 'https://example.test/read-three', NULL);
+    v_roam_ok := true;
+  EXCEPTION WHEN others THEN
+    v_roam_ok := false;
+  END;
+
+  -- Roam is not a user, so its read can never carry a person's login.
+  BEGIN
+    INSERT INTO public.research_page_read (purpose, path, url, checked_by)
+    VALUES ('job', 'roam_saved_page', 'https://example.test/read-four', '00000000-0000-4000-8000-000000000001');
+    v_roam_refused := false;
+  EXCEPTION WHEN check_violation THEN
+    v_roam_refused := true;
+  END;
+
+  -- The robot's own read names nobody either.
+  BEGIN
+    INSERT INTO public.research_page_read (purpose, path, url, checked_by)
+    VALUES ('job', 'direct', 'https://example.test/read-five', NULL);
+    v_direct_ok := true;
+  EXCEPTION WHEN others THEN
+    v_direct_ok := false;
+  END;
+
+  INSERT INTO _part_type_auto_sort_checks (check_name, ok)
+  VALUES ('roam_read_is_a_valid_read_with_no_user', v_owner_ok AND v_roam_ok AND v_direct_ok);
+  INSERT INTO _part_type_auto_sort_checks (check_name, ok)
+  VALUES ('a_read_without_its_person_is_refused', v_owner_refused AND v_roam_refused);
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- Result

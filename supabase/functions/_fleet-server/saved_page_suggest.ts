@@ -1,22 +1,20 @@
 /**
  * R2 (docs/part-type-learning-audit.md §3): turn the unknown, proved rows of one saved page into suggestions.
  *
- * One suggestion per catalogue group row. Existing types win, then fixings, then a new type; the plain name is the
- * page's own words with the head noun last ("INLET, AIR CLEANER, NO.1" → "Air cleaner inlet"); the part group comes
- * from the plan's 13-row table, first match wins; the position scheme comes from the places the page printed. At most
- * 20 suggestions, and any row beyond that is only counted.
+ * One suggestion per catalogue group row. A fixing first, then an existing type, then a new type; the plain name is
+ * the page's own words with the head noun last ("INLET, AIR CLEANER, NO.1" → "Air cleaner inlet"); the part group
+ * comes from the plan's 13-row table, first match wins; the position scheme comes from the places the page printed.
+ * At most 20 suggestions, and any row beyond that is only counted.
  *
  * Nothing here reads the database: the active part types, the part groups on file and the dismissed phrases are
  * passed in, so the rule is one pure function and the route stays the only place that talks to Postgres.
  */
 import type { PartType, ProvenRow } from "./saved_page_proof.ts";
 import {
-  headNoun,
   normalisePhrase,
   pagePhraseFromGroupLine,
   parseGroupPhrase,
   plainNameFromPhrase,
-  qualifierWords,
 } from "./saved_page_phrases.ts";
 
 export type SuggestionKind = "new" | "existing" | "fixings";
@@ -124,24 +122,92 @@ export function isFixingsName(name: string): boolean {
 }
 
 /**
- * R2.1 + R2.3: an active part type that already covers this part — the same head noun plus at least one shared
- * qualifying word. The best match (most shared words, then name) is used, so "Hose clamp" finds the Hose clamp type
- * and "Air cleaner hose" does not become a twin of "Radiator hose".
+ * Words that say how a name is written, not which part it is. The twin check drops them, so the live
+ * "DAMPER, MODE SERVO" does not become a twin of "Damper for airmix servo" on the shared word "for" alone (AS-31).
+ */
+const TWIN_STOP_WORDS = new Set([
+  "for",
+  "of",
+  "the",
+  "and",
+  "with",
+  "to",
+  "from",
+  "by",
+  "no",
+  "nos",
+  "number",
+  "assy",
+  "sub",
+  "set",
+  "sa",
+]);
+
+/** The words the twin check compares: lower case, a trailing "NO.n" gone, filler and one-letter words dropped. */
+function twinWords(name: string | null | undefined): string[] {
+  return String(name ?? "")
+    .replace(/\bno\.?\s*\d+\s*$/i, " ")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length >= 2 && !TWIN_STOP_WORDS.has(word));
+}
+
+function headOfWords(words: ReadonlyArray<string>): string {
+  return words[words.length - 1] ?? "";
+}
+
+/**
+ * R2.1 + R2.3, tightened (AS-31): two names are the same part only when they end on the same head noun **and** every
+ * meaningful word of the shorter name, beyond the head noun, appears in the longer one. So "HOSE, DRAIN COOLER" is
+ * "Drain cooler hose", while "DAMPER, MODE SERVO" is not "Damper for airmix servo" (only "for" would have matched).
+ * A name with nothing beyond its head noun is only the same part as itself, so "Filter" never becomes "Cabin filter".
+ */
+export function samePartName(a: string | null | undefined, b: string | null | undefined): boolean {
+  const wordsA = twinWords(a);
+  const wordsB = twinWords(b);
+  if (!wordsA.length || !wordsB.length) return false;
+  if (headOfWords(wordsA) !== headOfWords(wordsB)) return false;
+  const [shorter, longer] = wordsA.length <= wordsB.length ? [wordsA, wordsB] : [wordsB, wordsA];
+  const rest = shorter.slice(0, -1);
+  if (!rest.length) return shorter.join(" ") === longer.join(" ");
+  const inLonger = new Set(longer);
+  return rest.every((word) => inLonger.has(word));
+}
+
+/**
+ * R2.1 + R2.3: an active part type that already covers this part, by the twin rule above. The most specific type
+ * (the most meaningful words, then the name) is used, so "Air cleaner hose" beats a bare "Hose".
  */
 export function existingTypeFor(baseName: string, types: ReadonlyArray<PartType>): PartType | null {
-  const head = headNoun(baseName);
+  const head = headOfWords(twinWords(baseName));
   if (!head) return null;
-  const wanted = new Set(qualifierWords(baseName));
-  let best: { type: PartType; shared: number } | null = null;
+  let best: { type: PartType; words: number } | null = null;
   for (const type of types) {
-    if (headNoun(type.name) !== head) continue;
-    const shared = qualifierWords(type.name).filter((word) => wanted.has(word)).length;
-    if (shared < 1) continue;
-    if (!best || shared > best.shared || (shared === best.shared && type.name.localeCompare(best.type.name) < 0)) {
-      best = { type, shared };
+    if (headOfWords(twinWords(type.name)) !== head) continue;
+    if (!samePartName(baseName, type.name)) continue;
+    const words = twinWords(type.name).length;
+    if (!best || words > best.words || (words === best.words && type.name.localeCompare(best.type.name) < 0)) {
+      best = { type, words };
     }
   }
   return best?.type ?? null;
+}
+
+/**
+ * §2 step 3 (AS-30): the part type Roam already has for this name — the page phrase first, then the plain name.
+ *
+ * A fixing never matches an existing type: the catalogue writes the thing first and the hardware word after it
+ * (`BOLT(FOR COOLER EXPANSION VALVE)`), so the fixing check is ahead of this on every path (the sorter, the Add
+ * button and the review list's Track it all come through here or through the sorter's own step 2).
+ */
+export function typeRoamAlreadyHas(
+  phrase: string,
+  name: string,
+  types: ReadonlyArray<PartType>,
+): PartType | null {
+  if (isFixingsName(phrase) || isFixingsName(name)) return null;
+  const parsed = parseGroupPhrase(phrase);
+  return (parsed ? existingTypeFor(parsed.baseName, types) : null) ?? existingTypeFor(name, types);
 }
 
 /** R2.6: no front/rear words → none; front/rear → axle; front/rear and left/right → axle_left_right. */
@@ -213,7 +279,9 @@ export function buildSuggestions(input: {
     if (!suggested) continue;
 
     const existing = existingTypeFor(parsed.baseName, input.types);
-    const kind: SuggestionKind = existing ? "existing" : isFixingsName(parsed.baseName) ? "fixings" : "new";
+    // AS-30: the fixing check is ahead of "Roam already has the type" on every path, so a hardware row is never
+    // shown (or saved) as the part its words happen to name: `GROMMET (FOR DRAIN HOSE)` is not a drain hose.
+    const kind: SuggestionKind = isFixingsName(parsed.baseName) ? "fixings" : existing ? "existing" : "new";
     const groupName = suggestedGroupName(suggested);
     const numbers: string[] = [];
     for (const row of bucket.rows) {
@@ -224,11 +292,12 @@ export function buildSuggestions(input: {
     const suggestion: Suggestion = {
       key: bucket.key,
       // The card offers "Save under <name>" for an existing type, so the name shown is that type's own (R2.1 / S1).
-      name: existing ? existing.name : suggested,
+      // A fixing keeps the page's own words: it is never offered as the part its words happen to name.
+      name: kind === "existing" && existing ? existing.name : suggested,
       groupId: groupByName.get(groupName) ?? null,
       groupName,
       kind,
-      existingTypeId: existing?.id ?? null,
+      existingTypeId: kind === "existing" ? existing?.id ?? null : null,
       positionScheme: positionSchemeOf(bucket.rows),
       pagePhrase: bucket.phrase,
       numbers,

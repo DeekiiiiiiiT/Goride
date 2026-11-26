@@ -11,6 +11,7 @@ import {
   isFixingsName,
   positionSchemeOf,
   suggestedGroupName,
+  typeRoamAlreadyHas,
 } from "./saved_page_suggest.ts";
 import { headNoun, normalisePhrase, plainNameFromPhrase } from "./saved_page_phrases.ts";
 
@@ -95,7 +96,7 @@ Deno.test("R2.2: rows sharing a group row are one suggestion; numbers stay in pa
   assertEquals(build.suggestions[0].numberCount, 2);
 });
 
-Deno.test("R2.1 + R2.3: an existing type wins — same head noun and a shared word", () => {
+Deno.test("R2.1 + R2.3: an existing type wins — same head noun and every meaningful word of the shorter name", () => {
   assertEquals(existingTypeFor("air cleaner hose", TYPES)?.id, "t-hose");
   assertEquals(existingTypeFor("hose clamp", TYPES)?.id, "t-clamp");
   // A different qualifier is a new type, not a twin (PT-04).
@@ -107,6 +108,23 @@ Deno.test("R2.1 + R2.3: an existing type wins — same head noun and a shared wo
   assertEquals(build.suggestions[0].existingTypeId, "t-hose");
   // The card offers the existing type's own name.
   assertEquals(build.suggestions[0].name, "Air cleaner hose");
+});
+
+Deno.test("R2.3: 'DAMPER, MODE SERVO' is not 'Damper for airmix servo', either way round (S1c bug 3)", () => {
+  // The live pair, with the catalogue's own wording. Two names are one part only when the shorter name's
+  // meaningful words (beyond the head noun) are all in the longer one — "for" alone is never a match.
+  const AIRMIX = [{ id: "t-airmix", name: "Damper for airmix servo", scheme: "none" }];
+  const MODE = [{ id: "t-mode", name: "Damper for mode servo", scheme: "none" }];
+  assertEquals(existingTypeFor("damper for mode servo", AIRMIX), null);
+  assertEquals(existingTypeFor("damper for airmix servo", MODE), null);
+  // The same part, written in another order or with fewer words, still matches both ways.
+  assertEquals(existingTypeFor("damper for airmix servo", AIRMIX)?.id, "t-airmix");
+  assertEquals(existingTypeFor("airmix damper servo", AIRMIX)?.id, "t-airmix");
+  assertEquals(existingTypeFor("damper for mode servo", MODE)?.id, "t-mode");
+  assertEquals(existingTypeFor("mode damper servo", MODE)?.id, "t-mode");
+  // A bare word is not every longer name's twin.
+  assertEquals(existingTypeFor("filter", [{ id: "t-cabin", name: "Cabin filter", scheme: "none" }]), null);
+  assertEquals(existingTypeFor("filter", [{ id: "t-cabin", name: "Filter", scheme: "none" }])?.id, "t-cabin");
 });
 
 Deno.test("R2.1: a name whose head noun is hardware is a fixing, never a suggestion card", () => {
@@ -121,6 +139,28 @@ Deno.test("R2.1: a name whose head noun is hardware is a fixing, never a suggest
   assertEquals(build.suggestions.length, 1);
   assertEquals(build.suggestions[0].kind, "fixings");
   assertEquals(build.suggestions[0].name, "Hose clip");
+});
+
+Deno.test("R2.1: a fixing never resolves to the part its words happen to name (S1c bug 2)", () => {
+  // The live shapes, with made-up words: the fixing word is the catalogue's first segment, the part word second.
+  const types: PartType[] = [
+    { id: "t-hose", name: "Example hose", scheme: "none" },
+    { id: "t-valve", name: "Example valve", scheme: "none" },
+  ];
+  assertEquals(typeRoamAlreadyHas("BOLT(FOR EXAMPLE VALVE)", "Bolt for example valve", types), null);
+  assertEquals(typeRoamAlreadyHas("GROMMET (FOR EXAMPLE HOSE)", "Grommet for example hose", types), null);
+  // The same part written as a part is still found, so the fixing check is not a blanket stop.
+  assertEquals(typeRoamAlreadyHas("HOSE, EXAMPLE", "Example hose", types)?.id, "t-hose");
+  // And the suggestion the page makes for a fixing is a fixing line even though the words match a type on file.
+  const build = buildSuggestions({
+    rows: [row(2, "17882 - GROMMET (FOR EXAMPLE HOSE)", "99999-Z0304")],
+    types,
+    groups: GROUPS,
+  });
+  assertEquals(
+    [build.suggestions[0].kind, build.suggestions[0].name, build.suggestions[0].existingTypeId],
+    ["fixings", "Grommet for example hose", null],
+  );
 });
 
 Deno.test("R2.5: the group table is tried in the plan's order, first match wins", () => {
