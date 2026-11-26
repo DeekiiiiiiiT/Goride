@@ -107,6 +107,20 @@ export async function rememberCarSiteVersion(
  * Spans (spec) save like the confirm route always did; part numbers save one entry per number with every place it was
  * confirmed for (RE-69).
  */
+/**
+ * A save changes what is Confirmed for a car, so the car's parts readiness (Coverage cards, Fleet "parts ready") must be
+ * recalculated. This only marks it out of date; the 10-minute parts-readiness-catch-up job rebuilds it. The other save
+ * paths already call it; promote_part_proposal did not, so a browser-check or saved-page save left a Coverage card on
+ * "Not started" (Roomy cabin filter, 26 Nov). Best effort: a failed mark never fails the save.
+ */
+async function markReadinessOutOfDate(supabase: SupabaseClient): Promise<void> {
+  try {
+    await supabase.rpc("refresh_variant_parts_readiness");
+  } catch {
+    // The nightly rebuild catches it up.
+  }
+}
+
 export async function savePartAnswers(
   supabase: SupabaseClient,
   jobId: string,
@@ -159,6 +173,7 @@ export async function savePartAnswers(
     });
     if (pErr) return { ok: false, error: pErr.message, saved: [] };
     await supabase.rpc("catalog_research_expire_browser_checks");
+    await markReadinessOutOfDate(supabase);
     return { ok: true, jobType: "spec", result: data, results: [], detected };
   }
 
@@ -269,5 +284,6 @@ export async function savePartAnswers(
       .eq("id", row.id).eq("status", "open");
   }
   await supabase.rpc("catalog_research_expire_browser_checks");
+  if (results.length) await markReadinessOutOfDate(supabase);
   return { ok: true, jobType: "part", result: results[results.length - 1]?.result ?? null, results, detected };
 }
