@@ -1371,6 +1371,51 @@ Deno.test("§3.2 an already-on-file row is queued too (PP-08)", async () => {
   assertEquals(db.table("part_picture").length, 4);
 });
 
+Deno.test("§3.2 one part on two rows is queued once and the rows after it still get pictures", async () => {
+  const db = new FakeDb();
+  // 11111-B1002 is the same physical part as 11111-A1001 (one interchange group), like one number on two periods.
+  db.table("part_master").find((m) => m.oem_part_number === "11111-B1002")!.interchange_group_id = "group-11111-A1001";
+  // part_picture has one row per interchange group, as on production.
+  const pictures = db.table("part_picture");
+  const push = pictures.push.bind(pictures);
+  pictures.push = (...rows: Row[]) => {
+    for (const r of rows) {
+      if (pictures.some((p) => p.interchange_group_id === r.interchange_group_id)) {
+        throw { code: "23505", message: 'duplicate key value violates unique constraint "part_picture_interchange_group_id_key"' };
+      }
+    }
+    return push(...rows);
+  };
+  const out = await run(db, diagramPage(), { pictures: pictureDeps(fakeDiagramStore()) });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  const result = out.row.result.pictures!;
+  assertEquals(result.failed, false);
+  assertEquals(result.queued, 3);
+  assertEquals(result.rows.length, 4);
+  assert(result.rows.every((r) => r.status === "queued"), JSON.stringify(result.rows));
+  assertEquals(db.table("part_picture").length, 3);
+});
+
+Deno.test("a page whose numbers are all already on file opens no browser check", async () => {
+  const db = new FakeDb();
+  for (const [number, side] of [["11111-A1001", "right"], ["11111-B1002", "right"], ["22222-A1001", "left"], ["22222-B1002", "left"]]) {
+    db.seedListing({ number, position: "front", side, year_from: 2016, year_to: 2020 });
+  }
+  let jobCalls = 0;
+  const original = db.rpc.bind(db);
+  db.rpc = ((name: string, args: Record<string, unknown>) => {
+    if (name === "research_saved_page_job") jobCalls += 1;
+    return original(name, args);
+  }) as typeof db.rpc;
+  const out = await run(db, diagramPage());
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  assertEquals(out.row.result.counts.already, 4);
+  assertEquals(jobCalls, 0);
+  assert(out.row.result.rows.every((r) => r.group !== "already" || r.jobId === null), JSON.stringify(out.row.result.rows));
+});
+
 Deno.test("§3.2 template off queues nothing, an existing picture is already-have, a .html page has no diagram", async () => {
   // 1. The group's template is off (Fluids / tyres): nothing queued, nothing counted.
   let db = new FakeDb();

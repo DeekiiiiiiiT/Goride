@@ -176,9 +176,17 @@ export async function queuePartPictures(
       ).map((row) => row.picture_id),
     );
 
+    // One part can appear on several rows of a page (the same number for two periods). It is queued once; its other
+    // rows answer the same, and never insert a second picture for the group (that broke the whole upload's queue).
+    const queuedThisRun = new Set<string>();
+
     for (const row of args.rows) {
       const master = masterByNumber.get(norm(row.number));
       const groupId = master?.interchange_group_id ? String(master.interchange_group_id) : "";
+      if (groupId && queuedThisRun.has(groupId)) {
+        result.rows.push({ number: row.number, status: "queued" });
+        continue;
+      }
       if (!master || !groupId) {
         result.noDiagram++;
         result.rows.push({ number: row.number, status: "noDiagram" });
@@ -292,6 +300,7 @@ export async function queuePartPictures(
       }
 
       result.queued++;
+      queuedThisRun.add(groupId);
       result.rows.push({ number: row.number, status: "queued" });
     }
 
