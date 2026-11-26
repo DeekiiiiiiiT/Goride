@@ -984,3 +984,25 @@ Deno.test("SP-48: a row line with two date ranges is held, never the first one",
   );
   assertEquals(db.table("part_listing").length, 0);
 });
+Deno.test("SP-50: once the page's numbers save, the robot's other guesses on that job are set aside, never deleted", async () => {
+  const db = new FakeDb();
+  const job = db.seedJob({ state: "browser_check" });
+  db.table("catalog_part_proposal").push(
+    { id: "guess-1", job_id: job.id, brand: "Kyb", part_number: "WST5700L", part_number_norm: "WST5700L", position_key: "front", status: "open" },
+    { id: "guess-2", job_id: job.id, brand: "Testmake", part_number: "11111-Z9999", part_number_norm: "11111Z9999", position_key: "front", status: "open" },
+    { id: "other-job", job_id: "job-elsewhere", brand: "Kyb", part_number: "X1", part_number_norm: "X1", position_key: "front", status: "open" },
+  );
+  const out = await shockRun(db, pageHtml());
+  assertEquals(out.kind, "done");
+  if (out.kind === "done") assertEquals(out.row.result.counts.saved, 4);
+  const props = db.table("catalog_part_proposal");
+  for (const id of ["guess-1", "guess-2"]) {
+    const p = props.find((r) => r.id === id);
+    assertEquals(p?.status, "rejected");
+    assertEquals(p?.rejected_reason, "not on the catalogue page the owner checked");
+  }
+  assertEquals(props.find((r) => r.id === "other-job")?.status, "open");
+  const saved = props.filter((r) => r.job_id === job.id && r.trust_route === "owner_browser");
+  assertEquals(saved.length, 4);
+  assert(saved.every((r) => r.status !== "rejected"), JSON.stringify(saved.map((r) => r.status)));
+});

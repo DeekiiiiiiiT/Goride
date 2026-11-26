@@ -164,6 +164,7 @@ export async function savePartAnswers(
     });
   }
   const results: Array<{ number: string; places: string[]; result: unknown }> = [];
+  const savedIds = new Set<string>();
   const placeText = (g: Group) =>
     g.places.map((p) => [`${p.axle}${p.side ? ` ${p.side}` : ""}`.trim() || "this car", p.periodText ?? ""].filter(Boolean).join(" "));
   const partial = (g: Group, why: string): SaveResult => {
@@ -224,9 +225,20 @@ export async function savePartAnswers(
       p_actor: actor,
     });
     if (pErr) return partial(g, pErr.message);
+    savedIds.add((prop as { id: string }).id);
     results.push({ number: g.number, places: placeText(g), result: done });
     const batchId = (done as { batchId?: string } | null)?.batchId;
     if (batchId) await autoResolveFromBatch(supabase, batchId, actor);
+  }
+  // The owner checked the real page, so the robot's other guesses on this job are not the answer: set them aside
+  // (kept, with a reason) so they stop showing as "Needs checking" next to the saved numbers (26 Nov).
+  const { data: leftovers } = await supabase.from("catalog_part_proposal").select("id")
+    .eq("job_id", jobId).eq("status", "open");
+  for (const row of (leftovers ?? []) as Array<{ id: string }>) {
+    if (savedIds.has(row.id)) continue;
+    await supabase.from("catalog_part_proposal")
+      .update({ status: "rejected", rejected_reason: "not on the catalogue page the owner checked" })
+      .eq("id", row.id).eq("status", "open");
   }
   await supabase.rpc("catalog_research_expire_browser_checks");
   return { ok: true, jobType: "part", result: results[results.length - 1]?.result ?? null, results, detected };
