@@ -1,7 +1,7 @@
 /**
  * T8, T9, T10. deno test --no-check supabase/functions/_fleet-server/parts_catalog_read.test.ts
  */
-import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { registerCatalogRoutes } from "./catalog_routes.ts";
 import { rankTermResults, readPartTerm, shapeBrowse, tallyCoverage } from "./parts_catalog_read.ts";
@@ -53,6 +53,7 @@ Deno.test("coverage counts through the part, not a missing listing column", () =
 
 Deno.test("R9: Fleet's readPartTerm finds a type by the page's own words, through its synonym", async () => {
   const partsTermQueries: Array<{ table: string; column: string; value: string }> = [];
+  const eqFilters: Array<{ table: string; column: string; value: unknown }> = [];
   const data: Record<string, Array<Record<string, unknown>>> = {
     maintenance_service_categories: [{ id: "hose", name: "Air cleaner hose", plain_name: "Air cleaner hose" }],
     // D7 wrote exactly this row when the type was added from a page.
@@ -62,7 +63,11 @@ Deno.test("R9: Fleet's readPartTerm finds a type by the page's own words, throug
   function chain(table: string) {
     const builder: Record<string, any> = {};
     const self = () => builder;
-    for (const name of ["select", "eq", "in", "or", "order", "limit"]) builder[name] = self;
+    for (const name of ["select", "in", "or", "order", "limit"]) builder[name] = self;
+    builder.eq = (column: string, value: unknown) => {
+      eqFilters.push({ table, column, value });
+      return builder;
+    };
     builder.ilike = (column: string, value: string) => {
       partsTermQueries.push({ table, column, value });
       return builder;
@@ -78,6 +83,10 @@ Deno.test("R9: Fleet's readPartTerm finds a type by the page's own words, throug
   assertEquals([synonymQuery?.column, synonymQuery?.value], ["term", "%air cleaner hose%"]);
   assertEquals(result.synonyms[0]?.plainName, "Air cleaner hose");
   assertEquals([result.hits[0]?.kind, result.hits[0]?.id], ["synonym", "hose"]);
+  // G9: a draft type is not offered by Find parts search, by name or by synonym.
+  assert(eqFilters.some((filter) =>
+    filter.table === "maintenance_service_categories" && filter.column === "part_type_status" && filter.value === "active"
+  ));
 });
 
 Deno.test("a staff member cannot save a problem", async () => {

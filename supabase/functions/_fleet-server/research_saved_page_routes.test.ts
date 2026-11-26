@@ -10,6 +10,8 @@ import type { PartPictureQueueDeps } from "./part_pictures_queue.ts";
 import { pictureBlockers } from "./part_picture_reads.ts";
 import { mergePartPicturesSettings } from "./part_pictures_settings.ts";
 import { addSuggestedPartType, registerSavedPagePartTypeRoutes } from "./saved_page_part_type_routes.ts";
+import { registerSavedPagePartNamesRoutes } from "./saved_page_part_names_routes.ts";
+import type { SavedPageSortAi } from "./saved_page_sort_ai.ts";
 import { registerCatalogRoutes } from "./catalog_routes.ts";
 import { normalisePhrase } from "./saved_page_phrases.ts";
 
@@ -194,6 +196,18 @@ function fakeAi(db: FakeDb, specs: RowSpec[], mutate?: (rows: any[], call: numbe
 
 type Row = Record<string, any>;
 
+function jsonbContains(have: unknown, want: unknown): boolean {
+  if (Array.isArray(want)) {
+    return Array.isArray(have) && want.every((w) => have.some((h) => jsonbContains(h, w)));
+  }
+  if (want && typeof want === "object") {
+    if (!have || typeof have !== "object") return false;
+    return Object.entries(want as Record<string, unknown>)
+      .every(([k, v]) => jsonbContains((have as Record<string, unknown>)[k], v));
+  }
+  return have === want;
+}
+
 class Q {
   private filters: Array<[string, string, unknown]> = [];
   private orderBy?: [string, boolean];
@@ -246,6 +260,14 @@ class Q {
     this.filters.push(["in", col, vals]);
     return this;
   }
+  not(col: string, op: string, val: unknown) {
+    this.filters.push(["not", col, val]);
+    return this;
+  }
+  contains(col: string, val: unknown) {
+    this.filters.push(["contains", col, val]);
+    return this;
+  }
   order(col: string, opts?: { ascending?: boolean }) {
     this.orderBy = [col, opts?.ascending !== false];
     return this;
@@ -271,6 +293,8 @@ class Q {
       if (op === "is") return (row[col] ?? null) === val;
       if (op === "in") return Array.isArray(val) && (val as unknown[]).includes(row[col]);
       if (op === "gte") return String(row[col] ?? "") >= String(val ?? "");
+      if (op === "not") return (row[col] ?? null) !== val;
+      if (op === "contains") return jsonbContains(row[col], val);
       return true;
     });
   }
@@ -410,7 +434,78 @@ class FakeDb {
       const result = this.selfServePartType(args) as Row;
       return result.error ? { data: null, error: result.error } : { data: result, error: null };
     }
+    if (name === "part_name_answer_set") return { data: this.answerSet(args), error: null };
     return { data: null, error: null };
+  }
+  /** The D1 function, faked: seed words are adopted and never relabelled; skip clears a seed's key; owner wins. */
+  private answerSet(args: Record<string, unknown>) {
+    const key = String(args.p_phrase_key ?? "");
+    const phrase = String(args.p_phrase ?? "");
+    const verdict = String(args.p_verdict ?? "");
+    const typeId = args.p_type_id == null ? null : String(args.p_type_id);
+    const setBy = String(args.p_set_by ?? "");
+    const reason = args.p_reason == null ? null : String(args.p_reason);
+    const actor = args.p_actor == null ? null : String(args.p_actor);
+    const synonyms = this.table("part_term_synonym");
+    const dismissals = this.table("part_type_suggestion_dismissal");
+    if (setBy === "roam" && (
+      synonyms.some((s) => s.phrase_key === key && s.added_by === "owner") ||
+      dismissals.some((d) => d.phrase_key === key && d.set_by === "owner")
+    )) {
+      return { set: "owner_wins", phrase_key: key };
+    }
+    if (verdict === "track") {
+      const term = phrase.toLowerCase();
+      const byKey = synonyms.find((s) => s.phrase_key === key);
+      if (byKey) {
+        if (byKey.added_by !== "seed") byKey.added_by = setBy;
+        byKey.reason = reason;
+      } else {
+        const byTerm = synonyms.find((s) => s.term === term);
+        if (byTerm) {
+          if (byTerm.added_by !== "seed") byTerm.added_by = setBy;
+          byTerm.phrase_key = key;
+          byTerm.reason = reason;
+        } else {
+          const type = this.table("maintenance_service_categories").find((c) => c.id === typeId);
+          synonyms.push({
+            term,
+            canonical: String(type?.name ?? phrase),
+            maintenance_component_id: typeId,
+            phrase_key: key,
+            added_by: setBy,
+            added_at: new Date().toISOString(),
+            reason,
+          });
+        }
+      }
+      for (let i = dismissals.length - 1; i >= 0; i -= 1) {
+        if (dismissals[i].phrase_key === key) dismissals.splice(i, 1);
+      }
+    } else {
+      for (let i = synonyms.length - 1; i >= 0; i -= 1) {
+        const s = synonyms[i];
+        if (s.phrase_key !== key) continue;
+        if (s.added_by === "seed") {
+          s.phrase_key = null;
+          s.reason = null;
+        } else {
+          synonyms.splice(i, 1);
+        }
+      }
+      const existing = dismissals.find((d) => d.phrase_key === key);
+      const row = {
+        phrase_key: key,
+        phrase,
+        dismissed_by: setBy === "owner" ? actor : null,
+        note: reason,
+        set_by: setBy,
+        dismissed_at: new Date().toISOString(),
+      };
+      if (existing) Object.assign(existing, row);
+      else dismissals.push(row);
+    }
+    return { set: verdict, phrase_key: key };
   }
   private selfServePartType(args: Record<string, unknown>) {
     const input = (args.p_input ?? {}) as Row;
@@ -481,7 +576,7 @@ class FakeDb {
   }
 }
 
-function run(db: FakeDb, page: string, opts: { fileName?: string; url?: string; car?: string; again?: boolean; ai?: SavedPageAi; pictures?: PartPictureQueueDeps } = {}) {
+function run(db: FakeDb, page: string, opts: { fileName?: string; url?: string; car?: string; again?: boolean; ai?: SavedPageAi; pictures?: PartPictureQueueDeps; sortAi?: SavedPageSortAi } = {}) {
   const fileName = opts.fileName ?? (/mime-version/i.test(page) ? "page.mhtml" : "page.html");
   return runSavedPage(db as unknown as SupabaseClient, {
     bytes: enc(page),
@@ -495,6 +590,7 @@ function run(db: FakeDb, page: string, opts: { fileName?: string; url?: string; 
     ai: opts.ai ?? fakeAi(db, SHOCK_ROWS),
     now: () => new Date(db.now),
     ...(opts.pictures ? { pictures: opts.pictures } : {}),
+    ...(opts.sortAi ? { sortAi: opts.sortAi } : {}),
   });
 }
 
@@ -1535,7 +1631,7 @@ const HOSE_KEY = "HOSEAIRCLEANERNO1";
 const INLET_KEY = "INLETAIRCLEANERNO1";
 const CLIP_KEY = "CLIPHOSE";
 
-const learnRun = (db: FakeDb, opts: { again?: boolean } = {}) =>
+const learnRun = (db: FakeDb, opts: { again?: boolean; sortAi?: SavedPageSortAi } = {}) =>
   run(db, LEARN_HTML, { ...opts, ai: fakeAi(db, LEARN_ROWS) });
 
 function resultOfPage(db: FakeDb, id: string): Record<string, any> {
@@ -1718,9 +1814,9 @@ Deno.test("R5: Add creates the type through the shared function, saves the rows 
     ["air_cleaner_inlet", "AIR_CLEANER_INLET", BELTS_GROUP, "component", true, "active", "none", "replace"],
   );
 
-  // D7: the page's own words become the synonym.
+  // D7 + AS-22: the synonym is the words a person types (the plain name), with the page phrase as its key.
   const synonym = db.table("part_term_synonym").find((s) => s.maintenance_component_id === type.id);
-  assertEquals([synonym?.term, synonym?.canonical], ["inlet, air cleaner, no.1", "Air cleaner inlet"]);
+  assertEquals([synonym?.term, synonym?.canonical, synonym?.phrase_key], ["air cleaner inlet", "Air cleaner inlet", INLET_KEY]);
 
   // R5 step 7: the row is saved for this car with the page's own dates.
   const listing = db.table("part_listing").find((l) => l.part_interchange_group.part_master[0].oem_part_number === "99999-Z0302");
@@ -2066,9 +2162,9 @@ Deno.test("S1b fix 1: renaming the card to words the page never printed still sa
   const row = rowsOfPage(db, id).find((r) => r.number === "99999-Z0302")!;
   assertEquals([row.group, row.partType, row.reason], ["saved", "Breather tube", null]);
   assertEquals(suggestionOf(db, id, INLET_KEY)!.status, "added");
-  // The synonym still carries the page's own words, so Fleet finds the renamed type by them.
+  // AS-22: the synonym carries the words a person types, and the page phrase stays as its key, so Fleet finds it.
   const synonym = db.table("part_term_synonym").find((s) => s.maintenance_component_id === created[0].id);
-  assertEquals([synonym?.term, synonym?.canonical], ["inlet, air cleaner, no.1", "Breather tube"]);
+  assertEquals([synonym?.term, synonym?.canonical], ["breather tube", "Breather tube"]);
 });
 
 Deno.test("S1b fix 2: a row held because of the page still ends 'added' (Added, needs you)", async () => {
@@ -2180,4 +2276,95 @@ Deno.test("S1b fix 3: two presses at once make one type, and the second never un
   await addPartType(db, id, body);
   assertEquals([db.table("maintenance_service_categories").length, db.table("part_listing").length], [types, listings]);
   assertEquals(suggestionOf(db, id, INLET_KEY)!.status, "added");
+});
+
+Deno.test("R3: the upload sorts its names, saves them as Roam's answer, and patches the result", async () => {
+  const db = new FakeDb();
+  let calls = 0;
+  const sortAi: SavedPageSortAi = async ({ items }) => {
+    calls += 1;
+    return items.map((item) => ({
+      key: item.key,
+      verdict: item.key === INLET_KEY ? "track" : "skip",
+      group: "Belts & hoses",
+      positionScheme: "none",
+      reason: "Made up reason",
+    }));
+  };
+  const out = await learnRun(db, { sortAi });
+  if (out.kind !== "done") return;
+  assertEquals(calls, 1);
+
+  const id = out.row.id;
+  const synonym = db.table("part_term_synonym").find((s) => s.phrase_key === INLET_KEY);
+  assertEquals(
+    [synonym?.added_by, synonym?.term, synonym?.canonical],
+    ["roam", "air cleaner inlet", "Air cleaner inlet"],
+  );
+  assertEquals(suggestionOf(db, id, INLET_KEY)?.status, "added");
+  const row = rowsOfPage(db, id).find((r) => r.number === "99999-Z0302")!;
+  assertEquals([row.group, row.partType], ["saved", "Air cleaner inlet"]);
+  // The other names the AI skipped are remembered as Roam's "not tracked".
+  assert(db.table("part_type_suggestion_dismissal").some((d) => d.set_by === "roam"));
+});
+
+Deno.test("R3: an AI that is down leaves the names waiting and the page done", async () => {
+  const db = new FakeDb();
+  const sortAi: SavedPageSortAi = async () => {
+    throw new Error("down");
+  };
+  const out = await learnRun(db, { sortAi });
+  if (out.kind !== "done") return;
+  const id = out.row.id;
+  assertEquals(suggestionOf(db, id, INLET_KEY)?.status, "waiting");
+  const row = rowsOfPage(db, id).find((r) => r.number === "99999-Z0302")!;
+  assertEquals(row.group, "not_roam_type");
+  // The fixing is a real skip; the name the AI could not answer is not dismissed.
+  assertEquals(db.table("part_type_suggestion_dismissal").some((d) => d.phrase_key === INLET_KEY), false);
+  assertEquals(out.row.status, "done");
+});
+
+Deno.test("R4: Don't track is owner only, keeps p_actor, and patches the page", async () => {
+  const db = new FakeDb();
+  const out = await learnRun(db);
+  if (out.kind !== "done") return;
+  const { routes, app } = partTypeApp();
+  registerSavedPagePartNamesRoutes(app as never, db as unknown as SupabaseClient, { pictures: null });
+  const post = routes.find((r) => r.method === "POST" && r.path.endsWith("/part-names/:key/skip"))!;
+  assert(post, "part-names skip missing");
+
+  const denied = await post.handler(routeCtx({
+    param: { key: INLET_KEY },
+    owner: { id: ACTOR, resolvedRole: "platform_support" } as never,
+  })) as { status: number };
+  assertEquals(denied.status, 403);
+
+  const ok = await post.handler(routeCtx({ param: { key: INLET_KEY } })) as { status: number };
+  assertEquals(ok.status, 200);
+
+  const dismissal = db.table("part_type_suggestion_dismissal").find((d) => d.phrase_key === INLET_KEY)!;
+  assertEquals([dismissal.set_by, dismissal.dismissed_by], ["owner", ACTOR]);
+  const page = db.table("research_saved_page").find((r) => r.id === out.row.id)!;
+  const suggestion = (page.result.suggestions as Array<Record<string, any>>).find((s) => s.key === INLET_KEY);
+  assertEquals(suggestion.status, "skipped");
+});
+
+Deno.test("R4: Track it writes an owner answer and saves the kept rows", async () => {
+  const db = new FakeDb();
+  const out = await learnRun(db);
+  if (out.kind !== "done") return;
+  const { routes, app } = partTypeApp();
+  registerSavedPagePartNamesRoutes(app as never, db as unknown as SupabaseClient, { pictures: null });
+  const post = routes.find((r) => r.method === "POST" && r.path.endsWith("/part-names/:key/track"))!;
+  assert(post, "part-names track missing");
+
+  const result = await post.handler(routeCtx({ param: { key: HOSE_KEY } })) as { status: number; body: Record<string, any> };
+  assertEquals(result.status, 200);
+  assertEquals(result.body.ok, true);
+
+  const synonym = db.table("part_term_synonym").find((s) => s.phrase_key === HOSE_KEY);
+  assertEquals([synonym?.added_by, synonym?.canonical], ["owner", "Air cleaner hose"]);
+  const page = db.table("research_saved_page").find((r) => r.id === out.row.id)!;
+  const suggestion = (page.result.suggestions as Array<Record<string, any>>).find((s) => s.key === HOSE_KEY);
+  assert(["added", "waiting"].includes(suggestion.status), suggestion.status);
 });

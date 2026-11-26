@@ -20,7 +20,7 @@ import {
 } from "./saved_page_phrases.ts";
 
 export type SuggestionKind = "new" | "existing" | "fixings";
-export type SuggestionStatus = "open" | "added" | "dismissed";
+export type SuggestionStatus = "open" | "added" | "dismissed" | "skipped" | "waiting";
 
 /** D2's shape. `name` is the existing type's name for kind "existing" (that is what the card offers to save under). */
 export type Suggestion = {
@@ -112,9 +112,15 @@ export function suggestedGroupName(name: string): string {
   return DEFAULT_GROUP;
 }
 
-/** PT-05: a fixing is a name whose head noun is a hardware word ("HOSE CLIP", "BOLT, FLANGE"). */
+/**
+ * PT-05 + AS-10: a fixing is a name whose FIRST comma segment (the catalogue's thing itself: `BOLT(FOR …)`,
+ * `GROMMET (FOR …)`, `HOSE CLIP`) carries a hardware word. The old rule looked at the last word only, which missed
+ * every Toyota row written `THING(FOR …)`.
+ */
 export function isFixingsName(name: string): boolean {
-  return FIXINGS_WORDS.has(headNoun(name));
+  const parsed = parseGroupPhrase(name);
+  if (!parsed) return false;
+  return parsed.headWords.some((word) => FIXINGS_WORDS.has(word.toLowerCase()));
 }
 
 /**
