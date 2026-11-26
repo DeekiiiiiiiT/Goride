@@ -59,6 +59,15 @@ beforeEach(() => vi.clearAllMocks());
 afterEach(cleanup);
 
 describe("SavedPageOverlay — part pictures", () => {
+  it("a single-file save whose stored name lost its ending shows no drawing notice", async () => {
+    const p = page({ file_name: "Air cleaner for Test car - Genuine Onlin" }, [{ picture: { ...made, status: "being_made", url: null } }]);
+    research.savedPage.mockResolvedValue(p);
+    research.savedPageWithPictures.mockResolvedValue({ savedPage: p, picturesAiOn: true });
+    open();
+    expect((await screen.findByTestId("saved-page-picture-state")).textContent).toMatch(/Making/);
+    expect(screen.queryByTestId("saved-page-needs-drawing")).toBeNull();
+  });
+
   it("Nothing new to save, the row's Making state, the pictures line and See pictures", async () => {
     const p = page({}, [{ picture: { ...made, status: "being_made", url: null } }]);
     research.savedPage.mockResolvedValue(page());
@@ -75,6 +84,7 @@ describe("SavedPageOverlay — part pictures", () => {
 
   it("a normal .html save shows the single-file notice and No diagram, and no See pictures", async () => {
     const p = page({ file_name: "page.html" });
+    p.result.pictures = { queued: 0, alreadyHave: 0, noDiagram: 1, failed: false, rows: [{ number: "99999-Z0101", status: "noDiagram" }] };
     research.savedPage.mockResolvedValue(p);
     research.savedPageWithPictures.mockResolvedValue({ savedPage: p, picturesAiOn: true });
     open();

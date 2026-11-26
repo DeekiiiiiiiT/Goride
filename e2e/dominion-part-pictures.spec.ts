@@ -93,7 +93,7 @@ const savedPage = (fileName: string, picture: unknown) => ({
     counts: { saved: 0, already: 1, held: 0, not_roam_type: 2 },
     rows: ROWS.map((r) => (r.group === "already" ? { ...r, picture } : r)),
     otherTypes: ["Hose", "Hose clip"],
-    pictures: { queued: 1, alreadyHave: 0, noDiagram: fileName.endsWith(".html") ? 1 : 0, failed: false, rows: [{ number: "00000-F1001", status: fileName.endsWith(".html") ? "noDiagram" : "queued" }] },
+    pictures: { queued: fileName.endsWith(".html") ? 0 : 1, alreadyHave: 0, noDiagram: fileName.endsWith(".html") ? 1 : 0, failed: false, rows: [{ number: "00000-F1001", status: fileName.endsWith(".html") ? "noDiagram" : "queued" }] },
   },
 });
 

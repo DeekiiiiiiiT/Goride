@@ -35,7 +35,6 @@ function withPictures(shown: SavedPage, fresh: SavedPage): SavedPage {
   };
 }
 
-const isSingleFile = (name: string | null | undefined) => /\.mht(ml)?$/i.test(name ?? "");
 
 const MAX_BYTES = 8 * 1024 * 1024;
 const ACCEPT = ".html,.htm,.mhtml,.mht,text/html,multipart/related";
@@ -70,7 +69,13 @@ const EMPTY: SavedPageCounts = { saved: 0, already: 0, held: 0, not_roam_type: 0
 
 /** The page link a saved file carries: Chrome/Edge `saved from url`, or an .mhtml `Snapshot-Content-Location`. */
 export function linkInSavedFile(head: string): string | null {
-  const saved = /<!--\s*saved from url=\(\d+\)(\S+?)\s*-->/i.exec(head);
+  // A "Webpage, Single File" save stores its page quoted-printable ("url=3D(0122)https://…" split by "=" line
+  // breaks): undo that first, but only for a MIME file, so a plain .html page is read exactly as saved.
+  const isMime = /^(?:From:|MIME-Version:|Snapshot-Content-Location:)/im.test(head.slice(0, 400));
+  const text = isMime
+    ? head.replace(/=\r?\n/g, "").replace(/=([0-9A-F]{2})/gi, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+    : head;
+  const saved = /<!--\s*saved from url=\(\d+\)(https?:\/\/\S+?)\s*-->/i.exec(text);
   if (saved) return saved[1];
   const mhtml = /^(?:Snapshot-Content-Location|Content-Location):\s*(https?:\/\/\S+)/im.exec(head);
   return mhtml ? mhtml[1] : null;
@@ -685,7 +690,7 @@ function Result({
         {aiOn ? <PicturesLine page={page} /> : null}
       </div>
 
-      {aiOn && !isSingleFile(page.file_name) && counts.saved + counts.already > 0 ? (
+      {aiOn && needsDrawing(page) ? (
         <div className="flex items-start gap-3 rounded-xl bg-[#dbe1ff] p-4 text-[14px] text-[#00174b] dark:bg-[#1e3a8a]/40 dark:text-[#dbe1ff]" data-testid="saved-page-needs-drawing">
           <DIcon name="info" className="text-[20px] text-[#0153dc] dark:text-[#93b4ff]" />
           <p>
@@ -778,8 +783,17 @@ function Group({ title, count, testId, children }: { title: string; count: numbe
 /** One row everywhere (SP-37): icon, plain words · place, then number and dates in mono; names wrap, never cut off. */
 /** The row's picture state for S1: its picture, or "No diagram" when the upload had none for it. */
 function pictureFor(page: SavedPage, row: SavedPageRow): { noDiagram: boolean } {
+  // Decided from what the upload recorded, never the file name: the server stores a shortened name without its
+  // ending, so a single-file save would look like a plain .html one.
   const queued = page.result?.pictures?.rows?.find((p) => p.number === row.number);
-  return { noDiagram: !row.picture && (queued?.status === "noDiagram" || !isSingleFile(page.file_name)) };
+  return { noDiagram: !row.picture && queued?.status === "noDiagram" };
+}
+
+/** The "Pictures need the drawing" notice: the upload found no drawing for any of its parts. */
+function needsDrawing(page: SavedPage): boolean {
+  const pictures = page.result?.pictures;
+  if (!pictures || pictures.failed) return false;
+  return pictures.noDiagram > 0 && pictures.queued === 0 && !(page.result?.rows ?? []).some((r) => r.picture);
 }
 
 /** "Pictures: 4 made · 2 being made · 3 with no diagram" (only the parts that are not zero). */
