@@ -37,7 +37,7 @@ const projectRef = process.env.INVENTORY_E2E_SUPABASE_PROJECT_REF?.trim() || rea
 const sharedEnv = {
   ...process.env,
   VITE_SUPABASE_URL: apiUrl,
-  VITE_SUPABASE_ANON_KEY: anonKey,
+  VITE_SUPABASE_PUBLISHABLE_KEY: anonKey,
   VITE_SUPABASE_PROJECT_ID: projectRef,
 };
 

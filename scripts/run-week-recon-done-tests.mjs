@@ -167,7 +167,7 @@ async function main() {
   }
 
   run(pnpm, ['--filter', '@roam/fleet', 'build'], {
-    env: { VITE_SUPABASE_URL: apiUrl, VITE_SUPABASE_ANON_KEY: anonKey, VITE_SUPABASE_PROJECT_ID: 'Goride' },
+    env: { VITE_SUPABASE_URL: apiUrl, VITE_SUPABASE_PUBLISHABLE_KEY: anonKey, VITE_SUPABASE_PROJECT_ID: 'Goride' },
   });
   spawnBg('fleet-preview', pnpm, ['--filter', '@roam/fleet', 'exec', 'vite', 'preview', '--host', '127.0.0.1', '--port', FLEET_PORT, '--strictPort']);
   await waitFor(async () => ((await fetch(`${FLEET_BASE_URL}/`)).ok ? true : 'not ready'), 'Fleet preview');
