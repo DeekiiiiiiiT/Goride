@@ -1,0 +1,126 @@
+ROAM FLEET — FIND PARTS, PART PICTURES — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+HOW TO USE: First paste = everything from the intro down to END OF FIRST PASTE (Screens 1 and 2). Then paste one SCREEN block at a time, in order. Never paste the last section ("FOR CLAUDE — DO NOT PASTE").
+Plan: docs/part-pictures-audit.md (Rev 2), §4 F1.
+
+
+==================== FIRST PASTE ====================
+
+Roam Fleet - Find parts, part pictures (desktop web app with a phone layout, for car owners, fleet owners and their staff):
+
+Design high-fidelity, modern screens that add a real-looking picture of the part to the answers in Roam Fleet's "Find parts" tab. The person using it is not a mechanic. They pick their car, say what they need (for example "front brake pads") and get one plain answer: the part, a Verified badge, and one number to give the store. Today the answer shows a simple flat drawing of a brake pad for every part. Now, when Roam has one, the answer shows a realistic studio photo of that exact part, so the person can see what they are looking for before they go to the store. The photo is made by AI from the car maker's drawing, so a short caption always says so. When Roam has no photo yet, the simple drawing stays. It must feel friendly, bright and trustworthy, like the best modern shopping and banking apps. Make each screen tall enough to show everything, with no inner scrolling. Draw only the screens asked for in this message. Information only: no prices, shops, stock, quotes or carts anywhere.
+
+
+BRAND IDENTITY:
+- Keep the existing Roam Fleet app frame exactly as it is today (do not redesign it):
+  - Top: a white nav row with the black "Roam Fleet" app tile, then: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations (active), Delivery Operations, Analytics, Reports, Business Finance, a bell, the avatar.
+  - Page title: breadcrumb "Fleet / Maintenance / Find parts", the title "Fleet Maintenance", then the tab pill: By vehicle, Service ledger, Find parts (active), Work orders, Requests, Inspections, Schedule.
+  - Everything BELOW the tab pill is the design.
+- Theme: "Friendly modern" — calm, bright, confident, consumer-grade. Not a technical staff tool.
+- LIGHT MODE (default):
+  - Primary: near-black #030213 — main buttons, selected states
+  - Page wash #f8fafc; cards #FFFFFF with a soft shadow (0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(15,23,42,0.06)) and a hairline border rgba(0,0,0,0.06)
+  - Text #0a0a0a; muted #64748b
+  - Verified: green #059669 on #ecfdf5; Check before buying: amber #b45309 on #fffbeb; error #d4183d on #fff1f2
+  - Soft tile fill (picture tiles, logo circles): #f1f5f9
+- DARK MODE: page #1c1c1e, cards #2a2a2d, border #3a3a3d, text #fafafa, muted #a1a1aa, primary buttons white #fafafa with near-black text; Verified #34d399 on #064e3b; Check before buying #fbbf24 on #451a03.
+- Shapes: cards 20px radius, buttons and inputs 12px, chips and badges fully rounded.
+- Typography: Inter. Page titles 28px semibold, card titles 20px semibold, body 16px, muted helper text 14px. The part number uses a clean mono font at 22px with wide letter spacing.
+- The part picture tile, one look everywhere: a rounded 16px square on the soft #f1f5f9 fill. With a photo: a realistic top-down studio photo of the part, centred, soft natural shadow, true materials, and NO words, numbers, logos or brand names on the part. Under the tile, one muted 13px line: "Picture made by AI from the maker's diagram — the real part may look different." Without a photo: the existing simple flat line drawing of the part type in the same tile, and no caption.
+- Only two trust badges: "Verified" (green, check icon) and "Check before buying" (amber, info icon).
+- Buttons always look like buttons: Primary = solid near-black with white text; Secondary = white with a visible #cbd5e1 border and dark text; Danger = red border and red text. Never underlined text links.
+- Never on any screen: chassis codes, engine codes, "OEM", "interchange", "fitment", "AI sparkles", percentages, prices, J$, shops, stock.
+- Every overlay is in-app: a centred white card over the page dimmed 40%, 24px radius. Never a browser pop-up.
+- Sample data (real, from Roam's database):
+  - Car: "Toyota Roomy · 2019 · 5179KZ".
+  - Front brake pads — give the store 04465-B1190 (Verified, genuine Toyota, set of 4 pads). Photo: four grey brake pads on steel backing plates with small metal wear clips. Other numbers stores may use: Daihatsu 04465-B1320, NiBK PN5562, SB BP25562, Brembo P 16 013, Akebono AN-754WK. Also fits 33 other cars.
+  - Front brake calipers — Right front 47730-B1021, Left front 47750-B1021 (both Verified). Photo: a cast-iron caliper body with a silver piston boot and two slide pins (left one mirrored).
+  - Handbrake cables — Front cable (cable 1) 46410-B1011, Rear cable 2 46420-B1090, Rear cable 3 46430-B1090 (all Verified). Photo of the front cable: a long black-sheathed steel cable with metal end fittings, coiled loosely. No photo yet for the two rear cables.
+  - Rear brake shoes — 04495-B2430 (Verified, genuine Toyota). Photo: a pair of curved steel brake shoes with dark friction lining. An older number 04495-B2400 (Check before buying) has no photo.
+
+
+DESIGN PRINCIPLES (only what changes the drawing):
+- Desktop-first at 1200px content width; phone at 390px.
+- The picture tile is the left column of the answer card on desktop and the top of the card on a phone; it is big (about 300px on desktop), never a small icon.
+- One photo per answer card. The "Other numbers stores may use" list never has photos.
+- The caption is always there when a photo is shown, and never when the drawing is shown.
+- 8px spacing grid, 44px touch targets.
+
+
+SCREEN 1: FRONT BRAKE PADS — THE ANSWER, WITH A PHOTO
+Same Roam Fleet app frame. Draw tall enough to show everything, no inner scrolling.
+- Header: back arrow "Back to Brakes", title "Front brake pads", muted "for your Toyota Roomy 2019 · 5179KZ".
+- One big part card:
+  - Left column: the picture tile with the realistic photo of four grey brake pads on steel backing plates; under it the caption "Picture made by AI from the maker's diagram — the real part may look different."; under that the tiny car drawing with both front wheels highlighted and the label "Both front wheels".
+  - Right column: title "Front brake pads" (20px) with the green "Verified" pill and a muted line "Genuine Toyota part · set of 4 pads".
+  - A highlighted inner box: muted label "Give the store this number", "04465-B1190" big in mono, primary button "Copy number".
+  - A folded row "Other numbers stores may use (5)" with a chevron (closed).
+  - "Also fits" row: 6 maker logos overlapping in a line (Toyota, Daihatsu, Subaru, Suzuki, Mazda, Perodua), "Also fits 33 other cars", secondary button "See every car".
+  - Bottom right: secondary button "Use in a service log".
+
+SCREEN 2: THE PHOTO — LARGE VIEW
+Same Roam Fleet app frame. Behind the overlay, dimmed 40%: the Front brake pads answer. Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 680px wide, 24px radius.
+- A large square photo (600px) of the four grey brake pads on steel backing plates, soft shadow, no words.
+- Under it: "Front brake pads" (20px semibold), "04465-B1190" in mono, and the caption "Picture made by AI from the maker's diagram — the real part may look different."
+- Footer: primary "Close" on the right.
+
+END OF FIRST PASTE
+
+
+SCREEN 3: FRONT BRAKE CALIPERS — TWO ANSWERS, EACH WITH A PHOTO
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Car "Toyota Roomy · 2019 · 5179KZ". Draw tall enough to show everything, no inner scrolling.
+- Header: back arrow "Back to Brakes", title "Front brake calipers", muted "for your Toyota Roomy 2019 · 5179KZ".
+- Muted line on top: "Your Roomy has two — one for each front wheel."
+- Two side-by-side part cards. Each card: the picture tile on top with a realistic photo of a cast-iron caliper body with a silver piston boot (the left one mirrored), the caption under it, the tiny car drawing highlighting one wheel, then the name with the green "Verified" pill, the number box and primary "Copy number":
+  - "Right front" · 47730-B1021
+  - "Left front" · 47750-B1021
+
+SCREEN 4: HANDBRAKE CABLES — ONE PHOTO, TWO DRAWINGS
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Car "Toyota Roomy · 2019 · 5179KZ". Draw tall enough to show everything, no inner scrolling.
+- Header: back arrow "Back to Brakes", title "Handbrake cables", muted "for your Toyota Roomy 2019 · 5179KZ".
+- A simple drawing of the cable path under the car (lever → front cable → two rear cables) and the muted line "Your Roomy has three handbrake cables."
+- Three part cards in a row. Each has its picture tile on top, then the name, the green "Verified" pill, the number in mono and primary "Copy number":
+  - "Front cable (cable 1)" · 46410-B1011 — realistic photo of a long black-sheathed steel cable with metal end fittings, loosely coiled; caption under it.
+  - "Rear cable 2" · 46420-B1090 — the simple flat line drawing of a cable in the tile; no caption.
+  - "Rear cable 3" · 46430-B1090 — the simple flat line drawing of a cable; no caption.
+
+SCREEN 5: REAR BRAKE SHOES — VERIFIED WITH A PHOTO, OLDER NUMBER WITHOUT
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Car "Toyota Roomy · 2019 · 5179KZ". Draw tall enough to show everything, no inner scrolling.
+- Header: back arrow "Back to Brakes", title "Rear brake shoes", muted "for your Toyota Roomy 2019 · 5179KZ".
+- First card (full answer card): picture tile with a realistic photo of a pair of curved steel brake shoes with dark friction lining and the caption; tiny car drawing with both rear wheels highlighted; "Rear brake shoes" with the green "Verified" pill; muted "Genuine Toyota part"; number box "04495-B2430" with primary "Copy number".
+- Under it, a lighter card: the simple flat line drawing of a brake shoe in a smaller tile (no caption), the amber "Check before buying" pill, "04495-B2400" in mono, a muted line "An older number some stores still use.", secondary "Copy number".
+
+SCREEN 6: FRONT BRAKE PADS — DARK MODE
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project, in DARK MODE (page #1c1c1e, cards #2a2a2d). Car "Toyota Roomy · 2019 · 5179KZ". Draw tall enough to show everything, no inner scrolling.
+- Exactly the content of the front brake pads answer: header "Front brake pads", muted "for your Toyota Roomy 2019 · 5179KZ"; the picture tile (soft dark tile #3a3a3d) with the realistic photo of four grey brake pads and the caption "Picture made by AI from the maker's diagram — the real part may look different." in muted #a1a1aa; "Both front wheels" car drawing; "Front brake pads" with the green "Verified" pill; "Give the store this number" box with "04465-B1190" and a white "Copy number" button; folded "Other numbers stores may use (5)"; "Also fits 33 other cars" with "See every car"; "Use in a service log".
+
+SCREEN 7: PHONE — FRONT BRAKE PADS (390px)
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project, on a 390px phone. Car "Toyota Roomy · 2019 · 5179KZ". Draw tall enough to show everything, no inner scrolling.
+- Header: back arrow, "Front brake pads", muted "Toyota Roomy 2019 · 5179KZ".
+- The picture tile full width at the top of the card (square), with the realistic photo of four grey brake pads; the caption under it.
+- Then "Front brake pads" with the green "Verified" pill, "Genuine Toyota part · set of 4 pads", the number box "04465-B1190" with a full-width primary "Copy number", the folded "Other numbers stores may use (5)" row, "Also fits 33 other cars" with a full-width secondary "See every car", and a full-width secondary "Use in a service log".
+
+
+==================== FOR CLAUDE — DO NOT PASTE ====================
+
+ADDITIONAL UI COMPONENTS:
+- PartPictureTile (shared, one component for all four answer layouts): props `picture: { url, urlDetail } | null`, `fallback` (the existing Stitch illustration for that part type, e.g. StitchPadIllustration). With a picture: `<button>` wrapping the card-size image (alt = part name), caption under it; tap opens the large view. Without: the fallback drawing, no caption, not clickable.
+- PartPictureOverlay: in-app overlay with the detail-size image, name, number in mono, caption, primary "Close"; Escape closes; focus returns to the tile.
+- Image loading: show the soft tile with the fallback drawing until the photo has loaded; if the photo fails to load, keep the drawing (never a broken-image icon).
+
+INTERACTIONS:
+- Tapping the photo opens Screen 2's large view; "Close" or Escape shuts it.
+- The photo comes from `fleet_parts_lookup` (plan §3.6): one `picture` per answer card for that part's group, only when it is ready and not hidden in Dominion. When Dominion hides it, the next load shows the drawing with no caption.
+- "Other numbers stores may use" rows never show a picture.
+
+Spec screens / Area:
+| Screen | Plan | Area |
+|---|---|---|
+| 1 | F1 pads | StitchAnswerCard (pads layout) |
+| 2 | F1 large view | new PartPictureOverlay |
+| 3 | F1 calipers | EverydayFindPartsFlow calipers layout |
+| 4 | F1 cables (photo + fallback) | EverydayFindPartsFlow cables layout |
+| 5 | F1 shoes (photo + fallback) | EverydayFindPartsFlow shoes layout |
+| 6 | F1 dark mode | StitchAnswerCard |
+| 7 | F1 phone | StitchAnswerCard at 390px |

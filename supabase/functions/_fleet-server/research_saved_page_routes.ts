@@ -38,17 +38,39 @@ import {
   versionDatesFit,
 } from "./saved_page_proof.ts";
 import { formatBytes, humanFileKind, isWebPage, savedPageText } from "./saved_page_text.ts";
+import {
+  type PartDiagramStore,
+  type PartPictureQueueDeps,
+  type PartPictureQueueRow,
+  type PicturesResult,
+  queuePartPictures,
+} from "./part_pictures_queue.ts";
+import { loadPartPicturesSettings } from "./part_pictures_settings.ts";
+import {
+  readPictureBlockers,
+  withSavedPagePictures,
+  type PictureBlockers,
+} from "./part_picture_reads.ts";
+import { R2Client, r2ConfigFromEnv } from "../_shared/objectStorage/index.ts";
 
 const PREFIX = "/make-server-37f42386/admin/catalog-research";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_FILE_BYTES = 5 * 1024 * 1024;
+// PP-02: a single-file page of the owner's sample is about 4.9 MB; 8 MB leaves room without straining the function.
+const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const DAILY_PAGES = 40;
 const SIDED = new Set(["four_corners", "axle_left_right"]);
 const POSITION_SCHEMES = new Set(["axle", "four_corners", "axle_left_right", "axle_inner_outer", "axle_numbered"]);
 
 const norm = (s: string | null | undefined) => String(s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 type Counts = { saved: number; already: number; held: number; not_roam_type: number };
-type SavedPageResult = { counts: Counts; rows: ResultRow[]; otherTypes: string[]; stop?: { code: string; detail: string } };
+type SavedPageResult = {
+  counts: Counts;
+  rows: ResultRow[];
+  otherTypes: string[];
+  stop?: { code: string; detail: string };
+  /** §3.2 pictures. Absent on old results and when AI part pictures are off. */
+  pictures?: PicturesResult;
+};
 const emptyCounts = (): Counts => ({ saved: 0, already: 0, held: 0, not_roam_type: 0 });
 
 type SavedPageRow = {
@@ -110,7 +132,14 @@ export type SavedPageAiInput = {
 
 export type SavedPageAi = (input: SavedPageAiInput) => Promise<AiPartRow[]>;
 
-export type SavedPageDeps = { ai?: SavedPageAi; now?: () => Date };
+export type SavedPageDeps = {
+  ai?: SavedPageAi;
+  now?: () => Date;
+  /** Part pictures (§3.2). Undefined = skip (tests, and runSavedPage called directly); null = also skip. */
+  pictures?: PartPictureQueueDeps | null;
+  /** §3.5 point 7: the blockers the saved-page result's picture states come from. Default reads the row + the budget. */
+  pictureBlockers?: () => Promise<PictureBlockers>;
+};
 
 type OnFile = { componentId: string; number: string; position: string | null; side: string | null; from: number | null; to: number | null };
 
@@ -840,7 +869,43 @@ export async function runSavedPage(
     const counts = emptyCounts();
     for (const r of rows) counts[r.group]++;
     const otherTypes = [...new Set(proven.filter((r) => !r.type).map((r) => r.partTypeName).filter(Boolean))].slice(0, 5);
-    const result = { counts, rows, otherTypes };
+
+    // §3.2 pictures: every proven Roam-type row that ended saved OR already on file (PP-08), best effort.
+    // The upload never fails because of a picture (PP-25), and nothing is drawn here (PP-12).
+    let pictures: PicturesResult | null = null;
+    const pictureDeps = deps.pictures === undefined ? null : deps.pictures;
+    if (pictureDeps) {
+      const queueRows: PartPictureQueueRow[] = [];
+      for (const r of proven) {
+        const decided = outcome.get(r.lineNo);
+        if (!r.type || r.dropped || !decided) continue;
+        if (decided.group !== "saved" && decided.group !== "already") continue;
+        queueRows.push({
+          number: r.number,
+          lineNo: r.lineNo,
+          groupLine: r.groupLineNo ? page.lines[r.groupLineNo - 1] ?? null : null,
+          componentId: r.type.id,
+        });
+      }
+      pictures = await queuePartPictures(
+        supabase,
+        {
+          bytes: input.bytes,
+          fileName: input.fileName,
+          savedPageId: row.id,
+          carMake: car.make,
+          rows: queueRows,
+        },
+        pictureDeps,
+      );
+    }
+
+    const result: SavedPageResult = {
+      counts,
+      rows,
+      otherTypes,
+      ...(pictures ? { pictures } : {}),
+    };
     await updateRow(row.id, {
       status: "done",
       stop_reason: null,
@@ -923,11 +988,30 @@ function apiSavedPage(row: SavedPageRow): Omit<SavedPageRow, "uploaded_by"> {
   return rest;
 }
 
+/**
+ * Live picture deps for the upload route: R2 from function secrets (null when unset, and then no diagram can be
+ * stored) and the settings row. Built once per function instance.
+ */
+function productionPictureDeps(): PartPictureQueueDeps {
+  let r2: PartDiagramStore | null = null;
+  try {
+    r2 = new R2Client(r2ConfigFromEnv());
+  } catch {
+    r2 = null;
+  }
+  return { r2, loadSettings: loadPartPicturesSettings };
+}
+
 export function registerResearchSavedPageRoutes(
   app: { get: Function; post: Function },
   supabase: SupabaseClient,
   deps: SavedPageDeps = {},
 ) {
+  // The uploaded route queues pictures; a test that calls runSavedPage directly skips that unless it says otherwise.
+  const routeDeps: SavedPageDeps = {
+    ...deps,
+    pictures: deps.pictures === undefined ? productionPictureDeps() : deps.pictures,
+  };
   // R1 / R9: read one saved page. Everything is saved before the reply (SP-34).
   app.post(`${PREFIX}/saved-pages`, async (c: Context) => {
     const denied = guardWrite(c);
@@ -952,7 +1036,7 @@ export function registerResearchSavedPageRoutes(
       url: String(form.get("url") ?? "") || null,
       again: againValue === "true" || againValue === "1",
       actor,
-    }, deps);
+    }, routeDeps);
     if (outcome.kind === "error") return c.json({ error: outcome.error }, outcome.status as 400);
     if (outcome.kind === "already_read") {
       return c.json({ savedPage: apiSavedPage(outcome.row), alreadyRead: true, readAt: outcome.readAt });
@@ -1000,6 +1084,28 @@ export function registerResearchSavedPageRoutes(
       .eq("id", id).maybeSingle();
     if (error) return c.json({ error: error.message }, 500);
     if (!data) return c.json({ error: "Not found" }, 404);
-    return c.json({ savedPage: apiSavedPage(data as SavedPageRow) });
+
+    // §3.5 point 7: each row carries its picture, so S1 can show the thumbnail and the state (also for a row that
+    // was already on file). Best effort: a picture problem never hides the upload's own result (PP-25).
+    const row = data as SavedPageRow;
+    let result: SavedPageResult = row.result;
+    let picturesAiOn: boolean | null = null;
+    try {
+      const blockers = await (routeDeps.pictureBlockers ??
+        (async () => (await readPictureBlockers(supabase)).blockers))();
+      const decorated = await withSavedPagePictures(
+        supabase,
+        result as unknown as Record<string, unknown>,
+        blockers,
+      );
+      if (decorated) result = decorated as unknown as SavedPageResult;
+      picturesAiOn = blockers.aiOn;
+    } catch (err) {
+      console.error("saved page pictures not attached", err);
+    }
+    return c.json({
+      savedPage: apiSavedPage({ ...row, result }),
+      ...(picturesAiOn !== null ? { picturesAiOn } : {}),
+    });
   });
 }

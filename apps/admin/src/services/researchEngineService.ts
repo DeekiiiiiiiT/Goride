@@ -5,6 +5,7 @@
  */
 import { API_ENDPOINTS } from "./apiConfig";
 import { publicAnonKey } from "../utils/supabase/info";
+import type { PartPicture } from "../components/admin/part-pictures/partPicturesApi";
 
 const BASE = `${API_ENDPOINTS.catalog}/make-server-37f42386/admin/catalog-research`;
 
@@ -407,6 +408,16 @@ export type SavedPageRow = {
   /** Plain reason from the server (held rows only); the screen never makes its own wording. */
   reason: string | null;
   jobId: string | null;
+  /** Part pictures (docs/part-pictures-audit.md §3.5 point 7): only on GET saved-pages/:id. */
+  picture?: PartPicture | null;
+};
+/** What the upload did about pictures (§3.2). */
+export type SavedPagePictures = {
+  queued: number;
+  alreadyHave: number;
+  noDiagram: number;
+  failed: boolean;
+  rows: Array<{ number: string; status: "queued" | "alreadyHave" | "noDiagram" | "templateOff" }>;
 };
 export type SavedPageStopCode =
   | "wrong_car"
@@ -428,7 +439,7 @@ export type SavedPage = {
   file_name: string | null;
   status: "reading" | "done" | "stopped";
   stop_reason: string | null;
-  result: { counts?: SavedPageCounts; rows?: SavedPageRow[]; otherTypes?: string[]; stop?: { code: string; detail: string } };
+  result: { counts?: SavedPageCounts; rows?: SavedPageRow[]; otherTypes?: string[]; stop?: { code: string; detail: string }; pictures?: SavedPagePictures };
   created_at: string;
 };
 export type SavedPageReply = {
@@ -464,6 +475,9 @@ export const researchApi = {
   savedPages: (t: string, vehicleCatalogId: string) =>
     getJson<{ items: SavedPageListItem[] }>(t, `/saved-pages?vehicleCatalogId=${encodeURIComponent(vehicleCatalogId)}`).then((r) => r.items ?? []),
   savedPage: (t: string, id: string) => getJson<{ savedPage: SavedPage }>(t, `/saved-pages/${encodeURIComponent(id)}`).then((r) => r.savedPage),
+  /** The same page with each row's picture, and whether AI part pictures are on (S1). */
+  savedPageWithPictures: (t: string, id: string) =>
+    getJson<{ savedPage: SavedPage; picturesAiOn?: boolean }>(t, `/saved-pages/${encodeURIComponent(id)}`),
   summary: (t: string) => getJson<ResearchSummary>(t, "/summary"),
   notices: (t: string) => getJson<{ items: ResearchNotice[] }>(t, "/notices").then((r) => r.items ?? []),
   coverage: (t: string, carId: string) => getJson<CarCoverage>(t, `/coverage/${encodeURIComponent(carId)}`),

@@ -210,7 +210,7 @@ test.describe("Saved catalogue pages (S1–S6)", () => {
     await page.getByTestId("add-from-saved-page").click();
     const o = page.getByTestId("saved-page-overlay");
     await expect(o.getByTestId("saved-page-howto")).toContainText("Open the page for this car on the catalogue website.");
-    await expect(o.getByTestId("saved-page-howto")).toContainText("Save it as Webpage. Either kind works.");
+    await expect(o.getByTestId("saved-page-howto")).toContainText("Save it as Webpage, Single File. That also brings the drawing, so Roam can make a picture of each part.");
     await expect(o.getByTestId("saved-page-dropzone")).toBeVisible();
     await expect(o.getByTestId("saved-page-read")).toBeDisabled();
     await shot(page, "02a-upload-empty");
@@ -337,9 +337,9 @@ test.describe("Saved catalogue pages (S1–S6)", () => {
     await o.getByTestId("saved-page-choose-another").click();
     await expect(o.getByTestId("saved-page-dropzone")).toBeVisible();
     // Too big is caught before uploading.
-    await page.getByTestId("saved-page-file-input").setInputFiles({ name: "huge.html", mimeType: "text/html", buffer: Buffer.alloc(5 * 1024 * 1024 + 10, 32) });
+    await page.getByTestId("saved-page-file-input").setInputFiles({ name: "huge.html", mimeType: "text/html", buffer: Buffer.alloc(8 * 1024 * 1024 + 10, 32) });
     await expect(o.getByTestId("saved-page-stop")).toHaveAttribute("data-code", "too_big");
-    await expect(o.getByTestId("saved-page-stop-detail")).toHaveText("5.0 MB");
+    await expect(o.getByTestId("saved-page-stop-detail")).toHaveText("8.0 MB");
 
     const pm = await page.context().newPage();
     await pm.setViewportSize({ width: 1440, height: 1000 });

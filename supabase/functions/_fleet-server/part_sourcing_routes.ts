@@ -15,6 +15,7 @@ import { registerFleetFindPartsRoutes } from "./fleet_find_parts_routes.ts";
 import { registerCatalogRoutes } from "./catalog_routes.ts";
 import { registerFleetAdminPartsRoutes } from "./fleet_admin_parts_routes.ts";
 import { enrichFleetParts, getCatalogParts, overlayUniversalStock, assembleMatchSections } from "./catalog_api.ts";
+import { listingsForVehicle } from "./listings_for_vehicle.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -53,6 +54,9 @@ export function registerPartSourcingRoutes(
   };
   gate.use("/make-server-37f42386/admin/*", requireAuth(), async (c, next) => {
     if (!c.req.path.includes("/admin/part-")) return next();
+    // Part pictures carry their own guards (part_picture_admin_routes.ts): Remake, Hide and Show are staff actions
+    // (docs/part-pictures-audit.md §3.5), so they are not part-sourcing master writes.
+    if (c.req.path.includes("/admin/part-picture")) return next();
     if (c.req.method === "GET" || c.req.method === "HEAD") return next();
     const denied = assertPartSourcingPlatformAccess(c);
     if (denied) return denied;
@@ -598,15 +602,13 @@ export function registerPartSourcingRoutes(
     try {
       const catalogId = c.req.query("vehicle_catalog_id")?.trim() || "";
       const partId = c.req.query("part_id")?.trim() || "";
-      let q = supabase
-        .from("part_fitment")
-        .select("*, part_master ( id, name, oem_part_number )")
-        .order("created_at", { ascending: false });
-      if (catalogId && isUuid(catalogId)) q = q.eq("vehicle_catalog_id", catalogId);
-      if (partId && isUuid(partId)) q = q.eq("part_id", partId);
-      const { data, error } = await q.limit(500);
-      if (error) throw error;
-      return c.json({ items: data || [] });
+      // part_fitment is retired (RE-12): same JSON shape, read from part_listing.
+      const items = await listingsForVehicle(supabase, {
+        catalogId: catalogId && isUuid(catalogId) ? catalogId : null,
+        partId: partId && isUuid(partId) ? partId : null,
+        limit: 500,
+      });
+      return c.json({ items });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       return c.json({ error: msg }, 500);

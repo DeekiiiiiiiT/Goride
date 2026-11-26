@@ -16,6 +16,7 @@ const ApiCommandCenter = lazyNamed(() => import('./api-center/ApiCommandCenter')
 const VehicleCatalogManager = lazyNamed(() => import('./vehicle-catalog/VehicleCatalogManager'), 'VehicleCatalogManager');
 const PendingVehicleCatalogManager = lazyNamed(() => import('./vehicle-catalog/PendingVehicleCatalogManager'), 'PendingVehicleCatalogManager');
 const VehiclePicturesPage = lazyNamed(() => import('./vehicle-catalog/vehicle-pictures/VehiclePicturesPage'), 'VehiclePicturesPage');
+const PartPicturesPage = lazyNamed(() => import('./part-pictures/PartPicturesPage'), 'PartPicturesPage');
 const MaintenanceMasterPage = lazyNamed(() => import('./maintenance-master/MaintenanceMasterPage'), 'MaintenanceMasterPage');
 const PartsSourcingManager = lazyNamed(() => import('./parts-sourcing/PartsSourcingManager'), 'PartsSourcingManager');
 const PartsDatabasePage = lazyNamed(() => import('./parts-database/PartsDatabasePage'), 'PartsDatabasePage');
@@ -121,6 +122,7 @@ export function AdminPortal() {
       'fuel-stations': ['q', 'status', 'pcode', 'brand', 'pin', 'source', 'issue', 'sort', 'dir', 'p', 'tab', 'sub'],
       'pending-motor-vehicles': ['tab'],
       'activity-log': ['filter', 'conflict'],
+      'part-pictures': ['savedPageId'],
     };
     const url = new URL(window.location.href);
     const keep = new Set(allowed[page] || []);
@@ -306,6 +308,11 @@ export function AdminPortal() {
       {currentPage === 'vehicle-pictures' && (
         <Suspense fallback={<div className="p-8 text-slate-500">Loading vehicle pictures…</div>}>
           <VehiclePicturesPage isOwner={role === 'platform_owner'} onBack={() => setCurrentPage('vehicles-home')} />
+        </Suspense>
+      )}
+      {currentPage === 'part-pictures' && (
+        <Suspense fallback={<div className="p-8 text-slate-500">Loading part pictures…</div>}>
+          <PartPicturesPage isOwner={role === 'platform_owner'} onBack={() => setCurrentPage('vehicles-home')} />
         </Suspense>
       )}
       {currentPage === 'maintenance-templates' && (

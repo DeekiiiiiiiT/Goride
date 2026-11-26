@@ -13,8 +13,31 @@ import {
   type SavedPageStopCode,
 } from "../../../services/researchEngineService";
 import { D_MONO, D_MUTED, D_TXT, DIcon, PartsButton, RE_SOFT, RePill } from "./ReKit";
+import { PartPictureFrame, PictureStatePill, pictureWord } from "../part-pictures/PartPictureBits";
 
-const MAX_BYTES = 5 * 1024 * 1024;
+/** S1 "See pictures": open the Part pictures page filtered to this upload (same switch the page links use). */
+export function openPartPicturesFor(savedPageId: string) {
+  const url = new URL(window.location.href);
+  window.history.pushState({ page: "part-pictures" }, "", `${url.pathname}?page=part-pictures&savedPageId=${encodeURIComponent(savedPageId)}`);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+/** Copies each row's picture (matched by number and group) and the upload's picture counts onto the page shown. */
+function withPictures(shown: SavedPage, fresh: SavedPage): SavedPage {
+  const freshRows = fresh.result?.rows ?? [];
+  const rows = (shown.result?.rows ?? []).map((row) => {
+    const match = freshRows.find((f) => f.number === row.number && f.group === row.group);
+    return { ...row, picture: match?.picture ?? null };
+  });
+  return {
+    ...shown,
+    result: { ...shown.result, rows, pictures: fresh.result?.pictures ?? shown.result?.pictures },
+  };
+}
+
+const isSingleFile = (name: string | null | undefined) => /\.mht(ml)?$/i.test(name ?? "");
+
+const MAX_BYTES = 8 * 1024 * 1024;
 const ACCEPT = ".html,.htm,.mhtml,.mht,text/html,multipart/related";
 
 type Props = {
@@ -97,7 +120,7 @@ function stopLines(stop: Stop): { line: string; box: string | null } {
     case "untrusted_site":
       return { line: "Use a page from the car maker's own catalogue.", box: stop.detail };
     case "too_big":
-      return { line: "Saved pages up to 5 MB can be read.", box: stop.detail };
+      return { line: "Saved pages up to 8 MB can be read.", box: stop.detail };
     case "not_web_page":
       return { line: "Save the page with Ctrl+S, as Webpage.", box: stop.detail };
     default:
@@ -122,6 +145,33 @@ export function SavedPageOverlay({ token, carId, carLabel, jobId, savedPageId, o
   const [showOther, setShowOther] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const reading = view.kind === "reading";
+  const [picturesAiOn, setPicturesAiOn] = useState(false);
+
+  // S1 pictures: read the rows with their pictures once the result shows, then every 10 s while one is being made.
+  const resultId = view.kind === "result" ? view.page.id : null;
+  const makingAny = view.kind === "result" && (view.page.result?.rows ?? []).some((r) => r.picture?.status === "being_made");
+  const refreshPictures = useCallback(
+    (id: string) =>
+      researchApi
+        .savedPageWithPictures(token, id)
+        .then((r) => {
+          setPicturesAiOn(Boolean(r.picturesAiOn));
+          // Only the pictures are taken from this read; the result already shown stays exactly as it was.
+          setView((v) => (v.kind === "result" && v.page.id === id ? { kind: "result", page: withPictures(v.page, r.savedPage) } : v));
+        })
+        .catch(() => {
+          // Pictures are extra: the result stays as it was (PP-25).
+        }),
+    [token],
+  );
+  useEffect(() => {
+    if (resultId) void refreshPictures(resultId);
+  }, [resultId, refreshPictures]);
+  useEffect(() => {
+    if (!resultId || !makingAny) return;
+    const t = window.setInterval(() => void refreshPictures(resultId), 10_000);
+    return () => window.clearInterval(t);
+  }, [resultId, makingAny, refreshPictures]);
 
   // S2 row → that upload's result.
   useEffect(() => {
@@ -230,7 +280,9 @@ export function SavedPageOverlay({ token, carId, carLabel, jobId, savedPageId, o
           <HowStep n={2}>
             Press <Kbd>Ctrl+S</Kbd> (<Kbd>Cmd+S</Kbd> on a Mac).
           </HowStep>
-          <HowStep n={3}>Save it as Webpage. Either kind works.</HowStep>
+          <HowStep n={3}>
+            Save it as <span className="font-semibold">Webpage, Single File</span>. That also brings the drawing, so Roam can make a picture of each part.
+          </HowStep>
         </div>
 
         <input
@@ -252,7 +304,7 @@ export function SavedPageOverlay({ token, carId, carLabel, jobId, savedPageId, o
               </span>
               <div className="min-w-0">
                 <p className={`break-all text-[15px] font-medium ${D_TXT}`}>{file.name}</p>
-                <p className={`text-[13px] ${D_MUTED}`}>{formatSize(file.size)} · saved web page</p>
+                <p className={`text-[13px] ${D_MUTED}`}>{formatSize(file.size)} · saved web page{/\.mht(ml)?$/i.test(file.name) ? " · single file" : ""}</p>
               </div>
             </div>
             <PartsButton variant="secondary" className="!min-h-[44px]" onClick={() => inputRef.current?.click()} data-testid="saved-page-choose-another">
@@ -317,10 +369,11 @@ export function SavedPageOverlay({ token, carId, carLabel, jobId, savedPageId, o
         <div className="flex items-start gap-3 rounded-xl bg-[#dbe1ff] p-4 text-[14px] text-[#00174b] dark:bg-[#1e3a8a]/40 dark:text-[#dbe1ff]">
           <DIcon name="verified_user" className="text-[20px] text-[#0153dc] dark:text-[#93b4ff]" />
           <p>
-            Rows that pass every check are saved as <span className="font-semibold text-[#006e31] dark:text-[#4ade80]">Confirmed</span>. Rows that
-            don&apos;t come back to you.
+            Rows that pass every check are saved as <span className="font-semibold text-[#006e31] dark:text-[#4ade80]">Confirmed</span>. Each Roam
+            part also gets a picture a minute or two later.
           </p>
         </div>
+        <p className={`text-[13px] ${D_MUTED}`}>Saved pages up to 8 MB can be read.</p>
       </>
     );
     footer = (
@@ -377,10 +430,26 @@ export function SavedPageOverlay({ token, carId, carLabel, jobId, savedPageId, o
       </>
     );
   } else if (view.kind === "result") {
-    body = <Result page={view.page} showOther={showOther} setShowOther={setShowOther} onCheckPart={onCheckPart} />;
+    const resultPage = view.page;
+    const hasPictures = picturesAiOn && (resultPage.result?.rows ?? []).some((r) => r.picture);
+    body = <Result page={resultPage} aiOn={picturesAiOn} showOther={showOther} setShowOther={setShowOther} onCheckPart={onCheckPart} />;
     footer = (
       <>
-        <span />
+        {hasPictures ? (
+          <PartsButton
+            variant="secondary"
+            className="!min-h-[44px]"
+            data-testid="saved-page-see-pictures"
+            onClick={() => {
+              onClose();
+              openPartPicturesFor(resultPage.id);
+            }}
+          >
+            <DIcon name="image" className="text-[18px]" /> See pictures
+          </PartsButton>
+        ) : (
+          <span />
+        )}
         <PartsButton
           variant="primary"
           className="!min-h-[44px]"
@@ -573,11 +642,13 @@ function CountPills({ counts }: { counts: SavedPageCounts }) {
 
 function Result({
   page,
+  aiOn,
   showOther,
   setShowOther,
   onCheckPart,
 }: {
   page: SavedPage;
+  aiOn: boolean;
   showOther: boolean;
   setShowOther: (v: boolean) => void;
   onCheckPart: (jobId: string, partType: string) => void;
@@ -586,10 +657,11 @@ function Result({
   const rows = page.result?.rows ?? [];
   const of = (g: SavedPageRow["group"]) => rows.filter((r) => r.group === g);
   const held = counts.held > 0;
+  const nothingNew = counts.saved === 0 && counts.held === 0 && counts.already > 0;
   const title =
     counts.saved === 0 && counts.held === 0
       ? counts.already
-        ? `${counts.already} already on file`
+        ? "Nothing new to save"
         : "No parts saved"
       : held
         ? `${counts.saved} ${counts.saved === 1 ? "part" : "parts"} saved · ${counts.held} need you`
@@ -600,7 +672,7 @@ function Result({
   return (
     <div className="flex flex-col gap-6" data-testid="saved-page-result">
       <div className="flex flex-col items-center gap-3 text-center">
-        <span className={`flex h-14 w-14 items-center justify-center rounded-full ${held ? TONE_CIRCLE.amber : TONE_CIRCLE.green}`}>
+        <span className={`flex h-14 w-14 items-center justify-center rounded-full ${held ? TONE_CIRCLE.amber : nothingNew ? TONE_CIRCLE.slate : TONE_CIRCLE.green}`}>
           <DIcon name={held ? "priority_high" : "check"} className="text-[28px]" />
         </span>
         <h2 className={`text-[26px] font-semibold ${D_TXT}`} data-testid="saved-page-result-title">
@@ -610,17 +682,27 @@ function Result({
           {page.domain ? `From ${page.domain} · ` : ""}read {readDate(page.created_at)}
         </p>
         <CountPills counts={counts} />
+        {aiOn ? <PicturesLine page={page} /> : null}
       </div>
+
+      {aiOn && !isSingleFile(page.file_name) && counts.saved + counts.already > 0 ? (
+        <div className="flex items-start gap-3 rounded-xl bg-[#dbe1ff] p-4 text-[14px] text-[#00174b] dark:bg-[#1e3a8a]/40 dark:text-[#dbe1ff]" data-testid="saved-page-needs-drawing">
+          <DIcon name="info" className="text-[20px] text-[#0153dc] dark:text-[#93b4ff]" />
+          <p>
+            <span className="font-semibold">Pictures need the drawing.</span> Next time, save the page in Chrome as Webpage, Single File and upload that.
+          </p>
+        </div>
+      ) : null}
 
       <Group title="Saved" count={of("saved").length} testId="group-saved">
         {of("saved").map((r, i) => (
-          <ResultLine key={`s${i}`} row={r} right={<RePill tone="green" icon="check">Confirmed</RePill>} />
+          <ResultLine key={`s${i}`} row={r} picture={aiOn ? pictureFor(page, r) : undefined} right={<RePill tone="green" icon="check">Confirmed</RePill>} />
         ))}
       </Group>
 
       <Group title="Already on file" count={of("already").length} testId="group-already">
         {of("already").map((r, i) => (
-          <ResultLine key={`a${i}`} row={r} right={<RePill tone="grey">Already on file</RePill>} />
+          <ResultLine key={`a${i}`} row={r} picture={aiOn ? pictureFor(page, r) : undefined} right={<RePill tone="grey">Already on file</RePill>} />
         ))}
       </Group>
 
@@ -694,18 +776,70 @@ function Group({ title, count, testId, children }: { title: string; count: numbe
 }
 
 /** One row everywhere (SP-37): icon, plain words · place, then number and dates in mono; names wrap, never cut off. */
-function ResultLine({ row, right, reason }: { row: SavedPageRow; right?: ReactNode; reason?: string | null }) {
+/** The row's picture state for S1: its picture, or "No diagram" when the upload had none for it. */
+function pictureFor(page: SavedPage, row: SavedPageRow): { noDiagram: boolean } {
+  const queued = page.result?.pictures?.rows?.find((p) => p.number === row.number);
+  return { noDiagram: !row.picture && (queued?.status === "noDiagram" || !isSingleFile(page.file_name)) };
+}
+
+/** "Pictures: 4 made · 2 being made · 3 with no diagram" (only the parts that are not zero). */
+function PicturesLine({ page }: { page: SavedPage }) {
+  const rows = (page.result?.rows ?? []).filter((r) => r.group === "saved" || r.group === "already");
+  if (page.result?.pictures?.failed) {
+    return (
+      <p className={`flex items-center gap-1.5 text-[14px] ${D_MUTED}`} data-testid="saved-page-pictures-line">
+        <DIcon name="image" className="text-[18px]" /> Pictures couldn&apos;t be queued — try again in a minute.
+      </p>
+    );
+  }
+  const count = (fn: (r: SavedPageRow) => boolean) => rows.filter(fn).length;
+  const parts = [
+    [count((r) => r.picture?.status === "made" || r.picture?.status === "hidden"), "made"],
+    [count((r) => r.picture?.status === "being_made"), "being made"],
+    [count((r) => r.picture?.status === "waiting"), "waiting"],
+    [count((r) => r.picture?.status === "failed"), "failed"],
+    [count((r) => pictureFor(page, r).noDiagram), "with no diagram"],
+  ]
+    .filter(([n]) => Number(n) > 0)
+    .map(([n, word]) => `${n} ${word}`);
+  if (!parts.length) return null;
+  return (
+    <p className={`flex items-center gap-1.5 text-[14px] ${D_MUTED}`} data-testid="saved-page-pictures-line">
+      <DIcon name="image" className="text-[18px]" /> Pictures: {parts.join(" · ")}
+    </p>
+  );
+}
+
+function ResultLine({
+  row,
+  right,
+  reason,
+  picture,
+}: {
+  row: SavedPageRow;
+  right?: ReactNode;
+  reason?: string | null;
+  picture?: { noDiagram: boolean };
+}) {
+  const word = picture ? pictureWord(row.picture ?? null, picture.noDiagram) : null;
   const waits = Boolean(reason && /^Waits\b/.test(reason));
   return (
     <div className="flex flex-col gap-3 bg-white p-4 sm:flex-row sm:items-center dark:bg-[#111a2e]" data-testid="saved-page-row">
       <div className="flex min-w-0 flex-1 items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#dbe1ff] text-[#0153dc] dark:bg-[#1e3a8a]/50 dark:text-[#93b4ff]">
-          <DIcon name={rowIcon(row.partType)} className="text-[20px]" />
-        </span>
+        {word ? (
+          <PartPictureFrame picture={row.picture ?? null} size={40} icon={rowIcon(row.partType)} />
+        ) : (
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#dbe1ff] text-[#0153dc] dark:bg-[#1e3a8a]/50 dark:text-[#93b4ff]">
+            <DIcon name={rowIcon(row.partType)} className="text-[20px]" />
+          </span>
+        )}
         <div className="flex min-w-0 flex-col gap-0.5">
-          <span className={`text-[15px] font-medium ${D_TXT}`}>
-            {row.partType}
-            {row.place ? ` · ${row.place}` : ""}
+          <span className={`flex flex-wrap items-center gap-2 text-[15px] font-medium ${D_TXT}`}>
+            {word ? <span data-testid="saved-page-picture-state"><PictureStatePill word={word} /></span> : null}
+            <span>
+              {row.partType}
+              {row.place ? ` · ${row.place}` : ""}
+            </span>
           </span>
           <span className={`text-[13px] ${D_MONO} ${D_MUTED}`}>{[row.number, row.dates].filter(Boolean).join(" · ")}</span>
           {reason ? (

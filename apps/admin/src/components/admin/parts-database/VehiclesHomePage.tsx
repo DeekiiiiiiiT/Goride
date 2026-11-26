@@ -33,6 +33,7 @@ const MODULES = [
   { id: "parts-catalog", label: "Parts database", detail: "Search any car and see its parts in five match types.", icon: "category" },
   { id: "pending-motor-vehicles", label: "Pending catalog", detail: "Rows waiting for a person to approve.", icon: "hourglass_top" },
   { id: "vehicle-pictures", label: "Vehicle pictures", detail: "One studio picture per car and colour.", icon: "photo_camera" },
+  { id: "part-pictures", label: "Part pictures", detail: "One realistic picture per part, made from the maker's diagram.", icon: "photo_library" },
   { id: "maintenance-templates", label: "Maintenance templates", detail: "Service schedules used by the apps.", icon: "build_circle" },
   { id: "suppliers-prices", label: "Suppliers and prices", detail: "Who sells a part, and for how much.", icon: "storefront" },
   { id: "catalog-quality", label: "Data quality", detail: "Catalog rows that fail a check.", icon: "rule" },

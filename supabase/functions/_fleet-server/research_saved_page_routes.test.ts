@@ -6,6 +6,9 @@
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { runSavedPage, type SavedPageAi, type SavedPageAiInput } from "./research_saved_page_routes.ts";
+import type { PartPictureQueueDeps } from "./part_pictures_queue.ts";
+import { pictureBlockers } from "./part_picture_reads.ts";
+import { mergePartPicturesSettings } from "./part_pictures_settings.ts";
 
 // ---------------------------------------------------------------- fixtures
 
@@ -14,6 +17,7 @@ const ACTOR = "22222222-2222-4222-8222-222222222222";
 const LATER_CAR = "33333333-3333-4333-8333-333333333333";
 const SHOCK = "44444444-4444-4444-8444-444444444444";
 const BAR = "55555555-5555-4555-8555-555555555555";
+const SUS_GROUP = "66666666-6666-4666-8666-666666666666";
 
 const RIGHT_GROUP = "GROUP 77777U - ABSORBER SET, SHOCK, FRONT RH";
 const LEFT_GROUP = "GROUP 77778U - ABSORBER SET, SHOCK, FRONT LH";
@@ -228,6 +232,10 @@ class Q {
     this.filters.push(["is", col, val]);
     return this;
   }
+  in(col: string, vals: unknown[]) {
+    this.filters.push(["in", col, vals]);
+    return this;
+  }
   order(col: string, opts?: { ascending?: boolean }) {
     this.orderBy = [col, opts?.ascending !== false];
     return this;
@@ -251,6 +259,7 @@ class Q {
     return this.filters.every(([op, col, val]) => {
       if (op === "eq") return row[col] === val;
       if (op === "is") return (row[col] ?? null) === val;
+      if (op === "in") return Array.isArray(val) && (val as unknown[]).includes(row[col]);
       if (op === "gte") return String(row[col] ?? "") >= String(val ?? "");
       return true;
     });
@@ -305,9 +314,22 @@ class FakeDb {
       { id: LATER_CAR, make: "Testmake", model: "Testmodel", chassis_code: "ZZ900", engine_code: "1KR-FE", trim_series: null, catalog_trim: null, transmission: "CVT", production_start_year: 2020, production_start_month: 9, production_end_year: null, production_end_month: null },
     ],
     maintenance_service_categories: [
-      { id: SHOCK, code: "SUS-SHOCK", name: "Shock absorber", kind: "component", is_part: true, part_type_status: "active", position_scheme: "four_corners" },
-      { id: BAR, code: "SUS-BAR", name: "Stabilizer bar", kind: "component", is_part: true, part_type_status: "active", position_scheme: "axle" },
+      { id: SUS_GROUP, code: "SUS", name: "Suspension & steering", kind: "system", is_part: true, part_type_status: "active", position_scheme: "none", parent_id: null },
+      { id: SHOCK, code: "SUS-SHOCK", name: "Shock absorber", kind: "component", is_part: true, part_type_status: "active", position_scheme: "four_corners", parent_id: SUS_GROUP },
+      { id: BAR, code: "SUS-BAR", name: "Stabilizer bar", kind: "component", is_part: true, part_type_status: "active", position_scheme: "axle", parent_id: SUS_GROUP },
     ],
+    // Part pictures (§3.2): the part behind each number, its template, and the queue itself.
+    part_master: [
+      { oem_part_number: "11111-A1001", oem_part_number_norm: "11111A1001", manufacturer: "Testmake", name: "Shock absorber", maintenance_component_id: SHOCK, interchange_group_id: "group-11111-A1001", catalog_decision: "pending" },
+      { oem_part_number: "11111-B1002", oem_part_number_norm: "11111B1002", manufacturer: "Testmake", name: "Shock absorber", maintenance_component_id: SHOCK, interchange_group_id: "group-11111-B1002", catalog_decision: "pending" },
+      { oem_part_number: "22222-A1001", oem_part_number_norm: "22222A1001", manufacturer: "Testmake", name: "Shock absorber", maintenance_component_id: SHOCK, interchange_group_id: "group-22222-A1001", catalog_decision: "pending" },
+      { oem_part_number: "22222-B1002", oem_part_number_norm: "22222B1002", manufacturer: "Testmake", name: "Shock absorber", maintenance_component_id: SHOCK, interchange_group_id: "group-22222-B1002", catalog_decision: "pending" },
+    ],
+    part_picture_template: [
+      { catalog_group_id: SUS_GROUP, materials: "Painted shock absorbers with chrome rods.", enabled: true, version: 1 },
+    ],
+    part_picture: [],
+    part_picture_diagram: [],
     trusted_source: [
       { domain: "catalog.example", kind: "car_maker", maker_norm: "testmake" },
       { domain: "parts.example", kind: "part_maker", maker_norm: "parts" },
@@ -401,7 +423,7 @@ class FakeDb {
   }
 }
 
-function run(db: FakeDb, page: string, opts: { fileName?: string; url?: string; car?: string; again?: boolean; ai?: SavedPageAi } = {}) {
+function run(db: FakeDb, page: string, opts: { fileName?: string; url?: string; car?: string; again?: boolean; ai?: SavedPageAi; pictures?: PartPictureQueueDeps } = {}) {
   const fileName = opts.fileName ?? (/mime-version/i.test(page) ? "page.mhtml" : "page.html");
   return runSavedPage(db as unknown as SupabaseClient, {
     bytes: enc(page),
@@ -411,7 +433,11 @@ function run(db: FakeDb, page: string, opts: { fileName?: string; url?: string; 
     url: opts.url ?? null,
     again: opts.again ?? false,
     actor: ACTOR,
-  }, { ai: opts.ai ?? fakeAi(db, SHOCK_ROWS), now: () => new Date(db.now) });
+  }, {
+    ai: opts.ai ?? fakeAi(db, SHOCK_ROWS),
+    now: () => new Date(db.now),
+    ...(opts.pictures ? { pictures: opts.pictures } : {}),
+  });
 }
 
 const shockRun = (db: FakeDb, page: string, extra: { specs?: RowSpec[]; mutate?: (rows: any[], call: number) => any[]; again?: boolean; car?: string; url?: string; fileName?: string } = {}) =>
@@ -779,17 +805,149 @@ Deno.test("S2 → S5: one upload's result comes back by id, without the uploader
   assertEquals(bad.status, 400);
 });
 
+Deno.test("§3.5 point 7: the saved-page result carries each row's picture, so S1 can show the thumbnail", async () => {
+  Deno.env.set("R2_PUBLIC_BASE_URL", "https://media.test");
+  const app: Array<{ method: string; path: string; handler: (c: any) => Promise<any> }> = [];
+  const record = (method: string) => (path: string, handler: any) => app.push({ method, path, handler });
+  const db = new FakeDb();
+  const { registerResearchSavedPageRoutes } = await import("./research_saved_page_routes.ts");
+  const blockers = pictureBlockers(
+    mergePartPicturesSettings({ ai_part_pictures: true }),
+    { now: new Date(db.now), geminiSpend: { usedUsd: 0, budgetUsd: 80 }, madeToday: 0 },
+  );
+  registerResearchSavedPageRoutes(
+    { get: record("GET"), post: record("POST") },
+    db as unknown as SupabaseClient,
+    { pictureBlockers: async () => blockers },
+  );
+  const get = app.find((r) => r.method === "GET" && r.path.endsWith("/saved-pages/:id"));
+  assert(get, "GET saved-pages/:id missing");
+  const id = "0b7a6c1e-2222-4222-8333-444455556666";
+  // A ready picture for 11111-A1001's group (also the "Already on file" case: the picture came from another upload).
+  db.table("part_picture").push({
+    id: "pic-ready-1",
+    interchange_group_id: "group-11111-A1001",
+    manufacturer: "Testmake",
+    part_number: "11111-A1001",
+    part_name: "Shock absorber",
+    catalog_group_id: SUS_GROUP,
+    status: "ready",
+    r2_key: "catalogue/parts/pic-ready-1/v1.png",
+    version: 1,
+    template_version: 1,
+    made_at: "2026-11-25T09:00:00Z",
+    created_at: "2026-11-25T09:00:00Z",
+  });
+  db.table("part_picture_diagram").push({
+    id: "diag-1",
+    picture_id: "pic-ready-1",
+    r2_key: "part-diagrams/pic-ready-1/one.png",
+    deleted_at: null,
+  });
+  // A queued picture for the other row, with the AI switched off: it shows as waiting, reason off.
+  db.table("part_picture").push({
+    id: "pic-waiting-1",
+    interchange_group_id: "group-22222-A1001",
+    manufacturer: "Testmake",
+    part_number: "22222-A1001",
+    part_name: "Shock absorber",
+    catalog_group_id: SUS_GROUP,
+    status: "queued",
+    r2_key: null,
+    version: 1,
+    template_version: 1,
+    made_at: null,
+    created_at: "2026-11-25T09:05:00Z",
+  });
+  const offBlockers = pictureBlockers(
+    mergePartPicturesSettings({ ai_part_pictures: false }),
+    { now: new Date(db.now), geminiSpend: { usedUsd: 0, budgetUsd: 80 }, madeToday: 0 },
+  );
+  const app2: Array<{ method: string; path: string; handler: (c: any) => Promise<any> }> = [];
+  const record2 = (method: string) => (path: string, handler: any) => app2.push({ method, path, handler });
+  registerResearchSavedPageRoutes(
+    { get: record2("GET"), post: record2("POST") },
+    db as unknown as SupabaseClient,
+    { pictureBlockers: async () => offBlockers },
+  );
+  const getOff = app2.find((r) => r.method === "GET" && r.path.endsWith("/saved-pages/:id"))!;
+  db.table("research_saved_page").push({
+    id, vehicle_catalog_id: CAR, job_id: null, domain: "catalog.example", source_url: null, file_name: "p.mhtml", status: "done",
+    stop_reason: null, uploaded_by: ACTOR, created_at: "2026-11-25T10:00:00Z",
+    result: {
+      counts: { saved: 1, already: 1, held: 0, not_roam_type: 0 },
+      rows: [
+        { partType: "Shock absorber", place: "front right", number: "11111-A1001", dates: "11.2016 - 11.2018", group: "saved", reason: null, jobId: null },
+        { partType: "Shock absorber", place: "front left", number: "22222-A1001", dates: "11.2016 - 11.2018", group: "already", reason: null, jobId: null },
+        { partType: "Other", place: null, number: "99999-Z1001", dates: null, group: "not_roam_type", reason: null, jobId: null },
+      ],
+    },
+  });
+  const ctx = (handler: string) => ({
+    req: {
+      param: (k: string) => (k === "id" ? id : ""),
+      header: (name?: string) =>
+        name === "Authorization"
+          ? `Bearer ${btoa(JSON.stringify({ alg: "none" }))}.${btoa(JSON.stringify({ aal: "aal2", sub: ACTOR }))}.sig`
+          : null,
+    },
+    get: (k: string) =>
+      k === "rbacUser"
+        ? { id: ACTOR, userId: ACTOR, resolvedRole: "platform_owner", role: "platform_owner", mfaVerified: true, aal: "aal2" }
+        : undefined,
+    json: (body: unknown, status = 200) => ({ body, status }),
+  });
+
+  const on = await get!.handler(ctx("on")) as { status: number; body: any };
+  assertEquals(on.status, 200);
+  const rows = on.body.savedPage.result.rows as Array<Record<string, any>>;
+  assertEquals(on.body.picturesAiOn, true);
+  assertEquals(rows[0].picture.status, "made");
+  assertEquals(rows[0].picture.hasDiagram, true);
+  assertEquals(rows[0].picture.waitingReason, null);
+  assertEquals(rows[0].picture.partNumber, "11111-A1001");
+  assertEquals(rows[0].picture.catalogGroup, { id: SUS_GROUP, name: "Suspension & steering" });
+  assertEquals(rows[0].picture.url.src.includes("width=480"), true, JSON.stringify(rows[0].picture.url));
+  assertEquals(rows[0].picture.urlDetail.src.includes("width=1200"), true);
+  assertEquals(rows[1].picture.status, "being_made");
+  assertEquals(rows[1].picture.hasDiagram, false);
+  assertEquals(rows[2].picture, null);
+  // The upload's own fields and counts are untouched.
+  assertEquals(rows[2].group, "not_roam_type");
+  assertEquals(on.body.savedPage.result.counts, { saved: 1, already: 1, held: 0, not_roam_type: 0 });
+
+  // AI off: S1 shows no pictures line, and every waiting row says why.
+  const off = await getOff.handler(ctx("off")) as { status: number; body: any };
+  assertEquals(off.status, 200);
+  assertEquals(off.body.picturesAiOn, false);
+  const offRows = off.body.savedPage.result.rows as Array<Record<string, any>>;
+  assertEquals(offRows[1].picture.status, "waiting");
+  assertEquals(offRows[1].picture.waitingReason, "off");
+  assertEquals(offRows[0].picture.status, "made");
+});
+
 // ---------------------------------------------------------------- R1: file stops
 
 Deno.test("R1: too big, not a web page and no rows each stop with their own code and detail", async () => {
+  // PP-02: the limit is 8 MB now (a single-file page of the owner's sample is about 4.9 MB).
   const big = new FakeDb();
   const bigOut = await runSavedPage(big as unknown as SupabaseClient, {
-    bytes: new Uint8Array(5 * 1024 * 1024 + 1), fileName: "page.html", vehicleCatalogId: CAR, actor: ACTOR,
+    bytes: new Uint8Array(8 * 1024 * 1024 + 1), fileName: "page.html", vehicleCatalogId: CAR, actor: ACTOR,
   }, { ai: fakeAi(big, []) });
   assertEquals(bigOut.kind, "stopped");
   if (bigOut.kind === "stopped") {
     assertEquals(bigOut.code, "too_big");
-    assertEquals(bigOut.detail, "5.0 MB");
+    assertEquals(bigOut.detail, "8.0 MB");
+  }
+
+  // A page between the old 5 MB limit and the new 8 MB one is no longer refused for its size.
+  const medium = new FakeDb();
+  const mediumOut = await runSavedPage(medium as unknown as SupabaseClient, {
+    bytes: new Uint8Array(6 * 1024 * 1024), fileName: "page.html", vehicleCatalogId: CAR, actor: ACTOR,
+  }, { ai: fakeAi(medium, []) });
+  assertEquals(mediumOut.kind, "stopped");
+  if (mediumOut.kind === "stopped") {
+    assert(mediumOut.code !== "too_big", "6 MB must be inside the 8 MB limit");
   }
 
   const pdf = new FakeDb();
@@ -1005,4 +1163,228 @@ Deno.test("SP-50: once the page's numbers save, the robot's other guesses on tha
   const saved = props.filter((r) => r.job_id === job.id && r.trust_route === "owner_browser");
   assertEquals(saved.length, 4);
   assert(saved.every((r) => r.status !== "rejected"), JSON.stringify(saved.map((r) => r.status)));
+});
+
+// ---------------------------------------------------------------- §3.2 pictures after the upload
+
+/** The image map the made-up diagram page carries: only the right-hand part is named by it. */
+const DIAGRAM_AREA = `<img src="https://catalog.example/parts/ZZ900_files/sub47777.png" usemap="#m47777">
+<map name="m47777"><area shape="rect" coords="1,2,3,4" title="ABSORBER SET, SHOCK, FRONT RH" data-key="1_47777-77777"></map>`;
+
+/** A minimal PNG (signature + IHDR) as base64, so the part survives UTF-8 text encoding in this fixture. */
+function pngBase64(width: number, height: number): string {
+  const bytes = new Uint8Array(33);
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
+  bytes.set([0, 0, 0, 13], 8);
+  bytes.set([0x49, 0x48, 0x44, 0x52], 12);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(16, width);
+  view.setUint32(20, height);
+  bytes[24] = 8;
+  bytes[25] = 2;
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
+}
+
+/** The table page as a single-file page: one 400×400 diagram part plus its image map. */
+function diagramPage(html = pageHtml({ header: DIAGRAM_AREA })): string {
+  const boundary = "----MultipartBoundary--PPTEST----";
+  return [
+    "From: <Saved by Blink>",
+    "MIME-Version: 1.0",
+    `Content-Type: multipart/related; type="text/html"; boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
+    "Content-Type: text/html",
+    "Content-Transfer-Encoding: quoted-printable",
+    "Content-Location: https://catalog.example/parts/ZZ900",
+    "",
+    html.replace(/=/g, "=3D"),
+    "",
+    `--${boundary}`,
+    "Content-Type: image/png",
+    "Content-Transfer-Encoding: base64",
+    "Content-Location: https://catalog.example/parts/ZZ900_files/sub47777.png",
+    "",
+    pngBase64(400, 400),
+    "",
+    `--${boundary}--`,
+  ].join("\r\n");
+}
+
+function fakeDiagramStore() {
+  const puts: Array<{ bucket: string; key: string; bytes: Uint8Array; contentType: string; cacheControl: string }> = [];
+  const state = { fail: false };
+  return {
+    puts,
+    failAll: () => {
+      state.fail = true;
+    },
+    async put(bucket: "public" | "private", key: string, bytes: Uint8Array, contentType: string, cacheControl: string) {
+      if (state.fail) throw new Error("R2 PUT 500");
+      puts.push({ bucket, key, bytes, contentType, cacheControl });
+    },
+  };
+}
+
+function pictureSettings(patch: Record<string, unknown> = {}) {
+  return {
+    ai_part_pictures: true,
+    part_picture_model: "gemini-3.1-flash-image",
+    max_attempts: 3,
+    daily_max: 50,
+    retention_days: 30,
+    ...patch,
+  };
+}
+
+function pictureDeps(
+  r2: ReturnType<typeof fakeDiagramStore> | null,
+  settings = pictureSettings(),
+): PartPictureQueueDeps {
+  return {
+    r2: r2 as unknown as PartPictureQueueDeps["r2"],
+    loadSettings: async () => settings as never,
+  };
+}
+
+Deno.test("§3.2 saved rows queue a picture and the diagram goes to the private bucket", async () => {
+  const db = new FakeDb();
+  const r2 = fakeDiagramStore();
+  const out = await run(db, diagramPage(), { pictures: pictureDeps(r2) });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+
+  const pictures = out.row.result.pictures!;
+  assertEquals([pictures.queued, pictures.alreadyHave, pictures.noDiagram, pictures.failed], [4, 0, 0, false]);
+  assertEquals(pictures.rows.length, 4);
+  assert(pictures.rows.every((r) => r.status === "queued"), JSON.stringify(pictures.rows));
+
+  const rows = db.table("part_picture");
+  assertEquals(rows.length, 4);
+  assert(rows.every((r) => r.status === "queued" && r.source_saved_page_id), JSON.stringify(rows));
+  assert(rows.every((r) => r.catalog_group_id === SUS_GROUP && r.component_id === SHOCK));
+  assert(rows.every((r) => r.label === null), "a group line of \"GROUP 77777U\" carries no callout label");
+
+  assertEquals(r2.puts.length, 4);
+  assert(r2.puts.every((p) => p.bucket === "private" && p.key.startsWith("part-diagrams/")), JSON.stringify(r2.puts.map((p) => p.bucket)));
+  assert(r2.puts.every((p) => p.contentType === "image/png" && p.bytes.length === 33));
+
+  const diagrams = db.table("part_picture_diagram");
+  assertEquals(diagrams.length, 4);
+  // Right-hand rows are named by the image map; left-hand rows fall back to the largest picture.
+  assertEquals(diagrams.filter((d) => d.map_box !== null).length, 2);
+  assertEquals(diagrams.find((d) => d.map_box)?.map_box, { x1: 1, y1: 2, x2: 3, y2: 4 });
+  assert(diagrams.every((d) => d.saved_page_id && d.delete_after && d.r2_key));
+});
+
+Deno.test("§3.2 an already-on-file row is queued too (PP-08)", async () => {
+  const db = new FakeDb();
+  for (const [number, side] of [["11111-A1001", "right"], ["11111-B1002", "right"], ["22222-A1001", "left"], ["22222-B1002", "left"]]) {
+    db.seedListing({ number, position: "front", side, year_from: 2016, year_to: 2020 });
+  }
+  const out = await run(db, diagramPage(), { pictures: pictureDeps(fakeDiagramStore()) });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+
+  assertEquals(out.row.result.counts.saved, 0);
+  assertEquals(out.row.result.counts.already, 4);
+  const pictures = out.row.result.pictures!;
+  assertEquals([pictures.queued, pictures.alreadyHave], [4, 0]);
+  assertEquals(pictures.rows.length, 4);
+  assertEquals(db.table("part_picture").length, 4);
+});
+
+Deno.test("§3.2 template off queues nothing, an existing picture is already-have, a .html page has no diagram", async () => {
+  // 1. The group's template is off (Fluids / tyres): nothing queued, nothing counted.
+  let db = new FakeDb();
+  db.table("part_picture_template")[0].enabled = false;
+  let out = await run(db, diagramPage(), { pictures: pictureDeps(fakeDiagramStore()) });
+  if (out.kind === "done") {
+    const pictures = out.row.result.pictures!;
+    assertEquals([pictures.queued, pictures.alreadyHave, pictures.noDiagram], [0, 0, 0]);
+    assert(pictures.rows.every((r) => r.status === "templateOff"), JSON.stringify(pictures.rows));
+  }
+  assertEquals(db.table("part_picture").length, 0);
+
+  // 2. One group already has a ready picture.
+  db = new FakeDb();
+  db.table("part_picture").push({ id: "pic-1", interchange_group_id: "group-11111-A1001", status: "ready", version: 1 });
+  out = await run(db, diagramPage(), { pictures: pictureDeps(fakeDiagramStore()) });
+  if (out.kind === "done") {
+    const pictures = out.row.result.pictures!;
+    assertEquals([pictures.queued, pictures.alreadyHave], [3, 1]);
+  }
+  assertEquals(db.table("part_picture").length, 4);
+
+  // 3. A plain .html upload carries no pictures, so nothing is queued.
+  db = new FakeDb();
+  out = await run(db, pageHtml({ header: DIAGRAM_AREA }), { pictures: pictureDeps(fakeDiagramStore()) });
+  if (out.kind === "done") {
+    const pictures = out.row.result.pictures!;
+    assertEquals([pictures.queued, pictures.alreadyHave, pictures.noDiagram], [0, 0, 4]);
+  }
+  assertEquals(db.table("part_picture").length, 0);
+});
+
+Deno.test("§3.2 best effort: a picture-side error still saves the parts, and says pictures failed", async () => {
+  const db = new FakeDb();
+  const broken: PartPictureQueueDeps = {
+    r2: fakeDiagramStore() as never,
+    loadSettings: async () => {
+      throw new Error("settings unavailable");
+    },
+  };
+  const out = await run(db, diagramPage(), { pictures: broken });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  assertEquals(out.row.result.counts.saved, 4);
+  assertEquals(out.row.result.pictures!.failed, true);
+  assertEquals(out.row.result.pictures!.queued, 0);
+  assertEquals(db.table("part_picture").length, 0);
+});
+
+Deno.test("§3.2 best effort: when every diagram upload fails, nothing is left queued", async () => {
+  const db = new FakeDb();
+  const r2 = fakeDiagramStore();
+  r2.failAll();
+  const out = await run(db, diagramPage(), { pictures: pictureDeps(r2) });
+  if (out.kind === "done") {
+    const pictures = out.row.result.pictures!;
+    assertEquals([pictures.queued, pictures.noDiagram, pictures.failed], [0, 4, false]);
+  }
+  assertEquals(db.table("part_picture").filter((r) => r.status === "queued").length, 0);
+});
+
+Deno.test("§3.2 AI part pictures off: nothing queued and no pictures line on the result", async () => {
+  const db = new FakeDb();
+  const out = await run(db, diagramPage(), {
+    pictures: pictureDeps(fakeDiagramStore(), pictureSettings({ ai_part_pictures: false })),
+  });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  assert(!("pictures" in out.row.result), "no pictures key while the switch is off");
+  assertEquals(out.row.result.counts.saved, 4);
+  assertEquals(db.table("part_picture").length, 0);
+});
+
+Deno.test("§3.2 a failed picture is re-queued on the same row, never a second row for that part", async () => {
+  const db = new FakeDb();
+  db.table("part_picture").push({
+    id: "pic-failed",
+    interchange_group_id: "group-11111-A1001",
+    status: "failed",
+    version: 1,
+    attempts: 3,
+    last_error: "old reason",
+  });
+  const out = await run(db, diagramPage(), { pictures: pictureDeps(fakeDiagramStore()) });
+  if (out.kind === "done") assertEquals(out.row.result.pictures!.queued, 4);
+
+  const rows = db.table("part_picture");
+  assertEquals(rows.length, 4);
+  const retried = rows.find((r) => r.interchange_group_id === "group-11111-A1001")!;
+  assertEquals(retried.id, "pic-failed");
+  assertEquals([retried.status, retried.attempts, retried.last_error], ["queued", 0, null]);
 });

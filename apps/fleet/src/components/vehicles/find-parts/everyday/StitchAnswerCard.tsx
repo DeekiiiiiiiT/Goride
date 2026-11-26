@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../ui/tooltip";
 import { TrustBadge, mapTrustLabel } from "./EverydayShared";
+import { PartPictureTile, type FleetPartPicture } from "./PartPictureTile";
 
 /** Small (i) next to a heading; hover or tap shows the plain explanation. */
 function InfoTip({ label, text }: { label: string; text: string }) {
@@ -166,7 +167,10 @@ export function StitchAnswerCard({
   onUseInService,
   defaultAltsOpen = false,
   partInfo = [],
+  picture,
 }: {
+  /** F1: the part's AI picture (ready only), or null — the drawing stays. */
+  picture?: FleetPartPicture;
   /** Facts shown in "Your part info" (car, chassis, engine, drive, part). Only real values; missing ones are left out. */
   partInfo?: PartInfoFact[];
   name: string;
@@ -226,9 +230,7 @@ export function StitchAnswerCard({
       <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
         {/* Left: picture + where it goes */}
         <div className="flex flex-col gap-5 lg:col-span-4">
-          <div className="group relative flex min-h-[260px] w-full flex-col items-center justify-center overflow-hidden rounded-2xl bg-[#eff4ff] p-6 dark:bg-[#2a2a2d]">
-            <StitchPadIllustration />
-          </div>
+          <PartPictureTile picture={picture} fallback={<StitchPadIllustration />} partName={name} partNumber={number} />
           <div className="flex w-full items-center gap-4 rounded-2xl bg-[#eff4ff] p-4 dark:bg-[#2a2a2d]">
             <div className="relative flex h-24 w-20 shrink-0 items-center justify-center rounded-xl bg-white p-2 shadow-sm dark:bg-[#1c1c1e]">
               <StitchCarPosition spot={spot} />
