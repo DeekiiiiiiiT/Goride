@@ -249,7 +249,7 @@ async function main() {
 
   run(
     'node',
-    ['node_modules/@playwright/test/cli.js', 'test', '--project=inventory', ...specFiles],
+    ['node_modules/@playwright/test/cli.js', 'test', '--project=inventory', ...(process.env.CI ? ['--max-failures=2'] : []), ...specFiles],
     { env: e2eEnv },
   );
 
