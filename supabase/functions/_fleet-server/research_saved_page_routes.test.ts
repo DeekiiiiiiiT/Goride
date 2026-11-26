@@ -899,6 +899,45 @@ Deno.test("SP-45: an AI failure shows the plain line; the raw error only goes to
   assertEquals(db.table("research_saved_page")[0].stop_reason, "ai_failed");
 });
 
+Deno.test("SP-49: the two reads run at the same time; a read that runs out of time stops the upload with a plain line", async () => {
+  // Both reads start before either finishes.
+  const db = new FakeDb();
+  let started = 0;
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  const parallelAi: SavedPageAi = async (input) => {
+    db.aiCalls.push(input);
+    started++;
+    if (started === 2) release();
+    await gate;
+    return [];
+  };
+  const both = await Promise.race([
+    run(db, pageHtml(), { ai: parallelAi }).then(() => "finished"),
+    new Promise((r) => setTimeout(() => r("stuck: second read waited for the first"), 2000)),
+  ]);
+  assertEquals(both, "finished");
+  assertEquals(started, 2);
+
+  // A timed-out read: the upload is marked stopped (never left on "reading") and the screen gets a plain line.
+  const slow = new FakeDb();
+  const original = console.error;
+  console.error = () => {};
+  let out: { kind: string; status?: number; error?: string };
+  try {
+    out = await run(slow, pageHtml(), {
+      ai: () => Promise.reject(new DOMException("Signal timed out.", "TimeoutError")),
+    }) as typeof out;
+  } finally {
+    console.error = original;
+  }
+  assertEquals(out.kind, "error");
+  assertEquals(out.status, 504);
+  assertEquals(out.error, "Reading the page took too long. Try again.");
+  assertEquals(slow.table("research_saved_page")[0].status, "stopped");
+  assertEquals(slow.table("research_saved_page")[0].stop_reason, "ai_failed");
+});
+
 Deno.test("SP-46: a trusted part maker's page stops with part_maker_page", async () => {
   const db = new FakeDb();
   const out = await shockRun(db, pageHtml(), { url: "https://parts.example/parts/ZZ900" });
