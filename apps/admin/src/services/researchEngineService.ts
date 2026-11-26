@@ -394,9 +394,76 @@ export type BrowserCheckGate =
   | { ok: true; detected: string }
   | { ok: false; reason: "no_car" | "no_number" | "number_not_on_line" | "wrong_years" | "wrong_engine" | "no_value" | "empty" };
 
+// ------------------------------------------------------------------ saved catalogue pages (docs/saved-page-parts-audit.md)
+
+export type SavedPageGroup = "saved" | "already" | "held" | "not_roam_type";
+export type SavedPageCounts = Record<SavedPageGroup, number>;
+export type SavedPageRow = {
+  partType: string;
+  place: string | null;
+  number: string | null;
+  dates: string | null;
+  group: SavedPageGroup;
+  /** Plain reason from the server (held rows only); the screen never makes its own wording. */
+  reason: string | null;
+  jobId: string | null;
+};
+export type SavedPageStopCode =
+  | "wrong_car"
+  | "untrusted_site"
+  | "part_maker_page"
+  | "cap_reached"
+  | "too_big"
+  | "not_web_page"
+  | "no_rows"
+  | "no_build_dates"
+  | "too_many_pages"
+  | "ai_failed";
+export type SavedPage = {
+  id: string;
+  vehicle_catalog_id: string;
+  job_id: string | null;
+  domain: string | null;
+  source_url: string | null;
+  file_name: string | null;
+  status: "reading" | "done" | "stopped";
+  stop_reason: string | null;
+  result: { counts?: SavedPageCounts; rows?: SavedPageRow[]; otherTypes?: string[]; stop?: { code: string; detail: string } };
+  created_at: string;
+};
+export type SavedPageReply = {
+  savedPage: SavedPage;
+  alreadyRead?: boolean;
+  readAt?: string;
+  stop?: { code: SavedPageStopCode; detail: string };
+  versionShown?: string | null;
+  carFrame?: string | null;
+};
+export type SavedPageListItem = { id: string; createdAt: string; domain: string | null; status: SavedPage["status"]; counts: SavedPageCounts };
+
+/** R1: upload one saved page (multipart; the browser sets the boundary). */
+async function uploadSavedPage(
+  token: string,
+  body: { file: File; vehicleCatalogId: string; jobId?: string | null; url?: string | null; again?: boolean },
+): Promise<SavedPageReply> {
+  const form = new FormData();
+  form.append("file", body.file, body.file.name);
+  form.append("vehicleCatalogId", body.vehicleCatalogId);
+  if (body.jobId) form.append("jobId", body.jobId);
+  if (body.url) form.append("url", body.url);
+  if (body.again) form.append("again", "true");
+  const res = await fetch(`${BASE}/saved-pages`, { method: "POST", headers: headers(token), body: form });
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()) as SavedPageReply;
+}
+
 // ------------------------------------------------------------------ reads
 
 export const researchApi = {
+  uploadSavedPage,
+  savedPages: (t: string, vehicleCatalogId: string) =>
+    getJson<{ items: SavedPageListItem[] }>(t, `/saved-pages?vehicleCatalogId=${encodeURIComponent(vehicleCatalogId)}`).then((r) => r.items ?? []),
+  savedPage: (t: string, id: string) => getJson<{ savedPage: SavedPage }>(t, `/saved-pages/${encodeURIComponent(id)}`).then((r) => r.savedPage),
   summary: (t: string) => getJson<ResearchSummary>(t, "/summary"),
   notices: (t: string) => getJson<{ items: ResearchNotice[] }>(t, "/notices").then((r) => r.items ?? []),
   coverage: (t: string, carId: string) => getJson<CarCoverage>(t, `/coverage/${encodeURIComponent(carId)}`),

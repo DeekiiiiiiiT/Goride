@@ -12,6 +12,7 @@ import { registerPendingVehicleCatalogRoutes } from "../_fleet-server/pending_ve
 import { registerPendingPartsCatalogRoutes } from "../_fleet-server/pending_parts_catalog_routes.ts";
 import { registerCatalogResearchRoutes } from "../_fleet-server/catalog_research_routes.ts";
 import { registerResearchEngineRoutes } from "../_fleet-server/research_engine_routes.ts";
+import { registerResearchSavedPageRoutes } from "../_fleet-server/research_saved_page_routes.ts";
 import { withPrivacyGuard } from "../_fleet-server/research_privacy.ts";
 import { registerVehicleCatalogWriteRoutes } from "../_fleet-server/vehicle_catalog_write_routes.ts";
 import { serviceKey } from "../_shared/serviceKey.ts";
@@ -371,6 +372,7 @@ try {
   registerPendingPartsCatalogRoutes(withPrivacyGuard(app, ["notes"]), writer);
   registerCatalogResearchRoutes(withPrivacyGuard(app), writer);
   registerResearchEngineRoutes(withPrivacyGuard(app), writer);
+  registerResearchSavedPageRoutes(withPrivacyGuard(app), writer);
   registerVehicleCatalogWriteRoutes(app, writer);
 } catch (err) {
   console.error("catalog master writes not mounted", err instanceof Error ? err.message : err);

@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"outline":"#737686","outline-variant":"#c3c6d7","on-surface":"#191b24","inverse-on-surface":"#f0f0fc","background":"#faf8ff","on-primary-fixed":"#00174b","tertiary":"#005323","surface":"#faf8ff","on-tertiary-fixed":"#00210a","primary-container":"#0153dc","primary-fixed":"#dbe1ff","surface-container-lowest":"#ffffff","on-surface-variant":"#434655","on-error-container":"#93000a","error":"#ba1a1a","secondary-fixed-dim":"#b9c7df","surface-bright":"#faf8ff","on-background":"#191b24","surface-container-highest":"#e1e1ed","secondary":"#515f74","secondary-container":"#d5e3fc","inverse-surface":"#2e3039","error-container":"#ffdad6","on-tertiary":"#ffffff","on-secondary-container":"#57657a","surface-variant":"#e1e1ed","surface-container":"#ededf9","tertiary-container":"#006e31","on-error":"#ffffff","secondary-fixed":"#d5e3fc","inverse-primary":"#b4c5ff","surface-tint":"#0053db","primary":"#003ea9","on-primary":"#ffffff","tertiary-fixed":"#9af7aa","on-primary-fixed-variant":"#003ea8","surface-dim":"#d9d9e5","on-secondary":"#ffffff","on-secondary-fixed-variant":"#3a485b","on-secondary-fixed":"#0d1c2e","tertiary-fixed-dim":"#7fda90","primary-fixed-dim":"#b4c5ff","on-primary-container":"#ced8ff","surface-container-low":"#f3f3ff","on-tertiary-container":"#91eea1","on-tertiary-fixed-variant":"#005323","surface-container-high":"#e7e7f3"},"borderRadius":{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},"spacing":{"space-md":"1rem","space-lg":"1.5rem","space-xs":"0.25rem","space-sm":"0.5rem","space-xl":"2rem","gutter":"1.5rem","margin":"2rem"},"fontFamily":{"label-sm":["JetBrains Mono"],"body-md":["Inter"],"headline-sm":["Inter"],"label-md":["JetBrains Mono"],"headline-lg":["Inter"],"body-sm":["Inter"]},"fontSize":{"label-sm":["11px",{"lineHeight":"16px","letterSpacing":"0.03em","fontWeight":"500"}],"body-md":["15px",{"lineHeight":"22px","fontWeight":"400"}],"headline-sm":["18px",{"lineHeight":"26px","letterSpacing":"-0.01em","fontWeight":"600"}],"label-md":["13px",{"lineHeight":"18px","letterSpacing":"0.02em","fontWeight":"500"}],"headline-lg":["26px",{"lineHeight":"34px","letterSpacing":"-0.015em","fontWeight":"600"}],"body-sm":["13px",{"lineHeight":"18px","fontWeight":"400"}]}}}};</script></head><body class="bg-background font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-screen w-[260px] bg-inverse-surface text-inverse-on-surface z-50 flex flex-col justify-between overflow-y-auto border-r border-outline-variant/20"><div class="p-space-lg"><div class="flex items-center gap-space-sm mb-space-xl"><div class="w-8 h-8 rounded bg-primary-container flex items-center justify-center text-on-primary font-headline-sm text-headline-sm">D</div><div><div class="font-headline-sm text-headline-sm font-semibold tracking-tight text-surface-container-lowest">Dominion</div><div class="font-label-sm text-label-sm text-outline-variant">Roam Admin Console</div></div></div><nav class="flex flex-col gap-space-lg" data-active-classes="bg-primary-container text-on-primary font-semibold"><div class="flex flex-col gap-1"><span class="font-label-sm text-label-sm uppercase tracking-wider text-outline px-space-sm mb-space-xs">Master Data</span><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg font-body-sm text-body-sm text-outline-variant hover:bg-surface-container-highest/10 hover:text-surface-container-lowest transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[20px]">grid_view</span><span>Overview</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg font-body-sm text-body-sm text-outline-variant hover:bg-surface-container-highest/10 hover:text-surface-container-lowest transition-colors" data-path="vehicles" href="#"><span class="material-symbols-outlined text-[20px]">directions_car</span><span>Vehicles</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg font-body-sm text-body-sm text-outline-variant hover:bg-surface-container-highest/10 hover:text-surface-container-lowest transition-colors" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[20px]">map</span><span>Places and Maps</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg font-body-sm text-body-sm text-outline-variant hover:bg-surface-container-highest/10 hover:text-surface-container-lowest transition-colors" data-path="fuel-management" href="#"><span class="material-symbols-outlined text-[20px]">local_gas_station</span><span>Fuel</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg font-body-sm text-body-sm text-outline-variant hover:bg-surface-container-highest/10 hover:text-surface-container-lowest transition-colors" data-path="tolls-and-taxes" href="#"><span class="material-symbols-outlined text-[20px]">toll</span><span>Tolls, Tax &amp; Vendors</span></a></div><div class="flex flex-col gap-1"><span class="font-label-sm text-label-sm uppercase tracking-wider text-outline px-space-sm mb-space-xs">Engines</span><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg font-body-sm text-body-sm text-outline-variant hover:bg-surface-container-highest/10 hover:text-surface-container-lowest transition-colors" data-path="telemetry-engines" href="#"><span class="material-symbols-outlined text-[20px]">manufacturing</span><span>Telemetry Engines</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg font-body-sm text-body-sm text-outline-variant hover:bg-surface-container-highest/10 hover:text-surface-container-lowest transition-colors" data-path="rule-evaluator" href="#"><span class="material-symbols-outlined text-[20px]">memory</span><span>Rule Evaluator</span></a></div><div class="flex flex-col gap-1"><span class="font-label-sm text-label-sm uppercase tracking-wider text-outline px-space-sm mb-space-xs">Distribution</span><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg font-body-sm text-body-sm text-outline-variant hover:bg-surface-container-highest/10 hover:text-surface-container-lowest transition-colors" data-path="route-distribution" href="#"><span class="material-symbols-outlined text-[20px]">route</span><span>Route Ingest</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg font-body-sm text-body-sm text-outline-variant hover:bg-surface-container-highest/10 hover:text-surface-container-lowest transition-colors" data-path="dispatch-nodes" href="#"><span class="material-symbols-outlined text-[20px]">hub</span><span>Dispatch Nodes</span></a></div><div class="flex flex-col gap-1"><span class="font-label-sm text-label-sm uppercase tracking-wider text-outline px-space-sm mb-space-xs">Platform</span><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg font-body-sm text-body-sm text-outline-variant hover:bg-surface-container-highest/10 hover:text-surface-container-lowest transition-colors" data-path="api-access" href="#"><span class="material-symbols-outlined text-[20px]">terminal</span><span>API &amp; Integrations</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg font-body-sm text-body-sm text-outline-variant hover:bg-surface-container-highest/10 hover:text-surface-container-lowest transition-colors" data-path="audit-logs" href="#"><span class="material-symbols-outlined text-[20px]">shield</span><span>Audit Logs</span></a></div><div class="flex flex-col gap-1"><span class="font-label-sm text-label-sm uppercase tracking-wider text-outline px-space-sm mb-space-xs">Back Office</span><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg font-body-sm text-body-sm text-outline-variant hover:bg-surface-container-highest/10 hover:text-surface-container-lowest transition-colors" data-path="billing" href="#"><span class="material-symbols-outlined text-[20px]">receipt_long</span><span>Invoicing &amp; Ledger</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg font-body-sm text-body-sm text-outline-variant hover:bg-surface-container-highest/10 hover:text-surface-container-lowest transition-colors" data-path="operator-roles" href="#"><span class="material-symbols-outlined text-[20px]">badge</span><span>Operator Access</span></a></div></nav></div><div class="p-space-lg border-t border-outline-variant/10"><div class="flex items-center justify-between text-outline text-label-sm font-label-sm"><span>CORE v2.4.1</span><span class="flex items-center gap-1 text-tertiary-fixed-dim"><span class="w-2 h-2 rounded-full bg-tertiary-fixed"></span> ONLINE</span></div></div></aside><div class="pl-[260px]"><header class="fixed top-0 left-[260px] right-0 h-16 bg-surface-container-lowest border-b border-surface-container-highest z-40 flex items-center justify-between px-8"><div class="flex items-center w-full max-w-md relative"><span class="material-symbols-outlined absolute left-3 text-outline text-[20px]">search</span><input class="w-full h-10 pl-10 pr-12 rounded-lg bg-surface border border-outline-variant text-on-surface placeholder:text-outline focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-fixed font-body-sm text-body-sm" placeholder="Search entities, engines, routes…" type="text"/><span class="absolute right-3 px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant font-label-sm text-label-sm">⌘K</span></div><div class="flex items-center gap-space-md"><button aria-label="Toggle theme" class="w-10 h-10 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><button aria-label="Notifications" class="w-10 h-10 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors relative"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-error"></span></button><div class="h-6 w-[1px] bg-surface-container-highest mx-space-xs"></div><div class="flex items-center gap-space-sm pl-space-xs"><div class="text-right"><div class="font-body-sm text-body-sm font-semibold text-on-surface leading-tight">Deeki T</div><div class="font-label-sm text-label-sm text-outline leading-tight">Owner</div></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="relative pt-16 bg-background min-h-screen"><div class="flex flex-col w-full relative pb-space-xl">
+<!-- Dimmed Underlay: Toyota Roomy Coverage Inspection Console (Dimmed 40% behind stopped state board) -->
+<div class="relative w-full opacity-40 pointer-events-none select-none px-8 pt-6 filter blur-[0.6px] transition-opacity duration-300">
+<!-- Breadcrumb & Underlay Header -->
+<div class="flex items-center justify-between mb-4">
+<div class="flex items-center gap-space-sm text-on-surface-variant font-label-md text-label-md">
+<span>FLEET_ROOT</span>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+<span>TOYOTA_JAPAN</span>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+<span class="font-semibold text-on-surface">ROOMY (DBA-M900A-BGBGE)</span>
+<span class="bg-surface-container px-2 py-0.5 rounded text-primary font-label-sm text-label-sm">CATALOG ACTIVE</span>
+</div>
+<div class="flex items-center gap-space-sm">
+<span class="px-3 py-1 rounded bg-surface-container-high text-on-surface font-label-sm text-label-sm">SCHEMA: ROAM_INGEST_V4</span>
+<span class="px-3 py-1 rounded bg-secondary-container text-on-secondary-container font-label-sm text-label-sm">NODE: TYO-EDG-09</span>
+</div>
+</div>
+<!-- Underlay Coverage Record Mockup Cards -->
+<div class="grid grid-cols-12 gap-space-md mb-space-md">
+<!-- Vehicle Hero Snapshot -->
+<div class="col-span-4 bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<div class="flex items-center justify-between mb-space-sm">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Target Specimen</span>
+<span class="bg-surface-container text-outline px-2 py-0.5 rounded font-label-sm text-label-sm">VIN: M900A-0049281</span>
+</div>
+<div class="h-28 w-full rounded-lg overflow-hidden relative mb-space-sm bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="Technical studio isometric render of a modern compact silver Toyota Roomy minivan positioned inside a neutral engineering white inspection bay with cool blue calibration grid lines." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCQcY0ThGpT76LUdMp6ga6N8kQcYXgcx1RSRd1P_KAHRwE9yWC1pJn4ABiTTctSTKOWLAA1y5PB3EuzQTstdMK49pS8TEhR9iCCiuNDdbn_sF13DHlyFOf49zEuYGSdT_5a45oHIsPng7Ze529Btc7IXflmXSU9Eu9XTAA6QhsFu6ytDmiPBwK8g4u9YflO8GjuXAzCldyaeZU8hfjy25DgRrbvuMW9RfgRw7nh2KDI"/>
+<div class="absolute bottom-2 left-2 bg-inverse-surface/80 text-inverse-on-surface px-2 py-0.5 rounded font-label-sm text-label-sm">1KR-FE 996cc</div>
+</div>
+<div class="font-headline-sm text-headline-sm text-on-surface mb-1">Toyota Roomy G "Cozy Edition"</div>
+<div class="text-on-surface-variant font-body-sm text-body-sm">Assembly Plant: Daihatsu Ikeda Plant · Chassis Type: FF</div>
+</div>
+<!-- Telemetry Status Rings & Coverage Metas -->
+<div class="col-span-5 bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between mb-space-sm">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Coverage Completeness</span>
+<span class="text-tertiary font-label-sm text-label-sm font-semibold">91.4% RESOLVED</span>
+</div>
+<div class="grid grid-cols-3 gap-space-sm text-center">
+<div class="bg-surface-container-low p-space-sm rounded-lg">
+<div class="font-label-sm text-label-sm text-outline">Powertrain</div>
+<div class="font-headline-sm text-headline-sm text-on-surface mt-1">42 / 44</div>
+<div class="w-full bg-surface-container-highest h-1 rounded-full mt-2 overflow-hidden">
+<div class="bg-primary-container h-full w-[95%]"></div>
+</div>
+</div>
+<div class="bg-surface-container-low p-space-sm rounded-lg">
+<div class="font-label-sm text-label-sm text-outline">Braking &amp; ABS</div>
+<div class="font-headline-sm text-headline-sm text-on-surface mt-1">18 / 18</div>
+<div class="w-full bg-surface-container-highest h-1 rounded-full mt-2 overflow-hidden">
+<div class="bg-tertiary-container h-full w-full"></div>
+</div>
+</div>
+<div class="bg-surface-container-low p-space-sm rounded-lg">
+<div class="font-label-sm text-label-sm text-outline">Body &amp; Trim</div>
+<div class="font-headline-sm text-headline-sm text-on-surface mt-1">89 / 112</div>
+<div class="w-full bg-surface-container-highest h-1 rounded-full mt-2 overflow-hidden">
+<div class="bg-secondary h-full w-[79%]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Telemetry Stream Sparkline -->
+<div class="pt-space-sm">
+<div class="flex items-center justify-between text-outline font-label-sm text-label-sm mb-1">
+<span>PARSER LATENCY PROFILE (LAST 24 INGESTS)</span>
+<span>AVG 142ms</span>
+</div>
+<svg class="w-full h-8 text-primary-container" fill="none" viewbox="0 0 300 32">
+<path d="M0,28 L20,24 L45,26 L70,12 L95,20 L120,8 L145,19 L170,15 L195,27 L220,9 L245,14 L270,6 L300,18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+<path d="M0,28 L20,24 L45,26 L70,12 L95,20 L120,8 L145,19 L170,15 L195,27 L220,9 L245,14 L270,6 L300,18 L300,32 L0,32 Z" fill="currentColor" fill-opacity="0.08"></path>
+</svg>
+</div>
+</div>
+<!-- Live Pipeline Inspector Panel -->
+<div class="col-span-3 bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider block mb-space-sm">Ingest Queue</span>
+<div class="flex flex-col gap-2">
+<div class="flex items-center justify-between p-2 rounded bg-surface-container-low">
+<span class="font-label-sm text-label-sm text-on-surface">ROOMY_OEM_SEC4.html</span>
+<span class="text-tertiary font-label-sm text-label-sm font-semibold">VALID</span>
+</div>
+<div class="flex items-center justify-between p-2 rounded bg-surface-container-low">
+<span class="font-label-sm text-label-sm text-on-surface">DENSO_RAD_M900.mhtml</span>
+<span class="text-secondary font-label-sm text-label-sm">QUEUED</span>
+</div>
+<div class="flex items-center justify-between p-2 rounded bg-surface-container-low">
+<span class="font-label-sm text-label-sm text-on-surface">AISIN_CVT_SPEC.html</span>
+<span class="text-secondary font-label-sm text-label-sm">QUEUED</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Data Table Underlay -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<div class="flex items-center justify-between mb-space-sm pb-2">
+<div class="font-headline-sm text-headline-sm text-on-surface">Extracted OEM Part Master Index</div>
+<div class="flex gap-2">
+<span class="px-2.5 py-1 rounded bg-surface-container text-on-surface-variant font-label-sm text-label-sm">48 Parts Logged</span>
+<span class="px-2.5 py-1 rounded bg-surface-container text-on-surface-variant font-label-sm text-label-sm">Filter: Roomy (900A)</span>
+</div>
+</div>
+<div class="grid grid-cols-6 gap-4 text-outline font-label-sm text-label-sm py-2">
+<span>OEM PART NUMBER</span>
+<span>COMPONENT DESCRIPTION</span>
+<span>SUBSYSTEM</span>
+<span>FITMENT CODES</span>
+<span>SOURCE DOMAIN</span>
+<span class="text-right">CONFIRMATION</span>
+</div>
+<div class="flex flex-col gap-1 font-body-sm text-body-sm text-on-surface-variant">
+<div class="grid grid-cols-6 gap-4 py-2 bg-surface-container-low/40 px-2 rounded">
+<span class="font-label-sm text-label-sm font-semibold text-on-surface">16400-B1440</span>
+<span>Radiator Assembly Core</span>
+<span>Cooling (Engine)</span>
+<span class="font-label-sm text-label-sm">DBA-M900A-AGBGE</span>
+<span>toyota.epc-data.com</span>
+<span class="text-right text-tertiary font-label-sm text-label-sm font-semibold">VERIFIED</span>
+</div>
+<div class="grid grid-cols-6 gap-4 py-2 px-2 rounded">
+<span class="font-label-sm text-label-sm font-semibold text-on-surface">43410-B1140</span>
+<span>Front Drive Shaft RH</span>
+<span>Drivetrain (Axle)</span>
+<span class="font-label-sm text-label-sm">DBA-M900A-BGBGE</span>
+<span>partsfan.com/toyota</span>
+<span class="text-right text-tertiary font-label-sm text-label-sm font-semibold">VERIFIED</span>
+</div>
+<div class="grid grid-cols-6 gap-4 py-2 bg-surface-container-low/40 px-2 rounded">
+<span class="font-label-sm text-label-sm font-semibold text-on-surface">84306-B1030</span>
+<span>Clockspring Steering Spiral</span>
+<span>Electrical / SRS</span>
+<span class="font-label-sm text-label-sm">M900A / M910A All</span>
+<span>toyota.epc-data.com</span>
+<span class="text-right text-secondary font-label-sm text-label-sm">CONFIRMED</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Primary Foreground Layer: Stopped States Matrix Board -->
+<div class="relative z-10 -mt-[440px] px-8 flex flex-col items-center">
+<!-- Header Block -->
+<div class="w-full max-w-[1300px] mb-8 text-center flex flex-col items-center">
+<div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container-high text-on-surface mb-3 shadow-sm">
+<span class="w-2 h-2 rounded-full bg-error animate-pulse"></span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider font-semibold">Ingest Exception Guardrails</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface mb-2 font-bold tracking-tight">
+        Ingest Exceptions &amp; Guardrails · Stopped States
+      </h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl text-center">
+        Overview of all 6 system check termination messages for saved page reads. Each condition cleanly stops ingest before corrupted or mismatched telemetry reaches the master fleet index.
+      </p>
+</div>
+<!-- 3 × 2 Matrix Board Grid of Stopped States -->
+<div class="w-full max-w-[1300px] grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+<!-- Card 1: Wrong Car -->
+<div class="w-full min-w-0 bg-surface-container-lowest rounded-2xl p-6 shadow-md hover:shadow-xl transition-all duration-200 flex flex-col justify-between" style="border: 1px solid #e6e7ee; box-shadow: 0 4px 20px rgba(1, 83, 220, 0.05);">
+<div>
+<!-- Icon & Header State Badge -->
+<div class="flex items-center justify-between mb-5">
+<div class="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style="background-color: #fdecec;">
+<span class="material-symbols-outlined text-[24px]" style="color: #a83836;">directions_car</span>
+</div>
+<span class="font-label-sm text-label-sm px-2.5 py-1 rounded bg-surface-container-high text-on-surface-variant">STATE 01 · MISMATCH</span>
+</div>
+<!-- Title & Narrative -->
+<h2 class="font-headline-sm text-headline-sm font-semibold mb-2" style="color: #30323b;">
+            This page is for a different car
+          </h2>
+<p class="font-body-md text-body-md mb-4" style="color: #5d5f68;">
+            It shows M910A-AGBGE. Open the page for the Toyota Roomy M900A.
+          </p>
+<!-- Telemetry Callout Pill -->
+<div class="bg-surface-container-low rounded-lg p-3 mb-6">
+<div class="flex items-center justify-between font-label-sm text-label-sm text-outline mb-1">
+<span>DETECTED CHASSIS</span>
+<span class="text-error font-semibold">MISMATCH</span>
+</div>
+<div class="flex items-center gap-2 font-label-md text-label-md">
+<span class="px-2 py-0.5 rounded bg-error-container text-on-error-container">M910A-AGBGE (4WD)</span>
+<span class="material-symbols-outlined text-[16px] text-outline">arrow_forward</span>
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-on-surface font-semibold">M900A (2WD)</span>
+</div>
+</div>
+</div>
+<!-- Action Section -->
+<div class="pt-2">
+<button class="w-full h-10 px-4 rounded-lg font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2 transition-colors duration-150" style="background-color: #ffffff; color: #30323b; border: 1px solid #c5c6d0;" type="button">
+<span class="material-symbols-outlined text-[18px]">upload_file</span>
+<span>Choose another file</span>
+</button>
+</div>
+</div>
+<!-- Card 2: Untrusted Site -->
+<div class="w-full min-w-0 bg-surface-container-lowest rounded-2xl p-6 shadow-md hover:shadow-xl transition-all duration-200 flex flex-col justify-between" style="border: 1px solid #e6e7ee; box-shadow: 0 4px 20px rgba(1, 83, 220, 0.05);">
+<div>
+<!-- Icon & Header State Badge -->
+<div class="flex items-center justify-between mb-5">
+<div class="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style="background-color: #fdecec;">
+<span class="material-symbols-outlined text-[24px]" style="color: #a83836;">gpp_bad</span>
+</div>
+<span class="font-label-sm text-label-sm px-2.5 py-1 rounded bg-surface-container-high text-on-surface-variant">STATE 02 · REPUTATION</span>
+</div>
+<!-- Title & Narrative -->
+<h2 class="font-headline-sm text-headline-sm font-semibold mb-2" style="color: #30323b;">
+            That site isn't on the trusted list for this car
+          </h2>
+<p class="font-body-md text-body-md mb-4" style="color: #5d5f68;">
+            Use a page from the car maker's catalogue or a trusted part maker.
+          </p>
+<!-- Domain Validation Metadata -->
+<div class="bg-surface-container-low rounded-lg p-3 mb-6">
+<div class="flex items-center justify-between font-label-sm text-label-sm text-outline mb-1">
+<span>UNVERIFIED ORIGIN</span>
+<span class="text-error font-semibold">DENIED</span>
+</div>
+<div class="font-label-sm text-label-sm text-on-surface font-mono truncate">
+              https://autoparts-unverified-mirror.hk/toyota/m900a
+            </div>
+<div class="text-outline font-body-sm text-[12px] mt-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">info</span>
+              Only OEM catalogs or authorized Tier-1 portals accepted.
+            </div>
+</div>
+</div>
+<!-- Action Section -->
+<div class="pt-2">
+<button class="w-full h-10 px-4 rounded-lg font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2 transition-colors duration-150" style="background-color: #ffffff; color: #30323b; border: 1px solid #c5c6d0;" type="button">
+<span class="material-symbols-outlined text-[18px]">upload_file</span>
+<span>Choose another file</span>
+</button>
+</div>
+</div>
+<!-- Card 3: Budget Limit -->
+<div class="w-full min-w-0 bg-surface-container-lowest rounded-2xl p-6 shadow-md hover:shadow-xl transition-all duration-200 flex flex-col justify-between" style="border: 1px solid #e6e7ee; box-shadow: 0 4px 20px rgba(1, 83, 220, 0.05);">
+<div>
+<!-- Icon & Header State Badge -->
+<div class="flex items-center justify-between mb-5">
+<div class="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style="background-color: #fff4dc;">
+<span class="material-symbols-outlined text-[24px]" style="color: #8a5a00;">account_balance_wallet</span>
+</div>
+<span class="font-label-sm text-label-sm px-2.5 py-1 rounded bg-secondary-container text-on-secondary-container font-semibold">STATE 03 · EXHAUSTED</span>
+</div>
+<!-- Title & Narrative -->
+<h2 class="font-headline-sm text-headline-sm font-semibold mb-2" style="color: #30323b;">
+            Today's research budget is used up
+          </h2>
+<p class="font-body-md text-body-md mb-4" style="color: #5d5f68;">
+            Try again tomorrow.
+          </p>
+<!-- Budget Quota Tracker -->
+<div class="bg-surface-container-low rounded-lg p-3 mb-6">
+<div class="flex items-center justify-between font-label-sm text-label-sm mb-1.5">
+<span class="text-outline">DAILY PARSER QUOTA</span>
+<span class="font-semibold text-on-surface">5,000 / 5,000 CALLS</span>
+</div>
+<div class="w-full bg-surface-container-highest h-2 rounded-full overflow-hidden">
+<div class="h-full w-full rounded-full" style="background-color: #8a5a00;"></div>
+</div>
+<div class="flex items-center justify-between font-label-sm text-label-sm text-outline mt-2">
+<span>Quota cycles at 00:00 UTC</span>
+<span class="font-mono">In 4h 32m</span>
+</div>
+</div>
+</div>
+<!-- Action Section: Primary Action Button -->
+<div class="pt-2">
+<button class="w-full h-10 px-4 rounded-lg font-body-sm text-body-sm font-semibold text-white flex items-center justify-center gap-2 transition-colors duration-150 shadow-sm" style="background-color: #0153dc;" type="button">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+<span>Done</span>
+</button>
+</div>
+</div>
+<!-- Card 4: File Too Big -->
+<div class="w-full min-w-0 bg-surface-container-lowest rounded-2xl p-6 shadow-md hover:shadow-xl transition-all duration-200 flex flex-col justify-between" style="border: 1px solid #e6e7ee; box-shadow: 0 4px 20px rgba(1, 83, 220, 0.05);">
+<div>
+<!-- Icon & Header State Badge -->
+<div class="flex items-center justify-between mb-5">
+<div class="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style="background-color: #fdecec;">
+<span class="material-symbols-outlined text-[24px]" style="color: #a83836;">error</span>
+</div>
+<span class="font-label-sm text-label-sm px-2.5 py-1 rounded bg-surface-container-high text-on-surface-variant">STATE 04 · PAYLOAD</span>
+</div>
+<!-- Title & Narrative -->
+<h2 class="font-headline-sm text-headline-sm font-semibold mb-2" style="color: #30323b;">
+            This file is too big
+          </h2>
+<p class="font-body-md text-body-md mb-4" style="color: #5d5f68;">
+            Saved pages up to 5 MB can be read.
+          </p>
+<!-- File Size Telemetry Metric -->
+<div class="bg-surface-container-low rounded-lg p-3 mb-6">
+<div class="flex items-center justify-between font-label-sm text-label-sm text-outline mb-1">
+<span>ATTACHED PAYLOAD</span>
+<span class="text-error font-semibold">18.4 MB (EXCEEDS 5.0 MB)</span>
+</div>
+<div class="flex items-center gap-2 text-on-surface font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-outline text-[18px]">attachment</span>
+<span class="truncate">toyota_roomy_full_archive_embedded.mhtml</span>
+</div>
+<div class="text-outline font-body-sm text-[12px] mt-1">
+              Tip: Save HTML without complete media assets to stay under 5 MB.
+            </div>
+</div>
+</div>
+<!-- Action Section -->
+<div class="pt-2">
+<button class="w-full h-10 px-4 rounded-lg font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2 transition-colors duration-150" style="background-color: #ffffff; color: #30323b; border: 1px solid #c5c6d0;" type="button">
+<span class="material-symbols-outlined text-[18px]">upload_file</span>
+<span>Choose another file</span>
+</button>
+</div>
+</div>
+<!-- Card 5: Not a Saved Webpage -->
+<div class="w-full min-w-0 bg-surface-container-lowest rounded-2xl p-6 shadow-md hover:shadow-xl transition-all duration-200 flex flex-col justify-between" style="border: 1px solid #e6e7ee; box-shadow: 0 4px 20px rgba(1, 83, 220, 0.05);">
+<div>
+<!-- Icon & Header State Badge -->
+<div class="flex items-center justify-between mb-5">
+<div class="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style="background-color: #fdecec;">
+<span class="material-symbols-outlined text-[24px]" style="color: #a83836;">file_download_off</span>
+</div>
+<span class="font-label-sm text-label-sm px-2.5 py-1 rounded bg-surface-container-high text-on-surface-variant">STATE 05 · MIME TYPE</span>
+</div>
+<!-- Title & Narrative -->
+<h2 class="font-headline-sm text-headline-sm font-semibold mb-2" style="color: #30323b;">
+            That isn't a saved web page
+          </h2>
+<p class="font-body-md text-body-md mb-4" style="color: #5d5f68;">
+            Save the page with Ctrl+S, as Webpage.
+          </p>
+<!-- Format Guide Pill -->
+<div class="bg-surface-container-low rounded-lg p-3 mb-6">
+<div class="flex items-center justify-between font-label-sm text-label-sm text-outline mb-1">
+<span>RECEIVED FORMAT</span>
+<span class="text-error font-semibold">APPLICATION/PDF</span>
+</div>
+<div class="flex items-center gap-2 font-label-md text-label-md text-on-surface">
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-error font-mono">.pdf</span>
+<span class="text-outline font-body-sm text-[12px]">is not accepted.</span>
+</div>
+<div class="text-outline font-body-sm text-[12px] mt-1.5">
+              Requires <span class="font-mono text-on-surface font-semibold">.html</span> or <span class="font-mono text-on-surface font-semibold">.mhtml</span> DOM tree capture.
+            </div>
+</div>
+</div>
+<!-- Action Section -->
+<div class="pt-2">
+<button class="w-full h-10 px-4 rounded-lg font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2 transition-colors duration-150" style="background-color: #ffffff; color: #30323b; border: 1px solid #c5c6d0;" type="button">
+<span class="material-symbols-outlined text-[18px]">upload_file</span>
+<span>Choose another file</span>
+</button>
+</div>
+</div>
+<!-- Card 6: No Part Rows Found -->
+<div class="w-full min-w-0 bg-surface-container-lowest rounded-2xl p-6 shadow-md hover:shadow-xl transition-all duration-200 flex flex-col justify-between" style="border: 1px solid #e6e7ee; box-shadow: 0 4px 20px rgba(1, 83, 220, 0.05);">
+<div>
+<!-- Icon & Header State Badge -->
+<div class="flex items-center justify-between mb-5">
+<div class="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style="background-color: #f1f5f9;">
+<span class="material-symbols-outlined text-[24px]" style="color: #475569;">search_off</span>
+</div>
+<span class="font-label-sm text-label-sm px-2.5 py-1 rounded bg-surface-container-high text-on-surface-variant">STATE 06 · DOM EMPTY</span>
+</div>
+<!-- Title & Narrative -->
+<h2 class="font-headline-sm text-headline-sm font-semibold mb-2" style="color: #30323b;">
+            Roam couldn't find any part rows on this page
+          </h2>
+<p class="font-body-md text-body-md mb-4" style="color: #5d5f68;">
+            Open the section that lists the part numbers, then save it again.
+          </p>
+<!-- Table Inspection Breakdown -->
+<div class="bg-surface-container-low rounded-lg p-3 mb-6">
+<div class="flex items-center justify-between font-label-sm text-label-sm text-outline mb-1">
+<span>SCAN RESULT</span>
+<span class="text-secondary font-semibold">0 OEM RECORDS</span>
+</div>
+<div class="flex items-center justify-between text-on-surface-variant font-body-sm text-[12px]">
+<span>DOM Nodes Inspected:</span>
+<span class="font-mono text-on-surface">1,492 tags</span>
+</div>
+<div class="flex items-center justify-between text-on-surface-variant font-body-sm text-[12px] mt-1">
+<span>Part Number Regex Matches:</span>
+<span class="font-mono text-error font-semibold">0 found</span>
+</div>
+</div>
+</div>
+<!-- Action Section -->
+<div class="pt-2">
+<button class="w-full h-10 px-4 rounded-lg font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2 transition-colors duration-150" style="background-color: #ffffff; color: #30323b; border: 1px solid #c5c6d0;" type="button">
+<span class="material-symbols-outlined text-[18px]">upload_file</span>
+<span>Choose another file</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Supplementary Admin Diagnostic Footer Meta Bar -->
+<div class="w-full max-w-[1300px] mt-10 bg-surface-container-lowest rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-sm" style="border: 1px solid #e6e7ee;">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary-container text-[20px]">security</span>
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Dominion Safety Gate v2.4</span>
+<span class="text-outline text-label-sm">·</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">All stopped states are logged with client SHA-256 signatures for forensic audit compliance.</span>
+</div>
+<div class="flex items-center gap-4 text-outline font-label-sm text-label-sm">
+<span class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+          Ingest Daemon Healthy
+        </span>
+<span>ERROR_TAXONOMY_SPEC: ISO-14229</span>
+</div>
+</div>
+</div>
+</div></main></div></body></html>

@@ -14,6 +14,7 @@ import {
 } from "../../../services/researchEngineService";
 import { patchPendingPartsGroup, type PendingPartsQueueGroup } from "../../../services/pendingPartsCatalogService";
 import { AddedPickPartPanel } from "../vehicle-catalog/pending-parts/AddedPickPartPanel";
+import { SavedPageOverlay } from "./SavedPageOverlay";
 import {
   D_CARD,
   D_MONO,
@@ -74,7 +75,12 @@ type Props = {
   onChanged: (outcome?: DrawerOutcome) => void;
 };
 
-export function ResearchJobDrawer({ token, jobId, group, fallbackTitle, fallbackCar, browserChecks, onClose, onChanged }: Props) {
+export function ResearchJobDrawer({ token, jobId: jobIdProp, group, fallbackTitle, fallbackCar, browserChecks, onClose, onChanged }: Props) {
+  // Saved pages (docs/saved-page-parts-audit.md S1 / S5): "Check this part" may open another job in this same drawer.
+  const [jobOverride, setJobOverride] = useState<string | null>(null);
+  useEffect(() => setJobOverride(null), [jobIdProp]);
+  const jobId = jobOverride ?? jobIdProp;
+  const [savedPageOpen, setSavedPageOpen] = useState(false);
   const [detail, setDetail] = useState<ResearchJobDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -250,8 +256,10 @@ export function ResearchJobDrawer({ token, jobId, group, fallbackTitle, fallback
     </div>
   ) : undefined;
 
+  const savedPageCarId = detail?.job.vehicle_catalog_id ?? null;
   return (
-    <ReDrawer open={open} onClose={onClose} header={header} footer={state === "browser_check" ? undefined : footerNode} testId="research-drawer">
+    <>
+    <ReDrawer open={open} onClose={savedPageOpen ? () => undefined : onClose} header={header} footer={state === "browser_check" ? undefined : footerNode} testId="research-drawer">
       {loading && !detail ? <ReSkeleton rows={3} /> : null}
 
       {picking && group ? (
@@ -301,6 +309,7 @@ export function ResearchJobDrawer({ token, jobId, group, fallbackTitle, fallback
           onNotOnPage={() =>
             void run("Not on page", () => researchApi.notOnPage(token, jobId!), { message: `${itemName} marked Couldn't find.` })
           }
+          onUseSavedPage={detail.job.job_type === "part" && detail.job.vehicle_catalog_id ? () => setSavedPageOpen(true) : undefined}
         />
       ) : null}
 
@@ -368,6 +377,25 @@ export function ResearchJobDrawer({ token, jobId, group, fallbackTitle, fallback
         </>
       ) : null}
     </ReDrawer>
+    {savedPageOpen && savedPageCarId ? (
+      <SavedPageOverlay
+        token={token}
+        carId={savedPageCarId}
+        carLabel={[detail?.car ? `${detail.car.make} ${detail.car.model}` : carName, detail?.car?.chassis_code].filter(Boolean).join(" · ")}
+        jobId={jobId}
+        onClose={() => setSavedPageOpen(false)}
+        onChanged={() => {
+          onChanged();
+          void load();
+        }}
+        onCheckPart={(nextJobId) => {
+          setSavedPageOpen(false);
+          if (nextJobId === jobId) void load();
+          else setJobOverride(nextJobId);
+        }}
+      />
+    ) : null}
+    </>
   );
 }
 
@@ -511,6 +539,7 @@ function EditAndAdd({
 // ------------------------------------------------------------------ Screen 3 / 18: browser check
 
 function BrowserCheckCard({
+  onUseSavedPage,
   detail,
   itemName,
   browserChecks,
@@ -524,6 +553,8 @@ function BrowserCheckCard({
   busy: boolean;
   onConfirm: (payload: BrowserCheckAnswersPayload) => void;
   onNotOnPage: () => void;
+  /** S1: open the saved-page upload for this car and job (part checks only). */
+  onUseSavedPage?: () => void;
 }) {
   // RE-68: the owner looks and answers; nothing is copied (owner, 21 Nov).
   const [versionOk, setVersionOk] = useState<boolean | null>(null);
@@ -1125,6 +1156,20 @@ function BrowserCheckCard({
             Not on this page
           </PartsButton>
         </div>
+        {at === 0 && onUseSavedPage ? (
+          <div className="mt-2 flex flex-col gap-3 rounded-2xl border border-[#e6e7ee] p-4 sm:flex-row sm:items-center dark:border-[#1e293b]" data-testid="use-saved-page-card">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#dbe1ff] text-[#0153dc] dark:bg-[#1e3a8a]/50 dark:text-[#93b4ff]">
+              <DIcon name="upload_file" className="text-[20px]" />
+            </span>
+            <div className="flex min-w-0 flex-1 flex-col">
+              <span className={`text-[15px] font-semibold ${D_TXT}`}>Faster: upload the page instead</span>
+              <span className={`text-[13px] ${D_MUTED}`}>Save the page with Ctrl+S and upload it. Roam fills in every number and date for you.</span>
+            </div>
+            <PartsButton variant="secondary" className="!min-h-[44px]" disabled={busy} onClick={onUseSavedPage} data-testid="use-saved-page">
+              <DIcon name="upload" className="text-[18px]" /> Use a saved page
+            </PartsButton>
+          </div>
+        ) : null}
       </div>
     </div>
   );
