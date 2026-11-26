@@ -3,15 +3,16 @@
  *
  * The rule is one pure function: the caller passes the page's kept rows, the active types, the part groups and the
  * saved answers, and gets back either a decision (track / skip, with who set it and why) or an open name for the AI.
- * Nothing here reads the database.
+ * The order is the plan's own: the owner's answer, then the fixing / heading check, then "Roam already has the type"
+ * (§2, AS-30 and AS-32). Nothing here reads the database.
  */
 import type { PartType } from "./saved_page_proof.ts";
 import type { ResultRow } from "./research_saved_page_routes.ts";
 import {
-  FIXINGS_WORDS,
-  existingTypeFor,
+  isFixingsName,
   positionSchemeOf,
   suggestedGroupName,
+  typeRoamAlreadyHas,
 } from "./saved_page_suggest.ts";
 import {
   normalisePhrase,
@@ -70,7 +71,11 @@ export type SortOpen = {
   rows: ResultRow[];
 };
 
-/** Head nouns that are containers, trim or headings, never a part sold on its own (G3, AS-12). */
+/**
+ * Container, trim and heading words that are never a part sold on its own (G3, AS-12). A name is generic only when
+ * the **whole** name, once ASSY / SUB-ASSY and a trailing NO.n are gone, is one of these (AS-32). "Unit" is a
+ * heading; "Heater radiator unit" is the heater core and goes to the AI.
+ */
 const GENERIC_NAMES = new Set([
   "cover",
   "case",
@@ -84,8 +89,15 @@ const GENERIC_NAMES = new Set([
   "trim",
 ]);
 
-/** Catalogue filler that is a heading, not a part name. */
-const HEADING_PHRASES = new Set(["common parts", "parts", "unit", "assembly"]);
+/** The name with the catalogue's own filler gone: ASSY / SUB-ASSY, a trailing NO.n, and every other character. */
+function bareName(name: string): string {
+  return String(name ?? "")
+    .replace(/\b(sub-?assy|assy)\b/gi, " ")
+    .replace(/\bno\.?\s*\d+\s*$/i, " ")
+    .replace(/[^A-Za-z0-9]+/g, " ")
+    .trim()
+    .toLowerCase();
+}
 
 function cleanName(name: string): string {
   const stripped = String(name ?? "")
@@ -155,15 +167,13 @@ export function buildSortNames(
   return names.sort((a, b) => (a.rows[0]?.lineNo ?? 0) - (b.rows[0]?.lineNo ?? 0));
 }
 
-/** §2 step 4 / G3: not a name Roam can make a type from, and why. */
+/** §2 step 2 / G3: not a name Roam can make a type from, and what was decided — "A fixing", "A heading" (AS-32). */
 export function notARealPartName(name: SortName): string | null {
-  const parsed = parseGroupPhrase(name.phrase);
-  if (parsed && parsed.headWords.some((word) => FIXINGS_WORDS.has(word.toLowerCase()))) return "A fixing";
-  const lower = name.name.trim().toLowerCase();
-  if (HEADING_PHRASES.has(name.phrase.trim().toLowerCase())) return "A section heading";
-  if (GENERIC_NAMES.has(lower)) return "A section heading";
-  const head = lower.split(/\s+/).filter(Boolean).pop() ?? "";
-  if (GENERIC_NAMES.has(head)) return "A section heading";
+  // AS-30: the fixing check is the catalogue's own order — the thing first, the hardware word after it.
+  if (isFixingsName(name.phrase)) return "A fixing";
+  // AS-32: a heading or generic container only when the whole name is that word. A plain name that merely ends on
+  // "unit" / "packing" is a real part ("Heater radiator unit", "Cooling unit packing") and goes to the AI.
+  if (GENERIC_NAMES.has(bareName(name.name))) return "A heading";
   if (/\d{4,}/.test(name.name)) return "A part number, not a name";
   if (name.name.length < 3 || name.name.length > 60) return "Not a part name";
   return null;
@@ -172,9 +182,10 @@ export function notARealPartName(name: SortName): string | null {
 /**
  * §2 steps 1–4, first answer wins:
  *   1. the owner's saved answer (absolute);
- *   2. a part type Roam already has (page phrase, then plain name);
- *   3. Roam's own saved answer (a track only while its type is active; a skip unless a type now covers the name);
- *   4. a fixing, a heading, a generic container or a number-shaped name;
+ *   2. not a name — a fixing, a whole-name heading, a generic container or a number-shaped name (AS-30/AS-32: this
+ *      is ahead of "Roam already has the type", so a fixing or a heading is never saved under a part it resembles);
+ *   3. a part type Roam already has (page phrase, then plain name; never for a fixing);
+ *   4. Roam's own saved answer (a track only while its type is active; a skip unless a type now covers the name);
  *   5. everything else is open for the AI.
  */
 export function sortUnknownNames(input: {
@@ -223,10 +234,23 @@ export function sortUnknownNames(input: {
       continue;
     }
 
-    // 2. A type Roam already has: the page phrase first, then the plain name.
-    const parsed = parseGroupPhrase(name.phrase);
-    const existing = (parsed ? existingTypeFor(parsed.baseName, input.types as PartType[]) : null)
-      ?? existingTypeFor(name.name, input.types as PartType[]);
+    // 2. Not a name Roam can make a type from — ahead of the existing-type match, never behind it (AS-30).
+    const notAPart = notARealPartName(name);
+    if (notAPart) {
+      decided.push({
+        ...base,
+        verdict: "skip",
+        setBy: "roam",
+        typeId: null,
+        typeName: null,
+        reason: notAPart,
+        writeAnswer: true,
+      });
+      continue;
+    }
+
+    // 3. A type Roam already has: the page phrase first, then the plain name.
+    const existing = typeRoamAlreadyHas(name.phrase, name.name, input.types);
     if (existing) {
       decided.push({
         ...base,
@@ -240,7 +264,7 @@ export function sortUnknownNames(input: {
       continue;
     }
 
-    // 3. Roam's own earlier answer.
+    // 4. Roam's own earlier answer.
     if (saved?.setBy === "roam") {
       if (saved.verdict === "track") {
         const type = input.types.find((t) => t.id === saved.typeId) ?? null;
@@ -268,21 +292,6 @@ export function sortUnknownNames(input: {
         });
         continue;
       }
-    }
-
-    // 4. Not a name Roam can make a type from.
-    const notAPart = notARealPartName(name);
-    if (notAPart) {
-      decided.push({
-        ...base,
-        verdict: "skip",
-        setBy: "roam",
-        typeId: null,
-        typeName: null,
-        reason: notAPart,
-        writeAnswer: true,
-      });
-      continue;
     }
 
     // 5. Ask the AI.

@@ -11,6 +11,7 @@ import { pictureBlockers } from "./part_picture_reads.ts";
 import { mergePartPicturesSettings } from "./part_pictures_settings.ts";
 import { addSuggestedPartType, registerSavedPagePartTypeRoutes } from "./saved_page_part_type_routes.ts";
 import { registerSavedPagePartNamesRoutes } from "./saved_page_part_names_routes.ts";
+import { savePartAnswers } from "./research_part_save.ts";
 import type { SavedPageSortAi } from "./saved_page_sort_ai.ts";
 import { registerCatalogRoutes } from "./catalog_routes.ts";
 import { normalisePhrase } from "./saved_page_phrases.ts";
@@ -313,6 +314,22 @@ class Q {
       return { data: out, error: null };
     }
     if (this.action === "insert") {
+      // S1c bug 1: the live table's own rule, so a save that borrows an identity fails here too.
+      if (this.table === "research_page_read") {
+        const path = String(this.payload.path ?? "");
+        const checker = this.payload.checked_by ?? null;
+        const allowed = (path === "owner_browser" && Boolean(checker))
+          || (path === "direct" && !checker)
+          || (path === "roam_saved_page" && !checker);
+        if (!allowed) {
+          return {
+            data: null,
+            error: {
+              message: `new row for relation "research_page_read" violates check constraint "research_page_read_owner_has_checker"`,
+            },
+          };
+        }
+      }
       const row: Row = { id: `row-${this.db.seq++}`, created_at: new Date(this.db.now).toISOString(), ...this.payload };
       rows.push(row);
       return { data: this.singleRow ? row : rows, error: null };
@@ -2304,8 +2321,35 @@ Deno.test("R3: the upload sorts its names, saves them as Roam's answer, and patc
   assertEquals(suggestionOf(db, id, INLET_KEY)?.status, "added");
   const row = rowsOfPage(db, id).find((r) => r.number === "99999-Z0302")!;
   assertEquals([row.group, row.partType], ["saved", "Air cleaner inlet"]);
+  // S1c bug 1: the read that proves the save is Roam's own, and it names no user (the live constraint refused it).
+  const read = db.table("research_page_read").at(-1)!;
+  assertEquals([read.path, read.checked_by, read.saved_page_id], ["roam_saved_page", null, id]);
   // The other names the AI skipped are remembered as Roam's "not tracked".
   assert(db.table("part_type_suggestion_dismissal").some((d) => d.set_by === "roam"));
+});
+
+Deno.test("S1c bug 1: a save with nobody's check and no saved page is refused, and writes no read", async () => {
+  const db = new FakeDb();
+  const saved = await savePartAnswers(db as unknown as SupabaseClient, "job-none", {
+    job: {
+      id: "job-none",
+      job_type: "part",
+      state: "browser_check",
+      vehicle_catalog_id: CAR,
+      maintenance_component_id: AIR_HOSE,
+      spec_key: null,
+      fit_descriptor: null,
+    },
+    car: {},
+    host: "catalog.example",
+    carMakerPage: true,
+    detected: "99999-Z0901",
+    versionCode: null,
+    actor: null,
+  }, "https://catalog.example/parts/ZZ900", "made-up evidence");
+  assertEquals(saved.ok, false);
+  if (!saved.ok) assertEquals(saved.error, "A person has to check this page before Roam can save it");
+  assertEquals(db.table("research_page_read").length, 0);
 });
 
 Deno.test("R3: an AI that is down leaves the names waiting and the page done", async () => {
@@ -2364,6 +2408,9 @@ Deno.test("R4: Track it writes an owner answer and saves the kept rows", async (
 
   const synonym = db.table("part_term_synonym").find((s) => s.phrase_key === HOSE_KEY);
   assertEquals([synonym?.added_by, synonym?.canonical], ["owner", "Air cleaner hose"]);
+  // The owner's own save still names the owner on its read (S1c bug 1 does not touch a person's identity).
+  const read = db.table("research_page_read").at(-1)!;
+  assertEquals([read.path, read.checked_by], ["owner_browser", ACTOR]);
   const page = db.table("research_saved_page").find((r) => r.id === out.row.id)!;
   const suggestion = (page.result.suggestions as Array<Record<string, any>>).find((s) => s.key === HOSE_KEY);
   assert(["added", "waiting"].includes(suggestion.status), suggestion.status);

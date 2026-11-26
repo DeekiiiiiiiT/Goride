@@ -12,6 +12,7 @@ import {
   sortUnknownNames,
   type SavedAnswers,
 } from "./saved_page_auto_sort.ts";
+import { buildSuggestions } from "./saved_page_suggest.ts";
 
 const GROUPS = [
   { id: "g-belts", name: "Belts & hoses" },
@@ -87,6 +88,36 @@ Deno.test("R1 step 2: a type Roam already has wins, on the page phrase or the pl
   assertEquals([out.decided[0].verdict, out.decided[0].typeId, out.decided[0].setBy], ["track", "t-hose", "roam"]);
 });
 
+Deno.test("R1 step 2: a fixing is checked before 'Roam already has the type' (S1c bug 2)", () => {
+  // Made-up names for the two live shapes: THING(FOR …) matched a part Roam already had and got a synonym.
+  const rows = [
+    row(2, "99999 - BOLT(FOR EXAMPLE PART)", "99999-Z0501"),
+    row(4, "99998 - GROMMET (FOR EXAMPLE HOSE)", "99999-Z0502"),
+  ];
+  const names = buildSortNames(rows, GROUPS);
+  const types: PartType[] = [
+    { id: "t-part", name: "Example part", scheme: "none" },
+    { id: "t-hose", name: "Example hose", scheme: "none" },
+  ];
+  const out = sortUnknownNames({ names, types, saved: new Map() });
+  assertEquals(out.open.length, 0);
+  assertEquals(out.decided.length, 2);
+  for (const d of out.decided) {
+    assertEquals([d.verdict, d.reason, d.typeId, d.setBy], ["skip", "A fixing", null, "roam"]);
+  }
+  // The same answer on the suggestion builder: a fixing is never an "existing" card.
+  const build = buildSuggestions({ rows: [row(2, "99998 - GROMMET (FOR EXAMPLE HOSE)", "99999-Z0502")], types, groups: GROUPS });
+  assertEquals([build.suggestions[0].kind, build.suggestions[0].existingTypeId], ["fixings", null]);
+});
+
+Deno.test("R1 step 2: a name that is a part still finds Roam's own type (the fixing fix is not a blanket stop)", () => {
+  const rows = [row(2, "99999 - HOSE, EXAMPLE", "99999-Z0501")];
+  const names = buildSortNames(rows, GROUPS);
+  const types: PartType[] = [{ id: "t-hose", name: "Example hose", scheme: "none" }];
+  const out = sortUnknownNames({ names, types, saved: new Map() });
+  assertEquals([out.decided[0].verdict, out.decided[0].typeId], ["track", "t-hose"]);
+});
+
 Deno.test("R1 step 3: Roam's saved track is used while its type is active; a gone type falls through", () => {
   const rows = [row(2, "99999 - PART, EXAMPLE", "99999-Z0501")];
   const names = buildSortNames(rows, GROUPS);
@@ -124,11 +155,11 @@ Deno.test("R1 step 4: a fixing is the first comma segment, so Toyota's THING(FOR
   for (const d of out.decided) assertEquals([d.verdict, d.reason], ["skip", "A fixing"]);
 });
 
-Deno.test("R1 step 4: headings, generic containers and number-shaped names are not types", () => {
+Deno.test("R1 step 2: headings, whole-name generic words and number-shaped names are not types", () => {
   const rows = [
     row(2, "COMMON PARTS", "99999-Z0501"),
     row(4, "99998 - COVER", "99999-Z0502"),
-    row(6, "99997 - UNIT ASSY, EXAMPLE", "99999-Z0503"),
+    row(6, "99997 - UNIT", "99999-Z0503"),
     row(8, "99996 - PART, 12345", "99999-Z0504"),
   ];
   const names = buildSortNames(rows, GROUPS);
@@ -136,6 +167,25 @@ Deno.test("R1 step 4: headings, generic containers and number-shaped names are n
   const out = sortUnknownNames({ names, types: [], saved: new Map() });
   assertEquals(out.open.length, 0);
   assertEquals(out.decided.every((d) => d.verdict === "skip"), true);
+  // The reason says what was decided, never the old catch-all.
+  const heading = out.decided.find((d) => d.key === "COVER")!;
+  assertEquals(heading.reason, "A heading");
+  const number = out.decided.find((d) => d.key === "PART12345")!;
+  assertEquals(number.reason, "A part number, not a name");
+  assertEquals(out.decided.some((d) => /section heading/i.test(d.reason)), false);
+});
+
+Deno.test("R1 step 2: a part whose name ends on a generic word goes to the AI (S1c bug 4)", () => {
+  // Made-up names for the two live shapes: the heater core and a packing that were skipped as "A section heading".
+  const rows = [
+    row(2, "99999 - UNIT SUB-ASSY, EXAMPLE RADIATOR", "99999-Z0501"),
+    row(4, "99998 - PACKING, EXAMPLE UNIT, NO.1", "99999-Z0502"),
+  ];
+  const names = buildSortNames(rows, GROUPS);
+  for (const name of names) assertEquals(notARealPartName(name), null, name.name);
+  const out = sortUnknownNames({ names, types: [], saved: new Map() });
+  assertEquals(out.decided.length, 0);
+  assertEquals(out.open.map((o) => o.name).sort(), ["Example radiator unit", "Example unit packing"]);
 });
 
 Deno.test("R1 step 5: a real, unnamed part is open for the AI with one sample line", () => {

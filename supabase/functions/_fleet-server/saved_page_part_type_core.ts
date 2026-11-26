@@ -11,8 +11,8 @@ import { answersGate, type CarBuild, type CheckAnswers } from "./research_browse
 import { identityTokens } from "./research_part_job.ts";
 import { savePartAnswers, type SaveJob } from "./research_part_save.ts";
 import { PLACE_AXLE_REASON, PLACE_SIDE_REASON, type PartType, placeGap, rowNamesType } from "./saved_page_proof.ts";
-import { existingTypeFor } from "./saved_page_suggest.ts";
-import { normalisePhrase, parseGroupPhrase } from "./saved_page_phrases.ts";
+import { typeRoamAlreadyHas } from "./saved_page_suggest.ts";
+import { normalisePhrase } from "./saved_page_phrases.ts";
 import { loadPageDrawings, type SavedPageDiagramStore } from "./saved_page_diagrams.ts";
 import {
   type PartPictureQueueDeps,
@@ -249,8 +249,10 @@ async function resolveType(
     type = live.find((t) => t.name.trim().toLowerCase() === input.name.trim().toLowerCase()) ?? null;
   }
   if (!type) {
-    const parsed = parseGroupPhrase(input.phrase);
-    type = (parsed ? existingTypeFor(parsed.baseName, live) : null) ?? existingTypeFor(input.name, live);
+    // AS-30: the fixing check is ahead of "Roam already has the type" on this path too (Add and the review list's
+    // Track it). A hardware name never resolves to the part its words happen to name, and a real name still finds
+    // its type by the twin rule (same head noun, every meaningful word of the shorter name shared).
+    type = typeRoamAlreadyHas(input.phrase, input.name, live);
   }
   if (type) return { id: type.id, name: type.name, scheme: type.scheme ?? null };
 
@@ -274,7 +276,7 @@ async function resolveType(
     if (input.answer.setBy === "roam" && message.includes("Op code already in use")) {
       const again = await readLiveTypes(supabase);
       const winner = again.find((t) => t.name.trim().toLowerCase() === input.name.trim().toLowerCase())
-        ?? existingTypeFor(input.name, again);
+        ?? typeRoamAlreadyHas(input.phrase, input.name, again);
       if (winner) return { id: winner.id, name: winner.name, scheme: winner.scheme ?? null };
       throw new Error("That name is already in use. Try another name.");
     }
