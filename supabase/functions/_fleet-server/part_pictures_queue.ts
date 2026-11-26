@@ -12,7 +12,7 @@ import {
   imageExtension,
   partAreaTitleFromGroupLine,
   partLabelFromGroupLine,
-  readSingleFileImages,
+  type SavedPageImages,
 } from "./saved_page_text.ts";
 import {
   loadPartPicturesSettings,
@@ -81,12 +81,14 @@ type ExistingPicture = { id: string; interchange_group_id: string; status: strin
 /**
  * Queue the pictures. Returns null when AI part pictures are off (S1 shows no pictures line at all).
  * Never throws.
+ *
+ * R7: the drawings are handed in, never read from a file here — at upload they are the page's drawings (read once and
+ * kept in research_saved_page_diagram), and at Add they are the ones loaded back from that table.
  */
 export async function queuePartPictures(
   supabase: SupabaseClient,
   args: {
-    bytes: Uint8Array;
-    fileName: string;
+    drawings: SavedPageImages;
     savedPageId: string;
     carMake: string | null;
     rows: PartPictureQueueRow[];
@@ -157,8 +159,8 @@ export async function queuePartPictures(
     );
     const pictureByGroup = new Map(existing.map((p) => [p.interchange_group_id, p]));
 
-    // 5. The diagram(s) inside the file, read once.
-    const images = readSingleFileImages(args.bytes, args.fileName);
+    // 5. The drawings this upload kept (R7): read once at upload, loaded from the table at Add.
+    const images = args.drawings;
 
     // Diagrams already stored for a failed picture we are re-queueing.
     const failedIds = existing.filter((p) => p.status === "failed").map((p) => p.id);

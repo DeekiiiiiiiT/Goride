@@ -106,8 +106,27 @@ export async function readPartsBrowseForVariant(supabase: SupabaseClient, varian
   return { ...merged, systems };
 }
 
-export type TermComponent = { id: string; name?: string | null; plain_name?: string | null };
-export type TermSynonym = { term?: string | null; maintenance_component_id?: string | null };
+/** A part group: the 13 system rows a part type sits under (Brakes, Engine, Filters…), by name. */
+export type PartGroup = { id: string; name: string };
+
+/**
+ * The part groups on file. Same predicate as part_pictures' template seed: a system row with no parent that is a
+ * part and (being a group) has part types under it. It excludes the five import-only system rows.
+ */
+export async function readPartGroups(supabase: SupabaseClient): Promise<PartGroup[]> {
+  const { data, error } = await supabase
+    .from("maintenance_service_categories")
+    .select("id, name")
+    .eq("kind", "system")
+    .eq("is_part", true)
+    .is("parent_id", null)
+    .order("name")
+    .limit(50);
+  if (error) throw error;
+  return ((data ?? []) as Array<{ id: string; name: string }>).map((row) => ({ id: String(row.id), name: String(row.name) }));
+}
+
+export type TermComponent = { id: string; name?: string | null; plain_name?: string | null };export type TermSynonym = { term?: string | null; maintenance_component_id?: string | null };
 export type TermPart = {
   id: string;
   name?: string | null;

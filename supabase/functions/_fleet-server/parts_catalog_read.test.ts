@@ -4,7 +4,7 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { registerCatalogRoutes } from "./catalog_routes.ts";
-import { rankTermResults, shapeBrowse, tallyCoverage } from "./parts_catalog_read.ts";
+import { rankTermResults, readPartTerm, shapeBrowse, tallyCoverage } from "./parts_catalog_read.ts";
 
 Deno.test("o2 returns the oxygen sensor, and a part number ranks first", () => {
   const words = rankTermResults("o2", {
@@ -49,6 +49,35 @@ Deno.test("coverage counts through the part, not a missing listing column", () =
   );
   assertEquals(areas.find((row) => row.id === "pads")?.count, 2);
   assertEquals(areas.find((row) => row.id === "oil")?.count, 1);
+});
+
+Deno.test("R9: Fleet's readPartTerm finds a type by the page's own words, through its synonym", async () => {
+  const partsTermQueries: Array<{ table: string; column: string; value: string }> = [];
+  const data: Record<string, Array<Record<string, unknown>>> = {
+    maintenance_service_categories: [{ id: "hose", name: "Air cleaner hose", plain_name: "Air cleaner hose" }],
+    // D7 wrote exactly this row when the type was added from a page.
+    part_term_synonym: [{ term: "air cleaner hose", maintenance_component_id: "hose", canonical: "Air cleaner hose" }],
+    part_master: [],
+  };
+  function chain(table: string) {
+    const builder: Record<string, any> = {};
+    const self = () => builder;
+    for (const name of ["select", "eq", "in", "or", "order", "limit"]) builder[name] = self;
+    builder.ilike = (column: string, value: string) => {
+      partsTermQueries.push({ table, column, value });
+      return builder;
+    };
+    builder.then = (resolve: (value: unknown) => unknown) => resolve({ data: data[table] ?? [], error: null });
+    return builder;
+  }
+  const supabase = { from: (table: string) => chain(table) };
+
+  const result = await readPartTerm(supabase as unknown as SupabaseClient, "air cleaner hose");
+  // The synonym lookup is the one that carries the page's words (ilike, so the owner's own typing finds it).
+  const synonymQuery = partsTermQueries.find((query) => query.table === "part_term_synonym");
+  assertEquals([synonymQuery?.column, synonymQuery?.value], ["term", "%air cleaner hose%"]);
+  assertEquals(result.synonyms[0]?.plainName, "Air cleaner hose");
+  assertEquals([result.hits[0]?.kind, result.hits[0]?.id], ["synonym", "hose"]);
 });
 
 Deno.test("a staff member cannot save a problem", async () => {

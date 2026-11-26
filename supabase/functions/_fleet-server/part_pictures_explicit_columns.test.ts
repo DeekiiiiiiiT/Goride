@@ -97,8 +97,7 @@ Deno.test("D7: the Dominion reads (round S2) name their columns too", async () =
   assert(!/\.from\(\s*(["'])part_picture/.test(reads), "the reads module takes its rows from part_picture_admin_db");
 });
 
-Deno.test("D7: part_master and part_picture_template reads also name their columns", async () => {
-  const queue = await read("part_pictures_queue.ts");
+Deno.test("D7: part_master and part_picture_template reads also name their columns", async () => {  const queue = await read("part_pictures_queue.ts");
   // The two lookups that feed the queue (passed to selectIn, which runs .select(columns)).
   assert(
     queue.includes('"oem_part_number, oem_part_number_norm, manufacturer, name, maintenance_component_id, interchange_group_id, catalog_decision"'),
@@ -110,4 +109,43 @@ Deno.test("D7: part_master and part_picture_template reads also name their colum
   );
   const db = await read("part_picture_db.ts");
   assert(db.includes('.select("catalog_group_id, materials, enabled, version")'));
+});
+
+/**
+ * D8.9 (docs/part-type-learning-audit.md §2): the two tables the learning round added are server-only too. Every read
+ * names its columns — a `select("*")` would start returning a history nobody meant to expose.
+ */
+const LEARNING_FILES = [
+  "saved_page_diagrams.ts",
+  "saved_page_part_type_routes.ts",
+  "research_saved_page_routes.ts",
+  "part_picture_db.ts",
+  "part_picture_cleanup.ts",
+];
+
+Deno.test("D8.9: no new server file uses select(\"*\") on the two new tables", async () => {
+  // The modules this round added have no older reads at all, so a bare select("*") anywhere in them is a bug.
+  const NO_STAR_FILES = ["saved_page_diagrams.ts", "saved_page_part_type_routes.ts", "part_picture_cleanup.ts"];
+  for (const file of NO_STAR_FILES) {
+    const text = await read(file);
+    assert(!/\.select\(\s*(["'`])\*\1/.test(text), `${file} uses select("*")`);
+  }
+  for (const file of LEARNING_FILES) {
+    const text = await read(file);
+    for (const table of ["part_type_suggestion_dismissal", "research_saved_page_diagram"]) {
+      const sources = [...text.matchAll(new RegExp(`\\.from\\(\\s*(["'])${table}\\1\\s*\\)`, "g"))];
+      for (const source of sources) {
+        const after = text.slice((source.index ?? 0) + source[0].length);
+        const select = after.match(/^\s*\.select\(\s*([^)]*)/);
+        if (!select) continue; // an insert or update chain: no columns to read
+        const columns = select[1].trim();
+        assert(columns.length > 0, `${file}: select() on ${table} names no columns`);
+        assert(!/^(["'`])\*\1/.test(columns), `${file}: select("*") on ${table}`);
+        assert(
+          /^(["'`])[^"'`]+\1/.test(columns) || columns.startsWith("SAVED_PAGE_"),
+          `${file}: select on ${table} must be a quoted column list or a shared constant, got ${columns.slice(0, 40)}`,
+        );
+      }
+    }
+  }
 });
