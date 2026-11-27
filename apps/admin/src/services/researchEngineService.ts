@@ -196,6 +196,8 @@ export type ResearchJobDetail = {
   browserCheckUrl: string | null;
   /** RE-63: the same model's other engines built in the same years (e.g. the turbo). */
   sisterEngines?: Array<{ code: string; turbo: boolean }>;
+  /** Step 3 wording: the car maker's own name for this part ("Hub & bearing assy, rear axle"), when Roam knows it. */
+  makerPartName?: string | null;
   /** RE-63: the catalogue's own name for this car's version, learned from an earlier confirmed check. */
   knownVersion?: {
     domain: string;

@@ -374,6 +374,7 @@ jobs:
           supabase/functions/_fleet-server/saved_page_sort_ai.test.ts
           supabase/functions/_fleet-server/saved_page_text.test.ts
           supabase/functions/_fleet-server/saved_page_proof.test.ts
+          supabase/functions/_fleet-server/research_car_link.test.ts
           supabase/functions/_fleet-server/catalog_trusted_source_block.test.ts
           supabase/functions/_fleet-server/parts_sourcing_request_build.test.ts
 
