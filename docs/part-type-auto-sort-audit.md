@@ -19,7 +19,17 @@ owner pastes is [part_type_auto_sort_cleanup_LIVE.sql](./part_type_auto_sort_cle
 
 ## 0. START HERE
 
-- **Deployed to Supabase but NOT on main (26 Nov 22:2x UTC):** `_fleet-server/saved_page_phrases.ts` side-words fix (RH/LH/RIGHT/LEFT stripped from keys and names) in platform-catalog + catalog-research. A deploy from main without this file would undo it. Clean-up `docs/side_words_cleanup_LIVE.sql` for the owner to paste.
+- **Deployed but NOT on main (27 Nov, platform-catalog + catalog-research, from main dc2916b0 + these files):**
+  `research_saved_page_routes.ts` (lettered diagram codes 42409C/42311U skipped), `saved_page_suggest.ts` (answered
+  names stay listed as Roam's decision), `saved_page_proof.ts` + `saved_page_part_type_core.ts` +
+  `saved_page_auto_sort_run.ts` (a parking brake part is always rear: `impliedAxle`, so LH/RH-only rows are no longer
+  held with "The page doesn't say front or rear"), plus their tests (`saved_page_proof.test.ts` new). Any push from
+  main must carry these files or it undoes them. The Roomy page's 7 strut-set rows held before this need a re-upload.
+  **27 Nov later:** the reads-disagree Rev 2 build ([saved-page-reads-disagree-audit.md](./saved-page-reads-disagree-audit.md))
+  is deployed the same way and adds to this list: `saved_page_on_file.ts`, `saved_page_part_type_routes.ts`,
+  `saved_page_result.ts` (new), and new versions of the files above (`impliedAxle` now needs REAR on the page). The
+  Dominion screen changes (`SavedPageOverlay.tsx`, `researchEngineService.ts`) and the e2e/CI test list are local only.
+- **LIVE (26 Nov ~22:45 UTC, main dc2916b0):** Dominion screens (summary line, Sorted by Roam, Read again main button, cabin guide) on the website; side-words fix on main and deployed. Nothing deployed-but-not-on-main.
 - **Build status (26 Nov, local, not live):** D1/D1b LIVE (migration 20261126181621; PR #19 puts it on main). Server S1 + S1b (DSH) built: core, sorter, AI call, upload sort, review routes, worker leftovers, G9 (Find parts strict; Log service hides only unused drafts). Claude fixed the worker missing newer uploads (waitingPages now filters in the database). Screens built (Claude): S1 SortSummary + "New part type" pill + Review view in SavedPageOverlay; S2 SortedByRoam on Part types (replaces the hidden list). Tests: CI find-parts deno 220/220, maintenance 7/7, admin vitest 311/311, saved-page e2e 10/10, tsc clean. Next: ship the server (PR), then the owner uploads the heater page again.
 - **S1c, the first live run's fix round (26 Nov 20:06 UTC):** the run on the Roomy heater page (saved pages
   `298f1475…` and `741719e8…`) found four bugs, all fixed here and each covered by a test. Live state it left: **13

@@ -70,7 +70,7 @@ type View =
   | { kind: "loading" }
   | { kind: "error"; message: string };
 
-const EMPTY: SavedPageCounts = { saved: 0, already: 0, held: 0, not_roam_type: 0 };
+const EMPTY: Required<SavedPageCounts> = { saved: 0, already: 0, held: 0, not_saved: 0, left_for_later: 0, not_roam_type: 0 };
 
 /** The page link a saved file carries: Chrome/Edge `saved from url`, or an .mhtml `Snapshot-Content-Location`. */
 export function linkInSavedFile(head: string): string | null {
@@ -704,6 +704,11 @@ function CountPills({ counts }: { counts: SavedPageCounts }) {
           Already on file {counts.already}
         </RePill>
       ) : null}
+      {counts.not_saved ? (
+        <RePill tone="grey" testId="count-not-saved">
+          Not saved {counts.not_saved}
+        </RePill>
+      ) : null}
       <RePill tone={counts.held ? "amber" : "grey"} testId="count-held">
         Needs you {counts.held}
       </RePill>
@@ -739,30 +744,19 @@ function Result({
   const rows = page.result?.rows ?? [];
   const of = (g: SavedPageRow["group"]) => rows.filter((r) => r.group === g);
   const held = counts.held > 0;
-  const nothingNew = counts.saved === 0 && counts.held === 0 && counts.already > 0;
+  const nothingNew = counts.saved === 0 && counts.held === 0 && counts.already + counts.not_saved > 0;
+  const skipped = page.result?.skipped ?? counts.left_for_later;
   const title =
     counts.saved === 0 && counts.held === 0
-      ? counts.already
+      ? counts.already + counts.not_saved
         ? "Nothing new to save"
         : "No parts saved"
       : held
         ? `${counts.saved} ${counts.saved === 1 ? "part" : "parts"} saved · ${counts.held} need you`
         : `${counts.saved} ${counts.saved === 1 ? "part" : "parts"} saved`;
   const other = of("not_roam_type");
-  const heldLine = (r: SavedPageRow, i: number) => (
-    <ResultLine
-      key={`h${i}`}
-      row={r}
-      reason={r.reason}
-      right={
-        r.jobId ? (
-          <PartsButton variant="secondary" className="!min-h-[44px]" onClick={() => onCheckPart(r.jobId!, r.partType)} data-testid="saved-page-check-part">
-            Check this part
-          </PartsButton>
-        ) : null
-      }
-    />
-  );
+  // Rev 2 §4: a held row is a page gap or a Roam problem, never a part question, so it carries no "Check this part".
+  const heldLine = (r: SavedPageRow, i: number) => <ResultLine key={`h${i}`} row={r} reason={r.reason} />;
   // Results read after the part-type round carry suggestions; older ones keep the folded list.
   const learning = Array.isArray(page.result?.suggestions);
   const madeHere = newTypeKeys(page);
@@ -811,12 +805,24 @@ function Result({
         ))}
       </Group>
 
+      <Group title="Not saved" count={of("not_saved").length} testId="group-not-saved">
+        {of("not_saved").map((r, i) => (
+          <ResultLine key={`n${i}`} row={r} reason={r.reason} right={<RePill tone="grey">Not saved</RePill>} />
+        ))}
+      </Group>
+
       <Group title="Needs you" count={of("held").length} testId="group-held">
         {of("held").map(heldLine)}
-        {of("held").length ? (
-          <p className={`px-1 pt-1 text-[13px] ${D_MUTED}`}>Check this part opens the usual check with the numbers from the page already listed.</p>
-        ) : null}
       </Group>
+
+      {skipped > 0 ? (
+        <div className={`flex items-center gap-3 rounded-xl px-4 py-3 text-[14px] ${RE_SOFT} ${D_TXT}`} data-testid="saved-page-skipped">
+          <DIcon name="block" className={`text-[20px] ${D_MUTED}`} />
+          <span>
+            Roam skipped {skipped} {skipped === 1 ? "row" : "rows"} it couldn&apos;t prove from the page.
+          </span>
+        </div>
+      ) : null}
 
       {learning && sortedByRoam(page) ? (
         <SortSummary page={page} onReview={onReview} />
@@ -930,7 +936,8 @@ function ResultLine({
   newType?: boolean;
 }) {
   const word = picture ? pictureWord(row.picture ?? null, picture.noDiagram) : null;
-  const waits = Boolean(reason && /^Waits\b/.test(reason));
+  // A "waits" line and a Not saved fact are plain information (grey, info icon); only a held row is a warning.
+  const waits = Boolean(reason && (/^Waits\b/.test(reason) || row.group === "not_saved"));
   return (
     <div className="flex flex-col gap-3 bg-white p-4 sm:flex-row sm:items-center dark:bg-[#111a2e]" data-testid="saved-page-row">
       <div className="flex min-w-0 flex-1 items-start gap-3">

@@ -22,11 +22,13 @@ import {
   type SavedPageSortAi,
 } from "./saved_page_sort_ai.ts";
 import {
+  type CoreDecision,
   readActiveTypes,
   saveRowsAsPartType,
 } from "./saved_page_part_type_core.ts";
 import type { PartPictureQueueDeps, PicturesResult } from "./part_pictures_queue.ts";
 import type { ResultRow, SavedPageResult, SavedPageRow } from "./research_saved_page_routes.ts";
+import { countRowsByGroup } from "./saved_page_result.ts";
 
 const HOUR_MS = 60 * 60 * 1000;
 /** G6: leave this much of the daily cap unspent before starting another sort call. */
@@ -138,14 +140,18 @@ async function writeSkip(
   if (error) throw new Error(error.message);
 }
 
-export function rowUpdates(decisions: ReadonlyArray<{ row: ResultRow; state: "saved" | "already" | "held"; reason: string | null; jobId: string | null }>, typeName: string) {
-  const out = new Map<number, { partType: string; group: ResultRow["group"]; reason: string | null; jobId: string | null }>();
+export function rowUpdates(decisions: ReadonlyArray<CoreDecision>, typeName: string) {
+  const out = new Map<number, { partType: string; group: ResultRow["group"]; reason: string | null; jobId: string | null; place?: string | null; waitReason?: string | null }>();
   for (const d of decisions) {
     out.set(d.row.lineNo, {
       partType: typeName,
       group: d.state,
-      reason: d.state === "held" ? d.reason : null,
+      // Rev 2 §4: only held (a page gap / Roam problem) and not_saved (a fact) carry a plain line.
+      reason: d.state === "held" || d.state === "not_saved" ? d.reason : null,
       jobId: d.jobId,
+      ...(d.state === "left_for_later" ? { waitReason: d.waitReason ?? null } : {}),
+      // The core may fill in an axle from the page heading (REAR) when the row itself never writes it (Rev 2 §3.6).
+      ...(d.row.place !== undefined ? { place: d.row.place } : {}),
     });
   }
   return out;
@@ -176,12 +182,12 @@ export async function patchSavedPageResult(
     const change = updates.get(key)?.rows?.get(row.lineNo);
     if (change) Object.assign(row, change);
   }
-  const counts = { saved: 0, already: 0, held: 0, not_roam_type: 0 };
-  for (const row of current.rows ?? []) counts[row.group] += 1;
+  const counts = countRowsByGroup(current.rows ?? []);
   const next: SavedPageResult = {
     ...current,
     rows: current.rows ?? [],
     counts,
+    skipped: counts.left_for_later,
     suggestions: current.suggestions ?? [],
   };
   if (pictures) next.pictures = mergePictures(current.pictures, pictures);

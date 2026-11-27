@@ -36,6 +36,8 @@ import {
   placeGap,
   proveRows,
   type ProvenRow,
+  readFields,
+  type ReadFields,
   versionDatesFit,
 } from "./saved_page_proof.ts";
 import { buildText } from "./saved_page_build_text.ts";
@@ -60,6 +62,7 @@ import {
   type PictureBlockers,
 } from "./part_picture_reads.ts";
 import { R2Client, r2ConfigFromEnv } from "../_shared/objectStorage/index.ts";
+import { type Counts, countRowsByGroup, emptyCounts, ROAM_SAVE_PROBLEM, type SavedPageRowGroup } from "./saved_page_result.ts";
 
 const PREFIX = "/make-server-37f42386/admin/catalog-research";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -76,7 +79,12 @@ const SIDED = new Set(["four_corners", "axle_left_right"]);
 const POSITION_SCHEMES = new Set(["axle", "four_corners", "axle_left_right", "axle_inner_outer", "axle_numbered"]);
 
 const norm = (s: string | null | undefined) => String(s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-type Counts = { saved: number; already: number; held: number; not_roam_type: number };
+export { countRowsByGroup, emptyCounts };
+export type { Counts, SavedPageRowGroup };
+
+/** §3.9: one line's read A and read B, as each read gave it. Stored with the upload; a screen never shows them. */
+export type StoredRead = { lineNo: number; a: ReadFields | null; b: ReadFields | null };
+
 export type SavedPageResult = {
   counts: Counts;
   rows: ResultRow[];
@@ -90,8 +98,11 @@ export type SavedPageResult = {
   pictures?: PicturesResult;
   /** R5: when the name sorter last tried an AI call for this page (the worker's one-an-hour gate). */
   sortAt?: string;
+  /** Rev 2 §3.3: rows left for later — the count behind the screen's one folded line, never a question. */
+  skipped?: number;
+  /** Rev 2 §3.9: the two reads as each gave them, so a disagreement can be looked at afterwards. */
+  reads?: StoredRead[];
 };
-export const emptyCounts = (): Counts => ({ saved: 0, already: 0, held: 0, not_roam_type: 0 });
 
 export type SavedPageRow = {
   id: string;
@@ -165,14 +176,15 @@ export type SavedPageDeps = {
   sortAi?: SavedPageSortAi | null;
 };
 
-import { type OnFile, overlaps, parseOnFile, placeMatches } from "./saved_page_on_file.ts";
+import { covers, type OnFile, overlaps, parseOnFile, placeMatches } from "./saved_page_on_file.ts";
 
 export type ResultRow = {
   partType: string;
   place: string | null;
   number: string | null;
   dates: string | null;
-  group: "saved" | "already" | "held" | "not_roam_type";
+  group: SavedPageRowGroup;
+  /** The plain line a row shows. Only `held` (a page gap) and `not_saved` (a fact) carry one (Rev 2 §4). */
   reason: string | null;
   jobId: string | null;
   // D1 (26 Nov): everything about the row, kept for every row, so a part type can be added later without the file.
@@ -184,9 +196,12 @@ export type ResultRow = {
   to: string | null;
   datesText: string | null;
   numberOk: boolean;
+  /** Information only since Rev 2: both reads gave the same five fields. It never holds a row. */
   readsAgree: boolean;
   datesOk: boolean;
   placeOk: boolean;
+  /** Rev 2 §3.3: why this row waits, for the record only. The screen never shows it and asks nothing. */
+  waitReason?: string | null;
   /** D1/D2: the suggestion this row belongs to (unknown rows only), or null. */
   suggestion: string | null;
   /** R1/AS-17: the normalised page phrase, the answer key shared by every page. */
@@ -220,6 +235,19 @@ function unknownPartLabel(row: ProvenRow): string {
   if (row.pageName) return row.pageName;
   if (row.partTypeName && !isOtherTypeName(row.partTypeName)) return row.partTypeName;
   return "Unknown part";
+}
+
+/**
+ * Rev 2 §3.1: the row's number is already confirmed on file, so the listing's own name and place are what the owner
+ * sees — never the read's guess (04495-B1310 is "Brake shoes · rear" on file, whatever a read called it).
+ */
+function alignToOnFile(row: ProvenRow, listing: OnFile, types: PartType[]): void {
+  const known = types.find((t) => t.id === listing.componentId) ?? null;
+  const name = listing.name ?? known?.name ?? row.partTypeName;
+  row.type = { id: listing.componentId, name, scheme: known?.scheme ?? null };
+  row.partTypeName = name;
+  if (listing.position === "front" || listing.position === "rear") row.axle = listing.position;
+  if (listing.side === "left" || listing.side === "right" || listing.side === "both") row.side = listing.side;
 }
 
 /** The car's build as plain words, shared with the auto-sort core (saved_page_build_text.ts). */
@@ -336,6 +364,16 @@ export async function readSavedPageWithGemini(input: SavedPageAiInput): Promise<
 }
 
 /** The schema-shaped answer → rows. Anything that isn't a usable row is dropped; the code proves the rest. */
+/**
+ * Toyota, Daihatsu and Lexus catalogues label each diagram group with a 5-digit reference code ("42410"); the part
+ * numbers under it are longer ("42410-B1080"). The bare code is never a part number.
+ */
+export function isDiagramCode(number: string, make: string | null | undefined): boolean {
+  if (!/toyota|daihatsu|lexus/i.test(String(make ?? ""))) return false;
+  // "42410", and the lettered sub-codes the same diagrams use ("42409C", "42311U").
+  return /^\d{5}[A-Z]?$/i.test(String(number ?? "").replace(/\s+/g, ""));
+}
+
 export function parseAiRows(text: string): AiPartRow[] {
   const raw = String(text ?? "").replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
   let json: unknown = null;
@@ -602,8 +640,11 @@ export async function runSavedPage(
     }
 
     // R2 / D3: a phrase the owner marked "not a part we track" is never offered again, on any page, for any car.
-    const { data: dismissalRows } = await supabase.from("part_type_suggestion_dismissal").select("phrase_key").limit(1000);
+    const { data: dismissalRows } = await supabase.from("part_type_suggestion_dismissal").select("phrase_key, note").limit(1000);
     const dismissed = new Set(((dismissalRows ?? []) as Array<{ phrase_key: string }>).map((d) => String(d.phrase_key)));
+    const dismissedNotes = new Map(
+      ((dismissalRows ?? []) as Array<{ phrase_key: string; note?: string | null }>).map((d) => [String(d.phrase_key), d.note ?? null]),
+    );
     const carFacts: CarFacts = {
       make: car.make,
       model: car.model,
@@ -644,10 +685,36 @@ export async function runSavedPage(
     }
     const spendEnd = await spendNow();
     const aiCost = Math.round(Math.max(0, spendEnd - spendStart) * 10000) / 10000;
+    // Owner 26 Nov (Roomy rear hub page): a Toyota-family diagram's 5-digit reference code ("42410", "42440") is not a
+    // part number. Read as one it has no dates and held the real 42410-B1080 rows on the same axle.
+    read1 = read1.filter((r) => !isDiagramCode(r.number, car.make));
+    read2 = read2.filter((r) => !isDiagramCode(r.number, car.make));
 
     if (!read1.length && !read2.length) {
       return await stopReading("no_rows", "Open the section that lists the part numbers, then save it again.", aiCost);
     }
+
+    // R8 / §3.1 (Rev 2): what is already Confirmed on this car — read once, before the part type is taken from a read,
+    // so a number Roam already holds settles the row whatever either read called it. Its name and place are the
+    // on-file listing's, never a read's.
+    const { data: listingData } = await supabase.from("part_listing")
+      .select("position, side, year_from, year_to, part_interchange_group ( part_master ( oem_part_number, maintenance_component_id ) )")
+      .eq("vehicle_catalog_id", car.id).eq("trust", "confirmed").limit(2000);
+    const onFile = parseOnFile(listingData);
+    const typeNameById = new Map(types.map((t) => [t.id, t.name]));
+    const unnamed = [...new Set(onFile.map((a) => a.componentId))].filter((id) => !typeNameById.has(id));
+    if (unnamed.length) {
+      // A listing can be for a part type that is no longer active: its name is read once, best effort.
+      try {
+        const { data: nameRows } = await supabase.from("maintenance_service_categories").select("id, name").in("id", unnamed);
+        for (const n of (nameRows ?? []) as Array<{ id: string; name: string }>) typeNameById.set(String(n.id), String(n.name));
+      } catch (err) {
+        console.warn("saved page on-file names not read", err);
+      }
+    }
+    for (const a of onFile) a.name = typeNameById.get(a.componentId) ?? null;
+    const onFileByNumber = new Map<string, OnFile>();
+    for (const a of onFile) if (!onFileByNumber.has(norm(a.number))) onFileByNumber.set(norm(a.number), a);
 
     // R6: prove the rows on the page. D1 caps the kept rows at 400, so a pathological page can never grow the result.
     const proven = proveRows({
@@ -657,76 +724,76 @@ export async function runSavedPage(
       types,
       car: carFacts,
       header: headerFacts(headerLines),
+      headingText: headerText,
+      isOnFile: (n) => onFileByNumber.has(norm(n)),
     }).slice(0, MAX_RESULT_ROWS);
     if (!proven.length) {
       return await stopReading("no_rows", "Open the section that lists the part numbers, then save it again.", aiCost);
     }
 
-    // R8: what is already Confirmed on this car, for the same part type and place, overlapping years.
-    const { data: listingData } = await supabase.from("part_listing")
-      .select("position, side, year_from, year_to, part_interchange_group ( part_master ( oem_part_number, maintenance_component_id ) )")
-      .eq("vehicle_catalog_id", car.id).eq("trust", "confirmed").limit(2000);
-    const onFile = parseOnFile(listingData);
-    // The page's own numbers for each place: a split's two numbers are both on the page, so an on-file sibling is
-    // never "Roam already has…" (SP-25 / SP-44).
-    const pageNumbers = new Map<string, Set<string>>();
-    for (const r of proven) {
-      if (!r.type || r.dropped) continue;
-      const key = `${r.type.id}|${r.axle ?? ""}|${r.side ?? ""}`;
-      const set = pageNumbers.get(key) ?? new Set<string>();
-      set.add(norm(r.number));
-      pageNumbers.set(key, set);
-    }
+    // §3.1 / §3.8 (Rev 2): one decision per row. The same number on file (any type) is Already on file; a different
+    // number that already holds these years is Not saved; everything else goes on to be checked on the page.
     const decision = new Map<number, { onFile: OnFile | null; same: boolean; conflict: boolean }>();
     for (const r of proven) {
+      const direct = r.number ? onFileByNumber.get(norm(r.number)) ?? null : null;
+      if (direct) {
+        decision.set(r.lineNo, { onFile: direct, same: true, conflict: false });
+        alignToOnFile(r, direct, types);
+        continue;
+      }
       if (!r.type) {
         decision.set(r.lineNo, { onFile: null, same: false, conflict: false });
         continue;
       }
       const hits = onFile.filter((a) => a.componentId === r.type!.id && placeMatches(a, r) && overlaps(a, r));
-      // The same number wins over any other: a frame split is two different numbers on purpose (SP-25), so a row
-      // whose own number is already on file is "Already on file", never a conflict with its sibling.
       const sameHit = hits.find((a) => norm(a.number) === norm(r.number)) ?? null;
-      const here = pageNumbers.get(`${r.type.id}|${r.axle ?? ""}|${r.side ?? ""}`) ?? new Set<string>();
-      const otherHit = hits.find((a) => norm(a.number) !== norm(r.number) && !here.has(norm(a.number))) ?? null;
+      // A frame split's two numbers sit apart by a month, so only a listing that covers the row's whole span blocks it.
+      const otherHit = hits.find((a) => norm(a.number) !== norm(r.number) && covers(a, r)) ?? null;
       decision.set(r.lineNo, { onFile: sameHit ?? otherHit, same: Boolean(sameHit), conflict: !sameHit && Boolean(otherHit) });
     }
 
-    const outcome = new Map<number, { group: "saved" | "already" | "held" | "not_roam_type"; reason: string | null; jobId: string | null }>();
+    type Outcome = { group: SavedPageRowGroup; reason: string | null; jobId: string | null; waitReason?: string | null };
+    const outcome = new Map<number, Outcome>();
     for (const r of proven) {
-      if (!r.type) {
-        outcome.set(r.lineNo, { group: "not_roam_type", reason: null, jobId: null });
-        continue;
-      }
       if (r.dropped) continue;
       const d = decision.get(r.lineNo)!;
       if (d.same) outcome.set(r.lineNo, { group: "already", reason: null, jobId: null });
       else if (d.conflict) {
         outcome.set(r.lineNo, {
-          group: "held",
-          reason: `Roam already has ${d.onFile!.number} for these years`,
+          group: "not_saved",
+          reason: `Roam already has a different number here (${d.onFile!.number})`,
           jobId: null,
         });
-      } else outcome.set(r.lineNo, { group: "held", reason: r.reason, jobId: null });
+      } else if (r.leftForLater) {
+        // Rev 2 §3.3: nothing saved, nothing asked, nothing opened. `result.skipped` counts it.
+        outcome.set(r.lineNo, { group: "left_for_later", reason: null, jobId: null, waitReason: r.reason });
+      } else if (!r.type) outcome.set(r.lineNo, { group: "not_roam_type", reason: null, jobId: null });
     }
 
-    // Groups: one job per part type + axle (both sides together, SP-24).
+    // Groups: one job per part type + axle (both sides together, SP-24). A row already on file joins its type's group
+    // because its years cover that place (SP-44), and a Not-saved row joins it because its place is covered on file by
+    // the other number (§3.8) — neither ever opens a job on its own.
     const groups = new Map<string, { type: PartType; axle: "front" | "rear" | null; rows: ProvenRow[] }>();
     for (const r of proven) {
-      if (!r.type || r.dropped) continue;
+      if (!r.type || r.dropped || r.leftForLater) continue;
       const key = `${r.type.id}|${r.axle ?? ""}`;
       const g = groups.get(key) ?? { type: r.type, axle: r.axle, rows: [] };
       g.rows.push(r);
       groups.set(key, g);
     }
+    // A place with no number because Roam left a row for later is not "save another page": the owner is never asked.
+    const skippedTypes = new Set(proven.filter((r) => r.leftForLater && !r.dropped && r.type).map((r) => r.type!.id));
 
     for (const g of groups.values()) {
-      // Every row's number is already Confirmed for its place: nothing to save and nothing to check, so no browser
-      // check is opened (one opened here was never closed and sat in Pending catalog as "Browser check").
-      if (g.rows.every((r) => decision.get(r.lineNo)?.same)) {
-        for (const r of g.rows) outcome.set(r.lineNo, { group: "already", reason: null, jobId: null });
-        continue;
-      }
+      const sameRows = g.rows.filter((r) => decision.get(r.lineNo)!.same);
+      const notSavedRows = g.rows.filter((r) => decision.get(r.lineNo)!.conflict);
+      const pending = g.rows.filter((r) => {
+        const d = decision.get(r.lineNo)!;
+        return !d.same && !d.conflict;
+      });
+      // Every row's number is already Confirmed for its place, or covered by another number: nothing to save and
+      // nothing to check, so no browser check is opened (one opened here was never closed and sat in Pending catalog).
+      if (!pending.length) continue;
       const positionAware = POSITION_SCHEMES.has(String(g.type.scheme ?? ""));
       const canHaveJob = !positionAware || g.axle != null;
       let job: { jobId: string; state: string } | null = null;
@@ -739,7 +806,7 @@ export async function runSavedPage(
           p_actor: actor,
         });
         if (jobError) {
-          for (const r of g.rows) outcome.set(r.lineNo, { group: "held", reason: "The browser check couldn't open. Try again.", jobId: null });
+          for (const r of pending) outcome.set(r.lineNo, { group: "held", reason: "The browser check couldn't open. Try again.", jobId: null });
           continue;
         }
         const jr = jobResult as { jobId?: string; state?: string; busy?: boolean } | null;
@@ -747,89 +814,69 @@ export async function runSavedPage(
         else if (jr?.jobId) job = { jobId: String(jr.jobId), state: String(jr.state ?? "browser_check") };
       }
 
-      const held = (r: ProvenRow, reason: string | null) =>
-        outcome.set(r.lineNo, { group: "held", reason: reason ?? r.reason ?? "Needs you", jobId: job?.jobId ?? null });
+      const held = (r: ProvenRow, reason: string) =>
+        outcome.set(r.lineNo, { group: "held", reason, jobId: job?.jobId ?? null });
+      const leftForLater = (r: ProvenRow, note: string | null) =>
+        outcome.set(r.lineNo, { group: "left_for_later", reason: null, jobId: null, waitReason: note ?? r.reason });
 
       if (busy) {
-        for (const r of g.rows) held(r, r.reason ?? "Roam is checking this part now. Try again in a few minutes.");
+        for (const r of pending) held(r, "Roam is checking this part now. Try again in a few minutes.");
         continue;
       }
       if (!job) {
-        for (const r of g.rows) held(r, r.reason);
+        for (const r of pending) held(r, "The browser check couldn't open. Try again.");
         continue;
       }
 
-      const rowsToConsider = g.rows.filter((r) => {
-        const d = decision.get(r.lineNo)!;
-        return !d.same;
-      });
-      const failures = rowsToConsider.filter((r) => r.reason != null);
-      const conflicts = rowsToConsider.filter((r) => decision.get(r.lineNo)!.conflict);
-      const passing = rowsToConsider.filter((r) => !r.reason && !decision.get(r.lineNo)!.conflict);
       // A number already on file covers its place just as well as a new one (nothing is saved for it, but the axle's
       // other side must not be held because of it).
-      const coverRows = g.rows.filter((r) => !r.reason && !decision.get(r.lineNo)!.conflict);
+      const coverRows = g.rows;
 
-      // P7: every place on the axle must be fully covered by its passing rows (or numbers already on file).
+      // P7: every place on the axle must be fully covered by its rows (or numbers already on file).
       let gap: string | null = null;
       const gapFor = new Map<string, string | null>();
-      if (!failures.length && !conflicts.length && coverRows.length) {
-        if (SIDED.has(String(g.type.scheme ?? ""))) {
-          for (const place of ["left", "right"]) {
-            const rs = coverRows.filter((r) => r.side === place || r.side === "both");
-            const placeGapText = rs.length ? placeGap(rs.map((r) => ({ from: r.from!, to: r.to! })), build) : "No number for this side";
-            gapFor.set(place, placeGapText);
-            if (placeGapText) gap = gap ?? placeGapText;
-          }
-        } else {
-          gap = placeGap(coverRows.map((r) => ({ from: r.from!, to: r.to! })), build);
+      if (SIDED.has(String(g.type.scheme ?? ""))) {
+        for (const place of ["left", "right"]) {
+          const rs = coverRows.filter((r) => r.side === place || r.side === "both");
+          const placeGapText = rs.length ? placeGap(rs.map((r) => ({ from: r.from!, to: r.to! })), build) : "No number for this side";
+          gapFor.set(place, placeGapText);
+          if (placeGapText) gap = gap ?? placeGapText;
         }
+      } else {
+        gap = placeGap(coverRows.map((r) => ({ from: r.from!, to: r.to! })), build);
       }
 
-      // SP-39: an auto_added job never saves. Rows are Already on file or held as "Roam already has…".
+      // SP-39: an auto_added job never saves. Its number is already on the car, so the row is a fact, not a question.
       if (job.state === "auto_added") {
-        for (const r of rowsToConsider) {
-          const d = decision.get(r.lineNo)!;
-          if (d.same) outcome.set(r.lineNo, { group: "already", reason: null, jobId: job.jobId });
-          else if (d.conflict) {
-            outcome.set(r.lineNo, { group: "held", reason: `Roam already has ${d.onFile!.number} for these years`, jobId: job.jobId });
-          } else {
-            held(r, r.reason ?? "Roam already has parts for this part type on this car");
-            outcome.set(r.lineNo, { ...outcome.get(r.lineNo)!, jobId: job.jobId });
-          }
+        for (const r of pending) {
+          outcome.set(r.lineNo, { group: "not_saved", reason: "Roam already has a number for this part on this car", jobId: job.jobId });
         }
         continue;
       }
 
-      const axleHeld = failures.length > 0 || conflicts.length > 0 || Boolean(gap);
-      if (axleHeld) {
-        for (const r of rowsToConsider) {
-          const d = decision.get(r.lineNo)!;
-          if (d.conflict) {
-            outcome.set(r.lineNo, { group: "held", reason: `Roam already has ${d.onFile!.number} for these years`, jobId: job.jobId });
-            continue;
-          }
-          if (r.reason) {
-            outcome.set(r.lineNo, { group: "held", reason: r.reason, jobId: job.jobId });
-            continue;
-          }
+      if (gap) {
+        // A place with no number because Roam left a row for later is not "save another page" (Rev 2 §4): the owner
+        // sees the skip count, never a question about a part.
+        if (skippedTypes.has(g.type.id)) {
+          for (const r of pending) leftForLater(r, gap);
+          continue;
+        }
+        for (const r of pending) {
           const placeGapText = SIDED.has(String(g.type.scheme ?? ""))
             ? (r.side === "both"
               ? gapFor.get("right") ?? gapFor.get("left") ?? null
               : gapFor.get(r.side === "right" ? "right" : "left") ?? null)
             : gap;
           held(r, placeGapText ?? "Waits with the other side, so both sides save together");
-          outcome.set(r.lineNo, { ...outcome.get(r.lineNo)!, jobId: job.jobId });
         }
-        await writeSuggestions(supabase, job.jobId, g.type, g.axle, rowsToConsider.filter((r) => !decision.get(r.lineNo)!.same), decision, carMakerPage, car.make);
+        await writeSuggestions(supabase, job.jobId, g.type, g.axle, pending, decision, carMakerPage, car.make);
         continue;
       }
 
       // All pass: save this axle's new numbers through the one save path (SP-01 / R8).
-      const toSave = passing.filter((r) => !decision.get(r.lineNo)!.same);
+      const toSave = pending;
       if (!toSave.length) continue;
 
-      const secondRead = read2;
       const datesOf = (r: ProvenRow) =>
         r.from == null
           ? null
@@ -839,23 +886,23 @@ export async function runSavedPage(
             toYear: r.to == null ? null : yearOf(r.to),
             toMonth: r.to == null ? null : monthOf(r.to),
           };
+      // Rev 2 §3.4: the gate's second typing is the page's own number (P1 already proved it), never read 2's — a read
+      // that misread a digit must not stop a page-proved number from saving.
       const numbersFor = (rows: ProvenRow[]): NonNullable<CheckAnswers["numbers"]> => {
         const out: NonNullable<CheckAnswers["numbers"]> = [];
         for (const r of rows) {
-          const again = secondRead.find((x) => x.lineNo === r.lineNo)?.number ?? r.number;
           const dates = datesOf(r);
           const sides = r.side === "both" ? ["left", "right"] as const : [r.side];
           for (const side of sides) {
-            out.push({ axle: r.axle, side: side ?? null, value: r.number, valueAgain: again, dates });
+            out.push({ axle: r.axle, side: side ?? null, value: r.number, valueAgain: r.number, dates });
           }
         }
         return out;
       };
-      // SP-44: the axle's numbers already on file go to the gate too, so its date check sees the whole axle; only the
-      // new numbers are saved afterwards.
-      const sameRows = g.rows.filter((r) => decision.get(r.lineNo)!.same);
+      // SP-44 / Rev 2 §3.8: the axle's numbers already on file, and the place covered by another number, go to the gate
+      // too, so its date check sees the whole axle; only the new numbers are saved afterwards.
       const newNumbers = new Set(toSave.map((r) => norm(r.number)));
-      const gateNums = [...numbersFor(toSave), ...numbersFor(sameRows)];
+      const gateNums = [...numbersFor(toSave), ...numbersFor(sameRows), ...numbersFor(notSavedRows)];
 
       const { data: suggestionRows } = await supabase.from("catalog_part_proposal").select("part_number")
         .eq("job_id", job.jobId).eq("status", "open");
@@ -877,13 +924,13 @@ export async function runSavedPage(
         build,
       });
       if (!gate.ok) {
-        for (const r of toSave) outcome.set(r.lineNo, { group: "held", reason: "Roam couldn't save these numbers together. Use the browser check.", jobId: job.jobId });
+        for (const r of toSave) held(r, ROAM_SAVE_PROBLEM);
         continue;
       }
       // Only the new numbers' items are saved; the on-file ones stay "Already on file".
       const gateItems = (gate.items ?? []).filter((it) => newNumbers.has(norm(it.detected)));
       if (!gateItems.length) {
-        for (const r of toSave) outcome.set(r.lineNo, { group: "held", reason: "Roam couldn't save these numbers together. Use the browser check.", jobId: job.jobId });
+        for (const r of toSave) held(r, ROAM_SAVE_PROBLEM);
         continue;
       }
 
@@ -891,7 +938,7 @@ export async function runSavedPage(
         .select("id, job_type, state, vehicle_catalog_id, maintenance_component_id, spec_key, fit_descriptor")
         .eq("id", job.jobId).maybeSingle();
       if (!jobRow) {
-        for (const r of toSave) outcome.set(r.lineNo, { group: "held", reason: "The browser check is gone. Refresh the page.", jobId: job.jobId });
+        for (const r of toSave) held(r, "The browser check is gone. Refresh the page.");
         continue;
       }
       const evidence = [...new Set(toSave.map((r) => r.evidence))].join("\n");
@@ -908,17 +955,20 @@ export async function runSavedPage(
       const savedNumbers = new Set(
         (saved.ok ? saved.results : saved.saved).map((r) => norm(r.number)),
       );
+      // SP-45: the raw reason stays in the server log; the screen only ever gets the plain line (Rev 2 §4).
+      if (!saved.ok) console.error("saved page save failed", saved.error);
       for (const r of toSave) {
         if (savedNumbers.has(norm(r.number))) outcome.set(r.lineNo, { group: "saved", reason: null, jobId: job.jobId });
-        else outcome.set(r.lineNo, { group: "held", reason: saved.ok ? "Roam couldn't save this number." : saved.error, jobId: job.jobId });
+        else outcome.set(r.lineNo, { group: "held", reason: ROAM_SAVE_PROBLEM, jobId: job.jobId });
       }
     }
 
     // R2: one suggestion per catalogue group row among the unknown rows (D2). A dismissed phrase is skipped here.
     // R3: the 20-card limit goes, so every unknown name is a suggestion the sorter can answer.
-    const suggestionBuild = buildSuggestions({ rows: proven, types, groups: partGroups, dismissed, max: MAX_RESULT_ROWS });
+    const suggestionBuild = buildSuggestions({ rows: proven, types, groups: partGroups, dismissed, dismissedNotes, max: MAX_RESULT_ROWS });
 
-    // Result rows + counts.
+    // Result rows + counts. Rev 2 §4: only `held` (the page's own gap) and `not_saved` (a fact) carry a plain line;
+    // a row left for later keeps its why in `waitReason`, which no screen shows.
     const rows: ResultRow[] = [];
     for (const r of proven) {
       const o = outcome.get(r.lineNo);
@@ -930,7 +980,7 @@ export async function runSavedPage(
         number: r.number || null,
         dates: r.datesText,
         group: o.group,
-        reason: o.group === "saved" || o.group === "already" || o.group === "not_roam_type" ? null : o.reason,
+        reason: o.group === "held" || o.group === "not_saved" ? o.reason : null,
         jobId: o.jobId,
         groupLine: r.groupLine,
         lineText: r.lineText,
@@ -943,12 +993,23 @@ export async function runSavedPage(
         readsAgree: r.readsAgree,
         datesOk: r.datesOk,
         placeOk: r.placeOk,
+        ...(o.group === "left_for_later" ? { waitReason: o.waitReason ?? r.reason ?? null } : {}),
         suggestion: suggestionBuild.keyByLine.get(r.lineNo) ?? null,
         phraseKey: r.groupLine ? normalisePhrase(pagePhraseFromGroupLine(r.groupLine)) || null : null,
       });
     }
-    const counts = emptyCounts();
-    for (const r of rows) counts[r.group]++;
+    const counts = countRowsByGroup(rows);
+    // Rev 2 §3.3: the one number behind "Roam skipped N rows it couldn't prove from the page".
+    const skipped = counts.left_for_later;
+    // Rev 2 §3.9: both reads, as each gave them (bounded by the result's own row cap).
+    const reads: StoredRead[] = [];
+    for (const lineNo of [...new Set([...read1, ...read2].map((x) => Number(x.lineNo)))].sort((x, y) => x - y)) {
+      if (!Number.isInteger(lineNo) || lineNo < 1 || lineNo > page.lines.length) continue;
+      const a = read1.find((x) => Number(x.lineNo) === lineNo) ?? null;
+      const b = read2.find((x) => Number(x.lineNo) === lineNo) ?? null;
+      reads.push({ lineNo, a: a ? readFields(a) : null, b: b ? readFields(b) : null });
+      if (reads.length >= MAX_RESULT_ROWS) break;
+    }
     // R3: otherTypes stays for old results; it is now the list of suggestion names rather than ["other"].
     const otherTypes = suggestionBuild.suggestions.map((s) => s.name).filter(Boolean).slice(0, 20);
 
@@ -999,6 +1060,8 @@ export async function runSavedPage(
       rows,
       suggestions: suggestionBuild.suggestions,
       otherTypes,
+      skipped,
+      reads,
       ...(suggestionBuild.moreUnknownRows > 0 ? { moreUnknownRows: suggestionBuild.moreUnknownRows } : {}),
       ...(pictures ? { pictures } : {}),
     };
@@ -1050,7 +1113,8 @@ async function writeSuggestions(
 ): Promise<void> {
   const kind = confirmedPartKind(carMakerPage, carMake, null);
   for (const r of rows) {
-    if (!r.numberOk || !r.readsAgree) continue;
+    // Rev 2: a held row is a page gap with a page-proved number; the reads' agreement no longer decides anything.
+    if (!r.numberOk || !r.number) continue;
     if (decision.get(r.lineNo)?.same) continue;
     const key = axle ?? "";
     const { error } = await supabase.from("catalog_part_proposal").upsert({

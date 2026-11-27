@@ -219,19 +219,35 @@ Deno.test("R2.6: the position scheme comes from the places the page printed", ()
   assertEquals(build.suggestions[0].positionScheme, "axle_left_right");
 });
 
-Deno.test("R2: a dismissed phrase is never suggested again", () => {
+Deno.test("R2: a dismissed phrase is never suggested again — it is listed as already answered", () => {
   const rows = [row(2, "17881 - HOSE, AIR CLEANER, NO.1", "99999-Z0301"), row(4, "17751 - INLET, AIR CLEANER, NO.1", "99999-Z0302")];
+  const hoseKey = normalisePhrase("HOSE, AIR CLEANER, NO.1");
   const build = buildSuggestions({
     rows,
     types: [],
     groups: GROUPS,
-    dismissed: new Set([normalisePhrase("HOSE, AIR CLEANER, NO.1")]),
+    dismissed: new Set([hoseKey]),
+    dismissedNotes: new Map([[hoseKey, "Not a part we track"]]),
   });
-  assertEquals(build.suggestions.length, 1);
-  assertEquals(build.suggestions[0].key, normalisePhrase("INLET, AIR CLEANER, NO.1"));
-  // The dismissed phrase's row is still listed (D1) but carries no suggestion.
-  assertEquals(build.keyByLine.get(2), undefined);
-  assertEquals(build.keyByLine.get(4), build.suggestions[0].key);
+  const hose = build.suggestions.find((s) => s.key === hoseKey)!;
+  const inlet = build.suggestions.find((s) => s.key === normalisePhrase("INLET, AIR CLEANER, NO.1"))!;
+  // Owner 26 Nov: never a card again (not open), but the result says what was decided.
+  assertEquals([hose.status, hose.reason], ["skipped", "Not a part we track"]);
+  assertEquals(inlet.status, "open");
+  assertEquals(build.keyByLine.get(2), hoseKey);
+  assertEquals(build.keyByLine.get(4), inlet.key);
+});
+
+Deno.test("owner 26 Nov: a fixing Roam already answered says 'A fixing', not 'add a part type'", () => {
+  const key = normalisePhrase("BOLT, HUB(FOR REAR AXLE RH)");
+  const build = buildSuggestions({
+    rows: [row(2, "90105 - BOLT, HUB(FOR REAR AXLE RH)", "90049-12062")],
+    types: [],
+    groups: GROUPS,
+    dismissed: new Set([key]),
+    dismissedNotes: new Map(),
+  });
+  assertEquals(build.suggestions.map((s) => [s.kind, s.status, s.reason]), [["fixings", "skipped", "A fixing"]]);
 });
 
 Deno.test("R2.7: at most 20 cards, fixings still listed, the rest only counted", () => {

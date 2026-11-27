@@ -71,13 +71,18 @@ const HELD_ROWS = [
   { partType: "Shock absorber", place: "front right", number: "00000-S1001", dates: "11.2016 – 11.2018", group: "already", reason: null, jobId: "job-s" },
   { partType: "Shock absorber", place: "rear right", number: "00000-S3001", dates: "11.2016 – 11.2018", group: "held", reason: "Dates missing 12.2018 – 08.2020", jobId: "job-rs" },
   { partType: "Shock absorber", place: "rear left", number: "00000-S4001", dates: "11.2016 – 09.2020", group: "held", reason: "Waits with the other side, so both sides save together", jobId: "job-rs" },
-  { partType: "Front Stabilizer Link", place: null, number: "00000-L1003", dates: "11.2016 – 09.2020", group: "held", reason: "The two reads don't agree", jobId: "job-l" },
+  // Rev 2 (docs/saved-page-reads-disagree-audit.md): a different number on file is Not saved; a row the page can't prove
+  // is left for later and only counted. Neither is ever a question.
+  { partType: "Front Stabilizer Link", place: null, number: "00000-L1003", dates: "11.2016 – 09.2020", group: "not_saved", reason: "Roam already has a different number here (00000-L1001)", jobId: null },
+  { partType: "Front Stabilizer Link", place: null, number: "00000-L1004", dates: "11.2016 – 09.2020", group: "left_for_later", reason: null, jobId: null },
   { partType: "Coil spring", place: null, number: "00000-X0001", dates: null, group: "not_roam_type", reason: null, jobId: null },
 ];
 const count = (rows: Array<{ group: string }>) => ({
   saved: rows.filter((r) => r.group === "saved").length,
   already: rows.filter((r) => r.group === "already").length,
   held: rows.filter((r) => r.group === "held").length,
+  not_saved: rows.filter((r) => r.group === "not_saved").length,
+  left_for_later: rows.filter((r) => r.group === "left_for_later").length,
   not_roam_type: rows.filter((r) => r.group === "not_roam_type").length,
 });
 const page1 = (rows: typeof SAVED_ROWS | typeof HELD_ROWS, over: Record<string, unknown> = {}) => ({
@@ -217,7 +222,7 @@ test.describe("Saved catalogue pages (S1–S6)", () => {
     await noDropWords(page);
     await card.getByTestId("saved-page-list-row").nth(1).click();
     const o = page.getByTestId("saved-page-overlay");
-    await expect(o.getByTestId("saved-page-result-title")).toHaveText("1 part saved · 3 need you");
+    await expect(o.getByTestId("saved-page-result-title")).toHaveText("1 part saved · 2 need you");
     expect(calls.some((c) => c.method === "GET" && c.path === "/saved-pages/sp-2")).toBe(true);
     await o.getByTestId("saved-page-done").click();
     await expect(o).toHaveCount(0);
@@ -297,7 +302,7 @@ test.describe("Saved catalogue pages (S1–S6)", () => {
     await expect(o).toHaveCount(0);
   });
 
-  test("Screen 7 — some rows need you: reasons, Check this part opens that browser check", async ({ page }) => {
+  test("Screen 7 — some rows need you: page gaps only, Not saved, skipped count, no Check this part", async ({ page }) => {
     const calls: Calls = [];
     await install(page, calls, { upload: "held" });
     await openCoverage(page);
@@ -305,23 +310,23 @@ test.describe("Saved catalogue pages (S1–S6)", () => {
     const o = page.getByTestId("saved-page-overlay");
     await chooseFile(page);
     await o.getByTestId("saved-page-read").click();
-    await expect(o.getByTestId("saved-page-result-title")).toHaveText("1 part saved · 3 need you");
+    await expect(o.getByTestId("saved-page-result-title")).toHaveText("1 part saved · 2 need you");
     await expect(o.getByTestId("count-already")).toHaveText("Already on file 1");
-    await expect(o.getByTestId("count-held")).toHaveText("Needs you 3");
+    await expect(o.getByTestId("count-not-saved")).toHaveText("Not saved 1");
+    await expect(o.getByTestId("count-held")).toHaveText("Needs you 2");
     const held = o.getByTestId("group-held");
     await expect(held.getByTestId("saved-page-reason")).toContainText([
       "Dates missing 12.2018 – 08.2020",
       "Waits with the other side, so both sides save together",
-      "The two reads don't agree",
     ]);
-    await expect(held).toContainText("Check this part opens the usual check with the numbers from the page already listed.");
+    await expect(o.getByTestId("group-not-saved")).toContainText("Roam already has a different number here (00000-L1001)");
+    await expect(o.getByTestId("saved-page-skipped")).toContainText("Roam skipped 1 row it couldn't prove from the page.");
+    await expect(o.getByTestId("saved-page-check-part")).toHaveCount(0);
+    await expect(o.getByText("Check this part")).toHaveCount(0);
     await expect(o.getByTestId("group-already")).toContainText("Already on file");
     await shot(page, "07-result-some-need-you");
     await noDropWords(page);
-    await held.getByTestId("saved-page-check-part").first().click();
-    await expect(o).toHaveCount(0);
-    await expect(page.getByTestId("research-drawer")).toBeVisible();
-    await expect.poll(() => calls.some((c) => c.method === "GET" && c.path === "/jobs/job-rs")).toBe(true);
+    expect(calls.some((c) => c.method === "GET" && c.path.startsWith("/jobs/"))).toBe(false);
   });
 
   test("Screen 8 — read before: See the result, Read again sends again=true, Cancel", async ({ page }) => {

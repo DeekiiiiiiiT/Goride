@@ -27,6 +27,10 @@ const SUS_GROUP = "66666666-6666-4666-8666-666666666666";
 /** Round S1 fixtures: the part group a suggestion lands in, and a type that already covers "Air cleaner hose". */
 const BELTS_GROUP = "88888888-8888-4888-8888-888888888888";
 const AIR_HOSE = "99999999-9999-4999-8999-999999999999";
+/** Rev 2 fixtures: the two brake types the Roomy page's two reads named, and the cylinder kit (made-up numbers). */
+const BRAKE_PADS = "aaaa1111-1111-4111-8111-111111111111";
+const BRAKE_SHOES = "bbbb2222-2222-4222-8222-222222222222";
+const CYL_KIT = "cccc3333-3333-4333-8333-333333333333";
 
 const RIGHT_GROUP = "GROUP 77777U - ABSORBER SET, SHOCK, FRONT RH";
 const LEFT_GROUP = "GROUP 77778U - ABSORBER SET, SHOCK, FRONT LH";
@@ -376,6 +380,10 @@ class FakeDb {
       // Round S1: the group a suggested part would be created under, and one type that already covers a page phrase.
       { id: BELTS_GROUP, code: "SYS-BELTS", name: "Belts & hoses", kind: "system", is_part: true, part_type_status: "active", position_scheme: "none", parent_id: null },
       { id: AIR_HOSE, code: "air_cleaner_hose", name: "Air cleaner hose", kind: "component", is_part: true, part_type_status: "active", position_scheme: "none", parent_id: BELTS_GROUP },
+      // Rev 2: the brake types the two reads named on the Roomy rear brake page, and the cylinder kit beside them.
+      { id: BRAKE_PADS, code: "BRK-PADS", name: "Brake pads", kind: "component", is_part: true, part_type_status: "active", position_scheme: "axle", parent_id: SUS_GROUP },
+      { id: BRAKE_SHOES, code: "BRK-SHOES", name: "Brake shoes", kind: "component", is_part: true, part_type_status: "active", position_scheme: "axle", parent_id: SUS_GROUP },
+      { id: CYL_KIT, code: "BRK-CYL", name: "Rear wheel cylinder kit", kind: "component", is_part: true, part_type_status: "active", position_scheme: "axle", parent_id: SUS_GROUP },
     ],
     // Part pictures (§3.2): the part behind each number, its template, and the queue itself.
     part_master: [
@@ -620,12 +628,19 @@ function savedListings(db: FakeDb, numbers: string[]): Row[] {
   return db.table("part_listing").filter((l) => l.trust === "confirmed" && l.part_interchange_group.part_master.some((p: Row) => numbers.includes(p.oem_part_number)));
 }
 
+/** The result's counts carry every group (Rev 2: not_saved and left_for_later too), zero-filled here. */
+function counts(
+  patch: Partial<Record<"saved" | "already" | "held" | "not_saved" | "left_for_later" | "not_roam_type", number>> = {},
+): Record<string, number> {
+  return { saved: 0, already: 0, held: 0, not_saved: 0, left_for_later: 0, not_roam_type: 0, ...patch };
+}
+
 Deno.test("§9 test 1: table layout, .html — 4 saved with the right year_from/year_to", async () => {
   const db = new FakeDb();
   const out = await shockRun(db, pageHtml());
   assertEquals(out.kind, "done");
   if (out.kind !== "done") return;
-  assertEquals(out.row.result.counts, { saved: 4, already: 0, held: 0, not_roam_type: 0 });
+  assertEquals(out.row.result.counts, counts({ saved: 4 }));
   const listings = savedListings(db, ["11111-A1001", "11111-B1002", "22222-A1001", "22222-B1002"]);
   assertEquals(listings.length, 4);
   const first = listings.find((l) => l.part_interchange_group.part_master[0].oem_part_number === "11111-A1001");
@@ -723,13 +738,14 @@ Deno.test("§9 test 7: a side that stops in 2018 holds the whole axle, with the 
   assertEquals(suggested, ["11111-A1001", "22222-A1001", "22222-B1002"]);
 });
 
-Deno.test("§9 test 8: reads that disagree hold that axle; a stabilizer bar row is still saved", async () => {
+Deno.test("§9 test 8 (Rev 2): reads that disagree on a page-proven number no longer hold that axle", async () => {
   const db = new FakeDb();
   const bar: RowSpec = { number: "33333-C1001", type: "Stabilizer bar", axle: "front", side: null, group: "STABILIZER BAR, FRONT", from: [2016, 11], to: [2020, 9] };
   const specs: RowSpec[] = [...SHOCK_ROWS, bar];
   const page = pageHtml({
     extraTables: `<table><tr><td>STABILIZER BAR, FRONT</td></tr><tr><td>33333-C1001</td><td>front</td><td>11.2016</td><td>09.2020</td></tr></table>`,
   });
+  // Read 2 prints a number the row does not show: the page's own number wins (§3.4), so nothing is held.
   const mutate = (rows: any[], call: number) => {
     if (call !== 2) return rows;
     const copy = rows.map((r) => ({ ...r }));
@@ -741,15 +757,18 @@ Deno.test("§9 test 8: reads that disagree hold that axle; a stabilizer bar row 
   assertEquals(out.kind, "done");
   if (out.kind !== "done") return;
   const rows = (out.row.result.rows ?? []) as Array<Record<string, unknown>>;
-  assert(rows.some((r) => String(r.reason).includes("don't agree")), JSON.stringify(rows));
+  assert(!rows.some((r) => String(r.reason).includes("don't agree")), JSON.stringify(rows));
+  assertEquals(out.row.result.counts, counts({ saved: 5 }));
+  assertEquals(out.row.result.skipped, 0);
   const savedNumbers = db.table("part_listing").map((l) => l.part_interchange_group.part_master[0].oem_part_number);
-  assertEquals(savedNumbers, ["33333-C1001"]);
+  assertEquals(savedNumbers.sort(), ["11111-A1001", "11111-B1002", "22222-A1001", "22222-B1002", "33333-C1001"]);
 });
 
-Deno.test("§9 test 9: a number the page doesn't show is held, never saved", async () => {
+Deno.test("§9 test 9 (Rev 2): a number neither read prints on the page is never saved, and never asked", async () => {
   const db = new FakeDb();
-  const mutate = (rows: any[], call: number) => {
-    if (call !== 1) return rows;
+  // Both reads print a number the row does not show: the page cannot prove a number, so the row waits for later — and
+  // the axle it belongs to can no longer cover the car's years, so its siblings wait too, with no question.
+  const mutate = (rows: any[]) => {
     const copy = rows.map((r) => ({ ...r }));
     const hit = copy.find((r) => r.number === "11111-A1001");
     if (hit) hit.number = "44444-D1001";
@@ -757,8 +776,14 @@ Deno.test("§9 test 9: a number the page doesn't show is held, never saved", asy
   };
   const out = await shockRun(db, pageHtml(), { mutate });
   assertEquals(out.kind, "done");
-  if (out.kind === "done") assertEquals(out.row.result.counts.saved, 0);
+  if (out.kind !== "done") return;
+  assertEquals(out.row.result.counts, counts({ left_for_later: 4 }));
+  assertEquals(out.row.result.skipped, 4);
+  const rows = (out.row.result.rows ?? []) as Array<Record<string, unknown>>;
+  const waiting = rows.find((r) => r.waitReason === "The number isn't written on that row")!;
+  assertEquals([waiting.group, waiting.reason, waiting.jobId, waiting.number], ["left_for_later", null, null, null]);
   assertEquals(db.table("part_listing").length, 0);
+  assertEquals(db.table("catalog_part_proposal").length, 0);
 });
 
 Deno.test("§9 test 10: a stamp code and a group code are never saved (SP-17, SP-19)", async () => {
@@ -829,17 +854,19 @@ Deno.test("§9 test 12: the same page twice is 'Read on', Read again shows Alrea
   assertEquals(db.table("part_listing").length, fourth);
 });
 
-Deno.test("§9 test 13: a different Confirmed number holds the row and the old listing is untouched", async () => {
+Deno.test("§9 test 13 (Rev 2): a different Confirmed number is Not saved, and the old listing is untouched", async () => {
   const db = new FakeDb();
   db.seedListing({});
   const out = await shockRun(db, pageHtml());
   assertEquals(out.kind, "done");
   if (out.kind !== "done") return;
-  assertEquals(out.row.result.counts.saved, 0);
-  assertEquals(out.row.result.counts.held, 4);
+  // The seeded listing is front left, so the left rows meet it and the right rows are free to save (§3.8).
+  assertEquals(out.row.result.counts, counts({ saved: 2, not_saved: 2 }));
   const rows = (out.row.result.rows ?? []) as Array<Record<string, unknown>>;
-  assert(rows.some((r) => String(r.reason).includes("Roam already has 99999-E1001")), JSON.stringify(rows));
-  assertEquals(db.table("part_listing").length, 1);
+  const blocked = rows.filter((r) => r.group === "not_saved");
+  assertEquals(blocked.length, 2);
+  assert(blocked.every((r) => r.reason === "Roam already has a different number here (99999-E1001)" && r.jobId === null), JSON.stringify(blocked));
+  assertEquals(db.table("part_listing").length, 3);
   assertEquals(db.table("research_number_conflict").length, 0);
 });
 
@@ -1172,16 +1199,18 @@ Deno.test("SP-41: a nested frame-split table in each row still saves all 4 with 
   }
 });
 
-Deno.test("SP-42: a row with no dates is held with 'No dates shown on the page'", async () => {
+Deno.test("SP-42 (Rev 2): a row with no dates waits for later with 'No dates shown on the page', never a question", async () => {
   const db = new FakeDb();
   const right = [`<tr><td>11111-A1001</td><td>M900,910</td></tr>`];
   const specs = SHOCK_ROWS.filter((s) => ["11111-A1001", "22222-A1001", "22222-B1002"].includes(s.number));
   const out = await shockRun(db, pageHtml({ right }), { specs });
   assertEquals(out.kind, "done");
   if (out.kind !== "done") return;
-  assertEquals(out.row.result.counts.saved, 0);
+  assertEquals(out.row.result.counts, counts({ left_for_later: 3 }));
+  assertEquals(out.row.result.skipped, 3);
   const rows = (out.row.result.rows ?? []) as Array<Record<string, unknown>>;
-  assert(rows.some((r) => r.number === "11111-A1001" && r.reason === "No dates shown on the page"), JSON.stringify(rows));
+  const dateless = rows.find((r) => r.waitReason === "No dates shown on the page")!;
+  assertEquals([dateless.group, dateless.reason, dateless.jobId], ["left_for_later", null, null]);
 });
 
 Deno.test("SP-43: a stopped earlier read (cap reached) never counts as 'read before'", async () => {
@@ -1314,7 +1343,7 @@ Deno.test("SP-47: a group table inside each outer row saves all 4 with their own
   }
 });
 
-Deno.test("SP-48: a row line with two date ranges is held, never the first one", async () => {
+Deno.test("SP-48 (Rev 2): a row line with two date ranges waits for later, never the first one", async () => {
   const db = new FakeDb();
   const right = [`<tr><td>11111-A1001</td><td>11.2016 - 11.2018 and 11.2018 - 09.2020</td></tr>`];
   const specs = SHOCK_ROWS.filter((s) => ["11111-A1001", "22222-A1001", "22222-B1002"].includes(s.number));
@@ -1324,7 +1353,7 @@ Deno.test("SP-48: a row line with two date ranges is held, never the first one",
   assertEquals(out.row.result.counts.saved, 0);
   const rows = (out.row.result.rows ?? []) as Array<Record<string, unknown>>;
   assert(
-    rows.some((r) => r.number === "11111-A1001" && r.reason === "This row shows more than one set of dates"),
+    rows.some((r) => r.group === "left_for_later" && r.waitReason === "This row shows more than one set of dates"),
     JSON.stringify(rows),
   );
   assertEquals(db.table("part_listing").length, 0);
@@ -1751,7 +1780,7 @@ Deno.test("R1: a place the page prints is kept; a place it doesn't say is not he
   assertEquals(suggestionOf(db, out.row.id, HOSE_KEY)!.positionScheme, "axle_left_right");
 });
 
-Deno.test("R1: a row the page doesn't date is held, never suggested (SP-42 unchanged)", async () => {
+Deno.test("R1: a row the page doesn't date waits for later, never suggested (SP-42 unchanged)", async () => {
   const db = new FakeDb();
   const page = `<html><head><title>Check Catalogue ZZ900-AAAA 11.2016 - 09.2020</title></head><body>
 <!-- saved from url=(0045)https://catalog.example/parts/ZZ900 -->
@@ -1765,8 +1794,8 @@ Deno.test("R1: a row the page doesn't date is held, never suggested (SP-42 uncha
   assertEquals(out.kind, "done");
   if (out.kind !== "done") return;
   const row = rowsOfPage(db, out.row.id).find((r) => r.number === "99999-Z0301")!;
-  // SP-42 unchanged: the row is held (its dates check failed) and it is not part of any suggestion.
-  assertEquals([row.datesOk, row.suggestion], [false, null]);
+  // SP-42 unchanged: the row's dates check failed, so it waits for later and is not part of any suggestion.
+  assertEquals([row.datesOk, row.suggestion, row.group], [false, null, "left_for_later"]);
   assertEquals(resultOfPage(db, out.row.id).suggestions, []);
 });
 
@@ -1783,10 +1812,11 @@ Deno.test("R2 + D3: a dismissed phrase is never suggested again on any page", as
   const out = await learnRun(db);
   assertEquals(out.kind, "done");
   if (out.kind !== "done") return;
-  assertEquals(resultOfPage(db, out.row.id).suggestions.length, 2);
-  assertEquals(suggestionOf(db, out.row.id, INLET_KEY), undefined);
+  // Owner 26 Nov: never offered again, but listed as already answered so the result says so.
+  assertEquals(resultOfPage(db, out.row.id).suggestions.filter((s: { status: string }) => s.status === "open").length, 2);
+  assertEquals(suggestionOf(db, out.row.id, INLET_KEY)!.status, "skipped");
   const row = rowsOfPage(db, out.row.id).find((r) => r.number === "99999-Z0302")!;
-  assertEquals(row.suggestion, null);
+  assertEquals(row.suggestion, INLET_KEY);
 });
 
 Deno.test("R8: every active part type goes to the AI — no 120 slice — and the read limit is 500", async () => {
@@ -1863,7 +1893,7 @@ Deno.test("R5: Add creates the type through the shared function, saves the rows 
   const rows = rowsOfPage(db, id);
   const saved = rows.find((r) => r.number === "99999-Z0302")!;
   assertEquals([saved.group, saved.partType, saved.reason], ["saved", "Air cleaner inlet", null]);
-  assertEquals(resultOfPage(db, id).counts, { saved: 1, already: 0, held: 0, not_roam_type: 2 });
+  assertEquals(resultOfPage(db, id).counts, counts({ saved: 1, not_roam_type: 2 }));
   const suggestion = suggestionOf(db, id, INLET_KEY)!;
   assertEquals([suggestion.status, suggestion.typeId, suggestion.typeName], ["added", type.id, "Air cleaner inlet"]);
 
@@ -1940,7 +1970,7 @@ Deno.test("R5: a part-way failure keeps the type so the next press continues it,
   assertEquals(rowsOfPage(db, id).find((r) => r.number === "99999-Z0302")!.group, "saved");
 });
 
-Deno.test("R5 step 6: a different number already on file holds the row and creates nothing new", async () => {
+Deno.test("R5 step 6 (Rev 2 §3.8): a different number already on file is Not saved and creates nothing new", async () => {
   const db = new FakeDb();
   db.seedListing({ number: "99999-Z0399", componentId: AIR_HOSE, position: null, side: null, year_from: 2016, year_to: 2020 });
   const out = await learnRun(db);
@@ -1950,21 +1980,22 @@ Deno.test("R5 step 6: a different number already on file holds the row and creat
   await addPartType(db, id, addBody(HOSE_KEY));
   assertEquals(db.table("maintenance_service_categories").length, before);
   const row = rowsOfPage(db, id).find((r) => r.number === "99999-Z0301")!;
-  assertEquals(row.group, "held");
-  assertEquals(row.reason, "Roam already has 99999-Z0399 for these years");
+  assertEquals(row.group, "not_saved");
+  assertEquals(row.reason, "Roam already has a different number here (99999-Z0399)");
   assertEquals(db.table("part_listing").length, 1);
 });
 
-Deno.test("R5 step 6: the same number already on file is 'Already on file' and still counts as added", async () => {
+Deno.test("R5 step 6 (Rev 2): the same number already on file is 'Already on file' at upload, so no card is offered", async () => {
   const db = new FakeDb();
   db.seedListing({ number: "99999-Z0301", componentId: AIR_HOSE, position: null, side: null, year_from: 2016, year_to: 2020 });
   const out = await learnRun(db);
   if (out.kind !== "done") return;
   const id = out.row.id;
-  await addPartType(db, id, addBody(HOSE_KEY));
+  // §3.1: the number is on file, so the upload itself says so, under the on-file listing's own name — the phrase needs
+  // no card, because Roam already knows the part.
   const row = rowsOfPage(db, id).find((r) => r.number === "99999-Z0301")!;
-  assertEquals([row.group, row.reason], ["already", null]);
-  assertEquals(suggestionOf(db, id, HOSE_KEY)!.status, "added");
+  assertEquals([row.group, row.reason, row.partType], ["already", null, "Air cleaner hose"]);
+  assertEquals(suggestionOf(db, id, HOSE_KEY), undefined);
   assertEquals(db.table("part_listing").length, 1);
 });
 
@@ -2018,8 +2049,9 @@ Deno.test("R6: Dismiss remembers the phrase and the next upload never offers it"
 
   const again = await learnRun(db, { again: true });
   if (again.kind !== "done") return;
-  assertEquals(resultOfPage(db, again.row.id).suggestions.length, 2);
-  assertEquals(suggestionOf(db, again.row.id, INLET_KEY), undefined);
+  // Owner 26 Nov: listed as already answered, never as an open card.
+  assertEquals(resultOfPage(db, again.row.id).suggestions.filter((s: { status: string }) => s.status === "open").length, 2);
+  assertEquals(suggestionOf(db, again.row.id, INLET_KEY)!.status, "skipped");
 });
 
 // ---------------------------------------------------------------- R11: the hidden list and Suggest again
@@ -2199,7 +2231,7 @@ Deno.test("S1b fix 1: renaming the card to words the page never printed still sa
   assertEquals([synonym?.term, synonym?.canonical], ["breather tube", "Breather tube"]);
 });
 
-Deno.test("S1b fix 2: a row held because of the page still ends 'added' (Added, needs you)", async () => {
+Deno.test("S1b fix 2 (Rev 2): a row Not saved because of what is on file still ends 'added'", async () => {
   const db = new FakeDb();
   db.seedListing({ number: "99999-Z0399", componentId: AIR_HOSE, position: null, side: null, year_from: 2016, year_to: 2020 });
   const out = await learnRun(db);
@@ -2212,7 +2244,7 @@ Deno.test("S1b fix 2: a row held because of the page still ends 'added' (Added, 
   const suggestion = suggestionOf(db, id, HOSE_KEY)!;
   assertEquals([suggestion.status, suggestion.typeId, suggestion.reason], ["added", AIR_HOSE, null]);
   const row = rowsOfPage(db, id).find((r) => r.number === "99999-Z0301")!;
-  assertEquals([row.group, row.reason], ["held", "Roam already has 99999-Z0399 for these years"]);
+  assertEquals([row.group, row.reason], ["not_saved", "Roam already has a different number here (99999-Z0399)"]);
 
   // The card is finished: pressing again changes nothing and makes no second type.
   const types = db.table("maintenance_service_categories").length;
@@ -2222,7 +2254,7 @@ Deno.test("S1b fix 2: a row held because of the page still ends 'added' (Added, 
   assertEquals(suggestionOf(db, id, HOSE_KEY)!.status, "added");
 });
 
-Deno.test("S1b fix 2: a page that can't say left or right still ends 'added', with the row held", async () => {
+Deno.test("S1b fix 2 (Rev 2): a page that names two sides still ends 'added', and the row waits for later", async () => {
   const db = new FakeDb();
   const page = `<html><head><title>Check Catalogue ZZ900-AAAA 11.2016 - 09.2020</title></head><body>
 <!-- saved from url=(0045)https://catalog.example/parts/ZZ900 -->
@@ -2230,9 +2262,11 @@ Deno.test("S1b fix 2: a page that can't say left or right still ends 'added', wi
 <table>
 <tr><td>10001 - ABSORBER, FRONT LH</td></tr>
 <tr><td>99999-Z0401</td><td>FRONT LH</td><td>11.2016</td><td>09.2020</td><td>1.00</td></tr>
-<tr><td>99999-Z0402</td><td>FRONT</td><td>11.2016</td><td>09.2020</td><td>1.00</td></tr>
+<tr><td>99999-Z0402</td><td>FRONT RH</td><td>11.2016</td><td>09.2020</td><td>1.00</td></tr>
 </table>
 </body></html>`;
+  // The group row says LH while the second row's own line says RH: the page names two sides for that row, so it has no
+  // side Roam can prove and it waits for later (Rev 2 §3.6) — never a question on the screen.
   const specs: RowSpec[] = [
     { number: "99999-Z0401", type: "other", axle: "front", side: "left", group: "ABSORBER, FRONT LH", from: [2016, 11], to: [2020, 9] },
     { number: "99999-Z0402", type: "other", axle: "front", side: null, group: "ABSORBER, FRONT LH", from: [2016, 11], to: [2020, 9] },
@@ -2244,14 +2278,20 @@ Deno.test("S1b fix 2: a page that can't say left or right still ends 'added', wi
   const suggestion = suggestionOf(db, id, key)!;
   assertEquals([suggestion.kind, suggestion.positionScheme], ["new", "axle_left_right"]);
 
+  const before = rowsOfPage(db, id).find((r) => r.number === "99999-Z0402")!;
+  // Before the type exists nothing waits on the place: an unknown row keeps only what the page prints.
+  assertEquals([before.group, before.reason, before.suggestion], ["not_roam_type", null, key]);
+
   await addPartType(db, id, addBody(key, { groupId: BELTS_GROUP }));
 
   const rows = rowsOfPage(db, id);
   assertEquals([rows.find((r) => r.number === "99999-Z0401")!.group], ["saved"]);
   const unplaced = rows.find((r) => r.number === "99999-Z0402")!;
-  assertEquals([unplaced.group, unplaced.reason], ["held", "The page doesn't say left or right on that row"]);
+  // Rev 2 §3.3: the sort/Add path waits quietly too — no reason shown, counted as skipped.
+  assertEquals([unplaced.group, unplaced.reason, unplaced.waitReason], ["left_for_later", null, "The page doesn't say left or right on that row"]);
   assertEquals(suggestionOf(db, id, key)!.status, "added");
-  assertEquals(resultOfPage(db, id).counts, { saved: 1, already: 0, held: 1, not_roam_type: 0 });
+  assertEquals(resultOfPage(db, id).counts, counts({ saved: 1, left_for_later: 1 }));
+  assertEquals(resultOfPage(db, id).skipped, 1);
 });
 
 Deno.test("S1b fix 2: a failure a retry can fix keeps the card open, and the next press finishes it", async () => {
@@ -2429,4 +2469,252 @@ Deno.test("R4: Track it writes an owner answer and saves the kept rows", async (
   const page = db.table("research_saved_page").find((r) => r.id === out.row.id)!;
   const suggestion = (page.result.suggestions as Array<Record<string, any>>).find((s) => s.key === HOSE_KEY);
   assert(["added", "waiting"].includes(suggestion.status), suggestion.status);
+});
+
+Deno.test("owner 26 Nov: a Toyota diagram's 5-digit reference code is not a part number", async () => {
+  const { isDiagramCode } = await import("./research_saved_page_routes.ts");
+  assert(isDiagramCode("42410", "Toyota"));
+  assert(isDiagramCode("42440", "Daihatsu"));
+  assert(!isDiagramCode("42410-B1080", "Toyota"));
+  assert(!isDiagramCode("90916-03150", "Toyota"));
+  assert(!isDiagramCode("12345", "Honda"));
+  assert(isDiagramCode("42409C", "Toyota"));
+  assert(isDiagramCode("42311U", "Toyota"));
+});
+
+// ---------------------------------------------------------------- Rev 2: the two reads never overrule the page
+// (docs/saved-page-reads-disagree-audit.md §5.1, §5.2b). Made-up numbers; the shapes are the Roomy rear brake page's.
+
+/** The Roomy rear brake page's shape: one group row, its rows, and the site's own "brake pads, set" translation. */
+function brakePageHtml(opts: { group?: string; rows: string[] }): string {
+  return `<html><head><title>Check Catalogue ZZ900-AAAA 11.2016 - 09.2020</title></head><body>
+<!-- saved from url=(0045)https://catalog.example/parts/ZZ900 -->
+<h2>Rear brake</h2>
+<table>
+<tr><td>${opts.group ?? "33333 - SHOE KIT, REAR BRAKE"}</td></tr>
+${opts.rows.join("\n")}
+</table>
+</body></html>`;
+}
+
+/** One rear-brake row, written the way the site writes it (the row's own title is the site's translation). */
+const shoeRow = (number: string, from = "11.2016", to = "09.2020") =>
+  `<tr><td>${number}</td><td>Brake pads, set</td><td>${from}</td><td>${to}</td><td>1.00</td></tr>`;
+
+const SHOE_SPEC: RowSpec = {
+  number: "33333-S1001",
+  type: "Brake shoes",
+  axle: "rear",
+  side: null,
+  group: "SHOE KIT, REAR BRAKE",
+  from: [2016, 11],
+  to: [2020, 9],
+};
+
+/** Read 2 names the part differently: the same row, the other name (the real 04495-B1310 shape). */
+const otherName = (name: string) => (rows: any[], call: number) => {
+  if (call !== 2) return rows;
+  return rows.map((r) => ({ ...r, partType: name }));
+};
+
+Deno.test("Rev-1: reads name the same shoe kit two ways; the number is on file → Already on file under the on-file name", async () => {
+  const db = new FakeDb();
+  db.seedListing({ number: "33333-S1001", componentId: BRAKE_SHOES, position: "rear", side: null, year_from: 2016, year_to: 2019 });
+  const out = await run(db, brakePageHtml({ rows: [shoeRow("33333-S1001")] }), { ai: fakeAi(db, [SHOE_SPEC], otherName("Brake pads")) });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  // §3.1: the number is on file, so the row is Already on file under Brake shoes · rear — never the read's "Brake pads".
+  const rows = (out.row.result.rows ?? []) as Array<Record<string, any>>;
+  assertEquals(out.row.result.counts, counts({ already: 1 }));
+  assertEquals([rows[0].partType, rows[0].place, rows[0].group, rows[0].reason, rows[0].jobId], ["Brake shoes", "rear", "already", null, null]);
+  assertEquals(db.table("catalog_research_job").length, 0);
+  assertEquals(db.table("catalog_part_proposal").length, 0);
+  assertEquals(db.table("part_listing").length, 1);
+});
+
+Deno.test("Rev-2: reads name the same shoe kit two ways; the number is new → the group row's word names it", async () => {
+  const db = new FakeDb();
+  const out = await run(db, brakePageHtml({ rows: [shoeRow("33333-S1001")] }), { ai: fakeAi(db, [SHOE_SPEC], otherName("Brake pads")) });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  // §3.2: "SHOE KIT, REAR BRAKE" head is SHOE, so the row is Brake shoes even though its own title says brake pads.
+  const rows = (out.row.result.rows ?? []) as Array<Record<string, any>>;
+  assertEquals(out.row.result.counts, counts({ saved: 1 }));
+  assertEquals([rows[0].partType, rows[0].place, rows[0].group], ["Brake shoes", "rear", "saved"]);
+  const saved = db.table("part_listing").map((l) => l.part_interchange_group.part_master[0]);
+  assertEquals([saved[0].oem_part_number, saved[0].maintenance_component_id], ["33333-S1001", BRAKE_SHOES]);
+});
+
+Deno.test("Rev-3: the group row names neither candidate → nothing saved and the owner is asked nothing", async () => {
+  const db = new FakeDb();
+  const page = brakePageHtml({ group: "33333 - KIT, REAR", rows: [shoeRow("33333-S1001")] });
+  const out = await run(db, page, { ai: fakeAi(db, [{ ...SHOE_SPEC, group: "KIT, REAR" }], otherName("Brake pads")) });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  // §3.3: the row waits for later — no save, no question, no job, no proposal — and result.skipped counts it.
+  assertEquals(out.row.result.counts, counts({ left_for_later: 1 }));
+  assertEquals(out.row.result.skipped, 1);
+  const rows = (out.row.result.rows ?? []) as Array<Record<string, any>>;
+  assertEquals([rows[0].group, rows[0].reason, rows[0].jobId], ["left_for_later", null, null]);
+  assertEquals([db.table("part_listing").length, db.table("catalog_research_job").length, db.table("catalog_part_proposal").length], [0, 0, 0]);
+});
+
+Deno.test("Rev-3b: the group names neither and read 1's name is in the row title → still nothing saved", async () => {
+  const db = new FakeDb();
+  const page = brakePageHtml({ group: "33333 - KIT, REAR", rows: [shoeRow("33333-S1001")] });
+  // Read 1 says Brake pads (the row title "Brake pads, set" carries PADS, so P4 alone would pass); read 2 says shoes.
+  const out = await run(db, page, { ai: fakeAi(db, [{ ...SHOE_SPEC, type: "Brake pads", group: "KIT, REAR" }], otherName("Brake shoes")) });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  // §3.3: two names and a page that settles neither is never a save under the first read's name.
+  assertEquals(out.row.result.counts, counts({ left_for_later: 1 }));
+  assertEquals([db.table("part_listing").length, db.table("catalog_research_job").length, db.table("catalog_part_proposal").length], [0, 0, 0]);
+});
+
+Deno.test("Rev-4: read 2 prints a different number; the page prints read 1's → the page's number is saved", async () => {
+  const db = new FakeDb();
+  const mutate = (rows: any[], call: number) => {
+    if (call !== 2) return rows;
+    return rows.map((r) => ({ ...r, number: "33333-S9999" }));
+  };
+  const out = await run(db, brakePageHtml({ rows: [shoeRow("33333-S1001")] }), { ai: fakeAi(db, [SHOE_SPEC], mutate) });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  // §3.4: a number the row does not print can never win, and the page's number is passed to the gate as its own retype.
+  assertEquals(out.row.result.counts, counts({ saved: 1 }));
+  const saved = db.table("part_listing").map((l) => l.part_interchange_group.part_master[0].oem_part_number);
+  assertEquals(saved, ["33333-S1001"]);
+});
+
+Deno.test("Rev-5: both numbers are on the row and neither is on file → it quietly waits", async () => {
+  const db = new FakeDb();
+  const page = brakePageHtml({ rows: [`<tr><td>33333-S1001 (SUBS) 33333-S1002</td><td>11.2016</td><td>05.2019</td><td>1.00</td></tr>`] });
+  const mutate = (rows: any[], call: number) => (call === 2 ? rows.map((r) => ({ ...r, number: "33333-S1002" })) : rows);
+  const out = await run(db, page, { ai: fakeAi(db, [SHOE_SPEC], mutate) });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  assertEquals(out.row.result.counts, counts({ left_for_later: 1 }));
+  const rows = (out.row.result.rows ?? []) as Array<Record<string, any>>;
+  assertEquals(rows[0].waitReason, "Two part numbers on the row and neither is on file");
+  assertEquals(db.table("part_listing").length, 0);
+});
+
+Deno.test("Rev-6: read 2's dates differ → the page's dates are saved, no hold", async () => {
+  const db = new FakeDb();
+  const mutate = (rows: any[], call: number) => {
+    if (call !== 2) return rows;
+    return rows.map((r) => ({ ...r, dates: { fromMonth: 1, fromYear: 2019, toMonth: 9, toYear: 2020 } }));
+  };
+  const out = await run(db, brakePageHtml({ rows: [shoeRow("33333-S1001")] }), { ai: fakeAi(db, [SHOE_SPEC], mutate) });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  // §3.5: the saved dates are the page's own, whatever either read said about them.
+  assertEquals(out.row.result.counts, counts({ saved: 1 }));
+  const rows = (out.row.result.rows ?? []) as Array<Record<string, any>>;
+  assertEquals(rows[0].datesText, "11.2016 – 09.2020");
+  const listing = db.table("part_listing")[0];
+  assertEquals([listing.year_from, listing.year_to], [null, null]);
+});
+
+Deno.test("Rev-7: read 2 says 'none' on a place the page writes REAR → the page's REAR is saved", async () => {
+  const db = new FakeDb();
+  const mutate = (rows: any[], call: number) => (call === 2 ? rows.map((r) => ({ ...r, axle: null })) : rows);
+  const out = await run(db, brakePageHtml({ rows: [shoeRow("33333-S1001")] }), { ai: fakeAi(db, [SHOE_SPEC], mutate) });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  // §3.6: the page's own word sets the place, never the read's.
+  assertEquals(out.row.result.counts, counts({ saved: 1 }));
+  assertEquals(db.table("part_listing")[0].position, "rear");
+});
+
+Deno.test("Rev-10: read 2 never lists a row the page proves → it is saved", async () => {
+  const db = new FakeDb();
+  const mutate = (rows: any[], call: number) => (call === 2 ? [] : rows);
+  const out = await run(db, brakePageHtml({ rows: [shoeRow("33333-S1001")] }), { ai: fakeAi(db, [SHOE_SPEC], mutate) });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  // §3.7: the page is the evidence — one read missing a line is not evidence against it.
+  assertEquals(out.row.result.counts, counts({ saved: 1 }));
+  assertEquals(out.row.result.skipped, 0);
+});
+
+Deno.test("Rev-11: read 2 lists a row the page doesn't prove → it waits by the page, not by the reads", async () => {
+  const db = new FakeDb();
+  const mutate = (rows: any[], call: number) => {
+    if (call !== 2) return rows;
+    // A line the page doesn't carry that number on: the page cannot prove this extra row.
+    const lineNo = 3;
+    return [...rows, { lineNo, groupLineNo: null, partType: "Brake shoes", axle: "rear", side: null, number: "33333-S1003", dates: { fromMonth: 11, fromYear: 2016, toMonth: 5, toYear: 2019 }, fitNote: null }];
+  };
+  const out = await run(db, brakePageHtml({ rows: [shoeRow("33333-S1001")] }), { ai: fakeAi(db, [SHOE_SPEC], mutate) });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  assertEquals(out.row.result.counts, counts({ saved: 1, left_for_later: 1 }));
+  const wait = (out.row.result.rows ?? []).find((r) => r.waitReason === "The number isn't written on that row")!;
+  assertEquals([wait.group, wait.reason, wait.jobId], ["left_for_later", null, null]);
+  assertEquals(db.table("part_listing").length, 1);
+});
+
+Deno.test("Rev-12: a different number on file for the same place and years → Not saved, no button", async () => {
+  const db = new FakeDb();
+  db.seedListing({ number: "33333-S1001", componentId: CYL_KIT, position: "rear", side: null, year_from: 2016, year_to: 2020 });
+  const page = `<html><head><title>Check Catalogue ZZ900-AAAA 11.2016 - 09.2020</title></head><body>
+<!-- saved from url=(0045)https://catalog.example/parts/ZZ900 -->
+<h2>Rear brake</h2>
+<table>
+<tr><td>04474 - CYLINDER KIT, REAR WHEEL</td></tr>
+<tr><td>33333-S1001</td><td>11.2016</td><td>09.2020</td><td>1.00</td></tr>
+<tr><td>04906 - CUP KIT, REAR WHEEL CYLINDER</td></tr>
+<tr><td>33333-S2001</td><td>11.2016</td><td>09.2020</td><td>1.00</td></tr>
+</table>
+</body></html>`;
+  const specs: RowSpec[] = [
+    { number: "33333-S1001", type: "Rear wheel cylinder kit", axle: "rear", side: null, group: "CYLINDER KIT, REAR WHEEL", from: [2016, 11], to: [2020, 9] },
+    { number: "33333-S2001", type: "Rear wheel cylinder kit", axle: "rear", side: null, group: "CUP KIT, REAR WHEEL CYLINDER", from: [2016, 11], to: [2020, 9] },
+  ];
+  const out = await run(db, page, { ai: fakeAi(db, specs) });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  // Rev 2 §3.8: the second number is not on file, so it is Not saved — never "Already on file", never a question.
+  assertEquals(out.row.result.counts, counts({ already: 1, not_saved: 1 }));
+  const blocked = (out.row.result.rows ?? []).find((r) => r.group === "not_saved")!;
+  assertEquals([blocked.number, blocked.reason, blocked.jobId], ["33333-S2001", "Roam already has a different number here (33333-S1001)", null]);
+  assertEquals(db.table("part_listing").length, 1);
+});
+
+Deno.test("Rev-12b: quiet waits are counted in result.skipped, never asked", async () => {
+  const db = new FakeDb();
+  const page = brakePageHtml({
+    rows: [`<tr><td>33333-S1001</td><td>n/a</td></tr>`, `<tr><td>33333-S1002</td><td>n/a</td></tr>`],
+  });
+  const specs: RowSpec[] = [
+    { ...SHOE_SPEC, number: "33333-S1001" },
+    { ...SHOE_SPEC, number: "33333-S1002" },
+  ];
+  const out = await run(db, page, { ai: fakeAi(db, specs) });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  assertEquals(out.row.result.counts, counts({ left_for_later: 2 }));
+  assertEquals(out.row.result.skipped, 2);
+  const rows = (out.row.result.rows ?? []) as Array<Record<string, any>>;
+  assert(rows.every((r) => r.group === "left_for_later" && r.reason === null && r.jobId === null), JSON.stringify(rows));
+  assertEquals([db.table("part_listing").length, db.table("catalog_part_proposal").length], [0, 0]);
+});
+
+Deno.test("Rev-16: both reads are kept on the upload, as each gave them", async () => {
+  const db = new FakeDb();
+  const mutate = (rows: any[], call: number) => {
+    if (call !== 2) return rows;
+    return rows.map((r) => ({ ...r, partType: "Brake pads", axle: "front", number: "33333-S9999" }));
+  };
+  const out = await run(db, brakePageHtml({ rows: [shoeRow("33333-S1001")] }), { ai: fakeAi(db, [SHOE_SPEC], mutate) });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  const reads = (out.row.result.reads ?? []) as Array<Record<string, any>>;
+  assertEquals(reads.length, 1);
+  assertEquals(reads[0].a, { number: "33333-S1001", partType: "Brake shoes", axle: "rear", side: null, dates: { fromMonth: 11, fromYear: 2016, toMonth: 9, toYear: 2020 } });
+  assertEquals(reads[0].b, { number: "33333-S9999", partType: "Brake pads", axle: "front", side: null, dates: { fromMonth: 11, fromYear: 2016, toMonth: 9, toYear: 2020 } });
+  // The reads are stored with the upload, not shown: the row still follows the page (Brake shoes, rear, its number).
+  const rows = (out.row.result.rows ?? []) as Array<Record<string, any>>;
+  assertEquals([rows[0].partType, rows[0].place, rows[0].number], ["Brake shoes", "rear", "33333-S1001"]);
 });

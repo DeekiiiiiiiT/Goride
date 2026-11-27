@@ -403,8 +403,14 @@ export type BrowserCheckGate =
 
 // ------------------------------------------------------------------ saved catalogue pages (docs/saved-page-parts-audit.md)
 
-export type SavedPageGroup = "saved" | "already" | "held" | "not_roam_type";
-export type SavedPageCounts = Record<SavedPageGroup, number>;
+/**
+ * docs/saved-page-reads-disagree-audit.md Rev 2: "not_saved" = Roam already has a different number here (a fact, no
+ * button); "left_for_later" = Roam couldn't prove the row from the page, so nothing was saved and nothing is asked.
+ */
+export type SavedPageGroup = "saved" | "already" | "held" | "not_saved" | "left_for_later" | "not_roam_type";
+/** Older uploads carry only the first four keys. */
+export type SavedPageCounts = Record<"saved" | "already" | "held" | "not_roam_type", number> &
+  Partial<Record<"not_saved" | "left_for_later", number>>;
 export type SavedPageRow = {
   partType: string;
   place: string | null;
@@ -506,6 +512,8 @@ export type SavedPage = {
     moreUnknownRows?: number;
     /** When Roam last sorted this upload's unknown names (auto-sort plan R3/R5). */
     sortAt?: string;
+    /** Rev 2 §3.3: rows Roam left out because the page couldn't prove them (same as counts.left_for_later). */
+    skipped?: number;
   };
   created_at: string;
 };
