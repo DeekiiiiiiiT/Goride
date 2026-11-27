@@ -1,0 +1,214 @@
+ROAM DOMINION — YOUR ANSWERS TEACH ROAM — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+HOW TO USE: First paste = everything from the intro down to END OF FIRST PASTE (Screens 1 and 2). Then paste one SCREEN block at a time, in order. Never paste the last section ("FOR CLAUDE — DO NOT PASTE").
+Plan: docs/answers-teach-roam-audit.md (Rev 2), §5.1–5.4.
+
+
+==================== FIRST PASTE ====================
+
+Roam Dominion - Your answers teach Roam (desktop admin console for the owner, who is not a mechanic):
+
+Design high-fidelity, modern screens for the Roam Dominion admin console. The owner uploads a page saved from a car maker's parts catalogue, and Roam saves every part it can prove from the page. When the page uses a word Roam doesn't know yet (Toyota calls a strut mount "SUPPORT SUB-ASSY, FRONT SUSPENSION"), or doesn't say front or rear, Roam now asks one short question on a card that shows exactly what it read: the heading, the row, the number and the dates. One tap saves the part and Roam remembers the answer, so the same wording on the next page saves by itself, and the owner can see it happening: "Saved 1 row using your earlier answers." A list on the Part types page shows everything Roam has learned, with Undo on each. It must feel effortless and trustworthy, like a premium consumer app: one question per card, plain words first, the catalogue's own words shown exactly as written. Make each screen tall enough to show everything, with no inner scrolling and no cut-off boxes. Draw only the screens asked for in this message. Dominion is the master reference database: no fleet names, plates, drivers, vehicle counts, "used by", prices, suppliers, stock or quantities anywhere.
+
+
+BRAND IDENTITY (take from the live Dominion screens — do not invent):
+- Keep the Dominion console frame exactly as it is:
+  - dark navy left sidebar "Dominion · Roam Admin Console" with groups MASTER DATA (Overview, Vehicles active, Places and Maps, Fuel, Tolls, Tax and Vendors), ENGINES (Fuel Brain, Toll Brain, Matching Brain), DISTRIBUTION (Apps, Data API, Change requests), PLATFORM (Staff and roles, Activity log, Platform Ops, Global settings), BACK OFFICE (GCT registrations, Ledger, Remittance); at the bottom a small "KGN-DC-01 · JMD READY" line
+  - top bar: search "Search entities, engines, routes…" with a ⌘K chip, moon icon, user "DT · Deeki T · Owner" and a sign-out icon
+  - everything right of the sidebar and below the top bar is the design
+- Theme: "Calm modern workspace". Generous spacing, 16px rounded cards, soft shadows, larger type, clear hierarchy, few codes.
+- LIGHT MODE (draw every screen in light mode):
+  - Primary #0153dc; primary container #dbe1ff
+  - Background #faf8fe; cards #ffffff, 16px radius, 1px #e6e7ee hairline, soft shadow 0 4px 16px rgba(1,83,220,0.04)
+  - Text #30323b; muted #5d5f68; outline #797a84; input borders #c5c6d0; tint panels #f3f4fb with 12px radius
+  - Success #006e31 on #e6f4ea; warning #8a5a00 on #fff4dc; error #a83836 on #fdecec; slate #475569 on #f1f5f9
+- DARK MODE (for the theme switch): background #0b1220; cards #111a2e; hairlines #1e293b; text #e2e8f0; muted #94a3b8; outline #94a3b8; primary #5b8def; success #4ade80; warning #fbbf24; error #f87171.
+- The saved-page result overlay (already live): a centred white overlay 640px wide over the car page dimmed 40%, 20px radius, 32px padding. At the top a 56px circle (green with a tick when all saved, amber with "!" when something needs the owner), the title, the muted line "From amayama.com · read 27 Nov 2026", then four count pills in a row: green "Saved", slate "Already on file", amber "Needs you", grey outline "Not a Roam part type". Then result groups, each a heading with a small count and a white card of rows (a 40px part-type icon square, the plain name and place, the number and dates in mono, a pill on the right). Footer: primary "Done" on the right.
+- The question card (new): a white card inside the "Needs you" group, 16px radius, 1px #f1d9a6 border with a 4px #8a5a00 amber bar on the left, 20px padding. Top to bottom:
+  - the part type in bold 16px with the place after a dot when known ("Strut mount · Front");
+  - the page heading exactly as written, in 13px mono, muted ("48609A - SUPPORT SUB-ASSY, FRONT SUSPENSION");
+  - the row text exactly as written, in 13px mono inside a #f3f4fb tint box, 8px radius;
+  - a line with the part number in a mono chip (#f1f5f9, 6px radius) and the dates in mono;
+  - the question in bold 15px ("Is this the Strut mount?");
+  - the answer buttons in one row, all 44px tall.
+- The answered card: the same card shrinks to one line with a green left bar, a green tick, and the text in #006e31 ("Saved 48609-B1060 · Front, both sides"), and under it a muted line ("Roam will remember 'SUPPORT SUB-ASSY, FRONT SUSPENSION' for Toyota.").
+- The "learned" line (new): a slim tint panel (#e6f4ea, 12px radius, 12px padding) with the Material icon "school" in green and one line of text, under the count pills.
+- Buttons always look like buttons, never underlined text links:
+  - Primary: solid #0153dc, white text, 44px tall, 10px radius, semibold
+  - Secondary: white fill, visible #c5c6d0 border, dark text
+  - Danger: white fill, #a83836 border and red text
+  - Disabled: 50% opacity, never hidden
+- Typography: Inter. Titles 26px semibold, section titles 18px semibold, body 15px, hints 13px muted. JetBrains Mono with tabular numerals only for part numbers, dates and the catalogue's own words, always after the plain words.
+- Icons: Material Symbols Outlined, 20–24px. Part types show in a 36px soft #dbe1ff rounded square with a blue icon.
+- Every overlay and dialog is in-app. Never a browser pop-up.
+- Sample data (the owner's real saved pages for a Toyota Roomy 2016–2020 · 2WD · frame M900A · engine 1KR-FE, site amayama.com):
+  - Front suspension page, wording question: Strut mount · Front. Heading "48609A - SUPPORT SUB-ASSY, FRONT SUSPENSION". Row "Genuine Toyota 48609-B1060 - Support sub-assy, front suspension 48609-B1060 | M900,910 | 11.2016 - 09.2020 | 02". Number 48609-B1060, dates 11.2016 – 09.2020.
+  - Front suspension page, saved: Front spring seat · Front, both sides 48470-97403; Coil spring · Front right 48131-B1310; Coil spring · Front left 48131-B1310; Front stabilizer bar 48811-B1070; Stabilizer bar bush · Front 48815-B1090 (all 11.2016 – 09.2020). Already on file: Shock absorber · Front right 48510-B9285 (11.2016 – 11.2018) and 48510-B9115 (11.2018 – 09.2020), Front stabilizer link 48820-B1010.
+  - Rear brake page, front/rear question: Parking brake shoe strut set · Right. Heading "47061 - STRUT SET, PARKING BRAKE SHOE, RH". Row "Genuine Toyota 47061-B2040 - Strut set, parking brake shoe, rh 47061-B2040 | M900 | 11.2016 - 02.2019 | 01". Number 47061-B2040, dates 11.2016 – 02.2019.
+  - Rear brake page, which-part question: heading "04495 - SHOE KIT, REAR BRAKE", row "Genuine Toyota 04495-B1310 - Brake pads, set 04495-B1310 (SUBS) | M900 | 11.2016 - 05.2019 | 01", number 04495-B1310, dates 11.2016 – 05.2019.
+  - Rear brake page, saved: Rear brake automatic adjust lever · Rear right 47643-B2020; Brake backing plate · Rear right 47043-B2090. Already on file: Brake shoes · Rear 04495-B2400 (11.2016 – 05.2019) and 04495-B2430 (06.2019 – 09.2020), Brake drum · Rear 42431-B1021, Wheel cylinder · Rear right 47550-B1030.
+
+
+DESIGN PRINCIPLES (only what changes the drawing):
+- Desktop-first at 1440px. The result overlay is 640px wide; on a phone it is a bottom sheet.
+- One question per card. The card always shows what Roam read before it asks.
+- The catalogue's own words are in mono, exactly as on the page. Everything Roam says is plain words.
+- A part the car can't have is never offered as an answer.
+- No "approve", "decide" or "sign off" wording. Answers are short: "Yes, it's the Strut mount", "Rear", "Brake shoes".
+- 8px spacing grid, 44px touch targets.
+
+
+SCREEN 1: RESULT — A QUESTION WAITING
+Same Dominion console frame, colours and style. Behind the overlay, dimmed 40%: the Toyota Roomy car page. Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 640px wide. A 56px amber circle with a white "!". Title "5 parts saved · 1 needs you" (26px semibold), muted line "From amayama.com · read 27 Nov 2026".
+- Count pills: green "Saved 5", slate "Already on file 3", amber "Needs you 1", grey outline "Not a Roam part type 11".
+- Group "Needs you" (count 1), one question card: "Strut mount · Front"; heading "48609A - SUPPORT SUB-ASSY, FRONT SUSPENSION"; row "Genuine Toyota 48609-B1060 - Support sub-assy, front suspension 48609-B1060 | M900,910 | 11.2016 - 09.2020 | 02"; chip "48609-B1060" and "11.2016 – 09.2020"; question "Is this the Strut mount?"; buttons primary "Yes, it's the Strut mount" and secondary "No, it's something else".
+- Group "Saved" (count 5), rows with green "Confirmed" pills: Front spring seat · Front, both sides 48470-97403; Coil spring · Front right 48131-B1310; Coil spring · Front left 48131-B1310; Front stabilizer bar 48811-B1070; Stabilizer bar bush · Front 48815-B1090; each with "11.2016 – 09.2020" in mono.
+- Group "Already on file" (count 3), collapsed to its heading with a chevron.
+- Footer: primary "Done" on the right.
+
+SCREEN 2: RESULT — AFTER ANSWERING
+Same Dominion console frame, colours and style. Behind the overlay, dimmed 40%: the Toyota Roomy car page. Draw tall enough to show everything, no inner scrolling.
+- The same overlay a moment later. Circle now green with a tick. Title "6 parts saved", muted line "From amayama.com · read 27 Nov 2026".
+- Count pills: green "Saved 6", slate "Already on file 3", amber "Needs you 0", grey outline "Not a Roam part type 11".
+- Group "Needs you" (count 0) now holds the answered card: green tick "Saved 48609-B1060 · Front, both sides", muted under it "Roam will remember 'SUPPORT SUB-ASSY, FRONT SUSPENSION' for Toyota."
+- Group "Saved" (count 6): "Strut mount · Front, both sides 48609-B1060" at the top, then the five rows from before, green "Confirmed" pills.
+- Footer: primary "Done".
+
+END OF FIRST PASTE
+
+
+SCREEN 3: RESULT — THE NEXT PAGE SAVES BY ITSELF
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the overlay, dimmed 40%: the Toyota Roomy car page for frame M910A (4WD). Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 640px wide, green circle with a tick. Title "6 parts saved", muted line "From amayama.com · read 28 Nov 2026".
+- Count pills: green "Saved 6", slate "Already on file 0", amber "Needs you 0", grey outline "Not a Roam part type 11".
+- Directly under the pills, the learned line (green tint panel, "school" icon): "Saved 1 row using your earlier answers."
+- Group "Saved" (count 6): "Strut mount · Front, both sides 48609-B1060" with a small slate pill "Learned from you"; then Front spring seat · Front, both sides 48470-97403, Coil spring · Front right 48131-B1310, Coil spring · Front left 48131-B1310, Front stabilizer bar 48811-B1070, Stabilizer bar bush · Front 48815-B1090, with green "Confirmed" pills and "11.2016 – 09.2020".
+- No "Needs you" group.
+- Footer: primary "Done".
+
+SCREEN 4: RESULT — WHICH PART, AND FRONT OR REAR
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the overlay, dimmed 40%: the Toyota Roomy (M900A) car page. Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 640px wide, amber circle with "!". Title "2 parts saved · 2 need you", muted line "From amayama.com · read 27 Nov 2026".
+- Count pills: green "Saved 2", slate "Already on file 4", amber "Needs you 2", grey outline "Not a Roam part type 9".
+- Group "Needs you" (count 2):
+  - Card 1 (which part): title "Rear brake part · Rear"; heading "04495 - SHOE KIT, REAR BRAKE"; row "Genuine Toyota 04495-B1310 - Brake pads, set 04495-B1310 (SUBS) | M900 | 11.2016 - 05.2019 | 01"; chip "04495-B1310" and "11.2016 – 05.2019"; question "Which part is this?"; buttons secondary "Brake shoes" and secondary "Something else". (Brake pads is not offered: this car has drum brakes at the rear.)
+  - Card 2 (front or rear), shown while saving: title "Parking brake shoe strut set · Right"; heading "47061 - STRUT SET, PARKING BRAKE SHOE, RH"; row "Genuine Toyota 47061-B2040 - Strut set, parking brake shoe, rh 47061-B2040 | M900 | 11.2016 - 02.2019 | 01"; chip "47061-B2040" and "11.2016 – 02.2019"; question "Where is it on the car?"; buttons secondary "Front" and secondary "Rear". "Rear" was just pressed: it shows a small spinner, and both buttons are at 50% and can't be pressed.
+- Group "Saved" (count 2): Rear brake automatic adjust lever · Rear right 47643-B2020; Brake backing plate · Rear right 47043-B2090; green "Confirmed".
+- Group "Already on file" (count 4), collapsed to its heading with a chevron.
+- Footer: primary "Done".
+
+SCREEN 5: RESULT — A SIDE QUESTION THAT DIDN'T SAVE
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the overlay, dimmed 40%: the Toyota Roomy car page. Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 640px wide, amber circle with "!". Title "5 parts saved · 1 needs you", muted line "From amayama.com · read 26 Nov 2026".
+- Count pills: green "Saved 5", slate "Already on file 3", amber "Needs you 1", grey outline "Not a Roam part type 11".
+- Group "Needs you" (count 1), one question card: "Strut mount · Front"; heading "48609A - SUPPORT SUB-ASSY, FRONT SUSPENSION"; row "Genuine Toyota 48609-B1060 - Support sub-assy, front suspension 48609-B1060 | M900,910 | 11.2016 - 09.2020 | 02"; chip "48609-B1060" and "11.2016 – 09.2020"; question "Which side is it on?"; buttons secondary "Left", "Right", "Both sides".
+- Under the buttons, a red line with an error icon on a #fdecec tint: "That didn't save. Try again." The three buttons are back to normal so the owner can press again.
+- Group "Saved" (count 5) collapsed to its heading with a chevron.
+- Footer: primary "Done".
+
+SCREEN 6: PHONE — RESULT WITH A QUESTION (390px)
+Same Dominion console frame, colours, cards and style as the earlier screens in this project, on a 390px phone: the result is a bottom sheet with a small grab bar at the top and rounded top corners. Draw tall enough to show everything, no inner scrolling.
+- Title "5 parts saved · 1 needs you", the count pills wrapping onto two lines.
+- The question card full width: "Strut mount · Front"; the heading "48609A - SUPPORT SUB-ASSY, FRONT SUSPENSION" and the row text wrapping onto several lines (never cut off); chip "48609-B1060" and "11.2016 – 09.2020" on one line; "Is this the Strut mount?"; then the two buttons stacked full width: primary "Yes, it's the Strut mount" on top, secondary "No, it's something else" under it.
+- The "Saved" group heading collapsed with a chevron.
+- Full-width primary "Done" at the bottom.
+
+SCREEN 7: PENDING CATALOG — A QUESTION WAITING IN THE LIST
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. The page is Vehicles › Pending catalog. Draw tall enough to show everything, no inner scrolling.
+- Title "Pending catalog", muted line "What Roam is researching, and what needs you."; on the right, secondary buttons "Export CSV" (download icon) and "Re-run waiting jobs (up to 50)" (refresh icon). No banners at the top of the page.
+- Tabs in a white card: "Parts 7" (selected, blue underline), "Vehicles 0", "Auto-match conflicts 0", "Settings and health".
+- Four stat cards: "NEEDS REVIEW 0" (amber dot), "BROWSER CHECKS WAITING 7 of 25" (blue dot), "RESEARCHING NOW 0" (blue dot), "ADDED THIS WEEK 40" (green dot).
+- Filter chips: "All (53)", "Needs review (0)", "Browser check (7) · 7 of 25 open" (selected, solid blue), "Researching (0)", "Waiting its turn (0)"; a search box "Search car or part… (Press '/' to focus)" with a "/" key chip.
+- Table with columns CAR & MODEL, PART & PLACE, SOURCE CATALOGUE, STATUS, RESULT NUMBER, ACTION. Each car cell: a small red car icon in a soft circle, "Toyota Roomy 2016–2020 2WD", muted mono "M900A · 1KR-FE". Rows:
+  - Strut mount · Front — "Amayama" chip — amber pill "Needs you" (icon "help") — "Toyota 48609-B1060" in a mono chip — an arrow button
+  - Coolant — "—" — blue outline pill "Browser check" — "Toyota Super Long Life Coolant" — arrow
+  - Thermostat — "—" — "Browser check" — "Toyota 90916-03150" — arrow
+  - Headlight, low beam — "—" — "Browser check" — "H4" — arrow
+  - Tire size — "—" — "Browser check" — "165/65R14" — arrow
+  - Drive / Serpentine Belt — "Masuma" chip — "Browser check" — "Masuma 6PK-1195" — arrow
+  - Headlight, high beam — "—" — "Browser check" — "H4 or LED" — arrow
+- Footer: "Showing 7 of 7 pending parts", Previous / 1 / Next.
+
+SCREEN 8: BROWSER CHECK DRAWER — OPENS ON THE QUESTION
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. Behind it, blurred: the Pending catalog list. On the right, a white drawer 560px wide, full height. Draw tall enough to show everything, no inner scrolling.
+- Drawer header: "Strut mount" (20px semibold) with an amber pill "Needs you", muted line "Toyota Roomy 2016–2020 2WD · Front", and a round close button (X) on the right.
+- Body: a muted line "From your saved page · amayama.com · 26 Nov 2026", then one question card: "Strut mount · Front"; heading "48609A - SUPPORT SUB-ASSY, FRONT SUSPENSION"; row "Genuine Toyota 48609-B1060 - Support sub-assy, front suspension 48609-B1060 | M900,910 | 11.2016 - 09.2020 | 02" in the tint box; chip "48609-B1060" and "11.2016 – 09.2020"; "Is this the Strut mount?"; primary "Yes, it's the Strut mount", secondary "No, it's something else".
+- Under the card, a secondary full-width button "Or check it on the website step by step" (icon "open_in_new").
+- Drawer footer: muted line "Browser checks waiting for you: 7 of 25 · a check left for 30 days closes as Couldn't find."
+
+SCREEN 9: BROWSER CHECK DRAWER — ANSWERED
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. Behind it, blurred: the Pending catalog list. On the right, a white drawer 560px wide, full height.
+- Header: "Strut mount" with a green pill "Added", muted line "Toyota Roomy 2016–2020 2WD · Front", round close button.
+- Body: the answered card (green left bar, tick) "Saved 48609-B1060 · Front, both sides", and the muted line under it "Roam will remember 'SUPPORT SUB-ASSY, FRONT SUSPENSION' for Toyota."
+- Footer: one primary full-width button "Done".
+
+SCREEN 10: BROWSER CHECK DRAWER — STEP 3 IN THE MAKER'S WORDS
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. Behind it, blurred: the Pending catalog list. On the right, a white drawer 560px wide, full height, for a check with no question card (the step-by-step website check on another Toyota).
+- Header: "Strut mount" with a blue pill "Browser check" (icon), muted line "Toyota Corolla 2019–2024 · Front", round close button.
+- Body: a soft #dbe1ff panel, 16px radius: "Step 3 of 5" (13px), then a 28px blue numbered circle "3" beside the lines:
+  - "Search support" with a small copy icon
+  - "Open the section for the strut mount"
+  - "Do you see SUPPORT SUB-ASSY, FRONT SUSPENSION ?" with the catalogue words in bold mono and a small copy icon
+  - buttons secondary "Yes" and secondary "No"
+- Footer: muted line "Browser checks waiting for you: 7 of 25 · a check left for 30 days closes as Couldn't find.", then three buttons in a row: secondary "Back", primary "Next" (wide), danger "Not on this page".
+
+SCREEN 11: PART TYPES — LEARNED FROM YOU
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. The page is Vehicles › Parts database › Add parts › Part types. Draw tall enough to show everything, no inner scrolling.
+- Page title "Part types", muted line "The kinds of parts Roam keeps. Only the owner can add or change one." Above the new card, the existing part-type list drawn short and collapsed ("106 part types" with a chevron), and the existing "Sorted by Roam" card collapsed to its title with a chevron.
+- A white card "Learned from you" (18px semibold) with the muted line "What Roam remembers from your answers. It uses these on every new page."
+- Three rows, a hairline between each:
+  - "SUPPORT SUB-ASSY, FRONT SUSPENSION" (mono) → "Strut mount" (15px medium) with a 28px part-type icon; chip "Toyota"; muted line "Saved 2 parts · You answered on 27 Nov 2026"; on the right a secondary button with red text "Undo".
+  - "STRUT SET, PARKING BRAKE SHOE, RH" (mono) → "Parking brake shoe strut set"; chips "Toyota" and "Roomy · Rear"; muted "Saved 3 parts · You answered on 27 Nov 2026"; "Undo".
+  - "SHOE KIT, REAR BRAKE" (mono) → "Brake shoes"; chip "Toyota"; muted "Saved 1 part · You answered on 27 Nov 2026"; "Undo".
+
+SCREEN 12: PART TYPES — FORGET A LESSON
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. Behind an in-app dialog, dimmed 40%: the Part types page with the "Learned from you" card.
+- Centred white dialog, 480px wide, 20px radius, 28px padding. Title "Forget this?" (20px semibold).
+- Body: "Roam will ask again next time it sees 'SUPPORT SUB-ASSY, FRONT SUSPENSION' on a Toyota page. Parts already saved stay saved." (the catalogue words in mono).
+- Buttons on the right: secondary "Keep it", danger "Forget it".
+
+SCREEN 13: PART TYPES — LEARNED FROM YOU, NOTHING YET
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. The page is Vehicles › Parts database › Add parts › Part types.
+- The "Learned from you" card with, inside it, one centred muted line with a "school" icon: "Nothing learned yet." and under it, smaller: "Answer a question on an upload and it shows here."
+
+SCREEN 14: PART TYPES — LEARNED FROM YOU, COULDN'T LOAD
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. The page is Vehicles › Parts database › Add parts › Part types.
+- The "Learned from you" card with one red line and an error icon "Couldn't load what Roam learned." and a secondary button "Try again" (refresh icon).
+
+
+==================== FOR CLAUDE — DO NOT PASTE ====================
+
+ADDITIONAL UI COMPONENTS:
+- QuestionCard (plan §5.1, AT-05): kinds wording / types / axle / side. Shows part type (+ known place), page heading (mono), row text (mono, tint box), number chip, dates, the question, the answer buttons. Wording: primary "Yes, it's the {type}" + secondary "No, it's something else". Types: title is the plain area ("Rear brake part"), never a guessed type; one secondary button per candidate type that catalog_part_fits_axle allows, plus "Something else". Axle: "Front" / "Rear", same weight. Side: "Left" / "Right" / "Both sides". Saving: spinner on the pressed button, all buttons disabled. Error: red line "That didn't save. Try again.", buttons back. Answered: one green line + muted "Roam will remember …" line (wording/types: "'{heading}' for {make}."; place: "this is at the {axle} on a {model}."). After No / Something else: grey line "Not saved. It's in Pending catalog as a browser check."
+- LearnedLine (§5.1, AT-08): green tint panel, "school" icon, "Saved {n} rows using your earlier answers." (1 row / n rows). Shown only when n > 0.
+- "Learned from you" pill on Saved rows a lesson saved.
+- Drawer question mode (§5.2): header pill "Needs you" (amber) while open, "Added" (green) after; source line "From your saved page · {domain} · {date}"; QuestionCard; secondary "Or check it on the website step by step" opens the existing steps; after an answer, footer is one primary "Done".
+- Step 3 wording (§5.2, AT-06): "Search {maker search word}", "Do you see {maker's words} ?" from makerWordsFor; falls back to today's type name.
+- LearnedFromYou card (§5.3): rows heading (mono) → type, maker chip, model + axle chip for place lessons, "Saved {n} parts · You answered on {date}", Undo (secondary, red text) → ForgetDialog. Loading = three grey placeholder rows. Empty and error as Screens 13–14. Seed rows never listed. Owner only; staff see the list with Undo disabled and the line "Only the owner can change this".
+- Pending catalog status pill "Needs you" (amber, "help" icon) for jobs with a question (§5.4); it counts as a browser check in the card, the chip and "N of 25".
+
+INTERACTIONS:
+- Answer → POST saved-pages/:id/rows/:lineNo/answer {kind, yes | typeId | axle | side} (plan §4). Yes/pick saves through savePartAnswers, writes the lesson (rememberAnswer), the card turns answered, counts update. No / Something else → the row stays a browser check on its job, no lesson.
+- Drawer answer uses the same route via the job's question source (AT-12).
+- Undo → DELETE lessons/:id; parts already saved stay; the next upload asks again.
+- Screen 3's "Saved 1 row using your earlier answers" counts rows a lesson settled on that upload.
+- All sample rows are the owner's real Roomy uploads (26–27 Nov). Screen 3 (M910A, 28 Nov) and Screen 10 (Corolla) are made-up dates/cars to show the lesson at work; the built screens show real results only.
+- Banners: the "… blocks Roam" banners are gone from Pending catalog and Overview (27 Nov); don't draw them.
+
+Spec screens / Area:
+| Screen | Plan | Area |
+|---|---|---|
+| 1 | §5.1 wording question | SavedPageOverlay → QuestionCard |
+| 2 | §5.1 answered card | SavedPageOverlay |
+| 3 | §5.1 learned line + "Learned from you" pill | SavedPageOverlay → LearnedLine |
+| 4 | §5.1 which-part question + front/rear saving | SavedPageOverlay |
+| 5 | §5.1 side question + error | SavedPageOverlay |
+| 6 | §5.1 phone | SavedPageOverlay bottom sheet |
+| 7 | §5.4 Needs you status | Pending catalog parts list |
+| 8 | §5.2 question mode | ResearchJobDrawer |
+| 9 | §5.2 answered | ResearchJobDrawer |
+| 10 | §5.2 step 3 maker's words | ResearchJobDrawer steps |
+| 11 | §5.3 list | PartTypesSettings → LearnedFromYou |
+| 12 | §5.3 forget dialog | PartTypesSettings |
+| 13–14 | §5.3 empty / error | PartTypesSettings |

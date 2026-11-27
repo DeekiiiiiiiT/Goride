@@ -10,6 +10,7 @@
  */
 import { type CarBuild, periodsOnLine, typedLooksLikePartNumber, wholeNumberOnLine } from "./research_browser_check.ts";
 import { pageNameFromGroupLine, parseGroupPhrase } from "./saved_page_phrases.ts";
+import { lessonFor, type MakerWords, wordsForType } from "./saved_page_lessons.ts";
 
 export type AiDates = { fromMonth?: number | null; fromYear: number; toMonth?: number | null; toYear?: number | null };
 
@@ -87,7 +88,17 @@ export type ProvenRow = {
   dropped: boolean;
   /** The lines that prove it, for research_page_read.block_text (prices already removed). */
   evidence: string;
+  /**
+   * Answers teach Roam AT-03 / AT-05: the one thing the owner is asked about this row (switch on, number and dates
+   * proved on the page). Null when the row needs no question.
+   */
+  question: RowQuestion | null;
+  /** AT-08: the owner lessons that settled this row's part type or place (empty when none did). */
+  lessonIds: string[];
 };
+
+/** AT-05: what a question card asks. `typeIds` are the part types it offers (wording: one; types: the candidates). */
+export type RowQuestion = { kind: "wording" | "types" | "axle" | "side"; typeIds: string[] };
 
 /** D1: every kept line is cut here. The plan's limit (§2 D1); far more than either sample page needs. */
 export const MAX_RESULT_LINE = 300;
@@ -121,39 +132,15 @@ export function isFillerWord(word: string): boolean {
 const stem = (word: string) => String(word ?? "").toUpperCase().replace(/S$/, "");
 
 /**
- * What to look for in a catalogue's search box and row names. Ported from
- * apps/admin/src/components/admin/research-engine/researchModel.ts (partFinder) — keep the two in sync.
+ * Words a row may carry for a part type: its own name plus the car maker's words for it (P4), with the catalogue filler
+ * removed (Rev 2). The maker's words come from `part_maker_word` (answers-teach-roam AT-01): the seed rows are the old
+ * hand-written partFinder rows, each on the one type it was written for, plus the owner's lessons. A catalogue writes
+ * one part as a singular row and a plural name ("SHOE KIT" for "Brake shoes"), so both forms of a word count. A type
+ * whose words are all filler keeps them, so it is never held for ever.
  */
-export type PartFinder = { search: string; rowName: string | null };
-
-export function partFinder(itemName: string, make: string | null | undefined): PartFinder {
-  const n = itemName.toLowerCase();
-  const plain = { search: itemName.toLowerCase(), rowName: null };
-  if (!/toyota|daihatsu|lexus/i.test(String(make ?? ""))) return plain;
-  if (/mount|sensor|switch|timing|compressor|bearing|hose|cover|bracket|gasket/.test(n)) return plain;
-  if (/\bcabin\b|a\/c filter|air ?con(ditioning)? filter/.test(n)) return { search: "air filter", rowName: "ELEMENT, CLEAN AIR FILTER (or AIR REFINER)" };
-  if (/engine air filter|^air filter$|air cleaner/.test(n)) return { search: "air cleaner", rowName: "ELEMENT SUB-ASSY, AIR CLEANER FILTER" };
-  if (/spark plug/.test(n)) return { search: "spark plug", rowName: "PLUG, SPARK" };
-  if (/shock absorber|^shocks?$/.test(n)) return { search: "shock absorber", rowName: "ABSORBER ASSY, SHOCK" };
-  if (/thermostat/.test(n)) return { search: "thermostat", rowName: "THERMOSTAT" };
-  if (/brake pads?|^pads?$/.test(n)) return { search: "disc brake", rowName: "PAD KIT, DISC BRAKE" };
-  if (/brake shoes?/.test(n)) return { search: "brake shoe", rowName: "SHOE SET, BRAKE" };
-  if (/wiper blades?/.test(n)) return { search: "wiper", rowName: "BLADE ASSY, WIPER" };
-  if (/serpentine belt|drive belt|fan belt|v-?ribbed belt/.test(n)) return { search: "belt", rowName: "BELT, V-RIBBED" };
-  if (/oil filter/.test(n)) return { search: "oil filter", rowName: "FILTER SUB-ASSY, OIL" };
-  return plain;
-}
-
-/**
- * Words a row may carry for a part type: its own name, the catalogue search word and the catalogue row name (P4), with
- * the catalogue filler removed (Rev 2). A catalogue writes one part as a singular row and a plural name ("SHOE KIT" for
- * "Brake shoes"), so both forms of a word count. A type whose words are all filler keeps them, so it is never held for
- * ever.
- */
-export function typeWords(type: PartType, make: string | null | undefined): string[] {
-  const finder = partFinder(type.name, make);
+export function typeWords(type: PartType, maker?: MakerWords | null): string[] {
   const all = new Set<string>();
-  for (const w of `${type.name} ${finder.search} ${finder.rowName ?? ""}`.toUpperCase().split(/[^A-Z0-9]+/)) {
+  for (const w of `${type.name} ${wordsForType(maker, type.id).join(" ")}`.toUpperCase().split(/[^A-Z0-9]+/)) {
     if (w.length >= 3) all.add(w);
   }
   const distinctive = [...all].filter((w) => !isFillerWord(w));
@@ -206,11 +193,12 @@ export function impliedAxle(...pageTexts: Array<string | null | undefined>): "re
  */
 export function rowNamesType(
   type: PartType,
-  make: string | null | undefined,
+  maker: MakerWords | null | undefined,
   groupLine: string | null | undefined,
   lineText: string | null | undefined,
 ): boolean {
-  return hasWord(`${groupLine ?? ""} | ${lineText ?? ""}`, typeWords(type, make));
+  if (lessonFor(maker, groupLine, null).type?.typeId === type.id) return true;
+  return hasWord(`${groupLine ?? ""} | ${lineText ?? ""}`, typeWords(type, maker));
 }
 
 function hasWord(text: string, words: string[]): boolean {
@@ -385,6 +373,8 @@ export type NameResolution = {
   name: string;
   /** Rev 2 §3.3: the reads name two types and the page picks neither — the row is left for later. */
   ambiguous: boolean;
+  /** The Roam types the two reads named (one or two), for the "Which part is this?" question (AT-05). */
+  candidates: PartType[];
 };
 
 /**
@@ -403,11 +393,11 @@ export function resolvePartType(input: {
     const type = typeFor(input.types, name);
     if (type && !candidates.some((c) => c.id === type.id)) candidates.push(type);
   }
-  if (!candidates.length) return { type: null, name: names[0] ?? "", ambiguous: false };
-  if (candidates.length === 1) return { type: candidates[0], name: names[0] ?? candidates[0].name, ambiguous: false };
+  if (!candidates.length) return { type: null, name: names[0] ?? "", ambiguous: false, candidates };
+  if (candidates.length === 1) return { type: candidates[0], name: names[0] ?? candidates[0].name, ambiguous: false, candidates };
   const picked = nameFromPageWords(candidates, input.groupLine, input.lineText);
-  if (picked) return { type: picked, name: picked.name, ambiguous: false };
-  return { type: candidates[0], name: names[0] ?? candidates[0].name, ambiguous: true };
+  if (picked) return { type: picked, name: picked.name, ambiguous: false, candidates };
+  return { type: candidates[0], name: names[0] ?? candidates[0].name, ambiguous: true, candidates };
 }
 
 /**
@@ -425,10 +415,16 @@ export function proveRows(input: {
   headingText?: string;
   /** Is this number already confirmed on file for this car? Used only to pick between two numbers on one row. */
   isOnFile?: (number: string) => boolean;
+  /** AT-01 / AT-02: the car maker's words and the owner's lessons for this make. */
+  makerWords?: MakerWords | null;
+  /** AT-03: the switch. On: a wording, two-type, front/rear or side row with a proved number and dates is a question. */
+  askQuestions?: boolean;
 }): ProvenRow[] {
   const { reads, lines, containers, types, car, header } = input;
   const headingText = input.headingText ?? "";
   const isOnFile = input.isOnFile ?? (() => false);
+  const maker = input.makerWords ?? null;
+  const askQuestions = input.askQuestions === true;
   const identity = [car.frame, car.engineCode, car.model, car.make].filter((x): x is string => Boolean(x));
   const byLine = (rows: AiPartRow[]) => {
     const map = new Map<number, AiPartRow>();
@@ -457,7 +453,12 @@ export function proveRows(input: {
       groupLine,
       lineText: rowLine,
     });
-    const type = resolution.type;
+    // AT-02: the owner's lesson for this heading names the part type, whatever the two reads said.
+    const lesson = lessonFor(maker, groupLine, car.model);
+    const lessonType = lesson.type ? types.find((t) => t.id === lesson.type!.typeId) ?? null : null;
+    const type = lessonType ?? resolution.type;
+    const ambiguous = lessonType ? false : resolution.ambiguous;
+    const lessonIds: string[] = lessonType && lesson.type ? [lesson.type.id] : [];
     const row: ProvenRow = {
       lineNo,
       groupLineNo: group,
@@ -481,10 +482,18 @@ export function proveRows(input: {
       leftForLater: false,
       dropped: false,
       evidence: group ? `${groupLine}\n${rowLine}` : rowLine,
+      question: null,
+      lessonIds,
     };
-    const wait = (note: string) => {
+    // AT-03: a wait the owner can answer (wording, two types, front/rear, side) is noted with its question; any other
+    // wait is a page fact no answer can change, and the row stays a quiet skip.
+    const asks: Array<{ question: RowQuestion; note: string }> = [];
+    let pageFact = false;
+    const wait = (note: string, question?: RowQuestion) => {
       row.leftForLater = true;
       if (!row.reason) row.reason = note;
+      if (question) asks.push({ question, note });
+      else pageFact = true;
     };
 
     // R1 (§3): a row Roam has no type for keeps the page's own name, number, dates and the lines that prove them, and
@@ -495,7 +504,12 @@ export function proveRows(input: {
     }
     // §3.3: two different Roam types and the group row picks neither → the row waits. The first read's type is kept
     // only as a shelf for the retry; it must never save (the row's own title, "brake pads, set", would pass P4).
-    if (resolution.ambiguous) wait("The reads name two part types and the page names neither");
+    if (ambiguous) {
+      wait("The reads name two part types and the page names neither", {
+        kind: "types",
+        typeIds: resolution.candidates.map((t) => t.id),
+      });
+    }
 
     // §3.4 (Rev 2): the number the page prints wins. Read B's number only matters when read A's is not on the row; when
     // both are on the row, the one already on file is taken, and otherwise the row is left for later.
@@ -537,16 +551,28 @@ export function proveRows(input: {
     if (type) {
       const positionAware = POSITION_SCHEMES.has(String(type.scheme ?? ""));
       if (positionAware) {
-        row.axle = pageAxle(text) ?? impliedAxle(headingText, groupLine, rowLine);
-        if (!row.axle) {
+        // AT-07: the page's own word wins; an owner place lesson for this model fills a place the page doesn't say. A
+        // page that says the other axle than the lesson is asked again, and nothing saves.
+        const pagePlace = pageAxle(text) ?? impliedAxle(headingText, groupLine, rowLine);
+        const learnedAxle = lesson.place?.typeId === type.id ? lesson.place.axle : null;
+        if (pagePlace && learnedAxle && pagePlace !== learnedAxle) {
           row.placeOk = false;
-          wait(PLACE_AXLE_REASON);
+          wait(PLACE_AXLE_REASON, { kind: "axle", typeIds: [type.id] });
+        } else {
+          row.axle = pagePlace ?? learnedAxle;
+          if (!pagePlace && learnedAxle && lesson.place) lessonIds.push(lesson.place.id);
+          if (!row.axle) {
+            row.placeOk = false;
+            wait(PLACE_AXLE_REASON, { kind: "axle", typeIds: [type.id] });
+          }
         }
         if (SIDED.has(String(type.scheme ?? ""))) {
-          row.side = pageSide(text);
+          const learnedSide = lesson.place?.typeId === type.id ? lesson.place.side : null;
+          row.side = pageSide(text) ?? learnedSide;
+          if (!pageSide(text) && learnedSide && lesson.place && !lessonIds.includes(lesson.place.id)) lessonIds.push(lesson.place.id);
           if (!row.side) {
             row.placeOk = false;
-            wait(PLACE_SIDE_REASON);
+            wait(PLACE_SIDE_REASON, { kind: "side", typeIds: [type.id] });
           }
         }
       }
@@ -562,17 +588,31 @@ export function proveRows(input: {
 
     // P4 type: the row or group carries one of the part type's catalogue words ("SHOCK", not "SPRING"), without the
     // catalogue filler (Rev 2: "KIT" never names a type).
-    if (type && !row.leftForLater && !row.dropped) {
-      if (!hasWord(text, typeWords(type, car.make))) wait(NO_TYPE_WORDS_REASON);
+    // AT-02: the owner's lesson for this heading counts as naming the type. With the switch on, P4 is checked even when
+    // a place is missing, so the card asks about the part first; with it off the first wait's reason is unchanged.
+    const answerable = () => !pageFact && !row.dropped;
+    if (type && !ambiguous && !row.dropped && (!row.leftForLater || (askQuestions && answerable()))) {
+      const named = lessonType?.id === type.id || hasWord(text, typeWords(type, maker));
+      if (!named) wait(NO_TYPE_WORDS_REASON, { kind: "wording", typeIds: [type.id] });
     }
 
     // P6 fits this car: only engine/gearbox/option codes in the note are compared (SP-20).
-    if (!row.leftForLater && !row.dropped) {
+    if ((!row.leftForLater || (askQuestions && answerable())) && !row.dropped) {
       const problem = fitNoteProblem(row.fitNote, car, header);
       if (problem) {
         row.dropped = true;
         row.reason = problem;
       }
+    }
+
+    // AT-03: switch on, the number and dates proved, and every wait one the owner can answer → one question, the part
+    // first, then front/rear, then the side. The row isn't saved until it's answered.
+    if (askQuestions && asks.length && answerable() && row.numberOk && row.datesOk) {
+      const order = ["types", "wording", "axle", "side"] as const;
+      const pick = order.map((k) => asks.find((x) => x.question.kind === k)).find(Boolean)!;
+      row.question = pick.question;
+      row.reason = pick.note;
+      row.leftForLater = false;
     }
 
     // P5 information only (Rev 2 §3.5): the five fields the old code compared. It never holds a row.

@@ -60,7 +60,9 @@ export function ResearchNoticeBanners({
     researchApi
       .notices(token)
       .then((rows) => {
-        if (!cancelled) setItems(rows);
+        // Owner 27 Nov: "site blocks Roam" is not a banner. Those sites are listed under Settings and health and
+        // Trusted sources; a banner is only for something that stops research (paused, limits, spend cap).
+        if (!cancelled) setItems(rows.filter((n) => n.kind !== "site_blocked"));
       })
       .catch(() => {
         if (!cancelled) setItems([]);

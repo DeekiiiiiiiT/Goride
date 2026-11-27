@@ -85,6 +85,8 @@ export type ResearchJobListItem = {
   trustRoute: TrustRoute | null;
   siteDomains: string[];
   conflictOpen: boolean;
+  /** Answers teach Roam §5.4: a browser check that carries a question card. */
+  needsYou?: boolean;
   /** RE-73: the owner's note when the job was closed on their say-so (shown as Closed), else null. */
   closedNote?: string | null;
   updatedAt: string;
@@ -198,6 +200,22 @@ export type ResearchJobDetail = {
   sisterEngines?: Array<{ code: string; turbo: boolean }>;
   /** Step 3 wording: the car maker's own name for this part ("Hub & bearing assy, rear axle"), when Roam knows it. */
   makerPartName?: string | null;
+  /** Answers teach Roam AT-06: the word to search the maker's site for, when the maker's words are known. */
+  makerSearch?: string | null;
+  /** AT-11 / AT-12: the question card this browser check carries (the saved-page row Roam read). */
+  question?: {
+    savedPageId: string;
+    domain: string | null;
+    readAt: string;
+    lineNo: number;
+    partType: string;
+    place: string | null;
+    groupLine: string | null;
+    lineText: string;
+    number: string | null;
+    dates: string | null;
+    question: SavedPageQuestion;
+  } | null;
   /** RE-63: the catalogue's own name for this car's version, learned from an earlier confirmed check. */
   knownVersion?: {
     domain: string;
@@ -426,6 +444,42 @@ export type SavedPageRow = {
   suggestion?: string | null;
   /** Part pictures (docs/part-pictures-audit.md §3.5 point 7): only on GET saved-pages/:id. */
   picture?: PartPicture | null;
+  // Answers teach Roam (docs/answers-teach-roam-audit.md §5.1): what Roam read, for the question card.
+  lineNo?: number;
+  groupLine?: string | null;
+  lineText?: string;
+  /** The one thing a held row asks; `answer` is set once the owner answered. */
+  question?: SavedPageQuestion | null;
+  /** This row was saved because of an earlier answer ("Learned from you"). */
+  learned?: boolean;
+  /** Skipped rows only: the server's plain reason the page couldn't prove it (shown on the Skipped tab). */
+  waitReason?: string | null;
+  /** The heading's key (side words removed), so the RH and LH rows of one heading share one question card. */
+  phraseKey?: string | null;
+};
+export type SavedPageQuestion = {
+  kind: "wording" | "types" | "axle" | "side";
+  typeIds: string[];
+  typeNames: string[];
+  answer?: "yes" | "no" | null;
+  /** The server's line under an answered card ("Roam will remember … for Toyota."). */
+  note?: string | null;
+};
+/** The answer the owner gives on a question card. */
+export type QuestionAnswer = { yes?: boolean; typeId?: string | null; axle?: "front" | "rear"; side?: "left" | "right" | "both" };
+/** One owner lesson on Part types → Learned from you (§5.3). */
+export type MakerLesson = {
+  id: string;
+  heading: string;
+  make: string;
+  model: string | null;
+  axle: "front" | "rear" | null;
+  side: "left" | "right" | "both" | null;
+  typeId: string;
+  typeName: string;
+  partsSaved: number;
+  answeredBy: string | null;
+  answeredAt: string | null;
 };
 /** What the upload did about pictures (§3.2). */
 export type SavedPagePictures = {
@@ -493,7 +547,9 @@ export type SavedPageStopCode =
   | "no_rows"
   | "no_build_dates"
   | "too_many_pages"
-  | "ai_failed";
+  | "ai_failed"
+  /** Answers teach Roam: the maker's words couldn't be read, so nothing was decided. */
+  | "words_unread";
 export type SavedPage = {
   id: string;
   vehicle_catalog_id: string;
@@ -516,6 +572,8 @@ export type SavedPage = {
     sortAt?: string;
     /** Rev 2 §3.3: rows Roam left out because the page couldn't prove them (same as counts.left_for_later). */
     skipped?: number;
+    /** Answers teach Roam AT-08: rows saved on this upload because of an earlier answer. */
+    learned?: number;
   };
   created_at: string;
 };
@@ -569,6 +627,17 @@ export const researchApi = {
   skipPartName: (t: string, key: string) =>
     send<{ ok: true; drafted: boolean; pages: number }>(t, "POST", `/part-names/${encodeURIComponent(key)}/skip`),
   suggestPartTypeAgain: (t: string, id: string) => send<{ deleted: string }>(t, "DELETE", `/hidden-part-type-phrases/${encodeURIComponent(id)}`),
+  /** Answers teach Roam §5.1 / §5.2: answer one question card. */
+  answerQuestion: (t: string, savedPageId: string, lineNo: number, body: QuestionAnswer) =>
+    send<{ result: SavedPage["result"]; message: string | null }>(
+      t,
+      "POST",
+      `/saved-pages/${encodeURIComponent(savedPageId)}/rows/${lineNo}/answer`,
+      body,
+    ),
+  /** §5.3: what Roam learned from the owner's answers, and Undo. */
+  lessons: (t: string) => getJson<{ lessons: MakerLesson[]; canUndo: boolean }>(t, "/lessons"),
+  forgetLesson: (t: string, id: string) => send<{ ok: true }>(t, "DELETE", `/lessons/${encodeURIComponent(id)}`),
   summary: (t: string) => getJson<ResearchSummary>(t, "/summary"),
   notices: (t: string) => getJson<{ items: ResearchNotice[] }>(t, "/notices").then((r) => r.items ?? []),
   coverage: (t: string, carId: string) => getJson<CarCoverage>(t, `/coverage/${encodeURIComponent(carId)}`),

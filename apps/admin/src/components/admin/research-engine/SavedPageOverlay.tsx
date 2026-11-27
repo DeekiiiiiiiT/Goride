@@ -5,6 +5,7 @@
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
+  type QuestionAnswer,
   researchApi,
   type SavedPage,
   type SavedPageCounts,
@@ -17,6 +18,7 @@ import { PartPictureFrame, PictureStatePill, pictureWord } from "../part-picture
 import { listTemplates } from "../part-pictures/partPicturesApi";
 import { newTypeKeys, SavedPageSuggestions, SortSummary, sortedByRoam, type PickerGroup } from "./SavedPageSuggestions";
 import { SortedByRoam } from "./SortedByRoam";
+import { AnsweredLine, QuestionCard } from "./QuestionCard";
 
 /** S1 "See pictures": open the Part pictures page filtered to this upload (same switch the page links use). */
 export function openPartPicturesFor(savedPageId: string) {
@@ -120,6 +122,7 @@ const STOP_CARD: Record<SavedPageStopCode, { icon: string; tone: "red" | "amber"
   no_build_dates: { icon: "event_busy", tone: "slate", title: "This car has no build dates yet", button: "done" },
   too_many_pages: { icon: "hourglass_empty", tone: "amber", title: "That's enough pages for today", button: "done" },
   ai_failed: { icon: "cloud_off", tone: "red", title: "The page couldn't be read", button: "again" },
+  words_unread: { icon: "cloud_off", tone: "red", title: "The page couldn't be read", button: "again" },
 };
 
 /** The plain line under a stop card's title; the boxed detail is the server's own (SP-38). */
@@ -206,6 +209,18 @@ export function SavedPageOverlay({ token, carId, carLabel, jobId, savedPageId, o
       const reply = await researchApi.savedPagePartType(token, id, body);
       setPicturesAiOn(Boolean(reply.picturesAiOn));
       setView((v) => (v.kind === "result" && v.page.id === id ? { kind: "result", page: reply.savedPage } : v));
+      onChanged();
+    },
+    [token, onChanged],
+  );
+
+  // Answers teach Roam §5.1: answer one question card, then show the page as the server now has it.
+  const answerRow = useCallback(
+    async (id: string, lineNo: number, answer: QuestionAnswer) => {
+      await researchApi.answerQuestion(token, id, lineNo, answer);
+      const fresh = await researchApi.savedPageWithPictures(token, id);
+      setPicturesAiOn(Boolean(fresh.picturesAiOn));
+      setView((v) => (v.kind === "result" && v.page.id === id ? { kind: "result", page: fresh.savedPage } : v));
       onChanged();
     },
     [token, onChanged],
@@ -505,6 +520,7 @@ export function SavedPageOverlay({ token, carId, carLabel, jobId, savedPageId, o
         groups={groups}
         onAct={(b) => actOnSuggestion(resultPage.id, b)}
         onReview={() => setReviewing(true)}
+        onAnswer={(lineNo, answer) => answerRow(resultPage.id, lineNo, answer)}
       />
     );
     footer = (
@@ -729,6 +745,7 @@ function Result({
   groups,
   onAct,
   onReview,
+  onAnswer,
 }: {
   page: SavedPage;
   aiOn: boolean;
@@ -739,6 +756,8 @@ function Result({
   groups: PickerGroup[];
   onAct: (body: { key: string; action: "add" | "dismiss"; name?: string; groupId?: string }) => Promise<void>;
   onReview: () => void;
+  /** Answers teach Roam §5.1: answer one question card (throws when the save failed). */
+  onAnswer: (lineNo: number, answer: QuestionAnswer) => Promise<void>;
 }) {
   const counts = { ...EMPTY, ...(page.result?.counts ?? {}) };
   const rows = page.result?.rows ?? [];
@@ -757,6 +776,37 @@ function Result({
   const other = of("not_roam_type");
   // Rev 2 §4: a held row is a page gap or a Roam problem, never a part question, so it carries no "Check this part".
   const heldLine = (r: SavedPageRow, i: number) => <ResultLine key={`h${i}`} row={r} reason={r.reason} />;
+  // Rows with a question (still open, or answered on this result) show as cards; other held rows keep their line.
+  const asked = rows.filter((r) => r.question && r.lineNo != null);
+  const heldPlain = of("held").filter((r) => !r.question);
+  // One card per heading: open questions with the same heading key, kind and part types share a card.
+  const questionGroups: SavedPageRow[][] = [];
+  {
+    const byKey = new Map<string, SavedPageRow[]>();
+    for (const r of asked) {
+      if (r.question?.answer) continue;
+      const key = r.phraseKey
+        ? `${r.phraseKey}|${r.question!.kind}|${r.question!.typeIds.join(",")}`
+        : `line-${r.lineNo}`;
+      const list = byKey.get(key);
+      if (list) list.push(r);
+      else {
+        const fresh = [r];
+        byKey.set(key, fresh);
+        questionGroups.push(fresh);
+      }
+    }
+  }
+  // Owner 27 Nov: the tabs. Only kinds with rows get a tab; Needs you is first and opens first when it has rows.
+  type TabKey = "held" | "saved" | "already" | "skipped";
+  const tabs: Array<{ key: TabKey; label: string; count: number }> = [
+    { key: "held" as const, label: "Needs you", count: counts.held, show: asked.length > 0 || of("held").length > 0 },
+    { key: "saved" as const, label: "Saved", count: of("saved").length, show: of("saved").length > 0 },
+    { key: "already" as const, label: "Already on file", count: of("already").length + of("not_saved").length, show: of("already").length + of("not_saved").length > 0 },
+    { key: "skipped" as const, label: "Skipped", count: skipped, show: skipped > 0 },
+  ].filter((t) => t.show).map(({ show: _s, ...t }) => t);
+  const [chosenTab, setTab] = useState<TabKey | null>(null);
+  const tab: TabKey | null = chosenTab && tabs.some((t) => t.key === chosenTab) ? chosenTab : tabs[0]?.key ?? null;
   // Results read after the part-type round carry suggestions; older ones keep the folded list.
   const learning = Array.isArray(page.result?.suggestions);
   const madeHere = newTypeKeys(page);
@@ -778,6 +828,18 @@ function Result({
         {aiOn ? <PicturesLine page={page} /> : null}
       </div>
 
+      {page.result?.learned ? (
+        <div
+          className="flex items-center gap-3 rounded-xl border border-[#b7e1c4] bg-[#e6f4ea] px-4 py-3 text-[15px] text-[#006e31] dark:border-[#14532d] dark:bg-[#14532d]/40 dark:text-[#4ade80]"
+          data-testid="saved-page-learned"
+        >
+          <DIcon name="school" className="text-[20px]" />
+          <span>
+            Saved {page.result.learned} {page.result.learned === 1 ? "row" : "rows"} using your earlier answers.
+          </span>
+        </div>
+      ) : null}
+
       {aiOn && needsDrawing(page) ? (
         <div className="flex items-start gap-3 rounded-xl bg-[#dbe1ff] p-4 text-[14px] text-[#00174b] dark:bg-[#1e3a8a]/40 dark:text-[#dbe1ff]" data-testid="saved-page-needs-drawing">
           <DIcon name="info" className="text-[20px] text-[#0153dc] dark:text-[#93b4ff]" />
@@ -787,6 +849,35 @@ function Result({
         </div>
       ) : null}
 
+      {/* Owner 27 Nov: one tab per kind of row, so nothing needs a long scroll; Needs you opens first when it has rows. */}
+      {tabs.length ? (
+        <div className={`flex flex-wrap gap-1 rounded-xl px-2 ${RE_SOFT}`} role="tablist" data-testid="saved-page-tabs">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.key}
+              onClick={() => setTab(t.key)}
+              data-testid={`result-tab-${t.key}`}
+              className={`flex min-h-[44px] items-center gap-2 border-b-2 px-3 text-[14px] font-medium ${
+                tab === t.key ? "border-[#0153dc] text-[#0153dc] dark:border-[#93b4ff] dark:text-[#93b4ff]" : `border-transparent ${D_MUTED}`
+              }`}
+            >
+              {t.label}
+              <span
+                className={`rounded-full px-2 text-[12px] font-semibold ${
+                  t.key === "held" && t.count ? "bg-[#fff4dc] text-[#8a5a00] dark:bg-[#451a03] dark:text-[#fbbf24]" : "bg-white dark:bg-[#0b1220]"
+                }`}
+              >
+                {t.count}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {tab === "saved" ? (
       <Group title="Saved" count={of("saved").length} testId="group-saved">
         {of("saved").map((r, i) => (
           <ResultLine
@@ -794,34 +885,81 @@ function Result({
             row={r}
             picture={aiOn ? pictureFor(page, r) : undefined}
             newType={Boolean(r.suggestion && madeHere.has(r.suggestion))}
-            right={<RePill tone="green" icon="check">Confirmed</RePill>}
+            right={
+              <span className="flex flex-wrap items-center gap-1.5">
+                {r.learned ? (
+                  <RePill tone="grey" icon="school" testId="saved-page-learned-row">
+                    Learned from you
+                  </RePill>
+                ) : null}
+                <RePill tone="green" icon="check">Confirmed</RePill>
+              </span>
+            }
           />
         ))}
       </Group>
+      ) : null}
 
-      <Group title="Already on file" count={of("already").length} testId="group-already">
-        {of("already").map((r, i) => (
-          <ResultLine key={`a${i}`} row={r} picture={aiOn ? pictureFor(page, r) : undefined} right={<RePill tone="grey">Already on file</RePill>} />
-        ))}
-      </Group>
+      {tab === "already" ? (
+        <>
+          <Group title="Already on file" count={of("already").length} testId="group-already">
+            {of("already").map((r, i) => (
+              <ResultLine key={`a${i}`} row={r} picture={aiOn ? pictureFor(page, r) : undefined} right={<RePill tone="grey">Already on file</RePill>} />
+            ))}
+          </Group>
 
-      <Group title="Not saved" count={of("not_saved").length} testId="group-not-saved">
-        {of("not_saved").map((r, i) => (
-          <ResultLine key={`n${i}`} row={r} reason={r.reason} right={<RePill tone="grey">Not saved</RePill>} />
-        ))}
-      </Group>
+          <Group title="Not saved" count={of("not_saved").length} testId="group-not-saved">
+            {of("not_saved").map((r, i) => (
+              <ResultLine key={`n${i}`} row={r} reason={r.reason} right={<RePill tone="grey">Not saved</RePill>} />
+            ))}
+          </Group>
+        </>
+      ) : null}
 
-      <Group title="Needs you" count={of("held").length} testId="group-held">
-        {of("held").map(heldLine)}
-      </Group>
+      {/* Answers teach Roam §5.1: a question card per question, and the answered ones stay as one line (Stitch 2). */}
+      {tab === "held" && (asked.length || of("held").length) ? (
+        <section className="flex flex-col gap-2" data-testid="group-held">
+          <div className="flex items-center gap-2">
+            <h3 className={`text-[18px] font-semibold ${D_TXT}`}>Needs you</h3>
+            <span className="rounded-full bg-[#fff4dc] px-2 text-[12px] font-semibold text-[#8a5a00] dark:bg-[#451a03] dark:text-[#fbbf24]">{counts.held}</span>
+          </div>
+          {asked.filter((r) => r.question?.answer).map((r) => (
+            <AnsweredLine key={`q${r.lineNo}`} row={{ ...r, question: r.question! }} />
+          ))}
+          {/* Owner 27 Nov: one card per heading — the RH and LH rows ask once, and one answer saves them all. */}
+          {questionGroups.map(([first, ...others]) => (
+            <QuestionCard
+              key={`q${first.lineNo}`}
+              row={{ ...first, question: first.question! }}
+              others={others.map((o) => ({ ...o, question: o.question! }))}
+              canAnswer={owner}
+              onAnswer={(a) => onAnswer(Number(first.lineNo), a)}
+            />
+          ))}
+          {heldPlain.length ? (
+            <div className="flex flex-col divide-y divide-[#e6e7ee] overflow-hidden rounded-xl border border-[#e6e7ee] dark:divide-[#1e293b] dark:border-[#1e293b]">
+              {heldPlain.map(heldLine)}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
-      {skipped > 0 ? (
-        <div className={`flex items-center gap-3 rounded-xl px-4 py-3 text-[14px] ${RE_SOFT} ${D_TXT}`} data-testid="saved-page-skipped">
-          <DIcon name="block" className={`text-[20px] ${D_MUTED}`} />
-          <span>
-            Roam skipped {skipped} {skipped === 1 ? "row" : "rows"} it couldn&apos;t prove from the page.
-          </span>
-        </div>
+      {tab === "skipped" && skipped > 0 ? (
+        <section className="flex flex-col gap-2">
+          <div className={`flex items-center gap-3 rounded-xl px-4 py-3 text-[14px] ${RE_SOFT} ${D_TXT}`} data-testid="saved-page-skipped">
+            <DIcon name="block" className={`text-[20px] ${D_MUTED}`} />
+            <span>
+              Roam skipped {skipped} {skipped === 1 ? "row" : "rows"} it couldn&apos;t prove from the page.
+            </span>
+          </div>
+          {of("left_for_later").length ? (
+            <div className="flex flex-col divide-y divide-[#e6e7ee] overflow-hidden rounded-xl border border-[#e6e7ee] dark:divide-[#1e293b] dark:border-[#1e293b]" data-testid="group-skipped">
+              {of("left_for_later").map((r, i) => (
+                <ResultLine key={`k${i}`} row={r} reason={r.waitReason ?? null} quiet right={<RePill tone="grey">Skipped</RePill>} />
+              ))}
+            </div>
+          ) : null}
+        </section>
       ) : null}
 
       {learning && sortedByRoam(page) ? (
@@ -927,6 +1065,7 @@ function ResultLine({
   reason,
   picture,
   newType,
+  quiet,
 }: {
   row: SavedPageRow;
   right?: ReactNode;
@@ -934,10 +1073,12 @@ function ResultLine({
   picture?: { noDiagram: boolean };
   /** Auto-sort S1: Roam made this row's part type on this upload. */
   newType?: boolean;
+  /** Skipped tab: the reason is plain information, never a warning. */
+  quiet?: boolean;
 }) {
   const word = picture ? pictureWord(row.picture ?? null, picture.noDiagram) : null;
   // A "waits" line and a Not saved fact are plain information (grey, info icon); only a held row is a warning.
-  const waits = Boolean(reason && (/^Waits\b/.test(reason) || row.group === "not_saved"));
+  const waits = Boolean(reason && (quiet || /^Waits\b/.test(reason) || row.group === "not_saved"));
   return (
     <div className="flex flex-col gap-3 bg-white p-4 sm:flex-row sm:items-center dark:bg-[#111a2e]" data-testid="saved-page-row">
       <div className="flex min-w-0 flex-1 items-start gap-3">
