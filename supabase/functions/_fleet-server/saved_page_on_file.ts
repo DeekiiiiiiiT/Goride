@@ -81,6 +81,19 @@ export function covers(a: OnFile, r: { from: number | null; to: number | null })
 }
 
 /** Is the listing for the same place as the row? A position-aware type compares the axle; a side compares sides. */
+/**
+ * RE-74: this car already has a Confirmed number for this part type on this axle (any side, any years). A saved-page
+ * row that is held for a page gap then has nothing to ask: no browser check is opened for it.
+ */
+export function placeOnFile(
+  onFile: OnFile[],
+  type: { id: string; scheme?: string | null },
+  axle: "front" | "rear" | null,
+): boolean {
+  const positionAware = POSITION_SCHEMES.has(String(type.scheme ?? ""));
+  return onFile.some((a) => a.componentId === type.id && (!positionAware || (a.position ?? null) === axle));
+}
+
 export function placeMatches(a: OnFile, r: PlaceOf): boolean {
   if (r.type && POSITION_SCHEMES.has(String(r.type.scheme ?? ""))) {
     if ((a.position ?? null) !== (r.axle ?? null)) return false;

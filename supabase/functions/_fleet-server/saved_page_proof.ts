@@ -183,6 +183,8 @@ const SIDE_WORDS: Record<"left" | "right", string[]> = { left: ["LEFT", "LH"], r
 
 /** The plain words a quiet wait keeps (shared with the Add route's re-check; never shown to the owner). */
 export const PLACE_AXLE_REASON = "The page doesn't say front or rear on that row";
+/** RE-73: the car has drum brakes on that axle, so a disc-only part (pads, rotor, caliper) can't be there. */
+export const DRUM_AXLE_REASON = "This car has drum brakes there, so this part can't be on it";
 export const PLACE_SIDE_REASON = "The page doesn't say left or right on that row";
 export const NO_TYPE_WORDS_REASON = "The page doesn't name this part type on that row";
 

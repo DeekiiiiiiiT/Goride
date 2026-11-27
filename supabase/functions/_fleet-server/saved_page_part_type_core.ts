@@ -10,7 +10,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { answersGate, type CarBuild, type CheckAnswers } from "./research_browser_check.ts";
 import { identityTokens } from "./research_part_job.ts";
 import { savePartAnswers, type SaveJob } from "./research_part_save.ts";
-import { impliedAxle, PLACE_AXLE_REASON, PLACE_SIDE_REASON, type PartType, placeGap, rowNamesType } from "./saved_page_proof.ts";
+import { DRUM_AXLE_REASON, impliedAxle, PLACE_AXLE_REASON, PLACE_SIDE_REASON, type PartType, placeGap, rowNamesType } from "./saved_page_proof.ts";
 import { ROAM_SAVE_PROBLEM } from "./saved_page_result.ts";
 import { typeRoamAlreadyHas } from "./saved_page_suggest.ts";
 import { normalisePhrase } from "./saved_page_phrases.ts";
@@ -436,7 +436,16 @@ export async function saveRowsAsPartType(
       lastReason = lastReason ?? "The browser check couldn't open. Try again.";
       continue;
     }
-    const jr = jobResult.data as { jobId?: string; state?: string; busy?: boolean } | null;
+    const jr = jobResult.data as { jobId?: string; state?: string; busy?: boolean; notApplicable?: boolean } | null;
+    // RE-73: this car can't have this part on that axle (disc-only part on a drum axle): no check is opened.
+    if (jr?.notApplicable) {
+      for (const d of groupRows) {
+        d.state = "held";
+        d.reason = DRUM_AXLE_REASON;
+      }
+      lastReason = lastReason ?? DRUM_AXLE_REASON;
+      continue;
+    }
     if (jr?.busy) {
       for (const d of groupRows) {
         d.state = "held";

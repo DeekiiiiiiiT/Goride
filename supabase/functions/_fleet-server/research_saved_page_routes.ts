@@ -29,6 +29,7 @@ import {
   axleWordsFor,
   type CarFacts,
   dateRangeText,
+  DRUM_AXLE_REASON,
   headerFacts,
   headerLineCount,
   isOtherTypeName,
@@ -176,7 +177,7 @@ export type SavedPageDeps = {
   sortAi?: SavedPageSortAi | null;
 };
 
-import { covers, type OnFile, overlaps, parseOnFile, placeMatches } from "./saved_page_on_file.ts";
+import { covers, type OnFile, overlaps, parseOnFile, placeMatches, placeOnFile } from "./saved_page_on_file.ts";
 
 export type ResultRow = {
   partType: string;
@@ -794,6 +795,35 @@ export async function runSavedPage(
       // Every row's number is already Confirmed for its place, or covered by another number: nothing to save and
       // nothing to check, so no browser check is opened (one opened here was never closed and sat in Pending catalog).
       if (!pending.length) continue;
+      // A number already on file covers its place just as well as a new one (nothing is saved for it, but the axle's
+      // other side must not be held because of it).
+      const coverRows = g.rows;
+
+      // P7: every place on the axle must be fully covered by its rows (or numbers already on file). Worked out before
+      // any browser check opens, so RE-74 below can decide whether one is needed at all.
+      let gap: string | null = null;
+      const gapFor = new Map<string, string | null>();
+      if (SIDED.has(String(g.type.scheme ?? ""))) {
+        for (const place of ["left", "right"]) {
+          const rs = coverRows.filter((r) => r.side === place || r.side === "both");
+          const placeGapText = rs.length ? placeGap(rs.map((r) => ({ from: r.from!, to: r.to! })), build) : "No number for this side";
+          gapFor.set(place, placeGapText);
+          if (placeGapText) gap = gap ?? placeGapText;
+        }
+      } else {
+        gap = placeGap(coverRows.map((r) => ({ from: r.from!, to: r.to! })), build);
+      }
+
+      // RE-74 (27 Nov): the rows can't save (a page gap) and this car already has a Confirmed number for this part on
+      // this axle, so there is nothing to ask. Before this, a stray row (Amayama's section code "42403" read as a
+      // number) opened a Brake drum · Rear check on a Roomy whose drum was confirmed on 7 Nov.
+      if (gap && placeOnFile(onFile, g.type, g.axle)) {
+        for (const r of pending) {
+          outcome.set(r.lineNo, { group: "not_saved", reason: "Roam already has a number for this part on this car", jobId: null });
+        }
+        continue;
+      }
+
       const positionAware = POSITION_SCHEMES.has(String(g.type.scheme ?? ""));
       const canHaveJob = !positionAware || g.axle != null;
       let job: { jobId: string; state: string } | null = null;
@@ -809,7 +839,12 @@ export async function runSavedPage(
           for (const r of pending) outcome.set(r.lineNo, { group: "held", reason: "The browser check couldn't open. Try again.", jobId: null });
           continue;
         }
-        const jr = jobResult as { jobId?: string; state?: string; busy?: boolean } | null;
+        const jr = jobResult as { jobId?: string; state?: string; busy?: boolean; notApplicable?: boolean } | null;
+        // RE-73: this car can't have this part on that axle (disc-only part on a drum axle): no check is opened.
+        if (jr?.notApplicable) {
+          for (const r of pending) outcome.set(r.lineNo, { group: "held", reason: DRUM_AXLE_REASON, jobId: null });
+          continue;
+        }
         if (jr?.busy) busy = true;
         else if (jr?.jobId) job = { jobId: String(jr.jobId), state: String(jr.state ?? "browser_check") };
       }
@@ -826,24 +861,6 @@ export async function runSavedPage(
       if (!job) {
         for (const r of pending) held(r, "The browser check couldn't open. Try again.");
         continue;
-      }
-
-      // A number already on file covers its place just as well as a new one (nothing is saved for it, but the axle's
-      // other side must not be held because of it).
-      const coverRows = g.rows;
-
-      // P7: every place on the axle must be fully covered by its rows (or numbers already on file).
-      let gap: string | null = null;
-      const gapFor = new Map<string, string | null>();
-      if (SIDED.has(String(g.type.scheme ?? ""))) {
-        for (const place of ["left", "right"]) {
-          const rs = coverRows.filter((r) => r.side === place || r.side === "both");
-          const placeGapText = rs.length ? placeGap(rs.map((r) => ({ from: r.from!, to: r.to! })), build) : "No number for this side";
-          gapFor.set(place, placeGapText);
-          if (placeGapText) gap = gap ?? placeGapText;
-        }
-      } else {
-        gap = placeGap(coverRows.map((r) => ({ from: r.from!, to: r.to! })), build);
       }
 
       // SP-39: an auto_added job never saves. Its number is already on the car, so the row is a fact, not a question.
