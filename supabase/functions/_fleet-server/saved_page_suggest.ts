@@ -235,10 +235,13 @@ export function buildSuggestions(input: {
   types: ReadonlyArray<PartType>;
   groups: ReadonlyArray<{ id: string; name: string }>;
   dismissed?: ReadonlySet<string>;
+  /** The note saved with each dismissal ("A fixing"), shown as the already-answered name's reason. */
+  dismissedNotes?: ReadonlyMap<string, string | null>;
   max?: number;
 }): SuggestionBuild {
   const max = input.max ?? MAX_SUGGESTIONS;
   const dismissed = input.dismissed ?? new Set<string>();
+  const notes = input.dismissedNotes ?? new Map<string, string | null>();
   const groupByName = new Map(input.groups.map((g) => [g.name, g.id]));
 
   // R2.4's "another NO. of the same thing": every group row on the page (a known row's group counts too), by the
@@ -270,8 +273,9 @@ export function buildSuggestions(input: {
   const fixings: Array<{ suggestion: Suggestion; firstLine: number }> = [];
 
   for (const bucket of ordered) {
-    // A phrase the owner marked "not a part we track" is never offered again, on any page (D3, R6).
-    if (dismissed.has(bucket.key)) continue;
+    // A phrase already answered "not a part we track" (by the owner or Roam) is never offered again, on any page
+    // (D3, R6). Owner 26 Nov: it is still listed as answered, so the result says what Roam did instead of asking.
+    const answered = dismissed.has(bucket.key);
     const parsed = parseGroupPhrase(bucket.rows[0].groupLine);
     if (!parsed) continue;
     const keepNumber = parsed.noNumber != null && (numbersByBase.get(parsed.baseName)?.size ?? 0) > 1;
@@ -303,10 +307,10 @@ export function buildSuggestions(input: {
       numbers,
       rowCount: bucket.rows.length,
       numberCount: numbers.length,
-      status: "open",
+      status: answered ? "skipped" : "open",
       typeId: null,
       typeName: null,
-      reason: null,
+      reason: answered ? notes.get(bucket.key) || (kind === "fixings" ? "A fixing" : "Not a part we track") : null,
     };
     (kind === "fixings" ? fixings : cards).push({ suggestion, firstLine: bucket.rows[0].lineNo });
   }

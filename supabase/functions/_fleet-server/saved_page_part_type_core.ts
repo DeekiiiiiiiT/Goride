@@ -10,7 +10,8 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { answersGate, type CarBuild, type CheckAnswers } from "./research_browser_check.ts";
 import { identityTokens } from "./research_part_job.ts";
 import { savePartAnswers, type SaveJob } from "./research_part_save.ts";
-import { PLACE_AXLE_REASON, PLACE_SIDE_REASON, type PartType, placeGap, rowNamesType } from "./saved_page_proof.ts";
+import { impliedAxle, PLACE_AXLE_REASON, PLACE_SIDE_REASON, type PartType, placeGap, rowNamesType } from "./saved_page_proof.ts";
+import { ROAM_SAVE_PROBLEM } from "./saved_page_result.ts";
 import { typeRoamAlreadyHas } from "./saved_page_suggest.ts";
 import { normalisePhrase } from "./saved_page_phrases.ts";
 import { loadPageDrawings, type SavedPageDiagramStore } from "./saved_page_diagrams.ts";
@@ -20,7 +21,7 @@ import {
   type PicturesResult,
   queuePartPictures,
 } from "./part_pictures_queue.ts";
-import { type OnFile, overlaps, parseOnFile, placeMatches, POSITION_SCHEMES } from "./saved_page_on_file.ts";
+import { covers, type OnFile, overlaps, parseOnFile, placeMatches, POSITION_SCHEMES } from "./saved_page_on_file.ts";
 import { savedPageBuildText } from "./saved_page_build_text.ts";
 import type { ResultRow } from "./research_saved_page_routes.ts";
 
@@ -66,9 +67,12 @@ export type CoreInput = {
 
 export type CoreDecision = {
   row: ResultRow;
-  state: "saved" | "already" | "held";
+  /** Rev 2: "not_saved" = a different number already holds these years; "left_for_later" = the page can't prove it. */
+  state: "saved" | "already" | "held" | "not_saved" | "left_for_later";
   reason: string | null;
   jobId: string | null;
+  /** left_for_later only: the server-side note (never shown). */
+  waitReason?: string | null;
 };
 
 export type CoreType = { id: string; name: string; scheme: string | null };
@@ -346,11 +350,18 @@ export async function saveRowsAsPartType(
   const url = input.page.source_url ?? "";
 
   const decisions: Decision[] = [];
-  for (const row of input.rows) {
-    const { axle, side } = placeOf(row);
+  for (const pageRow of input.rows) {
+    const read = placeOf(pageRow);
+    const side = read.side;
+    // Rev 2 §3.6: the page's own REAR word (its group row or the row), never the part's name — car knowledge is not a
+    // page fact. The Add path has no page heading here, so only the two lines below it are read.
+    const implied = read.axle ? null : impliedAxle(pageRow.groupLine, pageRow.lineText);
+    const axle = read.axle ?? implied;
+    const row: ResultRow = implied ? { ...pageRow, place: [implied, side].filter(Boolean).join(" ") } : pageRow;
     const fromMonth = monthIndexFromIso(row.from);
     const toMonth = monthIndexFromIso(row.to);
-    const held = (reason: string): Decision => ({ row, state: "held", reason, jobId: null, axle, side, fromMonth, toMonth });
+    // Rev 2 §3.3: a row the page can't prove waits quietly — no question, no button, counted as skipped.
+    const held = (reason: string): Decision => ({ row, state: "left_for_later", reason: null, waitReason: reason, jobId: null, axle, side, fromMonth, toMonth });
     const base = { row, axle, side, fromMonth, toMonth };
 
     if (!rowNamesSuggestedPart(type, make, row, input.phrase)) {
@@ -374,9 +385,10 @@ export async function saveRowsAsPartType(
       decisions.push({ ...base, state: "already", reason: null, jobId: null });
       continue;
     }
-    const other = hits.find((a) => norm(a.number) !== norm(number) && overlaps(a, { from: fromMonth, to: toMonth })) ?? null;
+    // Rev 2 §3.8, the same rule as the upload: a different number whose years cover this row is a fact, not a question.
+    const other = hits.find((a) => norm(a.number) !== norm(number) && covers(a, { from: fromMonth, to: toMonth })) ?? null;
     if (other) {
-      decisions.push(held(`Roam already has ${other.number} for these years`));
+      decisions.push({ ...base, state: "not_saved", reason: `Roam already has a different number here (${other.number})`, jobId: null });
       continue;
     }
     if (!number) {
@@ -481,11 +493,12 @@ export async function saveRowsAsPartType(
       build,
     });
     if (!gate.ok) {
+      // Rev 2 §4: a failed save is a Roam problem to try again, never a question about the part.
       for (const d of groupRows) {
         d.state = "held";
-        d.reason = "Roam couldn't save these numbers together. Use the browser check.";
+        d.reason = ROAM_SAVE_PROBLEM;
       }
-      lastReason = lastReason ?? "Roam couldn't save these numbers together. Use the browser check.";
+      lastReason = lastReason ?? ROAM_SAVE_PROBLEM;
       continue;
     }
 
@@ -513,6 +526,8 @@ export async function saveRowsAsPartType(
       actor: input.answer.actor,
     }, url, evidence, input.page.id);
     const savedNumbers = new Set((saved.ok ? saved.results : saved.saved).map((r) => norm(r.number)));
+    // SP-45 / Rev 2 §4: the raw reason stays in the server log; the screen only ever gets the plain line.
+    if (!saved.ok) console.error("saved page part type save failed", saved.error);
     for (const d of groupRows) {
       d.jobId = jobId;
       if (savedNumbers.has(norm(String(d.row.number ?? "")))) {
@@ -520,14 +535,15 @@ export async function saveRowsAsPartType(
         d.reason = null;
       } else {
         d.state = "held";
-        d.reason = saved.ok ? "Roam couldn't save this number." : saved.error;
+        d.reason = ROAM_SAVE_PROBLEM;
         lastReason = lastReason ?? d.reason;
       }
     }
   }
 
   const everyRowFinal = decisions.every((d) =>
-    d.state === "saved" || d.state === "already" || isPageHeldReason(d.reason)
+    d.state === "saved" || d.state === "already" || d.state === "not_saved" || d.state === "left_for_later" ||
+    isPageHeldReason(d.reason)
   );
 
   let pictures: PicturesResult | undefined;
@@ -561,7 +577,13 @@ export async function saveRowsAsPartType(
   return {
     ok: true,
     type,
-    decisions: decisions.map((d) => ({ row: d.row, state: d.state, reason: d.reason, jobId: d.jobId })),
+    decisions: decisions.map((d) => ({
+      row: d.row,
+      state: d.state,
+      reason: d.reason,
+      jobId: d.jobId,
+      ...(d.state === "left_for_later" ? { waitReason: d.waitReason ?? null } : {}),
+    })),
     everyRowFinal,
     lastReason,
     ...(pictures ? { pictures } : {}),

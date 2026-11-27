@@ -28,6 +28,7 @@ import {
 } from "./research_saved_page_routes.ts";
 import { readPartGroups } from "./parts_catalog_read.ts";
 import { saveRowsAsPartType } from "./saved_page_part_type_core.ts";
+import { countRowsByGroup } from "./saved_page_result.ts";
 
 const OWNER_ONLY = "Only the owner can add a part type";
 
@@ -74,7 +75,7 @@ function mergePictures(base: PicturesResult | null | undefined, add: PicturesRes
   };
 }
 
-type RowPatch = Partial<Pick<ResultRow, "partType" | "group" | "reason" | "jobId">>;
+type RowPatch = Partial<Pick<ResultRow, "partType" | "group" | "reason" | "jobId" | "waitReason">>;
 
 type ResultPatch = {
   /** The suggestion's own fields, given the suggestion as it is stored right now. */
@@ -112,9 +113,8 @@ async function writeSuggestionPatch(
     const change = patch.rows.get(row.lineNo);
     return change ? { ...row, ...change } : row;
   });
-  const counts = { saved: 0, already: 0, held: 0, not_roam_type: 0 };
-  for (const row of rows) counts[row.group] += 1;
-  const next: SavedPageResult = { ...current, rows, counts, suggestions: current.suggestions };
+  const counts = countRowsByGroup(rows);
+  const next: SavedPageResult = { ...current, rows, counts, skipped: counts.left_for_later, suggestions: current.suggestions };
   if (patch.pictures) next.pictures = mergePictures(current.pictures, patch.pictures);
   const { error: writeError } = await supabase.from("research_saved_page").update({ result: next }).eq("id", pageId);
   if (writeError) throw new Error(writeError.message);
@@ -249,8 +249,9 @@ export async function addSuggestedPartType(
       {
         partType: type.name,
         group: d.state,
-        reason: d.state === "held" ? d.reason : null,
+        reason: d.state === "held" || d.state === "not_saved" ? d.reason : null,
         jobId: d.jobId,
+        ...(d.state === "left_for_later" ? { waitReason: d.waitReason ?? null } : {}),
       },
     ]),
   );

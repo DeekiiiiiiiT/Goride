@@ -16,6 +16,8 @@ export type OnFile = {
   /** Month indices, the same scale the proven rows use. */
   from: number | null;
   to: number | null;
+  /** The part type's name on file, filled in by the route (Rev 2 §3.1 shows the on-file name, not the read's). */
+  name?: string | null;
 };
 
 /** A place a row can be for. Both routes pass the same shape (a proven row, or a suggestion's kept row). */
@@ -63,6 +65,19 @@ export function overlaps(a: OnFile, r: { from: number | null; to: number | null 
   if (rf != null && at < rf) return false;
   if (rt != null && af > rt) return false;
   return true;
+}
+
+/**
+ * Rev 2 §3.8: does the listing already hold *these* years at that place? A listing whose years cover the row's whole
+ * span is "a different number already on file"; one that only touches it (the change month of a frame split, or the
+ * end of a shorter range) is the neighbouring number of a split and never blocks the new one (SP-44).
+ */
+export function covers(a: OnFile, r: { from: number | null; to: number | null }): boolean {
+  const af = a.from ?? Number.NEGATIVE_INFINITY;
+  const at = a.to ?? Number.POSITIVE_INFINITY;
+  const rf = r.from ?? Number.NEGATIVE_INFINITY;
+  const rt = r.to ?? Number.POSITIVE_INFINITY;
+  return af <= rf && at >= rt;
 }
 
 /** Is the listing for the same place as the row? A position-aware type compares the axle; a side compares sides. */

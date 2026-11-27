@@ -148,17 +148,42 @@ describe("SavedPageOverlay — parts Roam doesn't know yet", () => {
     expect(screen.queryByTestId("suggestion-add")).toBeNull();
   });
 
-  it("an added card with held rows says Added, needs you and offers Check this part", async () => {
+  it("an added card with held rows says Added, needs you and never offers Check this part (Rev 2 §4)", async () => {
     const p = page(
       [card({ status: "added", typeId: "t-1", typeName: "Air cleaner inlet" })],
-      [{ ...baseRows[0], group: "held", reason: "The page doesn't say front or rear on that row", jobId: "job-9" }],
+      [{ ...baseRows[0], group: "held", reason: "Dates missing 03.2019 – 09.2020", jobId: "job-9" }],
     );
     show(p);
     const c = await screen.findByTestId("suggestion-card");
     expect(c.getAttribute("data-state")).toBe("added_held");
     expect(within(c).getByText("Added, needs you")).toBeTruthy();
-    expect(within(c).getByTestId("saved-page-check-part")).toBeTruthy();
-    expect(within(c).getByTestId("saved-page-reason").textContent).toMatch(/front or rear/);
+    expect(within(c).queryByTestId("saved-page-check-part")).toBeNull();
+    expect(within(c).getByTestId("saved-page-reason").textContent).toMatch(/Dates missing/);
+  });
+
+  it("a different number on file shows under Not saved with its reason, never under Already on file (Rev 2 §3.8)", async () => {
+    const reason = "Roam already has a different number here (11111-A0001)";
+    const base = page([], [{ ...baseRows[0], group: "not_saved", reason, jobId: null }]);
+    const p = { ...base, result: { ...base.result, counts: { saved: 0, already: 0, held: 0, not_saved: 1, left_for_later: 0, not_roam_type: 0 } } };
+    show(p);
+    const g = await screen.findByTestId("group-not-saved");
+    expect(within(g).getByTestId("saved-page-reason").textContent).toContain(reason);
+    // A fact, not a warning: grey with the info icon.
+    expect(within(g).getByTestId("saved-page-reason").textContent).toMatch(/^info/);
+    expect(screen.queryByTestId("group-already")).toBeNull();
+    expect(screen.queryByTestId("saved-page-check-part")).toBeNull();
+    expect(screen.getByTestId("saved-page-result-title").textContent).toBe("Nothing new to save");
+  });
+
+  it("left-for-later rows show only as one skipped line with no button and don't count as need you (Rev 2 §3.3)", async () => {
+    const base = page([], [{ ...baseRows[0], group: "left_for_later", reason: null, jobId: null }, { ...baseRows[1], group: "left_for_later", reason: null, jobId: null }]);
+    const p = { ...base, result: { ...base.result, counts: { saved: 0, already: 0, held: 0, not_saved: 0, left_for_later: 2, not_roam_type: 0 }, skipped: 2 } };
+    show(p);
+    const line = await screen.findByTestId("saved-page-skipped");
+    expect(line.textContent).toMatch(/Roam skipped 2 rows it couldn.t prove from the page/);
+    expect(line.querySelector("button")).toBeNull();
+    expect(screen.queryByTestId("group-held")).toBeNull();
+    expect(screen.getByTestId("saved-page-result-title").textContent).not.toMatch(/need you/);
   });
 
   it("a failed add keeps the typed name and shows the server's reason with Try again", async () => {

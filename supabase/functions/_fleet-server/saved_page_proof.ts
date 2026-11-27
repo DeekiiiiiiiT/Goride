@@ -2,9 +2,14 @@
  * R6 (docs/saved-page-parts-audit.md §4): the AI's list of rows is only a list to check. This module proves each row on
  * the page text, drops rows that are another car, and says why a row is held (P1–P6). P7 (dates cover the build per
  * place) and the save/hold decision per axle live with the route.
+ *
+ * Read-vs-read audit (docs/saved-page-reads-disagree-audit.md, Rev 2): the two reads no longer overrule the page. The
+ * number, the dates and the place are proved on the page; the name comes from the page's own group row or from the
+ * number already on file; a row the page cannot settle is **left for later** (`leftForLater`), never shown to the owner
+ * as a question. `impliedAxle` fills in "rear" only when the page itself says REAR.
  */
 import { type CarBuild, periodsOnLine, typedLooksLikePartNumber, wholeNumberOnLine } from "./research_browser_check.ts";
-import { pageNameFromGroupLine } from "./saved_page_phrases.ts";
+import { pageNameFromGroupLine, parseGroupPhrase } from "./saved_page_phrases.ts";
 
 export type AiDates = { fromMonth?: number | null; fromYear: number; toMonth?: number | null; toYear?: number | null };
 
@@ -35,6 +40,15 @@ export type CarFacts = {
 
 export type HeaderFacts = { engines: Set<string>; grades: Set<string>; transmissions: Set<string>; options: Set<string> };
 
+/** §3.9: the five fields one read gave for one line, as stored with the upload (never shown on screen). */
+export type ReadFields = {
+  number: string;
+  partType: string;
+  axle: "front" | "rear" | null;
+  side: "left" | "right" | "both" | null;
+  dates: AiDates | null;
+};
+
 export type ProvenRow = {
   lineNo: number;
   groupLineNo: number | null;
@@ -54,11 +68,11 @@ export type ProvenRow = {
   to: number | null;
   datesText: string | null;
   fitNote: string | null;
-  /** Why this row is held; null while it passes. */
+  /** Why the page cannot settle this row (internal; a screen never asks it). Null when the row is proved. */
   reason: string | null;
   /** P1 passed: the number is a whole plain number on its row. */
   numberOk: boolean;
-  /** P5 passed: both reads agree on this row. */
+  /** Do both reads give the same number, type, place and dates? Information only — it never holds a row (Rev 2). */
   readsAgree: boolean;
   /** P2 passed: exactly one date range on the row, inside the car's build. */
   datesOk: boolean;
@@ -67,6 +81,8 @@ export type ProvenRow = {
    * row that fails it is held; an unknown row keeps only a place the page itself writes (R1).
    */
   placeOk: boolean;
+  /** Rev 2 §3.3: the page could not prove this row — it is not saved, not asked, and tried again next upload. */
+  leftForLater: boolean;
   /** Not this car (another engine, dates outside the build): dropped, never held and never shown (SP-23). */
   dropped: boolean;
   /** The lines that prove it, for research_page_read.block_text (prices already removed). */
@@ -87,6 +103,22 @@ export function isOtherTypeName(name: string | null | undefined): boolean {
 
 const norm = (s: string | null | undefined) => String(s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 const SIDED = new Set(["four_corners", "axle_left_right"]);
+/** The position schemes where the page must say front/rear (and left/right). */
+export const POSITION_SCHEMES = new Set(["axle", "four_corners", "axle_left_right", "axle_inner_outer", "axle_numbered"]);
+
+/**
+ * Rev 2 §2 / §3.2: these words name a shelf, never a part type. They are left out of every type's words, so "SHOE KIT,
+ * REAR BRAKE" can never be read as "Brake pads" (its `KIT`) and "FRONT BRAKE" never picks a type on its own.
+ */
+export const FILLER_WORDS: ReadonlySet<string> = new Set(["KIT", "SET", "ASSY", "SUBASSY", "SUB", "BRAKE", "REAR", "FRONT", "WHEEL"]);
+
+/** A catalogue filler word (see FILLER_WORDS). */
+export function isFillerWord(word: string): boolean {
+  return FILLER_WORDS.has(String(word ?? "").toUpperCase());
+}
+
+/** A word with its plural "s" off, so "SHOES" and "SHOE" are the same word. */
+const stem = (word: string) => String(word ?? "").toUpperCase().replace(/S$/, "");
 
 /**
  * What to look for in a catalogue's search box and row names. Ported from
@@ -112,23 +144,59 @@ export function partFinder(itemName: string, make: string | null | undefined): P
   return plain;
 }
 
-/** Words a row may carry for a part type: its own name, the catalogue search word and the catalogue row name (P4). */
+/**
+ * Words a row may carry for a part type: its own name, the catalogue search word and the catalogue row name (P4), with
+ * the catalogue filler removed (Rev 2). A catalogue writes one part as a singular row and a plural name ("SHOE KIT" for
+ * "Brake shoes"), so both forms of a word count. A type whose words are all filler keeps them, so it is never held for
+ * ever.
+ */
 export function typeWords(type: PartType, make: string | null | undefined): string[] {
   const finder = partFinder(type.name, make);
-  const words = new Set<string>();
+  const all = new Set<string>();
   for (const w of `${type.name} ${finder.search} ${finder.rowName ?? ""}`.toUpperCase().split(/[^A-Z0-9]+/)) {
-    if (w.length >= 3) words.add(w);
+    if (w.length >= 3) all.add(w);
   }
-  return [...words];
+  const distinctive = [...all].filter((w) => !isFillerWord(w));
+  const base = distinctive.length ? distinctive : [...all];
+  const forms = new Set<string>();
+  for (const word of base) {
+    forms.add(word);
+    const singular = word.replace(/S$/, "");
+    if (singular.length >= 3) forms.add(singular);
+    if (!word.endsWith("S")) forms.add(`${word}S`);
+  }
+  return [...forms];
+}
+
+/**
+ * Rev 2 §3.2: the words a part type's own name is made of, without the filler. "Brake shoes" → SHOES, "Rear wheel
+ * cylinder kit" → CYLINDER. These are the words the group row's head is matched against.
+ */
+export function nameWords(type: PartType): string[] {
+  const words = String(type.name ?? "").toUpperCase().split(/[^A-Z0-9]+/).filter((w) => w.length >= 3 && !isFillerWord(w));
+  return words.length ? words : String(type.name ?? "").toUpperCase().split(/[^A-Z0-9]+/).filter((w) => w.length >= 3);
 }
 
 /** The word lists P3 looks for. */
 const AXLE_WORDS: Record<"front" | "rear", string[]> = { front: ["FRONT", "FR"], rear: ["REAR", "RR"] };
 const SIDE_WORDS: Record<"left" | "right", string[]> = { left: ["LEFT", "LH"], right: ["RIGHT", "RH"] };
 
-/** The plain words a held row gets when the page doesn't say its place (shared with the Add route's re-check). */
+/** The plain words a quiet wait keeps (shared with the Add route's re-check; never shown to the owner). */
 export const PLACE_AXLE_REASON = "The page doesn't say front or rear on that row";
 export const PLACE_SIDE_REASON = "The page doesn't say left or right on that row";
+export const NO_TYPE_WORDS_REASON = "The page doesn't name this part type on that row";
+
+/**
+ * Rev 2 §3.6: a place only when the page itself says REAR and never FRONT — in the page's section heading, the group
+ * row or the row. The part's name is car knowledge, not a page fact, so it is never used. A page that never says rear
+ * inside the section leaves its parking-brake rows for later.
+ */
+export function impliedAxle(...pageTexts: Array<string | null | undefined>): "rear" | null {
+  const upper = pageTexts.map((t) => String(t ?? "")).join(" | ").toUpperCase();
+  if (!hasWord(upper, AXLE_WORDS.rear)) return null;
+  if (hasWord(upper, AXLE_WORDS.front)) return null;
+  return "rear";
+}
 
 /**
  * R5 step 5 / P4: does the row's own words (its group row and its line) carry the part type's words? This is the one
@@ -267,9 +335,82 @@ function readRowDates(line: string, build: CarBuild): RowDates {
 const datesKey = (d: AiDates | null | undefined) =>
   d ? `${d.fromYear}-${d.fromMonth ?? ""}|${d.toYear}-${d.toMonth ?? ""}` : "";
 
+/** §3.9: the five compared fields one read gave, ready to store. */
+export function readFields(row: AiPartRow): ReadFields {
+  return {
+    number: String(row?.number ?? "").trim(),
+    partType: String(row?.partType ?? "").trim(),
+    axle: row?.axle ?? null,
+    side: row?.side ?? null,
+    dates: row?.dates ?? null,
+  };
+}
+
+/** The one axle word a text prints: "front" or "rear"; null when both or neither (Rev 2 §3.6). */
+function pageAxle(text: string): "front" | "rear" | null {
+  const hits = (["front", "rear"] as const).filter((w) => hasWord(text, AXLE_WORDS[w]));
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/** The one side word a text prints: "left" or "right"; null when both or neither (Rev 2 §3.6). */
+function pageSide(text: string): "left" | "right" | null {
+  const hits = (["left", "right"] as const).filter((w) => hasWord(text, SIDE_WORDS[w]));
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/** §3.2: which of two names the group row's own head words pick. Null when the page names neither (or both). */
+export function nameFromPageWords(
+  candidates: PartType[],
+  groupLine: string | null | undefined,
+  lineText: string | null | undefined,
+): PartType | null {
+  if (candidates.length !== 2) return null;
+  const parsed = parseGroupPhrase(groupLine);
+  const words = new Set(
+    (parsed ? parsed.headWords : String(lineText ?? "").split(/[^A-Za-z0-9]+/))
+      .map((w) => stem(w))
+      .filter((w) => w.length >= 3 && !isFillerWord(w)),
+  );
+  if (!words.size) return null;
+  const hits = candidates.filter((t) => nameWords(t).some((w) => words.has(stem(w))));
+  return hits.length === 1 ? hits[0] : null;
+}
+
+export type NameResolution = {
+  /** The type the page picks (the first read's when the page is silent, so the row keeps a shelf for the retry). */
+  type: PartType | null;
+  /** The name to show while the row waits. */
+  name: string;
+  /** Rev 2 §3.3: the reads name two types and the page picks neither — the row is left for later. */
+  ambiguous: boolean;
+};
+
 /**
- * Prove every row the two reads name. Rows both reads agree on are checked on the page (P1–P4, P6); P5 compares the two
- * reads. A row that is another car is dropped; every other failure is a held reason.
+ * §3.2 / §3.3: the type a row belongs to. One name both reads agree on (or one is "other") is taken as it is; two
+ * different Roam types are settled by the page's own group row, and otherwise the row is ambiguous.
+ */
+export function resolvePartType(input: {
+  names: Array<string | null | undefined>;
+  types: PartType[];
+  groupLine: string | null;
+  lineText: string;
+}): NameResolution {
+  const names = [...new Set(input.names.map((n) => String(n ?? "").trim()).filter((n) => n && !isOtherTypeName(n)))];
+  const candidates: PartType[] = [];
+  for (const name of names) {
+    const type = typeFor(input.types, name);
+    if (type && !candidates.some((c) => c.id === type.id)) candidates.push(type);
+  }
+  if (!candidates.length) return { type: null, name: names[0] ?? "", ambiguous: false };
+  if (candidates.length === 1) return { type: candidates[0], name: names[0] ?? candidates[0].name, ambiguous: false };
+  const picked = nameFromPageWords(candidates, input.groupLine, input.lineText);
+  if (picked) return { type: picked, name: picked.name, ambiguous: false };
+  return { type: candidates[0], name: names[0] ?? candidates[0].name, ambiguous: true };
+}
+
+/**
+ * Prove every row the two reads name. A row the page proves is kept; a row the page cannot settle is marked
+ * `leftForLater` with its reason (Rev 2 §3.3); a row that is another car is dropped. The two reads never hold a row.
  */
 export function proveRows(input: {
   reads: [AiPartRow[], AiPartRow[]];
@@ -278,8 +419,15 @@ export function proveRows(input: {
   types: PartType[];
   car: CarFacts;
   header: HeaderFacts;
+  /** The page's own heading lines (title and the lines above the first part row), for the place rule (Rev 2 §3.6). */
+  headingText?: string;
+  /** Is this number already confirmed on file for this car? Used only to pick between two numbers on one row. */
+  isOnFile?: (number: string) => boolean;
 }): ProvenRow[] {
   const { reads, lines, containers, types, car, header } = input;
+  const headingText = input.headingText ?? "";
+  const isOnFile = input.isOnFile ?? (() => false);
+  const identity = [car.frame, car.engineCode, car.model, car.make].filter((x): x is string => Boolean(x));
   const byLine = (rows: AiPartRow[]) => {
     const map = new Map<number, AiPartRow>();
     for (const r of rows) {
@@ -297,20 +445,28 @@ export function proveRows(input: {
     const a = first.get(lineNo) ?? null;
     const b = second.get(lineNo) ?? null;
     const chosen = a ?? b!;
-    const typeName = String(a?.partType ?? b?.partType ?? "");
-    const type = typeFor(types, typeName);
     const rowLine = lines[lineNo - 1] ?? "";
+    const group = acceptedGroup(lines, containers, lineNo, a?.groupLineNo ?? b?.groupLineNo ?? null);
+    const groupLine = group ? lines[group - 1] : null;
+    const text = group ? `${groupLine} | ${rowLine}` : rowLine;
+    const resolution = resolvePartType({
+      names: [a?.partType, b?.partType],
+      types,
+      groupLine,
+      lineText: rowLine,
+    });
+    const type = resolution.type;
     const row: ProvenRow = {
       lineNo,
-      groupLineNo: null,
-      partTypeName: typeName,
+      groupLineNo: group,
+      partTypeName: type ? type.name : resolution.name,
       type,
-      groupLine: null,
+      groupLine: groupLine ? groupLine.slice(0, MAX_RESULT_LINE) : null,
       pageName: null,
       lineText: rowLine.slice(0, MAX_RESULT_LINE),
       axle: null,
       side: null,
-      number: String(chosen.number ?? "").trim(),
+      number: "",
       from: null,
       to: null,
       datesText: null,
@@ -320,157 +476,110 @@ export function proveRows(input: {
       readsAgree: false,
       datesOk: false,
       placeOk: true,
+      leftForLater: false,
       dropped: false,
-      evidence: rowLine,
+      evidence: group ? `${groupLine}\n${rowLine}` : rowLine,
+    };
+    const wait = (note: string) => {
+      row.leftForLater = true;
+      if (!row.reason) row.reason = note;
     };
 
-    const group = acceptedGroup(lines, containers, lineNo, chosen.groupLineNo);
-    row.groupLineNo = group;
-    // D1: a kept line is cut at 300 characters, the group row included.
-    row.groupLine = group ? lines[group - 1].slice(0, MAX_RESULT_LINE) : null;
-    const evidence = group ? `${lines[group - 1]}\n${rowLine}` : rowLine;
-    row.evidence = evidence;
-    const text = group ? `${lines[group - 1]} | ${rowLine}` : rowLine;
-    const fail = (reason: string) => {
-      if (!row.reason) row.reason = reason;
-    };
-
-    // R1 (§3): a row Roam has no type for keeps the page's own name, number, dates, place and the lines that prove
-    // them, and goes through the same checks a known row does (P1, P2, P5, P6, and the place words when written).
-    // Only P4 — the part type's own words — has nothing to check against yet, so it is the one thing that waits.
+    // R1 (§3): a row Roam has no type for keeps the page's own name, number, dates and the lines that prove them, and
+    // goes through the same checks a known row does. Only P4 has nothing to check against yet, so it is the one thing
+    // that waits.
     if (!type) {
-      row.pageName = pageNameFromGroupLine(row.groupLine) ?? (isOtherTypeName(typeName) ? null : typeName.trim() || null);
-
-      // Place: kept only when the page itself says it. A row whose page says no place is not held: a later
-      // non-positional type is fine with that.
-      const wantAxle = chosen.axle === "rear" ? "rear" : chosen.axle === "front" ? "front" : null;
-      if (wantAxle && hasWord(text, AXLE_WORDS[wantAxle])) row.axle = wantAxle;
-      const wantSide = chosen.side === "left" || chosen.side === "right" || chosen.side === "both" ? chosen.side : null;
-      if (wantSide && (wantSide === "both" || hasWord(text, SIDE_WORDS[wantSide]))) row.side = wantSide;
-      row.placeOk = (!wantAxle || row.axle === wantAxle) && (!wantSide || row.side === wantSide);
-
-      // P1 number: the same rule as a known row, including "never the group's own code".
-      const asWritten = row.number ? wholeNumberOnLine(rowLine, row.number) : null;
-      if (!row.number) fail("No part number on that row");
-      else if (!asWritten) fail("The number isn't written on that row");
-      else if (!typedLooksLikePartNumber(row.number, rowLine, [car.frame, car.engineCode, car.model, car.make].filter((x): x is string => Boolean(x)))) {
-        fail("That doesn't look like a part number");
-      } else if (group && wholeNumberOnLine(lines[group - 1], row.number)) {
-        fail("That number is the group's own code, not a part number");
-      } else {
-        row.number = asWritten;
-        row.numberOk = true;
-      }
-
-      // P2 dates: one range, written on the row; dates that miss the build drop the row as another car.
-      const dates = readRowDates(rowLine, car.build);
-      if (dates.kind === "none") fail("No dates shown on the page");
-      else if (dates.kind === "many") fail("This row shows more than one set of dates");
-      else if (dates.kind === "outside") row.dropped = true;
-      else {
-        row.from = dates.from;
-        row.to = dates.to;
-        row.datesText = dateRangeText(dates.from, dates.to);
-        row.datesOk = true;
-      }
-
-      // P5 the two reads agree (SP-22), on the same fields a known row is compared on.
-      const same = Boolean(a && b)
-        && norm(a!.number) === norm(b!.number)
-        && norm(a!.partType) === norm(b!.partType)
-        && (a!.axle ?? null) === (b!.axle ?? null)
-        && (a!.side ?? null) === (b!.side ?? null)
-        && datesKey(a!.dates) === datesKey(b!.dates);
-      if (!same) fail("The two reads don't agree");
-      else row.readsAgree = true;
-
-      // P6 fits this car: only engine/gearbox/option codes in the note are compared (SP-20).
-      if (!row.reason && !row.dropped) {
-        const problem = fitNoteProblem(row.fitNote, car, header);
-        if (problem) {
-          row.dropped = true;
-          row.reason = problem;
-        }
-      }
-
-      out.push(row);
-      continue;
+      row.pageName = pageNameFromGroupLine(row.groupLine) ?? (isOtherTypeName(resolution.name) ? null : resolution.name.trim() || null);
     }
+    // §3.3: two different Roam types and the group row picks neither → the row waits. The first read's type is kept
+    // only as a shelf for the retry; it must never save (the row's own title, "brake pads, set", would pass P4).
+    if (resolution.ambiguous) wait("The reads name two part types and the page names neither");
 
-    // P3 place: a position-aware type says front/rear (and left/right when it comes in sides) on the row or group.
-    if (type.scheme && ["axle", "four_corners", "axle_left_right", "axle_inner_outer", "axle_numbered"].includes(type.scheme)) {
-      row.axle = chosen.axle === "rear" ? "rear" : chosen.axle === "front" ? "front" : null;
-      if (!row.axle) {
-        row.placeOk = false;
-        fail(PLACE_AXLE_REASON);
-      } else if (!hasWord(text, AXLE_WORDS[row.axle])) {
-        row.placeOk = false;
-        fail(PLACE_AXLE_REASON);
-      }
-      if (SIDED.has(type.scheme)) {
-        row.side = chosen.side === "left" || chosen.side === "right" || chosen.side === "both" ? chosen.side : null;
-        if (!row.side) {
-          row.placeOk = false;
-          fail(PLACE_SIDE_REASON);
-        } else if (row.side !== "both" && !hasWord(text, SIDE_WORDS[row.side])) {
-          row.placeOk = false;
-          fail(PLACE_SIDE_REASON);
-        }
-      }
-    }
-
-    // P1 number: a whole plain number on the row, not a car code or a year, and never the group's own code (SP-19).
-    const asWritten = row.number ? wholeNumberOnLine(rowLine, row.number) : null;
-    if (!row.number) fail("No part number on that row");
-    else if (!asWritten) fail("The number isn't written on that row");
-    else if (!typedLooksLikePartNumber(row.number, rowLine, [car.frame, car.engineCode, car.model, car.make].filter((x): x is string => Boolean(x)))) {
-      fail("That doesn't look like a part number");
-    } else if (group && wholeNumberOnLine(lines[group - 1], row.number)) {
-      fail("That number is the group's own code, not a part number");
+    // §3.4 (Rev 2): the number the page prints wins. Read B's number only matters when read A's is not on the row; when
+    // both are on the row, the one already on file is taken, and otherwise the row is left for later.
+    const candidates = [...new Set([a?.number, b?.number].map((n) => String(n ?? "").trim()).filter(Boolean))];
+    const onRow = candidates.filter((n) => Boolean(wholeNumberOnLine(rowLine, n)) && typedLooksLikePartNumber(n, rowLine, identity));
+    if (onRow.length === 1) {
+      row.number = wholeNumberOnLine(rowLine, onRow[0]) ?? onRow[0];
+    } else if (onRow.length > 1) {
+      const onFilePick = onRow.find((n) => isOnFile(n));
+      if (onFilePick) row.number = wholeNumberOnLine(rowLine, onFilePick) ?? onFilePick;
+      else wait("Two part numbers on the row and neither is on file");
     } else {
-      row.number = asWritten;
-      row.numberOk = true;
+      wait(!candidates.length
+        ? "No part number on that row"
+        : candidates.some((n) => wholeNumberOnLine(rowLine, n))
+          ? "That doesn't look like a part number"
+          : "The number isn't written on that row");
+    }
+    if (row.number && group && wholeNumberOnLine(lines[group - 1], row.number)) {
+      wait("That number is the group's own code, not a part number");
+      row.number = "";
+    }
+    if (row.number) row.numberOk = true;
+
+    // P2 dates: one range, written on the row; dates that miss the build drop the row as another car.
+    const dates = readRowDates(rowLine, car.build);
+    if (dates.kind === "none") wait("No dates shown on the page");
+    else if (dates.kind === "many") wait("This row shows more than one set of dates");
+    else if (dates.kind === "outside") row.dropped = true;
+    else {
+      row.from = dates.from;
+      row.to = dates.to;
+      row.datesText = dateRangeText(dates.from, dates.to);
+      row.datesOk = true;
     }
 
-    // P2 dates: read from the row itself (an accepted group has no dates of its own). Dates that miss the build drop.
-    if (!row.reason) {
-      const dates = readRowDates(rowLine, car.build);
-      if (dates.kind === "none") fail("No dates shown on the page");
-      else if (dates.kind === "many") fail("This row shows more than one set of dates");
-      else if (dates.kind === "outside") row.dropped = true;
-      else {
-        row.from = dates.from;
-        row.to = dates.to;
-        row.datesText = dateRangeText(dates.from, dates.to);
-        row.datesOk = true;
+    // §3.6 (Rev 2): the page's own single word sets the place. Both words or neither → the row is left for later. A
+    // type with no place is not compared on place at all, and the side is never compared on a type that has no sides.
+    if (type) {
+      const positionAware = POSITION_SCHEMES.has(String(type.scheme ?? ""));
+      if (positionAware) {
+        row.axle = pageAxle(text) ?? impliedAxle(headingText, groupLine, rowLine);
+        if (!row.axle) {
+          row.placeOk = false;
+          wait(PLACE_AXLE_REASON);
+        }
+        if (SIDED.has(String(type.scheme ?? ""))) {
+          row.side = pageSide(text);
+          if (!row.side) {
+            row.placeOk = false;
+            wait(PLACE_SIDE_REASON);
+          }
+        }
       }
+    } else {
+      // R1: an unknown row keeps only a place the page itself writes — a later non-positional type is fine with none.
+      const axle = pageAxle(text) ?? impliedAxle(headingText, groupLine, rowLine);
+      const side = pageSide(text);
+      row.axle = axle;
+      row.side = side;
+      // Nothing waits on an unknown row's place, so the flag is true: its place is exactly what the page printed.
+      row.placeOk = true;
     }
 
-    // P4 type: the row or group carries one of the part type's catalogue words ("SHOCK", not "SPRING").
-    if (!row.reason && !row.dropped) {
-      const words = typeWords(type, car.make);
-      if (!hasWord(text, words)) fail("The page doesn't name this part type on that row");
+    // P4 type: the row or group carries one of the part type's catalogue words ("SHOCK", not "SPRING"), without the
+    // catalogue filler (Rev 2: "KIT" never names a type).
+    if (type && !row.leftForLater && !row.dropped) {
+      if (!hasWord(text, typeWords(type, car.make))) wait(NO_TYPE_WORDS_REASON);
     }
-
-    // P5 the two reads agree on number, type, place and dates (SP-22). Checked even when another check failed: two
-    // agreeing numbers are still the page's numbers to offer in the browser check.
-    const same = Boolean(a && b)
-      && norm(a!.number) === norm(b!.number)
-      && norm(a!.partType) === norm(b!.partType)
-      && (a!.axle ?? null) === (b!.axle ?? null)
-      && (a!.side ?? null) === (b!.side ?? null)
-      && datesKey(a!.dates) === datesKey(b!.dates);
-    if (!same) fail("The two reads don't agree");
-    else row.readsAgree = true;
 
     // P6 fits this car: only engine/gearbox/option codes in the note are compared (SP-20).
-    if (!row.reason && !row.dropped) {
+    if (!row.leftForLater && !row.dropped) {
       const problem = fitNoteProblem(row.fitNote, car, header);
       if (problem) {
         row.dropped = true;
         row.reason = problem;
       }
     }
+
+    // P5 information only (Rev 2 §3.5): the five fields the old code compared. It never holds a row.
+    row.readsAgree = Boolean(a && b)
+      && norm(a!.number) === norm(b!.number)
+      && norm(a!.partType) === norm(b!.partType)
+      && (a!.axle ?? null) === (b!.axle ?? null)
+      && (a!.side ?? null) === (b!.side ?? null)
+      && datesKey(a!.dates) === datesKey(b!.dates);
 
     out.push(row);
   }
