@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><title>Roam Fleet</title><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: 'class', theme: { extend: { colors: { 'surface-tint': '#5e5c74', 'surface-dim': '#ccdbf4', 'on-error-container': '#93000a', 'primary': '#000000', 'on-primary-container': '#84819a', 'on-primary': '#ffffff', 'secondary-fixed': '#dde3ed', 'inverse-surface': '#233144', 'on-tertiary': '#ffffff', 'on-primary-fixed': '#1b192e', 'outline-variant': '#c9c5cd', 'inverse-primary': '#c8c3df', 'on-secondary-fixed-variant': '#414750', 'surface-container-low': '#eff4ff', 'on-secondary-container': '#5d636c', 'tertiary-fixed-dim': '#68dba9', 'secondary': '#595f68', 'on-surface': '#0d1c2e', 'error': '#ba1a1a', 'on-tertiary-container': '#079669', 'on-tertiary-fixed': '#002114', 'primary-fixed-dim': '#c8c3df', 'tertiary': '#000000', 'outline': '#78767d', 'surface': '#f8f9ff', 'on-surface-variant': '#47464c', 'surface-container-lowest': '#ffffff', 'on-primary-fixed-variant': '#46445b', 'inverse-on-surface': '#eaf1ff', 'on-background': '#0d1c2e', 'background': '#f8f9ff', 'on-tertiary-fixed-variant': '#005137', 'primary-container': '#1b192e', 'surface-bright': '#f8f9ff', 'on-secondary': '#ffffff', 'on-secondary-fixed': '#161c24', 'surface-container-high': '#dce9ff', 'primary-fixed': '#e4dffc', 'surface-container': '#e6eeff', 'tertiary-fixed': '#85f8c4', 'error-container': '#ffdad6', 'surface-variant': '#d5e3fc', 'tertiary-container': '#002114', 'surface-container-highest': '#d5e3fc', 'on-error': '#ffffff', 'secondary-container': '#dbe0eb', 'secondary-fixed-dim': '#c1c7d1' }, borderRadius: { 'DEFAULT': '0.25rem', 'lg': '0.5rem', 'xl': '0.75rem', 'full': '9999px' }, spacing: { 'margin': '2rem', 'space-sm': '0.5rem', 'space-xs': '0.25rem', 'space-md': '1rem', 'gutter-compact': '1rem', 'space-lg': '1.5rem', 'gutter': '1.5rem', 'margin-compact': '1.5rem', 'space-xl': '2rem' }, fontFamily: { 'label-sm': ['Inter'], 'headline-xl': ['Inter'], 'numeric-lg': ['Inter'], 'headline-lg': ['Inter'], 'headline-md': ['Inter'], 'body-md': ['Inter'], 'label-md': ['Inter'], 'body-lg': ['Inter'], 'numeric-md': ['Inter'], 'body-sm': ['Inter'], 'title-sm': ['Inter'] }, fontSize: { 'label-sm': ['11px', { lineHeight: '14px', letterSpacing: '0.03em', fontWeight: '500' }], 'headline-xl': ['32px', { lineHeight: '40px', letterSpacing: '-0.02em', fontWeight: '600' }], 'numeric-lg': ['22px', { lineHeight: '28px', letterSpacing: '-0.01em', fontWeight: '600' }], 'headline-lg': ['24px', { lineHeight: '32px', letterSpacing: '-0.015em', fontWeight: '600' }], 'headline-md': ['20px', { lineHeight: '28px', letterSpacing: '-0.01em', fontWeight: '600' }], 'body-md': ['14px', { lineHeight: '20px', fontWeight: '400' }], 'label-md': ['12px', { lineHeight: '16px', letterSpacing: '0.02em', fontWeight: '600' }], 'body-lg': ['16px', { lineHeight: '24px', fontWeight: '400' }], 'numeric-md': ['14px', { lineHeight: '20px', fontWeight: '500' }], 'body-sm': ['13px', { lineHeight: '18px', fontWeight: '400' }], 'title-sm': ['16px', { lineHeight: '24px', letterSpacing: '-0.005em', fontWeight: '600' }] } } } };</script></head><body class="bg-surface font-body-md text-on-surface antialiased min-h-screen"><header class="fixed top-0 left-0 right-0 z-50 shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 bg-surface-container-lowest px-margin flex items-center justify-between"><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-sm"><div class="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-sm"><span class="material-symbols-outlined text-on-primary text-[20px]">local_shipping</span></div><span class="font-title-sm text-title-sm text-on-surface tracking-tight">Roam Fleet</span></div><nav class="hidden xl:flex items-center gap-space-md h-16" data-active-classes="text-on-surface font-title-sm border-b-2 border-primary"><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="dashboard" href="#">Dashboard</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="fleet-operations" href="#">Fleet Operations</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="driver-operations" href="#">Driver Operations</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="money" href="#">Money</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="vehicle-operations" href="#">Vehicle Operations</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="delivery-operations" href="#">Delivery Operations</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="analytics" href="#">Analytics</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="reports" href="#">Reports</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="business-finance" href="#">Business Finance</a></nav></div><div class="flex items-center gap-space-md"><div class="flex items-center gap-space-xs text-on-surface-variant"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="material-symbols-outlined text-[20px]">tune</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div><div class="h-12 bg-primary-container px-margin flex items-center justify-between"><div class="flex items-center"><div class="relative flex items-center"><span class="material-symbols-outlined absolute left-3 text-on-primary-container text-[18px]">search</span><input class="w-80 h-8 pl-9 pr-3 rounded-full bg-on-primary-fixed/20 text-on-primary font-body-sm text-body-sm placeholder:text-on-primary-container focus:outline-none focus:ring-1 focus:ring-on-primary-container transition-all" placeholder="Switch vehicle or search hub…" type="text"/></div></div><div class="flex items-center gap-space-md text-on-primary-container font-label-sm text-label-sm"><div class="flex items-center gap-space-xs"><span class="material-symbols-outlined text-[16px]">schedule</span><span class="font-numeric-md text-numeric-md text-on-primary">03:11:28 PM EST</span></div><div class="w-px h-4 bg-on-primary-container/30"></div><div class="flex items-center gap-space-xs"><span class="material-symbols-outlined text-[16px]">public</span><span>America/Jamaica</span></div></div></div></header><main class="w-full pt-28 bg-surface min-h-screen"><div class="flex flex-col w-full relative">
+<!-- Dimmed Review Queue Page Background (Simulated Active Fleet Treasury Ledger) -->
+<div class="w-full px-margin py-space-lg filter blur-[2px] opacity-40 pointer-events-none select-none max-w-[1600px] mx-auto">
+<!-- Top Action Breadcrumb & Metrics Preview -->
+<div class="flex items-center justify-between mb-space-lg">
+<div class="flex items-center gap-space-md">
+<div class="flex items-center gap-space-xs font-label-md text-label-md text-on-surface-variant">
+<span>Fleet Operations</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span>Fuel &amp; Expenses</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="text-on-surface">Daily Review Queue</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm">
+<span class="px-3 py-1 rounded-full bg-surface-container font-label-md text-label-md text-secondary">Batch #2025-W48-JM</span>
+</div>
+</div>
+<!-- Background Table Mockup -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-lg">
+<div class="flex items-center justify-between pb-space-md mb-space-md">
+<div class="font-title-sm text-title-sm text-on-surface">Unreconciled Fuel Receipts (14 pending)</div>
+<div class="flex gap-space-sm">
+<div class="h-9 px-4 rounded-xl bg-surface-container flex items-center text-on-surface-variant font-label-md text-label-md">All Vehicles</div>
+<div class="h-9 px-4 rounded-xl bg-surface-container flex items-center text-on-surface-variant font-label-md text-label-md">Status: Pending</div>
+</div>
+</div>
+<div class="space-y-space-sm">
+<div class="h-12 rounded-lg bg-surface-container-low flex items-center px-4 justify-between">
+<span class="font-body-md text-body-md text-on-surface">27 Nov, 09:40 AM · Marcus Blake · 4812GQ (Nissan AD)</span>
+<span class="font-numeric-md text-numeric-md text-on-surface">J$ 3,800.00</span>
+</div>
+<div class="h-12 rounded-lg bg-surface-container-high/60 flex items-center px-4 justify-between">
+<span class="font-body-md text-body-md text-on-surface">27 Nov, 08:15 AM · Andre Campbell · 7730HM (Toyota Sienta)</span>
+<span class="font-numeric-md text-numeric-md text-on-surface">J$ 2,500.00</span>
+</div>
+<div class="h-12 rounded-lg bg-surface-container-low flex items-center px-4 justify-between">
+<span class="font-body-md text-body-md text-on-surface">27 Nov, 07:05 AM · Sean Miller · 1092ER (Toyota Probox)</span>
+<span class="font-numeric-md text-numeric-md text-on-surface">J$ 4,120.00</span>
+</div>
+<div class="h-12 rounded-lg bg-surface-container-low flex items-center px-4 justify-between">
+<span class="font-body-md text-body-md text-on-surface">26 Nov, 06:50 PM · Leroy Patterson · 5501KJ (Isuzu ELF)</span>
+<span class="font-numeric-md text-numeric-md text-on-surface">J$ 9,450.00</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Modal Backdrop Overlay -->
+<div class="fixed inset-0 z-40 bg-inverse-surface/40 backdrop-blur-sm transition-opacity duration-200"></div>
+<!-- Centered Modal Layer -->
+<div class="fixed inset-0 z-50 flex items-center justify-center p-space-md sm:p-margin pointer-events-none">
+<!-- Modal Card (760px wide, no inner scrollbars, pristine spacing) -->
+<div class="w-full max-w-[760px] bg-surface-container-lowest rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.08)] pointer-events-auto flex flex-col overflow-hidden transition-transform animate-in fade-in zoom-in-95 duration-150">
+<!-- Modal Header -->
+<div class="px-space-lg pt-space-lg pb-space-sm flex items-start justify-between">
+<div>
+<div class="flex items-center gap-space-sm">
+<span class="w-2.5 h-2.5 rounded-full bg-sky-500 shadow-sm animate-pulse"></span>
+<h2 class="font-headline-md text-headline-md text-on-surface tracking-tight">
+              Fri 27 Nov, 8:15 AM · Andre Campbell
+            </h2>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+            This fill can't be approved yet.
+          </p>
+</div>
+<!-- Top Right Close Button -->
+<button class="h-10 px-4 rounded-xl bg-surface-container-lowest hover:bg-surface-container-low text-on-surface font-label-md text-label-md flex items-center gap-1.5 transition-colors shadow-sm" id="modal-close-top">
+<span class="material-symbols-outlined text-[18px]">close</span>
+<span>Close</span>
+</button>
+</div>
+<!-- Modal Body Content -->
+<div class="px-space-lg pb-space-md pt-space-xs space-y-space-md">
+<!-- 1. Sky-Blue Notice Strip -->
+<div class="bg-[#e0f2fe] rounded-xl p-3.5 flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-sky-200/70 flex items-center justify-center flex-shrink-0 text-sky-800">
+<span class="material-symbols-outlined text-[19px]">near_me</span>
+</div>
+<div class="font-body-sm text-body-sm text-[#0c4a6e] leading-snug">
+            Roam is checking where this fill was. Approve and reject come back once the station is confirmed.
+          </div>
+</div>
+<!-- 2. Soft Amber Notice Box -->
+<div class="bg-[#fffbeb] rounded-xl p-4">
+<div class="flex items-center gap-2 font-title-sm text-title-sm text-amber-950 mb-2">
+<span class="material-symbols-outlined text-amber-700 text-[18px]">help_center</span>
+<span>What's missing</span>
+</div>
+<ul class="space-y-1.5 font-body-sm text-body-sm text-amber-900 leading-relaxed pl-1">
+<li class="flex items-start gap-2">
+<span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 mt-2 flex-shrink-0"></span>
+<span>The phone sent a location, but no known station is there.</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 mt-2 flex-shrink-0"></span>
+<span>Roam will match it to a station, usually within a day.</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 mt-2 flex-shrink-0"></span>
+<span>If you know the station, add it with Edit after the check.</span>
+</li>
+</ul>
+</div>
+<!-- 2-Column Inspection Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-md mt-space-sm items-stretch">
+<!-- Left Column: Inspection Photo Cards (Stacked, Compact 220px-240px) -->
+<div class="flex flex-col gap-space-sm justify-between">
+<!-- Photo 1: Odometer -->
+<div class="relative h-[180px] rounded-xl overflow-hidden bg-primary-container shadow-sm group">
+<img class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" data-alt="Close up photograph of a clean illuminated dark car dashboard instrument cluster dial displaying crisp digital odometer reading 98412 km, neutral ambient cabin lighting, automotive cockpit fidelity, sharp focus on numerals" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDyvrJKh_lDZqiNojKpHME6CJ_esoInKf8imFolDuOtJgJJ6HOxnwIc_o5n3Mt9tqGJHeP5PWvBWt8p9V_l3Sr3NAmV7sENIzXgvnEzJGDRy0aejTLEFZVJrsTzrdOzJF9PtUaqK7ieqsHfElQs-4jkktBHVdLVxqTvVc2z2iT8hOgv1xzipNTcTUIYqodAu_z-5JT9hro388dgkCOSeob9g1vsWx9fFaTmvCd2VbA"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-black/40 pointer-events-none"></div>
+<!-- Badges Top -->
+<div class="absolute top-2.5 left-2.5 flex items-center gap-2">
+<span class="px-2.5 py-0.5 rounded-full bg-white/95 text-on-surface font-label-sm text-label-sm tracking-wider uppercase backdrop-blur-md shadow-sm">
+                  Odometer
+                </span>
+</div>
+<div class="absolute top-2.5 right-2.5">
+<span class="px-2.5 py-0.5 rounded-full bg-black/60 text-white font-numeric-md text-numeric-md tracking-tight backdrop-blur-md">
+                  98,412 km
+                </span>
+</div>
+<!-- Badges Bottom -->
+<div class="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between">
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#82f5c1] text-[#00714e] font-label-sm text-label-sm shadow-sm">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+<span>Read clearly</span>
+</div>
+<button class="h-7 px-2.5 rounded-lg bg-white/90 hover:bg-white text-on-surface font-label-sm text-label-sm flex items-center gap-1 backdrop-blur-md shadow-sm transition-colors">
+<span class="material-symbols-outlined text-[14px]">zoom_in</span>
+<span>View full size</span>
+</button>
+</div>
+</div>
+<!-- Photo 2: Fuel Pump -->
+<div class="relative h-[180px] rounded-xl overflow-hidden bg-primary-container shadow-sm group">
+<img class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" data-alt="Vibrant gas station pump digital fuel meter display showing total sale JMD 2500.00 and volume 11.60 Litres, professional commercial fleet service station photography, crisp clear digits with subtle glare protection" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAQVwgBrVeHlv1HsJlArXwjQeyKO4ZJhYa_EBijUt-gRkdPJqsKhm5hRZFmHHQJTD5ruzR0lNxy0uiS8P_FNXJWhHxMZ2xuYINElFewzEcAQ3KsWq8XBbPIIEBZbAmF--jLO8C6AQGadc5b8YcOMuSKXdfC3kHrw-Lewb2SvANw02jjg9PALteuxSQmRWa16jwTaKYeQKzSwNE1e6sgHMeEkwq0T8N17w_FF3BL2wU"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-black/40 pointer-events-none"></div>
+<!-- Badges Top -->
+<div class="absolute top-2.5 left-2.5 flex items-center gap-2">
+<span class="px-2.5 py-0.5 rounded-full bg-white/95 text-on-surface font-label-sm text-label-sm tracking-wider uppercase backdrop-blur-md shadow-sm">
+                  Pump
+                </span>
+</div>
+<!-- Badges Bottom -->
+<div class="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between">
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#82f5c1] text-[#00714e] font-label-sm text-label-sm shadow-sm">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+<span>Read clearly</span>
+</div>
+<button class="h-7 px-2.5 rounded-lg bg-white/90 hover:bg-white text-on-surface font-label-sm text-label-sm flex items-center gap-1 backdrop-blur-md shadow-sm transition-colors">
+<span class="material-symbols-outlined text-[14px]">zoom_in</span>
+<span>View full size</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Right Column: Reported Parameters Ledger Panel -->
+<div class="bg-surface-container-low rounded-xl p-space-md flex flex-col justify-between">
+<div class="space-y-space-sm divide-y-0">
+<!-- Driver Row -->
+<div class="flex items-center justify-between py-1.5">
+<span class="font-label-sm text-label-sm tracking-wider uppercase text-on-surface-variant">Driver</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Andre Campbell</span>
+</div>
+<!-- Car Row -->
+<div class="flex items-center justify-between py-1.5">
+<span class="font-label-sm text-label-sm tracking-wider uppercase text-on-surface-variant">Vehicle</span>
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded bg-surface-container font-label-sm text-label-sm text-on-surface font-semibold tracking-wider">
+                    7730HM
+                  </span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Toyota Sienta</span>
+</div>
+</div>
+<!-- Total Row (Emphasized) -->
+<div class="flex items-center justify-between py-2 bg-surface-container-lowest/80 px-3 rounded-lg">
+<span class="font-label-sm text-label-sm tracking-wider uppercase text-on-surface-variant">Total Paid</span>
+<span class="font-numeric-lg text-numeric-lg text-on-surface font-bold tracking-tight">
+                  J$ 2,500.00
+                </span>
+</div>
+<!-- Litres Row -->
+<div class="flex items-center justify-between py-1.5">
+<span class="font-label-sm text-label-sm tracking-wider uppercase text-on-surface-variant">Litres</span>
+<span class="font-numeric-md text-numeric-md text-on-surface font-medium">11.6 L</span>
+</div>
+<!-- Odometer Row -->
+<div class="flex items-center justify-between py-1.5">
+<span class="font-label-sm text-label-sm tracking-wider uppercase text-on-surface-variant">Odometer</span>
+<span class="font-numeric-md text-numeric-md text-on-surface font-medium">98,412 km</span>
+</div>
+<!-- Payment Method Row -->
+<div class="flex items-center justify-between py-1.5">
+<span class="font-label-sm text-label-sm tracking-wider uppercase text-on-surface-variant">Paid With</span>
+<div class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-container-highest text-on-surface font-label-md text-label-md font-medium">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant">payments</span>
+<span>Cash</span>
+</div>
+</div>
+<!-- Location Block -->
+<div class="pt-2">
+<div class="p-3 rounded-xl bg-surface-container-lowest flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm tracking-wider uppercase text-on-surface-variant">Station Location</span>
+<span class="px-2 py-0.5 rounded-full bg-[#e0f2fe] text-[#0c4a6e] font-label-sm text-label-sm flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-sky-500"></span>
+                      Pending Station Check
+                    </span>
+</div>
+<div class="flex items-start gap-2 mt-1">
+<span class="material-symbols-outlined text-[18px] text-sky-700 flex-shrink-0 mt-0.5">location_on</span>
+<span class="font-body-sm text-body-sm text-on-surface font-medium leading-snug">
+                      Near Spanish Town Rd and Washington Blvd
+                    </span>
+</div>
+</div>
+</div>
+</div>
+<!-- Audit Trail Micro-Info -->
+<div class="mt-space-sm pt-2 flex items-center justify-between text-on-surface-variant font-label-sm text-label-sm">
+<span>Telemetry Timestamp</span>
+<span class="font-numeric-md text-numeric-md text-on-surface">27 Nov 2025, 08:15:19 EST</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Bar -->
+<div class="bg-surface-container-low/60 px-space-lg py-space-md flex flex-col sm:flex-row justify-between items-center gap-space-sm">
+<div class="flex items-center gap-2 text-on-surface-variant font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[18px] text-outline">lock</span>
+<span>Approve and reject actions disabled during station verification.</span>
+</div>
+<!-- Action Controls -->
+<div class="flex items-center gap-space-sm w-full sm:w-auto justify-end">
+<button class="h-11 px-6 rounded-xl bg-surface-container-lowest hover:bg-surface-container-low text-on-surface font-label-md text-label-md flex items-center justify-center transition-colors shadow-sm min-w-[120px]" id="modal-close-bottom">
+            Close
+          </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+  // Simple interaction handler for modal closure dismissal simulation
+  (function() {
+    const topClose = document.getElementById('modal-close-top');
+    const bottomClose = document.getElementById('modal-close-bottom');
+    
+    function handleDismiss() {
+      const modal = topClose?.closest('.fixed.inset-0.z-50');
+      const backdrop = document.querySelector('.bg-inverse-surface\\/40');
+      if (modal && backdrop) {
+        modal.classList.add('opacity-0', 'transition-opacity', 'duration-150');
+        backdrop.classList.add('opacity-0', 'transition-opacity', 'duration-150');
+        setTimeout(() => {
+          modal.style.display = 'none';
+          backdrop.style.display = 'none';
+          const blurredBg = document.querySelector('.filter.blur-\\[2px\\]');
+          if (blurredBg) {
+            blurredBg.classList.remove('blur-[2px]', 'opacity-40', 'pointer-events-none');
+          }
+        }, 150);
+      }
+    }
+
+    if (topClose) topClose.addEventListener('click', handleDismiss);
+    if (bottomClose) bottomClose.addEventListener('click', handleDismiss);
+  })();
+</script></main><footer class="w-full bg-surface-container-low py-space-xl mt-space-xl"><div class="max-w-7xl mx-auto px-margin flex flex-col md:flex-row items-center justify-between gap-space-md font-body-sm text-body-sm text-on-surface-variant"><div>© 2025 Roam Fleet OS. Enterprise Fleet Management Systems.</div><div class="flex items-center gap-space-lg"><span>System Status: <span class="text-on-tertiary-container font-label-md text-label-md">Operational</span></span><a class="hover:text-on-surface transition-colors" href="#">Privacy Policy</a><a class="hover:text-on-surface transition-colors" href="#">Security &amp; Compliance</a></div></div></footer></body></html>

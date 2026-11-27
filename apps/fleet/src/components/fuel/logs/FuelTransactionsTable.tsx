@@ -47,6 +47,7 @@ import {
   entrySourceLabel,
   formatFuelEntryTime,
   formatFuelLogDate,
+  formatFuelLogDayLabel,
 } from './fuelLogDisplay';
 import type { FuelLogDisplayRow } from './groupFuelEntriesByFillGroup';
 import {
@@ -239,7 +240,7 @@ export function FuelTransactionsTable({
   return (
     <>
       <Table>
-        <TableHeader className="sticky top-0 bg-white z-10">
+        <TableHeader className="sticky top-0 z-10 bg-[#eff4ff] dark:bg-zinc-900 [&_th]:h-14 [&_th]:text-[12px] [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-wider [&_th]:text-[#47464c] [&_th]:dark:text-zinc-400">
           <TableRow>
             <TableHead className="hidden w-10 md:table-cell">
               <Checkbox
@@ -249,35 +250,35 @@ export function FuelTransactionsTable({
               />
             </TableHead>
             <TableHead>
-              <button type="button" className="font-medium hover:text-slate-900" onClick={() => onToggleSort('date')}>
+              <button type="button" className="uppercase tracking-wider hover:text-[#0d1c2e]" onClick={() => onToggleSort('date')}>
                 Date{sortIndicator('date')}
               </button>
             </TableHead>
-            <TableHead>Paid By</TableHead>
+            <TableHead>Paid with</TableHead>
             {showLineColumn ? (
               <TableHead className="hidden md:table-cell">Line</TableHead>
             ) : null}
             <TableHead className="hidden md:table-cell">Station</TableHead>
-            <TableHead className="hidden md:table-cell">Vehicle</TableHead>
+            <TableHead className="hidden md:table-cell">Car</TableHead>
             <TableHead className="hidden md:table-cell">Driver</TableHead>
             <TableHead className="hidden md:table-cell">
-              <button type="button" className="font-medium hover:text-slate-900" onClick={() => onToggleSort('liters')}>
-                Vol (L){sortIndicator('liters')}
+              <button type="button" className="uppercase tracking-wider hover:text-[#0d1c2e]" onClick={() => onToggleSort('liters')}>
+                Litres{sortIndicator('liters')}
               </button>
             </TableHead>
             <TableHead className="hidden md:table-cell">
-              <button type="button" className="font-medium hover:text-slate-900" onClick={() => onToggleSort('odometer')}>
-                Odo{sortIndicator('odometer')}
+              <button type="button" className="uppercase tracking-wider hover:text-[#0d1c2e]" onClick={() => onToggleSort('odometer')}>
+                Odometer{sortIndicator('odometer')}
               </button>
             </TableHead>
             <TableHead
               className="hidden md:table-cell"
               title="Pump-to-pump odometer change only — not Odometer History / Live Status"
             >
-              Δ Odo
+              Since last fill
             </TableHead>
             <TableHead>
-              <button type="button" className="font-medium hover:text-slate-900" onClick={() => onToggleSort('amount')}>
+              <button type="button" className="uppercase tracking-wider hover:text-[#0d1c2e]" onClick={() => onToggleSort('amount')}>
                 Cost{sortIndicator('amount')}
               </button>
             </TableHead>
@@ -285,22 +286,22 @@ export function FuelTransactionsTable({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="cursor-help font-medium">
-                    Audit
+                    Checks
                     <span className="block text-[11px] font-normal text-slate-400 normal-case tracking-normal">
-                      GPS · Sig · Odo
+                      Station · Signed · Odometer
                     </span>
                   </span>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-[220px]">
-                  <p className="text-xs font-semibold">Audit dots</p>
+                  <p className="text-xs font-semibold">Checks</p>
                   <p className="mt-1 text-[11px] text-slate-300">
-                    Three dots under the score: GPS station match · cryptographic signature · odometer present.
+                    Three dots under the score: the phone was at the station · the fill was signed · an odometer reading is there.
                   </p>
                 </TooltipContent>
               </Tooltip>
             </TableHead>
             <TableHead className="w-12 text-right md:w-auto">
-              <span className="sr-only md:not-sr-only">Actions</span>
+              <span className="sr-only">More</span>
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -371,6 +372,7 @@ export function FuelTransactionsTable({
                 <TableRow
                   key={row.id}
                   className={cn(
+                    'h-14 text-[13px] hover:bg-[#f8f9ff] dark:hover:bg-zinc-900/40',
                     isLocked && 'bg-slate-50/50',
                     focusHit && 'bg-emerald-50 ring-2 ring-inset ring-emerald-300',
                     rowSelected && 'bg-indigo-50/40',
@@ -385,7 +387,7 @@ export function FuelTransactionsTable({
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-0.5">
-                      <span>{formatFuelLogDate(entry.date)}</span>
+                      <span className="text-[15px] font-medium text-[#0d1c2e] dark:text-zinc-50">{formatFuelLogDayLabel(entry.date)}</span>
                       {entryTimeLabel && (
                         <span className="text-[11px] font-medium tabular-nums text-slate-500">
                           {entryTimeLabel}
@@ -397,7 +399,7 @@ export function FuelTransactionsTable({
                           return (
                             <Badge
                               variant="outline"
-                              className={cn('h-4 w-fit px-1 py-0 text-[11px] font-bold', src.color)}
+                              className={cn('h-5 w-fit rounded-full px-2 py-0 text-[11px] font-semibold', src.color)}
                             >
                               {src.label}
                             </Badge>
@@ -408,15 +410,17 @@ export function FuelTransactionsTable({
                   <TableCell>
                     <div className="flex flex-col gap-0.5">
                       <div className="flex flex-wrap items-center gap-2">
-                        {getTypeIcon(paidByLabel)}
-                        <span className="text-xs">{paidByLabel}</span>
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e6eeff] px-2.5 py-1 text-[12px] font-semibold text-[#0d1c2e] dark:bg-zinc-800 dark:text-zinc-100">
+                          {getTypeIcon(paidByLabel)}
+                          {paidByLabel}
+                        </span>
                         {isUnlinkedCardCharge(entry) && (
                           <Badge
                             variant="outline"
                             className="h-4 px-1 text-[9px] border-amber-200 bg-amber-100 text-amber-800"
                             title="Approved card charge with no linked log — review and Accept"
                           >
-                            Unmatched
+                            No fill logged
                           </Badge>
                         )}
                         {(isSplit || pendingHalf) && (
@@ -660,7 +664,7 @@ export function FuelTransactionsTable({
                     })()}
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
-                    <span className="font-mono text-xs font-semibold text-slate-800">
+                    <span className="text-[15px] font-medium tabular-nums text-[#0d1c2e] dark:text-zinc-50">
                       {(() => {
                         if (entry.odometer != null && Number(entry.odometer) > 0) {
                           return Number(entry.odometer).toLocaleString();
@@ -721,11 +725,11 @@ export function FuelTransactionsTable({
                       );
                     })()}
                   </TableCell>
-                  <TableCell className="text-xs font-bold">
+                  <TableCell className="text-[15px] font-semibold tabular-nums text-[#0d1c2e] dark:text-zinc-50">
                     {isSplit ? (
                       formatFuelMoney(displayAmount)
                     ) : (entry.metadata as { awaitingCardStatement?: boolean })?.awaitingCardStatement ? (
-                      <span className="font-medium text-amber-600">Awaiting</span>
+                      <span className="whitespace-nowrap rounded-full bg-[#fffbeb] px-2.5 py-1 text-[12px] font-semibold text-[#b45309]">Waiting on statement</span>
                     ) : (entry.metadata as { jaaRowKind?: string })?.jaaRowKind === 'declined' ? (
                       <span className="font-medium text-rose-600">Declined</span>
                     ) : (entry.metadata as { jaaRowKind?: string })?.jaaRowKind === 'fee' ? (
@@ -840,14 +844,30 @@ export function FuelTransactionsTable({
                   <TableCell className="text-right">
                     <div className="flex justify-end items-center gap-1">
                       {onUnlinkedChargeAction && isUnlinkedCardCharge(entry) && canEdit ? (
-                        <Button
-                          size="sm"
-                          className="h-8 px-3 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
-                          onClick={() => onUnlinkedChargeAction(entry, 'adopt')}
-                          title="Confirm odometer and fuel station"
-                        >
-                          Resolve
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            className="min-h-[40px] whitespace-nowrap rounded-xl bg-black px-4 text-[13px] font-medium text-white shadow-md hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900"
+                            onClick={() => onUnlinkedChargeAction(entry, 'adopt')}
+                            title="Add the odometer and station, and keep it as a fill"
+                          >
+                            Accept as a fill
+                          </button>
+                          <button
+                            type="button"
+                            className="hidden min-h-[40px] whitespace-nowrap rounded-xl bg-white px-4 text-[13px] font-medium text-[#0d1c2e] shadow-sm ring-1 ring-[#c9c5cd] hover:bg-[#e6eeff] lg:inline-flex lg:items-center dark:bg-zinc-900 dark:text-zinc-100"
+                            onClick={() => onUnlinkedChargeAction(entry, 'link')}
+                          >
+                            Link to a fill
+                          </button>
+                          <button
+                            type="button"
+                            className="hidden min-h-[40px] whitespace-nowrap rounded-xl bg-white px-4 text-[13px] font-medium text-[#ba1a1a] shadow-sm ring-1 ring-[#ffdad6] hover:bg-[#ffdad6] lg:inline-flex lg:items-center dark:bg-zinc-900"
+                            onClick={() => onUnlinkedChargeAction(entry, 'dismiss')}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
                       ) : null}
                       <Button
                         variant="ghost"
@@ -873,7 +893,7 @@ export function FuelTransactionsTable({
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-40">
                           <DropdownMenuLabel className="text-[11px] uppercase tracking-wider text-slate-400">
-                            Log Actions
+                            Fill
                           </DropdownMenuLabel>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
@@ -887,21 +907,21 @@ export function FuelTransactionsTable({
                             <>
                               <DropdownMenuSeparator />
                               <DropdownMenuLabel className="text-[11px] uppercase tracking-wider text-amber-700">
-                                Unmatched charge
+                                Card charge with no fill
                               </DropdownMenuLabel>
                               <DropdownMenuItem
                                 onClick={() => onUnlinkedChargeAction(entry, 'adopt')}
                                 disabled={!canEdit}
                                 className="cursor-pointer gap-2 text-xs"
                               >
-                                Resolve (odometer & station)
+                                Accept as a fill
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => onUnlinkedChargeAction(entry, 'link')}
                                 disabled={!canEdit}
                                 className="cursor-pointer gap-2 text-xs"
                               >
-                                Link to existing log
+                                Link to a fill
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => onUnlinkedChargeAction(entry, 'dismiss')}

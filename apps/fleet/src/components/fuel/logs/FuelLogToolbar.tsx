@@ -12,14 +12,16 @@ import {
 } from '../../ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '../../ui/popover';
 import { Tabs, TabsList, TabsTrigger } from '../../ui/tabs';
-import { Search, Filter as FilterIcon, Download, RotateCcw, History, X, Plus } from 'lucide-react';
+import { Search, Filter as FilterIcon, Download, RotateCcw, History, X, Plus, Hourglass } from 'lucide-react';
 import { PeriodWeekDropdown } from '../../ui/PeriodWeekDropdown';
 import type { DateRange } from 'react-day-picker';
 import { fuelServiceLineUiLabel } from '../../../utils/vocabulary';
 
 export type FuelLogToolbarProps = {
-  activeView: 'transactions' | 'cycles';
-  onViewChange: (view: 'transactions' | 'cycles') => void;
+  activeView: 'transactions' | 'cycles' | 'awaiting';
+  onViewChange: (view: 'transactions' | 'cycles' | 'awaiting') => void;
+  /** Fills still waiting on the gas card statement (shown on the Awaiting statement button). */
+  awaitingCount?: number;
   searchTerm: string;
   onSearchChange: (v: string) => void;
   canExport: boolean;
@@ -69,6 +71,7 @@ export type FuelLogToolbarProps = {
 export function FuelLogToolbar({
   activeView,
   onViewChange,
+  awaitingCount = 0,
   searchTerm,
   onSearchChange,
   canExport,
@@ -111,39 +114,52 @@ export function FuelLogToolbar({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <Tabs
           value={activeView}
-          onValueChange={(v) => onViewChange(v as 'transactions' | 'cycles')}
+          onValueChange={(v) => onViewChange(v as 'transactions' | 'cycles' | 'awaiting')}
           className="w-full sm:w-fit"
         >
-          <TabsList className="w-full sm:w-auto bg-slate-100 p-1 h-11">
+          {/* Stitch: segmented view switch — active is solid near-black. */}
+          <TabsList className="w-full sm:w-auto h-auto rounded-2xl bg-[#eff4ff] p-1.5 dark:bg-zinc-900">
             <TabsTrigger
               value="transactions"
-              className="gap-2 flex-1 sm:flex-none px-5 py-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm"
+              className="min-h-[44px] gap-2 flex-1 sm:flex-none rounded-xl px-5 text-[13px] font-semibold text-[#47464c] data-[state=active]:bg-black data-[state=active]:text-white data-[state=active]:shadow-md dark:data-[state=active]:bg-zinc-50 dark:data-[state=active]:text-zinc-900"
             >
               <History className="h-4 w-4" />
               <span>Transactions</span>
             </TabsTrigger>
             <TabsTrigger
               value="cycles"
-              className="gap-2 flex-1 sm:flex-none px-5 py-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm"
+              className="min-h-[44px] gap-2 flex-1 sm:flex-none rounded-xl px-5 text-[13px] font-semibold text-[#47464c] data-[state=active]:bg-black data-[state=active]:text-white data-[state=active]:shadow-md dark:data-[state=active]:bg-zinc-50 dark:data-[state=active]:text-zinc-900"
             >
               <RotateCcw className="h-4 w-4" />
               <span>Full Tanks</span>
             </TabsTrigger>
+            <TabsTrigger
+              value="awaiting"
+              className="min-h-[44px] gap-2 flex-1 sm:flex-none rounded-xl px-5 text-[13px] font-semibold text-[#47464c] data-[state=active]:bg-black data-[state=active]:text-white data-[state=active]:shadow-md dark:data-[state=active]:bg-zinc-50 dark:data-[state=active]:text-zinc-900"
+            >
+              <Hourglass className="h-4 w-4" />
+              <span>Awaiting statement</span>
+              {awaitingCount > 0 ? (
+                <span className="ml-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#fde68a] px-1.5 text-[11px] font-bold tabular-nums text-[#92400e]">
+                  {awaitingCount}
+                </span>
+              ) : null}
+            </TabsTrigger>
           </TabsList>
         </Tabs>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className={activeView === 'awaiting' ? 'hidden' : 'flex flex-wrap items-center gap-2'}>
           {onUnattributedOnlyChange ? (
             <button
               type="button"
               onClick={() => onUnattributedOnlyChange(!unattributedOnly)}
               className={
                 unattributedOnly
-                  ? 'inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-900'
-                  : 'inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50'
+                  ? 'inline-flex min-h-[36px] items-center gap-1.5 rounded-full bg-[#fffbeb] px-3.5 py-1.5 text-[12px] font-semibold text-[#b45309] ring-1 ring-[#fde68a]'
+                  : 'inline-flex min-h-[36px] items-center gap-1.5 rounded-full bg-[#eff4ff] px-3.5 py-1.5 text-[12px] font-semibold text-[#0d1c2e] hover:bg-[#e6eeff] dark:bg-zinc-900 dark:text-zinc-200'
               }
               aria-pressed={unattributedOnly}
             >
-              {fuelServiceLineUiLabel('unattributed')} ({unattributedCount})
+              No service line ({unattributedCount})
             </button>
           ) : null}
           {onUnlinkedCardChargesOnlyChange ? (
@@ -152,26 +168,27 @@ export function FuelLogToolbar({
               onClick={() => onUnlinkedCardChargesOnlyChange(!unlinkedCardChargesOnly)}
               className={
                 unlinkedCardChargesOnly
-                  ? 'inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-900'
-                  : 'inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50'
+                  ? 'inline-flex min-h-[36px] items-center gap-1.5 rounded-full bg-[#fffbeb] px-3.5 py-1.5 text-[12px] font-semibold text-[#b45309] ring-1 ring-[#fde68a]'
+                  : 'inline-flex min-h-[36px] items-center gap-1.5 rounded-full bg-[#eff4ff] px-3.5 py-1.5 text-[12px] font-semibold text-[#0d1c2e] hover:bg-[#e6eeff] dark:bg-zinc-900 dark:text-zinc-200'
               }
               aria-pressed={unlinkedCardChargesOnly}
             >
-              Unmatched ({unlinkedCardChargesCount})
+              Card charges with no fill ({unlinkedCardChargesCount})
             </button>
           ) : null}
         </div>
       </div>
 
-      {afterTabs ? <div className="mb-2">{afterTabs}</div> : null}
+      {afterTabs && activeView !== 'awaiting' ? <div className="mb-2">{afterTabs}</div> : null}
 
-      <div className="flex items-center justify-between gap-4">
+      {/* Awaiting statement loads its own backlog — week, search and filters don't apply. */}
+      <div className={activeView === 'awaiting' ? 'hidden' : 'flex items-center justify-between gap-4 rounded-2xl bg-white p-3 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)] dark:bg-[#2a2a2d]'}>
         <div className="flex items-center gap-2 flex-1 flex-wrap">
-          <div className="relative w-64 hidden md:block">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+          <div className="relative hidden w-full max-w-[400px] md:block">
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#47464c]" />
             <Input
-              placeholder="Search..."
-              className="pl-8 h-9 text-xs"
+              placeholder="Search driver, station, car…"
+              className="h-11 rounded-xl border-0 bg-[#eff4ff] pl-10 text-[15px] dark:bg-zinc-900"
               value={searchTerm}
               onChange={(e) => onSearchChange(e.target.value)}
             />
@@ -181,7 +198,7 @@ export function FuelLogToolbar({
               <Button
                 variant="outline"
                 size="sm"
-                className="gap-2 h-9 hidden md:inline-flex"
+                className="hidden h-11 gap-2 rounded-xl border-0 bg-white px-4 text-[13px] font-medium shadow-sm ring-1 ring-[#c9c5cd] md:inline-flex dark:bg-zinc-900"
                 onClick={onExport}
               >
                 <Download className="h-3.5 w-3.5" />
@@ -192,7 +209,7 @@ export function FuelLogToolbar({
             )}
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2 h-9 border-dashed relative">
+                <Button variant="outline" size="sm" className="relative h-11 gap-2 rounded-xl border-0 bg-white px-4 text-[13px] font-medium shadow-sm ring-1 ring-[#c9c5cd] dark:bg-zinc-900">
                   <FilterIcon className="h-3.5 w-3.5" />
                   Filters
                   {activeFilterCount > 0 && (
@@ -333,7 +350,7 @@ export function FuelLogToolbar({
                   selectedStart={periodStart}
                   selectedEnd={periodEnd}
                   placeholder="Select week period"
-                  buttonClassName="h-9 text-xs"
+                  buttonClassName="h-11 rounded-xl text-[13px]"
                   allowCustomRange
                   onSelect={(period) => {
                     const [sy, sm, sd] = period.startDate.split('-').map(Number);

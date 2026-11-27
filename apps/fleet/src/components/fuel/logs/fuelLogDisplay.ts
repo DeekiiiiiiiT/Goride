@@ -66,6 +66,17 @@ export function fuelEntrySortMs(e: { date?: string; time?: string | null }): num
   return Number.isNaN(t) ? 0 : t;
 }
 
+/** "Thu 26 Nov" — Stitch transaction_logs_* date column. */
+export function formatFuelLogDayLabel(dateString: string): string {
+  if (!dateString) return '-';
+  const day = dateString.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    const [y, m, d] = day.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  }
+  return formatFuelLogDate(dateString);
+}
+
 export function formatFuelLogDate(dateString: string): string {
   if (!dateString) return '-';
   if (dateString.includes('-') && dateString.length === 10) {
@@ -134,15 +145,15 @@ export function formatFuelEntryTime(entry: {
 export function entrySourceLabel(src: string): { label: string; color: string } {
   switch (src) {
     case 'admin-manual':
-      return { label: 'Admin Entry', color: 'bg-amber-50 text-amber-700 border-amber-200' };
+      return { label: 'Typed in Fleet', color: 'bg-amber-50 text-amber-700 border-amber-200' };
     case 'admin-edit':
-      return { label: 'Admin Edit', color: 'bg-violet-50 text-violet-700 border-violet-200' };
+      return { label: 'Changed in Fleet', color: 'bg-violet-50 text-violet-700 border-violet-200' };
     case 'bulk-import':
       return { label: 'Imported', color: 'bg-slate-100 text-slate-600 border-slate-200' };
     case 'fuel-card':
       return { label: 'Fuel Card', color: 'bg-blue-50 text-blue-600 border-blue-200' };
     case 'driver-portal':
-      return { label: 'Portal', color: 'bg-emerald-50 text-emerald-600 border-emerald-200' };
+      return { label: 'From phone', color: 'bg-emerald-50 text-emerald-600 border-emerald-200' };
     default:
       return { label: humanizeEntryType(src), color: 'bg-slate-50 text-slate-500 border-slate-200' };
   }

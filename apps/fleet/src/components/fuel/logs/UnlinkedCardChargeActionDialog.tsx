@@ -135,15 +135,15 @@ export function UnlinkedCardChargeActionDialog({
   const title = useMemo(() => {
     switch (action) {
       case 'adopt':
-        return 'Confirm unmatched card charge';
+        return 'Accept this card charge as a fill';
       case 'link':
-        return 'Link to existing log';
+        return 'Link this card charge to a fill';
       case 'dismiss':
-        return 'Dismiss card charge';
+        return 'Dismiss this card charge';
       case 'request_driver':
-        return 'Request driver log';
+        return 'Ask the driver to log it';
       default:
-        return 'Unmatched card charge';
+        return 'Card charge with no fill';
     }
   }, [action]);
 
@@ -243,18 +243,18 @@ export function UnlinkedCardChargeActionDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className={action === 'adopt' ? 'sm:max-w-lg' : 'sm:max-w-md'}>
+      <DialogContent className={(action === 'adopt' || action === 'link' ? 'sm:max-w-xl' : 'sm:max-w-md') + ' rounded-2xl border-0 p-6 sm:p-8'}>
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-[22px] font-semibold tracking-tight text-[#0d1c2e] dark:text-zinc-50">{title}</DialogTitle>
+          <DialogDescription className="text-[15px] text-[#47464c] dark:text-zinc-400">
             {statement ? (
               <>
-                {formatFuelMoney(amount)} · {String(statement.date || '').slice(0, 10)}
-                {statement.time ? ` · ${String(statement.time).slice(0, 8)}` : ''}
+                {String(statement.date || '').slice(0, 10)}
+                {statement.time ? `, ${String(statement.time).slice(0, 5)}` : ''} · <span className="font-semibold text-[#0d1c2e] dark:text-zinc-100">{formatFuelMoney(amount)}</span>
                 {receipt ? ` · ${receipt}` : ''}
                 {action === 'adopt' ? ` · ${merchant}` : null}
                 {statement && isJaaStatementLedgerRow(statement) && action !== 'adopt'
-                  ? ' · statement charge'
+                  ? ' · from the statement'
                   : null}
               </>
             ) : null}
@@ -393,25 +393,47 @@ export function UnlinkedCardChargeActionDialog({
           ) : null}
 
           {action === 'link' ? (
-            <div className="space-y-1.5">
-              <Label>Existing gas-card log</Label>
-              <Select value={linkEntryId} onValueChange={setLinkEntryId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select log" />
-                </SelectTrigger>
-                <SelectContent>
-                  {linkCandidates.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>
-                      {String(e.date || '').slice(0, 10)} ·{' '}
-                      {e.odometer != null ? `odo ${e.odometer}` : 'no odo'} ·{' '}
-                      {e.id.slice(0, 8)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex flex-col gap-3">
+              <p className="flex items-center gap-2 rounded-xl bg-[#eff4ff] px-4 py-3 text-[13px] text-[#0d1c2e] dark:bg-zinc-900 dark:text-zinc-200">
+                <span className="material-symbols-outlined text-[18px] text-[#47464c]">info</span>
+                Choose the gas card fill this charge belongs to.
+              </p>
+              <div role="radiogroup" aria-label="Fills" className="flex flex-col gap-2">
+                {linkCandidates.map((e) => {
+                  const on = linkEntryId === e.id;
+                  const litres = Number((e as { liters?: number }).liters) || 0;
+                  return (
+                    <button
+                      key={e.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={on}
+                      onClick={() => setLinkEntryId(e.id)}
+                      className={
+                        'flex items-start gap-3 rounded-xl p-4 text-left transition-colors ' +
+                        (on ? 'bg-[#dce9ff]/70 ring-2 ring-black dark:bg-zinc-800' : 'bg-white ring-1 ring-[#e6eeff] hover:bg-[#f8f9ff] dark:bg-zinc-900 dark:ring-zinc-800')
+                      }
+                    >
+                      <span className={'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ' + (on ? 'bg-black' : 'bg-[#e6eeff]')}>
+                        {on ? <span className="h-2 w-2 rounded-full bg-white" /> : null}
+                      </span>
+                      <span className="flex flex-col gap-0.5">
+                        <span className="text-[15px] font-semibold text-[#0d1c2e] dark:text-zinc-50">
+                          {String(e.date || '').slice(0, 10)}
+                          {e.time ? `, ${String(e.time).slice(0, 5)}` : ''}
+                        </span>
+                        {e.vendor || e.location ? <span className="text-[13px] text-[#47464c] dark:text-zinc-400">{e.vendor || e.location}</span> : null}
+                        <span className="text-[13px] tabular-nums text-[#47464c] dark:text-zinc-400">
+                          Odometer {e.odometer != null ? `${Number(e.odometer).toLocaleString('en-US')} km` : '—'} · Litres {litres ? `${litres} L` : '—'}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
               {linkCandidates.length === 0 ? (
-                <p className="text-[11px] text-amber-800">
-                  No unmatched gas-card logs in this period. Confirm into logs instead.
+                <p className="text-[13px] text-amber-800">
+                  No gas card fills without a charge this week. Use Accept as a fill instead.
                 </p>
               ) : null}
             </div>
@@ -419,7 +441,7 @@ export function UnlinkedCardChargeActionDialog({
 
           <div className="space-y-1.5">
             <Label>
-              {action === 'request_driver' ? 'Message (optional)' : 'Reason'}
+              {action === 'request_driver' ? 'Message (optional)' : 'Why?'}
             </Label>
             <Textarea
               value={reason}
@@ -429,7 +451,7 @@ export function UnlinkedCardChargeActionDialog({
                   ? 'Non-fuel, wrong card, disputed with issuer…'
                   : action === 'request_driver'
                     ? 'Optional note for the driver'
-                    : 'Why this action is correct'
+                    : 'e.g. Same fill — the driver logged it without the amount.'
               }
               rows={3}
             />
@@ -437,11 +459,33 @@ export function UnlinkedCardChargeActionDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={busy}>
-            Cancel
+          <Button
+            variant="outline"
+            className="min-h-[44px] rounded-xl border-0 bg-white px-5 text-[13px] font-medium shadow-sm ring-1 ring-[#c9c5cd] dark:bg-zinc-900"
+            onClick={() => handleOpenChange(false)}
+            disabled={busy}
+          >
+            Back
           </Button>
-          <Button onClick={() => void submit()} disabled={busy}>
-            {busy ? 'Working…' : action === 'adopt' ? 'Confirm & accept' : 'Confirm'}
+          <Button
+            className={
+              'min-h-[44px] rounded-xl px-6 text-[13px] font-medium shadow-md ' +
+              (action === 'dismiss' ? 'bg-[#ba1a1a] text-white hover:bg-[#93000a]' : 'bg-black text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900')
+            }
+            onClick={() => void submit()}
+            disabled={busy}
+          >
+            {busy
+              ? 'Working…'
+              : action === 'adopt'
+                ? 'Accept as a fill'
+                : action === 'link'
+                  ? 'Link fill'
+                  : action === 'dismiss'
+                    ? 'Dismiss charge'
+                    : action === 'request_driver'
+                      ? 'Ask the driver'
+                      : 'Confirm'}
           </Button>
         </DialogFooter>
       </DialogContent>

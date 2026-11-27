@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><title>Roam Fleet</title><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: 'class', theme: { extend: { colors: { 'surface-tint': '#5e5c74', 'surface-dim': '#ccdbf4', 'on-error-container': '#93000a', 'primary': '#000000', 'on-primary-container': '#84819a', 'on-primary': '#ffffff', 'secondary-fixed': '#dde3ed', 'inverse-surface': '#233144', 'on-tertiary': '#ffffff', 'on-primary-fixed': '#1b192e', 'outline-variant': '#c9c5cd', 'inverse-primary': '#c8c3df', 'on-secondary-fixed-variant': '#414750', 'surface-container-low': '#eff4ff', 'on-secondary-container': '#5d636c', 'tertiary-fixed-dim': '#68dba9', 'secondary': '#595f68', 'on-surface': '#0d1c2e', 'error': '#ba1a1a', 'on-tertiary-container': '#079669', 'on-tertiary-fixed': '#002114', 'primary-fixed-dim': '#c8c3df', 'tertiary': '#000000', 'outline': '#78767d', 'surface': '#f8f9ff', 'on-surface-variant': '#47464c', 'surface-container-lowest': '#ffffff', 'on-primary-fixed-variant': '#46445b', 'inverse-on-surface': '#eaf1ff', 'on-background': '#0d1c2e', 'background': '#f8f9ff', 'on-tertiary-fixed-variant': '#005137', 'primary-container': '#1b192e', 'surface-bright': '#f8f9ff', 'on-secondary': '#ffffff', 'on-secondary-fixed': '#161c24', 'surface-container-high': '#dce9ff', 'primary-fixed': '#e4dffc', 'surface-container': '#e6eeff', 'tertiary-fixed': '#85f8c4', 'error-container': '#ffdad6', 'surface-variant': '#d5e3fc', 'tertiary-container': '#002114', 'surface-container-highest': '#d5e3fc', 'on-error': '#ffffff', 'secondary-container': '#dbe0eb', 'secondary-fixed-dim': '#c1c7d1' }, borderRadius: { 'DEFAULT': '0.25rem', 'lg': '0.5rem', 'xl': '0.75rem', 'full': '9999px' }, spacing: { 'margin': '2rem', 'space-sm': '0.5rem', 'space-xs': '0.25rem', 'space-md': '1rem', 'gutter-compact': '1rem', 'space-lg': '1.5rem', 'gutter': '1.5rem', 'margin-compact': '1.5rem', 'space-xl': '2rem' }, fontFamily: { 'label-sm': ['Inter'], 'headline-xl': ['Inter'], 'numeric-lg': ['Inter'], 'headline-lg': ['Inter'], 'headline-md': ['Inter'], 'body-md': ['Inter'], 'label-md': ['Inter'], 'body-lg': ['Inter'], 'numeric-md': ['Inter'], 'body-sm': ['Inter'], 'title-sm': ['Inter'] }, fontSize: { 'label-sm': ['11px', { lineHeight: '14px', letterSpacing: '0.03em', fontWeight: '500' }], 'headline-xl': ['32px', { lineHeight: '40px', letterSpacing: '-0.02em', fontWeight: '600' }], 'numeric-lg': ['22px', { lineHeight: '28px', letterSpacing: '-0.01em', fontWeight: '600' }], 'headline-lg': ['24px', { lineHeight: '32px', letterSpacing: '-0.015em', fontWeight: '600' }], 'headline-md': ['20px', { lineHeight: '28px', letterSpacing: '-0.01em', fontWeight: '600' }], 'body-md': ['14px', { lineHeight: '20px', fontWeight: '400' }], 'label-md': ['12px', { lineHeight: '16px', letterSpacing: '0.02em', fontWeight: '600' }], 'body-lg': ['16px', { lineHeight: '24px', fontWeight: '400' }], 'numeric-md': ['14px', { lineHeight: '20px', fontWeight: '500' }], 'body-sm': ['13px', { lineHeight: '18px', fontWeight: '400' }], 'title-sm': ['16px', { lineHeight: '24px', letterSpacing: '-0.005em', fontWeight: '600' }] } } } };</script></head><body class="bg-surface font-body-md text-on-surface antialiased min-h-screen"><header class="fixed top-0 left-0 right-0 z-50 shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 bg-surface-container-lowest px-margin flex items-center justify-between"><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-sm"><div class="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-sm"><span class="material-symbols-outlined text-on-primary text-[20px]">local_shipping</span></div><span class="font-title-sm text-title-sm text-on-surface tracking-tight">Roam Fleet</span></div><nav class="hidden xl:flex items-center gap-space-md h-16" data-active-classes="text-on-surface font-title-sm border-b-2 border-primary"><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="dashboard" href="#">Dashboard</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="fleet-operations" href="#">Fleet Operations</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="driver-operations" href="#">Driver Operations</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="money" href="#">Money</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="vehicle-operations" href="#">Vehicle Operations</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="delivery-operations" href="#">Delivery Operations</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="analytics" href="#">Analytics</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="reports" href="#">Reports</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="business-finance" href="#">Business Finance</a></nav></div><div class="flex items-center gap-space-md"><div class="flex items-center gap-space-xs text-on-surface-variant"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="material-symbols-outlined text-[20px]">tune</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div><div class="h-12 bg-primary-container px-margin flex items-center justify-between"><div class="flex items-center"><div class="relative flex items-center"><span class="material-symbols-outlined absolute left-3 text-on-primary-container text-[18px]">search</span><input class="w-80 h-8 pl-9 pr-3 rounded-full bg-on-primary-fixed/20 text-on-primary font-body-sm text-body-sm placeholder:text-on-primary-container focus:outline-none focus:ring-1 focus:ring-on-primary-container transition-all" placeholder="Switch vehicle or search hub…" type="text"/></div></div><div class="flex items-center gap-space-md text-on-primary-container font-label-sm text-label-sm"><div class="flex items-center gap-space-xs"><span class="material-symbols-outlined text-[16px]">schedule</span><span class="font-numeric-md text-numeric-md text-on-primary">03:11:28 PM EST</span></div><div class="w-px h-4 bg-on-primary-container/30"></div><div class="flex items-center gap-space-xs"><span class="material-symbols-outlined text-[16px]">public</span><span>America/Jamaica</span></div></div></div></header><main class="w-full pt-28 bg-surface min-h-screen"><div class="flex flex-col w-full relative">
+<!-- Realistic Ambient Background: Transaction Logs ("Awaiting Statement" Desk View) -->
+<div class="w-full max-w-7xl mx-auto px-margin select-none pointer-events-none filter blur-[2px] opacity-40 transition-opacity">
+<!-- Breadcrumb & Top Bar -->
+<div class="flex items-center justify-between pb-space-lg">
+<div class="flex items-center gap-space-sm font-label-md text-label-md text-on-surface-variant">
+<span>Money &amp; Reconciliation</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span>Fuel Logs</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="text-on-surface font-title-sm">Awaiting Statement (34 pending)</span>
+</div>
+<div class="flex items-center gap-space-sm">
+<span class="px-3 py-1 bg-surface-container rounded-full text-label-sm font-label-sm text-on-surface-variant">Station: Portmore Depot 04</span>
+<span class="px-3 py-1 bg-surface-container rounded-full text-label-sm font-label-sm text-on-surface-variant">Batch #JM-2025-081</span>
+</div>
+</div>
+<!-- Summary Metrics Grid in Background -->
+<div class="grid grid-cols-4 gap-gutter mb-space-lg">
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm">
+<div class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Unmatched Slips</div>
+<div class="font-headline-lg text-headline-lg text-on-surface mt-1">18</div>
+</div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm">
+<div class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Discrepancy Volume</div>
+<div class="font-headline-lg text-headline-lg text-error mt-1">J$14,250.00</div>
+</div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm">
+<div class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Reconciled Today</div>
+<div class="font-headline-lg text-headline-lg text-on-tertiary-container mt-1">112 units</div>
+</div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm">
+<div class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Tolerance Cap</div>
+<div class="font-headline-lg text-headline-lg text-on-surface mt-1">J$50.00</div>
+</div>
+</div>
+<!-- Ledger Mock Table Rows -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-md space-y-3">
+<div class="flex items-center justify-between py-2 text-on-surface-variant font-label-md text-label-md border-b border-surface-container">
+<span class="w-28">Timestamp</span>
+<span class="w-48">Driver Name</span>
+<span class="w-24">Plate ID</span>
+<span class="w-32 text-right">Pump Slip</span>
+<span class="w-32 text-right">Card Charge</span>
+<span class="w-36 text-center">Status</span>
+</div>
+<div class="flex items-center justify-between py-3 font-body-sm text-body-sm bg-surface-container-low px-2 rounded-lg">
+<span class="w-28 font-numeric-md">21 Nov 17:12</span>
+<span class="w-48 font-medium text-on-surface">Kenny Gregory Rattray</span>
+<span class="w-24 font-mono text-xs">5179KZ</span>
+<span class="w-32 text-right font-numeric-md">J$5,000.00</span>
+<span class="w-32 text-right font-numeric-md text-error">J$5,600.00</span>
+<span class="w-36 text-center"><span class="px-2 py-0.5 rounded-full bg-error-container text-error text-[11px] font-semibold">Exceeds Card</span></span>
+</div>
+<div class="flex items-center justify-between py-3 font-body-sm text-body-sm">
+<span class="w-28 font-numeric-md">21 Nov 16:54</span>
+<span class="w-48">Devon Campbell</span>
+<span class="w-24 font-mono text-xs">8820LF</span>
+<span class="w-32 text-right font-numeric-md">J$8,200.00</span>
+<span class="w-32 text-right font-numeric-md">J$8,200.00</span>
+<span class="w-36 text-center"><span class="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-semibold text-[11px]">Exact Match</span></span>
+</div>
+</div>
+</div>
+<!-- Modal Backdrop / Scrim -->
+<div class="fixed inset-0 z-50 bg-inverse-surface/40 backdrop-blur-sm flex items-center justify-center p-space-md overflow-y-auto">
+<!-- Centred In-App Window: 560px width, zero inner scrolling necessary -->
+<div class="relative w-full max-w-[560px] bg-surface-container-lowest rounded-2xl shadow-[0_24px_50px_rgba(13,28,46,0.18)] p-space-lg my-auto animate-in fade-in zoom-in-95 duration-150">
+<!-- Top Accent Subtle Bar -->
+<div class="absolute top-0 left-8 right-8 h-[2px] bg-primary/10 rounded-full"></div>
+<!-- Header: Title, Subtitle, Close Button -->
+<div class="flex items-start justify-between mb-space-md pt-space-xs">
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[22px]">balance</span>
+<h2 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Decide what to pay</h2>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5">
+<span>Sat 21 Nov, 5:12 PM</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span class="font-semibold text-on-surface">Kenny Gregory Rattray</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span class="px-1.5 py-0.5 bg-surface-container text-on-surface font-mono text-[11px] rounded tracking-wide">5179KZ</span>
+</p>
+</div>
+<button aria-label="Close dialog" class="w-9 h-9 rounded-xl flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors focus:outline-none" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- Summary Box: Soft Tinted Panel -->
+<div class="bg-surface-container-low rounded-xl p-space-md mb-space-md space-y-2">
+<div class="flex items-center justify-between font-body-sm text-body-sm">
+<span class="text-on-surface-variant font-medium">Pump total</span>
+<span class="font-numeric-md text-numeric-md text-on-surface font-semibold">J$5,000.00</span>
+</div>
+<div class="flex items-center justify-between font-body-sm text-body-sm">
+<span class="text-on-surface-variant font-medium">Gas card charge</span>
+<span class="font-numeric-md text-numeric-md text-on-surface font-semibold">J$5,600.00</span>
+</div>
+<div class="flex items-center justify-between font-body-sm text-body-sm">
+<span class="text-on-surface-variant font-medium">Worked-out cash</span>
+<span class="font-numeric-md text-numeric-md text-outline italic">— (can't be worked out)</span>
+</div>
+<div class="h-px bg-surface-dim/70 my-2"></div>
+<div class="flex items-center justify-between font-body-sm text-body-sm">
+<div class="flex items-center gap-1.5 text-error font-semibold">
+<span class="material-symbols-outlined text-[16px]">priority_high</span>
+<span>More on the card than the pump</span>
+</div>
+<span class="font-numeric-md text-numeric-md font-bold text-error">J$600.00</span>
+</div>
+<div class="flex items-center justify-between text-label-sm font-label-sm text-on-surface-variant pt-0.5">
+<span>Allowed discrepancy threshold</span>
+<span class="font-numeric-md text-[11px] font-semibold text-secondary">J$50.00 cap</span>
+</div>
+</div>
+<!-- Decision Stack: 3 Interactive Choice Cards -->
+<div aria-label="Settlement options" class="space-y-space-sm mb-space-md" id="decision-group" role="radiogroup">
+<!-- Choice 1: Disabled / Ineligible -->
+<div class="opacity-55 bg-surface-container-low/70 rounded-xl p-space-md cursor-not-allowed">
+<div class="flex items-start gap-3">
+<div class="mt-0.5 w-5 h-5 rounded-full bg-surface-dim flex items-center justify-center shrink-0">
+<div class="w-2 h-2 rounded-full bg-outline"></div>
+</div>
+<div class="min-w-0 flex-1">
+<div class="flex items-center justify-between">
+<span class="font-body-md text-body-md font-medium text-on-surface-variant">Pay the worked-out cash</span>
+<span class="px-2 py-0.5 bg-surface-container rounded text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider">Unavailable</span>
+</div>
+<p class="font-body-sm text-body-sm text-secondary mt-0.5">Pay what the statement says the cash part was.</p>
+<div class="flex items-center gap-1 font-label-sm text-label-sm text-error mt-2">
+<span class="material-symbols-outlined text-[14px]">error_outline</span>
+<span>Not possible: the card charge is more than the pump total.</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Choice 2: Active / Selected (Default) -->
+<label class="block relative bg-surface-container-lowest rounded-xl p-space-md shadow-sm cursor-pointer transition-all duration-150 ring-2 ring-primary" id="card-option-custom">
+<input checked="" class="sr-only" name="settlement_action" onchange="handleOptionChange('custom_cash')" type="radio" value="custom_cash"/>
+<div class="flex items-start gap-3">
+<div class="mt-0.5 w-5 h-5 rounded-full bg-primary flex items-center justify-center shrink-0 ring-4 ring-primary/10">
+<div class="w-2 h-2 rounded-full bg-on-primary"></div>
+</div>
+<div class="min-w-0 flex-1">
+<div class="flex items-center justify-between">
+<span class="font-title-sm text-title-sm text-on-surface">Pay a different cash amount</span>
+<span class="text-label-sm font-label-sm px-2 py-0.5 rounded-full bg-surface-container font-semibold text-primary">Override</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5 mb-space-sm">Type the cash amount to pay the driver.</p>
+<!-- Styled Embedded Money Field -->
+<div class="bg-surface-container-low rounded-lg p-space-sm">
+<label class="block font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider mb-1" for="custom_amount_input">
+                  Cash to pay the driver
+                </label>
+<div class="relative flex items-center bg-surface-container-lowest rounded-md px-3 py-2 shadow-xs ring-1 ring-surface-dim focus-within:ring-2 focus-within:ring-primary transition-all">
+<span class="font-numeric-md text-numeric-md font-semibold text-on-surface-variant mr-1">J$</span>
+<input class="w-full bg-transparent font-numeric-md text-numeric-md font-bold text-on-surface focus:outline-none tracking-tight" id="custom_amount_input" inputmode="decimal" type="text" value="0.00"/>
+<span class="material-symbols-outlined text-outline text-[18px]">edit</span>
+</div>
+</div>
+</div>
+</div>
+</label>
+<!-- Choice 3: Pay No Cash (Attention Option) -->
+<label class="block bg-surface-container-lowest rounded-xl p-space-md shadow-xs hover:bg-surface-container-low/50 cursor-pointer transition-all duration-150" id="card-option-none">
+<input class="sr-only" name="settlement_action" onchange="handleOptionChange('no_cash')" type="radio" value="no_cash"/>
+<div class="flex items-start gap-3">
+<div class="mt-0.5 w-5 h-5 rounded-full bg-surface-container flex items-center justify-center shrink-0 transition-colors" id="radio-indicator-none">
+<div class="w-2 h-2 rounded-full bg-outline-variant"></div>
+</div>
+<div class="min-w-0 flex-1">
+<div class="flex items-center justify-between">
+<span class="font-title-sm text-title-sm text-error">Pay no cash for this fill</span>
+<span class="text-label-sm font-label-sm text-on-surface-variant">J$ 0.00 Disbursed</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">The driver is not paid for the cash part.</p>
+</div>
+</div>
+</label>
+</div>
+<!-- Mandatory Audit Log Input -->
+<div class="mb-space-lg">
+<div class="flex items-center justify-between mb-1.5">
+<label class="font-label-md text-label-md text-on-surface" for="decision-reason">
+            Why? (at least 8 characters) <span class="text-error">*</span>
+</label>
+<span class="font-label-sm text-label-sm text-on-surface-variant" id="char-counter">50 characters</span>
+</div>
+<textarea class="w-full bg-surface-container-low rounded-xl p-3 text-body-sm font-body-sm text-on-surface focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary focus:outline-none transition-all resize-none shadow-xs" id="decision-reason" oninput="updateCharCount(this)" rows="2">Card charge includes a car wash, no cash was paid.</textarea>
+<p class="font-label-sm text-label-sm text-on-surface-variant mt-1.5 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px] text-on-tertiary-container">verified_user</span>
+<span>This explanation will be logged permanently in Driver Settlement Ledger.</span>
+</p>
+</div>
+<!-- Modal Footer & Action Controls -->
+<div class="pt-space-md border-t border-surface-container flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim animate-pulse"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Slip #SLIP-5179-88</span>
+</div>
+<div class="flex items-center gap-space-sm">
+<button class="h-11 px-5 rounded-xl bg-surface-container-lowest hover:bg-surface-container text-on-surface font-title-sm text-body-sm shadow-xs transition-colors flex items-center justify-center focus:outline-none" type="button">
+            Back
+          </button>
+<button class="h-11 px-6 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-title-sm text-body-sm shadow-sm transition-all flex items-center gap-2 focus:outline-none" id="submit-decision-btn" type="button">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+<span id="submit-btn-label">Save decision</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+  function handleOptionChange(selectedMode) {
+    const customCard = document.getElementById('card-option-custom');
+    const noneCard = document.getElementById('card-option-none');
+    const noneRadioIndicator = document.getElementById('radio-indicator-none');
+    const submitBtn = document.getElementById('submit-decision-btn');
+    const submitLabel = document.getElementById('submit-btn-label');
+
+    if (selectedMode === 'no_cash') {
+      // Toggle card styles
+      customCard.classList.remove('ring-2', 'ring-primary', 'shadow-sm');
+      customCard.classList.add('shadow-xs');
+      
+      noneCard.classList.add('ring-2', 'ring-error', 'shadow-sm');
+      noneCard.classList.remove('hover:bg-surface-container-low/50');
+      noneRadioIndicator.classList.remove('bg-surface-container');
+      noneRadioIndicator.classList.add('bg-error');
+      noneRadioIndicator.innerHTML = '<div class="w-2 h-2 rounded-full bg-white"></div>';
+
+      // Update button to deliberate solid red action state
+      submitBtn.classList.remove('bg-primary', 'hover:bg-primary-container');
+      submitBtn.classList.add('bg-error', 'hover:bg-error/90');
+      submitLabel.textContent = 'Pay no cash';
+    } else {
+      // Restore default custom cash selection
+      noneCard.classList.remove('ring-2', 'ring-error', 'shadow-sm');
+      noneCard.classList.add('hover:bg-surface-container-low/50');
+      noneRadioIndicator.classList.add('bg-surface-container');
+      noneRadioIndicator.classList.remove('bg-error');
+      noneRadioIndicator.innerHTML = '<div class="w-2 h-2 rounded-full bg-outline-variant"></div>';
+
+      customCard.classList.add('ring-2', 'ring-primary', 'shadow-sm');
+      customCard.classList.remove('shadow-xs');
+
+      // Reset button to standard primary theme
+      submitBtn.classList.remove('bg-error', 'hover:bg-error/90');
+      submitBtn.classList.add('bg-primary', 'hover:bg-primary-container');
+      submitLabel.textContent = 'Save decision';
+    }
+  }
+
+  function updateCharCount(textarea) {
+    const counter = document.getElementById('char-counter');
+    const len = textarea.value.length;
+    counter.textContent = `${len} characters`;
+    if (len < 8) {
+      counter.classList.add('text-error');
+      counter.classList.remove('text-on-surface-variant');
+    } else {
+      counter.classList.remove('text-error');
+      counter.classList.add('text-on-surface-variant');
+    }
+  }
+</script></main><footer class="w-full bg-surface-container-low py-space-xl mt-space-xl"><div class="max-w-7xl mx-auto px-margin flex flex-col md:flex-row items-center justify-between gap-space-md font-body-sm text-body-sm text-on-surface-variant"><div>© 2025 Roam Fleet OS. Enterprise Fleet Management Systems.</div><div class="flex items-center gap-space-lg"><span>System Status: <span class="text-on-tertiary-container font-label-md text-label-md">Operational</span></span><a class="hover:text-on-surface transition-colors" href="#">Privacy Policy</a><a class="hover:text-on-surface transition-colors" href="#">Security &amp; Compliance</a></div></div></footer></body></html>

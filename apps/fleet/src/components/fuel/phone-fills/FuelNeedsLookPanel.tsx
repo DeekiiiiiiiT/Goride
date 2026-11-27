@@ -8,13 +8,16 @@
  */
 import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { isLogReviewEligible } from '@roam/fuel-core';
 import type { FinancialTransaction } from '../../../types/data';
 import { fuelService } from '../../../services/fuelService';
 import { FuelPhotoTile, type PhotoNote } from './FuelPhotoViewer';
 
 type Meta = Record<string, unknown>;
 type StationLite = { id: string; name: string; address?: string };
-type ApproveFn = (id: string, stationOpts?: { matchedStationId?: string; stationLocation?: string }) => Promise<void> | void;
+type StationOpts = { matchedStationId?: string; stationLocation?: string };
+type ApproveFn = (id: string, stationOpts?: StationOpts) => Promise<void> | void;
+type ApproveWithOdometerFn = (id: string, odometer: number, stationOpts?: StationOpts) => Promise<void> | void;
 export type VehicleLite = { plate?: string; car?: string };
 
 export function isPhoneFillNeedingLook(t: FinancialTransaction): boolean {
@@ -27,6 +30,32 @@ export function isPhoneFillBeingRead(t: FinancialTransaction): boolean {
   return String(t.status) === 'Pending' && typeof m.captureId === 'string' && m.photoReadStatus === 'waiting';
 }
 
+/** Phone fills list what the photo reader filled in (readFromPhoto); odometerMethod may not say so. */
+function odometerReadFromPhoto(t: FinancialTransaction): boolean {
+  const m = (t.metadata || {}) as Meta;
+  const fromPhoto = Array.isArray(m.readFromPhoto) ? (m.readFromPhoto as string[]) : [];
+  const method = String(m.odometerMethod || '');
+  // Same test as the card's "From photo" chip — these were approved straight from the card before.
+  return (
+    Number((t as { odometer?: number }).odometer) > 0 &&
+    (fromPhoto.includes('odometer') || method === 'ai_verified' || method === 'photo_read')
+  );
+}
+
+/** Odometer must be confirmed before approval (was the old "Log Review" tab). */
+export function isOdometerCheckFill(t: FinancialTransaction): boolean {
+  return (
+    !isPhoneFillBeingRead(t) &&
+    !odometerReadFromPhoto(t) &&
+    isLogReviewEligible(t as Parameters<typeof isLogReviewEligible>[0])
+  );
+}
+
+/** Everything the "Needs a look" section shows: unread phone photos + odometer checks. */
+export function isFillNeedingLook(t: FinancialTransaction): boolean {
+  return isPhoneFillNeedingLook(t) || isOdometerCheckFill(t);
+}
+
 export function money(n: number) {
   return `J$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
@@ -36,7 +65,7 @@ function parseNumber(v: string): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
-function when(t: FinancialTransaction) {
+export function when(t: FinancialTransaction) {
   const m = (t.metadata || {}) as Meta;
   const iso = typeof m.capturedAt === 'string' ? m.capturedAt : `${t.date}T${(t as { time?: string }).time || '00:00:00'}`;
   const d = new Date(iso);
@@ -151,6 +180,7 @@ function FillCard({
   vehicle,
   onSaved,
   onApprove,
+  onApproveWithOdometer,
   onReject,
   stations,
 }: {
@@ -159,6 +189,7 @@ function FillCard({
   vehicle?: VehicleLite;
   onSaved: (t: FinancialTransaction) => void;
   onApprove: ApproveFn;
+  onApproveWithOdometer: ApproveWithOdometerFn;
   onReject: (id: string, reason?: string) => Promise<void> | void;
   stations: StationLite[];
 }) {
@@ -167,12 +198,14 @@ function FillCard({
   const [picking, setPicking] = useState(false);
   const [total, setTotal] = useState('');
   const [liters, setLiters] = useState('');
+  const [odoInput, setOdoInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const [open, setOpen] = useState(false);
   const tot = parseNumber(total);
   const lit = parseNumber(liters);
+  const odoTyped = parseNumber(odoInput);
   const amount = Math.abs(Number(t.amount) || 0);
   const vol = Number(m.fuelVolume) || 0;
   const odo = Number((t as { odometer?: number }).odometer) || 0;
@@ -186,23 +219,36 @@ function FillCard({
   const isCard = String(t.paymentMethod || '').toLowerCase().includes('card');
   const plate = vehicle?.plate || (t as { vehiclePlate?: string }).vehiclePlate || '';
   const rate = tot && lit ? tot / lit : amount && vol ? amount / vol : 0;
+  // Pump photo unread → type total + litres. Odometer not confirmed (old Log Review) → type the reading.
+  const numbersNeeded = isPhoneFillNeedingLook(t);
+  const odoNeeded = isOdometerCheckFill(t) || !odo;
+  const canApprove = (!numbersNeeded || Boolean(tot && lit)) && (!odoNeeded || Boolean(odoTyped));
+  const odoReason = String(m.logReviewReason || m.odometerManualReason || '');
+  const reasonChip = m.needsLookReason ? String(m.needsLookReason) : odoNeeded ? odoReason || 'Odometer not confirmed' : '';
 
   const odoNote: PhotoNote = odo
-    ? odoFromPhoto
+    ? odoFromPhoto && !odoNeeded
       ? { tone: 'good', text: `Read clearly (${odo.toLocaleString('en-US')} km)` }
-      : { tone: 'plain', text: 'Typed by driver' }
+      : { tone: 'plain', text: `Typed by driver (${odo.toLocaleString('en-US')} km)` }
     : { tone: 'bad', text: "Couldn't read" };
   const pumpMissing = !amount && !vol ? 'Total & litres' : !amount ? 'Total' : !vol ? 'Litres' : '';
   const pumpNote: PhotoNote = pumpMissing ? { tone: 'bad', text: `${pumpMissing} couldn't be read` } : { tone: 'good', text: 'Read clearly' };
 
   const save = async (andApprove: boolean) => {
-    if (!tot || !lit) return;
+    if (andApprove ? !canApprove : !(tot && lit)) return;
     setBusy(true);
     try {
-      const updated = await fuelService.saveFillNumbers(t.id, { total: tot, liters: lit });
-      onSaved(updated);
-      if (andApprove) await onApprove(t.id, chosen ? { matchedStationId: chosen.id, stationLocation: chosen.address || chosen.name } : undefined);
-      else toast.success('Numbers saved — ready to approve');
+      if (numbersNeeded && tot && lit) {
+        const updated = await fuelService.saveFillNumbers(t.id, { total: tot, liters: lit });
+        onSaved(updated);
+      }
+      if (!andApprove) {
+        toast.success('Numbers saved — ready to approve');
+        return;
+      }
+      const stationOpts = chosen ? { matchedStationId: chosen.id, stationLocation: chosen.address || chosen.name } : undefined;
+      if (odoNeeded && odoTyped) await onApproveWithOdometer(t.id, Math.round(odoTyped), stationOpts);
+      else await onApprove(t.id, stationOpts);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not save the numbers');
     } finally {
@@ -279,7 +325,7 @@ function FillCard({
           <span className="flex items-center gap-1 rounded-full bg-[#ffdad6] px-3 py-1 text-[12px] font-semibold text-[#ba1a1a]">
             <span className="h-1.5 w-1.5 rounded-full bg-[#ba1a1a]" /> Needs a look
           </span>
-          {m.needsLookReason ? <span className={chip}>{String(m.needsLookReason)}</span> : null}
+          {reasonChip ? <span className={chip}>{reasonChip}</span> : null}
           <span className={chip}>{isCard ? 'Gas Card' : 'Cash'}</span>
           {noLocation ? (
             <span className={`${chip} flex items-center gap-1`}>
@@ -331,17 +377,62 @@ function FillCard({
                 <span className="text-[12px] font-semibold uppercase tracking-wider text-[#ba1a1a]">Type to approve</span>
               </div>
               <div className="space-y-4">
-                <div className={`${box} flex items-center justify-between`}>
-                  <div className="flex flex-col">
-                    <span className={label}>1. Odometer reading</span>
-                    <div className="mt-0.5 flex items-center gap-2">
-                      <span className="text-[20px] font-bold tabular-nums text-[#0d1c2e] dark:text-zinc-50">{odo ? `${odo.toLocaleString('en-US')} km` : '—'}</span>
-                      {odo ? <SourceTag>{odoFromPhoto ? 'From photo' : 'Typed by driver'}</SourceTag> : null}
+                {odoNeeded ? (
+                  <div className={`${box} flex flex-col gap-2`}>
+                    <div className="flex items-center justify-between">
+                      <label htmlFor={`odo-${t.id}`} className="text-[12px] font-semibold uppercase tracking-wider text-[#0d1c2e] dark:text-zinc-100">
+                        1. Odometer reading (km) <span className="text-[#ba1a1a]">*</span>
+                      </label>
+                      {odoTyped ? <SourceTag>Typed by you</SourceTag> : <NotRead />}
+                    </div>
+                    <div className="relative">
+                      <input
+                        id={`odo-${t.id}`}
+                        inputMode="numeric"
+                        value={odoInput}
+                        onChange={(e) => setOdoInput(e.target.value)}
+                        placeholder="e.g. 145320"
+                        className="h-11 w-full rounded-xl bg-[#eff4ff] pl-4 pr-12 text-[15px] font-semibold tabular-nums text-[#0d1c2e] shadow-inner focus:bg-white focus:outline-none focus:ring-2 focus:ring-black dark:bg-zinc-900 dark:text-zinc-100"
+                      />
+                      <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3.5 text-[15px] font-semibold text-[#47464c]">km</span>
+                    </div>
+                    <p className="text-[12px] font-semibold text-[#47464c] dark:text-zinc-400">
+                      {odo
+                        ? `Driver typed ${odo.toLocaleString('en-US')} km — check it against the photo.`
+                        : 'Read it from the odometer photo.'}
+                    </p>
+                    {odoTyped && odo && odoTyped < odo ? (
+                      <p className="text-[12px] font-semibold text-amber-800">
+                        This is lower than the driver&apos;s {odo.toLocaleString('en-US')} km. Please double-check.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className={`${box} flex items-center justify-between`}>
+                    <div className="flex flex-col">
+                      <span className={label}>1. Odometer reading</span>
+                      <div className="mt-0.5 flex items-center gap-2">
+                        <span className="text-[20px] font-bold tabular-nums text-[#0d1c2e] dark:text-zinc-50">{`${odo.toLocaleString('en-US')} km`}</span>
+                        <SourceTag>{odoFromPhoto ? 'From photo' : 'Typed by driver'}</SourceTag>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
-                <div className={`${box} flex flex-col gap-2`}>
+                {!numbersNeeded ? (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className={box}>
+                      <span className={`${label} block`}>2. Total amount</span>
+                      <span className="mt-0.5 block text-[20px] font-bold tabular-nums text-[#0d1c2e] dark:text-zinc-50">{amount ? money(amount) : '—'}</span>
+                    </div>
+                    <div className={box}>
+                      <span className={`${label} block`}>3. Volume (litres)</span>
+                      <span className="mt-0.5 block text-[20px] font-bold tabular-nums text-[#0d1c2e] dark:text-zinc-50">{vol ? `${vol} L` : '—'}</span>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className={numbersNeeded ? `${box} flex flex-col gap-2` : 'hidden'}>
                   <div className="flex items-center justify-between">
                     <label htmlFor={`tot-${t.id}`} className="text-[12px] font-semibold uppercase tracking-wider text-[#0d1c2e] dark:text-zinc-100">
                       2. Total amount (J$) <span className="text-[#ba1a1a]">*</span>
@@ -362,7 +453,7 @@ function FillCard({
                   {amount ? <p className="text-[12px] font-semibold text-[#47464c] dark:text-zinc-400">Read from the photo: {money(amount)}</p> : null}
                 </div>
 
-                <div className={`${box} flex flex-col gap-2`}>
+                <div className={numbersNeeded ? `${box} flex flex-col gap-2` : 'hidden'}>
                   <div className="flex items-center justify-between">
                     <label htmlFor={`lit-${t.id}`} className="text-[12px] font-semibold uppercase tracking-wider text-[#0d1c2e] dark:text-zinc-100">
                       3. Volume (litres) <span className="text-[#ba1a1a]">*</span>
@@ -484,29 +575,26 @@ function FillCard({
                 <span className="material-symbols-outlined text-[18px]">close</span> Reject
               </button>
               <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-                <button
-                  type="button"
-                  disabled={busy || !tot || !lit}
-                  onClick={() => void save(false)}
-                  className="h-11 rounded-xl bg-white px-5 text-[13px] font-medium text-[#0d1c2e] shadow-sm ring-1 ring-[#c9c5cd] hover:bg-[#e6eeff] disabled:opacity-40"
-                >
-                  Save numbers
-                </button>
-                {odo ? (
+                {numbersNeeded ? (
                   <button
                     type="button"
                     disabled={busy || !tot || !lit}
-                    onClick={() => void save(true)}
-                    className="flex h-11 items-center justify-center gap-2 rounded-xl bg-black px-6 text-[13px] font-medium text-white shadow-md disabled:opacity-40"
+                    onClick={() => void save(false)}
+                    className="h-11 rounded-xl bg-white px-5 text-[13px] font-medium text-[#0d1c2e] shadow-sm ring-1 ring-[#c9c5cd] hover:bg-[#e6eeff] disabled:opacity-40"
                   >
-                    <span className="material-symbols-outlined text-[18px] text-[#85f8c4]">check_circle</span> Save and approve
+                    Save numbers
                   </button>
-                ) : (
-                  // DSH CR-06: no odometer yet — save the numbers here, approve in Log Review with the reading.
-                  <p className="max-w-[16rem] self-center text-[12px] font-semibold text-[#47464c] dark:text-zinc-400">
-                    No odometer reading. Save the numbers, then approve it in Log Review with the reading.
-                  </p>
-                )}
+                ) : null}
+                {/* DSH CR-06 kept: never approved without an odometer — the reading box above is required. */}
+                <button
+                  type="button"
+                  disabled={busy || !canApprove}
+                  onClick={() => void save(true)}
+                  className="flex h-11 items-center justify-center gap-2 rounded-xl bg-black px-6 text-[13px] font-medium text-white shadow-md disabled:opacity-40"
+                >
+                  <span className="material-symbols-outlined text-[18px] text-[#85f8c4]">check_circle</span>
+                  {numbersNeeded ? 'Save and approve' : 'Approve'}
+                </button>
               </div>
             </>
           )}
@@ -522,6 +610,7 @@ export function FuelNeedsLookPanel({
   vehicles = {},
   onSaved,
   onApprove,
+  onApproveWithOdometer,
   onReject,
 }: {
   transactions: FinancialTransaction[];
@@ -529,9 +618,10 @@ export function FuelNeedsLookPanel({
   vehicles?: Record<string, VehicleLite>;
   onSaved: (t: FinancialTransaction) => void;
   onApprove: ApproveFn;
+  onApproveWithOdometer: ApproveWithOdometerFn;
   onReject: (id: string, reason?: string) => Promise<void> | void;
 }) {
-  const needs = transactions.filter(isPhoneFillNeedingLook);
+  const needs = transactions.filter(isFillNeedingLook);
   const anyNoLocation = needs.some((t) => !((t.metadata || {}) as Meta).locationMetadata);
   const [stations, setStations] = useState<StationLite[]>([]);
   useEffect(() => {
@@ -559,7 +649,7 @@ export function FuelNeedsLookPanel({
       {needs.length ? (
         <div className="pb-1">
           <h2 className="text-[17px] font-semibold leading-6 tracking-tight text-[#0d1c2e] dark:text-zinc-50">Fills needing a look ({needs.length})</h2>
-          <p className="text-[15px] text-[#47464c] dark:text-zinc-400">Check the photos and type the missing numbers to approve.</p>
+          <p className="text-[15px] text-[#47464c] dark:text-zinc-400">Check the photos and type the missing numbers or odometer reading to approve.</p>
         </div>
       ) : null}
       {needs.map((t) => (
@@ -570,6 +660,7 @@ export function FuelNeedsLookPanel({
           vehicle={t.vehicleId ? vehicles[t.vehicleId] : undefined}
           onSaved={onSaved}
           onApprove={onApprove}
+          onApproveWithOdometer={onApproveWithOdometer}
           onReject={onReject}
           stations={stations}
         />

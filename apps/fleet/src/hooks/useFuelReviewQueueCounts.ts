@@ -49,5 +49,7 @@ export function useInvalidateFuelReviewQueueCounts() {
   const qc = useQueryClient();
   return () => {
     void qc.invalidateQueries({ queryKey: FUEL_REVIEW_QUEUE_COUNTS_KEY });
+    // Transaction Logs › Awaiting statement view + its button count (FuelAwaitingStatementPanel).
+    void qc.invalidateQueries({ queryKey: ['fuel-awaiting-statement'] });
   };
 }

@@ -1,0 +1,227 @@
+ROAM FLEET — FUEL REVIEW QUEUE AND TRANSACTION LOGS — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+HOW TO USE THIS FILE
+- First paste: everything from "FIRST PASTE" down to the end of SCREEN 2.
+- Then paste one SCREEN block at a time (SCREEN 3, SCREEN 4, …). Each block is complete on its own.
+- Never paste the section "FOR CLAUDE — DO NOT PASTE" at the bottom.
+- Use the same Stitch project as the "Fuel fills from drivers' phones" screens (the Needs a look card), so these match it.
+
+
+
+==================== FIRST PASTE ====================
+
+Roam Fleet - Fuel Review Queue and Transaction Logs (Desktop Web App, for the fleet owner and fleet manager):
+
+Design the remaining fuel screens of Roam Fleet so they match the new "Needs a look" card the owner already likes. Two pages. The Review Queue is where the owner approves or rejects drivers' fuel fills: first the fills that need a look (already designed), then the fills ready to approve, then a window to check one fill and approve or reject it. Transaction Logs is the list of saved fills, with three views: Transactions (every fill this week), Full Tanks (fill-to-fill tank cycles), and Awaiting statement (gas card fills waiting on the gas card statement). The person using this is not an accountant or a mechanic: every card says in plain words what it is for and what to do. The design must feel modern, calm and effortless, like the best business banking apps, with generous spacing, soft shadows and large clear type. Every screen is tall enough to show everything, with no inner scrolling. Draw only the screens asked for in this message.
+
+
+BRAND IDENTITY:
+- Keep the existing Roam Fleet app frame exactly as it is today (do not redesign it):
+  - Top: a white nav row with the black "Roam Fleet" app tile, then: Dashboard, Fleet Operations (active, underlined), Driver Operations, Money, Vehicle Operations, Delivery Operations, Analytics, Reports, Business Finance.
+  - Dark bar below it: a dark navy strip with a search box "Switch vehicle or search hub…" on the left, and on the right "03:11:28 PM EST" and "America/Jamaica".
+- Theme: "Calm finance desk" — clear, trustworthy, quiet and modern. Not a spreadsheet, not a developer tool.
+- LIGHT MODE (default):
+  - Primary: near-black #030213 — primary buttons, the active tab
+  - Page wash: #f8fafc; cards: #FFFFFF with a soft shadow (0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(15,23,42,0.06)) and a hairline border rgba(0,0,0,0.06)
+  - Soft blue panel inside cards: #eff4ff; input fields: #eff4ff, white when focused
+  - Text: #0d1c2e; muted text: #47464c
+  - Approved / read clearly: green #00714e on #82f5c1 (chips), #069669 on #ecfdf5 (tiles)
+  - Waiting (statement, phone): amber #b45309 on #fffbeb
+  - Needs a look / mismatch / reject: red #ba1a1a on #ffdad6
+  - Station check: sky #0c4a6e on #e0f2fe
+  - Neutral chips: #47464c on #e6eeff
+- DARK MODE:
+  - Page #1c1c1e, cards #2a2a2d, soft panel #18181b, border #3a3a3d, text #fafafa, muted #a1a1aa, primary buttons white #fafafa with near-black text
+  - Green #34d399 on #064e3b; amber #fbbf24 on #451a03; red #f87171 on #450a0a; sky #7dd3fc on #0c4a6e; neutral #d4d4d8 on #27272a
+- Shapes: cards 16px corner radius, buttons and inputs 12px, photo tiles 12px, chips fully rounded. All buttons at least 44px tall.
+- Typography: Inter. Page title 28px bold, section title 17px semibold, card title 20px semibold, subtitle 15px muted, body 15px, helper text 13px, small labels 12px uppercase with letter spacing. Money and numbers use tabular figures: "J$4,000.00", "18.7 L", "200,247 km", "J$213.90 a litre".
+- Car plates are always in a small grey rounded box: "5179KZ", followed by the car in plain words "Toyota Roomy".
+- Dates in plain words: "Tue 24 Nov, 4:53 AM", "2 days", "since Wed". Never "2026-11-25", never codes, ids or internal words.
+- Buttons always look like buttons:
+  - Primary = solid near-black with white text (dark mode: white with near-black text).
+  - Secondary = white with a visible #c9c5cd border and dark text.
+  - Danger (Reject) = white with a red border and red text; the final "Reject fill" confirm is solid red.
+  - Never underlined text links, never grey text-only buttons, never icon-only buttons without a label. Confirms are in-app panels, never browser pop-ups.
+- The pieces used across these screens (draw them the same way every time):
+  - Summary tile: white card, small uppercase label, a big number with a small unit word, one muted line under it, a small icon top-right. "NEEDS A LOOK" tile is tinted red; others are calm.
+  - Fill card (the same family as the Needs a look card): line 1 date and time · driver name · plate box · car; line 2 on a soft blue strip: "TOTAL AMOUNT J$4,000.00", "VOLUME (LITRES) 18.7 L", "ODOMETER 200,247 km", and on the right chips (payment "Cash" or "Gas Card", station with a pin icon, where it came from "From driver's phone" or "Typed in Fleet"); line 3: two small photo thumbnails (Odometer, Pump) on the left and the buttons on the right.
+  - Notice line: a full-width rounded strip with one sentence and one secondary button on the right.
+  - Table: white card, header row on #eff4ff with 12px uppercase labels, rows 56px tall with a hairline divider, numbers right-aligned.
+  - Status chips: "Awaiting" amber, "Split" neutral, "Admin entry" amber outline, "Needs a look" red, "Read clearly" green, "Waiting for station check" sky.
+  - Side panel: slides in from the right, 480px wide, white, a title, a close button "Close", sections separated by 24px.
+- No gradients, glassmorphism or 3D. No AI badges, no sparkles.
+- Sample data (REAL drivers and stations, Rideshare, Toyota Roomy, week Mon 23 Nov – Sun 29 Nov 2026):
+  - Kenny Gregory Rattray · 5179KZ Toyota Roomy:
+    - Mon 23 Nov, 7:27 PM · Rubis, 34 Old Harbour Rd · Cash · J$1,000.00 · 4.6 L · 200,243 km · typed in Fleet
+    - Tue 24 Nov, 4:53 AM · Blaize, Innswood Drive · Cash · J$4,000.00 · 18.7 L · 200,247 km · typed in Fleet
+    - Tue 24 Nov, 3:58 PM · TotalEnergies, 129 Old Hope Rd, Kingston · Cash · J$1,500.00 · 7.0 L · 200,558 km · typed in Fleet
+    - Wed 25 Nov, 7:02 AM · Rubis, 34 Old Harbour Rd · Cash · J$2,000.00 · 9.2 L · 200,613 km · typed in Fleet
+    - Wed 25 Nov, 10:46 AM · FESCO, 7–9 Beechwood Ave · Gas Card · amount waiting on the statement · 200,692 km
+    - Thu 26 Nov, 9:07 AM · FESCO, 7–9 Beechwood Ave · Gas Card · amount waiting on the statement · 200,932 km
+    - Fri 27 Nov, 11:07 AM · needs a look (pump photo not readable) · 201,213 km
+  - Marlon Andre Sterling · 8421LA Toyota Roomy: Thu 26 Nov, 6:40 PM · TotalEnergies, Spanish Town Rd · Cash · J$3,000.00 · 13.9 L · 154,880 km · from driver's phone (ready to approve)
+  - Andre Campbell · 7730HM Toyota Sienta: Fri 27 Nov, 8:15 AM · Cash · J$2,500.00 · 11.6 L · 98,412 km · no station found yet (waiting for station check)
+
+
+DESIGN PRINCIPLES:
+- Each screen answers "what needs me now?" first: counts at the top, then the list, oldest first.
+- One look for every fill: the ready-to-approve cards use the same card family as the Needs a look card.
+- Photos are big enough to read the numbers without opening them.
+- A missing value is labelled ("Waiting on statement", "Not read"), never shown as J$0.00 or 0.0 L.
+- Calm, not alarming: red only for things that block money (needs a look, mismatch, reject). Waiting is amber, not an error.
+- An empty section is not drawn; the summary tile already says "Nothing to approve".
+- Plain words only: no "anchor", "ledger", "integrity", "cycle id", "attribution", "reconciled", "OCR".
+- One view per screen.
+
+
+SCREEN 1: REVIEW QUEUE — READY TO APPROVE
+- Page title "Review Queue", subtitle "Approve or reject your drivers' fuel fills."
+- Under the title, a tab row: "All 43" (active), "Rideshare 43", "Delivery 0". On the right a secondary button "Refresh".
+- Three summary tiles in a row: "NEEDS A LOOK 1 fill — Photos the app couldn't read" (red tint), "WAITING ON PHONES 0 fills — Nothing waiting", "READY TO APPROVE 2 fills — Check and approve".
+- A red notice line: "1 card and pump mismatch needs a pay decision" with a secondary button "Open Awaiting statement".
+- Section "Fills needing a look (1)" drawn as ONE compact collapsed card only (the full card is already designed): "Fri 27 Nov, 11:07 AM · Kenny Gregory Rattray · 5179KZ · Toyota Roomy", red chip "Needs a look", chip "Pump photo not readable", secondary button "Open".
+- Section "Ready to approve (2)", subtitle "Check each fill, then approve or reject it."
+  - Fill card 1: "Thu 26 Nov, 6:40 PM · Marlon Andre Sterling · 8421LA · Toyota Roomy"; strip "TOTAL AMOUNT J$3,000.00 · VOLUME 13.9 L · ODOMETER 154,880 km · J$215.83 a litre"; chips "Cash", pin "TotalEnergies, Spanish Town Rd", "From driver's phone"; two photo thumbnails with green "Read clearly" under each; buttons right: "Reject" (danger), "View" (secondary), "Approve" (primary).
+  - Fill card 2 (at the bottom, softer): "Fri 27 Nov, 8:15 AM · Andre Campbell · 7730HM · Toyota Sienta"; strip "TOTAL AMOUNT J$2,500.00 · VOLUME 11.6 L · ODOMETER 98,412 km"; sky chip "Waiting for station check", chip "No station found for this location"; only one button "View" (secondary); muted line "Roam is checking this station. You can approve it once the check is done."
+
+SCREEN 2: REVIEW QUEUE — FILL TYPED IN FLEET, SEVERAL SELECTED
+- Same page frame as Screen 1: title "Review Queue", tabs "All 43 / Rideshare 43 / Delivery 0", the three tiles ("NEEDS A LOOK 0 fills — Nothing to check", "WAITING ON PHONES 0 fills — Nothing waiting", "READY TO APPROVE 3 fills — Check and approve").
+- Section "Ready to approve (3)". Each card has a round checkbox at its left edge; two cards are ticked.
+- A dark selection bar pinned above the list: "2 selected" · secondary buttons "Set Rideshare", "Set Delivery" · secondary button "Clear".
+- Card 1 (ticked): "Thu 26 Nov, 6:40 PM · Marlon Andre Sterling · 8421LA · Toyota Roomy · J$3,000.00 · 13.9 L · 154,880 km", chips "Cash", "From driver's phone", amber chip "No service line yet"; buttons "Reject", "View", "Approve".
+- Card 2 (ticked): "Fri 27 Nov, 9:30 AM · Kenny Gregory Rattray · 5179KZ · Toyota Roomy · J$2,000.00 · 9.4 L · 201,213 km", chips "Cash", amber outline "Typed in Fleet", amber chip "No service line yet"; buttons "Reject", "Edit", "Delete", "View", "Approve" — Edit and Delete are secondary, Delete has red text.
+- Card 3 (not ticked): "Fri 27 Nov, 10:05 AM · Andre Campbell · 7730HM · Toyota Sienta · J$1,800.00 · 8.3 L · 98,470 km", chips "Cash", "Rideshare", "From driver's phone"; buttons "Reject", "View", "Approve".
+
+END OF FIRST PASTE
+
+
+
+SCREEN 3: CHECK A FILL — APPROVE
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Tall enough to show everything, no inner scrolling.
+- Background: the Review Queue page, dimmed. On top, a large centred in-app window (760px wide, 16px corners), title "Thu 26 Nov, 6:40 PM · Marlon Andre Sterling", subtitle "Check the photos and numbers, then approve." A "Close" secondary button top-right.
+- Left half: two big photos stacked, 260px tall each, labelled "Odometer" and "Pump", each with a "View full size" secondary button and a green chip "Read clearly".
+- Right half, a list of values (label left, value right): "Driver Marlon Andre Sterling", "Car 8421LA Toyota Roomy", "Date Thu 26 Nov, 6:40 PM", "Total J$3,000.00", "Litres 13.9 L", "Price J$215.83 a litre", "Odometer 154,880 km", "Paid with Cash".
+- "Fuel station" block on the soft blue panel: a searchable dropdown "Brand" showing "TotalEnergies", a searchable dropdown "Station" showing "TotalEnergies — Spanish Town Rd" with a green chip "Verified station", and a secondary button "Station not listed — type the address".
+- "Service line" block: two big choice buttons side by side, "Rideshare" (selected, near-black) and "Delivery" (white).
+- "Note (optional)" text box, placeholder "e.g. Checked the odometer photo."
+- Bottom bar: "Reject" (danger) on the left; "Back" (secondary) and "Approve fill" (primary, with a check icon) on the right.
+
+SCREEN 4: CHECK A FILL — REJECT
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Tall enough to show everything, no inner scrolling.
+- Background: the Review Queue page, dimmed. On top, the same large in-app window as the approve window: title "Thu 26 Nov, 6:40 PM · Marlon Andre Sterling", the two big photos (Odometer, Pump) on the left, the values list on the right ("Total J$3,000.00", "Litres 13.9 L", "Odometer 154,880 km", "Paid with Cash", "Station TotalEnergies, Spanish Town Rd").
+- At the bottom, a red-tinted panel replaces the buttons: title "Reject this fill?", a required text box labelled "Why? Marlon sees this." containing "The pump photo shows J$2,000, not J$3,000. Please log it again.", and a muted line "The fill will not be paid."
+- Buttons: "Keep it" (secondary) and "Reject fill" (solid red).
+
+SCREEN 5: CHECK A FILL — WAITING FOR STATION CHECK
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Tall enough to show everything, no inner scrolling.
+- Background: the Review Queue page, dimmed. On top, the large in-app window: title "Fri 27 Nov, 8:15 AM · Andre Campbell", subtitle "This fill can't be approved yet."
+- A sky-blue notice at the top with a pin icon: "Roam is checking where this fill was. Approve and reject come back once the station is confirmed."
+- A soft amber box titled "What's missing", with plain bullet lines: "The phone sent a location, but no known station is there.", "Roam will match it to a station, usually within a day.", "If you know the station, add it with Edit after the check."
+- Left: the two big photos (Odometer, Pump). Right: the values list ("Total J$2,500.00", "Litres 11.6 L", "Odometer 98,412 km", "Paid with Cash", "Location Near Spanish Town Rd and Washington Blvd").
+- Bottom bar: only "Close" (secondary).
+
+SCREEN 6: TRANSACTION LOGS — TRANSACTIONS
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Kenny Gregory Rattray, 5179KZ Toyota Roomy. Tall enough to show everything, no inner scrolling.
+- Page title "Transaction Logs", subtitle "Every saved fuel fill. Add fuel to log one yourself." On the right a primary button "+ Add fuel" and a secondary "Refresh".
+- Tab row: "All 43" (active), "Rideshare 43", "Delivery 0".
+- View switch (a segmented control with icons): "Transactions" (active), "Full Tanks", "Awaiting statement 2" (small amber count). On the right two filter chips: "No service line (0)", "Card charges with no fill (0)".
+- Three summary tiles: "FILLS 6 — 2 from phones · 4 typed in Fleet", "SPEND J$8,500.00 — Cash J$8,500.00 · Gas Card J$0.00", "NEEDS FIXING 0 — All fills add up" (green check).
+- Toolbar: a search box "Search driver, station, car…", secondary buttons "Export" and "Filters", and a week picker showing "Mon 23 Nov – Sun 29 Nov".
+- Table, columns: Date · Paid with · Line · Station · Car · Driver · Litres · Odometer · Since last fill · Cost · Checks · (a "⋯" menu button, labelled "More" on hover).
+  - "Thu 26 Nov, 9:07 AM" · Gas Card · Rideshare · FESCO, 7–9 Beechwood Ave · 5179KZ · Kenny Gregory Rattray · "—" · 200,932 km · "+240 km" · amber chip "Waiting on statement" · green shield
+  - "Wed 25 Nov, 10:46 AM" · Gas Card · Rideshare · FESCO, 7–9 Beechwood Ave · 5179KZ · Kenny · "—" · 200,692 km · "+79 km" · amber chip "Waiting on statement" · green shield
+  - "Wed 25 Nov, 7:02 AM" · Cash · Rideshare · Rubis, 34 Old Harbour Rd · 5179KZ · Kenny · 9.2 L · 200,613 km · "+55 km" · J$2,000.00 · blue score "80" · amber outline chip "Typed in Fleet" under the date
+  - "Tue 24 Nov, 3:58 PM" · Cash · Rideshare · TotalEnergies, 129 Old Hope Rd · 5179KZ · Kenny · 7.0 L · 200,558 km · "+311 km" · J$1,500.00 · green shield · "Typed in Fleet"
+  - "Tue 24 Nov, 4:53 AM" · Cash · Rideshare · Blaize, Innswood Drive · 5179KZ · Kenny · 18.7 L · 200,247 km · "+4 km" · J$4,000.00 · green shield · "Typed in Fleet"
+  - "Mon 23 Nov, 7:27 PM" · Cash · Rideshare · Rubis, 34 Old Harbour Rd · 5179KZ · Kenny · 4.6 L · 200,243 km · "+297 km" · J$1,000.00 · blue score "85" · "Typed in Fleet"
+- One row's "⋯" menu is open as a small in-app menu: "View details", "Edit fill", "Delete fill" (red text).
+- Litres show a thin bar under the number showing how full the tank got.
+
+SCREEN 7: TRANSACTION LOGS — FILL DETAILS PANEL
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Tall enough to show everything, no inner scrolling.
+- Background: the Transaction Logs table (Transactions view), dimmed. A side panel slides in from the right, 480px wide.
+- Title "Tue 24 Nov, 4:53 AM", subtitle "Kenny Gregory Rattray · 5179KZ Toyota Roomy". Secondary button "Close" top-right.
+- Big number row: "J$4,000.00" · "18.7 L" · "J$213.90 a litre".
+- Section "Where": "Blaize", "Innswood Drive", green chip "Verified station", a small map tile with a pin, and the line "Phone location matched the station (40 m away)".
+- Section "Odometer": "200,247 km", "Since last fill +4 km", "Last fill 200,243 km on Mon 23 Nov".
+- Section "How it was logged": "Typed in Fleet", "Paid with Cash", "Line Rideshare".
+- Section "Photos": two photo tiles (Odometer, Receipt) with "View full size".
+- Section "Checks": three rows with green ticks — "Location matches the station", "Signed by the driver", "Odometer makes sense".
+- Bottom: "Edit fill" (secondary) and "Delete fill" (secondary with red text). For a fill in a closed week, instead show a grey line with a lock icon: "This week is closed. Fills can't be changed."
+
+SCREEN 8: TRANSACTION LOGS — FULL TANKS
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Kenny Gregory Rattray, 5179KZ Toyota Roomy. Tall enough to show everything, no inner scrolling.
+- Page title "Transaction Logs", tabs "All 43 / Rideshare 43 / Delivery 0", view switch with "Full Tanks" active ("Transactions", "Full Tanks", "Awaiting statement 2").
+- One muted line under the switch: "A full tank runs from one fill-to-full to the next. It shows how far each tank went."
+- Four summary tiles: "FULL TANKS 2", "DISTANCE 689 km", "FUEL USED 39.5 L — 17.4 km a litre", "NEEDS A LOOK 1" (amber).
+- Week picker "Mon 23 Nov – Sun 29 Nov" and secondary "Export".
+- Table of full tanks, columns: Car · Started · Ended · Odometer · Distance · Fuel · Cost · Price a litre · How it closed · (button).
+  - 5179KZ · "Mon 23 Nov, 7:27 PM" · "Tue 24 Nov, 4:53 AM" · "200,243 → 200,247 km" · 4 km · 18.7 L · J$4,000.00 · J$213.90 · chip "Filled to full" · secondary button "View fills"
+  - 5179KZ · "Tue 24 Nov, 4:53 AM" · "Wed 25 Nov, 7:02 AM" · "200,247 → 200,613 km" · 366 km · 16.2 L · J$3,500.00 · J$216.05 · chip "Filled to full" · secondary button "View fills"
+  - 5179KZ · "Wed 25 Nov, 7:02 AM" · still running · "200,613 → …" · — · — · — · — · grey chip "Still filling" · secondary button "View fills"
+- Card "Needs a look (1)" under the table: one row "5179KZ · Wed 25 Nov – Thu 26 Nov · Gas card fills have no litres yet, so this tank can't be measured." with an amber chip "Waiting on statement" and a secondary button "Assign to me".
+- Card "How far a litre goes": a simple clean line chart of km a litre for the last 8 weeks (16.1, 16.8, 17.0, 16.4, 17.2, 17.9, 17.1, 17.4), one green line, light gridlines.
+
+SCREEN 9: TRANSACTION LOGS — AWAITING STATEMENT
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Kenny Gregory Rattray, 5179KZ Toyota Roomy. Tall enough to show everything, no inner scrolling.
+- Page title "Transaction Logs", tabs "All 43 / Rideshare 43 / Delivery 0", view switch with "Awaiting statement 3" active ("Transactions", "Full Tanks", "Awaiting statement 3"). No week picker, search or filters on this view; one muted line: "Shows every fill still waiting, from any week."
+- Section 1, title in red "Card and pump don't agree (1)", subtitle "The gas card charge is more than the pump total, so the cash part can't be worked out. Decide what to pay."
+  - One red-edged card row: "Sat 21 Nov, 5:12 PM · Kenny Gregory Rattray · 5179KZ" · "Pump J$5,000.00 · Card J$5,600.00" · red chip "J$600.00 more on the card" · muted "Allowed difference J$50.00" · primary button "Decide pay".
+- Section 2, title "Gas card fills waiting for their charge (2)", subtitle "The amount and litres come from the gas card statement. They fill in by themselves when it is uploaded."
+  - Row: "Wed 25 Nov, 10:46 AM" · Kenny Gregory Rattray · 5179KZ Toyota Roomy · "FESCO, 7–9 Beechwood Ave" · 200,692 km · amber chip "2 days"
+  - Row: "Thu 26 Nov, 9:07 AM" · Kenny Gregory Rattray · 5179KZ Toyota Roomy · "FESCO, 7–9 Beechwood Ave" · 200,932 km · amber chip "1 day"
+- Section 3, title "Cash part waiting on the statement (0)", subtitle "For fills paid partly by gas card and partly in cash, the cash part is worked out when the statement is uploaded." Inside, a small calm card: green check "Nothing waiting."
+- Draw one more row style as a note under Section 2, greyed sample: a row waiting "16 days" has an amber background and a secondary button "Escalate", with the line "Waited 14+ days — check the latest gas card statement was uploaded."
+
+SCREEN 10: TRANSACTION LOGS — DECIDE PAY FOR A MISMATCH
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Tall enough to show everything, no inner scrolling.
+- Background: the Transaction Logs page on the Awaiting statement view, dimmed. On top, a centred in-app window (560px wide), title "Decide what to pay", subtitle "Sat 21 Nov, 5:12 PM · Kenny Gregory Rattray · 5179KZ".
+- A four-line summary on the soft blue panel: "Pump total J$5,000.00", "Gas card charge J$5,600.00", "Worked-out cash —" (muted "can't be worked out"), "Difference J$600.00 more on the card" (red), muted "Allowed difference J$50.00".
+- Three large choice cards, one selected (near-black border):
+  - "Pay the worked-out cash" — greyed out, with the line "Not possible: the card charge is more than the pump total."
+  - "Pay a different cash amount" (selected) — a money field "J$ 0.00" inside the card, label "Cash to pay the driver".
+  - "Pay no cash for this fill" — "The driver is not paid for the cash part."
+- Required text box "Why? (at least 8 characters)" containing "Card charge includes a car wash, no cash was paid."
+- Buttons: "Back" (secondary) and "Save decision" (primary).
+
+SCREEN 11: TRANSACTION LOGS — CARD CHARGE WITH NO FILL
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Tall enough to show everything, no inner scrolling.
+- Page title "Transaction Logs", tabs "All 43 / Rideshare 43 / Delivery 0", view switch "Transactions" active. The chip "Card charges with no fill (1)" is on (amber, selected).
+- An amber notice line: "Showing gas card charges from the statement that no driver logged. Accept, link or dismiss each one."
+- Table with one row: "Sat 21 Nov, 2:30 PM" · Gas Card · "TotalEnergies, Spanish Town Rd" · 5179KZ · Kenny Gregory Rattray · 14.2 L · "—" · J$3,050.00 · amber chip "No fill logged".
+- On the right of the row three buttons: "Accept as a fill" (primary), "Link to a fill" (secondary), "Dismiss" (secondary with red text).
+- Below the table, the "Link to a fill" panel open as an in-app window: title "Link this card charge to a fill", a list of 3 nearby fills by the same car (date, station, odometer) with round pick buttons, and buttons "Back" and "Link".
+
+
+
+==================== FOR CLAUDE — DO NOT PASTE ====================
+
+ADDITIONAL UI COMPONENTS
+- Fill card (ready to approve) = same component family as FillCard in apps/fleet/src/components/fuel/phone-fills/FuelNeedsLookPanel.tsx. Replace renderTable() in FuelReimbursementTable.tsx for the Ready to approve list; keep every action it has today: View (opens the fill window), Approve, Reject, Edit (onEdit, Manual / Bulk Manual / Manual Request / no source only), Delete (Pending + Manual or no source only), bulk select + Set Rideshare / Set Delivery (BULK_SET_SERVICE_LINE_MAX 200), station-held fills View only (RQ-05), split re-home note (describeSplitCashRehome), "Why it's here" badges (automated, odometer review, split mismatch) as chips.
+- Fill window = the Details Dialog in FuelReimbursementTable.tsx: photos (EvidenceFromRecord, receipt + odometer), driver/date/total/litres/rate/odometer, station brand → verified station → type address (approvalBrand / approvalMatchedStationId / approvalStationLocation), service line choice when showServiceLineControls, notes (approve optional, reject required — RQ-11), station-hold diagnostics (buildStationHoldDiagnostics) with approve/reject disabled.
+- Transaction Logs = FuelLogTable.tsx + logs/FuelLogToolbar.tsx + logs/FuelLogKpiRow.tsx + logs/FuelTransactionsTable.tsx + logs/FuelEntryDetailSheet.tsx + logs/FuelCyclesPanel.tsx (+ FuelExceptionQueue, FuelEfficiencyTrend) + logs/UnlinkedCardChargeActionDialog.tsx + FuelAwaitingStatementPanel.tsx + SplitCashResolveDialog.tsx.
+- Keep the filters popover contents (vehicle, driver, type, anchor, status, integrity, entry source) but in plain words; keep cycle filter chip, imbalanced tile click, exceptions tile scroll, export (selected rows), pagination, sort, focus-entry highlight, split fill grouping, Resolve Cash on split rows, edit gate labels (locked seal, waiting for statement).
+
+INTERACTIONS
+- Approve → api.approveExpense(id, notes, odometer?, stationOpts) via handleApproveReimbursement; service line after approve via fuelService.setFuelEntriesServiceLine.
+- Reject → handleRejectReimbursement(id, reason).
+- Decide pay / Escalate → handleResolveSplitCash → fuelService.resolveSplitFillCash({ fillGroupId, action: accept_derived | enter_cash | void, cashAmount, reason }).
+- Open Awaiting statement from the queue → sessionStorage FUEL_LOGS_OPEN_VIEW_KEY = 'awaiting', then setActiveTab('logs'); URL ?tab=awaiting.
+- Card charges with no fill → onUnlinkedChargeAction(entry, 'adopt' | 'link' | 'dismiss').
+- Awaiting statement loads its own 180-day backlog (fuelReviewQueueLookbackRange); the week picker does not apply.
+- "Awaiting statement N" count on the view switch is new: needs a count without loading the view (not built yet).
+
+Spec screens / Area
+| Screen | Area | Replaces |
+|---|---|---|
+| 1 | Review Queue — Ready to approve | renderTable() in FuelReimbursementTable.tsx |
+| 2 | Review Queue — bulk select + typed-in-Fleet card | bulk bar + Edit/Delete row actions |
+| 3 | Fill window — approve | Details Dialog (approve) |
+| 4 | Fill window — reject | Details Dialog (reject) |
+| 5 | Fill window — station check | Details Dialog (station-held) |
+| 6 | Transaction Logs — Transactions | FuelLogToolbar + FuelLogKpiRow + FuelTransactionsTable |
+| 7 | Transaction Logs — fill details | FuelEntryDetailSheet |
+| 8 | Transaction Logs — Full Tanks | FuelCyclesPanel + FuelExceptionQueue + FuelEfficiencyTrend |
+| 9 | Transaction Logs — Awaiting statement | FuelAwaitingStatementPanel |
+| 10 | Decide pay | SplitCashResolveDialog |
+| 11 | Card charge with no fill | Unmatched chip view + UnlinkedCardChargeActionDialog |
