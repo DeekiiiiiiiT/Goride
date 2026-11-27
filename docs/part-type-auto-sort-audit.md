@@ -19,7 +19,14 @@ owner pastes is [part_type_auto_sort_cleanup_LIVE.sql](./part_type_auto_sort_cle
 
 ## 0. START HERE
 
-- **Deployed but NOT on main (27 Nov, platform-catalog + catalog-research, from main dc2916b0 + these files):**
+- **27 Nov ~11:15 UTC — LIVE + ON MAIN via PR #22 (main 20593200d):** every server file below plus the Dominion screen
+  (grey "Not saved", skipped line, no Check this part on held rows), `researchEngineService.ts` types, e2e and the CI
+  test list. Dominion website deploy fired. The merge's edge deploy rebuilt platform-catalog + catalog-research from
+  main, which dropped the Needs-review NR files, so both were redeployed at once from main 20593200d + the NR files
+  (255/255 tests); see [needs-review-browser-check-audit.md](./needs-review-browser-check-audit.md). CI on main is red
+  on "migration version list matches production" only because `20261126232240_needs_review_guesses_to_browser_check.sql`
+  is live but not on main.
+- **(History) Deployed but NOT on main (27 Nov, platform-catalog + catalog-research, from main dc2916b0 + these files):**
   `research_saved_page_routes.ts` (lettered diagram codes 42409C/42311U skipped), `saved_page_suggest.ts` (answered
   names stay listed as Roam's decision), `saved_page_proof.ts` + `saved_page_part_type_core.ts` +
   `saved_page_auto_sort_run.ts` (a parking brake part is always rear: `impliedAxle`, so LH/RH-only rows are no longer

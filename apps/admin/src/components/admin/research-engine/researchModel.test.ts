@@ -269,3 +269,34 @@ describe("missing dates (owner 25 Nov)", () => {
     expect(monthIndexText(m(2020, 12))).toBe("12.2020");
   });
 });
+
+describe("NR-03 specConfirmed", () => {
+  it("a value read on a trusted site counts as proven", async () => {
+    const { specConfirmed } = await import("./researchModel");
+    expect(specConfirmed({ trust_route: "a", evidence_read_ids: [] })).toBe(true);
+    expect(specConfirmed({ trust_route: null, evidence_read_ids: ["r1"] })).toBe(true);
+  });
+  it("the AI's guess alone is not proven", async () => {
+    const { specConfirmed } = await import("./researchModel");
+    expect(specConfirmed({ trust_route: null, evidence_read_ids: [] })).toBe(false);
+  });
+});
+
+describe("step 3 words from the car maker's own part name", () => {
+  it("wheel bearing on a Roomy → search hub, rear axle section", async () => {
+    const { partFinder } = await import("./researchModel");
+    expect(partFinder("Wheel bearing", "Toyota", "rear:both", "Hub & bearing assy, rear axle")).toEqual({
+      search: "hub",
+      rowName: "HUB & BEARING ASSY, REAR AXLE",
+      section: "rear axle hub & bearing",
+    });
+  });
+  it("a part with wording on file keeps it", async () => {
+    const { partFinder } = await import("./researchModel");
+    expect(partFinder("Thermostat", "Toyota", null, "Something else")).toEqual({ search: "thermostat", rowName: "THERMOSTAT" });
+  });
+  it("no maker name → as before", async () => {
+    const { partFinder } = await import("./researchModel");
+    expect(partFinder("Wheel bearing", "Toyota", "rear", null)).toEqual({ search: "wheel bearing", rowName: null, section: "rear wheel bearing" });
+  });
+});

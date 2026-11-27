@@ -38,6 +38,7 @@ import {
   slotKeyFor,
 } from "./research_part_job.ts";
 import { autoResolveFromBatch } from "./catalog_request_autoresolve.ts";
+import { findCarCatalogueLink } from "./research_car_link.ts";
 import { runSpecJob, runVehicleListJob } from "./research_other_jobs.ts";
 import { sortWaitingNames } from "./saved_page_auto_sort_run.ts";
 
@@ -517,6 +518,17 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
         carMakerNorm,
         shape,
         passes,
+      });
+    }
+
+    // NR-01: no catalogue page among the AI's sources → Roam builds the car's own catalogue link.
+    if (!browserCheckUrl) {
+      browserCheckUrl = await findCarCatalogueLink(supabase, {
+        vehicleId: job.vehicle_catalog_id,
+        carMake: vc?.make,
+        carMakerNumbers: proposalRows
+          .filter((r) => carMakerNorm && brandNorm(String(r.brand ?? ""), aliases) === carMakerNorm)
+          .map((r) => String(r.part_number ?? "")),
       });
     }
 

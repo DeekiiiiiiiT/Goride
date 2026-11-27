@@ -8,6 +8,7 @@ import { dominionCan } from "../../../packages/auth-client/src/dominionPermissio
 import { ENGINE_REV } from "./catalog_research_worker.ts";
 import { autoResolveFromBatch } from "./catalog_request_autoresolve.ts";
 import { versionListLink } from "./research_browser_check.ts";
+import { findCarCatalogueLink, findMakerPartName } from "./research_car_link.ts";
 
 // RE-23: explicit columns only — never select("*") on research tables.
 const JOB_FIELDS = "id, job_type, state, vehicle_catalog_id, maintenance_component_id, fit_descriptor, match_type, spec_key, attempts, last_error, next_research_at, updated_at";
@@ -178,7 +179,7 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
       .find((u) => typeof u === "string" && u.startsWith("https://")) as string | undefined;
     const fromEvent = (linkEvent as { detail?: { url?: unknown } } | null)?.detail?.url;
     // RE-60: a link to one version of a frame is cut back to the frame's version list (Roam can't check the version).
-    const browserCheckUrl = versionListLink(fromProposal ?? (typeof fromEvent === "string" && fromEvent.startsWith("https://") ? fromEvent : null));
+    let browserCheckUrl = versionListLink(fromProposal ?? (typeof fromEvent === "string" && fromEvent.startsWith("https://") ? fromEvent : null));
     const vehicleId = (job as { vehicle_catalog_id?: string | null }).vehicle_catalog_id;
     const componentId = (job as { maintenance_component_id?: string | null }).maintenance_component_id;
     const specKey = (job as { spec_key?: string | null }).spec_key;
@@ -193,6 +194,18 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
     ]);
     // RE-62 / RE-63: the engine in plain words (only when Dominion knows it), the sister engines of the same years (so
     // the guide can say "not 1KRVET — that's the turbo"), and the catalogue version learned from an earlier check.
+    // NR-04: a Browser check moved over from Needs review has no stored link → the car's own catalogue link.
+    const jobState = String((job as { state?: string }).state ?? "");
+    if (!browserCheckUrl && (jobState === "browser_check" || jobState === "browser_check_queued")) {
+      const make = String((car as { make?: string } | null)?.make ?? "");
+      browserCheckUrl = await findCarCatalogueLink(supabase, {
+        vehicleId,
+        carMake: make,
+        carMakerNumbers: ((proposals ?? []) as Array<{ brand?: string | null; part_number?: string | null }>)
+          .filter((p) => make && String(p.brand ?? "").trim().toLowerCase() === make.trim().toLowerCase())
+          .map((p) => String(p.part_number ?? "")),
+      });
+    }
     let engineWords: string | null = null;
     let sisterEngines: Array<{ code: string; turbo: boolean }> = [];
     let knownVersion: {
@@ -275,11 +288,20 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
         };
       }
     }
+    // Step 3 wording: the car maker's own name for this part (confirmed before on this make, else this job's guess).
+    const makerPartName = (job as { job_type?: string }).job_type === "part"
+      ? await findMakerPartName(supabase, {
+        make: (car as { make?: string } | null)?.make,
+        componentId,
+        guesses: (proposals ?? []) as Array<{ brand?: string | null; part_name?: string | null }>,
+      })
+      : null;
     return c.json({
       job,
       car: car ? { ...(car as Record<string, unknown>), engine_words: engineWords } : null,
       sisterEngines,
       knownVersion,
+      makerPartName,
       partType: comp ?? null,
       spec: spec ?? null,
       browserCheckUrl,

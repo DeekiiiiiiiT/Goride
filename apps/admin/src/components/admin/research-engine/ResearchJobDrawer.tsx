@@ -67,6 +67,7 @@ import {
   placeLabel,
   proposalChecks,
   proposalConfirmed,
+  specConfirmed,
   readOnLabel,
   siteName,
   statePill,
@@ -210,8 +211,17 @@ export function ResearchJobDrawer({ token, jobId: jobIdProp, group, fallbackTitl
   } else if (openConflict) {
     footer = null;
   } else if (state === "needs_review" && (reviewProposal || openSpec)) {
+    // NR-03: one click adds only an answer Roam proved on a trusted site; a guess is never one click from the catalogue.
+    const proven = reviewProposal
+      ? proposalConfirmed(reviewProposal) || (reviewProposal.evidence_read_ids ?? []).length > 0
+      : specConfirmed(openSpec!);
     footer = (
       <>
+        {!proven ? (
+          <span className={`text-[13px] ${D_MUTED}`} data-testid="unproven-note">
+            Roam couldn&apos;t prove this on a trusted site. Check it before adding.
+          </span>
+        ) : (
         <PartsButton
           variant="primary"
           disabled={busy}
@@ -228,6 +238,7 @@ export function ResearchJobDrawer({ token, jobId: jobIdProp, group, fallbackTitl
         >
           <DIcon name="check" className="text-[16px]" /> Looks right — add it
         </PartsButton>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           {reviewProposal ? (
             <PartsButton variant="secondary" disabled={busy} onClick={() => setEditing((v) => !v)} data-testid="edit-and-add">
@@ -719,7 +730,7 @@ function BrowserCheckCard({
   // The button names the site it really opens (RE-69: it said Partsouq while opening the remembered Amayama page).
   const site = siteName(openUrl);
   const jobType = detail.job.job_type === "spec" ? "spec" : "part";
-  const finder = partFinder(itemName, detail.car?.make, detail.job.fit_descriptor);
+  const finder = partFinder(itemName, detail.car?.make, detail.job.fit_descriptor, detail.makerPartName);
   const known = detail.knownVersion ?? null;
   const versionRow = catalogueVersionRow(detail.car, known).filter((c) => c.label !== "Model code" && c.value !== "—");
   const dates = buildDates(detail.car);

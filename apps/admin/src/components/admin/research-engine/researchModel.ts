@@ -191,6 +191,11 @@ export function proposalConfirmed(p: Pick<PartProposal, "checks" | "trust_route"
   return p.checks?.trust === "confirmed" || p.trust_route === "a" || p.trust_route === "b" || p.trust_route === "c" || p.trust_route === "owner_browser";
 }
 
+/** NR-03: a spec value Roam read on a trusted site (not only the AI's guess). */
+export function specConfirmed(p: { trust_route?: string | null; evidence_read_ids?: string[] | null }): boolean {
+  return Boolean(p.trust_route) || (p.evidence_read_ids ?? []).length > 0;
+}
+
 /** The "how sure" line on a Roam found card. */
 export function howSureLine(p: Pick<PartProposal, "checks" | "trust_route" | "sources">): string {
   switch (p.trust_route) {
@@ -436,15 +441,45 @@ export type PartFinder = { search: string; rowName: string | null; section?: str
  * What to type in a Japanese maker catalogue's search box (Toyota / Daihatsu / Lexus parts catalogues), and the row's
  * name there. Only names seen in those catalogues; other parts fall back to the part's own name.
  */
-export function partFinder(itemName: string, make: string | null | undefined, fitDescriptor?: string | null): PartFinder {
+export function partFinder(
+  itemName: string,
+  make: string | null | undefined,
+  fitDescriptor?: string | null,
+  makerName?: string | null,
+): PartFinder {
   const found = makerPartFinder(itemName, make, fitDescriptor);
   if (found.section) return found;
+  // Owner 26 Nov: no wording on file for this part → the car maker's own name for it (confirmed before on this make, or
+  // Roam's guess under the car maker's brand), e.g. "Hub & bearing assy, rear axle" → search "hub".
+  if (!found.rowName && makerName) {
+    const fromMaker = finderFromMakerName(makerName);
+    if (fromMaker) return fromMaker;
+  }
   // Owner 25 Nov: a front / rear check says which section to open, on any site, for any part (brakes, bearings…).
   const fit = String(fitDescriptor ?? "").toLowerCase();
   const axle = fit.includes("rear") ? "rear" : fit.includes("front") ? "front" : null;
   if (!axle) return found;
   const part = itemName.toLowerCase().replace(/\b(front|rear)\b/g, "").replace(/\s+/g, " ").trim() || itemName.toLowerCase();
   return { ...found, section: `${axle} ${part}` };
+}
+
+/**
+ * A car maker's part name written the catalogue way ("NOUN, WHERE": "Hub & bearing assy, rear axle", "THERMOSTAT")
+ * → search the noun's first word, open the section named by where + noun, look for the row by its full name.
+ */
+export function finderFromMakerName(makerName: string): PartFinder | null {
+  const name = makerName.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
+  if (name.length < 3) return null;
+  const [headRaw, ...rest] = name.split(",");
+  const head = headRaw.replace(/\b(sub-?assy|assy|assembly|set|kit)\b/gi, " ").replace(/\s+/g, " ").trim();
+  const where = rest.join(",").replace(/\s+/g, " ").trim();
+  const search = head.split(/[\s&/]+/).find((w) => /[a-z]{3,}/i.test(w))?.toLowerCase();
+  if (!search) return null;
+  return {
+    search,
+    rowName: name.toUpperCase(),
+    section: `${where ? `${where} ` : ""}${head}`.toLowerCase(),
+  };
 }
 
 function makerPartFinder(itemName: string, make: string | null | undefined, fitDescriptor?: string | null): PartFinder {
