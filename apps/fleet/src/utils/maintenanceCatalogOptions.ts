@@ -56,3 +56,16 @@ export function catalogOptionsFromScheduleRows(
   }
   return out;
 }
+
+/**
+ * Step 15 (MER-22): the car's schedule rows plus Dominion's active service packages that are not on the car yet
+ * (`packages` from GET maintenance-schedule), for the Log service package list only. Never used for due math.
+ */
+export function scheduleRowsWithPackages(sch: {
+  schedule?: unknown[] | null;
+  packages?: unknown[] | null;
+}): VehicleMaintenanceScheduleRowApi[] {
+  const rows = Array.isArray(sch.schedule) ? (sch.schedule as VehicleMaintenanceScheduleRowApi[]) : [];
+  const extra = Array.isArray(sch.packages) ? (sch.packages as VehicleMaintenanceScheduleRowApi[]) : [];
+  return [...rows, ...extra];
+}

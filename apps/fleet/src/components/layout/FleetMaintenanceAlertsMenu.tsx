@@ -182,7 +182,7 @@ export function FleetMaintenanceAlertsMenu({
                   <span className="font-mono text-xs">{String(row.license_plate ?? vehicleId.slice(0, 8))}</span>
                   <span className="font-medium truncate">{label}</span>
                   <span className="text-[11px] text-muted-foreground">
-                    {severity === "overdue" ? "Overdue" : "Due soon"}
+                    {severity === "overdue" ? "Overdue" : severity === "odometer_needed" ? "Log a reading so due dates can be worked out" : "Due soon"}
                     {closedReason ? ` · ${closedReason}` : ""}
                   </span>
                 </div>

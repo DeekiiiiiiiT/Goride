@@ -42,8 +42,9 @@ import { JobsTab } from "./jobs/JobsTab";
 import { fetchJobs } from "./jobs/jobsApi";
 import { SuppliesTab } from "./supplies/SuppliesTab";
 import { ReviewTab } from "./ReviewTab";
+import { ManualsTab } from "./manuals/ManualsTab";
 
-type Tab = "schedules" | "packages" | "jobs" | "supplies" | "review" | "history";
+type Tab = "schedules" | "manuals" | "packages" | "jobs" | "supplies" | "review" | "history";
 
 const WRITE_ROLES = new Set(["platform_owner", "platform_support", "platform_catalog_editor"]);
 
@@ -54,6 +55,9 @@ export function MaintenanceMasterPage() {
   const analystReadOnly = role === "platform_analyst";
 
   const [tab, setTab] = useState<Tab>("schedules");
+  /** Rebuild step 6: models with an owner's manual (tab count), and an upload asked for from the schedule drawer. */
+  const [manualCount, setManualCount] = useState<number | null>(null);
+  const [manualUploadRequest, setManualUploadRequest] = useState<{ platformId: string; name: string; at: number } | null>(null);
   const [governanceOn, setGovernanceOn] = useState<boolean | null>(null);
   const [summary, setSummary] = useState<MaintenanceSummary | null>(null);
   const [rules, setRules] = useState<MaintenanceRule[]>([]);
@@ -228,7 +232,7 @@ export function MaintenanceMasterPage() {
       } else {
         await createMaintenanceRule(token, { ...pendingPayload, status: "active" });
       }
-      toast.success("Schedule saved. Apps pick it up tonight.", { duration: 8000 });
+      toast.success("Schedule saved. Cars update now; the nightly run checks again tonight.", { duration: 8000 });
       setImpactOpen(false);
       setDrawerOpen(false);
       setPendingPayload(null);
@@ -257,7 +261,8 @@ export function MaintenanceMasterPage() {
 
 
   const tabs: { id: Tab; label: string; badge?: number }[] = [
-    { id: "schedules", label: "Part schedules", badge: indexRows.length },
+    { id: "schedules", label: "Part schedules", badge: indexRows.filter((r) => !r.as_needed).length },
+    { id: "manuals", label: "Manuals", badge: manualCount ?? undefined },
     { id: "packages", label: "Service packages", badge: packages.length },
     { id: "jobs", label: "Jobs", badge: jobCounts?.jobs },
     { id: "supplies", label: "Supplies", badge: jobCounts?.supplies },
@@ -337,6 +342,7 @@ export function MaintenanceMasterPage() {
           rules={rules}
           readOnly={analystReadOnly}
           canWrite={canWrite && !analystReadOnly}
+          token={token}
           onBack={() => setDetailComponentId(null)}
           onAddForScope={(scope) => {
             setEditingRule(null);
@@ -392,6 +398,20 @@ export function MaintenanceMasterPage() {
         </>
       ) : null}
 
+      {!detailCategory && tab === "manuals" ? (
+        <ManualsTab
+          token={token}
+          catalog={catalog}
+          rules={rules}
+          categories={categories.filter((c) => c.kind === "component")}
+          canEdit={canWrite && !analystReadOnly}
+          canApprove={role === "platform_owner"}
+          uploadRequest={manualUploadRequest}
+          onCountChanged={setManualCount}
+          onRulesChanged={() => void reload()}
+        />
+      ) : null}
+
       {!detailCategory && tab === "packages" ? (
         <PackagesTab
           token={token}
@@ -400,6 +420,10 @@ export function MaintenanceMasterPage() {
           canWrite={canWrite && !analystReadOnly}
           onEditPackage={(pkg) => {
             setEditingPackage(pkg);
+            setPackageDrawerOpen(true);
+          }}
+          onNewPackage={() => {
+            setEditingPackage(null);
             setPackageDrawerOpen(true);
           }}
         />
@@ -466,6 +490,12 @@ export function MaintenanceMasterPage() {
         onSaved={() => void reload()}
         onRequestImpact={(payload, mode) => void handleRequestImpact(payload, mode)}
         onStarterLoaded={() => void reload()}
+        onUploadManual={(platformId) => {
+          setDrawerOpen(false);
+          setDetailComponentId(null);
+          setTab("manuals");
+          setManualUploadRequest({ platformId, name: "this model", at: Date.now() });
+        }}
       />
 
       <MaintenanceMasterPackageDrawer

@@ -277,7 +277,7 @@ export function OdometerHistoryDrawer({
                         </span>
                         {row.source ? (
                           <span className="font-mono text-[10px] uppercase bg-surface-container px-2 py-0.5 rounded text-stitch-secondary">
-                            {row.source}
+                            {row.source === "pre_shift" ? "Pre-shift check" : row.source}
                           </span>
                         ) : null}
                       </div>

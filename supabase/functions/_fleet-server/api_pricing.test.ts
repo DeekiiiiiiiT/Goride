@@ -1,5 +1,6 @@
-import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assertAlmostEquals, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
+  DEEPSEEK_FILE_PARSE_PER_PAGE_USD,
   estimateCostUSD,
   GEMINI_GROUNDING_FREE_QUERIES_PER_MONTH,
   groundingCostUSD,
@@ -28,4 +29,38 @@ Deno.test("grounding: zero or negative queries cost nothing", () => {
 
 Deno.test("estimateCostUSD: a grounding line without a month count is charged in full", () => {
   assertEquals(estimateCostUSD("gemini", "gemini-3.8-flash", "grounding", { requests: 5 }), 0.07);
+});
+
+Deno.test("deepseek: chat is priced at the peak per-1K rates", () => {
+  // 1M input at $0.30 + 1M output at $1.20 (peak, cache miss).
+  assertAlmostEquals(
+    estimateCostUSD("deepseek", "deepseek-flash", "vision", { inputTokens: 1_000_000, outputTokens: 1_000_000 }),
+    1.5,
+    1e-9,
+  );
+  // One page read of ~2,000 in + 300 out costs well under a cent.
+  assertAlmostEquals(
+    estimateCostUSD("deepseek", "deepseek-flash", "vision", { inputTokens: 2_000, outputTokens: 300 }),
+    0.00096,
+    1e-9,
+  );
+});
+
+Deno.test("deepseek: file parsing is billed by the page", () => {
+  assertEquals(DEEPSEEK_FILE_PARSE_PER_PAGE_USD, 0.000225);
+  assertAlmostEquals(
+    estimateCostUSD("deepseek", "deepseek-flash", "file_parsing", { requests: 1 }),
+    0.000225,
+    1e-12,
+  );
+  assertAlmostEquals(
+    estimateCostUSD("deepseek", "deepseek-flash", "file_parsing", { requests: 1000 }),
+    0.225,
+    1e-9,
+  );
+});
+
+Deno.test("deepseek: an unknown model or provider is free, never NaN", () => {
+  assertEquals(estimateCostUSD("deepseek", "no-such-model", "vision", { inputTokens: 5 }), 0);
+  assertEquals(estimateCostUSD("deepseek", undefined, "vision", { inputTokens: 5 }), 0);
 });

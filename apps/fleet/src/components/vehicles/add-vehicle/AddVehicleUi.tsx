@@ -65,14 +65,14 @@ export function FlowShell({ children, crumb = "Add a vehicle" }: { children: Rea
   );
 }
 
-const STEPS = ["Fitness", "Registration", "Vehicle use", "Confirm car", "Done"] as const;
-export type StepNumber = 1 | 2 | 3 | 4 | 5;
+const STEPS = ["Fitness", "Registration", "Vehicle use", "Confirm car", "Odometer", "Done"] as const;
+export type StepNumber = 1 | 2 | 3 | 4 | 5 | 6;
 
-/** 1 Fitness · 2 Registration · 3 Confirm car · 4 Done. Steps before `current` show a green check. */
+/** 1 Fitness · 2 Registration · 3 Vehicle use · 4 Confirm car · 5 Odometer (and use) · 6 Done. Steps before `current` show a green check. */
 export function StepBar({ current }: { current: StepNumber }) {
   return (
     <div className="w-full py-1" aria-label={`Step ${current} of ${STEPS.length} · ${STEPS[current - 1]}`}>
-      <ol className="relative grid grid-cols-5 items-center">
+      <ol className="relative grid grid-cols-6 items-center">
         <div className="absolute left-[10%] right-[10%] top-1/2 h-[2px] -translate-y-1/2 bg-[#e5eeff] dark:bg-[#3a3a3d]" aria-hidden />
         {STEPS.map((label, i) => {
           const n = (i + 1) as StepNumber;

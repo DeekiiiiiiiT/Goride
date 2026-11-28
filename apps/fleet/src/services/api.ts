@@ -34,6 +34,7 @@ import type {
   MaintenanceServiceLedgerEntry,
   MaintenanceWorkOrder,
   MaintenanceWorkOrderStatus,
+  WorkOrderBoardCard,
   FoundWorkCounts,
   FoundWorkItem,
   PartsNotice,
@@ -2655,6 +2656,8 @@ export const api = {
           remainingKm: number;
         };
         schedule: unknown[];
+        /** Step 15: active Dominion packages not on this car (no due dates). */
+        packages?: unknown[];
       }>;
   },
 
@@ -3031,6 +3034,81 @@ export const api = {
       );
       if (!response.ok) throw new Error("Failed to load due items");
       return response.json() as Promise<{ items: unknown[] }>;
+  },
+
+  /** Step 7: the car's scheduled parts and when each was last done (Fill in history). */
+  async getMaintenanceHistory(vehicleId: string) {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fleetOps}/maintenance/vehicles/${encodeURIComponent(vehicleId)}/history`,
+        { headers: await getHeaders(null) },
+      );
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error((json as { error?: string }).error || "Could not load the service history");
+      return json as {
+        vehicle: {
+          id: string;
+          licensePlate: string | null;
+          make: string | null;
+          model: string | null;
+          year: string | number | null;
+          odometer: number | null;
+          odometerDate: string | null;
+        };
+        parts: Array<{
+          schedule_id: string;
+          category_id: string;
+          category_name: string;
+          position: string | null;
+          last_km: number | null;
+          last_date: string | null;
+          last_source: "work_order" | "service_log" | "manual" | null;
+          from_service_vendor: string | null;
+          check_next_service: boolean;
+          history_unknown: boolean;
+        }>;
+        unknownCount: number;
+      };
+  },
+
+  /** Step 7: save last-done km/date, or "Check at next service", for parts on one car. */
+  async saveMaintenanceHistory(
+    vehicleId: string,
+    rows: Array<{ schedule_id: string; last_km: number | null; last_date: string | null; check_next_service: boolean }>,
+  ) {
+      const response = await fetch(
+        `${API_ENDPOINTS.fleetOps}/maintenance/vehicles/${encodeURIComponent(vehicleId)}/history`,
+        { method: "POST", headers: await getHeaders(null), body: JSON.stringify({ rows }) },
+      );
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error((json as { error?: string }).error || "Could not save the service history");
+      return json as { success: boolean; filled: number; ticked: number; kept: number };
+  },
+
+  /** Step 11: the Work orders tab — tiles, open work orders, done recently, cancelled. */
+  async getWorkOrderBoard() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance/work-orders/board`, {
+        headers: await getHeaders(null),
+      });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error((json as { error?: string }).error || "Could not load work orders");
+      return json as {
+        tiles: { atGarage: number; waiting: number; doneThisMonth: number; needsDecision: number };
+        open: WorkOrderBoardCard[];
+        done: WorkOrderBoardCard[];
+        cancelled: WorkOrderBoardCard[];
+      };
+  },
+
+  /** Step 11: move a work order on the board — "It's at the garage" (in_shop) or Cancel (with a reason). */
+  async moveWorkOrder(id: string, body: { status: "in_shop" | "cancelled"; cancelReason?: string }) {
+      const response = await fetch(`${API_ENDPOINTS.fleetOps}/maintenance-work-orders/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: await getHeaders(),
+        body: JSON.stringify(body),
+      });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error((json as { error?: string }).error || "Could not update the work order");
+      return json;
   },
 
   async updateWorkOrder(id: string, patch: Partial<{

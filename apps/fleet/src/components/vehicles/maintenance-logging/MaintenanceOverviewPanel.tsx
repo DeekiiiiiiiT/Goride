@@ -99,6 +99,15 @@ function vehicleTitle(row: MaintenanceOverviewVehicleRow): string {
 
 function statusBadge(status: string, attention?: string) {
   const s = status.toLowerCase();
+  // Step 7: checked before "due" so it never reads as Due soon.
+  if (s.includes("history unknown")) {
+    return (
+      <span className="inline-flex items-center gap-1 bg-violet-50 text-violet-800 font-caption text-[11px] font-semibold px-2 py-1 rounded-full">
+        <span className="material-symbols-outlined text-[12px]">help</span>
+        History unknown
+      </span>
+    );
+  }
   if (s.includes("odometer")) {
     return (
       <span className="inline-flex items-center gap-1 bg-surface-container-highest text-on-surface-variant font-caption text-[11px] font-semibold px-2 py-1 rounded-full">

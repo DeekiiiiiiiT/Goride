@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { setPackageCategories, updateMaintenanceTemplate } from "../../../services/maintenanceTemplateService";
+import { createGlobalMaintenanceTemplate, setPackageCategories, updateMaintenanceTemplate } from "../../../services/maintenanceTemplateService";
 import type { MaintenanceServiceCategory } from "../../../types/maintenance";
 import { fetchPackageCategories, type MaintenanceRule } from "./maintenanceMasterApi";
 import { formatInterval, isCheckOnly } from "./maintenanceMasterFormat";
@@ -22,6 +22,7 @@ type Props = {
   open: boolean;
   token: string;
   canWrite: boolean;
+  /** null = New package (step 15, MER-22): the same drawer creates one. */
   pkg: PackageRow | null;
   /** Names of every other package, so a rename can't create a duplicate. */
   otherPackageNames?: string[];
@@ -51,7 +52,16 @@ export function MaintenanceMasterPackageDrawer({
   const [partSearch, setPartSearch] = useState("");
 
   useEffect(() => {
-    if (!open || !pkg?.id || !token) return;
+    if (!open || !token) return;
+    if (!pkg?.id) {
+      setError("");
+      setPartSearch("");
+      setPkgName("");
+      setPkgKm("");
+      setPkgMo("");
+      setMembers([]);
+      return;
+    }
     setError("");
     setPartSearch("");
     setPkgName(pkg.task_name ?? "");
@@ -136,9 +146,13 @@ export function MaintenanceMasterPackageDrawer({
       : "";
 
   const save = async () => {
-    if (!canWrite || !token || !pkg?.id) return;
+    if (!canWrite || !token) return;
     if (nameError) {
       setError(nameError);
+      return;
+    }
+    if (!pkg?.id && !members.length) {
+      setError("Add at least one job to the package.");
       return;
     }
     setBusy(true);
@@ -149,12 +163,21 @@ export function MaintenanceMasterPackageDrawer({
         required: m.required,
         sortOrder: i,
       }));
-      await setPackageCategories(token, pkg.id, items);
-      await updateMaintenanceTemplate(token, pkg.id, {
-        ...(trimmedName !== pkg.task_name ? { task_name: trimmedName } : {}),
-        interval_km: pkgKm === "" ? null : Number(pkgKm),
-        interval_months: pkgMo === "" ? null : Number(pkgMo),
-      });
+      const interval_km = pkgKm === "" ? null : Number(pkgKm);
+      const interval_months = pkgMo === "" ? null : Number(pkgMo);
+      if (pkg?.id) {
+        await setPackageCategories(token, pkg.id, items);
+        await updateMaintenanceTemplate(token, pkg.id, {
+          ...(trimmedName !== pkg.task_name ? { task_name: trimmedName } : {}),
+          interval_km,
+          interval_months,
+        });
+      } else {
+        // A package has no part of its own (component_id stays empty); it only groups jobs for one visit.
+        const created = await createGlobalMaintenanceTemplate(token, { task_name: trimmedName, interval_km, interval_months });
+        if (!created?.id) throw new Error(SAVE_ERROR);
+        await setPackageCategories(token, String(created.id), items);
+      }
       onSaved();
       onClose();
     } catch (e: unknown) {
@@ -165,7 +188,7 @@ export function MaintenanceMasterPackageDrawer({
     }
   };
 
-  if (!open || !pkg) return null;
+  if (!open) return null;
 
   const rhythm = formatInterval(pkgKmNum, pkgMoNum);
 
@@ -174,7 +197,7 @@ export function MaintenanceMasterPackageDrawer({
       <button type="button" className="fixed inset-0 z-40 bg-black/30" aria-label="Close" onClick={onClose} />
       <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[560px] flex-col border-l border-outline-variant/40 bg-white shadow-xl">
         <header className="flex items-center justify-between border-b border-outline-variant/30 px-6 py-4">
-          <h2 className="font-headline text-headline-sm text-on-surface">Edit package · {pkg.task_name}</h2>
+          <h2 className="font-headline text-headline-sm text-on-surface">{pkg ? `Edit package · ${pkg.task_name}` : "New package"}</h2>
           <button type="button" className="rounded-lg p-2 hover:bg-surface-container" onClick={onClose}>
             <span className="material-symbols-outlined">close</span>
           </button>
