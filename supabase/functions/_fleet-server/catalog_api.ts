@@ -2,6 +2,7 @@
  * Read-only vehicle catalog contract. Reference prices only.
  * Fleet apps add their own stock and negotiated prices after this.
  */
+import { listingsForVehicle } from "./listings_for_vehicle.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { decodeFrameNumber } from "../../../packages/types/src/frameNumberDecode.ts";
 import { buildFitMessage, landedCostJmd, PART_MATCH_TIERS, priceIsStale, totalImpactJmd } from "../../../packages/types/src/partsResolution.ts";
@@ -35,9 +36,6 @@ function yearInRange(yearFrom: number | null | undefined, yearTo: number | null 
 
 const OFFER_SELECT =
   "id, supplier_id, part_id, supplier_sku, unit_price, currency, moq, lead_time_days, url, is_active, price_observed_at, source, core_charge, warranty_months, warranty_km, organization_id, freight_estimate, duty_rate, fx_rate_to_jmd, supplier ( id, name, default_lead_time_days, freight_estimate, duty_rate, fx_rate_to_jmd )";
-
-const FITMENT_SELECT =
-  "id, part_id, vehicle_catalog_id, chassis_code, engine_code, year_from, year_to, part_master ( id, category_id, maintenance_component_id, name, oem_part_number, description, metadata, manufacturer, part_kind, catalog_decision, part_category ( id, slug, label, parent_id, sort_order ) )";
 
 export async function tieredSearchKilled(): Promise<boolean> {
   const flag = await getFeatureFlag(FEATURE_FLAGS.PARTS_TIERED_SEARCH);
@@ -222,8 +220,8 @@ async function loadLegacyReferenceParts(
   if (catErr) throw catErr;
   const catalogChassis = String((catRow as { chassis_code?: string } | null)?.chassis_code ?? "");
   const catalogEngine = String((catRow as { engine_code?: string } | null)?.engine_code ?? "");
-  const { data: fitRows, error: fitErr } = await supabase.from("part_fitment").select(FITMENT_SELECT).eq("vehicle_catalog_id", catalogId);
-  if (fitErr) throw fitErr;
+  // part_fitment is retired (RE-12): listings for this car in the old row shape.
+  const fitRows = await listingsForVehicle(supabase, { catalogId });
   type FitRow = {
     id: string;
     part_id: string;

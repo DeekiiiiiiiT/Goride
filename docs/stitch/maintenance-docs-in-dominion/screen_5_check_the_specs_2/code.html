@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Screen 5: Check the specs</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #faf8fe;
+      color: #30323b;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+      font-feature-settings: "tnum" 1;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      vertical-align: middle;
+    }
+    .btn-secondary {
+      background-color: #ffffff;
+      border: 1px solid #c5c6d0;
+      color: #30323b;
+      transition: all 0.15s ease;
+    }
+    .btn-secondary:hover {
+      background-color: #f3f4fb;
+    }
+    .btn-primary {
+      background-color: #0153dc;
+      color: #ffffff;
+      transition: all 0.15s ease;
+    }
+    .btn-primary:hover {
+      background-color: #0146be;
+    }
+    .btn-outline-primary {
+      background-color: #ffffff;
+      border: 1px solid #0153dc;
+      color: #0153dc;
+      transition: all 0.15s ease;
+    }
+    .btn-outline-primary:hover {
+      background-color: #dbe1ff;
+    }
+    .btn-danger {
+      background-color: #ffffff;
+      border: 1px solid #a83836;
+      color: #a83836;
+      transition: all 0.15s ease;
+    }
+    .btn-danger:hover {
+      background-color: #fdecec;
+    }
+    .card-base {
+      background-color: #ffffff;
+      border: 1px solid #e6e7ee;
+      border-radius: 16px;
+      box-shadow: 0 4px 16px rgba(1, 83, 220, 0.04);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex antialiased">
+
+  <!-- Left Sidebar (Dominion Frame) -->
+  <aside class="w-64 bg-[#0b1329] text-[#94a3b8] flex flex-col flex-shrink-0 min-h-screen border-r border-[#1e293b]">
+    <div class="h-16 flex items-center px-6 gap-3 border-b border-[#1e293b]/70">
+      <div class="w-8 h-8 rounded-lg bg-[#0153dc] flex items-center justify-center text-white font-bold text-sm tracking-wider">
+        D
+      </div>
+      <div>
+        <div class="text-white text-sm font-semibold tracking-tight">Dominion</div>
+        <div class="text-[11px] text-[#94a3b8] font-normal">Roam Admin Console</div>
+      </div>
+    </div>
+
+    <div class="flex-1 py-4 px-3 space-y-6 overflow-y-auto text-[13px]">
+      <div>
+        <div class="px-3 mb-2 text-[10px] font-bold tracking-wider text-[#64748b] uppercase">Master Data</div>
+        <nav class="space-y-0.5">
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">dashboard</span> Overview
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#0153dc]/20 text-white font-medium">
+            <span class="material-symbols-outlined text-[18px] text-[#5b8def]">directions_car</span> Vehicles active
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">map</span> Places and Maps
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">local_gas_station</span> Fuel
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">toll</span> Tolls
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">receipt_long</span> Tax and Vendors
+          </a>
+        </nav>
+      </div>
+
+      <div>
+        <div class="px-3 mb-2 text-[10px] font-bold tracking-wider text-[#64748b] uppercase">Engines</div>
+        <nav class="space-y-0.5">
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">smart_toy</span> Fuel Brain
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">traffic</span> Toll Brain
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">schema</span> Matching Brain
+          </a>
+        </nav>
+      </div>
+
+      <div>
+        <div class="px-3 mb-2 text-[10px] font-bold tracking-wider text-[#64748b] uppercase">Distribution</div>
+        <nav class="space-y-0.5">
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">apps</span> Apps
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">api</span> Data API
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">sync_alt</span> Change requests
+          </a>
+        </nav>
+      </div>
+
+      <div>
+        <div class="px-3 mb-2 text-[10px] font-bold tracking-wider text-[#64748b] uppercase">Platform</div>
+        <nav class="space-y-0.5">
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">badge</span> Staff and roles
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">history</span> Activity log
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">terminal</span> Platform Ops
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">tune</span> Global settings
+          </a>
+        </nav>
+      </div>
+
+      <div>
+        <div class="px-3 mb-2 text-[10px] font-bold tracking-wider text-[#64748b] uppercase">Back Office</div>
+        <nav class="space-y-0.5">
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">corporate_fare</span> GCT registrations
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">account_balance</span> Ledger
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">payments</span> Remittance
+          </a>
+        </nav>
+      </div>
+    </div>
+
+    <div class="p-4 border-t border-[#1e293b]/70 flex items-center justify-between text-[11px] text-[#64748b]">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span>Dominion v4.18</span>
+      </div>
+      <span>Tokyo DB</span>
+    </div>
+  </aside>
+
+  <!-- Main Content Frame -->
+  <div class="flex-1 flex flex-col min-w-0 bg-[#faf8fe] pb-24">
+    <!-- Top Bar -->
+    <header class="h-16 bg-white border-b border-[#e6e7ee] px-8 flex items-center justify-between sticky top-0 z-30">
+      <div class="relative w-96">
+        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#5d5f68] text-[20px]">search</span>
+        <input type="text" placeholder="Search entities, engines, routes…" class="w-full h-10 pl-10 pr-12 text-sm bg-[#faf8fe] rounded-lg border border-[#c5c6d0] focus:outline-none focus:border-[#0153dc] focus:ring-1 focus:ring-[#0153dc] text-[#30323b] placeholder-[#5d5f68]/70" />
+        <div class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-mono text-[#5d5f68] bg-white border border-[#c5c6d0] rounded px-1.5 py-0.5">⌘K</div>
+      </div>
+
+      <div class="flex items-center gap-4">
+        <button class="w-9 h-9 rounded-lg flex items-center justify-center text-[#5d5f68] hover:bg-[#f3f4fb] transition-colors" title="Toggle dark mode">
+          <span class="material-symbols-outlined text-[20px]">dark_mode</span>
+        </button>
+        <div class="flex items-center gap-3 pl-2 border-l border-[#e6e7ee]">
+          <div class="w-8 h-8 rounded-full bg-[#dbe1ff] text-[#0153dc] font-semibold text-xs flex items-center justify-center">
+            DT
+          </div>
+          <div class="text-xs">
+            <div class="font-semibold text-[#30323b]">Deeki T</div>
+            <div class="text-[#5d5f68]">Owner</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Page Body Container (max-w 1180px) -->
+    <main class="w-full max-w-[1180px] mx-auto px-6 py-6 space-y-6">
+      
+      <!-- Top Header & Back -->
+      <div class="space-y-1">
+        <a href="#" class="inline-flex items-center gap-1.5 text-xs font-medium text-[#5d5f68] hover:text-[#0153dc] transition-colors mb-1">
+          <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+          Toyota Roomy
+        </a>
+        <div class="flex items-baseline justify-between">
+          <div>
+            <h1 class="text-[26px] font-semibold text-[#30323b] tracking-tight">Check the specs</h1>
+            <p class="text-sm text-[#5d5f68]">Toyota Roomy — Owner's manual (Japan, 2021) · 16 pages</p>
+          </div>
+          <div class="text-xs text-[#5d5f68] flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-[16px] text-[#0153dc]">auto_awesome</span>
+            <span>OCR verified reference database</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Progress Strip Card -->
+      <div class="card-base p-4 flex items-center justify-between gap-6">
+        <div class="flex items-center gap-4 min-w-[260px]">
+          <div class="text-sm font-medium text-[#30323b]">
+            <span class="font-semibold font-mono">0</span> of <span class="font-semibold font-mono">27</span> checked
+          </div>
+          <div class="flex-1 bg-[#f3f4fb] h-2.5 rounded-full overflow-hidden border border-[#e6e7ee]">
+            <div class="bg-[#0153dc] h-full w-0 transition-all"></div>
+          </div>
+        </div>
+
+        <!-- Page Chips -->
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-[#5d5f68] mr-1">Sections:</span>
+          <button class="px-3 py-1.5 text-xs font-mono rounded-lg bg-[#f3f4fb] text-[#5d5f68] hover:bg-[#e6e7ee] transition-colors">
+            Front memo
+          </button>
+          <button class="px-3 py-1.5 text-xs font-mono rounded-lg bg-[#f3f4fb] text-[#5d5f68] hover:bg-[#e6e7ee] transition-colors">
+            402–407
+          </button>
+          <button class="px-3 py-1.5 text-xs font-mono rounded-lg bg-[#f3f4fb] text-[#5d5f68] hover:bg-[#e6e7ee] transition-colors">
+            412–413
+          </button>
+          <!-- Active Chip -->
+          <button class="px-3 py-1.5 text-xs font-mono rounded-lg bg-[#0153dc] text-white font-medium shadow-sm flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-white"></span>
+            520–526
+          </button>
+        </div>
+      </div>
+
+      <!-- Two-Column Workspace -->
+      <div class="grid grid-cols-12 gap-6 items-start">
+        
+        <!-- LEFT COLUMN: Document Inspection Viewer (45% / 5.4 cols -> 5 cols) -->
+        <div class="col-span-5 space-y-3 sticky top-24">
+          <div class="card-base overflow-hidden border border-[#c5c6d0]">
+            <!-- Document Header Bar -->
+            <div class="bg-[#f3f4fb] px-4 py-2.5 border-b border-[#e6e7ee] flex items-center justify-between text-xs">
+              <div class="flex items-center gap-2 text-[#30323b] font-medium">
+                <span class="material-symbols-outlined text-[18px] text-[#0153dc]">picture_as_pdf</span>
+                <span>roomy-2021.pdf</span>
+              </div>
+              <span class="px-2 py-0.5 rounded bg-white text-[#30323b] font-mono font-medium border border-[#c5c6d0]">
+                Page 521
+              </span>
+            </div>
+
+            <!-- Rendered Japanese Document Page Replica -->
+            <div class="p-5 bg-white text-[#1f2937] text-[11px] leading-relaxed select-none relative font-sans">
+              
+              <!-- Subtle document page header -->
+              <div class="border-b border-[#c5c6d0] pb-2 mb-3 flex justify-between items-baseline">
+                <span class="font-bold text-xs tracking-tight text-gray-800">9-1. 仕様一覧（サービスデータ）</span>
+                <span class="text-[10px] text-gray-400 font-mono">521</span>
+              </div>
+
+              <div class="text-[10px] text-gray-500 mb-2 font-medium">■ エンジン油脂類・容量規格一覧表</div>
+
+              <!-- Structured Japanese specs table inside PDF preview -->
+              <table class="w-full text-left border-collapse text-[10.5px]">
+                <thead>
+                  <tr class="border-b border-gray-300 text-gray-500 bg-gray-50 text-[10px]">
+                    <th class="py-1 px-1.5 font-medium">点検項目 (Item)</th>
+                    <th class="py-1 px-1.5 font-medium">規格 / 粘度 (Spec)</th>
+                    <th class="py-1 px-1.5 font-medium text-right">容量 (Capacity)</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                  <!-- TARGET HIGHLIGHTED ROW -->
+                  <tr class="bg-[#dbe1ff]/60 border-y-2 border-[#0153dc] text-[#0153dc] font-medium relative">
+                    <td class="py-2 px-1.5">
+                      <div class="flex items-center gap-1 font-bold">
+                        <span class="w-1.5 h-1.5 rounded-full bg-[#0153dc]"></span>
+                        エンジンオイル
+                      </div>
+                      <div class="text-[9.5px] text-[#0153dc]/80 font-normal">交換時（オイルのみ）<br>エレメント同時交換</div>
+                    </td>
+                    <td class="py-2 px-1.5 font-mono">
+                      API SN / ILSAC GF-5<br>SAE 0W-20 (5W-30)
+                    </td>
+                    <td class="py-2 px-1.5 text-right font-mono font-bold whitespace-nowrap">
+                      2.9 L<br>3.1 L
+                    </td>
+                  </tr>
+
+                  <tr class="text-gray-700">
+                    <td class="py-2 px-1.5">
+                      <div class="font-medium text-gray-900">冷却水 (LLC)</div>
+                      <div class="text-[9px] text-gray-500">トヨタ スーパーLLC</div>
+                    </td>
+                    <td class="py-2 px-1.5 text-gray-600">全量・希釈済50%</td>
+                    <td class="py-2 px-1.5 text-right font-mono text-gray-800">
+                      4.4 L (標準)<br>5.0 L (ターボ)
+                    </td>
+                  </tr>
+
+                  <tr class="text-gray-700">
+                    <td class="py-2 px-1.5">
+                      <div class="font-medium text-gray-900">トランスミッション</div>
+                      <div class="text-[9px] text-gray-500">CVTフルード FE</div>
+                    </td>
+                    <td class="py-2 px-1.5 text-gray-600">電子制御式CVT</td>
+                    <td class="py-2 px-1.5 text-right font-mono text-gray-800">
+                      5.8 L (標準)<br>6.4 L (ターボ)
+                    </td>
+                  </tr>
+
+                  <tr class="text-gray-700">
+                    <td class="py-2 px-1.5">
+                      <div class="font-medium text-gray-900">燃料タンク</div>
+                      <div class="text-[9px] text-gray-500">無鉛レギュラー</div>
+                    </td>
+                    <td class="py-2 px-1.5 text-gray-600">リザーブ含む</td>
+                    <td class="py-2 px-1.5 text-right font-mono text-gray-800">
+                      36 L (2WD)<br>38 L (4WD)
+                    </td>
+                  </tr>
+
+                  <tr class="text-gray-700">
+                    <td class="py-2 px-1.5">
+                      <div class="font-medium text-gray-900">ウィンドウォッシャー</div>
+                    </td>
+                    <td class="py-2 px-1.5 text-gray-600">寒冷地仕様共通</td>
+                    <td class="py-2 px-1.5 text-right font-mono text-gray-800">
+                      2.0 L
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div class="mt-4 pt-2 border-t border-gray-200 text-[9.5px] text-gray-400 flex items-center justify-between">
+                <span>※ 仕様・数値は改良のため予告なく変更することがあります。</span>
+                <span class="font-mono text-gray-400">TOYOTA ROOMY 2020-</span>
+              </div>
+            </div>
+
+            <!-- Zoom & Viewer Controls -->
+            <div class="bg-[#faf8fe] px-4 py-2 border-t border-[#e6e7ee] flex items-center justify-between text-xs text-[#5d5f68]">
+              <div class="flex items-center gap-1">
+                <button class="w-7 h-7 rounded hover:bg-[#e6e7ee] flex items-center justify-center transition-colors">
+                  <span class="material-symbols-outlined text-[18px]">zoom_out</span>
+                </button>
+                <span class="font-mono text-[11px] px-1 font-medium text-[#30323b]">100%</span>
+                <button class="w-7 h-7 rounded hover:bg-[#e6e7ee] flex items-center justify-center transition-colors">
+                  <span class="material-symbols-outlined text-[18px]">zoom_in</span>
+                </button>
+                <div class="h-4 w-[1px] bg-[#c5c6d0] mx-1"></div>
+                <button class="w-7 h-7 rounded hover:bg-[#e6e7ee] flex items-center justify-center transition-colors" title="Fit to width">
+                  <span class="material-symbols-outlined text-[18px]">fit_screen</span>
+                </button>
+              </div>
+              <div class="flex items-center gap-1 font-mono text-[11px]">
+                <span>Page 521 / 568</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 text-xs text-[#5d5f68] px-1">
+            <span class="material-symbols-outlined text-[16px] text-emerald-600">check_circle</span>
+            <span>Reading high-resolution OCR vector text directly from manual.</span>
+          </div>
+        </div>
+
+        <!-- RIGHT COLUMN: Verification Spec Cards (55% / 7 cols) -->
+        <div class="col-span-7 space-y-6">
+
+          <!-- SECTION: FLUIDS -->
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <h2 class="text-xs font-bold uppercase tracking-wider text-[#5d5f68]">Fluids</h2>
+              <span class="text-xs text-[#5d5f68]">4 specs</span>
+            </div>
+
+            <!-- Card 1: Engine oil capacity -->
+            <div class="card-base p-5 space-y-4 border-l-4 border-l-[#0153dc]">
+              <div class="flex items-start justify-between">
+                <div>
+                  <h3 class="text-base font-semibold text-[#30323b]">Engine oil capacity</h3>
+                  <div class="text-xs text-[#5d5f68]">Standard and filter replacement volume</div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button class="btn-secondary h-8 px-3 rounded-lg text-xs font-medium">Edit</button>
+                  <button class="btn-outline-primary h-8 px-3.5 rounded-lg text-xs font-semibold flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[16px]">check</span> Approve
+                  </button>
+                </div>
+              </div>
+
+              <!-- Lines: Now -> Manual -->
+              <div class="space-y-2 bg-[#f9f9fd] p-3 rounded-xl border border-[#e6e7ee]">
+                <div class="flex items-center justify-between text-sm">
+                  <span class="text-xs text-[#5d5f68] font-medium">Without filter:</span>
+                  <div class="flex items-center gap-2 font-mono">
+                    <span class="text-[#5d5f68]">Now 3.2 L</span>
+                    <span class="material-symbols-outlined text-[16px] text-[#5d5f68]">arrow_forward</span>
+                    <span class="font-bold text-[#30323b] text-base">2.9 L</span>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between text-sm pt-2 border-t border-[#e6e7ee]">
+                  <span class="text-xs text-[#5d5f68] font-medium">With filter:</span>
+                  <div class="flex items-center gap-2 font-mono">
+                    <span class="text-[#5d5f68]">Now —</span>
+                    <span class="material-symbols-outlined text-[16px] text-[#5d5f68]">arrow_forward</span>
+                    <span class="font-bold text-[#30323b] text-base">3.1 L</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Version Tick Boxes -->
+              <div>
+                <div class="text-[11px] font-medium text-[#5d5f68] uppercase tracking-wider mb-2">Apply to versions:</div>
+                <div class="flex flex-wrap gap-2.5">
+                  <label class="flex items-center gap-2 text-xs font-medium text-[#30323b] bg-[#faf8fe] px-2.5 py-1.5 rounded-lg border border-[#c5c6d0] cursor-pointer hover:bg-[#f3f4fb]">
+                    <input type="checkbox" checked class="w-4 h-4 rounded text-[#0153dc] focus:ring-[#0153dc] accent-[#0153dc]" />
+                    <span>2016–2020 · 2WD</span>
+                  </label>
+                  <label class="flex items-center gap-2 text-xs font-medium text-[#30323b] bg-[#faf8fe] px-2.5 py-1.5 rounded-lg border border-[#c5c6d0] cursor-pointer hover:bg-[#f3f4fb]">
+                    <input type="checkbox" checked class="w-4 h-4 rounded text-[#0153dc] focus:ring-[#0153dc] accent-[#0153dc]" />
+                    <span>2016–2020 · 4WD</span>
+                  </label>
+                  <label class="flex items-center gap-2 text-xs font-medium text-[#30323b] bg-[#faf8fe] px-2.5 py-1.5 rounded-lg border border-[#c5c6d0] cursor-pointer hover:bg-[#f3f4fb]">
+                    <input type="checkbox" checked class="w-4 h-4 rounded text-[#0153dc] focus:ring-[#0153dc] accent-[#0153dc]" />
+                    <span>2020– · 2WD</span>
+                  </label>
+                  <label class="flex items-center gap-2 text-xs font-medium text-[#30323b] bg-[#faf8fe] px-2.5 py-1.5 rounded-lg border border-[#c5c6d0] cursor-pointer hover:bg-[#f3f4fb]">
+                    <input type="checkbox" checked class="w-4 h-4 rounded text-[#0153dc] focus:ring-[#0153dc] accent-[#0153dc]" />
+                    <span>2020– · 4WD</span>
+                  </label>
+                  <label class="flex items-center gap-2 text-xs font-medium text-[#30323b] bg-[#faf8fe] px-2.5 py-1.5 rounded-lg border border-[#c5c6d0] cursor-pointer hover:bg-[#f3f4fb]">
+                    <input type="checkbox" checked class="w-4 h-4 rounded text-[#0153dc] focus:ring-[#0153dc] accent-[#0153dc]" />
+                    <span>2020– · turbo</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 2: Engine oil grade -->
+            <div class="card-base p-5 space-y-4">
+              <div class="flex items-start justify-between">
+                <div>
+                  <h3 class="text-base font-semibold text-[#30323b]">Engine oil grade</h3>
+                  <div class="text-xs text-[#5d5f68]">Viscosity grade specification</div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button class="btn-secondary h-8 px-3 rounded-lg text-xs font-medium">Edit</button>
+                  <button class="btn-outline-primary h-8 px-3.5 rounded-lg text-xs font-semibold flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[16px]">check</span> Approve
+                  </button>
+                </div>
+              </div>
+
+              <!-- Line: Now -> Manual -->
+              <div class="bg-[#f9f9fd] p-3 rounded-xl border border-[#e6e7ee] flex items-center justify-between text-sm">
+                <span class="text-xs text-[#5d5f68] font-medium">Specification:</span>
+                <div class="flex items-center gap-2 font-mono">
+                  <span class="text-[#5d5f68]">Now —</span>
+                  <span class="material-symbols-outlined text-[16px] text-[#5d5f68]">arrow_forward</span>
+                  <span class="font-bold text-[#30323b] text-base">0W-20 (5W-30 allowed)</span>
+                </div>
+              </div>
+
+              <!-- Version Tick Boxes -->
+              <div>
+                <div class="text-[11px] font-medium text-[#5d5f68] uppercase tracking-wider mb-2">Apply to versions:</div>
+                <div class="flex flex-wrap gap-2.5">
+                  <label class="flex items-center gap-2 text-xs font-medium text-[#30323b] bg-[#faf8fe] px-2.5 py-1.5 rounded-lg border border-[#c5c6d0] cursor-pointer">
+                    <input type="checkbox" checked class="w-4 h-4 rounded text-[#0153dc] accent-[#0153dc]" />
+                    <span>2016–2020 · 2WD</span>
+                  </label>
+                  <label class="flex items-center gap-2 text-xs font-medium text-[#30323b] bg-[#faf8fe] px-2.5 py-1.5 rounded-lg border border-[#c5c6d0] cursor-pointer">
+                    <input type="checkbox" checked class="w-4 h-4 rounded text-[#0153dc] accent-[#0153dc]" />
+                    <span>2016–2020 · 4WD</span>
+                  </label>
+                  <label class="flex items-center gap-2 text-xs font-medium text-[#30323b] bg-[#faf8fe] px-2.5 py-1.5 rounded-lg border border-[#c5c6d0] cursor-pointer">
+                    <input type="checkbox" checked class="w-4 h-4 rounded text-[#0153dc] accent-[#0153dc]" />
+                    <span>2020– · 2WD</span>
+                  </label>
+                  <label class="flex items-center gap-2 text-xs font-medium text-[#30323b] bg-[#faf8fe] px-2.5 py-1.5 rounded-lg border border-[#c5c6d0] cursor-pointer">
+                    <input type="checkbox" checked class="w-4 h-4 rounded text-[#0153dc] accent-[#0153dc]" />
+                    <span>2020– · 4WD</span>
+                  </label>
+                  <label class="flex items-center gap-2 text-xs font-medium text-[#30323b] bg-[#faf8fe] px-2.5 py-1.5 rounded-lg border border-[#c5c6d0] cursor-pointer">
+                    <input type="checkbox" checked class="w-4 h-4 rounded text-[#0153dc] accent-[#0153dc]" />
+                    <span>2020– · turbo</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 3: Coolant capacity -->
+            <div class="card-base p-5 space-y-4">
+              <div class="flex items-start justify-between">
+                <div>
+                  <h3 class="text-base font-semibold text-[#30323b]">Coolant capacity</h3>
+                  <div class="text-xs text-[#5d5f68]">Toyota Super Long Life Coolant</div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button class="btn-secondary h-8 px-3 rounded-lg text-xs font-medium">Edit</button>
+                  <button class="btn-outline-primary h-8 px-3.5 rounded-lg text-xs font-semibold flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[16px]">check</span> Approve
+                  </button>
+                </div>
+              </div>
+
+              <!-- Line 1 & Petrol Versions -->
+              <div class="space-y-3 bg-[#f9f9fd] p-3.5 rounded-xl border border-[#e6e7ee]">
+                <div class="flex items-center justify-between text-sm">
+                  <span class="font-semibold text-xs text-[#30323b]">1.0 petrol</span>
+                  <div class="flex items-center gap-2 font-mono">
+                    <span class="text-[#5d5f68]">Now 4.5 L</span>
+                    <span class="material-symbols-outlined text-[16px] text-[#5d5f68]">arrow_forward</span>
+                    <span class="font-bold text-[#30323b] text-base">4.4 L</span>
+                  </div>
+                </div>
+                <div class="flex flex-wrap gap-2 pt-1 border-t border-[#e6e7ee]">
+                  <label class="flex items-center gap-2 text-[11px] font-medium text-[#30323b] bg-white px-2 py-1 rounded border border-[#c5c6d0] cursor-pointer">
+                    <input type="checkbox" checked class="w-3.5 h-3.5 rounded text-[#0153dc] accent-[#0153dc]" />
+                    <span>2016–2020 · 2WD</span>
+                  </label>
+                  <label class="flex items-center gap-2 text-[11px] font-medium text-[#30323b] bg-white px-2 py-1 rounded border border-[#c5c6d0] cursor-pointer">
+                    <input type="checkbox" checked class="w-3.5 h-3.5 rounded text-[#0153dc] accent-[#0153dc]" />
+                    <span>2016–2020 · 4WD</span>
+                  </label>
+                  <label class="flex items-center gap-2 text-[11px] font-medium text-[#30323b] bg-white px-2 py-1 rounded border border-[#c5c6d0] cursor-pointer">
+                    <input type="checkbox" checked class="w-3.5 h-3.5 rounded text-[#0153dc] accent-[#0153dc]" />
+                    <span>2020– · 2WD</span>
+                  </label>
+                  <label class="flex items-center gap-2 text-[11px] font-medium text-[#30323b] bg-white px-2 py-1 rounded border border-[#c5c6d0] cursor-pointer">
+                    <input type="checkbox" checked class="w-3.5 h-3.5 rounded text-[#0153dc] accent-[#0153dc]" />
+                    <span>2020– · 4WD</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Line 2 & Turbo Versions -->
+              <div class="space-y-3 bg-[#f9f9fd] p-3.5 rounded-xl border border-[#e6e7ee]">
+                <div class="flex items-center justify-between text-sm">
+                  <span class="font-semibold text-xs text-[#30323b]">1.0 turbo</span>
+                  <div class="flex items-center gap-2 font-mono">
+                    <span class="text-[#5d5f68]">Now 4.5 L</span>
+                    <span class="material-symbols-outlined text-[16px] text-[#5d5f68]">arrow_forward</span>
+                    <span class="font-bold text-[#30323b] text-base">5.0 L</span>
+                  </div>
+                </div>
+                <div class="flex flex-wrap gap-2 pt-1 border-t border-[#e6e7ee]">
+                  <label class="flex items-center gap-2 text-[11px] font-medium text-[#30323b] bg-white px-2 py-1 rounded border border-[#c5c6d0] cursor-pointer">
+                    <input type="checkbox" checked class="w-3.5 h-3.5 rounded text-[#0153dc] accent-[#0153dc]" />
+                    <span>2020– · turbo</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 4: Fuel tank -->
+            <div class="card-base p-5 space-y-4">
+              <div class="flex items-start justify-between">
+                <div>
+                  <h3 class="text-base font-semibold text-[#30323b]">Fuel tank</h3>
+                  <div class="text-xs text-[#5d5f68]">Regular unleaded petrol capacity</div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button class="btn-secondary h-8 px-3 rounded-lg text-xs font-medium">Edit</button>
+                  <button class="btn-outline-primary h-8 px-3.5 rounded-lg text-xs font-semibold flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[16px]">check</span> Approve
+                  </button>
+                </div>
+              </div>
+
+              <div class="space-y-3">
+                <!-- 2WD Matches line -->
+                <div class="bg-[#f9f9fd] p-3 rounded-xl border border-[#e6e7ee] flex items-center justify-between">
+                  <span class="text-xs font-medium text-[#30323b]">2WD:</span>
+                  <div class="flex items-center gap-3">
+                    <span class="font-mono text-sm text-[#30323b]">Now 36 L</span>
+                    <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-[#e6f4ea] text-[#006e31] flex items-center gap-1">
+                      <span class="material-symbols-outlined text-[14px]">check</span> Matches
+                    </span>
+                  </div>
+                </div>
+
+                <!-- 4WD Changes line with 4WD tick boxes -->
+                <div class="bg-[#f9f9fd] p-3.5 rounded-xl border border-[#e6e7ee] space-y-3">
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="text-xs font-semibold text-[#30323b]">4WD:</span>
+                    <div class="flex items-center gap-2 font-mono">
+                      <span class="text-[#5d5f68]">Now 36 L</span>
+                      <span class="material-symbols-outlined text-[16px] text-[#5d5f68]">arrow_forward</span>
+                      <span class="font-bold text-[#30323b] text-base">38 L</span>
+                    </div>
+                  </div>
+                  <div class="flex flex-wrap gap-2 pt-2 border-t border-[#e6e7ee]">
+                    <label class="flex items-center gap-2 text-[11px] font-medium text-[#30323b] bg-white px-2 py-1 rounded border border-[#c5c6d0] cursor-pointer">
+                      <input type="checkbox" checked class="w-3.5 h-3.5 rounded text-[#0153dc] accent-[#0153dc]" />
+                      <span>2016–2020 · 4WD</span>
+                    </label>
+                    <label class="flex items-center gap-2 text-[11px] font-medium text-[#30323b] bg-white px-2 py-1 rounded border border-[#c5c6d0] cursor-pointer">
+                      <input type="checkbox" checked class="w-3.5 h-3.5 rounded text-[#0153dc] accent-[#0153dc]" />
+                      <span>2020– · 4WD</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- SECTION: TYRES -->
+          <div class="space-y-3 pt-2">
+            <div class="flex items-center justify-between">
+              <h2 class="text-xs font-bold uppercase tracking-wider text-[#5d5f68]">Tyres</h2>
+              <span class="text-xs text-[#5d5f68]">1 spec group</span>
+            </div>
+
+            <!-- Card: Tyres -->
+            <div class="card-base p-5 space-y-4">
+              <div class="flex items-start justify-between">
+                <div>
+                  <h3 class="text-base font-semibold text-[#30323b]">Tyre sizes & pressures</h3>
+                  <div class="text-xs text-[#5d5f68]">Factory inflation ratings and rim dimensions</div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button class="btn-secondary h-8 px-3 rounded-lg text-xs font-medium">Edit</button>
+                  <button class="btn-outline-primary h-8 px-3.5 rounded-lg text-xs font-semibold flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[16px]">check</span> Approve
+                  </button>
+                </div>
+              </div>
+
+              <!-- Tyres Spec Rows Table -->
+              <div class="bg-[#f9f9fd] p-3 rounded-xl border border-[#e6e7ee] space-y-2 text-xs">
+                <div class="flex items-center justify-between py-1 border-b border-[#e6e7ee]/80 font-mono">
+                  <span class="font-bold text-[#30323b] text-sm">165/65R14 79S</span>
+                  <div class="flex items-center gap-3 text-[#5d5f68]">
+                    <span>14×5J</span>
+                    <span class="font-bold text-[#0153dc]">260 kPa</span>
+                    <span class="font-sans px-2 py-0.5 rounded bg-[#e6e7ee] text-[#30323b] font-medium text-[11px]">standard</span>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between py-1 border-b border-[#e6e7ee]/80 font-mono">
+                  <span class="font-bold text-[#30323b] text-sm">175/55R15 77V</span>
+                  <div class="flex items-center gap-3 text-[#5d5f68]">
+                    <span>15×5J</span>
+                    <span class="font-bold text-[#0153dc]">250 kPa</span>
+                    <span class="font-sans px-2 py-0.5 rounded bg-[#f3f4fb] border border-[#c5c6d0] text-[#5d5f68] font-medium text-[11px]">optional</span>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between py-1 font-mono">
+                  <span class="font-bold text-[#30323b] text-sm">Spare T115/70D14 88M</span>
+                  <div class="flex items-center gap-3 text-[#5d5f68]">
+                    <span>14×4T</span>
+                    <span class="font-bold text-[#0153dc]">420 kPa</span>
+                    <span class="font-sans text-[#5d5f68] text-[11px]">—</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="text-xs text-[#8a5a00] bg-[#fff4dc] px-3 py-2 rounded-lg flex items-center gap-2">
+                <span class="material-symbols-outlined text-[16px]">info</span>
+                <span>Now: size only, no pressures</span>
+              </div>
+
+              <!-- Version Tick Boxes -->
+              <div>
+                <div class="text-[11px] font-medium text-[#5d5f68] uppercase tracking-wider mb-2">Apply to versions:</div>
+                <div class="flex flex-wrap gap-2.5">
+                  <label class="flex items-center gap-2 text-xs font-medium text-[#30323b] bg-[#faf8fe] px-2.5 py-1.5 rounded-lg border border-[#c5c6d0] cursor-pointer">
+                    <input type="checkbox" checked class="w-4 h-4 rounded text-[#0153dc] accent-[#0153dc]" />
+                    <span>2016–2020 · 2WD</span>
+                  </label>
+                  <label class="flex items-center gap-2 text-xs font-medium text-[#30323b] bg-[#faf8fe] px-2.5 py-1.5 rounded-lg border border-[#c5c6d0] cursor-pointer">
+                    <input type="checkbox" checked class="w-4 h-4 rounded text-[#0153dc] accent-[#0153dc]" />
+                    <span>2016–2020 · 4WD</span>
+                  </label>
+                  <label class="flex items-center gap-2 text-xs font-medium text-[#30323b] bg-[#faf8fe] px-2.5 py-1.5 rounded-lg border border-[#c5c6d0] cursor-pointer">
+                    <input type="checkbox" checked class="w-4 h-4 rounded text-[#0153dc] accent-[#0153dc]" />
+                    <span>2020– · 2WD</span>
+                  </label>
+                  <label class="flex items-center gap-2 text-xs font-medium text-[#30323b] bg-[#faf8fe] px-2.5 py-1.5 rounded-lg border border-[#c5c6d0] cursor-pointer">
+                    <input type="checkbox" checked class="w-4 h-4 rounded text-[#0153dc] accent-[#0153dc]" />
+                    <span>2020– · 4WD</span>
+                  </label>
+                  <label class="flex items-center gap-2 text-xs font-medium text-[#30323b] bg-[#faf8fe] px-2.5 py-1.5 rounded-lg border border-[#c5c6d0] cursor-pointer">
+                    <input type="checkbox" checked class="w-4 h-4 rounded text-[#0153dc] accent-[#0153dc]" />
+                    <span>2020– · turbo</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+
+    </main>
+
+    <!-- Sticky Bottom Footer Bar -->
+    <div class="fixed bottom-0 right-0 left-64 bg-white border-t border-[#e6e7ee] shadow-[0_-4px_16px_rgba(0,0,0,0.06)] px-8 py-3.5 z-40 flex items-center justify-between">
+      <div class="flex items-center gap-2 text-xs text-[#5d5f68]">
+        <span class="material-symbols-outlined text-[18px] text-[#5d5f68]">info</span>
+        <span>Approved specs replace what Roam has for the ticked versions, and the old value is kept in History.</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <button class="btn-danger h-11 px-4 rounded-xl text-sm font-semibold">
+          Reject this manual
+        </button>
+        <button class="btn-secondary h-11 px-5 rounded-xl text-sm font-semibold">
+          Save and finish later
+        </button>
+        <button class="btn-primary h-11 px-6 rounded-xl text-sm font-semibold shadow-md flex items-center gap-2">
+          <span class="material-symbols-outlined text-[18px]">verified</span>
+          Approve all 27
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>

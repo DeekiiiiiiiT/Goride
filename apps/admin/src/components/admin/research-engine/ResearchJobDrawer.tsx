@@ -64,6 +64,8 @@ import {
   checkPositions,
   catalogueEngineCode,
   partFinder,
+  specFinder,
+  anyPageLinkOk,
   carLabel,
   howSureLine,
   keptSources,
@@ -768,6 +770,8 @@ function BrowserCheckCard({
   const [typedAgain, setTypedAgain] = useState("");
   const [datesOk, setDatesOk] = useState<boolean | null>(null);
   const [sideOk, setSideOk] = useState<boolean | null>(null);
+  // Owner 27 Nov: the page a spec was found on, when it isn't a parts catalogue (owner's manual, finder site…).
+  const [pageLink, setPageLink] = useState("");
   // One number entry (tapped or typed, typed twice), keyed "<place>#<row>".
   const [posVals, setPosVals] = useState<Record<string, { picked: string; typed: string; again: string }>>({});
   // Owner 25 Nov: every number the site lists, per place, each with the dates shown next to it (any site, any count).
@@ -789,6 +793,7 @@ function BrowserCheckCard({
     setTypedAgain("");
     setDatesOk(null);
     setSideOk(null);
+    setPageLink("");
     setPosVals({});
   }, [detail.job.id]);
 
@@ -797,6 +802,9 @@ function BrowserCheckCard({
   // The button names the site it really opens (RE-69: it said Partsouq while opening the remembered Amayama page).
   const site = siteName(openUrl);
   const jobType = detail.job.job_type === "spec" ? "spec" : "part";
+  // Owner 27 Nov: bulbs, tyres, oil… aren't in a parts catalogue; they're checked on any page about the car.
+  const anyPage = jobType === "spec" && detail.specSource === "any_page";
+  const pageLinkOk = anyPage ? anyPageLinkOk(pageLink) : true;
   const finder = partFinder(itemName, detail.car?.make, detail.job.fit_descriptor, detail.makerPartName, detail.makerSearch);
   const known = detail.knownVersion ?? null;
   const versionRow = catalogueVersionRow(detail.car, known).filter((c) => c.label !== "Model code" && c.value !== "—");
@@ -804,6 +812,7 @@ function BrowserCheckCard({
   const fit = String(detail.job.fit_descriptor ?? "").toLowerCase();
   const side = fit.includes("rear") ? "rear" : fit.includes("front") ? "front" : null;
   const specLabel = (detail.spec?.label ?? itemName).toLowerCase();
+  const specHint = specFinder(detail.spec?.key, specLabel);
   // Roam's suggestions to tap (part numbers, or a spec's suggested value).
   const suggestions = [
     ...new Set(
@@ -819,9 +828,13 @@ function BrowserCheckCard({
   const needsAgain = !picked && Boolean(typed.trim());
   const againOk = !needsAgain || typedAgain.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") === typed.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
   const frame = String(detail.car?.chassis_code ?? "").trim().toUpperCase().replace(/^[A-Z0-9]{2,3}-(?=[A-Z])/, "");
+  const pickOf = (label: string) => versionRow.find((c) => c.label === label)?.value ?? "";
+  const pickBuilt = pickOf("Built");
+  const pickEngine = pickOf("Engine");
+  const pickGrade = pickOf("Grade");
   const typedModel = versionCode.trim().toUpperCase();
   const modelOk = frame ? typedModel.startsWith(`${frame}-`) && typedModel.length > frame.length + 3 : typedModel.length >= 4;
-  const versionAnswered = known ? versionOk === true : modelOk;
+  const versionAnswered = anyPage || known ? versionOk === true : modelOk;
   const positions = jobType === "part" ? checkPositions(detail.partType?.position_scheme, detail.job.fit_descriptor) : null;
   const pv = (k: string) => posVals[k] ?? { picked: "", typed: "", again: "" };
   const setPv = (k: string, patch: Partial<{ picked: string; typed: string; again: string }>) =>
@@ -877,7 +890,7 @@ function BrowserCheckCard({
       versionAnswered &&
       partFound === true &&
       (!needDatesAnswer || datesOk === true) &&
-      (jobType === "part" ? numbersOk && (positions || !side || sideOk === true) : Boolean(value) && againOk && (!side || sideOk === true)),
+      (jobType === "part" ? numbersOk && (positions || !side || sideOk === true) : Boolean(value) && againOk && pageLinkOk && (!side || sideOk === true)),
   );
   const dateYears = (() => {
     const now = new Date().getFullYear();
@@ -1030,7 +1043,17 @@ function BrowserCheckCard({
   const steps: Step[] = [
     { id: "open", ok: Boolean(openUrl), node: (
       <div className="flex w-full flex-col gap-2">
-        <p>Open the parts site. It opens in a new tab; come back here to answer.</p>
+        <p>
+          {anyPage ? (
+            <>
+              Search for your car&apos;s <span className="font-semibold">{specLabel}</span>. Use a page for your exact car: the
+              owner&apos;s manual, the car maker&apos;s site, or a bulb, tyre or battery finder. It opens in a new tab; come back
+              here to answer.
+            </>
+          ) : (
+            "Open the parts site. It opens in a new tab; come back here to answer."
+          )}
+        </p>
         {openUrl ? (
           <a
             href={openUrl}
@@ -1039,7 +1062,7 @@ function BrowserCheckCard({
             className="parts-btn parts-btn--primary !min-h-[40px] w-full justify-center md:w-auto"
             data-testid="open-catalogue-page"
           >
-            Open {site} <DIcon name="open_in_new" className="text-[16px]" />
+            {anyPage ? "Open the search" : `Open ${site}`} <DIcon name="open_in_new" className="text-[16px]" />
           </a>
         ) : (
           <span className={D_MUTED}>No {site} link for this one. Use Not on this page.</span>
@@ -1048,7 +1071,20 @@ function BrowserCheckCard({
     ) },
     { id: "version", ok: versionAnswered, no: versionOk === false, node: (
       <div className="flex w-full flex-col gap-2" data-testid="browser-check-instruction">
-        {known ? (
+        {anyPage ? (
+          <>
+            <p data-testid="guide-any-page-car">
+              Is the page you opened for your car: <span className="font-semibold">{detail.car ? carLabel(detail.car) : "this car"}</span>
+              {pickEngine ? (
+                <>
+                  , engine <span className="font-semibold">{pickEngine}</span>
+                </>
+              ) : null}
+              ?
+            </p>
+            {yesNo(versionOk, setVersionOk, "q-version")}
+          </>
+        ) : known ? (
           <>
             <p>{known.url ? "Check the site shows your car:" : "Pick your car in the site's list:"}</p>
             <ul className="flex flex-col gap-0.5" data-testid="guide-version-row">
@@ -1063,17 +1099,42 @@ function BrowserCheckCard({
           </>
         ) : (
           <>
-            <p>Pick the version of your car that has:</p>
-            <ul className="flex flex-col gap-0.5" data-testid="guide-version-row">
-              {versionRow.map((c) => (
-                <li key={c.label}>
-                  {c.label}: <span className="font-semibold">{c.value}</span>
-                  {(c.label === "Model code" || c.label === "Engine") && c.value !== "—" ? <CopyIcon text={c.value} /> : null}
-                </li>
-              ))}
-            </ul>
+            {/* Owner 27 Nov: an engine code finds no car on a parts site (Amayama: "No models found"). Every catalogue
+                lists the versions under the car's model code, so that is what to copy; the row is then matched by
+                the build dates and engine, which every site prints the same way. Grade only breaks a tie. */}
+            <div className="flex flex-col gap-1.5" data-testid="guide-version-row">
+              <p data-testid="guide-find-model">
+                {frame ? (
+                  <>
+                    1. Find <span className="font-semibold">{frame}</span>
+                    <CopyIcon text={frame} /> on the site. If the page doesn&apos;t list it, type it in the site&apos;s search box.
+                  </>
+                ) : (
+                  <>1. Find your car&apos;s list of versions on the site.</>
+                )}
+              </p>
+              <p data-testid="guide-pick-row">
+                2. In that list, pick the row
+                {pickBuilt ? (
+                  <>
+                    {" "}built <span className="font-semibold">{pickBuilt}</span>
+                  </>
+                ) : null}
+                {pickEngine ? (
+                  <>
+                    {" "}with engine <span className="font-semibold">{pickEngine}</span>
+                  </>
+                ) : null}
+                .
+              </p>
+              {pickGrade ? (
+                <p className={D_MUTED} data-testid="guide-pick-grade">
+                  More than one row? Pick grade <span className="font-semibold">{pickGrade}</span>. Sites often shorten grade names to a few capital letters.
+                </p>
+              ) : null}
+            </div>
             <label className="flex flex-col gap-1">
-              <span>Type the model code the site shows for it:</span>
+              <span>3. Type the model code shown on that row:</span>
               <input value={versionCode} onChange={(e) => setVersionCode(e.target.value)} maxLength={40} className={input} data-testid="q-version-code" />
             </label>
           </>
@@ -1082,7 +1143,58 @@ function BrowserCheckCard({
     ) },
     { id: "part", ok: partFound === true, no: partFound === false, node: (
       <div className="flex w-full flex-col gap-2" data-testid="guide-find-part">
-        {jobType === "part" && finder.section ? (
+        {/* Owner 27 Nov: the number first, on any site. A word search can land on a different part with the same word
+            ("THERMOSTAT ASSY" in the heater piping); Roam's number finds the one row. The word is the fallback. */}
+        {jobType === "part" && detail.savedPage ? (
+          <a
+            href={detail.savedPage.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="parts-btn parts-btn--secondary !min-h-[44px] w-full justify-center"
+            data-testid="guide-open-saved-page"
+          >
+            <DIcon name="history" className="text-[18px]" /> Open the page you saved before
+            {detail.savedPage.domain ? ` (${detail.savedPage.domain})` : ""}
+            <DIcon name="open_in_new" className="text-[16px]" />
+          </a>
+        ) : null}
+        {jobType === "part" && suggestions.length ? (
+          <ul className="flex flex-col gap-1.5" data-testid="guide-number-first">
+            <li data-testid="guide-search-number">
+              Search <span className="font-semibold">{suggestions[0]}</span>
+              <CopyIcon text={suggestions[0]} />
+              {suggestions.length > 1 ? (
+                <>
+                  {" "}(or{" "}
+                  {suggestions.slice(1, 3).map((n, i) => (
+                    <span key={n}>
+                      {i ? ", " : ""}
+                      <span className="font-semibold">{n}</span>
+                      <CopyIcon text={n} />
+                    </span>
+                  ))}
+                  )
+                </>
+              ) : null}
+              . Open what it finds and look for that number.
+            </li>
+            <li data-testid="guide-search-word">
+              Nothing found? Search <span className="font-semibold">{finder.search}</span>
+              <CopyIcon text={finder.search} />
+              {finder.section ? (
+                <>
+                  , open the section for the <span className="font-semibold">{finder.section}</span>,
+                </>
+              ) : null}{" "}
+              and look for a row called{" "}
+              <span className="font-semibold">{finder.rowName ?? itemName.toUpperCase()}</span>
+              {finder.rowName ? <CopyIcon text={finder.rowName} /> : null}.
+            </li>
+            <li className="font-semibold" data-testid="guide-found-it">
+              Found it? Press Yes. Not there? Press No, then Not on this page.
+            </li>
+          </ul>
+        ) : jobType === "part" && finder.section ? (
           <ul className="flex flex-col gap-1.5">
             <li>
               Search <span className="font-semibold">{finder.search}</span>
@@ -1114,9 +1226,29 @@ function BrowserCheckCard({
                 {finder.rowName ? <CopyIcon text={finder.rowName} /> : null}?
               </>
             ) : (
-              <>
-                Do you see the <span className="font-semibold">{specLabel}</span>?
-              </>
+              <span className="flex flex-col gap-1.5" data-testid="spec-hint">
+                <span>
+                  {anyPage ? null : (
+                    <>
+                      Search <span className="font-semibold">{specHint.search}</span>
+                      <CopyIcon text={specHint.search} />.
+                    </>
+                  )}
+                  {specHint.looksLike ? (
+                    <>
+                      {" "}It is written like <span className="font-semibold">{specHint.looksLike}</span>.
+                    </>
+                  ) : null}
+                </span>
+                <span>
+                  Do you see the <span className="font-semibold">{specLabel}</span>?
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {anyPage
+                    ? "Not written there? Try another page for your car. None shows it? Press No, then Not on this page."
+                    : "Only a part number, not the value itself? Press No, then Not on this page."}
+                </span>
+              </span>
             )}
           </p>
         )}
@@ -1194,8 +1326,24 @@ function BrowserCheckCard({
         })),
       ]
       : [
-        { id: "numbers", ok: Boolean(value) && againOk, node: (
+        { id: "numbers", ok: Boolean(value) && againOk && pageLinkOk, node: (
           <div className="flex w-full flex-col gap-2">
+            {anyPage ? (
+              <label className="flex flex-col gap-1">
+                <span>Copy the link of the page that shows it (from the address bar) and paste it here:</span>
+                <input
+                  value={pageLink}
+                  onChange={(e) => setPageLink(e.target.value)}
+                  placeholder="https://…"
+                  maxLength={2000}
+                  className={input}
+                  data-testid="q-page-link"
+                />
+                {pageLink.trim() && !pageLinkOk ? (
+                  <span className="text-[#a83836]">Paste the page&apos;s own link (starting https://), not the search page.</span>
+                ) : null}
+              </label>
+            ) : null}
             <p>The value shown:</p>
             {suggestions.length ? (
               <p className={`text-[13px] ${D_MUTED}`}>Roam's guesses. Tap one only if it's exactly what the site shows; otherwise type it.</p>
@@ -1325,7 +1473,7 @@ function BrowserCheckCard({
               onClick={() =>
                 openUrl &&
                 onConfirm({
-                  url: openUrl,
+                  url: anyPage ? pageLink.trim() : openUrl,
                   answers: {
                     versionOk: known ? versionOk === true : null,
                     versionCode: known ? null : versionCode.trim(),

@@ -7,6 +7,7 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { deskAug24Fixture } from './fixtures/deskAug24Fixture';
 import { TollV2CommandError } from '../../../../services/tollV2CommandError';
+import { TOLL_V2_NO_ACCESS_MESSAGE } from './tollV2ReadAccess';
 
 const tollV2Command = vi.fn();
 vi.mock('../../../../services/api', () => ({
@@ -24,11 +25,16 @@ vi.mock('sonner', () => ({
 
 const fetchDesk = vi.fn();
 const fetchTollV2DeskRpc = vi.fn();
+const deskQueryState = vi.hoisted(() => ({
+  isError: false,
+  error: null as unknown,
+}));
 vi.mock('./useTollV2Desk', () => ({
   useTollV2Desk: () => ({
     isLoading: false,
-    isError: false,
-    data: fetchDesk(),
+    isError: deskQueryState.isError,
+    error: deskQueryState.error,
+    data: deskQueryState.isError ? undefined : fetchDesk(),
     refetch: vi.fn(),
   }),
   fetchTollV2Desk: (...args: unknown[]) => fetchTollV2DeskRpc(...args),
@@ -60,8 +66,22 @@ vi.mock('./useTollV2Switches', () => ({
   useTollV2Switches: () => ({ data: { tollDisputes: false, loggedTrips: false, riderPaysDriver: false } }),
 }));
 
+const weeksQueryState = vi.hoisted(() => ({
+  isError: false,
+  isPending: false,
+  error: null as unknown,
+}));
+
 vi.mock('./useTollV2Weeks', () => ({
-  useTollV2Weeks: () => ({ data: weeksOverview }),
+  TOLL_V2_WEEKS_KEY: ['toll-v2-weeks'] as const,
+  useTollV2Weeks: () => ({
+    isLoading: weeksQueryState.isPending,
+    isPending: weeksQueryState.isPending,
+    isError: weeksQueryState.isError,
+    error: weeksQueryState.error,
+    data: weeksQueryState.isError || weeksQueryState.isPending ? undefined : weeksOverview,
+    refetch: vi.fn(),
+  }),
 }));
 
 vi.mock('../../../../hooks/usePermissions', () => ({
@@ -80,7 +100,7 @@ import { ReconTollsV2Step } from './ReconTollsV2Step';
 
 function wrap(ui: React.ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  return { client, ...render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>) };
 }
 
 describe('ReconTollsV2Step', () => {
@@ -96,6 +116,11 @@ describe('ReconTollsV2Step', () => {
     toastError.mockReset();
     weeksOverview.takeBacks = [];
     weeksOverview.openWeek = '2026-08-24';
+    weeksQueryState.isError = false;
+    weeksQueryState.isPending = false;
+    weeksQueryState.error = null;
+    deskQueryState.isError = false;
+    deskQueryState.error = null;
     fetchDesk.mockReturnValue(deskAug24Fixture());
     unhandled.length = 0;
     process.on('unhandledRejection', onUnhandled);
@@ -369,5 +394,110 @@ describe('ReconTollsV2Step', () => {
       expect(toastError).not.toHaveBeenCalled();
       expect(toastSuccess).toHaveBeenCalledWith('Tolls sealed for this week');
     });
+  });
+
+  it('sealing refreshes the weeks list too', async () => {
+    tollV2Command.mockResolvedValue({});
+    fetchDesk.mockReturnValue(
+      deskAug24Fixture({
+        sealed: false,
+        blockers: [],
+        charges: deskAug24Fixture().charges.map((c) => ({
+          ...c,
+          state: 'decided',
+          section: 'decided',
+          openMinor: 0,
+        })),
+      }),
+    );
+    const { client } = wrap(
+      <ReconTollsV2Step weekKey="2026-08-24" summaryTarget={null} onGoToTagAccount={() => {}} />,
+    );
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    fireEvent.click(screen.getByTestId('toll-v2-seal-button'));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Tolls sealed for this week'));
+    await waitFor(() => {
+      const weeksKey = JSON.stringify(['toll-v2-weeks']);
+      const asked = invalidate.mock.calls.some(
+        (call) =>
+          JSON.stringify((call[0] as { queryKey?: unknown } | undefined)?.queryKey) === weeksKey,
+      );
+      expect(asked).toBe(true);
+    });
+  });
+
+  it('a permission refusal on the weeks read says so where the take-backs card would be', () => {
+    weeksQueryState.isError = true;
+    weeksQueryState.error = { code: 'P0001', message: 'FORBIDDEN' };
+    fetchDesk.mockReturnValue(
+      deskAug24Fixture({ charges: [], paybacks: [], kept: [], reviewPairs: [], blockers: [], late: [] }),
+    );
+    wrap(<ReconTollsV2Step weekKey="2026-08-24" summaryTarget={null} onGoToTagAccount={() => {}} />);
+    expect(screen.getByTestId('toll-v2-weeks-error').textContent).toContain(TOLL_V2_NO_ACCESS_MESSAGE);
+    // The desk being empty must not be reported as "nothing to decide" while the weeks read failed.
+    expect(screen.queryByTestId('toll-v2-empty')).toBeNull();
+  });
+
+  it('a dropped connection on the weeks read says to check the connection, not that access is missing', () => {
+    weeksQueryState.isError = true;
+    weeksQueryState.error = new TypeError('Failed to fetch');
+    fetchDesk.mockReturnValue(
+      deskAug24Fixture({ charges: [], paybacks: [], kept: [], reviewPairs: [], blockers: [], late: [] }),
+    );
+    wrap(<ReconTollsV2Step weekKey="2026-08-24" summaryTarget={null} onGoToTagAccount={() => {}} />);
+    const card = screen.getByTestId('toll-v2-weeks-error');
+    expect(card.textContent).toContain("Couldn't load the Uber take-backs");
+    expect(card.textContent).not.toContain(TOLL_V2_NO_ACCESS_MESSAGE);
+    expect(screen.queryByTestId('toll-v2-empty')).toBeNull();
+  });
+
+  it('a sealed week shows the sealed ribbon, not the weeks error card', () => {
+    weeksQueryState.isError = true;
+    weeksQueryState.error = { code: 'P0001', message: 'FORBIDDEN' };
+    fetchDesk.mockReturnValue(deskAug24Fixture({ sealed: true }));
+    wrap(<ReconTollsV2Step weekKey="2026-08-24" summaryTarget={null} onGoToTagAccount={() => {}} />);
+    expect(screen.queryByTestId('toll-v2-weeks-error')).toBeNull();
+  });
+
+  it('a refused desk read says there is no access, and offers no Try again', () => {
+    // Both reads call the same permission check, so a user with no toll access fails the desk read first.
+    deskQueryState.isError = true;
+    deskQueryState.error = { code: 'P0001', message: 'FORBIDDEN' };
+    weeksQueryState.isError = true;
+    weeksQueryState.error = { code: 'P0001', message: 'FORBIDDEN' };
+    wrap(<ReconTollsV2Step weekKey="2026-08-24" summaryTarget={null} onGoToTagAccount={() => {}} />);
+    expect(screen.getByTestId('toll-v2-error').textContent).toContain(TOLL_V2_NO_ACCESS_MESSAGE);
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+  });
+
+  it('a dropped connection on the desk read still says to check the connection, with Try again', () => {
+    deskQueryState.isError = true;
+    deskQueryState.error = new TypeError('Failed to fetch');
+    wrap(<ReconTollsV2Step weekKey="2026-08-24" summaryTarget={null} onGoToTagAccount={() => {}} />);
+    const card = screen.getByTestId('toll-v2-error');
+    expect(card.textContent).toContain("Couldn't load tolls");
+    expect(card.textContent).toContain('Check your connection.');
+    expect(card.textContent).not.toContain(TOLL_V2_NO_ACCESS_MESSAGE);
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+  });
+
+  it('no "nothing to decide" card while the weeks list is still loading', () => {
+    weeksQueryState.isPending = true;
+    fetchDesk.mockReturnValue(
+      deskAug24Fixture({ charges: [], paybacks: [], kept: [], reviewPairs: [], blockers: [], late: [] }),
+    );
+    wrap(<ReconTollsV2Step weekKey="2026-08-24" summaryTarget={null} onGoToTagAccount={() => {}} />);
+    expect(screen.queryByTestId('toll-v2-empty')).toBeNull();
+    expect(screen.queryByTestId('toll-v2-weeks-error')).toBeNull();
+  });
+
+  it('an empty week with the weeks list loaded still says "No tolls this week"', () => {
+    weeksOverview.takeBacks = [];
+    fetchDesk.mockReturnValue(
+      deskAug24Fixture({ charges: [], paybacks: [], kept: [], reviewPairs: [], blockers: [], late: [] }),
+    );
+    wrap(<ReconTollsV2Step weekKey="2026-08-24" summaryTarget={null} onGoToTagAccount={() => {}} />);
+    const card = screen.getByTestId('toll-v2-empty');
+    expect(card.textContent).toContain('No tolls this week');
   });
 });

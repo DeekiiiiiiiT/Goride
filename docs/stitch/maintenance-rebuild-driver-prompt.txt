@@ -1,0 +1,177 @@
+ROAM DRIVER — MY CAR: SERVICE DUE, DO NOT DRIVE AND PRE-SHIFT CHECK — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+HOW TO USE: First paste = everything from the intro down to END OF FIRST PASTE (Screens 1 and 2). Then paste one SCREEN block at a time, in order. Never paste the last section ("FOR CLAUDE — DO NOT PASTE").
+Plan: docs/maintenance-enterprise-rebuild-review.md (Rev 2), B6, MER-16, MER-17.
+
+
+==================== FIRST PASTE ====================
+
+Roam Driver - My car kit: service due, do not drive, and the pre-shift check (Phone App, 390px, for drivers of fleet cars):
+
+Design high-fidelity phone screens for the "My car kit" part of the Roam Driver app. Today the driver sees the car's inventory and can start a pre-shift check, but cannot see what service is coming up, and is not told when the fleet has stopped the car. Now the top of My car kit shows a "Service due" card with the next three things the car needs, in plain words ("Oil change · in about 870 km"), and a "Report a problem" button that sends a request straight to the fleet. When the car must not be driven, a clear red banner says so, with the reason and a button to call the fleet. The pre-shift check fills in the odometer from the last reading, shows the checklist for this kind of car, and after a failed safety item says plainly that the car is now stopped. The tone is friendly, short and reassuring, never a telling-off. The design must feel modern, calm and effortless, like the best consumer apps. Every screen is tall enough to show everything, with no inner scrolling. Draw only the screens asked for in this message.
+
+
+BRAND IDENTITY:
+- Match the existing Roam Driver app (do not redesign it):
+  - white cards on a light slate page, rounded corners, large touch targets (at least 48px tall)
+  - top bar: menu button on the left, "Roam" in the middle, bell and profile on the right
+  - bottom tab bar as in the app
+- LIGHT MODE (default):
+  - Primary: Emerald 600 (#059669) — primary buttons, ticks, the active tab
+  - Background: Slate 100 (#f1f5f9)
+  - Surface cards: White (#ffffff) with a soft shadow (0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(15,23,42,0.06)) and a hairline border #e2e8f0
+  - Text primary: Slate 900 (#0f172a); muted text: Slate 600 (#475569)
+  - Coming up soon: Amber 700 (#b45309) on #fffbeb
+  - Overdue / do not drive: Red 600 (#dc2626) on #fef2f2
+  - All good: Emerald 600 (#059669) on #ecfdf5
+  - Sent to the fleet: Blue 700 (#1d4ed8) on #eff6ff
+- DARK MODE:
+  - Background #0f172a, surface #1e293b, border #334155, text #f8fafc, muted #cbd5e1, primary #10b981
+  - Amber #fbbf24 on #451a03; red #f87171 on #450a0a; blue #60a5fa on #172554
+- Shapes: cards 16px corner radius, buttons 12px, chips fully rounded.
+- Typography: Inter. Card title 17px semibold, body 15px, helper text 13px. Km in tabular figures with commas (200,932 km).
+- The car plate is always shown in a small grey rounded box: "5179KZ". The car is named in plain words: "Toyota Roomy".
+- Dates in plain words: "26 Nov", "by 1 May". Never "2026-11-26", never codes or ids.
+- Status chips (small, fully rounded, always words): "Soon" amber; "Overdue" red; "Booked" blue; "All good" green.
+- Buttons always look like buttons:
+  - Primary = solid emerald with white text.
+  - Secondary = white with a visible #cbd5e1 border and dark text.
+  - Danger = red border and red text; solid red only for a final confirm.
+  - Never underlined text links, never grey text-only buttons. Confirms are in-app bottom sheets, never browser pop-ups.
+- The pieces used across these screens (draw them the same way every time):
+  - Service due row: a 40px soft grey rounded square with the part icon; the job in plain words ("Oil change"); under it "in about 870 km" or "by 1 May"; a status chip on the right.
+  - Do-not-drive banner: full-width red card (#fef2f2 fill, #dc2626 left edge 4px), a block icon, title "Don't drive this car", the reason in one line, who stopped it and when, a solid red button "Call the fleet".
+  - Checklist item card: item name, a small "Safety" tag when it matters for safety, three large segmented buttons "Pass" (green when chosen), "Attention" (amber), "Fail" (red).
+- No gradients, glassmorphism or 3D. No AI badges. No costs, prices, garages' bills or other drivers anywhere.
+- Sample data (REAL car and driver; due items worked out from the car's last reading):
+  - Driver Kenny Gregory Rattray, car "Toyota Roomy" plate "5179KZ", last reading 200,932 km on 26 Nov.
+  - Coming up: "Tire rotation" overdue; "Oil change" in about 870 km; "Brake fluid check" at the next service.
+  - Booked: "At Whol-Hearted Car Service on 2 Dec".
+  - Pre-shift checklist (cars): Tires and tire pressure (Safety), Brakes (Safety), Lights and indicators (Safety), Windscreen and wipers (Safety), Mirrors, Horn, Seat belts (Safety), Fluid leaks under the car, Dashboard warning lights (Safety), Inside clean and tidy.
+
+
+DESIGN PRINCIPLES:
+- The driver needs one answer first: "Can I drive, and is anything coming up?"
+- Plain jobs, never part names a driver wouldn't say ("Oil change", not "Engine oil 0W-20").
+- Km are always "in about" — never exact maths, never "overdue by 10,844 km". Overdue is just "Overdue".
+- One clear next step per screen. Large tap targets for one-handed use.
+- One view per screen.
+
+
+SCREEN 1: MY CAR KIT — SERVICE DUE CARD
+Draw tall enough to show everything, no inner scrolling.
+- Top bar as in BRAND IDENTITY. Under it a back button "Back to Vehicle" and the title "My car kit", plate box "5179KZ", muted "Toyota Roomy".
+- Primary emerald button, full width: "Start pre-shift check" with a clipboard icon.
+- Card "Service coming up" with a wrench icon:
+  - Row: tire icon — "Tire rotation" — "The fleet has been told" — red chip "Overdue".
+  - Row: oil-drop icon — "Oil change" — "in about 870 km" — amber chip "Soon".
+  - Row: brake icon — "Brake fluid check" — "at the next service" — grey chip "Next visit".
+  - A blue tint strip at the bottom of the card: calendar icon, "Booked: Whol-Hearted Car Service on 2 Dec".
+  - Secondary button, full width: "Report a problem".
+- Below, the existing car kit content, drawn smaller: a progress ring "9 of 10 items in the car", line "Weekly check-in done 24 Nov", list title "Required inventory" with three rows (Spare tire ✓, Jack ✓, First-aid kit — amber "Missing" with a "Report" button).
+- Footer line with a phone icon: "Need depot assistance? Call Fleet Support 24/7".
+
+SCREEN 2: MY CAR KIT — DON'T DRIVE THIS CAR
+Draw tall enough to show everything, no inner scrolling.
+- Same top bar, "Back to Vehicle", title "My car kit", plate box "5179KZ", "Toyota Roomy".
+- Do-not-drive banner at the very top: block icon, title "Don't drive this car", reason "Brakes failed on today's pre-shift check.", muted "Stopped by Roam at 6:42 AM, 27 Nov", solid red button "Call the fleet", secondary button "See my check".
+- The "Start pre-shift check" button is greyed (50%) with a muted line under it: "The fleet will tell you when the car is cleared."
+- Card "Service coming up" as in the earlier screen, with the rows "Brakes — Fleet is booking it — red chip 'Overdue'", "Oil change — in about 870 km — amber 'Soon'".
+- Footer line "Need depot assistance? Call Fleet Support 24/7".
+
+END OF FIRST PASTE
+
+
+SCREEN 3: MY CAR KIT — ALL GOOD
+Same Roam Driver app frame, colours, cards and style as the earlier screens in this project. Driver Kenny Gregory Rattray, "Toyota Roomy" plate "5179KZ". Draw tall enough to show everything, no inner scrolling.
+- Top bar, "Back to Vehicle", title "My car kit", plate box, "Toyota Roomy".
+- Primary emerald button, full width: "Start pre-shift check".
+- Card "Service coming up" in its calm state: a 56px soft green circle with a check icon; title "Nothing due right now"; muted "Next: oil change in about 4,200 km". Secondary button "Report a problem".
+- The car kit content below (progress ring "10 of 10 items in the car", "Weekly check-in done 24 Nov").
+
+SCREEN 4: REPORT A PROBLEM — BOTTOM SHEET
+Same Roam Driver app frame, colours, cards and style as the earlier screens in this project. Behind the sheet, dimmed 40%: My car kit for "Toyota Roomy · 5179KZ". Draw tall enough to show everything, no inner scrolling.
+- Bottom sheet with a grab handle. Title "Report a problem", plate box "5179KZ".
+- "What's wrong?" as large chips in a wrap: "Brakes" (selected, emerald border and tick), "Tires", "Engine or warning light", "Lights", "Noise", "Air conditioning", "Something else".
+- "How soon?" segmented buttons: "Can wait", "Soon" (selected), "Can't drive it".
+- Text box "Tell the fleet more (optional)" filled: "Squeak from the front when braking".
+- Secondary button with a camera icon "Add a photo", and one small photo thumbnail already added.
+- Primary emerald button full width "Send to the fleet".
+
+SCREEN 5: REPORT SENT
+Same Roam Driver app frame, colours, cards and style as the earlier screens in this project. Draw tall enough to show everything, no inner scrolling.
+- Centred: a 72px soft emerald circle with a check; title "Sent to the fleet"; body "Brakes · Soon · 'Squeak from the front when braking'".
+- A blue tint card: "The fleet will reply here. You'll get a notification."
+- Primary emerald button "Back to My car kit"; secondary "See my reports".
+
+SCREEN 6: PRE-SHIFT CHECK — ODOMETER FILLED IN
+Same Roam Driver app frame, colours, cards and style as the earlier screens in this project. Driver Kenny Gregory Rattray, "Toyota Roomy" plate "5179KZ". Draw tall enough to show everything, no inner scrolling.
+- Top: back arrow, title "Pre-shift check", plate box "5179KZ", muted "Cars checklist · 10 items".
+- Card "Odometer": big number box filled "200,932 km" with a small grey line "Last reading 26 Nov. Change it if the dashboard shows more."; secondary button with a camera icon "Photo of the dashboard".
+- Progress strip: "3 of 10 done".
+- Checklist item cards:
+  - "Tires and tire pressure" · Safety tag · Pass selected (green).
+  - "Brakes" · Safety tag · Pass selected.
+  - "Lights and indicators" · Safety tag · Pass selected.
+  - "Windscreen and wipers" · Safety tag · none selected.
+  - "Mirrors" · none selected.
+  - "Horn" · none selected.
+- Primary emerald button full width at the bottom, disabled at 50% with a muted line: "Answer all 10 items to send".
+
+SCREEN 7: PRE-SHIFT CHECK — A SAFETY ITEM FAILED
+Same Roam Driver app frame, colours, cards and style as the earlier screens in this project. Driver Kenny Gregory Rattray, "Toyota Roomy" plate "5179KZ". Draw tall enough to show everything, no inner scrolling.
+- Top: back arrow, title "Pre-shift check", plate box "5179KZ", progress strip "10 of 10 done".
+- Checklist item card "Brakes" · Safety tag · Fail selected (solid red). Under it, expanded:
+  - "Add a photo (needed)" with one photo thumbnail added and a green tick.
+  - Text box filled "Pedal goes soft and the car pulls left."
+  - A soft red line with a warning icon: "This is a safety item. The car will be stopped until the fleet clears it."
+- The other items shown collapsed with green "Pass" ticks.
+- Primary emerald button full width "Send check".
+
+SCREEN 8: CHECK SENT — CAR STOPPED
+Same Roam Driver app frame, colours, cards and style as the earlier screens in this project. Draw tall enough to show everything, no inner scrolling.
+- Centred: a 72px soft red circle with a block icon; title "Don't drive this car"; body "Brakes failed on your check. The fleet has been told."
+- A white card: "Toyota Roomy" plate box "5179KZ"; "Stopped at 6:42 AM, 27 Nov"; "Odometer 200,964 km".
+- Solid red button full width "Call the fleet"; secondary "Back to My car kit".
+
+SCREEN 9: NOTIFICATIONS — CAR SERVICE
+Same Roam Driver app frame, colours, cards and style as the earlier screens in this project. Driver Kenny Gregory Rattray. Draw tall enough to show everything, no inner scrolling.
+- Title "Notifications", chips "All" (selected), "Car", "Money".
+- Notification cards, newest first, each with an icon square, title, one line and a time:
+  - green check — "Car cleared to drive" — "5179KZ · Brakes fixed at Whol-Hearted Car Service" — "Today, 3:15 PM".
+  - calendar — "Service booked" — "5179KZ · Whol-Hearted Car Service on 2 Dec" — "Yesterday".
+  - blue — "Your report was seen" — "Brakes · the fleet is booking it" — "26 Nov".
+  - amber oil-drop — "Oil change coming up" — "5179KZ · in about 870 km" — "26 Nov".
+- Unread cards have a small emerald dot on the left.
+
+
+==================== FOR CLAUDE — DO NOT PASTE ====================
+
+ADDITIONAL UI COMPONENTS:
+- ServiceComingUpCard: next 3 due lines from getMaintenanceSchedule (vehicle's due view), mapped to driver words (part category → plain job name), status Overdue / Soon / Next visit (History unknown parts read "at the next service") / Booked strip from an open work order. Empty state = "Nothing due right now" + next item.
+- DoNotDriveBanner: fleet.vehicles.do_not_drive + reason + set_at + who; blocks "Start pre-shift check" only when the car is stopped.
+- ReportProblemSheet: issue chips + urgency + notes + photo → createMaintenanceRequest (existing, no callers today, MER-16). "Can't drive it" urgency also notifies the fleet at once.
+- DVIR: template picked by the car's class (MER-17), odometer prefilled from the last reading (source dvir when changed), Fail on a Safety item requires a photo and shows the stop notice before sending.
+- Notifications: getMaintenanceDriverNotifications (existing, no callers today).
+- Dark mode: exact colour values.
+
+INTERACTIONS:
+- My car kit loads schedule + do-not-drive state; refresh on pull-down.
+- "Report a problem" → S4 → "Send to the fleet" → S5; the request appears in Fleet → Maintenance → Requests.
+- Pre-shift: "Send check" enabled when all items answered and the odometer is filled; Fail on a Safety item → after send, S8 (car stopped), and My car kit shows S2.
+- "Call the fleet" opens the phone dialer with the fleet support number (tel:), not a browser pop-up.
+- Fleet clearing do-not-drive sends the "Car cleared to drive" notification; banner disappears on next load.
+- Drivers never see costs, garage bills or other drivers. Drivers can't remove a report (Cancel only before Send).
+
+Spec screens / Area:
+| Screen | Plan | Area |
+|---|---|---|
+| 1 | B6, MER-16 | Dk1MyCarKit, new Service coming up card |
+| 2 | B6 | Dk1MyCarKit, do-not-drive banner |
+| 3 | B6 | Dk1MyCarKit, nothing due |
+| 4 | MER-16 | New report-a-problem sheet (maintenance request) |
+| 5 | MER-16 | Report sent |
+| 6 | MER-17 | Dk7PreShiftDvir redraw, odometer prefilled |
+| 7 | MER-17 | Dk7PreShiftDvir, safety Fail |
+| 8 | MER-17 | DVIR result, car stopped |
+| 9 | B6 | Driver notifications, car service |

@@ -17,6 +17,14 @@ engine's checks and save, and changes nothing about how the step-by-step browser
 
 ## START HERE (new chat)
 
+**26 Nov — SP-49 (first live upload failed, fixed locally, not live yet).** The owner's first real upload (Amayama
+Roomy front shock page, 136 lines) ran past the 150s server limit → "HTTP 504", and the row
+`c49835ff-…` was left on status `reading`. Cause: the two Gemini reads ran one after the other at full thinking
+(24s+ each on a small test page, far longer on the real one) and had no time limit. Fix in
+`research_saved_page_routes.ts`: thinking set to `low` (same rows in ~14s), both reads run at the same time, each
+read gives up after 100s and the upload is marked stopped with "Reading the page took too long. Try again."
+Test SP-49 added; 31/31 route tests pass.
+
 1. Read §0 and §1 (what it's for, what exists), then §3–§6 (the build spec), §9 (done-tests) and §10 (build order).
 2. The plan is **closed** (25 Nov). Build status:
    - Data (D1–D5): **built 25 Nov, checked by Claude, not live.** Migration

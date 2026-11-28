@@ -123,6 +123,7 @@ import {
 } from "./log_service_part_fit.ts";
 import { positionCodesProblem } from "../../../packages/types/src/partPositions.ts";
 import { loadJobPositionMeta } from "./job_position_meta.ts";
+import { countListings } from "./listings_for_vehicle.ts";
 
 const assertVehicleCatalogPlatformAccess = assertPlatformStaffResponse;
 
@@ -3608,11 +3609,11 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const catalogIds = [...new Set(vehicles.map((v) => String(v.vehicle_catalog_id ?? "")).filter(Boolean))];
         let partsReady = dueAttentionRows.length === 0;
         if (!partsReady && catalogIds.length > 0) {
-          const { count, error: fitErr } = await supabase
-            .from("part_fitment")
-            .select("id", { count: "exact", head: true })
-            .in("vehicle_catalog_id", catalogIds);
-          partsReady = !fitErr && (count ?? 0) > 0;
+          try {
+            partsReady = (await countListings(supabase, catalogIds)) > 0;
+          } catch {
+            partsReady = false;
+          }
         }
         const partsRequisition = {
           status: partsReady ? "Ready" as const : "Needs part numbers" as const,

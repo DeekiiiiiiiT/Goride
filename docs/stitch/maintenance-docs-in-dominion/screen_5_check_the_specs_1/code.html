@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Dominion - Roam Found This (Maintenance Sheet)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+    body {
+      font-family: 'Inter', sans-serif;
+      color: #30323b;
+      background-color: #faf8fe;
+      -webkit-font-smoothing: antialiased;
+    }
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-feature-settings: "tnum" 1;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      vertical-align: middle;
+    }
+    .material-symbols-outlined.fill {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .soft-card-shadow {
+      box-shadow: 0 4px 16px rgba(1, 83, 220, 0.04);
+    }
+    .overlay-shadow {
+      box-shadow: 0 24px 48px -12px rgba(15, 23, 42, 0.25), 0 8px 24px rgba(1, 83, 220, 0.06);
+    }
+  </style>
+<meta content="web_dashboard" name="shell-type"/></head>
+<body class="relative min-h-screen bg-[#faf8fe] overflow-x-hidden">
+<!-- Console App Shell (Background Workspace) -->
+<div class="flex min-h-screen w-full">
+<!-- Dark Navy Left Sidebar -->
+<aside class="w-[260px] bg-[#0b1329] text-[#94a3b8] flex-shrink-0 flex flex-col justify-between select-none">
+<div>
+<!-- Logo / Brand Header -->
+<div class="h-16 px-5 flex items-center gap-3 border-b border-[#1e293b]">
+<div class="w-7 h-7 rounded-lg bg-[#0153dc] flex items-center justify-center text-white font-bold text-sm tracking-wider shadow-sm">
+            D
+          </div>
+<div class="flex flex-col">
+<span class="text-white text-[14px] font-semibold tracking-tight">Dominion</span>
+<span class="text-[11px] text-slate-400 font-normal">Roam Admin Console</span>
+</div>
+</div>
+<!-- Navigation Groups -->
+<nav class="py-4 px-3 space-y-5 text-[13px]">
+<!-- Master Data -->
+<div>
+<div class="px-2 mb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Master Data</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">dashboard</span>
+<span>Overview</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg bg-[#1a2749] text-white font-medium" href="#">
+<span class="material-symbols-outlined text-[19px] text-[#5b8def]">directions_car</span>
+<span>Vehicles active</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">map</span>
+<span>Places and Maps</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">local_gas_station</span>
+<span>Fuel</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">toll</span>
+<span>Tolls</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">receipt_long</span>
+<span>Tax and Vendors</span>
+</a>
+</div>
+</div>
+<!-- Engines -->
+<div>
+<div class="px-2 mb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Engines</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">psychology</span>
+<span>Fuel Brain</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">toll</span>
+<span>Toll Brain</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">hub</span>
+<span>Matching Brain</span>
+</a>
+</div>
+</div>
+<!-- Distribution -->
+<div>
+<div class="px-2 mb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Distribution</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">apps</span>
+<span>Apps</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">api</span>
+<span>Data API</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">edit_note</span>
+<span>Change requests</span>
+</a>
+</div>
+</div>
+<!-- Platform -->
+<div>
+<div class="px-2 mb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Platform</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">badge</span>
+<span>Staff and roles</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">history</span>
+<span>Activity log</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">dns</span>
+<span>Platform Ops</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">settings</span>
+<span>Global settings</span>
+</a>
+</div>
+</div>
+<!-- Back Office -->
+<div>
+<div class="px-2 mb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Back Office</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">assignment_turned_in</span>
+<span>GCT registrations</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">account_balance</span>
+<span>Ledger</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">payments</span>
+<span>Remittance</span>
+</a>
+</div>
+</div>
+</nav>
+</div>
+<!-- Footer system status -->
+<div class="p-3 border-t border-[#1e293b] text-[12px] flex items-center justify-between text-slate-400">
+<span class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+<span>Dominion v4.18</span>
+</span>
+<span class="text-slate-400">Tokyo DB</span>
+</div>
+</aside>
+<!-- Main Content Area -->
+<div class="flex-1 flex flex-col min-w-0">
+<!-- Top Bar -->
+<header class="h-16 bg-white border-b border-[#e6e7ee] px-8 flex items-center justify-between flex-shrink-0 z-10">
+<div class="flex items-center gap-3 w-96">
+<div class="relative w-full">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">search</span>
+<input class="w-full h-10 pl-9 pr-12 rounded-lg bg-[#faf8fe] border border-[#c5c6d0] text-[14px] text-[#30323b] focus:outline-none focus:ring-2 focus:ring-[#0153dc]" placeholder="Search entities, engines, routes…" readonly="" type="text"/>
+<span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-mono-code font-medium text-slate-500 bg-white border border-[#e6e7ee] px-1.5 py-0.5 rounded shadow-xs">⌘K</span>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="w-9 h-9 rounded-lg border border-[#e6e7ee] flex items-center justify-center text-[#5d5f68] hover:bg-slate-50 transition-colors">
+<span class="material-symbols-outlined text-[20px]">dark_mode</span>
+</button>
+<div class="h-6 w-px bg-[#e6e7ee]"></div>
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-full bg-[#dbe1ff] text-[#0153dc] font-semibold text-xs flex items-center justify-center">
+              DT
+            </div>
+<div class="flex flex-col">
+<span class="text-[13px] font-medium text-[#30323b] leading-tight">Deeki T</span>
+<span class="text-[11px] text-[#5d5f68]">Owner</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Background Screen Content: Maintenance Templates Page -->
+<main class="flex-1 p-8 max-w-[1240px] w-full mx-auto"><div class="flex flex-col w-full">
+<!-- Top Navigation & View Title -->
+<div class="flex flex-col gap-4 mb-6">
+<div class="flex items-center gap-3">
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors font-body-sm text-body-sm font-medium">
+<span class="material-symbols-outlined text-[18px]">arrow_back</span>
+<span>Toyota Roomy</span>
+</button>
+<span class="text-outline-variant">/</span>
+<span class="font-label-mono-sm text-label-mono-sm text-secondary uppercase tracking-wider">Manual Verification Engine</span>
+</div>
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-3">
+<div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Check the specs</h1>
+<p class="font-body-md text-body-md text-secondary mt-0.5">Toyota Roomy — Owner's manual (Japan, 2021) · 16 extracted pages</p>
+</div>
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container font-label-mono-sm text-label-mono-sm text-secondary">
+<span class="material-symbols-outlined text-[15px] text-tertiary">document_scanner</span>
+          OCR Confidence: 99.4%
+        </span>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary-fixed text-primary font-label-mono-sm text-label-mono-sm font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-primary-container animate-pulse"></span>
+          Auto-aligned
+        </span>
+</div>
+</div>
+</div>
+<!-- Progress Verification Strip -->
+<div class="w-full bg-surface-container-lowest rounded-xl p-4 shadow-sm mb-8 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+<div class="flex items-center gap-4 min-w-[280px]">
+<div class="flex flex-col">
+<div class="flex items-baseline gap-2">
+<span class="font-label-mono-lg text-label-mono-lg text-on-surface font-semibold">0</span>
+<span class="font-body-sm text-body-sm text-secondary">of 27 verified</span>
+</div>
+<span class="font-label-mono-sm text-label-mono-sm text-secondary mt-0.5">0% complete</span>
+</div>
+<div class="flex-1 max-w-[180px] h-2 bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-primary-container rounded-full transition-all duration-300 w-0"></div>
+</div>
+</div>
+<!-- Page Selector Chips -->
+<div class="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
+<span class="font-label-ui text-label-ui text-secondary font-medium mr-1 uppercase tracking-wide">Sections:</span>
+<button class="px-3 py-1.5 rounded-full bg-surface-container-low hover:bg-surface-container text-secondary hover:text-on-surface font-label-mono-md text-label-mono-md transition-colors whitespace-nowrap">
+        Front memo
+      </button>
+<button class="px-3 py-1.5 rounded-full bg-surface-container-low hover:bg-surface-container text-secondary hover:text-on-surface font-label-mono-md text-label-mono-md transition-colors whitespace-nowrap">
+        402–407
+      </button>
+<button class="px-3 py-1.5 rounded-full bg-surface-container-low hover:bg-surface-container text-secondary hover:text-on-surface font-label-mono-md text-label-mono-md transition-colors whitespace-nowrap">
+        412–413
+      </button>
+<button class="px-3.5 py-1.5 rounded-full bg-primary-container text-on-primary font-label-mono-md text-label-mono-md font-semibold shadow-sm whitespace-nowrap flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[14px]">auto_stories</span>
+<span>520–526</span>
+</button>
+</div>
+</div>
+<!-- Primary Workspace: Two Columns -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start mb-24">
+<!-- LEFT COLUMN: PDF / Manual Inspection Preview (5 cols ~42-45%) -->
+<div class="lg:col-span-5 flex flex-col gap-3 sticky top-6">
+<div class="bg-surface-container-lowest rounded-2xl shadow-sm overflow-hidden flex flex-col">
+<!-- Inspector Header -->
+<div class="px-5 py-3.5 bg-surface-container-low flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-secondary text-[20px]">picture_as_pdf</span>
+<span class="font-label-mono-md text-label-mono-md text-on-surface font-medium truncate max-w-[210px]">roomy_om_jp_521.pdf</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-label-mono-sm text-label-mono-sm px-2.5 py-0.5 rounded-md bg-surface-container-highest text-tertiary font-semibold">
+              Page 521
+            </span>
+</div>
+</div>
+<!-- Rendered Technical Page Replica -->
+<div class="p-6 bg-surface-bright flex flex-col gap-4 font-body-sm text-body-sm select-none">
+<div class="flex justify-between items-baseline pb-2">
+<div>
+<div class="font-label-mono-md text-label-mono-md font-bold text-on-surface">9-1. 仕様一覧（サービスデータ）</div>
+<div class="font-label-mono-sm text-label-mono-sm text-secondary">TOYOTA ROOMY / THOR / TANK 2021</div>
+</div>
+<span class="font-label-mono-sm text-label-mono-sm text-outline">P. 521</span>
+</div>
+<!-- Mini simulated Japanese spec ledger table -->
+<div class="flex flex-col bg-surface-container-lowest rounded-lg overflow-hidden text-[12px] leading-relaxed">
+<!-- Table Header -->
+<div class="grid grid-cols-12 bg-surface-container font-label-ui text-label-ui font-semibold text-secondary px-3 py-2">
+<span class="col-span-4">点検項目 (Item)</span>
+<span class="col-span-5">規格 / 推奨 (Spec)</span>
+<span class="col-span-3 text-right">容量 (Capacity)</span>
+</div>
+<!-- Row 1: Engine Oil (Highlighted Focus) -->
+<div class="grid grid-cols-12 bg-secondary-fixed/50 text-on-surface font-label-mono-sm text-label-mono-sm px-3 py-2.5 relative items-center">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary-container"></div>
+<div class="col-span-4 flex items-center gap-1.5 font-medium text-primary">
+<span class="material-symbols-outlined text-[16px] text-primary-container">search_check</span>
+<span>エンジンオイル</span>
+</div>
+<div class="col-span-5 text-on-surface">
+                API SN / ILSAC GF-5<br/>
+<span class="text-primary font-semibold">SAE 0W-20 (5W-30)</span>
+</div>
+<div class="col-span-3 text-right font-semibold text-primary">
+                2.9 L<br/>
+<span class="font-normal text-secondary text-[10px]">(油筒のみ 3.1 L)</span>
+</div>
+</div>
+<!-- Row 2: Coolant -->
+<div class="grid grid-cols-12 px-3 py-2 font-label-mono-sm text-label-mono-sm text-secondary bg-surface-container-lowest">
+<span class="col-span-4 text-on-surface">冷却水 (LLC)</span>
+<span class="col-span-5">トヨタ スーパーLLC</span>
+<span class="col-span-3 text-right">4.4 L / 5.0 L*</span>
+</div>
+<!-- Row 3: Transmission -->
+<div class="grid grid-cols-12 px-3 py-2 font-label-mono-sm text-label-mono-sm text-secondary bg-surface-container-low">
+<span class="col-span-4 text-on-surface">CVTフルード</span>
+<span class="col-span-5">トヨタ純正 CVTフルード FE</span>
+<span class="col-span-3 text-right">5.7 L</span>
+</div>
+<!-- Row 4: Fuel -->
+<div class="grid grid-cols-12 px-3 py-2 font-label-mono-sm text-label-mono-sm text-secondary bg-surface-container-lowest">
+<span class="col-span-4 text-on-surface">燃料タンク容量</span>
+<span class="col-span-5">無鉛レギュラーガソリン</span>
+<span class="col-span-3 text-right">36 L (4WD: 38 L)</span>
+</div>
+<!-- Row 5: Spark Plugs -->
+<div class="grid grid-cols-12 px-3 py-2 font-label-mono-sm text-label-mono-sm text-secondary bg-surface-container-low">
+<span class="col-span-4 text-on-surface">点火プラグ</span>
+<span class="col-span-5">DENSO IXUH22I</span>
+<span class="col-span-3 text-right">3本</span>
+</div>
+<!-- Row 6: Tyres Note -->
+<div class="grid grid-cols-12 px-3 py-2 font-label-mono-sm text-label-mono-sm text-secondary bg-surface-container-lowest">
+<span class="col-span-4 text-on-surface">タイヤ空気圧</span>
+<span class="col-span-8">165/65R14 (260 kPa) / 175/55R15</span>
+</div>
+</div>
+<div class="flex items-center gap-2 p-2.5 rounded-lg bg-surface-container-low text-secondary font-label-mono-sm text-label-mono-sm">
+<span class="material-symbols-outlined text-[16px] text-tertiary">info</span>
+<span>Target matching OCR block at coordinates: <code class="text-on-surface">x:142 y:380 w:420 h:96</code></span>
+</div>
+</div>
+<!-- Bottom Viewer Tool Strip -->
+<div class="px-4 py-3 bg-surface-container-low flex items-center justify-between">
+<div class="flex items-center gap-1">
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest text-secondary hover:text-on-surface hover:bg-surface-container flex items-center justify-center transition-colors" title="Zoom Out">
+<span class="material-symbols-outlined text-[18px]">remove</span>
+</button>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface px-2 min-w-[52px] text-center font-medium">100%</span>
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest text-secondary hover:text-on-surface hover:bg-surface-container flex items-center justify-center transition-colors" title="Zoom In">
+<span class="material-symbols-outlined text-[18px]">add</span>
+</button>
+<button class="h-8 px-2.5 rounded-lg bg-surface-container-lowest text-secondary hover:text-on-surface hover:bg-surface-container font-label-mono-sm text-label-mono-sm flex items-center gap-1 transition-colors ml-1">
+<span class="material-symbols-outlined text-[16px]">fit_screen</span>
+<span>Fit</span>
+</button>
+</div>
+<div class="flex items-center gap-2">
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest text-secondary hover:text-on-surface hover:bg-surface-container flex items-center justify-center transition-colors" title="Rotate Page">
+<span class="material-symbols-outlined text-[18px]">rotate_right</span>
+</button>
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest text-secondary hover:text-on-surface hover:bg-surface-container flex items-center justify-center transition-colors" title="Open Fullscreen">
+<span class="material-symbols-outlined text-[18px]">fullscreen</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Quick Document Metadata Card -->
+<div class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-label-ui text-label-ui text-secondary uppercase font-semibold">Source Artifact</span>
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Toyota Japan Publications · Issue OM-ROOMY-21</span>
+</div>
+<button class="font-label-ui text-label-ui text-primary font-medium hover:underline inline-flex items-center gap-1">
+<span>View original raw</span>
+<span class="material-symbols-outlined text-[14px]">open_in_new</span>
+</button>
+</div>
+</div>
+<!-- RIGHT COLUMN: Spec Cards (7 cols ~55-58%) -->
+<div class="lg:col-span-7 flex flex-col gap-8">
+<!-- SECTION 1: FLUIDS -->
+<div class="flex flex-col gap-4">
+<div class="flex items-center justify-between pb-1">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+<span class="font-label-ui text-label-ui font-bold text-secondary uppercase tracking-widest">FLUIDS</span>
+</div>
+<span class="font-label-mono-sm text-label-mono-sm text-secondary">4 detected in this group</span>
+</div>
+<!-- SPEC CARD 1: Engine oil capacity -->
+<div class="bg-surface-container-lowest rounded-2xl p-6 shadow-sm flex flex-col gap-5">
+<div class="flex items-start justify-between">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Engine oil capacity</h3>
+<p class="font-body-sm text-body-sm text-secondary mt-0.5">Discrepancy detected against baseline DB catalog</p>
+</div>
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-secondary-fixed text-primary font-label-mono-sm text-label-mono-sm font-semibold">
+              Diff Detected
+            </span>
+</div>
+<!-- Comparison Spec Rows -->
+<div class="bg-surface-container-low rounded-xl p-4 flex flex-col gap-3 font-label-mono-md text-label-mono-md">
+<div class="flex flex-wrap items-center justify-between gap-2">
+<span class="text-secondary">Standard change:</span>
+<div class="flex items-center gap-2.5">
+<span class="text-secondary line-through">Now 3.2 L</span>
+<span class="material-symbols-outlined text-outline text-[16px]">arrow_forward</span>
+<span class="font-semibold text-primary bg-surface-container-lowest px-2 py-0.5 rounded shadow-2xs">Manual 2.9 L</span>
+</div>
+</div>
+<div class="flex flex-wrap items-center justify-between gap-2">
+<span class="text-secondary">With oil filter replacement:</span>
+<div class="flex items-center gap-2.5">
+<span class="text-secondary">Now —</span>
+<span class="material-symbols-outlined text-outline text-[16px]">arrow_forward</span>
+<span class="font-semibold text-primary bg-surface-container-lowest px-2 py-0.5 rounded shadow-2xs">Manual 3.1 L</span>
+</div>
+</div>
+</div>
+<!-- Version Apply Checkboxes -->
+<div>
+<div class="font-label-ui text-label-ui text-secondary font-medium uppercase tracking-wider mb-2.5">Apply to model trims:</div>
+<div class="flex flex-wrap gap-2">
+<label class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
+<input checked="" class="w-4 h-4 rounded text-primary-container accent-primary-container focus:ring-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2016–2020 · 2WD</span>
+</label>
+<label class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
+<input checked="" class="w-4 h-4 rounded text-primary-container accent-primary-container focus:ring-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2016–2020 · 4WD</span>
+</label>
+<label class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
+<input checked="" class="w-4 h-4 rounded text-primary-container accent-primary-container focus:ring-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2020– · 2WD</span>
+</label>
+<label class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
+<input checked="" class="w-4 h-4 rounded text-primary-container accent-primary-container focus:ring-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2020– · 4WD</span>
+</label>
+<label class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
+<input checked="" class="w-4 h-4 rounded text-primary-container accent-primary-container focus:ring-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2020– · turbo</span>
+</label>
+</div>
+</div>
+<!-- Card Actions -->
+<div class="flex items-center justify-end gap-3 pt-2">
+<button class="h-9 px-4 rounded-lg bg-surface-container text-secondary hover:text-on-surface hover:bg-surface-container-high font-body-sm text-body-sm font-medium transition-colors">
+              Edit
+            </button>
+<button class="h-9 px-4 rounded-lg bg-secondary-fixed hover:bg-primary-fixed text-primary font-body-sm text-body-sm font-semibold flex items-center gap-1.5 transition-colors">
+<span class="material-symbols-outlined text-[18px]">check</span>
+<span>Approve</span>
+</button>
+</div>
+</div>
+<!-- SPEC CARD 2: Engine oil grade -->
+<div class="bg-surface-container-lowest rounded-2xl p-6 shadow-sm flex flex-col gap-5">
+<div class="flex items-start justify-between">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Engine oil grade</h3>
+<p class="font-body-sm text-body-sm text-secondary mt-0.5">Viscosity index specification and tolerance</p>
+</div>
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-secondary-fixed text-primary font-label-mono-sm text-label-mono-sm font-semibold">
+              New Data
+            </span>
+</div>
+<div class="bg-surface-container-low rounded-xl p-4 flex flex-col gap-2 font-label-mono-md text-label-mono-md">
+<div class="flex flex-wrap items-center justify-between gap-2">
+<span class="text-secondary">Viscosity rating:</span>
+<div class="flex items-center gap-2.5">
+<span class="text-secondary">Now —</span>
+<span class="material-symbols-outlined text-outline text-[16px]">arrow_forward</span>
+<span class="font-semibold text-primary bg-surface-container-lowest px-2 py-0.5 rounded shadow-2xs">Manual 0W-20 (5W-30 allowed)</span>
+</div>
+</div>
+</div>
+<div>
+<div class="font-label-ui text-label-ui text-secondary font-medium uppercase tracking-wider mb-2.5">Apply to model trims:</div>
+<div class="flex flex-wrap gap-2">
+<label class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
+<input checked="" class="w-4 h-4 rounded text-primary-container accent-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2016–2020 · 2WD</span>
+</label>
+<label class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
+<input checked="" class="w-4 h-4 rounded text-primary-container accent-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2016–2020 · 4WD</span>
+</label>
+<label class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
+<input checked="" class="w-4 h-4 rounded text-primary-container accent-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2020– · 2WD</span>
+</label>
+<label class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
+<input checked="" class="w-4 h-4 rounded text-primary-container accent-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2020– · 4WD</span>
+</label>
+<label class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
+<input checked="" class="w-4 h-4 rounded text-primary-container accent-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2020– · turbo</span>
+</label>
+</div>
+</div>
+<div class="flex items-center justify-end gap-3 pt-2">
+<button class="h-9 px-4 rounded-lg bg-surface-container text-secondary hover:text-on-surface hover:bg-surface-container-high font-body-sm text-body-sm font-medium transition-colors">
+              Edit
+            </button>
+<button class="h-9 px-4 rounded-lg bg-secondary-fixed hover:bg-primary-fixed text-primary font-body-sm text-body-sm font-semibold flex items-center gap-1.5 transition-colors">
+<span class="material-symbols-outlined text-[18px]">check</span>
+<span>Approve</span>
+</button>
+</div>
+</div>
+<!-- SPEC CARD 3: Coolant capacity -->
+<div class="bg-surface-container-lowest rounded-2xl p-6 shadow-sm flex flex-col gap-5">
+<div class="flex items-start justify-between">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Coolant capacity</h3>
+<p class="font-body-sm text-body-sm text-secondary mt-0.5">Split by naturally aspirated and turbocharged powertrain variants</p>
+</div>
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-secondary-fixed text-primary font-label-mono-sm text-label-mono-sm font-semibold">
+              Split Trims
+            </span>
+</div>
+<!-- Line 1: Petrol NA -->
+<div class="flex flex-col gap-3 bg-surface-container-low p-4 rounded-xl">
+<div class="flex flex-wrap items-center justify-between gap-2 font-label-mono-md text-label-mono-md">
+<span class="text-on-surface font-semibold">1.0 Petrol (1KR-FE):</span>
+<div class="flex items-center gap-2.5">
+<span class="text-secondary line-through">Now 4.5 L</span>
+<span class="material-symbols-outlined text-outline text-[16px]">arrow_forward</span>
+<span class="font-semibold text-primary bg-surface-container-lowest px-2 py-0.5 rounded shadow-2xs">Manual 4.4 L</span>
+</div>
+</div>
+<div class="flex flex-wrap gap-2 pt-1">
+<label class="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-surface-container-lowest cursor-pointer">
+<input checked="" class="w-3.5 h-3.5 rounded text-primary-container accent-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2016–2020 · 2WD</span>
+</label>
+<label class="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-surface-container-lowest cursor-pointer">
+<input checked="" class="w-3.5 h-3.5 rounded text-primary-container accent-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2016–2020 · 4WD</span>
+</label>
+<label class="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-surface-container-lowest cursor-pointer">
+<input checked="" class="w-3.5 h-3.5 rounded text-primary-container accent-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2020– · 2WD</span>
+</label>
+<label class="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-surface-container-lowest cursor-pointer">
+<input checked="" class="w-3.5 h-3.5 rounded text-primary-container accent-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2020– · 4WD</span>
+</label>
+</div>
+</div>
+<!-- Line 2: Turbo -->
+<div class="flex flex-col gap-3 bg-surface-container-low p-4 rounded-xl">
+<div class="flex flex-wrap items-center justify-between gap-2 font-label-mono-md text-label-mono-md">
+<span class="text-on-surface font-semibold">1.0 Turbo (1KR-VET):</span>
+<div class="flex items-center gap-2.5">
+<span class="text-secondary line-through">Now 4.5 L</span>
+<span class="material-symbols-outlined text-outline text-[16px]">arrow_forward</span>
+<span class="font-semibold text-primary bg-surface-container-lowest px-2 py-0.5 rounded shadow-2xs">Manual 5.0 L</span>
+</div>
+</div>
+<div class="flex flex-wrap gap-2 pt-1">
+<label class="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-surface-container-lowest cursor-pointer">
+<input checked="" class="w-3.5 h-3.5 rounded text-primary-container accent-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2020– · turbo</span>
+</label>
+</div>
+</div>
+<div class="flex items-center justify-end gap-3 pt-2">
+<button class="h-9 px-4 rounded-lg bg-surface-container text-secondary hover:text-on-surface hover:bg-surface-container-high font-body-sm text-body-sm font-medium transition-colors">
+              Edit
+            </button>
+<button class="h-9 px-4 rounded-lg bg-secondary-fixed hover:bg-primary-fixed text-primary font-body-sm text-body-sm font-semibold flex items-center gap-1.5 transition-colors">
+<span class="material-symbols-outlined text-[18px]">check</span>
+<span>Approve</span>
+</button>
+</div>
+</div>
+<!-- SPEC CARD 4: Fuel tank capacity -->
+<div class="bg-surface-container-lowest rounded-2xl p-6 shadow-sm flex flex-col gap-5">
+<div class="flex items-start justify-between">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Fuel tank capacity</h3>
+<p class="font-body-sm text-body-sm text-secondary mt-0.5">Drivetrain variant dependency (2WD vs 4WD subframe)</p>
+</div>
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-container text-secondary font-label-mono-sm text-label-mono-sm font-medium">
+              Partial Match
+            </span>
+</div>
+<div class="flex flex-col gap-3 font-label-mono-md text-label-mono-md">
+<!-- 2WD Matches -->
+<div class="flex items-center justify-between p-3.5 rounded-xl bg-surface-container-low">
+<span class="text-on-surface font-semibold">2WD models:</span>
+<div class="flex items-center gap-2">
+<span class="text-secondary">Now 36 L</span>
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-secondary-container text-primary font-label-mono-sm text-label-mono-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">done_all</span>
+                  Matches
+                </span>
+</div>
+</div>
+<!-- 4WD Update -->
+<div class="flex flex-col gap-2.5 p-3.5 rounded-xl bg-surface-container-low">
+<div class="flex flex-wrap items-center justify-between gap-2">
+<span class="text-on-surface font-semibold">4WD models:</span>
+<div class="flex items-center gap-2.5">
+<span class="text-secondary line-through">Now 36 L</span>
+<span class="material-symbols-outlined text-outline text-[16px]">arrow_forward</span>
+<span class="font-semibold text-primary bg-surface-container-lowest px-2 py-0.5 rounded shadow-2xs">Manual 38 L</span>
+</div>
+</div>
+<div class="flex flex-wrap gap-2 pt-1">
+<label class="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-surface-container-lowest cursor-pointer">
+<input checked="" class="w-3.5 h-3.5 rounded text-primary-container accent-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2016–2020 · 4WD</span>
+</label>
+<label class="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-surface-container-lowest cursor-pointer">
+<input checked="" class="w-3.5 h-3.5 rounded text-primary-container accent-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2020– · 4WD</span>
+</label>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-end gap-3 pt-2">
+<button class="h-9 px-4 rounded-lg bg-surface-container text-secondary hover:text-on-surface hover:bg-surface-container-high font-body-sm text-body-sm font-medium transition-colors">
+              Edit
+            </button>
+<button class="h-9 px-4 rounded-lg bg-secondary-fixed hover:bg-primary-fixed text-primary font-body-sm text-body-sm font-semibold flex items-center gap-1.5 transition-colors">
+<span class="material-symbols-outlined text-[18px]">check</span>
+<span>Approve</span>
+</button>
+</div>
+</div>
+</div>
+<!-- SECTION 2: TYRES -->
+<div class="flex flex-col gap-4 pt-4">
+<div class="flex items-center justify-between pb-1">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+<span class="font-label-ui text-label-ui font-bold text-secondary uppercase tracking-widest">TYRES</span>
+</div>
+<span class="font-label-mono-sm text-label-mono-sm text-secondary">Wheel dimensions &amp; inflation</span>
+</div>
+<!-- SPEC CARD 5: Tyre specifications & pressures -->
+<div class="bg-surface-container-lowest rounded-2xl p-6 shadow-sm flex flex-col gap-5">
+<div class="flex items-start justify-between">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Tyre sizes &amp; pressures</h3>
+<p class="font-body-sm text-body-sm text-secondary mt-0.5">Enrichment: adds missing pressure values to current dimension records</p>
+</div>
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-secondary-fixed text-primary font-label-mono-sm text-label-mono-sm font-semibold">
+              Pressure Enrich
+            </span>
+</div>
+<!-- Spec Rows List -->
+<div class="flex flex-col gap-2.5">
+<!-- Row 1: Standard -->
+<div class="flex flex-wrap items-center justify-between p-3.5 rounded-xl bg-surface-container-low gap-2">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+<span class="font-label-mono-md text-label-mono-md font-bold text-on-surface">165/65R14 79S</span>
+<span class="text-outline font-label-mono-sm text-label-mono-sm">·</span>
+<span class="font-label-mono-sm text-label-mono-sm text-secondary">14×5J</span>
+<span class="text-outline font-label-mono-sm text-label-mono-sm">·</span>
+<span class="font-label-mono-md text-label-mono-md font-semibold text-primary">260 kPa</span>
+</div>
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-secondary font-label-mono-sm text-label-mono-sm font-medium uppercase">
+                Standard
+              </span>
+</div>
+<!-- Row 2: Optional -->
+<div class="flex flex-wrap items-center justify-between p-3.5 rounded-xl bg-surface-container-low gap-2">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span class="font-label-mono-md text-label-mono-md font-bold text-on-surface">175/55R15 77V</span>
+<span class="text-outline font-label-mono-sm text-label-mono-sm">·</span>
+<span class="font-label-mono-sm text-label-mono-sm text-secondary">15×5J</span>
+<span class="text-outline font-label-mono-sm text-label-mono-sm">·</span>
+<span class="font-label-mono-md text-label-mono-md font-semibold text-primary">250 kPa</span>
+</div>
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-secondary font-label-mono-sm text-label-mono-sm font-medium uppercase">
+                Optional
+              </span>
+</div>
+<!-- Row 3: Spare -->
+<div class="flex flex-wrap items-center justify-between p-3.5 rounded-xl bg-surface-container-low gap-2">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span class="font-label-mono-md text-label-mono-md font-medium text-secondary">Spare T115/70D14 88M</span>
+<span class="text-outline font-label-mono-sm text-label-mono-sm">·</span>
+<span class="font-label-mono-sm text-label-mono-sm text-secondary">14×4T</span>
+<span class="text-outline font-label-mono-sm text-label-mono-sm">·</span>
+<span class="font-label-mono-md text-label-mono-md font-semibold text-primary">420 kPa</span>
+</div>
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-secondary font-label-mono-sm text-label-mono-sm font-medium uppercase">
+                Emergency
+              </span>
+</div>
+</div>
+<!-- Muted Warning / Information Note -->
+<div class="flex items-start gap-2.5 p-3 rounded-xl bg-surface-container-low text-secondary font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[18px] text-tertiary mt-0.5">warning</span>
+<span>Current database has wheel sizing geometry recorded, but lacks factory cold inflation pressures (kPa). Approving will populate these telematics thresholds.</span>
+</div>
+<!-- All versions checkboxes -->
+<div>
+<div class="font-label-ui text-label-ui text-secondary font-medium uppercase tracking-wider mb-2.5">Apply to model trims:</div>
+<div class="flex flex-wrap gap-2">
+<label class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
+<input checked="" class="w-4 h-4 rounded text-primary-container accent-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2016–2020 · 2WD</span>
+</label>
+<label class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
+<input checked="" class="w-4 h-4 rounded text-primary-container accent-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2016–2020 · 4WD</span>
+</label>
+<label class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
+<input checked="" class="w-4 h-4 rounded text-primary-container accent-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2020– · 2WD</span>
+</label>
+<label class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
+<input checked="" class="w-4 h-4 rounded text-primary-container accent-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2020– · 4WD</span>
+</label>
+<label class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
+<input checked="" class="w-4 h-4 rounded text-primary-container accent-primary-container" type="checkbox"/>
+<span class="font-label-mono-sm text-label-mono-sm text-on-surface">2020– · turbo</span>
+</label>
+</div>
+</div>
+<div class="flex items-center justify-end gap-3 pt-2">
+<button class="h-9 px-4 rounded-lg bg-surface-container text-secondary hover:text-on-surface hover:bg-surface-container-high font-body-sm text-body-sm font-medium transition-colors">
+              Edit
+            </button>
+<button class="h-9 px-4 rounded-lg bg-secondary-fixed hover:bg-primary-fixed text-primary font-body-sm text-body-sm font-semibold flex items-center gap-1.5 transition-colors">
+<span class="material-symbols-outlined text-[18px]">check</span>
+<span>Approve</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Docked Bottom Verification Action Bar -->
+<div class="sticky bottom-0 left-0 right-0 z-30 -mx-8 px-8 py-4 bg-surface-container-lowest shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 mt-auto">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary text-[22px]">history_toggle_off</span>
+<p class="font-body-sm text-body-sm text-secondary max-w-xl">
+        Approved specs replace what Roam has for the ticked versions, and the old value is kept in History.
+      </p>
+</div>
+<div class="flex items-center gap-3 w-full sm:w-auto justify-end">
+<button class="h-11 px-4 rounded-lg bg-error-container hover:bg-error/20 text-on-error-container font-body-sm text-body-sm font-medium transition-colors flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px]">close</span>
+<span>Reject this manual</span>
+</button>
+<button class="h-11 px-4 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+        Save and finish later
+      </button>
+<button class="h-11 px-6 rounded-lg bg-primary-container hover:bg-primary text-on-primary font-body-sm text-body-sm font-semibold shadow-md transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-[20px]">task_alt</span>
+<span>Approve all 27</span>
+</button>
+</div>
+</div>
+</div></main>
+</div>
+</div>
+<!-- In-App Centered Modal Overlay (Dimmed 40%) - Tall and complete, no cut-off -->
+<div class="fixed inset-0 bg-[#0f172a]/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-6 overflow-y-auto">
+<!-- Dialog Card: 720px Wide, 20px Radius, 32px Padding -->
+<div class="w-[720px] max-w-full bg-white rounded-[20px] p-8 border border-[#e6e7ee] overlay-shadow my-auto">
+<!-- Overlay Header -->
+<div class="mb-5">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-lg bg-[#e6f4ea] text-[#006e31] flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">check_circle</span>
+</div>
+<h2 class="text-[26px] font-semibold text-[#30323b] tracking-tight">Roam found this</h2>
+</div>
+<button class="w-8 h-8 rounded-full flex items-center justify-center text-[#5d5f68] hover:bg-[#f3f4fb] hover:text-[#30323b] transition-colors" title="Close">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<p class="text-[15px] text-[#5d5f68] mt-1 ml-10">
+          Check it, then press Upload.
+        </p>
+</div>
+<!-- File Row at Top -->
+<div class="bg-[#f3f4fb] rounded-[14px] p-3.5 border border-[#e6e7ee] flex items-center justify-between mb-6">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-white border border-[#e6e7ee] flex items-center justify-center text-[#a83836] shadow-xs">
+<span class="material-symbols-outlined text-[24px]">picture_as_pdf</span>
+</div>
+<div>
+<div class="text-[14px] font-semibold text-[#30323b] font-mono-code">maintenancelist_2106_roomy_passenger.pdf</div>
+<div class="text-[12px] text-[#5d5f68] font-mono-code mt-0.5">0.5 MB · 5 pages</div>
+</div>
+</div>
+<button class="h-9 px-3.5 rounded-[10px] bg-white border border-[#c5c6d0] text-[#30323b] text-[13px] font-medium hover:bg-slate-50 transition-colors shadow-xs">
+          Choose another file
+        </button>
+</div>
+<!-- Fields Stack -->
+<div class="space-y-5">
+<!-- Field 1: What is it? -->
+<div>
+<label class="block text-[13px] font-medium text-[#5d5f68] mb-2">What is it?</label>
+<div class="grid grid-cols-2 gap-3.5">
+<!-- Selected Card: Service Schedule -->
+<div class="rounded-[14px] p-4 border-2 border-[#0153dc] bg-[#faf8fe] relative cursor-pointer shadow-xs">
+<div class="flex items-center justify-between mb-1.5">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-semibold bg-[#dbe1ff] text-[#0153dc]">
+<span class="material-symbols-outlined text-[16px]">event_repeat</span>
+                  Service schedule
+                </span>
+<span class="w-5 h-5 rounded-full bg-[#0153dc] text-white flex items-center justify-center">
+<span class="material-symbols-outlined text-[15px]">check</span>
+</span>
+</div>
+<p class="text-[13px] text-[#5d5f68] mt-2">When each part is changed</p>
+</div>
+<!-- Unselected Card: Owner's Manual -->
+<div class="rounded-[14px] p-4 border border-[#c5c6d0] bg-white hover:bg-slate-50 relative cursor-pointer transition-colors">
+<div class="flex items-center justify-between mb-1.5">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium bg-[#f1f5f9] text-[#475569]">
+<span class="material-symbols-outlined text-[16px]">menu_book</span>
+                  Owner's manual
+                </span>
+</div>
+<p class="text-[13px] text-[#5d5f68] mt-2">Oil, tyres, battery and bulbs</p>
+</div>
+</div>
+<!-- Confidence note -->
+<div class="flex items-center gap-1.5 mt-2 text-[13px] text-[#5d5f68]">
+<span class="material-symbols-outlined text-[16px] text-[#006e31]">check_circle</span>
+<span>From page 1: 点検整備方式 (Toyota maintenance sheet)</span>
+</div>
+</div>
+<!-- Field 2: Car (Four Dropdowns in Two Rows) -->
+<div>
+<label class="block text-[13px] font-medium text-[#5d5f68] mb-2">Car</label>
+<div class="grid grid-cols-2 gap-3 mb-2.5">
+<!-- Make -->
+<div>
+<div class="h-11 px-3.5 rounded-[10px] bg-white border border-[#c5c6d0] flex items-center justify-between text-[14px]">
+<span class="text-[#5d5f68] text-[13px]">Make <span class="text-[#30323b] font-medium ml-1.5">Toyota</span></span>
+<span class="material-symbols-outlined text-[18px] text-slate-400">arrow_drop_down</span>
+</div>
+</div>
+<!-- Model -->
+<div>
+<div class="h-11 px-3.5 rounded-[10px] bg-white border border-[#c5c6d0] flex items-center justify-between text-[14px]">
+<span class="text-[#5d5f68] text-[13px]">Model <span class="text-[#30323b] font-medium ml-1.5">Roomy</span></span>
+<span class="material-symbols-outlined text-[18px] text-slate-400">arrow_drop_down</span>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<!-- Years (Unsure - Amber border with 'Check this' chip) -->
+<div>
+<div class="h-11 px-3 rounded-[10px] bg-white border border-[#8a5a00] flex items-center justify-between text-[14px] ring-2 ring-[#fff4dc]">
+<div class="flex items-center gap-2">
+<span class="text-[#5d5f68] text-[13px]">Years <span class="text-[#30323b] font-medium font-mono-code ml-1.5">2020–</span></span>
+<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#fff4dc] text-[#8a5a00]">
+                    Check this
+                  </span>
+</div>
+<span class="material-symbols-outlined text-[18px] text-slate-400">arrow_drop_down</span>
+</div>
+</div>
+<!-- Version -->
+<div>
+<div class="h-11 px-3.5 rounded-[10px] bg-white border border-[#c5c6d0] flex items-center justify-between text-[14px]">
+<span class="text-[#5d5f68] text-[13px]">Version <span class="text-[#30323b] font-medium ml-1.5">All versions</span></span>
+<span class="material-symbols-outlined text-[18px] text-slate-400">arrow_drop_down</span>
+</div>
+</div>
+</div>
+<!-- Years reason hint -->
+<div class="flex items-start gap-1.5 mt-2 text-[13px] text-[#5d5f68]">
+<span class="material-symbols-outlined text-[16px] text-[#8a5a00] mt-0.5">info</span>
+<span>The sheet gives no years. Roam used the date printed on page 1: <span class="font-medium text-[#30323b]">1 June 2021</span>.</span>
+</div>
+<!-- Multi-brand note -->
+<div class="flex items-center gap-1.5 mt-1.5 text-[13px] text-[#5d5f68]">
+<span class="material-symbols-outlined text-[16px] text-[#006e31]">check_circle</span>
+<span>Covers Toyota Roomy, Toyota Tank, Daihatsu Thor and Subaru Justy — the same car under four names.</span>
+</div>
+</div>
+<!-- Field 3: Country -->
+<div>
+<label class="block text-[13px] font-medium text-[#5d5f68] mb-1.5">Country</label>
+<div class="h-11 px-3.5 rounded-[10px] bg-white border border-[#c5c6d0] flex items-center justify-between text-[14px] max-w-sm">
+<span class="text-[#30323b] font-medium">Japan</span>
+<span class="material-symbols-outlined text-[18px] text-slate-400">arrow_drop_down</span>
+</div>
+<div class="flex items-center gap-1.5 mt-1.5 text-[13px] text-[#5d5f68]">
+<span class="material-symbols-outlined text-[16px] text-[#006e31]">check_circle</span>
+<span>The sheet is in Japanese and cites Japan's transport ministry.</span>
+</div>
+</div>
+<!-- Field 4: Name -->
+<div>
+<label class="block text-[13px] font-medium text-[#5d5f68] mb-1.5">Name</label>
+<input class="w-full h-11 px-3.5 rounded-[10px] bg-white border border-[#c5c6d0] text-[14px] text-[#30323b] font-medium focus:outline-none focus:ring-2 focus:ring-[#0153dc]" type="text" value="Toyota Roomy — Maintenance sheet (Japan, June 2021)"/>
+</div>
+<!-- Field 5: Pages to read -->
+<div>
+<label class="block text-[13px] font-medium text-[#5d5f68] mb-1.5">Pages to read</label>
+<div class="flex items-center gap-2 mb-3">
+<!-- Chip "5" -->
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f3f4fb] border border-[#e6e7ee] text-[13px] text-[#30323b] font-mono-code font-semibold shadow-2xs">
+<span>5</span>
+<button class="w-4 h-4 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-700" title="Remove page">
+<span class="material-symbols-outlined text-[14px]">close</span>
+</button>
+</span>
+<!-- Secondary Button + Add pages -->
+<button class="h-8 px-3 rounded-full bg-white border border-[#c5c6d0] text-[#30323b] text-[12px] font-medium hover:bg-slate-50 transition-colors inline-flex items-center gap-1 shadow-2xs">
+<span class="material-symbols-outlined text-[15px]">add</span>
+              Add pages
+            </button>
+</div>
+<!-- Page Picture Thumbnail: 72x96px -->
+<div class="flex items-center gap-4">
+<div class="w-[72px] h-[96px] rounded-lg bg-white border border-[#c5c6d0] shadow-xs p-1.5 flex flex-col justify-between select-none relative overflow-hidden group">
+<!-- Japanese doc preview mock -->
+<div class="text-[6px] leading-[8px] text-slate-600 font-mono-code line-clamp-6">
+                点検整備方式<br/>
+                トヨタ ルーミー<br/>
+                エンジンオイル: 交換 15,000km<br/>
+                ブレーキフルード: 2年ごと<br/>
+                冷却水: 7年または16万km
+              <br/><br/></div>
+<div class="text-center bg-[#faf8fe] rounded text-[9px] font-mono-code font-semibold text-[#0153dc] py-0.5 border-t border-slate-100">
+                p. 5
+              </div>
+</div>
+<div class="text-[13px] text-[#5d5f68] leading-relaxed max-w-md">
+<p>Page 5 is the replacement schedule. Pages 1–4 are inspection lists, not read.</p>
+</div>
+</div>
+</div>
+<!-- Cost Line -->
+<div class="flex items-center gap-1.5 pt-1 text-[13px] text-[#5d5f68]">
+<span class="material-symbols-outlined text-[16px] text-slate-400">info</span>
+<span>Reading costs less than 1 US cent.</span>
+</div>
+</div>
+<!-- Footer Buttons -->
+<div class="mt-7 pt-5 border-t border-[#e6e7ee] flex items-center justify-between">
+<button class="h-11 px-5 rounded-[10px] bg-white border border-[#a83836] text-[#a83836] font-semibold text-[14px] hover:bg-[#fdecec]/40 transition-colors">
+          Cancel
+        </button>
+<button class="h-11 px-6 rounded-[10px] bg-[#0153dc] text-white font-semibold text-[14px] flex items-center gap-2 hover:bg-[#0047be] shadow-sm transition-colors">
+<span class="material-symbols-outlined text-[20px]">cloud_upload</span>
+<span>Upload and read</span>
+</button>
+</div>
+</div>
+</div>
+</body></html>

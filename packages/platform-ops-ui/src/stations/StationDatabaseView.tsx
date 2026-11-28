@@ -3,16 +3,16 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { FuelEntry } from '../types/fuel';
 import { StationProfile, StationOverride } from '../types/station';
-import { aggregateStations, calculateRegionalStats, generateStationId, normalizeStationName } from '../utils/stationUtils';
+import { aggregateStations, calculateRegionalStats } from '../utils/stationUtils';
 import { StationDetailView } from './StationDetailView';
 import { VerifiedStationsTab } from './VerifiedStationsTab';
 import { ResolutionQueueTab } from './ResolutionQueueTab';
 import type { ResolutionQueueSubTab } from './ResolutionQueueTab';
 import { Loader2, ShieldCheck, ShieldOff, Inbox, MapPin, Search } from 'lucide-react';
 import { fuelService } from '../services/stationFuelService';
-import { api } from '../services/stationOpsApi';
 import { toast } from 'sonner';
 import { AddStationModal } from './AddStationModal';
+import { useLearntVerifyModal } from './useLearntVerifyModal';
 
 type DominionStationTab = 'stations' | 'verified' | 'resolution';
 
@@ -56,8 +56,6 @@ export function StationDatabaseView({
   const logs = logsFromParent ?? internalLogs;
   const [isAddStationOpen, setIsAddStationOpen] = useState(false);
   const [editingStation, setEditingStation] = useState<StationProfile | null>(null);
-  const [verifyingLearntId, setVerifyingLearntId] = useState<string | null>(null);
-  const [verifyingNearbyStation, setVerifyingNearbyStation] = useState<any>(null);
   const [resolutionQueueCount, setResolutionQueueCount] = useState(0);
   const [stationSearch, setStationSearch] = useState('');
   const initialTab: DominionStationTab =
@@ -67,60 +65,6 @@ export function StationDatabaseView({
         ? 'resolution'
         : 'stations';
   const [activeTab, setActiveTab] = useState<DominionStationTab>(initialTab);
-
-  const handleVerifyLearntLocation = useCallback((learntLoc: any) => {
-    const pseudoStation: StationProfile = {
-      id: generateStationId(
-        normalizeStationName(learntLoc.name || 'Unknown Station'),
-        learntLoc.address || `${learntLoc.location?.lat ?? 0},${learntLoc.location?.lng ?? 0}`,
-      ),
-      name: learntLoc.name || 'Unknown Station',
-      brand: learntLoc.brand || 'Independent',
-      address: learntLoc.address || '',
-      city: learntLoc.city || '',
-      parish: learntLoc.parish || '',
-      country: learntLoc.country || 'Jamaica',
-      plusCode: learntLoc.plusCode || '',
-      location: {
-        lat: learntLoc.location?.lat ?? 0,
-        lng: learntLoc.location?.lng ?? 0,
-      },
-      isPreferred: false,
-      stats: {
-        avgPrice: 0,
-        lastPrice: 0,
-        priceTrend: 'Stable',
-        totalVisits: 1,
-        rating: 0,
-        lastUpdated: learntLoc.timestamp || new Date().toISOString(),
-      },
-      amenities: [],
-      dataSource: 'manual',
-      contactInfo: {},
-      status: 'unverified',
-      operationalStatus: 'active',
-      category: 'fuel',
-    } as StationProfile;
-
-    setEditingStation(pseudoStation);
-    setVerifyingLearntId(learntLoc.id);
-    const nearby = learntLoc.nearbyStation || null;
-    if (nearby?.id) {
-      const fromStore = stationOverrides[nearby.id];
-      setVerifyingNearbyStation({
-        ...nearby,
-        status: fromStore?.status || nearby.status || 'unverified',
-        brand: fromStore?.brand || nearby.brand || '',
-        address: fromStore?.address || nearby.address || '',
-        plusCode: fromStore?.plusCode || nearby.plusCode || '',
-        geofenceRadius: fromStore?.geofenceRadius || nearby.geofenceRadius,
-        matchType: nearby.matchType || 'geofence',
-      });
-    } else {
-      setVerifyingNearbyStation(null);
-    }
-    setIsAddStationOpen(true);
-  }, [stationOverrides]);
 
   const fetchData = useCallback(async () => {
     setIsBackendLoading(true);
@@ -197,6 +141,11 @@ export function StationDatabaseView({
       setIsBackendLoading(false);
     }
   }, [logsFromParent, fillSummary]);
+
+  const learntVerify = useLearntVerifyModal({
+    onAfterSuccess: fetchData,
+    getStationOverride: (id) => stationOverrides[id],
+  });
 
   // Phase 9: Persistent Storage Migration
   useEffect(() => {
@@ -594,7 +543,7 @@ export function StationDatabaseView({
           <ResolutionQueueTab
             defaultSubTab={defaultResolutionSubTab}
             onPromoted={() => fetchData()}
-            onVerifyLocation={handleVerifyLearntLocation}
+            onVerifyLocation={learntVerify.handleVerifyLearntLocation}
             onResolved={() => fetchData()}
             onCountChange={setResolutionQueueCount}
             enableSilentAttach={enableSilentAttach}
@@ -634,84 +583,28 @@ export function StationDatabaseView({
       />
 
       <AddStationModal 
-        isOpen={isAddStationOpen || !!editingStation}
+        isOpen={isAddStationOpen || !!editingStation || learntVerify.isVerifyOpen}
         onClose={() => {
           setIsAddStationOpen(false);
           setEditingStation(null);
-          setVerifyingLearntId(null);
-          setVerifyingNearbyStation(null);
+          learntVerify.closeVerify();
         }}
         onAdd={handleManualAdd}
-        editStation={editingStation}
-        verifyAsGodList={!!verifyingLearntId}
-        initialNearbyStation={verifyingNearbyStation}
+        editStation={editingStation ?? learntVerify.pseudoStation}
+        verifyAsGodList={!!learntVerify.verifyingLearntId}
+        initialNearbyStation={learntVerify.verifyingNearbyStation}
         onDeleteCsvReference={async (stationId: string) => {
-          await fuelService.deleteStation(stationId);
+          await learntVerify.onDeleteCsvReference(stationId);
           setStationOverrides((prev) => {
             const next = { ...prev };
             delete next[stationId];
             return next;
           });
-          await fetchData();
         }}
-        onMergeIntoExisting={async (existingStationId: string) => {
-          // Merge only into Verified GOD — backend rejects Unverified CSV
-          if (verifyingLearntId) {
-            const promoteResult = await api.promoteLearntLocationToMaster({
-              learntId: verifyingLearntId,
-              action: 'merge',
-              targetStationId: existingStationId,
-            });
-            const linked = promoteResult?.linkedEntries || 0;
-            toast.success('Merged into Verified GOD station.', {
-              description: linked > 0
-                ? `${linked} fuel transaction${linked > 1 ? 's' : ''} linked.`
-                : 'Learnt staging cleared.',
-              icon: <ShieldCheck className="h-4 w-4 text-emerald-500" />,
-            });
-            setVerifyingLearntId(null);
-            await fetchData();
-          } else {
-            toast.info('Station already exists on the GOD list. No new station was created.');
-          }
-        }}
+        onMergeIntoExisting={learntVerify.onMergeIntoExisting}
         onUpdate={async (id, stationData) => {
-          // Verify Location from Resolution Queue: create fresh GOD from form only — never seed from CSV
-          if (verifyingLearntId) {
-            try {
-              const promoteResult = await api.promoteLearntLocationToMaster({
-                learntId: verifyingLearntId,
-                action: 'create',
-                stationData: {
-                  ...stationData,
-                  status: 'verified',
-                  dataSource: 'manual',
-                },
-              });
-
-              if (promoteResult?.autoMerged) {
-                const linked = promoteResult?.linkedEntries || 0;
-                const mergedName = promoteResult?.data?.name || 'existing GOD station';
-                toast.success(`Matched existing GOD station "${mergedName}".`, {
-                  description: `${promoteResult.message || ''}${linked > 0 ? ` ${linked} transaction${linked > 1 ? 's' : ''} linked.` : ''}`,
-                  icon: <ShieldCheck className="h-4 w-4 text-emerald-500" />,
-                });
-              } else {
-                const linked = promoteResult?.linkedEntries || 0;
-                toast.success('Saved to Verified GOD list from your location.', {
-                  description: linked > 0
-                    ? `${linked} fuel transaction${linked > 1 ? 's' : ''} linked.`
-                    : 'Payment holds for this stop will clear when matching picks up your pin.',
-                  icon: <ShieldCheck className="h-4 w-4 text-emerald-500" />,
-                });
-              }
-              setVerifyingLearntId(null);
-              await fetchData();
-            } catch (promoteErr: any) {
-              console.error('[Verify Learnt] Failed to promote:', promoteErr);
-              toast.error(promoteErr?.message || 'Failed to save Verified GOD station.');
-              throw promoteErr;
-            }
+          if (learntVerify.verifyingLearntId) {
+            await learntVerify.onVerifyUpdate(id, stationData);
             return;
           }
 

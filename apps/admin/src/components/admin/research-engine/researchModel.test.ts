@@ -135,7 +135,30 @@ describe("money and goal", () => {
   });
 });
 
-import { catalogueEngineCode, partFinder } from "./researchModel";
+import { anyPageLinkOk, catalogueEngineCode, partFinder, specFinder } from "./researchModel";
+
+describe("anyPageLinkOk (spec found on any page)", () => {
+  it("takes the page's own https link, never the search page", () => {
+    expect(anyPageLinkOk("https://www.toyota.jp/roomy/manual.html")).toBe(true);
+    expect(anyPageLinkOk("https://www.google.com/search?q=roomy")).toBe(false);
+    expect(anyPageLinkOk("http://example.com")).toBe(false);
+    expect(anyPageLinkOk("")).toBe(false);
+  });
+});
+
+describe("specFinder (spec browser check hint)", () => {
+  it("uses the catalogue's word and an example of the value", () => {
+    expect(specFinder("headlight_high_bulb", "headlight, high beam")).toEqual({ search: "headlamp", looksLike: "H4" });
+    expect(specFinder("headlight_low_bulb", "low beam bulb").search).toBe("headlamp");
+    expect(specFinder("tire_size", "tire size")).toEqual({ search: "tire", looksLike: "165/65R14" });
+    expect(specFinder("engine_oil_capacity_with_filter_l", "oil capacity").looksLike).toBe("3.4 L");
+    expect(specFinder("engine_oil_grade", "engine oil grade").looksLike).toBe("0W-20");
+    expect(specFinder("coolant_type", "coolant")).toEqual({ search: "coolant", looksLike: null });
+  });
+  it("falls back to the spec's own name", () => {
+    expect(specFinder("mystery_key", "Mystery Spec")).toEqual({ search: "mystery spec", looksLike: null });
+  });
+});
 
 describe("browser-check guide (RE-63)", () => {
   it("writes engine codes the way catalogue version tables do", () => {

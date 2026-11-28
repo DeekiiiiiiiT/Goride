@@ -1,11 +1,11 @@
 import React from 'react';
-import { Card } from '../../ui/card';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 import { cn } from '../../ui/utils';
 import type { CycleKpis, TransactionKpis } from '../../../utils/fuelLogKpiMetrics';
 
 /**
- * Thin presentational KPI strip for Transaction Logs.
+ * Summary tiles for Transaction Logs.
+ * Look: Stitch docs/stitch/fuel-review-and-logs-fleet/transaction_logs_* (summary tiles).
  * Pure display — callers pass already-computed KPI objects (no data fetching here).
  * Clickable tiles call onTileClick with the tile id (e.g. 'imbalanced').
  */
@@ -14,7 +14,11 @@ export type KpiTile = {
   id: string;
   label: string;
   value: string;
+  /** Small unit after the number ("km", "L"). */
+  unit?: string;
   hint?: string;
+  /** Material Symbols icon name for the round badge top-right. */
+  icon?: string;
   /** Cash vs gas card lines under Spend. Shown only when they add up to the total. */
   split?: { cash: string; gasCard: string };
   tone?: 'default' | 'warning' | 'danger' | 'success';
@@ -23,11 +27,31 @@ export type KpiTile = {
   active?: boolean;
 };
 
-const toneClass: Record<NonNullable<KpiTile['tone']>, string> = {
-  default: 'text-slate-900',
-  warning: 'text-amber-600',
-  danger: 'text-rose-600',
-  success: 'text-emerald-600',
+type Tone = NonNullable<KpiTile['tone']>;
+
+const toneCard: Record<Tone, string> = {
+  default: 'bg-white dark:bg-[#2a2a2d]',
+  warning: 'bg-[#fffbeb] dark:bg-[#451a03]',
+  danger: 'bg-[#ffdad6] dark:bg-[#450a0a]',
+  success: 'bg-white dark:bg-[#2a2a2d]',
+};
+const toneText: Record<Tone, string> = {
+  default: 'text-[#47464c] dark:text-zinc-400',
+  warning: 'text-[#b45309] dark:text-[#fbbf24]',
+  danger: 'text-[#ba1a1a] dark:text-[#f87171]',
+  success: 'text-[#069669] dark:text-[#34d399]',
+};
+const toneValue: Record<Tone, string> = {
+  default: 'text-[#0d1c2e] dark:text-zinc-50',
+  warning: 'text-[#b45309] dark:text-[#fbbf24]',
+  danger: 'text-[#ba1a1a] dark:text-[#f87171]',
+  success: 'text-[#069669] dark:text-[#34d399]',
+};
+const toneIcon: Record<Tone, string> = {
+  default: 'bg-[#eff4ff] text-[#47464c] dark:bg-zinc-800 dark:text-zinc-300',
+  warning: 'bg-[#fde68a]/60 text-[#b45309]',
+  danger: 'bg-white text-[#ba1a1a]',
+  success: 'bg-[#82f5c1] text-[#00714e]',
 };
 
 export function FuelLogKpiRow({
@@ -41,14 +65,15 @@ export function FuelLogKpiRow({
   return (
     <div
       className={cn(
-        'grid gap-1.5 sm:gap-2',
-        tiles.length <= 3 ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4',
+        'grid gap-3 sm:gap-4',
+        tiles.length <= 3 ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2 lg:grid-cols-4',
       )}
     >
       {tiles.map((t) => {
+        const tone: Tone = t.tone || 'default';
         const clickable = !!onTileClick && (t.filterable || t.id === 'imbalanced' || t.id === 'exceptions');
         return (
-          <Card
+          <div
             key={t.id}
             role={clickable ? 'button' : undefined}
             tabIndex={clickable ? 0 : undefined}
@@ -65,44 +90,48 @@ export function FuelLogKpiRow({
                 : undefined
             }
             className={cn(
-              // Card defaults to gap-6 — kill it so KPI chips stay compact on phones
-              'gap-0 px-2 py-1 shadow-none transition-colors sm:px-2.5 sm:py-1.5',
-              clickable && 'cursor-pointer hover:border-slate-300 hover:bg-slate-50/80',
-              t.active && 'border-amber-300 ring-2 ring-amber-400',
+              'flex flex-col gap-1 rounded-2xl p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)] transition-colors sm:p-6',
+              toneCard[tone],
+              clickable && 'cursor-pointer hover:ring-2 hover:ring-[#c9c5cd]',
+              t.active && 'ring-2 ring-[#b45309]',
             )}
           >
-            <div className="truncate text-[9px] font-semibold uppercase leading-none tracking-wide text-slate-400 sm:text-[10px] sm:leading-tight">
-              {t.label}
+            <div className="flex items-start justify-between gap-2">
+              <span className={cn('text-[12px] font-semibold uppercase tracking-wider', toneText[tone])}>{t.label}</span>
+              {t.icon ? (
+                <span
+                  aria-hidden
+                  className={cn(
+                    'material-symbols-outlined flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[18px]',
+                    toneIcon[tone],
+                  )}
+                >
+                  {t.icon}
+                </span>
+              ) : null}
             </div>
-            <div
-              className={cn(
-                'truncate text-sm font-bold leading-tight sm:text-base',
-                toneClass[t.tone || 'default'],
-              )}
-            >
+            <div className={cn('truncate text-[24px] font-bold leading-tight tabular-nums sm:text-[32px]', toneValue[tone])}>
               {t.value}
+              {t.unit ? <span className="ml-1.5 text-[15px] font-medium text-[#47464c] dark:text-zinc-400">{t.unit}</span> : null}
             </div>
             {t.split ? (
-              <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[10px] leading-tight sm:text-[11px]">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[13px] leading-tight">
                 <span>
-                  <span className="text-slate-400">Cash </span>
-                  <span className="font-semibold tabular-nums text-slate-700">{t.split.cash}</span>
+                  <span className="text-[#47464c] dark:text-zinc-400">Cash</span>{' '}
+                  <span className="font-semibold tabular-nums text-[#0d1c2e] dark:text-zinc-100">{t.split.cash}</span>
                 </span>
                 <span>
-                  <span className="text-slate-400">Gas Card </span>
-                  <span className="font-semibold tabular-nums text-slate-700">{t.split.gasCard}</span>
+                  <span className="text-[#47464c] dark:text-zinc-400">Gas Card</span>{' '}
+                  <span className="font-semibold tabular-nums text-[#0d1c2e] dark:text-zinc-100">{t.split.gasCard}</span>
                 </span>
               </div>
             ) : null}
             {t.hint ? (
-              <div
-                className="mt-0.5 hidden truncate text-[10px] leading-tight text-slate-400 sm:block"
-                title={t.hint}
-              >
+              <div className={cn('truncate text-[13px] leading-tight', toneText[tone])} title={t.hint}>
                 {t.hint}
               </div>
             ) : null}
-          </Card>
+          </div>
         );
       })}
     </div>
@@ -116,14 +145,29 @@ export function cycleKpisToTiles(
 ): KpiTile[] {
   const distance = opts?.distanceKm ?? kpis.totalDistance;
   return [
-    { id: 'cycles', label: 'Cycles', value: String(kpis.totalCycles), hint: `${kpis.completed} done · ${kpis.active} active` },
-    { id: 'distance', label: 'Period distance', value: `${Math.round(distance).toLocaleString()} km` },
-    { id: 'fuel', label: 'Fuel', value: `${kpis.totalFuel.toLocaleString()} L` },
+    {
+      id: 'cycles',
+      label: 'Full tanks',
+      value: String(kpis.totalCycles),
+      icon: 'local_gas_station',
+      hint: `${kpis.completed} done · ${kpis.active} still filling`,
+    },
+    { id: 'distance', label: 'Distance', value: Math.round(distance).toLocaleString(), unit: 'km', icon: 'route' },
+    {
+      id: 'fuel',
+      label: 'Fuel used',
+      value: kpis.totalFuel.toLocaleString(),
+      unit: 'L',
+      icon: 'water_drop',
+      hint: kpis.totalFuel > 0 && distance > 0 ? `${(distance / kpis.totalFuel).toFixed(1)} km a litre average` : undefined,
+    },
     {
       id: 'exceptions',
-      label: 'Exceptions',
+      label: 'Needs a look',
       value: String(kpis.exceptions),
-      tone: kpis.exceptions > 0 ? 'danger' : 'success',
+      icon: kpis.exceptions > 0 ? 'warning' : 'check',
+      hint: kpis.exceptions > 0 ? 'Tap to see them' : 'Nothing to check',
+      tone: kpis.exceptions > 0 ? 'warning' : 'success',
       filterable: kpis.exceptions > 0,
       active: opts?.exceptionsActive,
     },
@@ -154,20 +198,23 @@ export function transactionKpisToTiles(
       id: 'fills',
       label: 'Fills',
       value: String(kpis.totalFills),
+      icon: 'local_gas_station',
       hint: opts?.sourceHint,
     },
     {
       id: 'spend',
       label: 'Spend',
       value: formatFuelMoney(kpis.totalSpend, 0),
+      icon: 'payments',
       split: spendSplit(kpis),
     },
     {
       id: 'imbalanced',
-      label: 'Imbalanced',
+      label: 'Needs fixing',
       value: String(kpis.imbalancedCount),
-      tone: kpis.imbalancedCount > 0 ? 'warning' : 'default',
-      hint: kpis.imbalancedCount > 0 ? 'Click to filter' : 'Ledger healthy',
+      icon: kpis.imbalancedCount > 0 ? 'warning' : 'check',
+      tone: kpis.imbalancedCount > 0 ? 'warning' : 'success',
+      hint: kpis.imbalancedCount > 0 ? 'Tap to show them' : 'All fills add up',
       filterable: true,
       active: opts?.integrityActive,
     },

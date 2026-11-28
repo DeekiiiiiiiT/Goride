@@ -1,0 +1,122 @@
+ROAM FLEET — FILL DETAILS PANEL AND DECIDE PAY WINDOW — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+HOW TO USE THIS FILE
+- Use the same Stitch project as "Fuel Review Queue and Transaction Logs" (the Calm Finance Desk look), so these match it.
+- First paste: everything from "FIRST PASTE" down to the end of SCREEN 2.
+- Then paste SCREEN 3 on its own.
+- Never paste the section "FOR CLAUDE — DO NOT PASTE" at the bottom.
+
+
+
+==================== FIRST PASTE ====================
+
+Roam Fleet - Fill details panel and Decide pay window (Desktop Web App, for the fleet owner and fleet manager):
+
+Design two in-app windows that open from the Transaction Logs page of Roam Fleet. The first is a side panel that shows one saved fuel fill in full when the owner taps a row: how much, how many litres, where, the odometer, how it was paid and logged, and a button to change it. The second is a centred window where the owner decides what to pay a driver when the gas card statement and the pump total don't agree. The person using this is not an accountant: every label is in plain words. The design must feel modern, calm and effortless, like the best business banking apps, with generous spacing, soft shadows and large clear type. Every screen is tall enough to show everything, with no inner scrolling. Draw only the screens asked for in this message.
+
+
+BRAND IDENTITY:
+- Keep the existing Roam Fleet app frame exactly as it is today (do not redesign it):
+  - Top: a white nav row with the black "Roam Fleet" app tile, then: Dashboard, Fleet Operations (active, underlined), Driver Operations, Money, Vehicle Operations, Delivery Operations, Analytics, Reports, Business Finance.
+  - Dark bar below it: a dark navy strip with a search box "Switch vehicle or search hub…" on the left, and on the right "03:11:28 PM EST" and "America/Jamaica".
+- Theme: "Calm finance desk" — clear, trustworthy, quiet and modern. Not a spreadsheet, not a developer tool.
+- LIGHT MODE (default):
+  - Primary: near-black #000000 — primary buttons
+  - Page wash: #f8f9ff; cards and panels: #FFFFFF with a soft shadow (0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(15,23,42,0.06))
+  - Soft blue panel inside cards: #eff4ff; input fields: #eff4ff, white when focused
+  - Text: #0d1c2e; muted text: #47464c
+  - Good / verified: green #00714e on #82f5c1
+  - Waiting on statement: amber #b45309 on #fffbeb
+  - Problem / mismatch / pay nothing: red #ba1a1a on #ffdad6
+  - Neutral chips: #47464c on #e6eeff
+- DARK MODE:
+  - Page #1c1c1e, panels #2a2a2d, soft panel #18181b, text #fafafa, muted #a1a1aa, primary buttons white with near-black text
+  - Green #34d399 on #064e3b; amber #fbbf24 on #451a03; red #f87171 on #450a0a; neutral #d4d4d8 on #27272a
+- Shapes: panels 16px corner radius, buttons and inputs 12px, chips fully rounded. All buttons at least 44px tall.
+- Typography: Inter. Window title 24px semibold, section title 17px semibold, body 15px, helper text 13px, small labels 12px uppercase with letter spacing. Money and numbers use tabular figures: "J$4,000.00", "18.7 L", "200,247 km", "J$213.90 a litre".
+- Car plates are always in a small grey rounded box: "5179KZ", followed by the car in plain words "Toyota Roomy".
+- Dates in plain words: "Tue 24 Nov, 4:53 AM". Never "2026-11-24", never codes, ids or internal words.
+- Buttons always look like buttons:
+  - Primary = solid near-black with white text.
+  - Secondary = white with a visible #c9c5cd border and dark text.
+  - Danger = white with a red border and red text; a final "pay nothing" confirm is solid red.
+  - Never underlined text links, never icon-only buttons without a label. Confirms are in-app windows, never browser pop-ups.
+- The pieces used across these screens (draw them the same way every time):
+  - Side panel: slides in from the right over the dimmed Transaction Logs page, 480px wide, white, full height. Header: title, one muted line under it, a chip for how the fill was logged, and a secondary "Close" button top-right. Sections separated by 24px with a 17px section title. A bottom bar pinned to the bottom with the buttons.
+  - Detail row: label on the left in muted text, value on the right in dark text.
+  - Big number row: three numbers side by side on the soft blue panel — money, litres, price a litre — with small uppercase labels above.
+  - Tank bar: a rounded bar showing how full the fill made the tank, with "38% of the tank" under it.
+  - Centred window: 560px wide, 16px corners, over the dimmed page, title + one muted line, content, buttons bottom-right.
+  - Choice card: a large white rounded card with a bold title and one muted line; the selected one has a near-black 2px border and a filled round dot.
+- No gradients, glassmorphism or 3D. No AI badges, no sparkles.
+- Sample data (REAL, Rideshare, Toyota Roomy):
+  - Kenny Gregory Rattray · 5179KZ Toyota Roomy · tank 40 L.
+  - Tue 24 Nov, 4:53 AM · Blaize, Innswood Drive · Cash · J$4,000.00 · 18.7 L · J$213.90 a litre · odometer 200,247 km · last fill 200,243 km · typed in Fleet.
+  - Sat 21 Nov, 5:12 PM · FESCO, 7–9 Beechwood Ave · paid partly by gas card and partly in cash · pump total J$5,000.00 · gas card charge J$5,600.00 · odometer 200,105 km.
+
+
+DESIGN PRINCIPLES:
+- The money comes first: the amount is the biggest thing in the panel.
+- Show only what Roam knows; a missing value says "—" or "Waiting on statement", never J$0.00.
+- Calm, not alarming: red only when something needs a money decision. Waiting is amber.
+- Plain words only: no "anchor", "ledger", "seal", "derived", "variance", "tolerance", "void", "entry mode".
+- One view per screen.
+
+
+SCREEN 1: FILL DETAILS PANEL — CASH FILL
+- Background: the Transaction Logs page (title "Transaction Logs", a table of fills), dimmed. The side panel is open on the right.
+- Header: title "Tue 24 Nov, 4:53 AM", muted line "Kenny Gregory Rattray · 5179KZ Toyota Roomy", amber outline chip "Typed in Fleet", secondary button "Close".
+- Big number row: "TOTAL J$4,000.00" · "LITRES 18.7 L" · "PRICE J$213.90 a litre". Under it the tank bar at 47% with "47% of the tank".
+- Section "Where": detail rows "Station Blaize" with a small green chip "Verified station", "Address Innswood Drive".
+- Section "Odometer": detail rows "Odometer 200,247 km", "Last fill 200,243 km", "Since last fill +4 km".
+- Section "How it was logged": detail rows "Driver Kenny Gregory Rattray", "Car 5179KZ Toyota Roomy", "Paid with Cash", "Logged as A fill typed in Fleet".
+- Section "Note" on a soft amber card: "Driver paid cash — gas card was declined."
+- Bottom bar: secondary button "Edit this fill" with a pencil icon on the left, secondary button "Close" on the right.
+
+SCREEN 2: FILL DETAILS PANEL — SPLIT FILL WAITING ON THE STATEMENT
+- Background: the Transaction Logs page, dimmed. The same side panel is open on the right.
+- Header: title "Sat 21 Nov, 5:12 PM", muted line "Kenny Gregory Rattray · 5179KZ Toyota Roomy", neutral chip "Gas card + cash", secondary button "Close".
+- Big number row: "PUMP TOTAL J$5,000.00" · "LITRES —" · "PRICE —".
+- Section "Paid two ways" on the soft blue panel: detail rows "Gas card J$5,600.00 (from the statement)", "Cash Waiting on statement" (amber chip), and a red chip "J$600.00 more on the card than the pump" with the muted line "Allowed difference J$50.00".
+- Section "Where": "Station FESCO", "Address 7–9 Beechwood Ave".
+- Section "Odometer": "Odometer 200,105 km", "Last fill 199,946 km", "Since last fill +159 km".
+- Section "How it was logged": "Driver Kenny Gregory Rattray", "Car 5179KZ Toyota Roomy", "Paid with Gas card + cash", "Logged as From the driver's phone".
+- An amber notice above the bottom bar: "The cash part waits for the gas card statement. Use Decide pay to set it — changes here would not apply."
+- Bottom bar: primary button "Decide pay" on the left, secondary button "Close" on the right.
+
+END OF FIRST PASTE
+
+
+
+SCREEN 3: DECIDE WHAT TO PAY
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Kenny Gregory Rattray, 5179KZ Toyota Roomy. Tall enough to show everything, no inner scrolling.
+- Background: the Transaction Logs page on its "Awaiting statement" view, dimmed. On top, a centred in-app window, 560px wide.
+- Title "Decide what to pay", muted line "Sat 21 Nov, 5:12 PM · Kenny Gregory Rattray · 5179KZ".
+- Summary on the soft blue panel, detail rows: "Pump total J$5,000.00", "Gas card charge J$5,600.00", "Worked-out cash —" with muted "can't be worked out", "More on the card than the pump J$600.00" in red, "Allowed difference J$50.00" muted.
+- Three large choice cards stacked:
+  - "Pay the worked-out cash" — "Pay what the statement says the cash part was." This one is greyed out with the line "Not possible: the card charge is more than the pump total."
+  - "Pay a different cash amount" (selected, near-black border) — "Type the cash amount to pay the driver." Inside it a money field labelled "Cash to pay the driver" showing "J$ 0.00".
+  - "Pay no cash for this fill" — "The driver is not paid for the cash part." (red title text)
+- Required text box "Why? (at least 8 characters)" containing "Card charge includes a car wash, no cash was paid."
+- Buttons bottom-right: "Back" (secondary) and "Save decision" (primary). When "Pay no cash for this fill" is the selected choice, the primary button becomes solid red "Pay no cash".
+
+
+
+==================== FOR CLAUDE — DO NOT PASTE ====================
+
+ADDITIONAL UI COMPONENTS
+- Screens 1–2 replace logs/FuelEntryDetailSheet.tsx (opened from FuelTransactionsTable onView; FuelLogTable passes vehicleLabel, driverLabel, stationLabel, stationAddressLabel, paymentLabel, prevOdometer, tankCapacity, canEdit, onEdit, onResolveSplitCash, splitSiblings).
+- Keep everything the sheet has today: entry source chip (entrySourceLabel), amount/litres/price, tank fill % (fillPct from tankCapacity), station + address (or "No GPS metadata" hidden), vehicle, driver, paid by, split fill breakdown (splitBreakdown: card, cash, awaiting cash, mismatch delta + tolerance, "mismatch acknowledged" → "Mismatch settled"), odometer, prev odometer + delta + isRegression warning (red line "Lower than the last fill — check the odometer"), entry type, entry mode, notes, edit gate notices (awaiting_card_readonly / awaiting_cash_readonly reason, resolve_split_cash), Resolve Cash → "Decide pay", Edit This Log → "Edit this fill" (disabled when sealed: show grey lock line "This week is closed. Fills can't be changed."), Close.
+- The sheet has no photos, no checks list and no delete today — don't add them in the port.
+- Screen 3 replaces SplitCashResolveDialog.tsx: choices accept_derived / enter_cash / void (labels above), derived cash unavailable → accept_derived disabled ('No derived amount'), cash field for enter_cash, reason required (min 8) for enter_cash and void, busy "Saving…", confirm label per choice.
+
+INTERACTIONS
+- Decide pay / Save decision → onResolve({ tx, action, cashAmount, reason }) → handleResolveSplitCash → fuelService.resolveSplitFillCash.
+- Edit this fill → onEdit(entry); Decide pay from the panel → onResolveSplitCash(entry) (openSplitResolveForEntry in FuelManagement).
+
+Spec screens / Area
+| Screen | Area | Replaces |
+|---|---|---|
+| 1 | Fill details panel — cash fill | logs/FuelEntryDetailSheet.tsx |
+| 2 | Fill details panel — split fill waiting | logs/FuelEntryDetailSheet.tsx (split + resolve gate) |
+| 3 | Decide what to pay | SplitCashResolveDialog.tsx |

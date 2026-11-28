@@ -328,7 +328,7 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
             </div>
           </DropdownMenuItem>
 
-          {!lateLog && (
+          {!lateLog && !onVerifyLocation && (
           <DropdownMenuItem
             className="gap-2.5 text-blue-700 focus:text-blue-800 focus:bg-blue-50 font-medium items-start py-2"
             onClick={() => void actions.handlePromote(row)}
@@ -408,36 +408,40 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
             </DropdownMenuItem>
           )}
 
-          <DropdownMenuSeparator />
-          <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
-            Discard
-          </DropdownMenuLabel>
+          {!isProvisional ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
+                Discard
+              </DropdownMenuLabel>
 
-          <DropdownMenuItem
-            className="gap-2.5 text-red-600 focus:text-red-700 focus:bg-red-50 items-start py-2"
-            onClick={() => {
-              actions.setSelectedRow(row);
-              actions.setIsRejectDialogOpen(true);
-            }}
-          >
-            <Trash2 className="h-4 w-4 mt-0.5 shrink-0" />
-            <div>
-              <div className="text-sm font-medium">Reject as Anomaly</div>
-            </div>
-          </DropdownMenuItem>
+              <DropdownMenuItem
+                className="gap-2.5 text-red-600 focus:text-red-700 focus:bg-red-50 items-start py-2"
+                onClick={() => {
+                  actions.setSelectedRow(row);
+                  actions.setIsRejectDialogOpen(true);
+                }}
+              >
+                <Trash2 className="h-4 w-4 mt-0.5 shrink-0" />
+                <div>
+                  <div className="text-sm font-medium">Reject as Anomaly</div>
+                </div>
+              </DropdownMenuItem>
 
-          <DropdownMenuItem
-            className="gap-2.5 text-red-700 focus:text-red-800 focus:bg-red-50 font-medium items-start py-2"
-            onClick={() => {
-              actions.setSelectedRow(row);
-              actions.setIsDeleteDialogOpen(true);
-            }}
-          >
-            <XCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            <div>
-              <div className="text-sm font-medium">Delete Permanently</div>
-            </div>
-          </DropdownMenuItem>
+              <DropdownMenuItem
+                className="gap-2.5 text-red-700 focus:text-red-800 focus:bg-red-50 font-medium items-start py-2"
+                onClick={() => {
+                  actions.setSelectedRow(row);
+                  actions.setIsDeleteDialogOpen(true);
+                }}
+              >
+                <XCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                <div>
+                  <div className="text-sm font-medium">Delete Permanently</div>
+                </div>
+              </DropdownMenuItem>
+            </>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
     );
@@ -581,14 +585,26 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm whitespace-nowrap">
-                      <div>{formatQueueDate(row.evidence?.date || row.learnt?.timestamp || row.learnt?.firstSeen)}</div>
+                      <div>
+                        {formatQueueDate(
+                          row.evidence?.date ||
+                            row.learnt?.timestamp ||
+                            row.learnt?.firstSeen ||
+                            row.provisional?.date ||
+                            undefined,
+                        )}
+                      </div>
                       {row.evidence?.time ? (
                         <div className="text-[10px] text-slate-400">{row.evidence.time}</div>
                       ) : null}
                     </TableCell>
-                    <TableCell className="text-sm">{row.evidence?.driverName || '—'}</TableCell>
+                    <TableCell className="text-sm">
+                      {row.evidence?.driverName || row.provisional?.driverName || '—'}
+                    </TableCell>
                     <TableCell className="text-right font-semibold tabular-nums">
-                      {row.evidence ? `$${Math.abs(Number(row.evidence.amount) || 0).toFixed(2)}` : '—'}
+                      {row.evidence || row.provisional?.amount != null
+                        ? `$${Math.abs(Number(row.evidence?.amount ?? row.provisional?.amount) || 0).toFixed(2)}`
+                        : '—'}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-0.5">

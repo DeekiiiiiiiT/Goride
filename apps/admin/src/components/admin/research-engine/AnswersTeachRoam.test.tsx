@@ -171,7 +171,8 @@ describe("question card (§5.1)", () => {
   it("the four kinds ask their own question with their own buttons (AT-05)", () => {
     expect(questionChoices({ kind: "types", typeIds: ["t-shoes"], typeNames: ["Brake shoes"] }).choices.map((c) => c.label)).toEqual(["Brake shoes", "Something else"]);
     expect(questionChoices({ kind: "axle", typeIds: ["t"], typeNames: ["Parking brake shoe strut set"] }).ask).toBe("Where is it on the car?");
-    expect(questionChoices({ kind: "side", typeIds: ["t"], typeNames: ["Strut mount"] }).choices.map((c) => c.label)).toEqual(["Left", "Right", "Both sides"]);
+    expect(questionChoices({ kind: "side", typeIds: ["t"], typeNames: ["Strut mount"] }).choices.map((c) => c.label)).toEqual(["Left", "Right", "Both sides", "It has no left or right"]);
+    expect(questionChoices({ kind: "axle", typeIds: ["t"], typeNames: ["Radiator hose"] }).choices.map((c) => c.label)).toEqual(["Front", "Rear", "It has no front or rear"]);
     expect(placeWords("front both")).toBe("Front, both sides");
     expect(placeWords("rear right")).toBe("Rear right");
   });

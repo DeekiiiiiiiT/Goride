@@ -24,13 +24,13 @@ import { TollV2UndoDialog } from './dialogs/TollV2UndoDialog';
 import { TollV2ConfirmAllSureDialog } from './dialogs/TollV2ConfirmAllSureDialog';
 import { TollV2LinkPaybackDialog } from './dialogs/TollV2LinkPaybackDialog';
 import type { TollV2RowActions } from './TollV2ChargeRow';
-import { useTollV2Weeks } from './useTollV2Weeks';
+import { TOLL_V2_WEEKS_KEY, useTollV2Weeks } from './useTollV2Weeks';
 import { TollV2LateItemsCard } from './TollV2LateItemsCard';
 import { TollV2TakeBacksCard } from './TollV2TakeBacksCard';
 import { TollV2RecordTakeBackDialog } from './dialogs/TollV2RecordTakeBackDialog';
 import { TollV2ReopenDialog } from './TollV2ReopenDialog';
 import { TollV2SealedRibbon } from './TollV2SealedRibbon';
-import { TollV2EmptyCard, TollV2ErrorCard, TollV2LoadingState } from './TollV2StateCards';
+import { TollV2EmptyCard, TollV2ErrorCard, TollV2LoadingState, TollV2WeeksErrorCard } from './TollV2StateCards';
 import { TollV2MobileSealBar } from './TollV2MobileSealBar';
 import type {
   TollV2Blocker,
@@ -141,6 +141,9 @@ export function ReconTollsV2Step({
   const showEmpty =
     desk &&
     !desk.sealed &&
+    // The weeks read failed or has not answered yet: don't claim "nothing to decide" while take-backs are unknown.
+    !weeksQuery.isError &&
+    !weeksQuery.isPending &&
     desk.charges.length === 0 &&
     (desk.paybacks?.length ?? 0) === 0 &&
     (desk.kept?.length ?? 0) === 0 &&
@@ -150,7 +153,7 @@ export function ReconTollsV2Step({
     openWeekTakeBacks.length === 0;
 
   const invalidateWeeks = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: ['toll-v2-weeks'] });
+    void queryClient.invalidateQueries({ queryKey: TOLL_V2_WEEKS_KEY });
   }, [queryClient]);
 
   const handleCarryLate = useCallback(
@@ -435,6 +438,8 @@ export function ReconTollsV2Step({
       if (res === null) return;
       toast.success('Tolls sealed for this week');
       await refetchDesk();
+      // The weeks list (Toll Health, take-backs) must see the seal, or it keeps showing the week as left to decide.
+      invalidateWeeks();
       if (onPeriodFinished) await onPeriodFinished();
     } catch (err) {
       if (partsLayout && err instanceof TollV2CommandError && err.code === 'PENDING_NOT_RESOLVED') {
@@ -446,7 +451,7 @@ export function ReconTollsV2Step({
     } finally {
       setSealing(false);
     }
-  }, [desk, onPeriodFinished, partsLayout, runCommand, refetchDesk]);
+  }, [desk, invalidateWeeks, onPeriodFinished, partsLayout, runCommand, refetchDesk]);
 
   const dupCharges = useMemo(() => {
     if (!desk || !dupPair) return { a: null, b: null };
@@ -501,7 +506,7 @@ export function ReconTollsV2Step({
 
   if (deskQuery.isError || !desk || !tiles || !subcounts || !progress) {
     return (
-      <TollV2ErrorCard onRetry={() => void deskQuery.refetch()} />
+      <TollV2ErrorCard error={deskQuery.error} onRetry={() => void deskQuery.refetch()} />
     );
   }
 
@@ -512,7 +517,11 @@ export function ReconTollsV2Step({
       {desk.sealed ? <TollV2SealedRibbon onReopen={() => setReopenOpen(true)} /> : null}
 
       {!desk.sealed ? (
-        <TollV2TakeBacksCard takeBacks={openWeekTakeBacks} onRecord={setTakeBackTarget} />
+        weeksQuery.isError ? (
+          <TollV2WeeksErrorCard error={weeksQuery.error} onRetry={() => void weeksQuery.refetch()} />
+        ) : (
+          <TollV2TakeBacksCard takeBacks={openWeekTakeBacks} onRecord={setTakeBackTarget} />
+        )
       ) : null}
 
       <TollV2TilesRow tiles={tiles} tilesAddUp={tiles.tilesAddUp} subcounts={subcounts} locked={desk.sealed} />

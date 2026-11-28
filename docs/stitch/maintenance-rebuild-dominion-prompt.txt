@@ -1,0 +1,261 @@
+ROAM DOMINION — MAINTENANCE: OWNER'S MANUALS AND SCHEDULES — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+HOW TO USE: First paste = everything from the intro down to END OF FIRST PASTE (Screens 1 and 2). Then paste one SCREEN block at a time, in order. Never paste the last section ("FOR CLAUDE — DO NOT PASTE").
+Plan: docs/maintenance-enterprise-rebuild-review.md (Rev 2), B1, B4, MER-01, MER-02, MER-04, MER-05, MER-06, MER-07, MER-08.
+If this Stitch project already has a saved design system called "Precision", "Technical", "Utilitarian" or "Manual", start a fresh Stitch project for this file.
+
+
+==================== FIRST PASTE ====================
+
+Roam Dominion - Maintenance templates: owner's manuals and part schedules (desktop admin console for the owner, who is not a mechanic):
+
+Design high-fidelity, modern screens for the Maintenance templates area of the Roam Dominion admin console. Dominion decides how often every part of every car is serviced, and every app in Roam uses those numbers. From now on the car maker's owner's manual is the main source. The owner picks a car model, uploads its owner's manual as a PDF once, and says which pages hold the maintenance table. Roam reads those pages in the background, then shows each page next to the numbers it found: every part with its normal schedule and its harder-driving schedule (taxis and heavy traffic). The owner checks them and approves, and every car of that model uses them from then on. A model with no manual yet uses Roam's own rule, labelled "Roam policy". Each number always says where it came from, down to the page: "Owner's manual · page 414". It must feel effortless and premium, like a modern document app: big clear page previews, calm progress, one obvious next step. Make each screen tall enough to show everything, with no inner scrolling and no cut-off boxes. Draw only the screens asked for in this message. Dominion is the master reference database: no fleet names, plates, drivers, vehicle counts, "used by", prices, suppliers or stock anywhere.
+
+
+BRAND IDENTITY (take from the live Dominion screens — do not invent):
+- Keep the Dominion console frame exactly as it is:
+  - dark navy left sidebar "Dominion · Roam Admin Console" with groups MASTER DATA (Overview, Vehicles active, Places and Maps, Fuel, Tolls, Tax and Vendors), ENGINES (Fuel Brain, Toll Brain, Matching Brain), DISTRIBUTION (Apps, Data API, Change requests), PLATFORM (Staff and roles, Activity log, Platform Ops, Global settings), BACK OFFICE (GCT registrations, Ledger, Remittance)
+  - top bar: search "Search entities, engines, routes…" with a ⌘K chip, moon icon, user "Deeki T · Owner"
+  - everything right of the sidebar and below the top bar is the design
+- Page header on every screen: breadcrumb "Dominion › Master data › Vehicles › Maintenance templates" in 13px muted sentence case; title "Maintenance templates" 26px semibold; subtitle "How often each part is serviced, for which cars, and why."; a pill tab bar: "Part schedules 16", "Manuals 2" (new, between Part schedules and Service packages), "Service packages 5", "Jobs 167", "Supplies 57", "Review list 0", "History". The selected tab is a solid #0153dc pill with white text and a white count bubble; the others are plain text with a soft grey count bubble.
+- Theme: "Calm modern workspace". Generous spacing, 16px rounded cards, soft shadows, larger type, clear hierarchy, few codes.
+- LIGHT MODE (draw every screen in light mode):
+  - Primary #0153dc; primary container #dbe1ff
+  - Background #faf8fe; cards #ffffff, 16px radius, 1px #e6e7ee hairline, soft shadow 0 4px 16px rgba(1,83,220,0.04)
+  - Text #30323b; muted #5d5f68; input borders #c5c6d0; tint panels #f3f4fb with 12px radius
+  - Success #006e31 on #e6f4ea; warning #8a5a00 on #fff4dc; error #a83836 on #fdecec; slate #475569 on #f1f5f9
+- DARK MODE (for the theme switch): background #0b1220; cards #111a2e; hairlines #1e293b; text #e2e8f0; muted #94a3b8; primary #5b8def; success #4ade80; warning #fbbf24; error #f87171.
+- Where-the-number-comes-from pills, one look everywhere (small rounded pill, icon + words): "Car maker" (green, menu_book icon), "Part maker" (blue on #dbe1ff, precision_manufacturing icon), "Roam policy" (slate, shield icon). Under the pill, a muted 13px line saying exactly where: "Owner's manual · page 414" or "No manual for this model yet".
+- Schedule status pills: "Active" (green dot), "Draft" (slate outline), "Needs checking" (amber), "Retired" (grey outline).
+- Two new part states, one look everywhere: "As needed" (slate outline pill with a build icon — a repair job that is never due on its own) and "No schedule yet" (amber outline pill with a schedule icon — waiting for a manual or a Roam rule).
+- Market pill on every manual: a small rounded pill with a flag and the plain name: "Jamaica" or "Japan". Never a two-letter code.
+- The schedule, written the same way everywhere: "Every 5,000 km or 6 months · whichever comes first". Harder driving sits right beside it, never hidden: "Harder driving: every 2,500 km or 3 months". When the manual has no separate figure: "Harder driving: same as normal (the manual gives one figure)".
+- The manual page preview, one look everywhere: a white portrait page with a soft shadow and 8px radius, showing a printed maintenance table (rows of parts, columns of km and months, small tick marks), page number "414" in a small grey pill under it. The row being checked is highlighted with a soft #dbe1ff band.
+- Car names, one way everywhere: make, model and years in plain words, then the version in plain words only when needed — "Toyota Roomy 2016–2020 · 2WD · 1.0 petrol". Never frame or chassis codes on screen.
+- Buttons always look like buttons, never underlined text links:
+  - Primary: solid #0153dc, white text, 44px tall, 10px radius, semibold
+  - Secondary: white fill, visible #c5c6d0 border, dark text
+  - Danger (Cancel, Remove, Reject): white fill, #a83836 border and red text; solid red only for a final confirm
+  - Disabled: 50% opacity, never hidden, with a small muted line under it saying why
+- Inputs and dropdowns: white, 10px radius, 1px #c5c6d0 border, 44px tall; focus ring #0153dc. Dropdowns are searchable and show a chevron.
+- Tick boxes: 20px rounded square with the words beside it, never the box alone.
+- Typography: Inter. Titles 26px semibold, section titles 18px semibold, body 15px, hints 13px muted. JetBrains Mono with tabular numerals only for km, months, page numbers and dates, always after the plain words.
+- Icons: Material Symbols Outlined, 20–24px. Part types show in a 40px soft #dbe1ff rounded square with a blue icon (oil drop, air, tire, brake, bolt for spark plugs).
+- Every overlay is in-app: a centred white card over the page dimmed 40%, 20px radius, 32px padding, or a 560px right-hand drawer. Never a browser pop-up.
+- Sample data (car models are real, from Roam's database; manual pages and figures are realistic picture data):
+  - Models: "Toyota Roomy 2016–2020 · 2WD · 1.0 petrol", "Honda Fit 2013–2020 · 1.5 hybrid", "Toyota C-HR 2016–2023 · 1.8 hybrid", "Toyota Tank 2016–2020", "Daihatsu Thor 2016–2020", "Nissan Note 2012–2020", "Toyota Probox 2014–2024".
+  - Manual 1: "Toyota Roomy — Owner's manual (export edition)" · Jamaica · 548 pages · maintenance table pages 412–419 · uploaded 27 Nov 2026 by Deeki T.
+  - Manual 2: "トヨタ ルーミー 取扱説明書" shown as "Toyota Roomy — Owner's manual (Japan edition)" · Japan · 612 pages · maintenance table pages 498–503.
+  - Rows found on page 414: Engine oil — every 10,000 km or 12 months; harder driving every 5,000 km or 6 months. Oil filter — every 20,000 km or 24 months; harder driving every 10,000 km or 12 months. Air filter — every 40,000 km; harder driving every 20,000 km. Spark plugs — every 100,000 km; the manual gives one figure. Brake fluid — every 40,000 km or 24 months; the manual gives one figure. Coolant — first at 160,000 km or 8 years, then every 80,000 km or 4 years.
+  - Roam policy today: Engine oil every 5,000 km or 3 months; Spark plugs every 100,000 km or 60 months.
+  - Part list areas: Engine, Brakes, Filters, Fluids, Suspension & steering, Tires & wheels, Electrical, Body & glass.
+
+
+DESIGN PRINCIPLES (only what changes the drawing):
+- Desktop-first at 1440px; content column max 1180px.
+- The plain words come first ("Engine oil"), then the numbers in mono, then where the number came from.
+- Normal and harder driving always sit side by side, the same size. Harder driving is never tucked behind a tick box.
+- One clear next action per screen. "Approve all" is the only primary button on the check screen.
+- Waiting is calm: a soft progress bar with the page being read, never a spinner alone.
+- 8px spacing grid, 44px touch targets.
+
+
+SCREEN 1: MANUALS TAB — ONE MANUAL LOADED
+Same Roam Dominion console frame, colours, cards and style. Draw tall enough to show everything, no inner scrolling.
+- Page header as in BRAND IDENTITY with the "Manuals 2" tab selected.
+- A soft #dbe1ff info line with a menu_book icon: "The owner's manual is the main source. Upload it once per car model, and every car of that model uses it."
+- Three summary cards in a row:
+  - "MODELS WITH A MANUAL" big "1", muted "Toyota Roomy 2016–2020".
+  - "MANUALS BEING READ OR CHECKED" big "1", muted "1 waiting for you to check".
+  - "MODELS ON ROAM POLICY" big "1,209", muted "No manual yet. Roam's own rule is used."
+- Toolbar: search box "Search a make or model…" (wide); dropdown "Manual · All" (options All, Has a manual, No manual yet); primary button with a + icon "Upload a manual".
+- A list of model cards (white, 16px radius), one per row, each with a 40px car icon square on the left:
+  1. "Toyota Roomy 2016–2020 · 2WD · 1.0 petrol" — green pill "Car maker" — line "2 manuals · Jamaica used first" — chips "Jamaica · checked" (green) and "Japan · waiting for you" (amber) — secondary button "Open".
+  2. "Honda Fit 2013–2020 · 1.5 hybrid" — slate pill "Roam policy" — muted "No manual for this model yet" — secondary button "Upload a manual".
+  3. "Toyota C-HR 2016–2023 · 1.8 hybrid" — slate pill "Roam policy" — muted "No manual for this model yet" — secondary button "Upload a manual".
+  4. "Toyota Probox 2014–2024 · 1.5 petrol" — slate pill "Roam policy" — muted "No manual for this model yet" — secondary button "Upload a manual".
+- Footer line, muted: "Showing 4 of 1,210 models" with secondary buttons "Previous" and "Next".
+
+SCREEN 2: UPLOAD A MANUAL — FILE CHOSEN
+Same Roam Dominion console frame, colours, cards and style. Behind the overlay, dimmed 40%: the Manuals tab with a list of car model cards. Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 680px wide. Title "Upload an owner's manual". Muted line "Roam reads only the pages you choose."
+- Field "Car" as four searchable dropdowns in a row, all filled: "Make · Toyota", "Model · Roomy", "Years · 2016–2020", "Version · 2WD · 1.0 petrol". Under them, a muted line with a check icon: "Covers Toyota Roomy, Toyota Tank, Daihatsu Thor and Subaru Justy of these years — the same car under four names."
+- Field "Which country is this manual for?" dropdown filled "Jamaica" with a flag. Muted help line: "Jamaica is used first. A Japan manual is used only when there is no Jamaica one."
+- Field "Name", filled: "Toyota Roomy — Owner's manual (export edition)".
+- Filled drop zone: PDF icon, file name "Roomy_owners_manual_export.pdf", muted "18.4 MB · 548 pages", a green check, secondary button "Choose another file".
+- Field "Pages with the maintenance table": two small number boxes "From 412" "To 419", muted line "8 pages will be read". To the right, three tiny page thumbnails of pages 412, 413, 414 showing printed tables, so the owner can see they picked the right pages.
+- Tint panel #f3f4fb, three numbered steps: "Open the PDF and find the maintenance schedule pages." · "Type the first and last page number." · "Press Upload. You can close this window while Roam reads."
+- Footer: danger "Cancel"; primary "Upload and read".
+
+END OF FIRST PASTE
+
+
+SCREEN 3: MODEL PAGE — MANUAL BEING READ
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Page header with the "Manuals" tab selected. Draw tall enough to show everything, no inner scrolling.
+- Back button (secondary, arrow icon) "Manuals". Title "Toyota Roomy 2016–2020 · 2WD · 1.0 petrol". Muted line "Also sold as Toyota Tank, Daihatsu Thor and Subaru Justy".
+- A large white card "Toyota Roomy — Owner's manual (export edition)", blue pill "Reading", market pill "Jamaica", muted "548 pages · reading pages 412–419 · uploaded 27 Nov 2026, 10:42 AM by Deeki T".
+  - A soft blue progress bar at 62% with the words "Reading page 417 of 419 · 5 of 8 pages done".
+  - A row of 8 small page thumbnails: 412–416 with a small green tick each, 417 with a soft blue pulse ring, 418–419 plain grey.
+  - Muted line: "You can leave this page. Roam carries on and lets you know when it's ready to check."
+  - Danger button "Stop reading".
+- A second white card "Toyota Roomy — Owner's manual (Japan edition)", market pill "Japan", amber pill "Waiting for you", muted "612 pages · pages 498–503 · 14 numbers found", primary button "Check numbers".
+- A third card "What every Roomy uses today": three rows, each with a part icon, part name, the schedule sentence, and the source pill with its line:
+  - "Engine oil · Every 5,000 km or 3 months" — slate "Roam policy", muted "No manual checked yet".
+  - "Spark plugs · Every 100,000 km or 60 months" — slate "Roam policy".
+  - "Brake fluid · Every 40,000 km or 24 months" — slate "Roam policy".
+  - Muted footer line: "This changes as soon as you approve the manual's numbers."
+
+SCREEN 4: CHECK THE NUMBERS — PAGE NEXT TO ROWS
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Full-width page (no tab bar), for the owner checking what Roam read from an owner's manual. Draw tall enough to show everything, no inner scrolling.
+- Top: back button "Toyota Roomy", title "Check the numbers", muted "Toyota Roomy — Owner's manual (export edition) · Jamaica · pages 412–419".
+- A progress strip: "6 of 14 checked" with a thin green bar; page tabs as pills "412", "413", "414" (selected, solid blue), "415", "416", "417", "418", "419".
+- Two columns:
+  - LEFT (45%): the manual page preview of page 414 — a printed maintenance table with columns "Item", "Normal", "Severe conditions", rows for engine oil, oil filter, air filter, spark plugs, brake fluid, coolant; the "Engine oil" row highlighted with a soft #dbe1ff band. Zoom buttons (+ / −, 32px with a visible border) under it.
+  - RIGHT (55%): a list of row cards, one per part found on this page:
+    1. Engine oil (oil icon) — "Normal: every 10,000 km or 12 months" | "Harder driving: every 5,000 km or 6 months" — muted "Found on page 414, row 1" — green pill "Approved".
+    2. Oil filter — "Normal: every 20,000 km or 24 months" | "Harder driving: every 10,000 km or 12 months" — buttons secondary "Edit", primary-outline "Approve".
+    3. Air filter — "Normal: every 40,000 km" | "Harder driving: every 20,000 km" — buttons "Edit", "Approve".
+    4. Spark plugs — "Normal: every 100,000 km" | "Harder driving: same as normal" with a ticked box "The manual gives one figure" — buttons "Edit", "Approve".
+    5. Brake fluid — "Normal: every 40,000 km or 24 months" | ticked "The manual gives one figure" — buttons "Edit", "Approve".
+    6. Coolant — "First at 160,000 km or 8 years, then every 80,000 km or 4 years" | ticked "The manual gives one figure" — amber pill "Needs checking" and a muted line "Roam is not sure this row is coolant. Check the page." — buttons "Edit", "Approve".
+    Each card shows: part icon square, part name 17px semibold, the two schedule boxes side by side (normal on white, harder driving on #f3f4fb), all numbers in mono.
+- Sticky footer bar (white, top hairline): muted "Approved numbers replace Roam policy for every Toyota Roomy 2016–2020 right away."; danger "Reject this manual"; secondary "Save and finish later"; primary "Approve all 13 left".
+
+SCREEN 5: EDIT ONE ROW
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the drawer, dimmed 40%: the "Check the numbers" page with the manual page on the left. Draw tall enough to show everything, no inner scrolling.
+- 560px right-hand drawer. Title "Coolant", muted "Toyota Roomy — Owner's manual (export edition) · page 414, row 6".
+- A small preview of the page row, cropped, with the highlighted band.
+- Field "Which part is this?" searchable dropdown filled "Coolant" (coolant icon).
+- Box "Normal driving": "Every [80,000] km or [48] months". A tick box "Different first time" ticked, with "First at [160,000] km or [96] months".
+- Box "Harder driving (taxis, heavy traffic)": tick box "The manual gives one figure" ticked; the km and months boxes beside it show "Same as normal" greyed.
+- Field "Page", filled "414".
+- Muted line: "Due is whichever comes first."
+- Footer: danger "Cancel"; secondary "Save"; primary "Save and approve".
+
+SCREEN 6: MODEL PAGE — MANUAL APPROVED
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Page header with the "Manuals" tab selected. Draw tall enough to show everything, no inner scrolling.
+- Back button "Manuals". Title "Toyota Roomy 2016–2020 · 2WD · 1.0 petrol". Muted "Also sold as Toyota Tank, Daihatsu Thor and Subaru Justy".
+- A soft green banner with a check icon: "14 numbers approved. Every Toyota Roomy 2016–2020 now uses this manual."
+- Card "Manuals for this model" — two rows:
+  - "Toyota Roomy — Owner's manual (export edition)" · market pill "Jamaica" · green pill "Used first" · muted "Pages 412–419 · checked 27 Nov 2026 by Deeki T" · secondary buttons "Open PDF" and "Read again".
+  - "Toyota Roomy — Owner's manual (Japan edition)" · market pill "Japan" · slate pill "Backup" · muted "Used only for parts the Jamaica manual leaves out" · secondary "Open PDF".
+- Card "What every Roomy uses now" — a clean table: Part · Normal · Harder driving · Comes from:
+  - Engine oil · Every 10,000 km or 12 months · Every 5,000 km or 6 months · green "Car maker", muted "Owner's manual · page 414"
+  - Oil filter · Every 20,000 km or 24 months · Every 10,000 km or 12 months · "Car maker", "page 414"
+  - Air filter · Every 40,000 km · Every 20,000 km · "Car maker", "page 414"
+  - Spark plugs · Every 100,000 km · Same as normal · "Car maker", "page 414"
+  - Brake fluid · Every 40,000 km or 24 months · Same as normal · "Car maker", "page 414"
+  - Wiper blades · Every 10,000 km or 6 months · — · slate "Roam policy", muted "Not in the manual"
+- Each Comes-from line is a small secondary button "Page 414" with an open-in-new icon that opens the page preview.
+
+SCREEN 7: PART SCHEDULES TAB — WITH MANUALS, AS NEEDED AND NO SCHEDULE YET
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Page header with the "Part schedules 22" tab selected. Draw tall enough to show everything, no inner scrolling.
+- A soft #dbe1ff info panel (no link, no button) with three short lines: "Part schedules decide how often a part is due." · "Service packages only group parts for one garage visit." · "Due is whichever comes first: the km or the months."
+- Three summary cards:
+  - "PART SCHEDULES" big "22", muted "16 for everyone · 6 for one model".
+  - "WHERE NUMBERS COME FROM": three short bars — "Car maker 6", "Part maker 0", "Roam policy 16"; under them muted "1,209 models have no manual yet".
+  - "NEEDS YOUR ATTENTION" big "1", muted "1 manual waiting for you to check".
+- Toolbar: search "Search a part…"; secondary "Preview a car"; primary "+ Add schedule".
+- Filter chips row: "All sources", "Car maker", "Part maker", "Roam policy" | "All", "Has a schedule", "As needed", "No schedule yet" | dropdown "Who it covers · All" (All, Everyone, One model, One engine, One car version).
+- Table, grouped by area, columns: Part · Everyone schedule · Harder driving · Models with their own · Comes from · Status:
+  - Area ENGINE:
+    - Engine oil — "5,000 km or 3 months" — "Same as normal" — "1 model" — slate "Roam policy" — green "Active"
+    - Spark plugs — "100,000 km or 60 months" — "Same as normal" — "1 model" — slate "Roam policy" — green "Active"
+    - Spark plug wires — "—" — "—" — "—" — "—" — amber outline "No schedule yet"
+    - Throttle body cleaning — "Done when needed" — "—" — "—" — "—" — slate outline "As needed"
+    - Leak inspection — "Done when needed" — "—" — "—" — "—" — slate outline "As needed"
+    - Valve clearance adjustment — "—" — "—" — "—" — "—" — amber outline "No schedule yet"
+  - Area BRAKES:
+    - Brake fluid — "40,000 km or 24 months" — "Same as normal" — "1 model" — slate "Roam policy" — green "Active"
+    - Brake pads — "10,000 km or 6 months" — "Same as normal" — "—" — slate "Roam policy" — green "Active"
+  - Area TIRES & WHEELS:
+    - Wheel alignment — "—" — "—" — "—" — "—" — amber outline "No schedule yet"
+    - Puncture repair — "Done when needed" — "—" — "—" — "—" — slate outline "As needed"
+- Each row ends with a chevron. "As needed" and "No schedule yet" rows have muted text so the scheduled rows stand out.
+
+SCREEN 8: ADD SCHEDULE DRAWER — ONE MODEL, CAR MAKER
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the drawer, dimmed 40%: the Part schedules table. Draw tall enough to show everything, no inner scrolling.
+- 560px right-hand drawer. Title "Add schedule".
+- Field "Which part" searchable dropdown filled "Timing belt" with a belt icon.
+- "Which cars" as four large choice cards in a 2×2 grid (icon, title, one muted line), the selected one with a #0153dc border and a tick:
+  - "Everyone" — "Every car, unless a model has its own"
+  - "One model" (selected) — "All years and names of one model"
+  - "One engine" — "Every car with this engine"
+  - "One car version" — "One exact version only"
+- Under the selected card, four searchable dropdowns in two rows: "Make · Toyota", "Model · Roomy", "Years · 2016–2020", "Version · 2WD · 1.0 petrol". A muted line with a check: "Covers Toyota Roomy, Tank, Daihatsu Thor and Subaru Justy · 2016–2020".
+- Two equal boxes side by side:
+  - "Normal driving": "Every [100,000] km or [—] months".
+  - "Harder driving (taxis, heavy traffic)": "Every [80,000] km or [—] months"; under it a tick box "The manual gives one figure" (not ticked).
+- "Where this number comes from" as three choice rows with radio circles: "Car maker's owner's manual" (selected), "Part maker's catalogue", "Roam policy".
+- Under the selected source: dropdown "Manual · Toyota Roomy — Owner's manual (export edition) · Jamaica", and a small box "Page [416]".
+- Field "How sure are you?" segmented buttons "Checked" (selected), "Likely", "Not sure".
+- Summary line in a #f3f4fb panel: "Timing belt for Toyota Roomy 2016–2020: every 100,000 km; harder driving every 80,000 km. From the owner's manual, page 416."
+- Footer: danger "Cancel"; secondary "Save as draft"; primary "Make active".
+
+SCREEN 9: ADD SCHEDULE DRAWER — CAR MAKER WITHOUT A PAGE
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the drawer, dimmed 40%: the Part schedules table. Draw tall enough to show everything, no inner scrolling.
+- 560px right-hand drawer. Title "Add schedule". Part "Cabin air filter".
+- "Which cars" card "One model" selected, with dropdowns "Make · Honda", "Model · Fit", "Years · 2013–2020", "Version · 1.5 hybrid".
+- Normal box "Every [20,000] km or [12] months"; Harder driving box empty with a red 1px border and a red line under it: "Fill in the harder-driving numbers, or tick 'The manual gives one figure'."
+- Source "Car maker's owner's manual" selected; dropdown "Manual" shows placeholder "No manual for Honda Fit yet" with a red border, and a red line: "Upload the Honda Fit manual first, or pick Roam policy."; secondary button "Upload a manual" next to it.
+- Footer: danger "Cancel"; secondary "Save as draft"; primary "Make active" disabled at 50% with a muted line under it: "Needs a manual and a page."
+
+SCREEN 10: READING FAILED ON TWO PAGES
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Page header with the "Manuals" tab selected. Draw tall enough to show everything, no inner scrolling.
+- Back button "Manuals". Title "Honda Fit 2013–2020 · 1.5 hybrid".
+- White card "Honda Fit — Owner's manual (export edition)", market pill "Jamaica", amber pill "Waiting for you", muted "Pages 386–392 · 9 numbers found".
+- A soft amber panel with a warning icon: "Pages 391 and 392 could not be read. They look like a photo of a page. Roam tried to read them as pictures and found nothing." Two thumbnails of pages 391 and 392 with small amber warning badges.
+- Buttons in the panel: secondary "Read those 2 pages again"; secondary "Choose different pages".
+- Below: primary button "Check the 9 numbers found".
+- Muted line at the bottom: "Pages 386–390 read fine."
+
+SCREEN 11: MANUALS TAB — NOTHING YET (EMPTY)
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Page header with the "Manuals 0" tab selected. Draw tall enough to show everything, no inner scrolling.
+- A large centred white card: a big soft menu_book icon in a 72px #dbe1ff circle; title "No owner's manuals yet"; body "Every car uses Roam policy until you upload its owner's manual."; primary button "Upload a manual".
+- Under it, three small step cards in a row with numbers: "1 · Pick the car" · "2 · Upload the PDF and say which pages" · "3 · Check the numbers and approve".
+
+
+==================== FOR CLAUDE — DO NOT PASTE ====================
+
+DEVIATIONS FROM THE REVIEW, ON PURPOSE (owner rules win):
+- Review B2/§Stitch list says "a family picker by chassis code". Owner rule 21 Nov: no codes on screen, every car picker is Make → Model → Years → Version dropdowns. So "One model" = the parent platform (family) found from those dropdowns; "One car version" = vehicle_catalog row. Codes never shown.
+- Review "Family coverage: every family in use" — Dominion = master data, no fleet counts. The Manuals tab lists every model family (1,210) with a Manual filter instead; no "in use".
+- "Who it covers" chips renamed: Everyone / One model / One engine / One car version (review: Everyone / Engine family / Model family / One chassis).
+- Sample manual pages and figures are picture data, not real Toyota numbers. The car models and names are real (M900 family = Roomy/Tank/Thor/Justy; GP5 = Honda Fit; ZYX10 = C-HR).
+
+ADDITIONAL UI COMPONENTS:
+- SourcePill + where-line: Car maker / Part maker / Roam policy; line = "Owner's manual · page N" | "Not in the manual" | "No manual for this model yet". Same component on Part schedules, ladder, model page, Preview a car.
+- ScheduleSentence: normal + harder-driving pair; "Same as normal (the manual gives one figure)" when severe_same_as_normal; first-time interval line when interval differs on first service.
+- PartStatePill: As needed (frequency_kind = manual_only) / No schedule yet (no rule, not manual_only).
+- MarketPill: Jamaica / Japan / other with flag; rank JM 1 · nearest market 2 · JP 3 · other 4.
+- ManualCard states: Reading (progress) / Waiting for you (N found) / Checked (Used first | Backup) / Failed pages / Stopped / Rejected.
+- PagePreview: rendered PDF page image with highlight band from row bbox; zoom.
+- CarPicker: Make → Model → Years → Version searchable dropdowns (same as Vehicles catalogue pickers); shows the "same car under N names" line from the family's member platforms.
+- Dark mode: exact colour values (text-[#…]), never Tailwind colour names (globals.css remaps them in .dark).
+
+INTERACTIONS:
+- Upload a manual (S2): POST maintenance-manuals (multipart, family/platform id, market, title, page_from, page_to) → returns at once with job id; card shows Reading. Background job reads page by page (text layer first, page image to AI when no text), writes draft rules with evidence_page and market. Poll every 10 s while Reading; stop when done.
+- "Stop reading": in-app confirm "Stop reading this manual? Numbers found so far are kept as drafts." (Cancel danger, Stop primary).
+- Check screen (S4): Approve one → rule status active, confidence confirmed, verified_by/at; recompute every car of the family now. "Approve all N left" → in-app confirm "Approve 13 numbers? Every Toyota Roomy 2016–2020 switches to them now." Rows marked Needs checking are included only after Edit/Approve one-by-one (Approve all skips them and says "1 left for you").
+- Edit row (S5): change part, numbers, first-time interval, one-figure tick, page. "Save and approve" = save + approve.
+- "Reject this manual": confirm with reason (min 10 characters); drafts retired, manual kept with status Rejected.
+- "Read again" / "Read those 2 pages again": new job for the chosen pages only; approved rows untouched.
+- Add schedule drawer (S8/S9): template_scope from the choice card (global / platform (family row) / engine_family / variant) + the matching id. Car maker needs manual_id + evidence_page; severe numbers or severe_same_as_normal. "Make active" disabled with the reason line until valid.
+- Part schedules filters: source chips, schedule-state chips (Has a schedule / As needed / No schedule yet), Who it covers dropdown. "How this works" button is gone (MER-24); its sentences are the info panel.
+- Owner-only actions (disabled with "Only the owner can change this" for staff): Approve, Approve all, Reject, Make active. Staff can upload and edit drafts.
+- Routes (new): GET/POST maintenance-manuals, GET maintenance-manuals/:id (pages, progress, rows), POST maintenance-manuals/:id/approve|reject|reread|stop, PATCH maintenance-manual-rows/:id, GET maintenance-manuals/:id/pages/:n (image).
+
+Spec screens / Area:
+| Screen | Plan | Area |
+|---|---|---|
+| 1 | B4, MER-07 | MaintenanceMasterPage → new Manuals tab |
+| 2 | B4.1–2, MER-06/07/08 | Upload manual overlay |
+| 3 | B4.4 | Manuals → model page, Reading state |
+| 4 | B4.6, MER-05 | Check the numbers page |
+| 5 | B4.6 | Edit row drawer |
+| 6 | B4.7–8 | Model page, approved state |
+| 7 | MER-04, MER-24, E-D2 | PartSchedulesTab redraw |
+| 8 | MER-01, MER-02, MER-05 | MaintenanceMasterScheduleDrawer redraw |
+| 9 | MER-05, MER-07 | Schedule drawer, invalid state |
+| 10 | MER-08 | Model page, failed pages state |
+| 11 | — | Manuals tab empty state |

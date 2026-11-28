@@ -3,7 +3,7 @@
  */
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RECON_STEP_ORDER } from '@roam/finance-core';
 import type { ReconRunPayload } from '../../../services/reconApi';
@@ -156,7 +156,14 @@ vi.mock('../../../services/reconApi', async (importOriginal) => {
 vi.mock('./ReconSettlementStep', () => ({
   ReconSettlementStep: () => <div data-testid="recon-settlement-mock" />,
 }));
-vi.mock('./ReconSourcesStep', () => ({ ReconSourcesStep: () => null }));
+vi.mock('./ReconSourcesStep', () => ({
+  // A real step calls onRefresh after a save; this button stands in for one.
+  ReconSourcesStep: (props: { onRefresh?: () => void | Promise<void> }) => (
+    <button type="button" data-testid="sources-refresh" onClick={() => void props.onRefresh?.()}>
+      source saved
+    </button>
+  ),
+}));
 vi.mock('./ReconAttributionStep', () => ({ ReconAttributionStep: () => null }));
 vi.mock('./ReconTagAccountStep', () => ({ ReconTagAccountStep: () => null }));
 vi.mock('./ReconTripsEarningsStep', () => ({ ReconTripsEarningsStep: () => null }));
@@ -169,6 +176,8 @@ import { ReconRunPage } from './ReconRunPage';
 
 describe('ReconRunPage post-save watch (WRA-69)', () => {
   let qc: QueryClient;
+  /** The step the page opens on, read through the mocked window.location. */
+  let locationSearch: string;
 
   beforeEach(() => {
     cleanup();
@@ -176,9 +185,12 @@ describe('ReconRunPage post-save watch (WRA-69)', () => {
     qc = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: Infinity } },
     });
+    locationSearch = '?step=settlement_preview';
     vi.spyOn(window, 'location', 'get').mockReturnValue({
       ...window.location,
-      search: '?step=settlement_preview',
+      get search() {
+        return locationSearch;
+      },
     } as Location);
     fetchRunMock.mockReset();
     fetchWeekProjectionStatusMock.mockClear();
@@ -240,4 +252,32 @@ describe('ReconRunPage post-save watch (WRA-69)', () => {
       { timeout: 15_000 },
     );
   }, 30_000);
+
+  it('a step refresh invalidates the toll weeks list too', async () => {
+    locationSearch = '?step=sources';
+    fetchRunMock.mockImplementation(async () => baseRun({ version: 75, settlementStatus: 'complete' }));
+    setReconWeekContext({ runId: RUN_ID, version: 75, closed: false });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+
+    render(
+      <QueryClientProvider client={qc}>
+        <ReconRunPage line={LINE} weekKey={WEEK} onBack={() => {}} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('sources-refresh')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('sources-refresh'));
+    });
+
+    await waitFor(() => {
+      const weeksKey = JSON.stringify(['toll-v2-weeks']);
+      const asked = invalidate.mock.calls.some(
+        (call) =>
+          JSON.stringify((call[0] as { queryKey?: unknown } | undefined)?.queryKey) === weeksKey,
+      );
+      expect(asked).toBe(true);
+    });
+  });
 });

@@ -11,15 +11,17 @@ is open.
 
 ## START HERE (new chat)
 
-> **27 Nov 2026: RE-73 / RE-74 / RE-75 (stale and impossible browser checks). All LIVE.**
-> - **DB** (owner pasted, logbook lines in): `20261127122811_part_fits_axle_drum_rule.sql` (RE-73: no pads, rotor or
->   caliper on a drum axle; the car's own brake type decides) and `20261127132914_research_close_covered_checks.sql`
+> **27 Nov 2026: RE-73 / RE-74 / RE-75 (stale and impossible browser checks).**
+> - **DB LIVE** (owner pasted, logbook lines in): `20261127122811_part_fits_axle_drum_rule.sql` (RE-73: no pads, rotor
+>   or caliper on a drum axle; the car's own brake type decides) and `20261127132914_research_close_covered_checks.sql`
 >   (RE-75: a job whose answer is already Confirmed or sourced is never made, and cron `research-close-covered` every
 >   10 min closes open ones → `auto_added`). Root cause: jobs were judged once when made and never re-checked.
-> - **Edge** (RE-73 message + RE-74: a saved-page held row opens no check when that part + axle is already on file):
->   `saved_page_proof.ts`, `research_saved_page_routes.ts`, `saved_page_part_type_core.ts`, `saved_page_on_file.ts`
->   (+ `saved_page_on_file.test.ts`). `platform-catalog` v265 + `catalog-research` v84 deployed 27 Nov ~14:25 UTC from
->   main e38dd9c72 + these files; this PR puts them on main.
+> - **Edge (RE-73 message + RE-74):** a saved-page held row opens no check when that part + axle is already on file.
+>   Clean copy `C:/Roam/Goride-deploy-re74` = main e38dd9c72 + 5 files: `saved_page_proof.ts`,
+>   `research_saved_page_routes.ts`, `saved_page_part_type_core.ts`, `saved_page_on_file.ts`,
+>   `saved_page_on_file.test.ts` (156/156 tests). Deploy `platform-catalog` + `catalog-research` from it.
+>   **Once deployed, these files are deployed-but-NOT-on-main:** any merge to main redeploys edge from main and undoes
+>   them unless they are on main. Both migration files are also not on main yet.
 
 1. Read this file. Follow `docs/how-we-build-playbook.md`. The owner is not a coder: plain words, **short replies**.
    When asked "what next?", answer in one line.
@@ -154,8 +156,10 @@ and show as **Closed**.
    (platform-catalog), Dominion Vercel Ready, Supabase function tests green, Parts SQL checks green after `86b9db1a`
    (two SQL tests still refreshed the old materialized view), new `research-engine-ui` CI job green.
    First catch-up rebuild **succeeded** 25 Nov 15:50 UTC (3 min 0 s; it would have been cut at 2 min before).
-   **Watch:** the 26 Nov 03:30 nightly `catalog-demand-readiness` in `cron.job_run_details` should succeed too. Roomy cells after the rebuild: FILT-AIR, HVAC-CABIN, ENG-THERM, BELT-SERP
-   "missing" — FILT-AIR is odd (engine air filter 17801-21060 was confirmed 21 Nov); look at why it doesn't count.
+   **Watch:** the 26 Nov 03:30 nightly `catalog-demand-readiness` in `cron.job_run_details` should succeed too. Air filter fixed 25 Nov (main `2cbee3f5`, migration `20261125155802` hand-run
+   with its logbook line): browser checks on the car maker's catalogue saved the engine's "aftermarket" guess, so
+   17801-21060 and 48530-B9165 sat in tier 4 and readiness skipped them; now saved as OEM (`confirmedPartKind`). Roomy
+   after the 16:10 rebuild: **7 of 10 ready**; still missing = cabin filter, thermostat, drive belt (the owner's checks).
 3. **RE-64 reconsidered (no change):** Amayama's `M900A-AGBVE` is the catalogue's own code (kept as the remembered
    version, which research uses). `vehicle_catalog.full_model_code` `DBA-M900A-GBME` may be the code on the car's own
    papers, and Fleet matching reads it, so it isn't overwritten. Change it only after a Roomy's papers are checked.

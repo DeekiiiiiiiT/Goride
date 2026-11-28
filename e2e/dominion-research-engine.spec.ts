@@ -396,9 +396,12 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect(d.getByTestId("q-part-yes")).toHaveCount(0);
     await d.getByTestId("browser-check-next").click();
     // No remembered version: the row to click in the catalogue's own column words, never a frame code to read.
-    await expect(d.getByTestId("browser-check-instruction")).toContainText("Pick the version of your car that has:");
-    await expect(d.getByTestId("guide-version-row")).toContainText("Engine: 1KRFE");
-    await expect(d.getByTestId("guide-version-row")).toContainText("Built:");
+    // Owner 27 Nov: copy the model code (an engine code finds no car on a parts site), then match dates + engine.
+    await expect(d.getByTestId("guide-find-model")).toContainText("1. Find M900A");
+    await expect(d.getByTestId("guide-find-model")).toContainText("type it in the site's search box");
+    await expect(d.getByRole("button", { name: "Copy M900A" })).toBeVisible();
+    await expect(d.getByTestId("guide-pick-row")).toContainText("with engine 1KRFE");
+    await expect(d.getByTestId("guide-pick-row")).toContainText("built 2016");
     await expect(d.getByTestId("browser-check-counter")).toContainText("7 of 25");
     await expect(d.getByTestId("browser-check-next")).toBeDisabled();
     await d.getByTestId("q-version-code").fill("M900A-AGBVE");
@@ -447,8 +450,11 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect(d.getByTestId("guide-version-row")).toContainText("Model code: M900A-AGBVE");
     await d.getByTestId("q-version-yes").click();
     await d.getByTestId("browser-check-next").click();
-    await expect(d.getByTestId("guide-find-part")).toContainText("Search spark plug");
-    await expect(d.getByTestId("guide-find-part")).toContainText("Do you see PLUG, SPARK");
+    // Owner 27 Nov: Roam's number first, then the word as the fallback.
+    await expect(d.getByTestId("guide-search-number")).toContainText("Search 00000-T0009");
+    await expect(d.getByTestId("guide-search-word")).toContainText("Nothing found? Search spark plug");
+    await expect(d.getByTestId("guide-search-word")).toContainText("look for a row called PLUG, SPARK");
+    await expect(d.getByTestId("guide-found-it")).toContainText("Found it? Press Yes. Not there? Press No, then Not on this page.");
     await d.getByTestId("q-part-yes").click();
     await d.getByTestId("browser-check-next").click();
     // Owner 25 Nov: the number and the dates shown next to it, on one step; years alone are fine.
@@ -493,7 +499,9 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect(d.getByRole("button", { name: "Copy M900A-AGBVE" })).toBeVisible();
     await d.getByTestId("q-version-yes").click();
     await next();
-    await expect(d.getByTestId("copy-icon")).toHaveCount(2);
+    // Owner 27 Nov: Roam's 3 numbers, then the search word and the row name.
+    await expect(d.getByTestId("copy-icon")).toHaveCount(5);
+    await expect(d.getByTestId("guide-search-number")).toContainText("Search 00000-S0001");
     await d.getByTestId("q-part-yes").click();
     await next();
     // Owner 25 Nov: one place per step, each saying how to read the site.

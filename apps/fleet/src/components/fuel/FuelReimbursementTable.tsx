@@ -10,13 +10,12 @@ import {
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { FinancialTransaction } from '../../types/data';
-import { Check, X, Eye, FileText, Calendar, User, Truck, DollarSign, Pencil, Trash2, Loader2, Camera, AlertTriangle, MapPin } from "lucide-react";
+import { Check, X, Eye, FileText, Calendar, User, DollarSign, Pencil, Trash2, Loader2, AlertTriangle, MapPin } from "lucide-react";
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { EvidenceFromRecord } from '../evidence/EvidenceFromRecord';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Textarea } from "../ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
@@ -30,30 +29,22 @@ import { StationProfile } from '../../types/station';
 import {
     isLogReviewEligible,
     isPendingFuelQueueRow,
-    isPendingReadyForReview,
     isPendingTabRow,
     isStationHeldQueueRow,
     isStationGateHeld,
     isUnresolvedSplitVariance,
     isAwaitingCashTx,
     isStaleAwaitingCash,
-    daysAwaitingCash,
-    awaitingStatementRowAction,
     describeSplitCashRehome,
-    describeSplitCashRehomeBlocked,
     metaFlagOn,
-    splitReconTolerance,
 } from '@roam/fuel-core';
 import { formatFuelMoney } from '../../utils/formatFuelMoney';
-import { ViewablePhoto } from './phone-fills/FuelPhotoViewer';
 import { fuelEntryMatchesLineFilter } from '../../utils/fuelServiceLineFilter';
 import { fuelServiceLineUiLabel } from '../../utils/vocabulary';
 import { Checkbox } from '../ui/checkbox';
 import { toast } from 'sonner';
-import {
-    SplitCashResolveDialog,
-    type SplitCashResolveChoice,
-} from './SplitCashResolveDialog';
+import { ViewablePhoto } from './phone-fills/FuelPhotoViewer';
+import { when as fillWhen, type VehicleLite } from './phone-fills/FuelNeedsLookPanel';
 
 const BULK_SET_SERVICE_LINE_MAX = 200;
 
@@ -197,24 +188,18 @@ interface FuelReimbursementTableProps {
     onEdit?: (transaction: FinancialTransaction) => void;
     onDelete?: (id: string) => void;
     onViewDriverLedger?: (driverId: string) => void;
-    onApproveLogReview?: (id: string, odometer: number, notes?: string) => void;
-    /** Resolve split cash money — accept derived / enter cash / void (C2). */
-    onResolveSplitCash?: (args: {
-        tx: FinancialTransaction;
-        action: SplitCashResolveChoice;
-        cashAmount?: number;
-        reason?: string;
-    }) => Promise<void> | void;
+    /** Split mismatches + waits live in Transaction Logs › Awaiting statement; this opens it. */
+    onOpenAwaitingStatement?: () => void;
+    /** Plate + car by vehicle id (same map the Needs a look cards use). */
+    vehicles?: Record<string, VehicleLite>;
     isRefreshing?: boolean;
     /** Jump to Transaction Logs for a posted fuel entry */
     onViewInTransactionLogs?: (opts: { fuelEntryId?: string; date?: string; vehicleId?: string }) => void;
-    /** Dual-line org: show Unattributed chip + approve service-line control */
+    /** Dual-line org: bulk set + approve service-line control */
     showServiceLineControls?: boolean;
-    lineFilter?: 'all' | 'rideshare' | 'rush_delivery' | 'unattributed';
-    onLineFilterChange?: (v: 'all' | 'rideshare' | 'rush_delivery' | 'unattributed') => void;
-    unattributedCount?: number;
+    /** Set by the page's All / Rideshare / Delivery tabs. */
+    lineFilter?: 'all' | 'rideshare' | 'rush_delivery';
     onBulkSetServiceLine?: (fuelEntryIds: string[], line: 'rideshare' | 'rush_delivery') => Promise<void> | void;
-    drivers?: Array<{ id?: string; driverId?: string; name?: string; firstName?: string; lastName?: string }>;
 }
 
 export function FuelReimbursementTable({ 
@@ -225,16 +210,13 @@ export function FuelReimbursementTable({
     onEdit, 
     onDelete,
     onViewDriverLedger,
-    onApproveLogReview,
-    onResolveSplitCash,
+    onOpenAwaitingStatement,
+    vehicles = {},
     isRefreshing = false,
     onViewInTransactionLogs,
     showServiceLineControls = false,
     lineFilter = 'all',
-    onLineFilterChange,
-    unattributedCount = 0,
     onBulkSetServiceLine,
-    drivers = [],
 }: FuelReimbursementTableProps) {
     const { can } = usePermissions();
     const [selectedTx, setSelectedTx] = useState<FinancialTransaction | null>(null);
@@ -243,21 +225,11 @@ export function FuelReimbursementTable({
     const [action, setAction] = useState<'approve' | 'reject' | null>(null);
     const [approveServiceLine, setApproveServiceLine] = useState<'rideshare' | 'rush_delivery'>('rideshare');
 
-    // Phase 6: Log Review Dialog state
-    const [logReviewTx, setLogReviewTx] = useState<FinancialTransaction | null>(null);
-    const [isLogReviewOpen, setIsLogReviewOpen] = useState(false);
-    const [adminOdometer, setAdminOdometer] = useState('');
-    const [adminNotes, setAdminNotes] = useState('');
-    const [isLogReviewSubmitting, setIsLogReviewSubmitting] = useState(false);
-    const [odometerError, setOdometerError] = useState('');
-
     const [verifiedStations, setVerifiedStations] = useState<StationProfile[]>([]);
     const [stationsLoading, setStationsLoading] = useState(false);
     const [approvalBrand, setApprovalBrand] = useState('');
     const [approvalMatchedStationId, setApprovalMatchedStationId] = useState('');
     const [approvalStationLocation, setApprovalStationLocation] = useState('');
-    const [splitResolveTx, setSplitResolveTx] = useState<FinancialTransaction | null>(null);
-    const [isResolvingSplit, setIsResolvingSplit] = useState(false);
     const [selectedTxIds, setSelectedTxIds] = useState<Set<string>>(() => new Set());
     const [bulkSetBusy, setBulkSetBusy] = useState(false);
 
@@ -372,7 +344,7 @@ export function FuelReimbursementTable({
             const linkedLog = logs.find(
                 (l) => l.transactionId === t.id || l.id === t.metadata?.sourceId,
             );
-            if (!linkedLog) return lineFilter === 'unattributed';
+            if (!linkedLog) return false;
             return fuelEntryMatchesLineFilter(linkedLog, lineFilter);
         });
     }, [transactions, logs, lineFilter]);
@@ -388,30 +360,10 @@ export function FuelReimbursementTable({
     const pendingReadyForReview = pendingAll.filter((t) => isPendingTabRow(t));
     const stationHeldRows = scopedTransactions.filter((t) => isStationHeldQueueRow(t));
 
-    const logReview = scopedTransactions.filter((t) => isLogReviewEligible(t));
     const splitMismatchTxs = useMemo(
         () => scopedTransactions.filter((t) => isUnresolvedSplitVariance(t)),
         [scopedTransactions],
     );
-    const driverNameById = useMemo(() => {
-        const map = new Map<string, string>();
-        for (const d of drivers) {
-            const id = d.id || d.driverId;
-            if (!id) continue;
-            const name = d.name || [d.firstName, d.lastName].filter(Boolean).join(' ') || '';
-            if (name) map.set(id, name);
-        }
-        return map;
-    }, [drivers]);
-
-    const driverLabel = (tx: FinancialTransaction) => {
-        const named = String(tx.driverName || '').trim();
-        if (named) return named;
-        const id = String(tx.driverId || '').trim();
-        if (id && driverNameById.has(id)) return driverNameById.get(id) as string;
-        return 'Unknown driver';
-    };
-
     const awaitingCashTxs = useMemo(
         () => scopedTransactions.filter((t) => isAwaitingCashTx(t) && !isUnresolvedSplitVariance(t)),
         [scopedTransactions],
@@ -420,32 +372,6 @@ export function FuelReimbursementTable({
         () => awaitingCashTxs.filter((t) => isStaleAwaitingCash(t)).length,
         [awaitingCashTxs],
     );
-    const blockedRehomeCount = useMemo(
-        () =>
-            awaitingCashTxs.filter((t) =>
-                metaFlagOn((t.metadata as Record<string, unknown> | undefined)?.splitCashRehomeBlocked),
-            ).length,
-        [awaitingCashTxs],
-    );
-
-    const confirmResolveSplit = async (args: {
-        tx: FinancialTransaction;
-        action: SplitCashResolveChoice;
-        cashAmount?: number;
-        reason?: string;
-    }) => {
-        if (!onResolveSplitCash) return;
-        setIsResolvingSplit(true);
-        try {
-            await onResolveSplitCash(args);
-            setSplitResolveTx(null);
-        } catch (e) {
-            console.error('[SplitCash] Resolve failed:', e);
-        } finally {
-            setIsResolvingSplit(false);
-        }
-    };
-
     const handleAction = (type: 'approve' | 'reject') => {
         setAction(type);
         setNotes('');
@@ -465,39 +391,6 @@ export function FuelReimbursementTable({
         setIsDetailsOpen(false);
         setAction(null);
         setSelectedTx(null);
-    };
-
-    // Phase 6: Open Log Review dialog
-    const openLogReview = (tx: FinancialTransaction) => {
-        setLogReviewTx(tx);
-        setAdminOdometer('');
-        setAdminNotes('');
-        setOdometerError('');
-        setIsLogReviewOpen(true);
-    };
-
-    // Phase 6: Confirm & Approve log review
-    const confirmLogReview = async () => {
-        if (!logReviewTx || !onApproveLogReview) return;
-
-        const odoValue = Number(adminOdometer);
-        if (!adminOdometer || isNaN(odoValue) || odoValue <= 0) {
-            setOdometerError('Please enter a valid odometer reading greater than 0.');
-            return;
-        }
-
-        setOdometerError('');
-        setIsLogReviewSubmitting(true);
-        try {
-            await onApproveLogReview(logReviewTx.id, odoValue, adminNotes || undefined);
-            setIsLogReviewOpen(false);
-            setLogReviewTx(null);
-        } catch (e) {
-            // Error handling is in the parent handler
-            console.error('[LogReview] Approval failed:', e);
-        } finally {
-            setIsLogReviewSubmitting(false);
-        }
     };
 
     const formatDate = (dateString: string) => {
@@ -523,20 +416,6 @@ export function FuelReimbursementTable({
         }
     };
 
-    // Phase 6: Helper to get a human-readable odometer method label
-    const getOdometerMethodLabel = (method?: string) => {
-        switch (method) {
-            case 'ai_verified': return 'Read from photo';
-            case 'photo_read': return 'Read from photo';
-            case 'manual_override': return 'Typed by driver';
-            case 'photo_review': return 'Photo check';
-            case 'manual_entry': return 'Typed';
-            case 'Admin Photo Upload': return 'Photo added in Fleet';
-            case 'Direct Entry': return 'Typed in Fleet';
-            default: return 'Not read';
-        }
-    };
-
     /** Odometer uploads are saved on metadata.odometerProofUrl (admin manual); also check legacy/top-level fields. */
     const resolveOdometerProofUrl = (tx: FinancialTransaction): string | undefined => {
         const m = tx.metadata as Record<string, unknown> | undefined;
@@ -550,55 +429,6 @@ export function FuelReimbursementTable({
         return s || undefined;
     };
 
-    const renderPendingQueueBadges = (tx: FinancialTransaction) => {
-        const badges = (
-            <>
-                {isStationGateHeld(tx) && (
-                    <Badge variant="outline" className="text-[9px] h-5 px-1.5 font-normal bg-sky-50 text-sky-800 border-sky-200">
-                        Waiting for station check
-                    </Badge>
-                )}
-                {metaFlagOn(tx.metadata?.automated) && (
-                    <Badge variant="outline" className="text-[9px] h-5 px-1.5 font-normal bg-slate-50 text-slate-600 border-slate-200">
-                        Automated
-                    </Badge>
-                )}
-                {isLogReviewEligible(tx) && (
-                    <Badge variant="outline" className="text-[9px] h-5 px-1.5 font-normal bg-amber-50 text-amber-800 border-amber-200">
-                        Odometer review
-                    </Badge>
-                )}
-                {isUnresolvedSplitVariance(tx) && (
-                    <Badge variant="outline" className="text-[9px] h-5 px-1.5 font-normal bg-rose-50 text-rose-800 border-rose-200">
-                        Split amount mismatch
-                    </Badge>
-                )}
-            </>
-        );
-        const hasAny =
-            isStationGateHeld(tx) ||
-            metaFlagOn(tx.metadata?.automated) ||
-            isLogReviewEligible(tx) ||
-            isUnresolvedSplitVariance(tx);
-        return (
-            <div className="flex flex-wrap gap-1 items-center min-h-[1.25rem]">
-                {hasAny ? badges : <span className="text-xs text-slate-300">—</span>}
-            </div>
-        );
-    };
-
-    // Phase 6: Helper to resolve station name for log review
-    const resolveStationName = (tx: FinancialTransaction) => {
-        if (tx.vendor && !tx.vendor.toLowerCase().includes('unknown')) return tx.vendor;
-        if ((tx as any).merchant && !(tx as any).merchant.toLowerCase().includes('unknown')) return (tx as any).merchant;
-        if (tx.metadata?.parentCompany) return tx.metadata.parentCompany;
-        const linkedLog = logs.find(l => l.transactionId === tx.id || l.id === tx.metadata?.sourceId);
-        if (linkedLog) {
-            const name = linkedLog.vendor || linkedLog.location || linkedLog.stationName;
-            if (name && !name.toLowerCase().includes('unknown')) return name;
-        }
-        return 'Station not known';
-    };
 
     const toggleSelectTx = (txId: string, checked: boolean) => {
         setSelectedTxIds((prev) => {
@@ -649,1219 +479,733 @@ export function FuelReimbursementTable({
         }
     };
 
-    const renderTable = (
-        data: FinancialTransaction[],
-        showActions = false,
-        pendingQueueMode = false,
-        allowFinalizePendingActions = true
-    ) => {
-        // Helper: resolve a display-friendly description, falling back to vendor or linked log data
-        const resolveDescription = (tx: FinancialTransaction) => {
-            const desc = tx.description || '';
-            // If the stored description doesn't contain "Unknown", use it as-is
-            if (desc && !desc.toLowerCase().includes('unknown')) return desc;
-            // Try vendor field
-            if (tx.vendor && !tx.vendor.toLowerCase().includes('unknown')) {
-                return `${tx.category || 'Fuel'} Expense - ${tx.vendor}`;
+    const resolveDescription = (tx: FinancialTransaction) => {
+        const desc = tx.description || '';
+        // If the stored description doesn't contain "Unknown", use it as-is
+        if (desc && !desc.toLowerCase().includes('unknown')) return desc;
+        // Try vendor field
+        if (tx.vendor && !tx.vendor.toLowerCase().includes('unknown')) {
+            return `${tx.category || 'Fuel'} Expense - ${tx.vendor}`;
+        }
+        // Try merchant field
+        if ((tx as any).merchant && !(tx as any).merchant.toLowerCase().includes('unknown')) {
+            return `${tx.category || 'Fuel'} Expense - ${(tx as any).merchant}`;
+        }
+        // Try metadata parentCompany
+        if (tx.metadata?.parentCompany) {
+            return `${tx.category || 'Fuel'} Expense - ${tx.metadata.parentCompany}`;
+        }
+        // Try linked fuel log
+        const linkedLog = logs.find(l => l.transactionId === tx.id || l.id === tx.metadata?.sourceId);
+        if (linkedLog) {
+            const name = linkedLog.vendor || linkedLog.location || linkedLog.stationName;
+            if (name && !name.toLowerCase().includes('unknown')) {
+                return `${tx.category || 'Fuel'} Expense - ${name}`;
             }
-            // Try merchant field
-            if ((tx as any).merchant && !(tx as any).merchant.toLowerCase().includes('unknown')) {
-                return `${tx.category || 'Fuel'} Expense - ${(tx as any).merchant}`;
-            }
-            // Try metadata parentCompany
-            if (tx.metadata?.parentCompany) {
-                return `${tx.category || 'Fuel'} Expense - ${tx.metadata.parentCompany}`;
-            }
-            // Try linked fuel log
-            const linkedLog = logs.find(l => l.transactionId === tx.id || l.id === tx.metadata?.sourceId);
-            if (linkedLog) {
-                const name = linkedLog.vendor || linkedLog.location || linkedLog.stationName;
-                if (name && !name.toLowerCase().includes('unknown')) {
-                    return `${tx.category || 'Fuel'} Expense - ${name}`;
-                }
-            }
-            // Last resort -- show a cleaner label than "Unknown"
-            return `${tx.category || 'Fuel'} — station not known`;
-        };
-
-        return (
-            <div className="rounded-md border bg-white">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            {bulkSelectEnabled ? (
-                                <TableHead className="w-10">
-                                    <Checkbox
-                                        checked={
-                                            data.length > 0 && data.every((t) => selectedTxIds.has(t.id))
-                                                ? true
-                                                : data.some((t) => selectedTxIds.has(t.id))
-                                                  ? 'indeterminate'
-                                                  : false
-                                        }
-                                        onCheckedChange={(v) => toggleSelectAllInData(data, v === true)}
-                                        aria-label="Select all rows"
-                                    />
-                                </TableHead>
-                            ) : null}
-                            <TableHead>Date</TableHead>
-                            <TableHead>Driver</TableHead>
-                            <TableHead>Amount</TableHead>
-                            <TableHead>Details</TableHead>
-                            <TableHead>Receipt</TableHead>
-                            <TableHead>Why it's here</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {data.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={bulkSelectEnabled ? 8 : 7} className="h-24 text-center text-slate-500">
-                                    No records found.
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            data.map((tx) => {
-                                const vol = computeResolvedFuelLiters(tx);
-                                const rowActions = allowFinalizePendingActions && !isStationGateHeld(tx);
-                                return (
-                                <TableRow key={tx.id}>
-                                    {bulkSelectEnabled ? (
-                                        <TableCell className="w-10">
-                                            <Checkbox
-                                                checked={selectedTxIds.has(tx.id)}
-                                                onCheckedChange={(v) => toggleSelectTx(tx.id, v === true)}
-                                                aria-label={`Select ${tx.driverName || 'row'}`}
-                                                disabled={!resolveFuelEntryIdForTx(tx, logs)}
-                                            />
-                                        </TableCell>
-                                    ) : null}
-                                    <TableCell className="font-medium">
-                                        {formatDate(tx.date)}
-                                        <div className="text-xs text-slate-500">{tx.time}</div>
-                                        {(() => {
-                                            const rehome = describeSplitCashRehome(
-                                                tx.metadata as Record<string, unknown>,
-                                            );
-                                            return rehome ? (
-                                                <div className="mt-0.5 text-[10px] font-normal text-slate-500">
-                                                    {rehome}
-                                                </div>
-                                            ) : null;
-                                        })()}
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <div className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center text-xs font-medium">
-                                                {tx.driverName?.charAt(0) || 'D'}
-                                            </div>
-                                            <span>{tx.driverName || 'Unknown'}</span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="font-semibold text-slate-900">
-                                        <div className="flex flex-col">
-                                            <span>{formatFuelMoney(Math.abs(Number(tx.amount) || Number(tx.metadata?.totalCost) || 0))}</span>
-                                            {tx.metadata?.paymentSource && tx.metadata.paymentSource !== 'driver_cash' && (
-                                                <span className="text-[9px] font-normal text-slate-400 uppercase">{tx.metadata.paymentSource === 'rideshare_cash' ? 'RideShare' : tx.metadata.paymentSource === 'company_card' ? 'Gas Card' : tx.metadata.paymentSource === 'petty_cash' ? 'Petty Cash' : tx.metadata.paymentSource}</span>
-                                            )}
-                                                                                    </div>
-                                    </TableCell>
-                                                                        <TableCell>
-                                        <div className="flex flex-col max-w-[200px]">
-                                            <div className="flex flex-wrap items-center gap-2 mb-1">
-                                                <span className="truncate text-sm font-medium">{resolveDescription(tx)}</span>
-                                                {tx.metadata?.source && (
-                                                    <Badge variant="secondary" className={cn(
-                                                        "text-[10px] h-5 px-1.5 font-normal border hover:bg-slate-200 transition-colors",
-                                                        tx.metadata.source === 'Fuel Log' || tx.metadata.source === 'Bulk Log' 
-                                                            ? "bg-blue-50 text-blue-700 border-blue-200" 
-                                                            : "bg-slate-100 text-slate-600 border-slate-200"
-                                                    )}>
-                                                        {tx.metadata.source}
-                                                    </Badge>
-                                                )}
-                                            </div>
-                                            {tx.odometer ? <span className="text-xs text-slate-500">Odometer: {Number(tx.odometer).toLocaleString('en-US')} km</span> : null}
-                                            <div className="flex gap-2">
-                                                {vol != null && <span className="text-xs text-slate-500">{vol} L</span>}
-                                                {(tx.metadata?.pricePerLiter || (vol != null && tx.amount)) && (
-                                                    <span className="text-xs text-slate-400">
-                                                        {formatFuelMoney(tx.metadata?.pricePerLiter ? Number(tx.metadata.pricePerLiter) : (vol ? Math.abs(Number(tx.amount)) / vol : 0))} a litre
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div
-                                            className="cursor-pointer"
-                                            onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); }}
-                                        >
-                                            <EvidenceFromRecord
-                                                record={tx}
-                                                label="Fuel receipt"
-                                                compact
-                                                className="w-24"
-                                            />
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        {pendingQueueMode && tx.status === 'Pending'
-                                            ? renderPendingQueueBadges(tx)
-                                            : getStatusBadge(tx.status)}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <div className="flex justify-end flex-wrap gap-2">
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <Button size="sm" variant="outline" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); }}>
-                                                        <Eye className="h-4 w-4" />
-                                                    </Button>
-                                                </TooltipTrigger>
-                                                <TooltipContent side="top" sideOffset={6}>View details</TooltipContent>
-                                            </Tooltip>
-
-                                            {pendingQueueMode && showActions && rowActions && isLogReviewEligible(tx) && onApproveLogReview && (
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <Button
-                                                            size="sm"
-                                                            className="bg-amber-600 hover:bg-amber-700 text-white"
-                                                            onClick={() => openLogReview(tx)}
-                                                        >
-                                                            <Eye className="h-4 w-4 mr-1" />
-                                                            Review
-                                                        </Button>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent side="top" sideOffset={6}>Confirm odometer to approve</TooltipContent>
-                                                </Tooltip>
-                                            )}
-
-                                            {/* Edit — not on Awaiting station (station hold); fleet waits on master station verification */}
-                                            {onEdit && rowActions && (
-                                                tx.metadata?.source === 'Manual' || 
-                                                tx.metadata?.source === 'Bulk Manual' || 
-                                                tx.metadata?.source === 'Manual Request' ||
-                                                !tx.metadata?.source
-                                            ) && (
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <Button 
-                                                            size="sm" 
-                                                            variant="outline" 
-                                                            onClick={() => onEdit(tx)} 
-                                                            className="hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
-                                                        >
-                                                            <Pencil className="h-4 w-4" />
-                                                        </Button>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent side="top" sideOffset={6}>Edit transaction</TooltipContent>
-                                                </Tooltip>
-                                            )}
-                                            
-                                            {showActions && rowActions && tx.status === 'Pending' && (tx.metadata?.source === 'Manual' || !tx.metadata?.source) && (
-                                                <>
-                                                    {onDelete && (
-                                                        <Tooltip>
-                                                            <TooltipTrigger asChild>
-                                                                <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700" onClick={() => onDelete(tx.id)}>
-                                                                    <Trash2 className="h-4 w-4" />
-                                                                </Button>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent side="top" sideOffset={6}>Delete this fill</TooltipContent>
-                                                        </Tooltip>
-                                                    )}
-                                                </>
-                                            )}
-
-                                            {showActions && rowActions && (
-                                                <>
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); setAction('approve'); }}>
-                                                                <Check className="h-4 w-4" />
-                                                            </Button>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent side="top" sideOffset={6}>Approve</TooltipContent>
-                                                    </Tooltip>
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <Button size="sm" variant="destructive" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); setAction('reject'); }}>
-                                                                <X className="h-4 w-4" />
-                                                            </Button>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent side="top" sideOffset={6}>Reject</TooltipContent>
-                                                    </Tooltip>
-                                                </>
-                                            )}
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            );})
-                        )}
-                    </TableBody>
-                </Table>
-            </div>
-        );
+        }
+        // Last resort -- show a cleaner label than "Unknown"
+        return `${tx.category || 'Fuel'} — station not known`;
     };
 
-    // Phase 6: Dedicated Log Review table
-    const renderLogReviewTable = (data: FinancialTransaction[]) => {
+    // Stitch: docs/stitch/fuel-review-and-logs-fleet/review_queue_* — one card per fill, same family as Needs a look.
+    const renderReadyCards = (data: FinancialTransaction[]) => {
+        const chip = 'rounded-full px-3 py-1 bg-[#e6eeff] text-[#47464c] text-[12px] font-semibold dark:bg-zinc-800 dark:text-zinc-300';
+        const label = 'text-[12px] font-semibold uppercase tracking-wider text-[#47464c] dark:text-zinc-400 mb-0.5';
+        const btn = 'min-h-[44px] px-5 rounded-xl bg-white text-[13px] font-medium shadow-sm ring-1 ring-[#c9c5cd] transition-colors dark:bg-zinc-900';
+        const readChip = (
+            <span className="self-start rounded-full bg-[#82f5c1] px-2.5 py-0.5 text-[12px] font-semibold text-[#00714e] flex items-center gap-1">
+                <span className="material-symbols-outlined text-[14px]">check</span> Read clearly
+            </span>
+        );
         return (
-            <div className="rounded-md border bg-white">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Driver</TableHead>
-                            <TableHead>Vehicle</TableHead>
-                            <TableHead>Amount</TableHead>
-                            <TableHead>Volume</TableHead>
-                            <TableHead>Station</TableHead>
-                            <TableHead>Odometer</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className="text-right">Action</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {data.map((tx) => {
-                            const method = tx.metadata?.odometerMethod;
-                            const reason = tx.metadata?.logReviewReason || tx.metadata?.odometerManualReason || '';
-                            const resolvedVol = computeResolvedFuelLiters(tx);
-                            return (
-                                <TableRow key={tx.id} className="hover:bg-amber-50/30">
-                                    <TableCell className="font-medium">
-                                        {formatDate(tx.date)}
-                                        <div className="text-xs text-slate-500">{tx.time}</div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <div className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center text-xs font-medium">
-                                                {tx.driverName?.charAt(0) || 'D'}
+            <div className="flex flex-col gap-4">
+                {data.map((tx) => {
+                    const m = (tx.metadata || {}) as Record<string, unknown>;
+                    const held = isStationGateHeld(tx);
+                    const rowActions = !held;
+                    const amount = Math.abs(Number(tx.amount) || Number(m.totalCost) || 0);
+                    const vol = computeResolvedFuelLiters(tx);
+                    const ppl = Number(m.pricePerLiter) || (vol && amount ? amount / vol : 0);
+                    const odo = Number(tx.odometer) || 0;
+                    const vehicle = tx.vehicleId ? vehicles[tx.vehicleId] : undefined;
+                    const plate = vehicle?.plate || (typeof m.vehiclePlate === 'string' ? m.vehiclePlate : '');
+                    const isCard = String(tx.paymentMethod || m.paymentSource || '').toLowerCase().includes('card');
+                    const source = String(m.source || '');
+                    const typedInFleet = source === 'Manual' || source === 'Bulk Manual' || m.entrySource === 'admin-manual' || m.entrySource === 'bulk-import';
+                    const fromPhone = !typedInFleet && (typeof m.captureId === 'string' || source === 'Fuel Log' || m.entrySource === 'driver-portal');
+                    const fromPhoto = Array.isArray(m.readFromPhoto) ? (m.readFromPhoto as string[]) : [];
+                    const odoMethod = String(m.odometerMethod || '');
+                    const odoRead = fromPhoto.includes('odometer') || odoMethod === 'ai_verified' || odoMethod === 'photo_read';
+                    const pumpRead = fromPhoto.includes('amount');
+                    const linkedLog = logs.find((l) => l.transactionId === tx.id || l.id === m.sourceId);
+                    const line = linkedLog ? String((linkedLog as { serviceLine?: string }).serviceLine || '') : '';
+                    const station = resolveDescription(tx);
+                    const rehome = describeSplitCashRehome(m);
+                    const canEditRow =
+                        Boolean(onEdit) && rowActions && (source === 'Manual' || source === 'Bulk Manual' || source === 'Manual Request' || !source);
+                    const canDeleteRow = Boolean(onDelete) && rowActions && tx.status === 'Pending' && (source === 'Manual' || !source);
+                    const entryId = bulkSelectEnabled ? resolveFuelEntryIdForTx(tx, logs) : null;
+                    const selected = selectedTxIds.has(tx.id);
+                    const open = (a: 'approve' | 'reject' | null) => {
+                        setSelectedTx(tx);
+                        setIsDetailsOpen(true);
+                        setAction(a);
+                    };
+                    return (
+                        <div
+                            key={tx.id}
+                            className={cn(
+                                'flex flex-col gap-4 rounded-2xl bg-white p-4 sm:p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)] dark:bg-[#2a2a2d]',
+                                held && 'opacity-90',
+                            )}
+                        >
+                            {/* Line 1 — date · driver · plate · car */}
+                            <div className="flex flex-wrap items-center gap-3">
+                                {bulkSelectEnabled ? (
+                                    <button
+                                        type="button"
+                                        role="checkbox"
+                                        aria-checked={selected}
+                                        aria-label={`Select ${tx.driverName || 'fill'}`}
+                                        disabled={!entryId}
+                                        onClick={() => toggleSelectTx(tx.id, !selected)}
+                                        className={cn(
+                                            'flex h-7 w-7 shrink-0 items-center justify-center rounded-full disabled:opacity-30',
+                                            selected ? 'bg-black text-white' : 'bg-[#e6eeff] text-transparent',
+                                        )}
+                                    >
+                                        <span className="material-symbols-outlined text-[18px]">check</span>
+                                    </button>
+                                ) : null}
+                                <span className="text-[15px] tabular-nums text-[#47464c] dark:text-zinc-400">{fillWhen(tx)}</span>
+                                <span className="text-[#c9c5cd]">·</span>
+                                <span className="text-[17px] font-semibold text-[#0d1c2e] dark:text-zinc-50">{tx.driverName || 'Unknown driver'}</span>
+                                {plate ? (
+                                    <>
+                                        <span className="text-[#c9c5cd]">·</span>
+                                        <span className="rounded-md bg-[#e6eeff] px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider text-[#0d1c2e] dark:bg-zinc-800 dark:text-zinc-100">{plate}</span>
+                                    </>
+                                ) : null}
+                                {vehicle?.car ? <span className="text-[15px] text-[#47464c] dark:text-zinc-400">{vehicle.car}</span> : null}
+                            </div>
+
+                            {/* Line 2 — soft blue strip with numbers + chips */}
+                            <div className="flex flex-col gap-4 rounded-xl bg-[#eff4ff] p-4 lg:flex-row lg:items-center lg:justify-between dark:bg-zinc-900/50">
+                                <div className="flex flex-wrap items-baseline gap-x-10 gap-y-3">
+                                    <div>
+                                        <div className={label}>Total amount</div>
+                                        <div className="text-[24px] font-bold tabular-nums text-[#0d1c2e] dark:text-zinc-50">{amount ? formatFuelMoney(amount) : '—'}</div>
+                                    </div>
+                                    <div>
+                                        <div className={label}>Volume (litres)</div>
+                                        <div className="text-[17px] font-semibold tabular-nums text-[#0d1c2e] dark:text-zinc-50">{vol != null ? `${vol} L` : '—'}</div>
+                                    </div>
+                                    <div>
+                                        <div className={label}>Odometer</div>
+                                        <div className="text-[17px] font-semibold tabular-nums text-[#0d1c2e] dark:text-zinc-50">{odo ? `${odo.toLocaleString('en-US')} km` : '—'}</div>
+                                    </div>
+                                    {ppl ? (
+                                        <div>
+                                            <div className={label}>Rate</div>
+                                            <div className="text-[15px] tabular-nums text-[#47464c] dark:text-zinc-400">{formatFuelMoney(ppl)} a litre</div>
+                                        </div>
+                                    ) : null}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span className={chip}>{isCard ? 'Gas Card' : 'Cash'}</span>
+                                    {station && !/station not known/i.test(station) ? (
+                                        <span className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[12px] font-semibold text-[#0d1c2e] shadow-sm dark:bg-zinc-800 dark:text-zinc-100">
+                                            <span className="material-symbols-outlined text-[14px] text-[#47464c]">location_on</span>
+                                            {station.replace(/^Fuel( Reimbursement)? Expense - /, '')}
+                                        </span>
+                                    ) : null}
+                                    {fromPhone ? <span className={chip}>From driver&apos;s phone</span> : null}
+                                    {typedInFleet ? (
+                                        <span className="rounded-full bg-[#fffbeb] px-3 py-1 text-[12px] font-semibold text-[#b45309] ring-1 ring-[#fde68a]">Typed in Fleet</span>
+                                    ) : null}
+                                    {showServiceLineControls ? (
+                                        line ? (
+                                            <span className={chip}>{fuelServiceLineUiLabel(line as 'rideshare' | 'rush_delivery')}</span>
+                                        ) : (
+                                            <span className="flex items-center gap-1 rounded-full bg-[#fffbeb] px-3 py-1 text-[12px] font-semibold text-[#b45309]">
+                                                <span className="h-1.5 w-1.5 rounded-full bg-[#b45309]" /> No service line yet
+                                            </span>
+                                        )
+                                    ) : null}
+                                    {held ? (
+                                        <span className="flex items-center gap-1 rounded-full bg-[#e0f2fe] px-3 py-1 text-[12px] font-semibold text-[#0c4a6e]">
+                                            <span className="material-symbols-outlined text-[14px]">sync</span> Waiting for station check
+                                        </span>
+                                    ) : null}
+                                    {metaFlagOn(m.automated) ? <span className={chip}>Added automatically</span> : null}
+                                    {isUnresolvedSplitVariance(tx) ? (
+                                        <span className="rounded-full bg-[#ffdad6] px-3 py-1 text-[12px] font-semibold text-[#ba1a1a]">Card and pump don&apos;t agree</span>
+                                    ) : null}
+                                </div>
+                            </div>
+
+                            {/* Line 3 — photos + buttons */}
+                            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                                {held ? (
+                                    <div className="flex items-center gap-2 text-[15px] text-[#47464c] dark:text-zinc-400">
+                                        <span className="material-symbols-outlined text-[18px]">info</span>
+                                        Roam is checking this station. You can approve it once the check is done.
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col gap-2">
+                                        <div className="flex items-start gap-4">
+                                            <div className="flex flex-col gap-2">
+                                                <ViewablePhoto url={resolveOdometerProofUrl(tx)} label="Odometer photo" className="h-[78px] w-[116px]" />
+                                                {odoRead ? readChip : null}
                                             </div>
-                                            <span className="font-medium">{tx.driverName || 'Unknown'}</span>
+                                            <div className="flex flex-col gap-2">
+                                                {tx.receiptUrl ? (
+                                                    <ViewablePhoto url={tx.receiptUrl} label="Pump photo" className="h-[78px] w-[116px]" />
+                                                ) : (
+                                                    <button type="button" className="w-[116px]" onClick={() => open(null)}>
+                                                        <EvidenceFromRecord record={tx} label="Fuel receipt" compact className="w-[116px]" />
+                                                    </button>
+                                                )}
+                                                {pumpRead ? readChip : null}
+                                            </div>
                                         </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-1.5 text-sm">
-                                            <Truck className="h-3.5 w-3.5 text-slate-400" />
-                                            <span>{tx.vehicleId ? (tx.metadata?.vehiclePlate || tx.vehicleId.substring(0, 8)) : '-'}</span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="font-semibold text-slate-900">
-                                        {formatFuelMoney(Math.abs(Number(tx.amount) || Number(tx.metadata?.totalCost) || 0))}
-                                    </TableCell>
-                                    <TableCell>
-                                        {resolvedVol != null ? `${resolvedVol} L` : '-'}
-                                    </TableCell>
-                                    <TableCell>
-                                        <span className="text-sm truncate max-w-[140px] block">{resolveStationName(tx)}</span>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <Badge variant="outline" className={cn(
-                                                    "text-[10px] px-2 py-0.5",
-                                                    method === 'photo_review' 
-                                                        ? "bg-purple-50 text-purple-700 border-purple-200" 
-                                                        : method === 'manual_override'
-                                                        ? "bg-blue-50 text-blue-700 border-blue-200"
-                                                        : "bg-slate-50 text-slate-600 border-slate-200"
-                                                )}>
-                                                    {getOdometerMethodLabel(method)}
-                                                </Badge>
-                                            </TooltipTrigger>
-                                            {reason && (
-                                                <TooltipContent>
-                                                    <p className="text-xs max-w-[200px]">{reason}</p>
-                                                </TooltipContent>
-                                            )}
-                                        </Tooltip>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[10px]">
-                                            Needs Review
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <Button 
-                                                    size="sm" 
-                                                    className="bg-amber-600 hover:bg-amber-700 text-white"
-                                                    onClick={() => openLogReview(tx)}
-                                                >
-                                                    <Eye className="h-4 w-4 mr-1.5" />
-                                                    Review
-                                                </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent side="top" sideOffset={6}>Confirm odometer to approve</TooltipContent>
-                                        </Tooltip>
-                                    </TableCell>
-                                </TableRow>
-                            );
-                        })}
-                    </TableBody>
-                </Table>
+                                        {rehome ? <p className="text-[13px] text-[#47464c] dark:text-zinc-400">{rehome}</p> : null}
+                                    </div>
+                                )}
+                                <div className="flex flex-wrap items-center justify-end gap-2">
+                                    {rowActions && can('fuel.reject') ? (
+                                        <button type="button" className={`${btn} text-[#ba1a1a] ring-[#ffdad6] hover:bg-[#ffdad6]`} onClick={() => open('reject')}>
+                                            Reject
+                                        </button>
+                                    ) : null}
+                                    {canEditRow && onEdit ? (
+                                        <button type="button" className={`${btn} flex items-center gap-1.5 text-[#0d1c2e] hover:bg-[#e6eeff] dark:text-zinc-100`} onClick={() => onEdit(tx)}>
+                                            <span className="material-symbols-outlined text-[16px]">edit</span> Edit
+                                        </button>
+                                    ) : null}
+                                    {canDeleteRow && onDelete ? (
+                                        <button type="button" className={`${btn} flex items-center gap-1.5 text-[#ba1a1a] hover:bg-[#ffdad6]`} onClick={() => onDelete(tx.id)}>
+                                            <span className="material-symbols-outlined text-[16px]">delete</span> Delete
+                                        </button>
+                                    ) : null}
+                                    <button type="button" className={`${btn} text-[#0d1c2e] hover:bg-[#e6eeff] dark:text-zinc-100`} onClick={() => open(null)}>
+                                        View
+                                    </button>
+                                    {rowActions && can('fuel.approve') ? (
+                                        <button
+                                            type="button"
+                                            className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-black px-6 text-[13px] font-medium text-white shadow-md hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900"
+                                            onClick={() => open('approve')}
+                                        >
+                                            <span className="material-symbols-outlined text-[18px]">done</span> Approve
+                                        </button>
+                                    ) : null}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
         );
     };
 
     return (
         <div className="space-y-6">
-            {showServiceLineControls && onLineFilterChange ? (
-              <div className="flex flex-wrap items-center gap-2">
-                {(
-                  [
-                    ['all', fuelServiceLineUiLabel('all')],
-                    ['rideshare', fuelServiceLineUiLabel('rideshare')],
-                    ['rush_delivery', fuelServiceLineUiLabel('rush_delivery')],
-                    ['unattributed', `${fuelServiceLineUiLabel('unattributed')} (${unattributedCount})`],
-                  ] as const
-                ).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => onLineFilterChange(value)}
-                    className={
-                      lineFilter === value
-                        ? 'rounded-full border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white'
-                        : 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50'
-                    }
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
             {bulkSelectEnabled && selectedTxIds.size > 0 ? (
-              <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                <span className="text-xs font-medium text-slate-700">
-                  {selectedTxIds.size} selected
-                  {selectedTxIds.size > BULK_SET_SERVICE_LINE_MAX
-                    ? ` (max ${BULK_SET_SERVICE_LINE_MAX})`
-                    : ''}
+              <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-[#1b192e] px-5 py-4 text-white shadow-lg">
+                <span className="flex items-center gap-2 text-[17px] font-semibold">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#82f5c1] text-[12px] font-bold text-[#00714e]">{selectedTxIds.size}</span>
+                  selected
+                  {selectedTxIds.size > BULK_SET_SERVICE_LINE_MAX ? <span className="text-[13px] font-normal text-white/70">(max {BULK_SET_SERVICE_LINE_MAX})</span> : null}
                 </span>
-                <Button
+                <span className="hidden h-6 w-px bg-white/20 sm:block" />
+                <button
                   type="button"
-                  size="sm"
-                  variant="outline"
                   disabled={bulkSetBusy || selectedTxIds.size > BULK_SET_SERVICE_LINE_MAX}
                   onClick={() => void runBulkSetServiceLine('rideshare')}
+                  className="flex min-h-[44px] items-center gap-2 rounded-xl px-3 text-[13px] font-semibold hover:bg-white/10 disabled:opacity-40"
                 >
-                  {bulkSetBusy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-                  Set                                     Rideshare
-                                  </Button>
-                <Button
+                  {bulkSetBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <span className="material-symbols-outlined text-[18px]">directions_car</span>}
+                  Set {fuelServiceLineUiLabel('rideshare')}
+                </button>
+                <button
                   type="button"
-                  size="sm"
-                  variant="outline"
                   disabled={bulkSetBusy || selectedTxIds.size > BULK_SET_SERVICE_LINE_MAX}
                   onClick={() => void runBulkSetServiceLine('rush_delivery')}
+                  className="flex min-h-[44px] items-center gap-2 rounded-xl px-3 text-[13px] font-semibold hover:bg-white/10 disabled:opacity-40"
                 >
+                  <span className="material-symbols-outlined text-[18px]">local_shipping</span>
                   Set {fuelServiceLineUiLabel('rush_delivery')}
-                </Button>
-                <Button
+                </button>
+                <button
                   type="button"
-                  size="sm"
-                  variant="ghost"
                   disabled={bulkSetBusy}
                   onClick={() => setSelectedTxIds(new Set())}
+                  className="ml-auto min-h-[44px] rounded-xl bg-white px-5 text-[13px] font-medium text-[#0d1c2e] shadow-sm"
                 >
-                  Clear
-                </Button>
+                  Clear selection
+                </button>
               </div>
             ) : null}
-            <Tabs defaultValue="pending" className="w-full">
-                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-                    <TabsList>
-                        <TabsTrigger value="log-review">
-                            Log Review
-                            {logReview.length > 0 && (
-                                <Badge variant="destructive" className="ml-1.5 text-[10px] px-1.5 py-0">
-                                    {logReview.length}
-                                </Badge>
-                            )}
-                        </TabsTrigger>
-                        <TabsTrigger value="pending">
-                            Pending
-                            {pendingReadyForReview.length > 0 && (
-                                <Badge variant="secondary" className="ml-2 bg-orange-100 text-orange-700 hover:bg-orange-200">
-                                    {pendingReadyForReview.length}
-                                </Badge>
-                            )}
-                        </TabsTrigger>
-                        <TabsTrigger value="split-mismatches">
-                            Split mismatches
-                            {splitMismatchTxs.length > 0 && (
-                                <Badge variant="destructive" className="ml-1.5 text-[10px] px-1.5 py-0">
-                                    {splitMismatchTxs.length}
-                                </Badge>
-                            )}
-                        </TabsTrigger>
-                        <TabsTrigger value="awaiting-statement">
-                            Awaiting statement
-                            {awaitingCashTxs.length > 0 && (
-                                <Badge
-                                    variant="secondary"
-                                    className={cn(
-                                        'ml-1.5 text-[10px] px-1.5 py-0',
-                                        staleAwaitingCount > 0
-                                            ? 'bg-amber-100 text-amber-900'
-                                            : 'bg-slate-100 text-slate-700',
-                                    )}
-                                >
-                                    {awaitingCashTxs.length}
-                                </Badge>
-                            )}
-                        </TabsTrigger>
-                    </TabsList>
+                {/* Split mismatches + 14-day waits moved to Transaction Logs › Awaiting statement — keep them visible here. */}
+                {(splitMismatchTxs.length > 0 || staleAwaitingCount > 0) && onOpenAwaitingStatement ? (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#ffdad6] px-5 py-4 dark:bg-[#450a0a]">
+                        <p className="flex items-center gap-3 text-[17px] font-medium text-[#ba1a1a] dark:text-[#f87171]">
+                            <span className="material-symbols-outlined flex h-8 w-8 items-center justify-center rounded-full bg-white text-[18px]">credit_card_off</span>
+                            {[
+                                splitMismatchTxs.length > 0
+                                    ? `${splitMismatchTxs.length} card and pump mismatch${splitMismatchTxs.length === 1 ? '' : 'es'} need${splitMismatchTxs.length === 1 ? 's' : ''} a pay decision`
+                                    : '',
+                                staleAwaitingCount > 0
+                                    ? `${staleAwaitingCount} fill${staleAwaitingCount === 1 ? ' has' : 's have'} waited 14+ days for the statement`
+                                    : '',
+                            ]
+                                .filter(Boolean)
+                                .join(' · ')}
+                        </p>
+                        <button
+                            type="button"
+                            onClick={onOpenAwaitingStatement}
+                            className="h-11 rounded-xl bg-white px-4 text-[13px] font-medium text-[#0d1c2e] shadow-sm ring-1 ring-[#c9c5cd] hover:bg-[#e6eeff]"
+                        >
+                            Open Awaiting statement
+                        </button>
+                    </div>
+                ) : null}
+
+            {/* The tile above already says when nothing is ready — the list only shows when it has fills. */}
+            {pendingReadyForReview.length > 0 || stationHeldRows.length > 0 ? (
+            <section className="flex flex-col gap-4">
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                        <h2 className="text-[17px] font-semibold leading-6 tracking-tight text-[#0d1c2e] dark:text-zinc-50">
+                            Ready to approve ({pendingReadyForReview.length})
+                        </h2>
+                        <p className="text-[15px] text-[#47464c] dark:text-zinc-400">Check each fill, then approve or reject it.</p>
+                    </div>
                     {pendingStationHoldCount > 0 && (
                         <div className="flex items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs text-sky-900">
                             <MapPin className="h-3.5 w-3.5 shrink-0" />
                             {pendingStationHoldCount} station hold
-                            {pendingStationHoldCount === 1 ? '' : 's'} — listed at the bottom of Pending
+                            {pendingStationHoldCount === 1 ? '' : 's'} — listed at the bottom
                         </div>
                     )}
                 </div>
 
-                <TabsContent value="log-review" className="space-y-4">
-                    {logReview.length === 0 ? (
-                        <div className="rounded-md border bg-white p-8 text-center text-slate-500">
-                            <p className="text-sm">No fuel submissions awaiting odometer review.</p>
-                            <p className="text-xs text-slate-400 mt-1">Fills show here when the odometer couldn't be read from the photo.</p>
-                        </div>
-                    ) : (
-                        renderLogReviewTable(logReview)
-                    )}
-                </TabsContent>
+                {isRefreshing && (
+                    <div className="flex items-center gap-2 text-xs font-medium text-blue-600 bg-blue-50/50 p-2 rounded-md border border-blue-100 animate-pulse">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Refreshing…
+                    </div>
+                )}
+                {/* RQ-05: held fills sit at the bottom with View only (rowActions is false for them). */}
+                {renderReadyCards([...pendingReadyForReview, ...stationHeldRows])}
+            </section>
+            ) : null}
 
-                <TabsContent value="pending" className="space-y-4">
-                    {isRefreshing && (
-                        <div className="flex items-center gap-2 text-xs font-medium text-blue-600 bg-blue-50/50 p-2 rounded-md border border-blue-100 animate-pulse">
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                            Refreshing…
-                        </div>
-                    )}
-                    {pendingReadyForReview.length === 0 && stationHeldRows.length === 0 ? (
-                        <div className="rounded-md border border-slate-200 bg-white p-8 text-center space-y-2">
-                            <p className="text-sm text-slate-600">No fuel items need your action.</p>
-                            <p className="text-xs text-slate-400 max-w-md mx-auto">
-                                Posted fill-ups are in <span className="font-medium text-slate-600">Transaction Logs</span>.
-                                Accounting history is under <span className="font-medium text-slate-600">Ledgers › Fuel Expenses</span>.
-                            </p>
-                        </div>
-                    ) : (
-                        // RQ-05: held fills sit at the bottom with View only (rowActions is false for them).
-                        renderTable([...pendingReadyForReview, ...stationHeldRows], true, true, true)
-                    )}
-                </TabsContent>
-
-                <TabsContent value="split-mismatches" className="space-y-4">
-                    {splitMismatchTxs.length === 0 ? (
-                        <div className="rounded-md border bg-white p-8 text-center text-slate-500">
-                            <p className="text-sm">No statement vs pump disagreements.</p>
-                            <p className="text-xs text-slate-400 mt-1">
-                              When a Dominion card charge exceeds the pump total (can&apos;t derive cash), it appears here.
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="rounded-md border bg-white overflow-hidden">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Date</TableHead>
-                                        <TableHead>Driver</TableHead>
-                                        <TableHead>Pump / Cash / Card</TableHead>
-                                        <TableHead>Delta</TableHead>
-                                        <TableHead className="text-right">Action</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {splitMismatchTxs.map((tx) => {
-                                        const m = (tx.metadata || {}) as Record<string, unknown>;
-                                        const pump = Number(m.splitPumpTotal) || 0;
-                                        const statement = Number(m.splitStatementAmount);
-                                        const derived = Number(m.splitDerivedCashAmount);
-                                        const delta = Number(m.splitVarianceDelta);
-                                        const tol = splitReconTolerance(pump);
-                                        return (
-                                            <TableRow key={tx.id}>
-                                                <TableCell className="text-xs">
-                                                    {tx.date}
-                                                    {(() => {
-                                                        const rehome = describeSplitCashRehome(m);
-                                                        const blocked = describeSplitCashRehomeBlocked(m);
-                                                        return (
-                                                            <>
-                                                                {rehome && (
-                                                                    <div className="mt-0.5 text-[10px] text-slate-500">
-                                                                        {rehome}
-                                                                    </div>
-                                                                )}
-                                                                {blocked && (
-                                                                    <div className="mt-0.5 text-[10px] text-amber-800">
-                                                                        {blocked}
-                                                                    </div>
-                                                                )}
-                                                            </>
-                                                        );
-                                                    })()}
-                                                </TableCell>
-                                                <TableCell className="text-xs">
-                                                    {driverLabel(tx)}
-                                                </TableCell>
-                                                <TableCell className="text-xs">
-                                                    <div className="flex flex-col gap-0.5">
-                                                        <span>Pump {formatFuelMoney(pump)}</span>
-                                                        <span className="text-slate-500">
-                                                            {Number.isFinite(statement)
-                                                                ? `Statement card ${formatFuelMoney(statement)}`
-                                                                : 'Statement card —'}
-                                                            {Number.isFinite(derived)
-                                                                ? ` · Derived cash ${formatFuelMoney(derived)}`
-                                                                : ''}
-                                                        </span>
-                                                        {m.splitPumpPriceOutlier === true && (
-                                                            <span className="text-amber-700">Price band flag</span>
-                                                        )}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="text-xs">
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="border-rose-200 bg-rose-50 text-rose-800"
-                                                    >
-                                                        {Number.isFinite(delta)
-                                                            ? `Δ ${formatFuelMoney(Math.abs(delta))}`
-                                                            : 'Mismatch'}
-                                                    </Badge>
-                                                    <div className="mt-0.5 text-[10px] text-slate-400">
-                                                        Tol {formatFuelMoney(tol)}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    {can('fuel.approve') && (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        className="h-8 text-xs"
-                                                        onClick={() => setSplitResolveTx(tx)}
-                                                    >
-                                                        Decide pay
-                                                    </Button>
-                                                    )}
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    )}
-                </TabsContent>
-
-                <TabsContent value="awaiting-statement" className="space-y-4">
-                    <p className="text-xs text-slate-500">
-                        Cash is calculated automatically when Roam uploads the gas card statement. No action needed unless a fill has waited 14+ days.
-                    </p>
-                    {awaitingCashTxs.length === 0 ? (
-                        <div className="rounded-md border bg-white p-8 text-center text-slate-500">
-                            <p className="text-sm">All split cash is matched or resolved.</p>
-                            <p className="text-xs text-slate-400 mt-1">
-                                Rows appear here after a split fill until the gas card statement derives the cash amount.
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="rounded-md border bg-white overflow-hidden">
-                            {staleAwaitingCount > 0 && (
-                                <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                                    {staleAwaitingCount} fill{staleAwaitingCount === 1 ? '' : 's'} waiting 14+ days — a fleet owner can escalate.
-                                </div>
-                            )}
-                            {blockedRehomeCount > 0 && (
-                                <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                                    {blockedRehomeCount} fill{blockedRehomeCount === 1 ? '' : 's'} cannot post into an open week — reopen or create a later fuel period (or fix missing driver).
-                                </div>
-                            )}
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Date</TableHead>
-                                        <TableHead>Driver</TableHead>
-                                        <TableHead>Age</TableHead>
-                                        <TableHead>Pump</TableHead>
-                                        <TableHead className="text-right">Action</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {awaitingCashTxs.map((tx) => {
-                                        const m = (tx.metadata || {}) as Record<string, unknown>;
-                                        const pump = Number(m.splitPumpTotal) || 0;
-                                        const days = daysAwaitingCash(tx);
-                                        const stale = isStaleAwaitingCash(tx);
-                                        const rehome = describeSplitCashRehome(m);
-                                        const blocked = describeSplitCashRehomeBlocked(m);
-                                        return (
-                                            <TableRow
-                                                key={tx.id}
-                                                className={stale || blocked ? 'bg-amber-50/60' : undefined}
-                                            >
-                                                <TableCell className="text-xs">
-                                                    {tx.date}
-                                                    {rehome && (
-                                                        <div className="mt-0.5 text-[10px] text-slate-500">{rehome}</div>
-                                                    )}
-                                                    {blocked && (
-                                                        <div className="mt-0.5 text-[10px] text-amber-800">{blocked}</div>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="text-xs">
-                                                    {driverLabel(tx)}
-                                                </TableCell>
-                                                <TableCell className="text-xs">
-                                                    {days != null ? (
-                                                        <span className={stale ? 'font-medium text-amber-900' : 'text-slate-600'}>
-                                                            {days}d waiting
-                                                        </span>
-                                                    ) : (
-                                                        '—'
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="text-xs">
-                                                    {formatFuelMoney(pump)}
-                                                    {m.splitPumpPriceOutlier === true && (
-                                                        <div className="text-[10px] text-amber-700">Price band flag</div>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    {awaitingStatementRowAction(tx, can('fuel.split_cash_override')) === 'escalate' && onResolveSplitCash ? (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        className="h-8 text-xs"
-                                                        onClick={() => setSplitResolveTx(tx)}
-                                                    >
-                                                        Escalate
-                                                    </Button>
-                                                    ) : (
-                                                    <div className="flex flex-col items-end gap-1">
-                                                        <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-600">
-                                                            pending
-                                                        </Badge>
-                                                    </div>
-                                                    )}
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    )}
-                </TabsContent>
-            </Tabs>
-
-            <SplitCashResolveDialog
-                open={!!splitResolveTx}
-                tx={splitResolveTx}
-                busy={isResolvingSplit}
-                onOpenChange={(open) => {
-                    if (!open) setSplitResolveTx(null);
-                }}
-                onResolve={confirmResolveSplit}
-            />
-
-            {/* Details Modal (existing Pending detail view) */}
+            {/* Fill window — Stitch docs/stitch/fuel-review-and-logs-fleet/check_a_fill_* (approve, reject, station check). */}
             <Dialog open={isDetailsOpen} onOpenChange={(open) => { if(!open) { setIsDetailsOpen(false); setAction(null); } }}>
-                <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                        <DialogTitle>Fuel fill</DialogTitle>
-                        <DialogDescription>
-                            Check the photos and numbers, then approve or reject.
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    {selectedTx && isStationGateHeld(selectedTx) && (
-                        <div className="space-y-3">
-                            <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm text-sky-900 flex gap-2 items-start">
-                                <MapPin className="h-4 w-4 shrink-0 mt-0.5 text-sky-700" />
-                                <span>
-                                    This fuel stop is not linked to a verified station yet. Approve and reject stay disabled until station verification completes in the station database.
-                                </span>
-                            </div>
-                            <div className="rounded-md border border-amber-200 bg-amber-50/80 px-3 py-3 text-sm text-amber-950">
-                                <div className="flex items-center gap-2 font-semibold text-amber-900 mb-2">
-                                    <AlertTriangle className="h-4 w-4 shrink-0" />
-                                    What&apos;s missing / why it&apos;s stuck
-                                </div>
-                                <ul className="list-disc pl-5 space-y-1.5 text-amber-950/95 leading-snug">
-                                    {buildStationHoldDiagnostics(selectedTx).map((line, i) => (
-                                        <li key={i}>{line}</li>
-                                    ))}
-                                </ul>
-                            </div>
-                        </div>
-                    )}
-
+                <DialogContent hideCloseButton className="sm:max-w-[960px] max-h-[92vh] overflow-y-auto rounded-2xl border-0 p-0 gap-0 bg-white dark:bg-[#2a2a2d]">
                     {selectedTx && (() => {
-                        const odometerPhotoUrl = resolveOdometerProofUrl(selectedTx);
-                        const resolvedLiters = computeResolvedFuelLiters(selectedTx);
+                        const tx = selectedTx;
+                        const m = (tx.metadata || {}) as Record<string, unknown>;
+                        const held = isStationGateHeld(tx);
+                        const pending = tx.status === 'Pending';
+                        const amount = Math.abs(Number(tx.amount) || Number(m.totalCost) || 0);
+                        const resolvedLiters = computeResolvedFuelLiters(tx);
+                        const litersDerived = resolvedLiters != null && !Number(tx.quantity) && !Number(m.fuelVolume);
+                        const ppl = Number(m.pricePerLiter) || (resolvedLiters && amount ? amount / resolvedLiters : 0);
+                        const odo = Number(tx.odometer) || 0;
+                        const vehicle = tx.vehicleId ? vehicles[tx.vehicleId] : undefined;
+                        const plate = vehicle?.plate || (typeof m.vehiclePlate === 'string' ? m.vehiclePlate : '');
+                        const isCard = String(tx.paymentMethod || m.paymentSource || '').toLowerCase().includes('card');
+                        const fromPhoto = Array.isArray(m.readFromPhoto) ? (m.readFromPhoto as string[]) : [];
+                        const odoMethod = String(m.odometerMethod || '');
+                        const odoRead = fromPhoto.includes('odometer') || odoMethod === 'ai_verified' || odoMethod === 'photo_read';
+                        const pumpRead = fromPhoto.includes('amount');
+                        const odometerPhotoUrl = resolveOdometerProofUrl(tx);
+                        const station = resolveDescription(tx).replace(/^Fuel( Reimbursement)? Expense - /, '');
                         const matchingStations = approvalBrand ? getStationsForBrand(approvalBrand) : [];
                         const hasVerifiedStations = matchingStations.length > 0;
                         const showFuelStationPicker =
-                            selectedTx.status === 'Pending' &&
-                            (selectedTx.category === 'Fuel' || selectedTx.category === 'Fuel Reimbursement') &&
-                            !isStationGateHeld(selectedTx);
+                            pending && (tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement') && !held && action !== 'reject';
+                        const source = String(m.source || '');
+                        const canEditHere =
+                            Boolean(onEdit) && pending && !held && (source === 'Manual' || source === 'Bulk Manual' || source === 'Manual Request' || !source);
+                        const coords = pickTransactionCoords(tx);
+                        const row = 'flex items-center justify-between gap-4 py-2';
+                        const rowLabel = 'text-[15px] text-[#47464c] dark:text-zinc-400';
+                        const rowValue = 'text-right text-[15px] font-medium tabular-nums text-[#0d1c2e] dark:text-zinc-50';
+                        const secondaryBtn = 'min-h-[44px] rounded-xl bg-white px-5 text-[13px] font-medium text-[#0d1c2e] shadow-sm ring-1 ring-[#c9c5cd] hover:bg-[#e6eeff] dark:bg-zinc-900 dark:text-zinc-100';
+                        const photo = (url: string | undefined, labelText: string, icon: string, read: boolean, fallback: React.ReactNode) => (
+                            <div className="relative">
+                                {url ? <ViewablePhoto url={url} label={`${labelText} photo`} className="h-[260px] w-full" /> : fallback}
+                                <span className="pointer-events-none absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[13px] font-semibold text-[#0d1c2e] shadow-sm">
+                                    <span className="material-symbols-outlined text-[16px]">{icon}</span> {labelText}
+                                </span>
+                                {read ? (
+                                    <span className="pointer-events-none absolute bottom-3 left-3 flex items-center gap-1 rounded-full bg-[#82f5c1] px-2.5 py-1 text-[12px] font-semibold text-[#00714e]">
+                                        <span className="material-symbols-outlined text-[14px]">check_circle</span> Read clearly
+                                    </span>
+                                ) : null}
+                            </div>
+                        );
                         return (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
-                            <div className="space-y-4">
-                                <div className="space-y-1">
-                                    <Label className="text-slate-500 text-xs uppercase tracking-wider">Driver</Label>
-                                    <div className="flex items-center gap-2 font-medium">
-                                        <User className="h-4 w-4 text-slate-400" />
-                                        {selectedTx.driverName}
+                            <>
+                                {/* Header */}
+                                <div className="flex items-start justify-between gap-4 px-6 pt-6 sm:px-8 sm:pt-8">
+                                    <div>
+                                        <DialogTitle className="flex items-center gap-2.5 text-[24px] font-semibold tracking-tight text-[#0d1c2e] dark:text-zinc-50">
+                                            <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', held ? 'bg-sky-500' : action === 'reject' ? 'bg-[#ba1a1a]' : 'bg-[#069669]')} />
+                                            {fillWhen(tx)} · {tx.driverName || 'Unknown driver'}
+                                        </DialogTitle>
+                                        <DialogDescription className="mt-1 text-[15px] text-[#47464c] dark:text-zinc-400">
+                                            {held
+                                                ? "This fill can't be approved yet."
+                                                : !pending
+                                                  ? 'This fill is already done.'
+                                                  : action === 'reject'
+                                                    ? 'Tell the driver why, then reject.'
+                                                    : 'Check the photos and numbers, then approve.'}
+                                        </DialogDescription>
                                     </div>
-                                </div>
-                                
-                                <div className="space-y-1">
-                                    <Label className="text-slate-500 text-xs uppercase tracking-wider">Date & Time</Label>
-                                    <div className="flex items-center gap-2 font-medium">
-                                        <Calendar className="h-4 w-4 text-slate-400" />
-                                        {formatDate(selectedTx.date)} at {selectedTx.time}
-                                    </div>
-                                </div>
-
-                                <div className="space-y-1">
-                                    <Label className="text-slate-500 text-xs uppercase tracking-wider">Total</Label>
-                                    <div className="flex items-center gap-2 font-bold text-lg text-emerald-600">
-                                        {formatFuelMoney(Math.abs(Number(selectedTx.amount) || Number(selectedTx.metadata?.totalCost) || 0))}
-                                    </div>
+                                    <button type="button" className={`${secondaryBtn} flex items-center gap-1.5`} onClick={() => { setIsDetailsOpen(false); setAction(null); }}>
+                                        Close <span className="material-symbols-outlined text-[18px]">close</span>
+                                    </button>
                                 </div>
 
-                                <div className="p-3 bg-slate-50 rounded-lg space-y-2 border border-slate-100">
-                                    <div className="flex justify-between text-sm">
-                                        <span className="text-slate-500">Odometer:</span>
-                                        <span className="font-mono">{selectedTx.odometer ? `${selectedTx.odometer} km` : '-'}</span>
-                                    </div>
-                                    <div className="flex justify-between text-sm items-start gap-2">
-                                        <span className="text-slate-500 shrink-0">Volume:</span>
-                                        <div className="text-right">
-                                            <span className="font-mono">{resolvedLiters != null ? `${resolvedLiters} L` : '-'}</span>
-                                            {resolvedLiters != null &&
-                                                !Number(selectedTx.quantity) &&
-                                                !Number(selectedTx.metadata?.fuelVolume) && (
-                                                    <p className="text-[10px] text-slate-400 mt-0.5">From amount ÷ rate</p>
-                                                )}
-                                        </div>
-                                    </div>
-                                    <div className="flex justify-between text-sm">
-                                        <span className="text-slate-500">Rate:</span>
-                                        <span className="font-mono">
-                                            {selectedTx.metadata?.pricePerLiter 
-                                                ? `${formatFuelMoney(Number(selectedTx.metadata.pricePerLiter))} a litre` 
-                                                : (resolvedLiters && resolvedLiters > 0 && selectedTx.amount 
-                                                    ? `${formatFuelMoney(Math.abs(Number(selectedTx.amount)) / resolvedLiters)} a litre` 
-                                                    : '-')}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                {showFuelStationPicker && (
-                                    <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-3">
-                                        <div>
-                                            <Label className="text-slate-600 text-xs font-semibold">Station</Label>
-                                            <p className="text-[11px] text-slate-500 mt-0.5">
-                                                Optional — choose a verified site if GPS did not match. Same as manual log entry.
-                                            </p>
-                                        </div>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                            <div className="space-y-1.5">
-                                                <Label className="text-slate-500 text-[10px] uppercase tracking-wider">Brand</Label>
-                                                <Select value={approvalBrand} onValueChange={handleApprovalBrandChange}>
-                                                    <SelectTrigger className="h-9">
-                                                        <SelectValue placeholder="Select brand" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {brandOptions.map((b) => (
-                                                            <SelectItem key={b} value={b}>
-                                                                <span className="flex items-center gap-2">
-                                                                    {b}
-                                                                    {getStationsForBrand(b).length > 0 && (
-                                                                        <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1 py-0 rounded-full">
-                                                                            {getStationsForBrand(b).length} verified
-                                                                        </span>
-                                                                    )}
-                                                                </span>
-                                                            </SelectItem>
-                                                        ))}
-                                                        <SelectItem value="__other_brand__">
-                                                            <span className="text-slate-500 italic">Other / Unlisted</span>
-                                                        </SelectItem>
-                                                    </SelectContent>
-                                                </Select>
+                                <div className="flex flex-col gap-5 px-6 py-6 sm:px-8">
+                                    {held ? (
+                                        <>
+                                            <div className="flex items-center gap-3 rounded-xl bg-[#e0f2fe] p-3.5 text-[15px] text-[#0c4a6e]">
+                                                <span className="material-symbols-outlined flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-200/70 text-[19px] text-sky-800">near_me</span>
+                                                Roam is checking where this fill was. Approve and reject come back once the station is confirmed.
                                             </div>
-                                            <div className="space-y-1.5">
-                                                <div className="flex items-center gap-2">
-                                                    <Label className="text-slate-500 text-[10px] uppercase tracking-wider">Location</Label>
-                                                    {approvalMatchedStationId && (
-                                                        <span className="text-[9px] font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0 rounded-full flex items-center gap-0.5">
-                                                            <MapPin className="w-2.5 h-2.5" /> Verified
-                                                        </span>
-                                                    )}
-                                                    {stationsLoading && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
+                                            <div className="rounded-xl bg-[#fffbeb] p-4">
+                                                <div className="mb-2 flex items-center gap-2 text-[17px] font-semibold text-amber-950">
+                                                    <span className="material-symbols-outlined text-[18px] text-amber-700">help_center</span>
+                                                    What&apos;s missing
                                                 </div>
-                                                {hasVerifiedStations ? (
-                                                    <>
-                                                        <Select
-                                                            value={approvalMatchedStationId || ''}
-                                                            onValueChange={(val) => {
-                                                                if (val === '__custom__') {
-                                                                    setApprovalMatchedStationId('');
-                                                                    setApprovalStationLocation('');
-                                                                } else {
-                                                                    handleApprovalVerifiedStationSelect(val);
-                                                                }
-                                                            }}
-                                                        >
-                                                            <SelectTrigger className="h-9">
-                                                                <SelectValue placeholder="Select verified station" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {matchingStations.map((s) => (
-                                                                    <SelectItem key={s.id} value={s.id}>
-                                                                        <span className="flex flex-col text-left">
-                                                                            <span className="font-medium text-sm">{s.name}</span>
-                                                                            {s.address && (
-                                                                                <span className="text-[10px] text-slate-400 truncate max-w-[220px]">
-                                                                                    {s.address}
-                                                                                </span>
-                                                                            )}
-                                                                        </span>
-                                                                    </SelectItem>
-                                                                ))}
-                                                                <SelectItem value="__custom__">
-                                                                    <span className="text-slate-500 italic text-xs">Type address manually…</span>
-                                                                </SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                        {approvalMatchedStationId && approvalStationLocation && (
-                                                            <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50/50 border border-emerald-100 rounded text-[10px] text-slate-600">
-                                                                <MapPin className="w-3 h-3 text-emerald-500 shrink-0" />
-                                                                <span className="truncate">{approvalStationLocation}</span>
-                                                            </div>
-                                                        )}
-                                                        {hasVerifiedStations && !approvalMatchedStationId && (
-                                                            <Input
-                                                                className="h-8 text-sm"
-                                                                value={approvalStationLocation}
-                                                                onChange={(e) => setApprovalStationLocation(e.target.value)}
-                                                                placeholder="Type address manually"
-                                                            />
-                                                        )}
-                                                    </>
-                                                ) : (
-                                                    <Input
-                                                        value={approvalStationLocation}
-                                                        onChange={(e) => setApprovalStationLocation(e.target.value)}
-                                                        placeholder={approvalBrand ? 'Type address or location' : 'Select a brand first'}
-                                                        className="h-9"
-                                                    />
-                                                )}
+                                                <ul className="space-y-1.5 pl-1 text-[15px] leading-relaxed text-amber-900">
+                                                    {buildStationHoldDiagnostics(tx).map((line, i) => (
+                                                        <li key={i} className="flex items-start gap-2">
+                                                            <span className="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                                                            {line}
+                                                        </li>
+                                                    ))}
+                                                </ul>
                                             </div>
+                                        </>
+                                    ) : null}
+
+                                    <div className="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+                                        {/* Photos */}
+                                        <div className="flex flex-col gap-4">
+                                            {photo(
+                                                odometerPhotoUrl,
+                                                'Odometer',
+                                                'speed',
+                                                odoRead,
+                                                <EvidenceFromRecord record={{ ...tx, odometerProofUrl: odometerPhotoUrl }} urlField="odometerProofUrl" label="Odometer photo" />,
+                                            )}
+                                            {photo(
+                                                tx.receiptUrl || undefined,
+                                                'Pump',
+                                                'local_gas_station',
+                                                pumpRead,
+                                                <EvidenceFromRecord record={tx} label="Fuel receipt" />,
+                                            )}
+                                        </div>
+
+                                        {/* Values + choices */}
+                                        <div className="flex flex-col gap-4">
+                                            <div className="rounded-xl bg-[#eff4ff] px-5 py-3 dark:bg-zinc-900/50">
+                                                <div className={row}>
+                                                    <span className={rowLabel}>Driver</span>
+                                                    <span className={rowValue}>{tx.driverName || 'Unknown driver'}</span>
+                                                </div>
+                                                {plate || vehicle?.car ? (
+                                                    <div className={row}>
+                                                        <span className={rowLabel}>Car</span>
+                                                        <span className={`${rowValue} flex items-center gap-2`}>
+                                                            {plate ? <span className="rounded-md bg-[#e6eeff] px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider dark:bg-zinc-800">{plate}</span> : null}
+                                                            {vehicle?.car}
+                                                        </span>
+                                                    </div>
+                                                ) : null}
+                                                <div className={row}>
+                                                    <span className={rowLabel}>Date</span>
+                                                    <span className={rowValue}>{fillWhen(tx)}</span>
+                                                </div>
+                                                <div className={row}>
+                                                    <span className={rowLabel}>Total</span>
+                                                    <span className="text-right text-[20px] font-bold tabular-nums text-[#0d1c2e] dark:text-zinc-50">{amount ? formatFuelMoney(amount) : '—'}</span>
+                                                </div>
+                                                <div className={row}>
+                                                    <span className={rowLabel}>Litres</span>
+                                                    <span className={rowValue}>
+                                                        {resolvedLiters != null ? `${resolvedLiters} L` : '—'}
+                                                        {litersDerived ? <span className="block text-[12px] font-normal text-[#47464c]">Worked out from total ÷ price</span> : null}
+                                                    </span>
+                                                </div>
+                                                <div className={row}>
+                                                    <span className={rowLabel}>Price</span>
+                                                    <span className={rowValue}>{ppl ? `${formatFuelMoney(ppl)} a litre` : '—'}</span>
+                                                </div>
+                                                <div className={row}>
+                                                    <span className={rowLabel}>Odometer</span>
+                                                    <span className={rowValue}>{odo ? `${odo.toLocaleString('en-US')} km` : '—'}</span>
+                                                </div>
+                                                <div className={row}>
+                                                    <span className={rowLabel}>Paid with</span>
+                                                    <span className="flex items-center gap-1 rounded-full bg-[#e6eeff] px-3 py-1 text-[13px] font-semibold text-[#0d1c2e] dark:bg-zinc-800 dark:text-zinc-100">
+                                                        <span className="material-symbols-outlined text-[16px]">{isCard ? 'credit_card' : 'payments'}</span>
+                                                        {isCard ? 'Gas Card' : 'Cash'}
+                                                    </span>
+                                                </div>
+                                                {!showFuelStationPicker ? (
+                                                    <div className={row}>
+                                                        <span className={rowLabel}>{held ? 'Location' : 'Station'}</span>
+                                                        <span className={rowValue}>
+                                                            {held && coords
+                                                                ? String(m.stationLocation || m.locationAddress || `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`)
+                                                                : /station not known/i.test(station) ? '—' : station}
+                                                        </span>
+                                                    </div>
+                                                ) : null}
+                                            </div>
+
+                                            {tx.description && !/^Fuel( Reimbursement)? Expense/.test(tx.description) ? (
+                                                <div className="rounded-xl bg-[#f8f9ff] p-4 text-[15px] text-[#0d1c2e] ring-1 ring-[#e6eeff] dark:bg-zinc-900 dark:text-zinc-100">
+                                                    <span className="mb-1 block text-[12px] font-semibold uppercase tracking-wider text-[#47464c]">Driver&apos;s note</span>
+                                                    {tx.description}
+                                                </div>
+                                            ) : null}
+
+                                            {showFuelStationPicker ? (
+                                                <div className="flex flex-col gap-3 rounded-xl bg-[#eff4ff] p-5 dark:bg-zinc-900/50">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-[17px] font-semibold text-[#0d1c2e] dark:text-zinc-50">Fuel station</span>
+                                                        {approvalMatchedStationId ? (
+                                                            <span className="flex items-center gap-1 rounded-full bg-[#82f5c1] px-2.5 py-0.5 text-[12px] font-semibold text-[#00714e]">
+                                                                <span className="material-symbols-outlined text-[14px]">verified</span> Verified station
+                                                            </span>
+                                                        ) : stationsLoading ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+                                                        ) : null}
+                                                    </div>
+                                                    <p className="-mt-2 text-[13px] text-[#47464c] dark:text-zinc-400">
+                                                        Optional — pick the station if the phone&apos;s location didn&apos;t match one.
+                                                    </p>
+                                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                                        <div className="flex flex-col gap-1.5">
+                                                            <span className="text-[12px] font-semibold uppercase tracking-wider text-[#47464c]">Brand</span>
+                                                            <Select value={approvalBrand} onValueChange={handleApprovalBrandChange}>
+                                                                <SelectTrigger className="h-11 rounded-xl border-0 bg-white shadow-sm dark:bg-zinc-900">
+                                                                    <SelectValue placeholder="Choose a brand" />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {brandOptions.map((b) => (
+                                                                        <SelectItem key={b} value={b}>
+                                                                            <span className="flex items-center gap-2">
+                                                                                {b}
+                                                                                {getStationsForBrand(b).length > 0 && (
+                                                                                    <span className="rounded-full bg-emerald-50 px-1.5 text-[10px] text-emerald-700">
+                                                                                        {getStationsForBrand(b).length} verified
+                                                                                    </span>
+                                                                                )}
+                                                                            </span>
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                    <SelectItem value="__other_brand__">
+                                                                        <span className="italic text-slate-500">Other / not listed</span>
+                                                                    </SelectItem>
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                        <div className="flex flex-col gap-1.5">
+                                                            <span className="text-[12px] font-semibold uppercase tracking-wider text-[#47464c]">Station</span>
+                                                            {hasVerifiedStations ? (
+                                                                <Select
+                                                                    value={approvalMatchedStationId || ''}
+                                                                    onValueChange={(val) => {
+                                                                        if (val === '__custom__') {
+                                                                            setApprovalMatchedStationId('');
+                                                                            setApprovalStationLocation('');
+                                                                        } else {
+                                                                            handleApprovalVerifiedStationSelect(val);
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <SelectTrigger className="h-11 rounded-xl border-0 bg-white shadow-sm dark:bg-zinc-900">
+                                                                        <SelectValue placeholder="Choose a station" />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        {matchingStations.map((s) => (
+                                                                            <SelectItem key={s.id} value={s.id}>
+                                                                                <span className="flex flex-col text-left">
+                                                                                    <span className="text-sm font-medium">{s.name}</span>
+                                                                                    {s.address && <span className="max-w-[220px] truncate text-[10px] text-slate-400">{s.address}</span>}
+                                                                                </span>
+                                                                            </SelectItem>
+                                                                        ))}
+                                                                        <SelectItem value="__custom__">
+                                                                            <span className="text-xs italic text-slate-500">Station not listed — type the address</span>
+                                                                        </SelectItem>
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            ) : (
+                                                                <Input
+                                                                    value={approvalStationLocation}
+                                                                    onChange={(e) => setApprovalStationLocation(e.target.value)}
+                                                                    placeholder={approvalBrand ? 'Type the address' : 'Choose a brand first'}
+                                                                    className="h-11 rounded-xl border-0 bg-white shadow-sm dark:bg-zinc-900"
+                                                                />
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    {hasVerifiedStations && approvalMatchedStationId && approvalStationLocation ? (
+                                                        <div className="flex items-center gap-1.5 text-[13px] text-[#47464c]">
+                                                            <MapPin className="h-3.5 w-3.5 shrink-0 text-[#069669]" />
+                                                            <span className="truncate">{approvalStationLocation}</span>
+                                                        </div>
+                                                    ) : null}
+                                                    {hasVerifiedStations && !approvalMatchedStationId ? (
+                                                        <Input
+                                                            className="h-11 rounded-xl border-0 bg-white shadow-sm dark:bg-zinc-900"
+                                                            value={approvalStationLocation}
+                                                            onChange={(e) => setApprovalStationLocation(e.target.value)}
+                                                            placeholder="Type the address"
+                                                        />
+                                                    ) : null}
+                                                </div>
+                                            ) : null}
+
+                                            {action === 'approve' && showServiceLineControls ? (
+                                                <div className="flex flex-col gap-2">
+                                                    <span className="text-[17px] font-semibold text-[#0d1c2e] dark:text-zinc-50">Service line</span>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        {(['rideshare', 'rush_delivery'] as const).map((l) => (
+                                                            <button
+                                                                key={l}
+                                                                type="button"
+                                                                onClick={() => setApproveServiceLine(l)}
+                                                                className={cn(
+                                                                    'min-h-[48px] rounded-xl text-[15px] font-semibold shadow-sm',
+                                                                    approveServiceLine === l
+                                                                        ? 'bg-black text-white dark:bg-zinc-50 dark:text-zinc-900'
+                                                                        : 'bg-white text-[#0d1c2e] ring-1 ring-[#c9c5cd] dark:bg-zinc-900 dark:text-zinc-100',
+                                                                )}
+                                                            >
+                                                                {fuelServiceLineUiLabel(l)}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ) : null}
+
+                                            {action === 'approve' ? (
+                                                <label className="flex flex-col gap-1.5">
+                                                    <span className="text-[15px] font-medium text-[#0d1c2e] dark:text-zinc-100">Note (optional)</span>
+                                                    <Textarea
+                                                        value={notes}
+                                                        onChange={(e) => setNotes(e.target.value)}
+                                                        placeholder="e.g. Checked the odometer photo."
+                                                        className="min-h-[72px] rounded-xl border-0 bg-[#eff4ff] dark:bg-zinc-900"
+                                                    />
+                                                </label>
+                                            ) : null}
                                         </div>
                                     </div>
-                                )}
-                                
-                                {selectedTx.description && (
-                                    <div className="space-y-1">
-                                        <Label className="text-slate-500 text-xs uppercase tracking-wider">Notes</Label>
-                                        <p className="text-sm text-slate-700 bg-slate-50 p-2 rounded">{selectedTx.description}</p>
-                                    </div>
-                                )}
 
-                            </div>
+                                    {action === 'reject' ? (
+                                        <div className="flex flex-col gap-3 rounded-xl bg-[#fff1f0] p-5 dark:bg-[#450a0a]">
+                                            <span className="text-[17px] font-semibold text-[#ba1a1a] dark:text-[#f87171]">Reject this fill?</span>
+                                            <label className="flex flex-col gap-1.5">
+                                                <span className="text-[15px] font-medium text-[#0d1c2e] dark:text-zinc-100">
+                                                    Why? {tx.driverName ? tx.driverName.split(' ')[0] : 'The driver'} sees this. <span className="text-[#ba1a1a]">*</span>
+                                                </span>
+                                                <Textarea
+                                                    value={notes}
+                                                    onChange={(e) => setNotes(e.target.value)}
+                                                    placeholder="e.g. The pump photo shows a different amount. Please log it again."
+                                                    className="min-h-[88px] rounded-xl border-0 bg-white shadow-sm dark:bg-zinc-900"
+                                                />
+                                            </label>
+                                            <p className="text-[13px] text-[#47464c] dark:text-zinc-400">The fill will not be paid.</p>
+                                        </div>
+                                    ) : null}
+                                </div>
 
-                            <div className="space-y-5">
-                                <div className="space-y-2">
-                                    <EvidenceFromRecord
-                                        record={selectedTx}
-                                        label="Fuel receipt"
-                                    />
+                                {/* Bottom bar */}
+                                <div className="flex flex-col gap-3 border-t border-[#e6eeff] bg-[#f8f9ff] px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8 dark:border-zinc-800 dark:bg-zinc-900/60">
+                                    {held ? (
+                                        <>
+                                            <span className="flex items-center gap-2 text-[15px] text-[#47464c] dark:text-zinc-400">
+                                                <span className="material-symbols-outlined text-[18px]">lock</span>
+                                                Approve and reject are off until the station is confirmed.
+                                            </span>
+                                            <button type="button" className={secondaryBtn} onClick={() => setIsDetailsOpen(false)}>Close</button>
+                                        </>
+                                    ) : !pending ? (
+                                        <>
+                                            <span />
+                                            <button type="button" className={secondaryBtn} onClick={() => setIsDetailsOpen(false)}>Close</button>
+                                        </>
+                                    ) : action === 'reject' ? (
+                                        <>
+                                            <span />
+                                            <div className="flex gap-3">
+                                                <button type="button" className={secondaryBtn} onClick={() => { setAction(null); setNotes(''); }}>Keep it</button>
+                                                <button
+                                                    type="button"
+                                                    disabled={!notes.trim() || !can('fuel.reject')}
+                                                    onClick={confirmAction}
+                                                    className="min-h-[44px] rounded-xl bg-[#ba1a1a] px-6 text-[13px] font-medium text-white shadow-sm disabled:opacity-40"
+                                                >
+                                                    Reject fill
+                                                </button>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="flex gap-3">
+                                                {can('fuel.reject') ? (
+                                                    <button
+                                                        type="button"
+                                                        className="min-h-[44px] rounded-xl bg-white px-5 text-[13px] font-medium text-[#ba1a1a] shadow-sm ring-1 ring-[#ffdad6] hover:bg-[#ffdad6]"
+                                                        onClick={() => { setAction('reject'); setNotes(''); }}
+                                                    >
+                                                        Reject
+                                                    </button>
+                                                ) : null}
+                                                {canEditHere && onEdit ? (
+                                                    <button type="button" className={`${secondaryBtn} flex items-center gap-1.5`} onClick={() => { setIsDetailsOpen(false); onEdit(tx); }}>
+                                                        <span className="material-symbols-outlined text-[16px]">edit</span> Edit
+                                                    </button>
+                                                ) : null}
+                                            </div>
+                                            <div className="flex gap-3">
+                                                {action === 'approve' ? (
+                                                    <button type="button" className={secondaryBtn} onClick={() => setAction(null)}>Back</button>
+                                                ) : null}
+                                                {can('fuel.approve') ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => (action === 'approve' ? confirmAction() : setAction('approve'))}
+                                                        className="flex min-h-[44px] items-center gap-2 rounded-xl bg-black px-6 text-[13px] font-medium text-white shadow-md hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900"
+                                                    >
+                                                        <span className="material-symbols-outlined text-[18px] text-[#85f8c4]">check_circle</span>
+                                                        {action === 'approve' ? 'Approve fill' : 'Approve'}
+                                                    </button>
+                                                ) : null}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
-                                <div className="space-y-2">
-                                    <EvidenceFromRecord
-                                        record={{ ...selectedTx, odometerProofUrl: odometerPhotoUrl }}
-                                        urlField="odometerProofUrl"
-                                        label="Odometer photo"
-                                    />
-                                </div>
-                            </div>
-                        </div>
+                            </>
                         );
                     })()}
-
-                    {/* Action Area */}
-                    {action && (
-                        <div className="pt-4 border-t">
-                            {action === 'approve' && showServiceLineControls ? (
-                              <div className="mb-4 space-y-2">
-                                <Label className="mb-1 block">Service line</Label>
-                                <div className="flex gap-2">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant={approveServiceLine === 'rideshare' ? 'default' : 'outline'}
-                                    onClick={() => setApproveServiceLine('rideshare')}
-                                  >
-                                    {fuelServiceLineUiLabel('rideshare')}
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant={approveServiceLine === 'rush_delivery' ? 'default' : 'outline'}
-                                    onClick={() => setApproveServiceLine('rush_delivery')}
-                                  >
-                                    {fuelServiceLineUiLabel('rush_delivery')}
-                                  </Button>
-                                </div>
-                                <p className="text-[11px] text-slate-500">
-                                  Sets an explicit line on the posted fill (sticky — not overwritten by re-resolve).
-                                </p>
-                              </div>
-                            ) : null}
-                            <Label htmlFor="action-notes" className="mb-2 block">
-                                {action === 'approve' ? 'Approval Notes (Optional)' : 'Why reject? The driver sees this.'}
-                            </Label>
-                            <Textarea 
-                                id="action-notes"
-                                value={notes} 
-                                onChange={(e) => setNotes(e.target.value)} 
-                                placeholder={action === 'approve' ? "E.g. Verified odometer reading." : "E.g. Receipt is blurry, please re-upload."}
-                                className="mb-4"
-                            />
-                            <div className="flex justify-end gap-2">
-                                <Button variant="ghost" onClick={() => setAction(null)}>Back</Button>
-                                <Button 
-                                    className={action === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}
-                                    disabled={action === 'reject' && !notes.trim()}
-                                    onClick={confirmAction}
-                                >
-                                    Confirm {action === 'approve' ? 'Approval' : 'Rejection'}
-                                </Button>
-                            </div>
-                        </div>
-                    )}
-
-                    {!action && selectedTx?.status === 'Pending' && (
-                        <DialogFooter className="gap-2 sm:gap-0">
-                            <div className="flex gap-2 w-full sm:w-auto mr-auto">
-                                {onEdit && !isStationGateHeld(selectedTx) && (
-                                    selectedTx.metadata?.source === 'Manual' || 
-                                    selectedTx.metadata?.source === 'Bulk Manual' || 
-                                    selectedTx.metadata?.source === 'Manual Request' ||
-                                    !selectedTx.metadata?.source
-                                ) && (
-                                    <Button variant="outline" className="flex-1 sm:flex-none" onClick={() => { setIsDetailsOpen(false); onEdit(selectedTx); }}>
-                                        <Pencil className="h-4 w-4 mr-2" />
-                                        Edit
-                                    </Button>
-                                )}
-                                <Button variant="outline" className="flex-1 sm:flex-none" onClick={() => setIsDetailsOpen(false)}>Close</Button>
-                            </div>
-                            {!isStationGateHeld(selectedTx) && (
-                                <div className="flex gap-2 w-full sm:w-auto">
-                                    {can('fuel.reject') && <Button variant="destructive" className="flex-1 sm:flex-none" onClick={() => setAction('reject')}>Reject</Button>}
-                                    {can('fuel.approve') && <Button className="bg-emerald-600 hover:bg-emerald-700 flex-1 sm:flex-none" onClick={() => setAction('approve')}>Approve</Button>}
-                                </div>
-                            )}
-                        </DialogFooter>
-                    )}
-                    
-                    {!action && selectedTx?.status !== 'Pending' && (
-                         <DialogFooter>
-                            <Button variant="outline" onClick={() => setIsDetailsOpen(false)}>Close</Button>
-                        </DialogFooter>
-                    )}
-                </DialogContent>
-            </Dialog>
-
-            {/* Phase 6: Log Review Detail Dialog */}
-            <Dialog open={isLogReviewOpen} onOpenChange={(open) => { if (!open && !isLogReviewSubmitting) { setIsLogReviewOpen(false); setLogReviewTx(null); } }}>
-                <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
-                            <Camera className="h-5 w-5 text-amber-600" />
-                            Review Fuel Log {logReviewTx?.driverName ? `\u2014 ${logReviewTx.driverName}` : ''}
-                        </DialogTitle>
-                        <DialogDescription>
-                            The odometer couldn't be read from the photo. Type the reading to approve.
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    {logReviewTx && (
-                        <div className="space-y-6 py-2">
-                            {/* Odometer Photo Section */}
-                            <div className="space-y-2">
-                                <Label className="text-slate-500 text-xs uppercase tracking-wider">Odometer Photo</Label>
-                                {logReviewTx.metadata?.odometerProofUrl ? (
-                                    <ViewablePhoto url={logReviewTx.metadata.odometerProofUrl} label="Odometer photo" className="h-[300px]" />
-                                ) : (
-                                    <div className="flex flex-col items-center justify-center h-40 bg-slate-50 rounded-lg border-2 border-dashed border-slate-200 text-slate-400">
-                                        <Camera className="h-10 w-10 mb-2 opacity-40" />
-                                        <span className="text-sm font-medium">No odometer photo available</span>
-                                        <span className="text-xs mt-1">The driver may not have submitted a photo for this entry.</span>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Receipt Photo (if available) */}
-                            {logReviewTx.receiptUrl && (
-                                <div className="space-y-2">
-                                    <Label className="text-slate-500 text-xs uppercase tracking-wider">Receipt Photo</Label>
-                                    <ViewablePhoto url={logReviewTx.receiptUrl} label="Receipt photo" className="h-[200px]" />
-                                </div>
-                            )}
-
-                            {/* Transaction Info Grid */}
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                    <Label className="text-slate-400 text-[10px] uppercase tracking-wider block mb-1">Date</Label>
-                                    <div className="flex items-center gap-1.5 text-sm font-medium">
-                                        <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                                        {formatDate(logReviewTx.date)}
-                                    </div>
-                                </div>
-                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                    <Label className="text-slate-400 text-[10px] uppercase tracking-wider block mb-1">Amount</Label>
-                                    <div className="flex items-center gap-1.5 text-sm font-bold text-emerald-600">
-                                        {formatFuelMoney(Math.abs(Number(logReviewTx.amount) || Number(logReviewTx.metadata?.totalCost) || 0))}
-                                    </div>
-                                </div>
-                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                    <Label className="text-slate-400 text-[10px] uppercase tracking-wider block mb-1">Volume</Label>
-                                    <span className="text-sm font-medium font-mono">
-                                        {(() => {
-                                            const v = computeResolvedFuelLiters(logReviewTx);
-                                            return v != null ? `${v} L` : '-';
-                                        })()}
-                                    </span>
-                                </div>
-                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                    <Label className="text-slate-400 text-[10px] uppercase tracking-wider block mb-1">Station</Label>
-                                    <span className="text-sm font-medium truncate block">{resolveStationName(logReviewTx)}</span>
-                                </div>
-                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                    <Label className="text-slate-400 text-[10px] uppercase tracking-wider block mb-1">Vehicle</Label>
-                                    <div className="flex items-center gap-1.5 text-sm font-medium">
-                                        <Truck className="h-3.5 w-3.5 text-slate-400" />
-                                        {logReviewTx.metadata?.vehiclePlate || logReviewTx.vehicleId?.substring(0, 8) || '-'}
-                                    </div>
-                                </div>
-                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                    <Label className="text-slate-400 text-[10px] uppercase tracking-wider block mb-1">Payment</Label>
-                                    <span className="text-sm font-medium">
-                                        {logReviewTx.paymentMethod || logReviewTx.metadata?.paymentSource || 'Cash'}
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* Capture Method Badge */}
-                            {logReviewTx.metadata?.odometerMethod && (
-                                <div className="flex items-center gap-2 p-3 bg-purple-50 rounded-lg border border-purple-100">
-                                    <AlertTriangle className="h-4 w-4 text-purple-600 shrink-0" />
-                                    <div>
-                                        <span className="text-xs font-semibold text-purple-700">
-                                            How the odometer was read: {getOdometerMethodLabel(logReviewTx.metadata.odometerMethod)}
-                                        </span>
-                                        {(logReviewTx.metadata?.logReviewReason || logReviewTx.metadata?.odometerManualReason) && (
-                                            <p className="text-xs text-purple-600 mt-0.5">
-                                                Reason: {logReviewTx.metadata.logReviewReason || logReviewTx.metadata.odometerManualReason}
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Admin Odometer Input */}
-                            <div className="space-y-2 p-4 bg-amber-50/50 rounded-lg border-2 border-amber-200">
-                                <Label htmlFor="admin-odometer" className="text-sm font-semibold text-amber-900">
-                                    Enter Odometer Reading (km) <span className="text-red-500">*</span>
-                                </Label>
-                                <p className="text-xs text-amber-700 mb-2">
-                                    Read the odometer value from the photo above and enter it here. This will be recorded as the official reading.
-                                </p>
-                                <Input 
-                                    id="admin-odometer"
-                                    type="number"
-                                    min="1"
-                                    step="1"
-                                    value={adminOdometer}
-                                    onChange={(e) => { setAdminOdometer(e.target.value); setOdometerError(''); }}
-                                    placeholder="e.g. 145320"
-                                    className={cn(
-                                        "font-mono text-lg h-12 bg-white",
-                                        odometerError && "border-red-500 focus-visible:ring-red-500"
-                                    )}
-                                />
-                                {odometerError && (
-                                    <p className="text-xs text-red-600 flex items-center gap-1">
-                                        <AlertTriangle className="h-3 w-3" />
-                                        {odometerError}
-                                    </p>
-                                )}
-
-                                {/* Warning if entered value seems low compared to existing odometer on tx */}
-                                {adminOdometer && Number(adminOdometer) > 0 && logReviewTx.odometer && Number(adminOdometer) < logReviewTx.odometer && (
-                                    <p className="text-xs text-amber-700 flex items-center gap-1 mt-1">
-                                        <AlertTriangle className="h-3 w-3" />
-                                        This reading ({adminOdometer} km) is lower than the existing odometer ({logReviewTx.odometer} km). Please double-check.
-                                    </p>
-                                )}
-                            </div>
-
-                            {/* Admin Notes */}
-                            <div className="space-y-2">
-                                <Label htmlFor="admin-log-notes" className="text-sm font-medium text-slate-700">
-                                    Notes (optional)
-                                </Label>
-                                <Textarea 
-                                    id="admin-log-notes"
-                                    value={adminNotes}
-                                    onChange={(e) => setAdminNotes(e.target.value)}
-                                    placeholder="E.g. Photo slightly blurry but reading is clearly 145,320 km."
-                                    rows={2}
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
-                        <Button 
-                            variant="outline" 
-                            onClick={() => { setIsLogReviewOpen(false); setLogReviewTx(null); }}
-                            disabled={isLogReviewSubmitting}
-                        >
-                            Cancel
-                        </Button>
-                        <Button 
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                            onClick={confirmLogReview}
-                            disabled={isLogReviewSubmitting || !adminOdometer}
-                        >
-                            {isLogReviewSubmitting ? (
-                                <>
-                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                    Approving...
-                                </>
-                            ) : (
-                                <>
-                                    <Check className="h-4 w-4 mr-2" />
-                                    Confirm & Approve
-                                </>
-                            )}
-                        </Button>
-                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>

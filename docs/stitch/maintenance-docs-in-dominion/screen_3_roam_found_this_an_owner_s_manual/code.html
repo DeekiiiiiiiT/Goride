@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Dominion - Roam Found This (Maintenance Sheet)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+    body {
+      font-family: 'Inter', sans-serif;
+      color: #30323b;
+      background-color: #faf8fe;
+      -webkit-font-smoothing: antialiased;
+    }
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-feature-settings: "tnum" 1;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      vertical-align: middle;
+    }
+    .material-symbols-outlined.fill {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .soft-card-shadow {
+      box-shadow: 0 4px 16px rgba(1, 83, 220, 0.04);
+    }
+    .overlay-shadow {
+      box-shadow: 0 24px 48px -12px rgba(15, 23, 42, 0.25), 0 8px 24px rgba(1, 83, 220, 0.06);
+    }
+  </style>
+<meta content="web_dashboard" name="shell-type"/></head>
+<body class="relative min-h-screen bg-[#faf8fe] overflow-x-hidden">
+<!-- Console App Shell (Background Workspace) -->
+<div class="flex min-h-screen w-full">
+<!-- Dark Navy Left Sidebar -->
+<aside class="w-[260px] bg-[#0b1329] text-[#94a3b8] flex-shrink-0 flex flex-col justify-between select-none">
+<div>
+<!-- Logo / Brand Header -->
+<div class="h-16 px-5 flex items-center gap-3 border-b border-[#1e293b]">
+<div class="w-7 h-7 rounded-lg bg-[#0153dc] flex items-center justify-center text-white font-bold text-sm tracking-wider shadow-sm">
+            D
+          </div>
+<div class="flex flex-col">
+<span class="text-white text-[14px] font-semibold tracking-tight">Dominion</span>
+<span class="text-[11px] text-slate-400 font-normal">Roam Admin Console</span>
+</div>
+</div>
+<!-- Navigation Groups -->
+<nav class="py-4 px-3 space-y-5 text-[13px]">
+<!-- Master Data -->
+<div>
+<div class="px-2 mb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Master Data</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">dashboard</span>
+<span>Overview</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg bg-[#1a2749] text-white font-medium" href="#">
+<span class="material-symbols-outlined text-[19px] text-[#5b8def]">directions_car</span>
+<span>Vehicles active</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">map</span>
+<span>Places and Maps</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">local_gas_station</span>
+<span>Fuel</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">toll</span>
+<span>Tolls</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">receipt_long</span>
+<span>Tax and Vendors</span>
+</a>
+</div>
+</div>
+<!-- Engines -->
+<div>
+<div class="px-2 mb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Engines</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">psychology</span>
+<span>Fuel Brain</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">toll</span>
+<span>Toll Brain</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">hub</span>
+<span>Matching Brain</span>
+</a>
+</div>
+</div>
+<!-- Distribution -->
+<div>
+<div class="px-2 mb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Distribution</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">apps</span>
+<span>Apps</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">api</span>
+<span>Data API</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">edit_note</span>
+<span>Change requests</span>
+</a>
+</div>
+</div>
+<!-- Platform -->
+<div>
+<div class="px-2 mb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Platform</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">badge</span>
+<span>Staff and roles</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">history</span>
+<span>Activity log</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">dns</span>
+<span>Platform Ops</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">settings</span>
+<span>Global settings</span>
+</a>
+</div>
+</div>
+<!-- Back Office -->
+<div>
+<div class="px-2 mb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Back Office</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">assignment_turned_in</span>
+<span>GCT registrations</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">account_balance</span>
+<span>Ledger</span>
+</a>
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px] text-slate-400">payments</span>
+<span>Remittance</span>
+</a>
+</div>
+</div>
+</nav>
+</div>
+<!-- Footer system status -->
+<div class="p-3 border-t border-[#1e293b] text-[12px] flex items-center justify-between text-slate-400">
+<span class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+<span>Dominion v4.18</span>
+</span>
+<span class="text-slate-400">Tokyo DB</span>
+</div>
+</aside>
+<!-- Main Content Area -->
+<div class="flex-1 flex flex-col min-w-0">
+<!-- Top Bar -->
+<header class="h-16 bg-white border-b border-[#e6e7ee] px-8 flex items-center justify-between flex-shrink-0 z-10">
+<div class="flex items-center gap-3 w-96">
+<div class="relative w-full">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">search</span>
+<input class="w-full h-10 pl-9 pr-12 rounded-lg bg-[#faf8fe] border border-[#c5c6d0] text-[14px] text-[#30323b] focus:outline-none focus:ring-2 focus:ring-[#0153dc]" placeholder="Search entities, engines, routes…" readonly="" type="text"/>
+<span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-mono-code font-medium text-slate-500 bg-white border border-[#e6e7ee] px-1.5 py-0.5 rounded shadow-xs">⌘K</span>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="w-9 h-9 rounded-lg border border-[#e6e7ee] flex items-center justify-center text-[#5d5f68] hover:bg-slate-50 transition-colors">
+<span class="material-symbols-outlined text-[20px]">dark_mode</span>
+</button>
+<div class="h-6 w-px bg-[#e6e7ee]"></div>
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-full bg-[#dbe1ff] text-[#0153dc] font-semibold text-xs flex items-center justify-center">
+              DT
+            </div>
+<div class="flex flex-col">
+<span class="text-[13px] font-medium text-[#30323b] leading-tight">Deeki T</span>
+<span class="text-[11px] text-[#5d5f68]">Owner</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Background Screen Content: Maintenance Templates Page -->
+<main class="flex-1 p-8 max-w-[1240px] w-full mx-auto"><div class="flex flex-col w-full relative">
+<!-- BACKGROUND WORKSPACE: Dominion Maintenance Templates (Manuals tab active) -->
+<div class="flex flex-col w-full space-y-gutter pointer-events-none select-none opacity-40 filter blur-[1px]">
+<!-- Top Action Breadcrumb & Title Area -->
+<div class="flex items-center justify-between">
+<div class="flex flex-col space-y-space-xs">
+<div class="flex items-center space-x-space-sm text-secondary font-label-ui text-label-ui">
+<span>Master Data</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span>Vehicles active</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="text-on-surface font-semibold">Maintenance Templates</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Maintenance Reference Library</h1>
+</div>
+<div class="flex items-center space-x-space-md">
+<div class="flex items-center bg-surface-container rounded-full p-1 shadow-sm">
+<span class="px-space-md py-1 rounded-full text-secondary font-label-ui text-label-ui">Service Schedules</span>
+<span class="px-space-md py-1 rounded-full bg-surface-container-lowest text-primary-container font-headline-sm text-body-sm shadow-xs">Manuals</span>
+<span class="px-space-md py-1 rounded-full text-secondary font-label-ui text-label-ui">Inspection Checklists</span>
+</div>
+<button class="bg-primary-container text-on-primary font-headline-sm text-body-sm px-space-lg py-2.5 rounded-lg flex items-center space-x-space-xs shadow-md">
+<span class="material-symbols-outlined text-[18px]">upload_file</span>
+<span>Import PDF</span>
+</button>
+</div>
+</div>
+<!-- Data Table Card Mockup -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col">
+<div class="bg-surface-container px-space-lg py-3 flex items-center justify-between text-secondary font-label-ui text-label-ui uppercase tracking-wider">
+<div class="w-1/4">Document / Vehicle</div>
+<div class="w-1/6">Jurisdiction</div>
+<div class="w-1/6">Category</div>
+<div class="w-1/6">Extracted Data</div>
+<div class="w-1/6 text-right">Actions</div>
+</div>
+<div class="divide-y divide-surface-container-low text-on-surface font-body-md text-body-md">
+<div class="px-space-lg py-4 flex items-center justify-between">
+<div class="w-1/4 flex items-center space-x-3">
+<span class="material-symbols-outlined text-secondary">menu_book</span>
+<div>
+<div class="font-semibold text-on-surface">Toyota Yaris Cross Owner's Handbook</div>
+<div class="text-secondary font-label-mono-sm text-label-mono-sm">MXPB10 · 2021-2024</div>
+</div>
+</div>
+<div class="w-1/6 font-label-mono-sm text-label-mono-sm text-secondary">Japan (MLIT)</div>
+<div class="w-1/6"><span class="bg-surface-container px-2 py-0.5 rounded-full text-secondary text-label-mono-sm font-label-mono-sm">Handbook</span></div>
+<div class="w-1/6 text-secondary text-body-sm">48 fluid specs, bulb table</div>
+<div class="w-1/6 text-right text-primary-container font-label-mono-sm">Ready</div>
+</div>
+<div class="px-space-lg py-4 flex items-center justify-between">
+<div class="w-1/4 flex items-center space-x-3">
+<span class="material-symbols-outlined text-secondary">menu_book</span>
+<div>
+<div class="font-semibold text-on-surface">Nissan Note e-POWER Manual</div>
+<div class="text-secondary font-label-mono-sm text-label-mono-sm">E13 Series · 2022</div>
+</div>
+</div>
+<div class="w-1/6 font-label-mono-sm text-label-mono-sm text-secondary">Japan (MLIT)</div>
+<div class="w-1/6"><span class="bg-surface-container px-2 py-0.5 rounded-full text-secondary text-label-mono-sm font-label-mono-sm">Handbook</span></div>
+<div class="w-1/6 text-secondary text-body-sm">Electric drive oil, 12V specs</div>
+<div class="w-1/6 text-right text-primary-container font-label-mono-sm">Ready</div>
+</div>
+<div class="px-space-lg py-4 flex items-center justify-between">
+<div class="w-1/4 flex items-center space-x-3">
+<span class="material-symbols-outlined text-secondary">menu_book</span>
+<div>
+<div class="font-semibold text-on-surface">Honda Freed Hybrid User Guide</div>
+<div class="text-secondary font-label-mono-sm text-label-mono-sm">GB7 / GB8 · 2020</div>
+</div>
+</div>
+<div class="w-1/6 font-label-mono-sm text-label-mono-sm text-secondary">Japan (MLIT)</div>
+<div class="w-1/6"><span class="bg-surface-container px-2 py-0.5 rounded-full text-secondary text-label-mono-sm font-label-mono-sm">Handbook</span></div>
+<div class="w-1/6 text-secondary text-body-sm">Dual clutch ATF, spark plugs</div>
+<div class="w-1/6 text-right text-primary-container font-label-mono-sm">Ready</div>
+</div>
+</div>
+</div>
+</div>
+<!-- FIXED MODAL OVERLAY: ROAM FOUND THIS (Centered 720px, Light theme tokens) -->
+<div class="fixed inset-0 bg-[#0f172a]/40 backdrop-blur-[4px] z-50 flex items-center justify-center p-6 overflow-y-auto">
+<!-- Modal Card (720px wide, 20px radius, 32px padding) -->
+<div class="w-[720px] max-w-full bg-surface-container-lowest rounded-[20px] p-8 shadow-2xl relative my-auto">
+<!-- Modal Header -->
+<div class="flex items-start justify-between mb-5">
+<div class="flex items-start space-x-3">
+<div class="w-9 h-9 rounded-lg bg-surface-container-low text-primary-container flex items-center justify-center flex-shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[22px]">smart_toy</span>
+</div>
+<div>
+<h2 class="font-headline-lg text-[25px] font-semibold text-on-surface tracking-tight leading-tight">Roam found this</h2>
+<p class="font-body-md text-body-md text-secondary mt-0.5">Check it, then press Upload.</p>
+</div>
+</div>
+<button class="w-8 h-8 rounded-full flex items-center justify-center text-secondary hover:bg-surface-container hover:text-on-surface transition-colors cursor-pointer" title="Close">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- File Row Card -->
+<div class="bg-surface-container-low rounded-xl p-3.5 flex items-center justify-between mb-5">
+<div class="flex items-center space-x-3 min-w-0">
+<div class="w-10 h-10 rounded-lg bg-surface-container-lowest flex items-center justify-center text-error flex-shrink-0 shadow-xs">
+<span class="material-symbols-outlined text-[24px]">picture_as_pdf</span>
+</div>
+<div class="min-w-0">
+<div class="font-label-mono-md text-body-md font-semibold text-on-surface truncate">roomy-2021.pdf</div>
+<div class="font-label-mono-sm text-label-mono-sm text-secondary mt-0.5">8.8 MB · 568 pages</div>
+</div>
+</div>
+<button class="h-9 px-3.5 rounded-[10px] bg-surface-container-lowest text-on-surface font-body-sm text-body-sm font-medium hover:bg-surface-container transition-colors shadow-xs flex-shrink-0">
+          Choose another file
+        </button>
+</div>
+<!-- Main Fields Container -->
+<div class="space-y-4">
+<!-- Field 1: What is it? -->
+<div>
+<label class="block font-headline-sm text-body-sm font-medium text-secondary mb-2">What is it?</label>
+<div class="grid grid-cols-2 gap-3.5">
+<!-- Choice 1: Service schedule (Unselected) -->
+<div class="rounded-xl p-3.5 bg-surface-container-lowest hover:bg-surface-container-low transition-colors cursor-pointer relative shadow-xs flex flex-col justify-between">
+<div class="flex items-center justify-between">
+<span class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full font-label-ui text-label-ui font-medium bg-surface-container text-secondary">
+<span class="material-symbols-outlined text-[16px]">event_repeat</span>
+<span>Service schedule</span>
+</span>
+</div>
+<p class="font-body-sm text-body-sm text-secondary mt-2">When each part is changed</p>
+</div>
+<!-- Choice 2: Owner's manual (SELECTED) -->
+<div class="rounded-xl p-3.5 bg-surface-container-low shadow-sm cursor-pointer relative flex flex-col justify-between">
+<div class="flex items-center justify-between">
+<span class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full font-headline-sm text-body-sm font-semibold bg-secondary-container text-primary-container">
+<span class="material-symbols-outlined text-[16px]">menu_book</span>
+<span>Owner's manual</span>
+</span>
+<span class="w-5 h-5 rounded-full bg-primary-container text-on-primary flex items-center justify-center shadow-xs">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</span>
+</div>
+<p class="font-body-sm text-body-sm text-secondary mt-2">Oil, tyres, battery and bulbs</p>
+</div>
+</div>
+<!-- Certainty line -->
+<div class="flex items-center space-x-1.5 mt-2 font-body-sm text-body-sm text-secondary">
+<span class="material-symbols-outlined text-[16px] text-[#006e31]">check_circle</span>
+<span>From the contents page</span>
+</div>
+</div>
+<!-- Field 2: Car (2x2 Dropdowns) -->
+<div>
+<label class="block font-headline-sm text-body-sm font-medium text-secondary mb-2">Car</label>
+<div class="grid grid-cols-2 gap-3 mb-2">
+<!-- Make -->
+<div class="h-11 px-3.5 rounded-[10px] bg-surface-container-lowest flex items-center justify-between shadow-xs">
+<span class="font-body-sm text-body-sm text-secondary">Make <span class="text-on-surface font-semibold ml-1.5">Toyota</span></span>
+<span class="material-symbols-outlined text-[18px] text-secondary">arrow_drop_down</span>
+</div>
+<!-- Model -->
+<div class="h-11 px-3.5 rounded-[10px] bg-surface-container-lowest flex items-center justify-between shadow-xs">
+<span class="font-body-sm text-body-sm text-secondary">Model <span class="text-on-surface font-semibold ml-1.5">Roomy</span></span>
+<span class="material-symbols-outlined text-[18px] text-secondary">arrow_drop_down</span>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<!-- Years (Warning / Check this state) -->
+<div class="h-11 px-3 rounded-[10px] bg-surface-container-lowest flex items-center justify-between shadow-xs bg-amber-50/40">
+<div class="flex items-center space-x-2 min-w-0">
+<span class="font-body-sm text-body-sm text-secondary">Years <span class="text-on-surface font-semibold font-label-mono-sm text-label-mono-sm ml-1.5">2020–</span></span>
+<span class="px-2 py-0.5 rounded-full font-label-mono-sm text-label-mono-sm font-semibold bg-[#fff4dc] text-[#8a5a00] flex-shrink-0">
+                  Check this
+                </span>
+</div>
+<span class="material-symbols-outlined text-[18px] text-secondary">arrow_drop_down</span>
+</div>
+<!-- Version -->
+<div class="h-11 px-3.5 rounded-[10px] bg-surface-container-lowest flex items-center justify-between shadow-xs">
+<span class="font-body-sm text-body-sm text-secondary">Version <span class="text-on-surface font-semibold ml-1.5">All versions</span></span>
+<span class="material-symbols-outlined text-[18px] text-secondary">arrow_drop_down</span>
+</div>
+</div>
+<!-- Years reason hint -->
+<div class="flex items-start space-x-1.5 mt-2 font-body-sm text-body-sm text-secondary">
+<span class="material-symbols-outlined text-[16px] text-[#8a5a00] mt-0.5 flex-shrink-0">info</span>
+<span>The manual leaves the car name and model blank for the owner to fill in. Roam used the 2021 print date.</span>
+</div>
+</div>
+<!-- Field 3: Country -->
+<div>
+<label class="block font-headline-sm text-body-sm font-medium text-secondary mb-1.5">Country</label>
+<div class="h-11 px-3.5 rounded-[10px] bg-surface-container-lowest flex items-center justify-between max-w-xs shadow-xs">
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Japan</span>
+<span class="material-symbols-outlined text-[18px] text-secondary">arrow_drop_down</span>
+</div>
+<div class="flex items-center space-x-1.5 mt-1.5 font-body-sm text-body-sm text-secondary">
+<span class="material-symbols-outlined text-[16px] text-[#006e31]">check_circle</span>
+<span>The manual is in Japanese and cites Japan's transport ministry.</span>
+</div>
+</div>
+<!-- Field 4: Name -->
+<div>
+<label class="block font-headline-sm text-body-sm font-medium text-secondary mb-1.5">Name</label>
+<input class="w-full h-11 px-3.5 rounded-[10px] bg-surface-container-lowest text-on-surface font-body-md text-body-md font-medium focus:outline-none shadow-xs" type="text" value="Toyota Roomy — Owner's manual (Japan, 2021)"/>
+</div>
+<!-- Field 5: Pages to read -->
+<div>
+<label class="block font-headline-sm text-body-sm font-medium text-secondary mb-1.5">Pages to read</label>
+<!-- Chips Row -->
+<div class="flex flex-wrap items-center gap-2 mb-3">
+<!-- Chip 1: Front memo page -->
+<span class="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-surface-container-low text-on-surface font-label-mono-sm text-label-mono-sm font-medium shadow-2xs">
+<span>Front memo page</span>
+<button class="w-4 h-4 rounded-full hover:bg-surface-container flex items-center justify-center text-secondary hover:text-on-surface cursor-pointer">
+<span class="material-symbols-outlined text-[13px]">close</span>
+</button>
+</span>
+<!-- Chip 2: 402–407 -->
+<span class="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-surface-container-low text-on-surface font-label-mono-sm text-label-mono-sm font-medium shadow-2xs">
+<span>402–407</span>
+<button class="w-4 h-4 rounded-full hover:bg-surface-container flex items-center justify-center text-secondary hover:text-on-surface cursor-pointer">
+<span class="material-symbols-outlined text-[13px]">close</span>
+</button>
+</span>
+<!-- Chip 3: 412–413 -->
+<span class="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-surface-container-low text-on-surface font-label-mono-sm text-label-mono-sm font-medium shadow-2xs">
+<span>412–413</span>
+<button class="w-4 h-4 rounded-full hover:bg-surface-container flex items-center justify-center text-secondary hover:text-on-surface cursor-pointer">
+<span class="material-symbols-outlined text-[13px]">close</span>
+</button>
+</span>
+<!-- Chip 4: 520–526 -->
+<span class="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-surface-container-low text-on-surface font-label-mono-sm text-label-mono-sm font-medium shadow-2xs">
+<span>520–526</span>
+<button class="w-4 h-4 rounded-full hover:bg-surface-container flex items-center justify-center text-secondary hover:text-on-surface cursor-pointer">
+<span class="material-symbols-outlined text-[13px]">close</span>
+</button>
+</span>
+<!-- Add pages button -->
+<button class="h-7 px-3 rounded-full bg-surface-container-lowest text-on-surface font-body-sm text-label-ui font-medium hover:bg-surface-container-low transition-colors inline-flex items-center space-x-1 shadow-2xs">
+<span class="material-symbols-outlined text-[15px]">add</span>
+<span>Add pages</span>
+</button>
+</div>
+<!-- Page Previews (Row of 4: 72x96 px) -->
+<div class="grid grid-cols-4 gap-3 max-w-[340px]">
+<!-- Thumbnail 1: Front Memo -->
+<div class="w-[72px] h-[96px] rounded-lg bg-surface-container-lowest shadow-xs p-1.5 flex flex-col justify-between overflow-hidden select-none">
+<div class="text-[6px] leading-[8px] text-secondary font-label-mono-sm overflow-hidden space-y-1">
+<div class="font-bold text-on-surface">車両記録メモ</div>
+<div class="w-full h-1 bg-surface-container"></div>
+<div>形式: 5BA-M900A</div>
+<div>初度登録年月</div>
+<div class="w-8 h-1 bg-surface-container"></div>
+</div>
+<div class="text-center bg-surface-container-low rounded text-[9px] font-label-mono-sm font-semibold text-primary-container py-0.5">
+                p. Memo
+              </div>
+</div>
+<!-- Thumbnail 2: 402 Spec Table -->
+<div class="w-[72px] h-[96px] rounded-lg bg-surface-container-lowest shadow-xs p-1.5 flex flex-col justify-between overflow-hidden select-none">
+<div class="text-[6px] leading-[8px] text-secondary font-label-mono-sm overflow-hidden space-y-0.5">
+<div class="font-bold text-on-surface">サービスデータ</div>
+<div class="flex justify-between border-b border-surface-container pb-0.5">
+<span>OIL 0W-20</span>
+<span>3.1L</span>
+</div>
+<div class="flex justify-between border-b border-surface-container pb-0.5">
+<span>CVT FE</span>
+<span>5.7L</span>
+</div>
+<div>冷却水 3.8L</div>
+</div>
+<div class="text-center bg-surface-container-low rounded text-[9px] font-label-mono-sm font-semibold text-primary-container py-0.5">
+                p. 402
+              </div>
+</div>
+<!-- Thumbnail 3: 412 Tyres / Battery -->
+<div class="w-[72px] h-[96px] rounded-lg bg-surface-container-lowest shadow-xs p-1.5 flex flex-col justify-between overflow-hidden select-none">
+<div class="text-[6px] leading-[8px] text-secondary font-label-mono-sm overflow-hidden space-y-1">
+<div class="font-bold text-on-surface">タイヤ・空気圧</div>
+<div class="w-7 h-5 rounded border border-surface-container flex items-center justify-center text-[5px] text-secondary mx-auto">
+                  240kPa
+                </div>
+<div>165/65R14 79S</div>
+<div>M-42 12V</div>
+</div>
+<div class="text-center bg-surface-container-low rounded text-[9px] font-label-mono-sm font-semibold text-primary-container py-0.5">
+                p. 412
+              </div>
+</div>
+<!-- Thumbnail 4: 520 Bulbs & Fuses -->
+<div class="w-[72px] h-[96px] rounded-lg bg-surface-container-lowest shadow-xs p-1.5 flex flex-col justify-between overflow-hidden select-none">
+<div class="text-[6px] leading-[8px] text-secondary font-label-mono-sm overflow-hidden space-y-0.5">
+<div class="font-bold text-on-surface">電球一覧</div>
+<div>前照灯 LED</div>
+<div>車幅灯 LED</div>
+<div>方向指示 21W</div>
+<div>制動灯 LED</div>
+<div>後退灯 16W</div>
+</div>
+<div class="text-center bg-surface-container-low rounded text-[9px] font-label-mono-sm font-semibold text-primary-container py-0.5">
+                p. 520
+              </div>
+</div>
+</div>
+<!-- Pages Extracted Summary -->
+<div class="flex items-center space-x-1.5 mt-2.5 font-body-sm text-body-sm text-[#006e31]">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+<span class="font-medium">16 pages instead of 568 — oil, tyres, battery, bulbs and the two intervals this manual prints.</span>
+</div>
+</div>
+<!-- Notice Panel -->
+<div class="bg-surface-container-low rounded-xl p-3.5 flex items-start space-x-3">
+<span class="material-symbols-outlined text-[18px] text-secondary flex-shrink-0 mt-0.5">info</span>
+<p class="font-body-sm text-body-sm text-secondary leading-snug">
+            This manual does not give the full service schedule. Add the car's maintenance sheet or booklet for that.
+          </p>
+</div>
+<!-- Cost Line -->
+<div class="flex items-center space-x-1.5 font-body-sm text-body-sm text-secondary pt-0.5">
+<span class="material-symbols-outlined text-[16px] text-secondary">receipt</span>
+<span>Reading costs about 1 US cent.</span>
+</div>
+</div>
+<!-- Modal Footer Action Buttons -->
+<div class="mt-6 pt-4 border-t border-surface-container flex items-center justify-between">
+<button class="h-11 px-5 rounded-[10px] bg-surface-container-lowest text-error font-headline-sm text-body-md font-semibold hover:bg-error-container/30 transition-colors cursor-pointer shadow-xs">
+          Cancel
+        </button>
+<button class="h-11 px-6 rounded-[10px] bg-primary-container text-on-primary font-headline-sm text-body-md font-semibold flex items-center space-x-2 hover:bg-primary transition-colors shadow-sm cursor-pointer">
+<span class="material-symbols-outlined text-[20px]">cloud_upload</span>
+<span>Upload and read</span>
+</button>
+</div>
+</div>
+</div>
+</div></main>
+</div>
+</div>
+<!-- In-App Centered Modal Overlay (Dimmed 40%) - Tall and complete, no cut-off -->
+<div class="fixed inset-0 bg-[#0f172a]/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-6 overflow-y-auto">
+<!-- Dialog Card: 720px Wide, 20px Radius, 32px Padding -->
+<div class="w-[720px] max-w-full bg-white rounded-[20px] p-8 border border-[#e6e7ee] overlay-shadow my-auto">
+<!-- Overlay Header -->
+<div class="mb-5">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-lg bg-[#e6f4ea] text-[#006e31] flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">check_circle</span>
+</div>
+<h2 class="text-[26px] font-semibold text-[#30323b] tracking-tight">Roam found this</h2>
+</div>
+<button class="w-8 h-8 rounded-full flex items-center justify-center text-[#5d5f68] hover:bg-[#f3f4fb] hover:text-[#30323b] transition-colors" title="Close">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<p class="text-[15px] text-[#5d5f68] mt-1 ml-10">
+          Check it, then press Upload.
+        </p>
+</div>
+<!-- File Row at Top -->
+<div class="bg-[#f3f4fb] rounded-[14px] p-3.5 border border-[#e6e7ee] flex items-center justify-between mb-6">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-white border border-[#e6e7ee] flex items-center justify-center text-[#a83836] shadow-xs">
+<span class="material-symbols-outlined text-[24px]">picture_as_pdf</span>
+</div>
+<div>
+<div class="text-[14px] font-semibold text-[#30323b] font-mono-code">maintenancelist_2106_roomy_passenger.pdf</div>
+<div class="text-[12px] text-[#5d5f68] font-mono-code mt-0.5">0.5 MB · 5 pages</div>
+</div>
+</div>
+<button class="h-9 px-3.5 rounded-[10px] bg-white border border-[#c5c6d0] text-[#30323b] text-[13px] font-medium hover:bg-slate-50 transition-colors shadow-xs">
+          Choose another file
+        </button>
+</div>
+<!-- Fields Stack -->
+<div class="space-y-5">
+<!-- Field 1: What is it? -->
+<div>
+<label class="block text-[13px] font-medium text-[#5d5f68] mb-2">What is it?</label>
+<div class="grid grid-cols-2 gap-3.5">
+<!-- Selected Card: Service Schedule -->
+<div class="rounded-[14px] p-4 border-2 border-[#0153dc] bg-[#faf8fe] relative cursor-pointer shadow-xs">
+<div class="flex items-center justify-between mb-1.5">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-semibold bg-[#dbe1ff] text-[#0153dc]">
+<span class="material-symbols-outlined text-[16px]">event_repeat</span>
+                  Service schedule
+                </span>
+<span class="w-5 h-5 rounded-full bg-[#0153dc] text-white flex items-center justify-center">
+<span class="material-symbols-outlined text-[15px]">check</span>
+</span>
+</div>
+<p class="text-[13px] text-[#5d5f68] mt-2">When each part is changed</p>
+</div>
+<!-- Unselected Card: Owner's Manual -->
+<div class="rounded-[14px] p-4 border border-[#c5c6d0] bg-white hover:bg-slate-50 relative cursor-pointer transition-colors">
+<div class="flex items-center justify-between mb-1.5">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium bg-[#f1f5f9] text-[#475569]">
+<span class="material-symbols-outlined text-[16px]">menu_book</span>
+                  Owner's manual
+                </span>
+</div>
+<p class="text-[13px] text-[#5d5f68] mt-2">Oil, tyres, battery and bulbs</p>
+</div>
+</div>
+<!-- Confidence note -->
+<div class="flex items-center gap-1.5 mt-2 text-[13px] text-[#5d5f68]">
+<span class="material-symbols-outlined text-[16px] text-[#006e31]">check_circle</span>
+<span>From page 1: 点検整備方式 (Toyota maintenance sheet)</span>
+</div>
+</div>
+<!-- Field 2: Car (Four Dropdowns in Two Rows) -->
+<div>
+<label class="block text-[13px] font-medium text-[#5d5f68] mb-2">Car</label>
+<div class="grid grid-cols-2 gap-3 mb-2.5">
+<!-- Make -->
+<div>
+<div class="h-11 px-3.5 rounded-[10px] bg-white border border-[#c5c6d0] flex items-center justify-between text-[14px]">
+<span class="text-[#5d5f68] text-[13px]">Make <span class="text-[#30323b] font-medium ml-1.5">Toyota</span></span>
+<span class="material-symbols-outlined text-[18px] text-slate-400">arrow_drop_down</span>
+</div>
+</div>
+<!-- Model -->
+<div>
+<div class="h-11 px-3.5 rounded-[10px] bg-white border border-[#c5c6d0] flex items-center justify-between text-[14px]">
+<span class="text-[#5d5f68] text-[13px]">Model <span class="text-[#30323b] font-medium ml-1.5">Roomy</span></span>
+<span class="material-symbols-outlined text-[18px] text-slate-400">arrow_drop_down</span>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<!-- Years (Unsure - Amber border with 'Check this' chip) -->
+<div>
+<div class="h-11 px-3 rounded-[10px] bg-white border border-[#8a5a00] flex items-center justify-between text-[14px] ring-2 ring-[#fff4dc]">
+<div class="flex items-center gap-2">
+<span class="text-[#5d5f68] text-[13px]">Years <span class="text-[#30323b] font-medium font-mono-code ml-1.5">2020–</span></span>
+<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#fff4dc] text-[#8a5a00]">
+                    Check this
+                  </span>
+</div>
+<span class="material-symbols-outlined text-[18px] text-slate-400">arrow_drop_down</span>
+</div>
+</div>
+<!-- Version -->
+<div>
+<div class="h-11 px-3.5 rounded-[10px] bg-white border border-[#c5c6d0] flex items-center justify-between text-[14px]">
+<span class="text-[#5d5f68] text-[13px]">Version <span class="text-[#30323b] font-medium ml-1.5">All versions</span></span>
+<span class="material-symbols-outlined text-[18px] text-slate-400">arrow_drop_down</span>
+</div>
+</div>
+</div>
+<!-- Years reason hint -->
+<div class="flex items-start gap-1.5 mt-2 text-[13px] text-[#5d5f68]">
+<span class="material-symbols-outlined text-[16px] text-[#8a5a00] mt-0.5">info</span>
+<span>The sheet gives no years. Roam used the date printed on page 1: <span class="font-medium text-[#30323b]">1 June 2021</span>.</span>
+</div>
+<!-- Multi-brand note -->
+<div class="flex items-center gap-1.5 mt-1.5 text-[13px] text-[#5d5f68]">
+<span class="material-symbols-outlined text-[16px] text-[#006e31]">check_circle</span>
+<span>Covers Toyota Roomy, Toyota Tank, Daihatsu Thor and Subaru Justy — the same car under four names.</span>
+</div>
+</div>
+<!-- Field 3: Country -->
+<div>
+<label class="block text-[13px] font-medium text-[#5d5f68] mb-1.5">Country</label>
+<div class="h-11 px-3.5 rounded-[10px] bg-white border border-[#c5c6d0] flex items-center justify-between text-[14px] max-w-sm">
+<span class="text-[#30323b] font-medium">Japan</span>
+<span class="material-symbols-outlined text-[18px] text-slate-400">arrow_drop_down</span>
+</div>
+<div class="flex items-center gap-1.5 mt-1.5 text-[13px] text-[#5d5f68]">
+<span class="material-symbols-outlined text-[16px] text-[#006e31]">check_circle</span>
+<span>The sheet is in Japanese and cites Japan's transport ministry.</span>
+</div>
+</div>
+<!-- Field 4: Name -->
+<div>
+<label class="block text-[13px] font-medium text-[#5d5f68] mb-1.5">Name</label>
+<input class="w-full h-11 px-3.5 rounded-[10px] bg-white border border-[#c5c6d0] text-[14px] text-[#30323b] font-medium focus:outline-none focus:ring-2 focus:ring-[#0153dc]" type="text" value="Toyota Roomy — Maintenance sheet (Japan, June 2021)"/>
+</div>
+<!-- Field 5: Pages to read -->
+<div>
+<label class="block text-[13px] font-medium text-[#5d5f68] mb-1.5">Pages to read</label>
+<div class="flex items-center gap-2 mb-3">
+<!-- Chip "5" -->
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f3f4fb] border border-[#e6e7ee] text-[13px] text-[#30323b] font-mono-code font-semibold shadow-2xs">
+<span>5</span>
+<button class="w-4 h-4 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-700" title="Remove page">
+<span class="material-symbols-outlined text-[14px]">close</span>
+</button>
+</span>
+<!-- Secondary Button + Add pages -->
+<button class="h-8 px-3 rounded-full bg-white border border-[#c5c6d0] text-[#30323b] text-[12px] font-medium hover:bg-slate-50 transition-colors inline-flex items-center gap-1 shadow-2xs">
+<span class="material-symbols-outlined text-[15px]">add</span>
+              Add pages
+            </button>
+</div>
+<!-- Page Picture Thumbnail: 72x96px -->
+<div class="flex items-center gap-4">
+<div class="w-[72px] h-[96px] rounded-lg bg-white border border-[#c5c6d0] shadow-xs p-1.5 flex flex-col justify-between select-none relative overflow-hidden group">
+<!-- Japanese doc preview mock -->
+<div class="text-[6px] leading-[8px] text-slate-600 font-mono-code line-clamp-6">
+                点検整備方式<br/>
+                トヨタ ルーミー<br/>
+                エンジンオイル: 交換 15,000km<br/>
+                ブレーキフルード: 2年ごと<br/>
+                冷却水: 7年または16万km
+              </div>
+<div class="text-center bg-[#faf8fe] rounded text-[9px] font-mono-code font-semibold text-[#0153dc] py-0.5 border-t border-slate-100">
+                p. 5
+              </div>
+</div>
+<div class="text-[13px] text-[#5d5f68] leading-relaxed max-w-md">
+<p>Page 5 is the replacement schedule. Pages 1–4 are inspection lists, not read.</p>
+</div>
+</div>
+</div>
+<!-- Cost Line -->
+<div class="flex items-center gap-1.5 pt-1 text-[13px] text-[#5d5f68]">
+<span class="material-symbols-outlined text-[16px] text-slate-400">info</span>
+<span>Reading costs less than 1 US cent.</span>
+</div>
+</div>
+<!-- Footer Buttons -->
+<div class="mt-7 pt-5 border-t border-[#e6e7ee] flex items-center justify-between">
+<button class="h-11 px-5 rounded-[10px] bg-white border border-[#a83836] text-[#a83836] font-semibold text-[14px] hover:bg-[#fdecec]/40 transition-colors">
+          Cancel
+        </button>
+<button class="h-11 px-6 rounded-[10px] bg-[#0153dc] text-white font-semibold text-[14px] flex items-center gap-2 hover:bg-[#0047be] shadow-sm transition-colors">
+<span class="material-symbols-outlined text-[20px]">cloud_upload</span>
+<span>Upload and read</span>
+</button>
+</div>
+</div>
+</div>
+</body></html>

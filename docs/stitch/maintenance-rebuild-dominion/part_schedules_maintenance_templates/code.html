@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "surface-container": "#ecedf8",
+          "on-tertiary": "#ffffff",
+          "surface-container-highest": "#e1e2ec",
+          "secondary-fixed": "#dae2fd",
+          "on-primary-container": "#ced8ff",
+          "error-container": "#ffdad6",
+          "on-error-container": "#93000a",
+          "tertiary": "#005323",
+          "on-secondary-fixed": "#131b2e",
+          "secondary-fixed-dim": "#bec6e0",
+          "tertiary-fixed": "#9af7aa",
+          "on-error": "#ffffff",
+          "primary-fixed-dim": "#b4c5ff",
+          "tertiary-fixed-dim": "#7fda90",
+          "on-surface-variant": "#434655",
+          "on-primary-fixed": "#00174b",
+          "tertiary-container": "#006e31",
+          "on-surface": "#191b23",
+          "secondary": "#565e74",
+          "primary-fixed": "#dbe1ff",
+          "error": "#ba1a1a",
+          "surface-container-lowest": "#ffffff",
+          "on-secondary-fixed-variant": "#3f465c",
+          "inverse-on-surface": "#eff0fb",
+          "surface-container-low": "#f2f3fe",
+          "inverse-primary": "#b4c5ff",
+          "primary": "#003ea9",
+          "on-background": "#191b23",
+          "surface-bright": "#faf8ff",
+          "primary-container": "#0153dc",
+          "on-secondary-container": "#5c647a",
+          "secondary-container": "#dae2fd",
+          "on-tertiary-fixed": "#00210a",
+          "background": "#faf8ff",
+          "on-tertiary-container": "#91eea1",
+          "outline-variant": "#c3c6d7",
+          "surface-variant": "#e1e2ec",
+          "surface-tint": "#0053db",
+          "on-primary": "#ffffff",
+          "surface-container-high": "#e7e7f2",
+          "surface": "#faf8ff",
+          "outline": "#737686",
+          "on-tertiary-fixed-variant": "#005323",
+          "inverse-surface": "#2e3038",
+          "surface-dim": "#d8d9e4",
+          "on-primary-fixed-variant": "#003ea8",
+          "on-secondary": "#ffffff"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.25rem",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+        "spacing": {
+          "space-sm": "0.5rem",
+          "space-md": "0.75rem",
+          "space-lg": "1.5rem",
+          "margin": "1rem",
+          "gutter-desktop": "1.5rem",
+          "space-base": "1rem",
+          "margin-desktop": "2rem",
+          "space-2xl": "3rem",
+          "space-xl": "2rem",
+          "space-xs": "0.25rem",
+          "space-xxs": "0.125rem",
+          "gutter": "1rem"
+        },
+        "fontFamily": {
+          "headline-lg": [
+            "Inter"
+          ],
+          "label-lg": [
+            "Inter"
+          ],
+          "mono-data-sm": [
+            "JetBrains Mono"
+          ],
+          "headline-sm": [
+            "Inter"
+          ],
+          "headline-md": [
+            "Inter"
+          ],
+          "body-lg": [
+            "Inter"
+          ],
+          "mono-data-md": [
+            "JetBrains Mono"
+          ],
+          "label-md": [
+            "Inter"
+          ],
+          "body-sm": [
+            "Inter"
+          ],
+          "body-md": [
+            "Inter"
+          ],
+          "headline-xl": [
+            "Inter"
+          ],
+          "headline-xl-mobile": [
+            "Inter"
+          ],
+          "label-sm": [
+            "Inter"
+          ],
+          "mono-metric-lg": [
+            "JetBrains Mono"
+          ]
+        },
+        "fontSize": {
+          "headline-lg": [
+            "22px",
+            {
+              "lineHeight": "28px",
+              "letterSpacing": "-0.015em",
+              "fontWeight": "600"
+            }
+          ],
+          "label-lg": [
+            "13px",
+            {
+              "lineHeight": "16px",
+              "letterSpacing": "0.01em",
+              "fontWeight": "500"
+            }
+          ],
+          "mono-data-sm": [
+            "11px",
+            {
+              "lineHeight": "14px",
+              "fontWeight": "400"
+            }
+          ],
+          "headline-sm": [
+            "15px",
+            {
+              "lineHeight": "20px",
+              "letterSpacing": "-0.005em",
+              "fontWeight": "600"
+            }
+          ],
+          "headline-md": [
+            "18px",
+            {
+              "lineHeight": "24px",
+              "letterSpacing": "-0.01em",
+              "fontWeight": "600"
+            }
+          ],
+          "body-lg": [
+            "15px",
+            {
+              "lineHeight": "22px",
+              "fontWeight": "400"
+            }
+          ],
+          "mono-data-md": [
+            "12px",
+            {
+              "lineHeight": "16px",
+              "letterSpacing": "-0.01em",
+              "fontWeight": "400"
+            }
+          ],
+          "label-md": [
+            "11px",
+            {
+              "lineHeight": "14px",
+              "letterSpacing": "0.02em",
+              "fontWeight": "500"
+            }
+          ],
+          "body-sm": [
+            "12px",
+            {
+              "lineHeight": "16px",
+              "fontWeight": "400"
+            }
+          ],
+          "body-md": [
+            "13px",
+            {
+              "lineHeight": "18px",
+              "fontWeight": "400"
+            }
+          ],
+          "headline-xl": [
+            "32px",
+            {
+              "lineHeight": "40px",
+              "letterSpacing": "-0.02em",
+              "fontWeight": "600"
+            }
+          ],
+          "headline-xl-mobile": [
+            "24px",
+            {
+              "lineHeight": "32px",
+              "letterSpacing": "-0.015em",
+              "fontWeight": "600"
+            }
+          ],
+          "label-sm": [
+            "10px",
+            {
+              "lineHeight": "12px",
+              "letterSpacing": "0.03em",
+              "fontWeight": "600"
+            }
+          ],
+          "mono-metric-lg": [
+            "16px",
+            {
+              "lineHeight": "20px",
+              "letterSpacing": "-0.02em",
+              "fontWeight": "500"
+            }
+          ]
+        }
+      },
+    },
+  }</script></head><body class="bg-background font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-64 bg-[#0b1220] z-50 flex flex-col justify-between select-none"><div class="flex flex-col"><div class="h-14 px-space-base flex items-center justify-between"><div class="flex items-center gap-space-sm"><div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center text-on-primary font-headline-sm text-headline-sm">R</div><div class="flex flex-col"><span class="font-headline-sm text-headline-sm text-[#ffffff] tracking-tight">ROAM</span><span class="font-label-sm text-label-sm text-[#94a3b8] uppercase tracking-wider">Dominion Core</span></div></div><span class="font-mono-data-sm text-mono-data-sm px-space-xs py-space-xxs rounded bg-[#0f172a] text-[#94a3b8]">v2.4</span></div><div class="px-space-md py-space-sm"><div class="font-label-sm text-label-sm text-[#94a3b8] px-space-md py-space-xs uppercase tracking-wider">Fleet Infrastructure</div><nav class="flex flex-col gap-space-xxs mt-space-xs" data-active-classes="bg-primary-container text-on-primary font-semibold"><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-[#94a3b8] hover:bg-[#ffffff]/[0.06] hover:text-[#ffffff] transition-colors font-label-lg text-label-lg" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">grid_view</span><span>Overview</span></a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-[#94a3b8] hover:bg-[#ffffff]/[0.06] hover:text-[#ffffff] transition-colors font-label-lg text-label-lg" data-path="fleet-vehicles" href="#"><span class="material-symbols-outlined text-[18px]">directions_car</span><span>Fleet Vehicles</span></a><a aria-current="page" class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg transition-colors bg-primary-container text-on-primary font-semibold" data-path="master-templates" href="#"><span class="material-symbols-outlined text-[18px]">dataset</span><span>Master Templates</span></a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-[#94a3b8] hover:bg-[#ffffff]/[0.06] hover:text-[#ffffff] transition-colors font-label-lg text-label-lg" data-path="maintenance-rules" href="#"><span class="material-symbols-outlined text-[18px]">rule_settings</span><span>Maintenance Rules</span></a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-[#94a3b8] hover:bg-[#ffffff]/[0.06] hover:text-[#ffffff] transition-colors font-label-lg text-label-lg" data-path="telemetry-stream" href="#"><span class="material-symbols-outlined text-[18px]">sensors</span><span>Telemetry Stream</span></a></nav></div><div class="px-space-md py-space-sm"><div class="font-label-sm text-label-sm text-[#94a3b8] px-space-md py-space-xs uppercase tracking-wider">Governance</div><nav class="flex flex-col gap-space-xxs mt-space-xs" data-active-classes="bg-primary-container text-on-primary font-semibold"><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-[#94a3b8] hover:bg-[#ffffff]/[0.06] hover:text-[#ffffff] transition-colors font-label-lg text-label-lg" data-path="oem-specifications" href="#"><span class="material-symbols-outlined text-[18px]">verified</span><span>OEM Specifications</span></a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-[#94a3b8] hover:bg-[#ffffff]/[0.06] hover:text-[#ffffff] transition-colors font-label-lg text-label-lg" data-path="tier-1-catalog" href="#"><span class="material-symbols-outlined text-[18px]">category</span><span>Tier-1 Catalog</span></a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-[#94a3b8] hover:bg-[#ffffff]/[0.06] hover:text-[#ffffff] transition-colors font-label-lg text-label-lg" data-path="compliance-audit" href="#"><span class="material-symbols-outlined text-[18px]">policy</span><span>Compliance Audit</span></a></nav></div></div><div class="p-space-base bg-[#0f172a] m-space-md rounded-xl flex items-center justify-between"><div class="flex items-center gap-space-sm"><span class="w-2 h-2 rounded-full bg-tertiary-fixed"></span><div class="flex flex-col"><span class="font-label-sm text-label-sm text-[#ffffff]">Sync Engine</span><span class="font-mono-data-sm text-mono-data-sm text-[#94a3b8]">Real-time (99.8%)</span></div></div><span class="material-symbols-outlined text-[#94a3b8] text-[18px]">sync</span></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-14 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(1,83,220,0.04)] z-40 flex items-center justify-between px-gutter-desktop"><div class="flex items-center gap-space-base flex-1 max-w-xl"><div class="relative w-full max-w-md"><span class="material-symbols-outlined absolute left-space-md top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">search</span><input class="w-full h-9 pl-9 pr-14 bg-surface-container-lowest text-on-surface placeholder:text-outline font-body-md text-body-md rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Search templates, VINs, parameters..." type="text"/><div class="absolute right-space-sm top-1/2 -translate-y-1/2 flex items-center gap-space-xxs px-space-xs py-space-xxs rounded bg-surface-container-high text-on-surface-variant font-mono-data-sm text-mono-data-sm"><span class="text-[10px]">⌘</span><span>K</span></div></div></div><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-sm"><button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[18px]">tune</span></button><button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[18px]">notifications</span></button></div><div class="flex items-center gap-space-md pl-space-md"><div class="flex flex-col text-right"><span class="font-label-lg text-label-lg text-on-surface leading-tight">Deeki T</span><span class="font-label-sm text-label-sm text-primary font-semibold">Owner</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full pt-14 px-gutter-desktop min-h-screen bg-background"><div class="flex flex-col w-full pb-16">
+<!-- Top Navigation & Header Context -->
+<div class="flex flex-col gap-space-xs mb-space-lg">
+<!-- Breadcrumb -->
+<div class="flex items-center gap-space-xs text-on-surface-variant font-label-lg text-label-lg">
+<span class="hover:text-primary transition-colors cursor-pointer">Dominion</span>
+<span class="text-outline text-xs">›</span>
+<span class="hover:text-primary transition-colors cursor-pointer">Master data</span>
+<span class="text-outline text-xs">›</span>
+<span class="hover:text-primary transition-colors cursor-pointer">Vehicles</span>
+<span class="text-outline text-xs">›</span>
+<span class="text-on-surface font-medium">Maintenance templates</span>
+</div>
+<!-- Title & Subtitle Bar -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-space-sm pt-space-xs">
+<div>
+<h1 class="font-headline-xl text-headline-xl text-on-surface tracking-tight">Maintenance templates</h1>
+<p class="font-body-lg text-body-lg text-secondary mt-space-xxs">How often each part is serviced, for which cars, and why.</p>
+</div>
+<div class="flex items-center gap-space-xs text-outline font-mono-data-sm text-mono-data-sm bg-surface-container-high px-space-md py-space-xs rounded-full self-start md:self-auto">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+<span>SPEC-DATABASE: ID# 409-MT</span>
+</div>
+</div>
+</div>
+<!-- Pill Tab Bar -->
+<div class="flex items-center gap-space-xs overflow-x-auto pb-space-xs mb-space-lg">
+<!-- 1. Part schedules (Active) -->
+<button class="flex items-center gap-space-xs px-space-md py-space-sm rounded-full bg-primary-container text-on-primary font-label-lg text-label-lg shadow-sm transition-all" type="button">
+<span>Part schedules</span>
+<span class="bg-surface-container-lowest text-primary font-mono-data-sm text-mono-data-sm px-1.5 py-0.5 rounded-full font-semibold">22</span>
+</button>
+<!-- 2. Manuals -->
+<button class="flex items-center gap-space-xs px-space-md py-space-sm rounded-full text-secondary hover:bg-surface-container-high transition-colors font-label-lg text-label-lg" type="button">
+<span>Manuals</span>
+<span class="bg-surface-container-highest text-secondary font-mono-data-sm text-mono-data-sm px-1.5 py-0.5 rounded-full">2</span>
+</button>
+<!-- 3. Service packages -->
+<button class="flex items-center gap-space-xs px-space-md py-space-sm rounded-full text-secondary hover:bg-surface-container-high transition-colors font-label-lg text-label-lg" type="button">
+<span>Service packages</span>
+<span class="bg-surface-container-highest text-secondary font-mono-data-sm text-mono-data-sm px-1.5 py-0.5 rounded-full">5</span>
+</button>
+<!-- 4. Jobs -->
+<button class="flex items-center gap-space-xs px-space-md py-space-sm rounded-full text-secondary hover:bg-surface-container-high transition-colors font-label-lg text-label-lg" type="button">
+<span>Jobs</span>
+<span class="bg-surface-container-highest text-secondary font-mono-data-sm text-mono-data-sm px-1.5 py-0.5 rounded-full">167</span>
+</button>
+<!-- 5. Supplies -->
+<button class="flex items-center gap-space-xs px-space-md py-space-sm rounded-full text-secondary hover:bg-surface-container-high transition-colors font-label-lg text-label-lg" type="button">
+<span>Supplies</span>
+<span class="bg-surface-container-highest text-secondary font-mono-data-sm text-mono-data-sm px-1.5 py-0.5 rounded-full">57</span>
+</button>
+<!-- 6. Review list -->
+<button class="flex items-center gap-space-xs px-space-md py-space-sm rounded-full text-secondary hover:bg-surface-container-high transition-colors font-label-lg text-label-lg" type="button">
+<span>Review list</span>
+<span class="bg-surface-container-highest text-secondary font-mono-data-sm text-mono-data-sm px-1.5 py-0.5 rounded-full">0</span>
+</button>
+<!-- 7. History -->
+<button class="flex items-center gap-space-xs px-space-md py-space-sm rounded-full text-secondary hover:bg-surface-container-high transition-colors font-label-lg text-label-lg" type="button">
+<span>History</span>
+</button>
+</div>
+<!-- Informational Banner -->
+<div class="bg-secondary-container/60 rounded-xl p-space-md mb-space-lg flex items-start gap-space-md shadow-sm">
+<div class="w-8 h-8 rounded-lg bg-primary-container text-on-primary flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[20px]">info</span>
+</div>
+<div class="flex flex-col lg:flex-row lg:items-center gap-space-xs lg:gap-space-lg text-on-secondary-fixed-variant font-body-md text-body-md">
+<div class="flex items-center gap-space-xs">
+<span class="w-1.5 h-1.5 rounded-full bg-primary shrink-0"></span>
+<span class="font-medium text-on-secondary-fixed">Part schedules</span> decide how often a part is due.
+      </div>
+<div class="hidden lg:block text-outline-variant">•</div>
+<div class="flex items-center gap-space-xs">
+<span class="w-1.5 h-1.5 rounded-full bg-primary shrink-0"></span>
+<span class="font-medium text-on-secondary-fixed">Service packages</span> only group parts for one garage visit.
+      </div>
+<div class="hidden lg:block text-outline-variant">•</div>
+<div class="flex items-center gap-space-xs">
+<span class="w-1.5 h-1.5 rounded-full bg-primary shrink-0"></span>
+<span>Due is whichever comes first: <strong class="text-on-secondary-fixed font-semibold">the km or the months</strong>.</span>
+</div>
+</div>
+</div>
+<!-- Three Summary Cards in a row -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-lg mb-space-lg">
+<!-- Card 1: Part Schedules -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider font-semibold">Part Schedules</span>
+<span class="material-symbols-outlined text-outline text-[20px]">tune</span>
+</div>
+<div class="mt-space-md">
+<div class="font-headline-xl text-headline-xl text-on-surface font-bold tracking-tight">22</div>
+<p class="font-body-md text-body-md text-secondary mt-space-xxs flex items-center gap-space-xs">
+<span class="font-medium text-on-surface">16 for everyone</span>
+<span class="text-outline-variant">·</span>
+<span>6 for one model</span>
+</p>
+</div>
+<div class="w-full bg-surface-container-high h-1.5 rounded-full overflow-hidden mt-space-md">
+<div class="bg-primary h-full rounded-full" style="width: 72%;"></div>
+</div>
+</div>
+<!-- Card 2: Where Numbers Come From -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider font-semibold">Where Numbers Come From</span>
+<span class="material-symbols-outlined text-outline text-[20px]">account_tree</span>
+</div>
+<div class="mt-space-md flex flex-col gap-space-xs">
+<!-- Visual breakdown progress bars -->
+<div class="w-full h-2 rounded-full flex gap-1 overflow-hidden bg-surface-container-high">
+<div class="bg-tertiary-container h-full" style="width: 27%;" title="Car maker: 6"></div>
+<div class="bg-primary h-full opacity-20" style="width: 5%;" title="Part maker: 0"></div>
+<div class="bg-secondary h-full" style="width: 68%;" title="Roam policy: 16"></div>
+</div>
+<div class="flex items-center justify-between pt-space-xs text-xs">
+<div class="flex items-center gap-space-xs">
+<span class="w-2 h-2 rounded-full bg-tertiary-container"></span>
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Car maker 6</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<span class="w-2 h-2 rounded-full bg-primary/40"></span>
+<span class="font-body-sm text-body-sm text-secondary">Part maker 0</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Roam policy 16</span>
+</div>
+</div>
+</div>
+<div class="font-body-sm text-body-sm text-outline mt-space-md flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[14px]">auto_stories</span>
+<span>1,209 models have no manual yet</span>
+</div>
+</div>
+<!-- Card 3: Needs Your Attention -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider font-semibold">Needs Your Attention</span>
+<span class="w-2 h-2 rounded-full bg-error"></span>
+</div>
+<div class="mt-space-md">
+<div class="flex items-baseline gap-space-sm">
+<div class="font-headline-xl text-headline-xl text-on-surface font-bold tracking-tight">1</div>
+<span class="font-label-md text-label-md px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-semibold">Pending Audit</span>
+</div>
+<div class="flex items-center gap-space-xs font-body-md text-body-md text-secondary mt-space-xxs">
+<span class="material-symbols-outlined text-[18px] text-error">assignment_late</span>
+<span class="text-on-surface font-medium">1 manual waiting for you to check</span>
+</div>
+</div>
+<div class="mt-space-md pt-space-xs flex items-center justify-between">
+<span class="font-mono-data-sm text-mono-data-sm text-outline">Toyota Hilux VIII (2GD)</span>
+<button class="font-label-sm text-label-sm text-primary hover:underline font-semibold" type="button">Review →</button>
+</div>
+</div>
+</div>
+<!-- Toolbar & Filters -->
+<div class="flex flex-col gap-space-md mb-space-md">
+<!-- Action Row (Search & Action Buttons) -->
+<div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-space-md">
+<!-- Search Input -->
+<div class="relative flex-1 max-w-md">
+<span class="material-symbols-outlined absolute left-space-md top-1/2 -translate-y-1/2 text-outline text-[20px]">search</span>
+<input class="w-full h-11 pl-11 pr-space-md bg-surface-container-lowest text-on-surface placeholder:text-outline font-body-md text-body-md rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Search a part…" type="text"/>
+</div>
+<!-- Action Buttons -->
+<div class="flex items-center gap-space-sm self-end md:self-auto">
+<button class="h-11 px-space-md rounded-xl bg-surface-container-lowest hover:bg-surface-container-high text-on-surface font-label-lg text-label-lg transition-colors shadow-sm flex items-center gap-space-xs" type="button">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+<span>Preview a car</span>
+</button>
+<button class="h-11 px-space-lg rounded-xl bg-primary-container text-on-primary font-label-lg text-label-lg hover:bg-primary transition-colors shadow-sm flex items-center gap-space-xs font-semibold" type="button">
+<span class="material-symbols-outlined text-[20px]">add</span>
+<span>Add schedule</span>
+</button>
+</div>
+</div>
+<!-- Filter Chips Row -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-wrap items-center justify-between gap-y-space-sm gap-x-space-md">
+<div class="flex flex-wrap items-center gap-space-sm">
+<!-- Segment 1: Sources -->
+<div class="flex items-center gap-space-xxs bg-surface-container-low p-1 rounded-lg">
+<button class="px-space-md py-1.5 rounded-md bg-surface-container-lowest text-primary font-label-md text-label-md font-semibold shadow-xs" type="button">All sources</button>
+<button class="px-space-md py-1.5 rounded-md text-secondary hover:text-on-surface font-label-md text-label-md" type="button">Car maker</button>
+<button class="px-space-md py-1.5 rounded-md text-secondary hover:text-on-surface font-label-md text-label-md" type="button">Part maker</button>
+<button class="px-space-md py-1.5 rounded-md text-secondary hover:text-on-surface font-label-md text-label-md" type="button">Roam policy</button>
+</div>
+<div class="w-px h-6 bg-surface-container-highest mx-space-xxs hidden md:block"></div>
+<!-- Segment 2: Schedule Status -->
+<div class="flex items-center gap-space-xxs bg-surface-container-low p-1 rounded-lg">
+<button class="px-space-md py-1.5 rounded-md bg-surface-container-lowest text-primary font-label-md text-label-md font-semibold shadow-xs" type="button">All</button>
+<button class="px-space-md py-1.5 rounded-md text-secondary hover:text-on-surface font-label-md text-label-md" type="button">Has a schedule</button>
+<button class="px-space-md py-1.5 rounded-md text-secondary hover:text-on-surface font-label-md text-label-md" type="button">As needed</button>
+<button class="px-space-md py-1.5 rounded-md text-secondary hover:text-on-surface font-label-md text-label-md" type="button">No schedule yet</button>
+</div>
+</div>
+<!-- Segment 3: Who it covers Dropdown -->
+<div class="flex items-center gap-space-xs">
+<div class="relative inline-block text-left">
+<button class="h-9 px-space-md rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-label-md text-label-md flex items-center gap-space-sm transition-colors" type="button">
+<span class="text-secondary">Who it covers:</span>
+<span class="font-semibold text-primary">All</span>
+<span class="material-symbols-outlined text-[16px] text-outline">expand_more</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Grouped Master Data Table -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden mb-space-md">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<!-- Table Header -->
+<thead>
+<tr class="bg-surface-container-low text-secondary font-label-md text-label-md tracking-wider uppercase h-10 select-none">
+<th class="py-2.5 px-space-lg font-semibold w-72">Part</th>
+<th class="py-2.5 px-space-base font-semibold">Everyone schedule</th>
+<th class="py-2.5 px-space-base font-semibold">Harder driving</th>
+<th class="py-2.5 px-space-base font-semibold">Models with their own</th>
+<th class="py-2.5 px-space-base font-semibold">Comes from</th>
+<th class="py-2.5 px-space-base font-semibold">Status</th>
+<th class="py-2.5 px-space-base text-right font-semibold pr-space-lg w-12"></th>
+</tr>
+</thead>
+<tbody class="divide-y-0">
+<!-- ================= GROUP AREA 1: ENGINE ================= -->
+<tr class="bg-surface-container/40">
+<td class="py-2.5 px-space-lg" colspan="7">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-outline text-[18px]">engineering</span>
+<span class="font-label-sm text-label-sm font-bold uppercase tracking-wider text-on-surface">Engine</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-highest text-secondary font-mono-data-sm text-mono-data-sm font-medium">6 parts</span>
+</div>
+</td>
+</tr>
+<!-- Row 1: Engine oil (Active) -->
+<tr class="hover:bg-surface-container-low/60 transition-colors group cursor-pointer">
+<td class="py-3 px-space-lg">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-xl bg-primary-fixed flex items-center justify-center text-primary shrink-0">
+<span class="material-symbols-outlined text-[20px]">water_drop</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold group-hover:text-primary transition-colors">Engine oil</span>
+<span class="font-mono-data-sm text-mono-data-sm text-outline">LUB-ENG-001</span>
+</div>
+</div>
+</td>
+<td class="py-3 px-space-base">
+<div class="flex items-center gap-space-xs font-mono-data-md text-mono-data-md text-on-surface font-medium">
+<span>5,000 km</span>
+<span class="text-outline font-normal">or</span>
+<span>3 months</span>
+</div>
+</td>
+<td class="py-3 px-space-base">
+<span class="font-body-md text-body-md text-secondary">Same as normal</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="font-body-md text-body-md text-primary font-medium hover:underline">1 model</span>
+</td>
+<td class="py-3 px-space-base">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-high text-secondary font-label-md text-label-md font-medium">
+<span class="material-symbols-outlined text-[14px]">shield</span>
+<span>Roam policy</span>
+</div>
+</td>
+<td class="py-3 px-space-base">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-tertiary-fixed/40 text-tertiary-container font-label-md text-label-md font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+<span>Active</span>
+</div>
+</td>
+<td class="py-3 px-space-base pr-space-lg text-right">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface transition-colors text-[20px]">chevron_right</span>
+</td>
+</tr>
+<!-- Row 2: Spark plugs (Active) -->
+<tr class="hover:bg-surface-container-low/60 transition-colors group cursor-pointer bg-surface-container-lowest">
+<td class="py-3 px-space-lg">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-xl bg-secondary-fixed flex items-center justify-center text-on-secondary-fixed shrink-0">
+<span class="material-symbols-outlined text-[20px]">bolt</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold group-hover:text-primary transition-colors">Spark plugs</span>
+<span class="font-mono-data-sm text-mono-data-sm text-outline">IGN-PLG-012</span>
+</div>
+</div>
+</td>
+<td class="py-3 px-space-base">
+<div class="flex items-center gap-space-xs font-mono-data-md text-mono-data-md text-on-surface font-medium">
+<span>100,000 km</span>
+<span class="text-outline font-normal">or</span>
+<span>60 months</span>
+</div>
+</td>
+<td class="py-3 px-space-base">
+<span class="font-body-md text-body-md text-secondary">Same as normal</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="font-body-md text-body-md text-primary font-medium hover:underline">1 model</span>
+</td>
+<td class="py-3 px-space-base">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-high text-secondary font-label-md text-label-md font-medium">
+<span class="material-symbols-outlined text-[14px]">shield</span>
+<span>Roam policy</span>
+</div>
+</td>
+<td class="py-3 px-space-base">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-tertiary-fixed/40 text-tertiary-container font-label-md text-label-md font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+<span>Active</span>
+</div>
+</td>
+<td class="py-3 px-space-base pr-space-lg text-right">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface transition-colors text-[20px]">chevron_right</span>
+</td>
+</tr>
+<!-- Row 3: Spark plug wires (No schedule yet - muted) -->
+<tr class="hover:bg-surface-container-low/60 transition-colors group cursor-pointer bg-surface-bright/50 opacity-80">
+<td class="py-3 px-space-lg">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center text-outline shrink-0">
+<span class="material-symbols-outlined text-[20px]">cable</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface font-medium group-hover:text-primary transition-colors">Spark plug wires</span>
+<span class="font-mono-data-sm text-mono-data-sm text-outline">IGN-WIR-004</span>
+</div>
+</div>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-mono-data-md text-mono-data-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-body-md text-body-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-body-md text-body-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-body-md text-body-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-md text-label-md">
+<span class="material-symbols-outlined text-[14px] text-outline">schedule</span>
+<span class="text-secondary font-medium">No schedule yet</span>
+</div>
+</td>
+<td class="py-3 px-space-base pr-space-lg text-right">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface transition-colors text-[20px]">chevron_right</span>
+</td>
+</tr>
+<!-- Row 4: Throttle body cleaning (As needed - muted) -->
+<tr class="hover:bg-surface-container-low/60 transition-colors group cursor-pointer bg-surface-bright/50 opacity-80">
+<td class="py-3 px-space-lg">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center text-outline shrink-0">
+<span class="material-symbols-outlined text-[20px]">build</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface font-medium group-hover:text-primary transition-colors">Throttle body cleaning</span>
+<span class="font-mono-data-sm text-mono-data-sm text-outline">ENG-THB-008</span>
+</div>
+</div>
+</td>
+<td class="py-3 px-space-base">
+<span class="font-body-md text-body-md text-secondary">Done when needed</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-body-md text-body-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-body-md text-body-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-body-md text-body-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-high text-secondary font-label-md text-label-md">
+<span class="material-symbols-outlined text-[14px]">handyman</span>
+<span class="font-medium">As needed</span>
+</div>
+</td>
+<td class="py-3 px-space-base pr-space-lg text-right">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface transition-colors text-[20px]">chevron_right</span>
+</td>
+</tr>
+<!-- Row 5: Leak inspection (As needed - muted) -->
+<tr class="hover:bg-surface-container-low/60 transition-colors group cursor-pointer bg-surface-bright/50 opacity-80">
+<td class="py-3 px-space-lg">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center text-outline shrink-0">
+<span class="material-symbols-outlined text-[20px]">manage_search</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface font-medium group-hover:text-primary transition-colors">Leak inspection</span>
+<span class="font-mono-data-sm text-mono-data-sm text-outline">ENG-CHK-019</span>
+</div>
+</div>
+</td>
+<td class="py-3 px-space-base">
+<span class="font-body-md text-body-md text-secondary">Done when needed</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-body-md text-body-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-body-md text-body-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-body-md text-body-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-high text-secondary font-label-md text-label-md">
+<span class="material-symbols-outlined text-[14px]">handyman</span>
+<span class="font-medium">As needed</span>
+</div>
+</td>
+<td class="py-3 px-space-base pr-space-lg text-right">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface transition-colors text-[20px]">chevron_right</span>
+</td>
+</tr>
+<!-- Row 6: Valve clearance adjustment (No schedule yet - muted) -->
+<tr class="hover:bg-surface-container-low/60 transition-colors group cursor-pointer bg-surface-bright/50 opacity-80">
+<td class="py-3 px-space-lg">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center text-outline shrink-0">
+<span class="material-symbols-outlined text-[20px]">settings_suggest</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface font-medium group-hover:text-primary transition-colors">Valve clearance adjustment</span>
+<span class="font-mono-data-sm text-mono-data-sm text-outline">ENG-VLV-003</span>
+</div>
+</div>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-mono-data-md text-mono-data-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-body-md text-body-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-body-md text-body-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-body-md text-body-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-md text-label-md">
+<span class="material-symbols-outlined text-[14px] text-outline">schedule</span>
+<span class="text-secondary font-medium">No schedule yet</span>
+</div>
+</td>
+<td class="py-3 px-space-base pr-space-lg text-right">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface transition-colors text-[20px]">chevron_right</span>
+</td>
+</tr>
+<!-- ================= GROUP AREA 2: BRAKES ================= -->
+<tr class="bg-surface-container/40">
+<td class="py-2.5 px-space-lg" colspan="7">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-outline text-[18px]">album</span>
+<span class="font-label-sm text-label-sm font-bold uppercase tracking-wider text-on-surface">Brakes</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-highest text-secondary font-mono-data-sm text-mono-data-sm font-medium">2 parts</span>
+</div>
+</td>
+</tr>
+<!-- Row 7: Brake fluid (Active) -->
+<tr class="hover:bg-surface-container-low/60 transition-colors group cursor-pointer bg-surface-container-lowest">
+<td class="py-3 px-space-lg">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-xl bg-primary-fixed flex items-center justify-center text-primary shrink-0">
+<span class="material-symbols-outlined text-[20px]">opacity</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold group-hover:text-primary transition-colors">Brake fluid</span>
+<span class="font-mono-data-sm text-mono-data-sm text-outline">BRK-FLD-002</span>
+</div>
+</div>
+</td>
+<td class="py-3 px-space-base">
+<div class="flex items-center gap-space-xs font-mono-data-md text-mono-data-md text-on-surface font-medium">
+<span>40,000 km</span>
+<span class="text-outline font-normal">or</span>
+<span>24 months</span>
+</div>
+</td>
+<td class="py-3 px-space-base">
+<span class="font-body-md text-body-md text-secondary">Same as normal</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="font-body-md text-body-md text-primary font-medium hover:underline">1 model</span>
+</td>
+<td class="py-3 px-space-base">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-high text-secondary font-label-md text-label-md font-medium">
+<span class="material-symbols-outlined text-[14px]">shield</span>
+<span>Roam policy</span>
+</div>
+</td>
+<td class="py-3 px-space-base">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-tertiary-fixed/40 text-tertiary-container font-label-md text-label-md font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+<span>Active</span>
+</div>
+</td>
+<td class="py-3 px-space-base pr-space-lg text-right">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface transition-colors text-[20px]">chevron_right</span>
+</td>
+</tr>
+<!-- Row 8: Brake pads (Active) -->
+<tr class="hover:bg-surface-container-low/60 transition-colors group cursor-pointer bg-surface-container-lowest">
+<td class="py-3 px-space-lg">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-xl bg-secondary-fixed flex items-center justify-center text-on-secondary-fixed shrink-0">
+<span class="material-symbols-outlined text-[20px]">disc_full</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold group-hover:text-primary transition-colors">Brake pads</span>
+<span class="font-mono-data-sm text-mono-data-sm text-outline">BRK-PAD-010</span>
+</div>
+</div>
+</td>
+<td class="py-3 px-space-base">
+<div class="flex items-center gap-space-xs font-mono-data-md text-mono-data-md text-on-surface font-medium">
+<span>10,000 km</span>
+<span class="text-outline font-normal">or</span>
+<span>6 months</span>
+</div>
+</td>
+<td class="py-3 px-space-base">
+<span class="font-body-md text-body-md text-secondary">Same as normal</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-body-md text-body-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-high text-secondary font-label-md text-label-md font-medium">
+<span class="material-symbols-outlined text-[14px]">shield</span>
+<span>Roam policy</span>
+</div>
+</td>
+<td class="py-3 px-space-base">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-tertiary-fixed/40 text-tertiary-container font-label-md text-label-md font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+<span>Active</span>
+</div>
+</td>
+<td class="py-3 px-space-base pr-space-lg text-right">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface transition-colors text-[20px]">chevron_right</span>
+</td>
+</tr>
+<!-- ================= GROUP AREA 3: TIRES & WHEELS ================= -->
+<tr class="bg-surface-container/40">
+<td class="py-2.5 px-space-lg" colspan="7">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-outline text-[18px]">radio_button_checked</span>
+<span class="font-label-sm text-label-sm font-bold uppercase tracking-wider text-on-surface">Tires &amp; Wheels</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-highest text-secondary font-mono-data-sm text-mono-data-sm font-medium">2 parts</span>
+</div>
+</td>
+</tr>
+<!-- Row 9: Wheel alignment (No schedule yet - muted) -->
+<tr class="hover:bg-surface-container-low/60 transition-colors group cursor-pointer bg-surface-bright/50 opacity-80">
+<td class="py-3 px-space-lg">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center text-outline shrink-0">
+<span class="material-symbols-outlined text-[20px]">explore</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface font-medium group-hover:text-primary transition-colors">Wheel alignment</span>
+<span class="font-mono-data-sm text-mono-data-sm text-outline">TIRE-ALN-001</span>
+</div>
+</div>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-mono-data-md text-mono-data-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-body-md text-body-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-body-md text-body-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-body-md text-body-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-md text-label-md">
+<span class="material-symbols-outlined text-[14px] text-outline">schedule</span>
+<span class="text-secondary font-medium">No schedule yet</span>
+</div>
+</td>
+<td class="py-3 px-space-base pr-space-lg text-right">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface transition-colors text-[20px]">chevron_right</span>
+</td>
+</tr>
+<!-- Row 10: Puncture repair (As needed - muted) -->
+<tr class="hover:bg-surface-container-low/60 transition-colors group cursor-pointer bg-surface-bright/50 opacity-80">
+<td class="py-3 px-space-lg">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center text-outline shrink-0">
+<span class="material-symbols-outlined text-[20px]">healing</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface font-medium group-hover:text-primary transition-colors">Puncture repair</span>
+<span class="font-mono-data-sm text-mono-data-sm text-outline">TIRE-REP-005</span>
+</div>
+</div>
+</td>
+<td class="py-3 px-space-base">
+<span class="font-body-md text-body-md text-secondary">Done when needed</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-body-md text-body-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-body-md text-body-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<span class="text-outline font-body-md text-body-md">—</span>
+</td>
+<td class="py-3 px-space-base">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-high text-secondary font-label-md text-label-md">
+<span class="material-symbols-outlined text-[14px]">handyman</span>
+<span class="font-medium">As needed</span>
+</div>
+</td>
+<td class="py-3 px-space-base pr-space-lg text-right">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface transition-colors text-[20px]">chevron_right</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Table Footer / Record Summary -->
+<div class="bg-surface-container-low px-space-lg py-space-md flex flex-col sm:flex-row items-center justify-between gap-space-sm text-secondary font-label-md text-label-md">
+<div class="flex items-center gap-space-xs">
+<span>Showing <strong class="text-on-surface font-semibold">10</strong> of <strong class="text-on-surface font-semibold">22</strong> part schedules</span>
+<span class="text-outline-variant">•</span>
+<span class="text-outline">12 inactive or excluded by filters</span>
+</div>
+<div class="flex items-center gap-space-xs font-mono-data-sm text-mono-data-sm">
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest text-outline hover:text-on-surface flex items-center justify-center shadow-xs disabled:opacity-40" disabled="" type="button">
+<span class="material-symbols-outlined text-[18px]">chevron_left</span>
+</button>
+<span class="px-2.5 py-1 bg-surface-container-lowest rounded-md text-primary font-semibold shadow-xs">1</span>
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest text-outline hover:text-on-surface flex items-center justify-center shadow-xs" type="button">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Operational Baseline Details (Micro-Architectural Spec Dock) -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-space-md mt-space-sm">
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center gap-space-md">
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-outline">
+<span class="material-symbols-outlined text-[18px]">verified_user</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-outline uppercase font-semibold">Baseline standard</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Roam Dominion v2.4 Default</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center gap-space-md">
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-outline">
+<span class="material-symbols-outlined text-[18px]">calculate</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-outline uppercase font-semibold">Interval logic</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Whichever occurs first (km / mo)</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center gap-space-md">
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-outline">
+<span class="material-symbols-outlined text-[18px]">model_training</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-outline uppercase font-semibold">Overrides</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">6 model-specific profiles</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center gap-space-md">
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-outline">
+<span class="material-symbols-outlined text-[18px]">speed</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-outline uppercase font-semibold">Severe conditions</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Auto-derated on heavy use</span>
+</div>
+</div>
+</div>
+</div></main></div></body></html>

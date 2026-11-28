@@ -33,6 +33,16 @@ import { usePlatformConfig } from '../auth/PlatformConfigContext';
 import { FuelEntryDetailSheet } from './logs/FuelEntryDetailSheet';
 import { FuelLogKpiRow, transactionKpisToTiles, cycleKpisToTiles } from './logs/FuelLogKpiRow';
 import { FuelLogToolbar } from './logs/FuelLogToolbar';
+import {
+  FuelAwaitingStatementPanel,
+  awaitingStatementCount,
+  useAwaitingStatement,
+  type ResolveSplitCashFn,
+} from './FuelAwaitingStatementPanel';
+import type { FuelLogView } from '../../hooks/useFuelLogQuery';
+
+/** Review Queue → "open Awaiting statement" hand-off (the page change drops the URL query). */
+export const FUEL_LOGS_OPEN_VIEW_KEY = 'fuel_logs_open_view';
 import { FuelTransactionsTable, resolvePaymentLabel } from './logs/FuelTransactionsTable';
 import { FuelCyclesPanel } from './logs/FuelCyclesPanel';
 import { fuelEntrySortMs } from './logs/fuelLogDisplay';
@@ -83,6 +93,8 @@ interface FuelLogTableProps {
   unlinkedCardChargesCount?: number;
   unlinkedCardChargesOnly?: boolean;
   onUnlinkedCardChargesOnlyChange?: (v: boolean) => void;
+  /** Awaiting statement view: decide pay / escalate on a split fill's cash half. */
+  onResolveSplitCashTx?: ResolveSplitCashFn;
 }
 
 export function FuelLogTable({
@@ -109,8 +121,12 @@ export function FuelLogTable({
   unlinkedCardChargesCount = 0,
   unlinkedCardChargesOnly = false,
   onUnlinkedCardChargesOnlyChange,
+  onResolveSplitCashTx,
 }: FuelLogTableProps) {
   const { can } = usePermissions();
+  // Count on the Awaiting statement button — same cached load the view uses.
+  const awaitingQuery = useAwaitingStatement();
+  const awaitingCount = awaitingStatementCount(awaitingQuery.data);
   const fleetTz = useFleetTimezone();
   const { defaultCurrency } = usePlatformConfig();
   const { query, setQuery } = useFuelLogQuery();
@@ -152,7 +168,13 @@ export function FuelLogTable({
   const [filterSource, setFilterSource] = useState<string>(query.source || 'all');
   const [filterIntegrity, setFilterIntegrity] = useState<string>(query.integrity || 'all');
   const [filterCycleId, setFilterCycleId] = useState<string | null>(query.cycleId || null);
-  const [activeView, setActiveView] = useState<'transactions' | 'cycles'>(query.view);
+  const [activeView, setActiveView] = useState<FuelLogView>(() => {
+    if (typeof window !== 'undefined' && sessionStorage.getItem(FUEL_LOGS_OPEN_VIEW_KEY) === 'awaiting') {
+      sessionStorage.removeItem(FUEL_LOGS_OPEN_VIEW_KEY);
+      return 'awaiting';
+    }
+    return query.view;
+  });
   const [viewingEntry, setViewingEntry] = useState<FuelEntry | null>(null);
   const [viewingSplitSiblings, setViewingSplitSiblings] = useState<FuelEntry[] | undefined>(
     undefined,
@@ -622,7 +644,8 @@ export function FuelLogTable({
 
   // Keep KPI state on one object — bare summaryError refs broke under Vite HMR (ROAM-FLEET-1A/19).
   const txnKpis = useTransactionLogKpis({
-    activeView,
+    // Awaiting statement has no KPI row; keep the Transactions summary warm for the switch back.
+    activeView: activeView === 'cycles' ? 'cycles' : 'transactions',
     periodStart,
     periodEnd,
     filterVehicle,
@@ -844,6 +867,7 @@ export function FuelLogTable({
 
       <FuelLogToolbar
         activeView={activeView}
+        awaitingCount={awaitingCount}
         onViewChange={(view) => {
           setActiveView(view);
           setQuery({ view });
@@ -914,9 +938,14 @@ export function FuelLogTable({
         afterTabs={
           <div>
             {unlinkedCardChargesOnly ? (
-              <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-                Showing Unmatched card charges only — approved statement fuel with no linked log.
-                Accept, link, or dismiss to clear.
+              <div className="mb-4 flex items-start gap-3 rounded-2xl bg-[#fffbeb] p-4 dark:bg-[#451a03]">
+                <span className="material-symbols-outlined flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-[18px] text-[#b45309]">warning</span>
+                <div>
+                  <p className="text-[15px] font-semibold text-[#92400e] dark:text-[#fbbf24]">Card charges with no fill</p>
+                  <p className="text-[13px] text-[#b45309] dark:text-[#fbbf24]">
+                    Showing gas card charges from the statement that no driver logged. Accept, link or dismiss each one.
+                  </p>
+                </div>
               </div>
             ) : null}
             {activeView === 'transactions' && summaryLoading && !hasExtraTxnFilters && !serverSummary ? (
@@ -937,7 +966,7 @@ export function FuelLogTable({
                   activeView === 'transactions'
                     ? transactionKpisToTiles(transactionKpis, {
                         integrityActive: filterIntegrity === 'imbalanced',
-                        sourceHint: `${transactionKpis.sourcePortal} portal · ${transactionKpis.sourceAdmin} admin · ${transactionKpis.sourceAnchors} anchors`,
+                        sourceHint: `${transactionKpis.sourcePortal} from phones · ${transactionKpis.sourceAdmin} typed in Fleet · ${transactionKpis.sourceAnchors} gas card`,
                       })
                     : cycleKpisToTiles(cycleKpis, {
                         distanceKm: trustedPeriodTotals.distanceKm,
@@ -967,7 +996,7 @@ export function FuelLogTable({
         }
       />
 
-      {showLineColumn && unallocatedSpend > 0 ? (
+      {activeView !== 'awaiting' && showLineColumn && unallocatedSpend > 0 ? (
         allocationEnabled && allocationProjection ? (
           <p className="text-xs text-indigo-900 bg-indigo-50 border border-indigo-100 rounded-md px-3 py-2">
             Trip-mix projection (reporting only): Rideshare $
@@ -990,8 +1019,14 @@ export function FuelLogTable({
         )
       ) : null}
 
-      <div className="rounded-md border bg-white overflow-x-auto">
-        {activeView === 'transactions' ? (
+      <div className={activeView === 'awaiting' ? '' : 'overflow-x-auto rounded-2xl bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)] dark:bg-[#2a2a2d]'}>
+        {activeView === 'awaiting' ? (
+          <FuelAwaitingStatementPanel
+            onResolveSplitCash={onResolveSplitCashTx}
+            getDriverName={getDriverName}
+            getVehicleName={getVehicleName}
+          />
+        ) : activeView === 'transactions' ? (
           <FuelTransactionsTable
             pagedDisplayRows={pagedDisplayRows}
             pagedEntries={pagedEntries}

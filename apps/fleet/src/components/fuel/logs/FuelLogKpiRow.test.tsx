@@ -37,7 +37,7 @@ describe('FuelLogKpiRow', () => {
         onTileClick={onTileClick}
       />,
     );
-    await user.click(screen.getByText('Imbalanced').closest('[role="button"]')!);
+    await user.click(screen.getByText('Needs fixing').closest('[role="button"]')!);
     expect(onTileClick).toHaveBeenCalledWith('imbalanced');
   });
 

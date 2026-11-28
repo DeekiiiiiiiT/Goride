@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
  * Single source of truth for tab, search, vehicle, integrity — shareable/bookmarkable.
  */
 
-export type FuelLogView = 'transactions' | 'cycles';
+export type FuelLogView = 'transactions' | 'cycles' | 'awaiting';
 
 export type FuelLogQuery = {
   view: FuelLogView;
@@ -30,7 +30,7 @@ const DEFAULT_QUERY: FuelLogQuery = {
 };
 
 function isView(v: string | null): v is FuelLogView {
-  return v === 'transactions' || v === 'cycles';
+  return v === 'transactions' || v === 'cycles' || v === 'awaiting';
 }
 
 function isSortField(v: string | null): v is NonNullable<FuelLogQuery['sortField']> {

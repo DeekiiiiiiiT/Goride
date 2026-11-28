@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {"darkMode": "class", "theme": {"extend": {"colors": {"error-container": "#ffdad6", "primary-fixed": "#dbe1ff", "tertiary-fixed-dim": "#b9c7df", "on-secondary-fixed": "#151b2a", "outline-variant": "#c3c6d7", "surface-tint": "#0053db", "surface-variant": "#e1e1ed", "tertiary-fixed": "#d5e3fc", "on-primary-fixed": "#00174b", "on-tertiary": "#ffffff", "on-background": "#191b24", "on-surface-variant": "#434655", "on-tertiary-fixed": "#0d1c2e", "on-primary-container": "#ced8ff", "on-primary-fixed-variant": "#003ea8", "on-tertiary-fixed-variant": "#3a485b", "on-error-container": "#93000a", "on-secondary-fixed-variant": "#404757", "surface-container-highest": "#e1e1ed", "tertiary": "#3a485c", "on-surface": "#191b24", "inverse-on-surface": "#f0f0fc", "background": "#faf8ff", "surface-container": "#ededf9", "inverse-surface": "#2e3039", "surface": "#faf8ff", "secondary-fixed-dim": "#c0c6da", "on-tertiary-container": "#ccdbf3", "surface-bright": "#faf8ff", "primary-fixed-dim": "#b4c5ff", "on-secondary": "#ffffff", "on-error": "#ffffff", "primary-container": "#0153dc", "on-secondary-container": "#5c6274", "inverse-primary": "#b4c5ff", "surface-dim": "#d9d9e5", "secondary": "#585e6f", "on-primary": "#ffffff", "error": "#ba1a1a", "outline": "#737686", "surface-container-high": "#e7e7f3", "secondary-container": "#d9dff4", "primary": "#003ea9", "tertiary-container": "#526074", "surface-container-lowest": "#ffffff", "secondary-fixed": "#dce2f6", "surface-container-low": "#f3f3ff"}, "borderRadius": {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"}, "spacing": {"gutter-sm": "1rem", "space-lg": "1.5rem", "gutter": "1.5rem", "margin": "2rem", "space-md": "1rem", "space-sm": "0.5rem", "margin-mobile": "1rem", "space-xs": "0.25rem", "gutter-lg": "2rem", "space-xl": "2rem"}, "fontFamily": {"label-md": ["Inter"], "code-sm": ["JetBrains Mono"], "display-lg": ["Inter"], "code-md": ["JetBrains Mono"], "headline-sm": ["Inter"], "body-lg": ["Inter"], "headline-md": ["Inter"], "body-sm": ["Inter"], "body-md": ["Inter"], "headline-lg": ["Inter"], "label-sm": ["Inter"]}, "fontSize": {"label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600"}], "code-sm": ["11px", {"lineHeight": "16px", "letterSpacing": "0em", "fontWeight": "500"}], "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600"}], "code-md": ["13px", {"lineHeight": "18px", "letterSpacing": "-0.01em", "fontWeight": "400"}], "headline-sm": ["16px", {"lineHeight": "24px", "letterSpacing": "-0.005em", "fontWeight": "600"}], "body-lg": ["16px", {"lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400"}], "headline-md": ["20px", {"lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "600"}], "body-sm": ["13px", {"lineHeight": "18px", "letterSpacing": "0.005em", "fontWeight": "400"}], "body-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400"}], "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.015em", "fontWeight": "600"}], "label-sm": ["11px", {"lineHeight": "14px", "letterSpacing": "0.03em", "fontWeight": "500"}]}}}};</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-64 bg-[#0b1220] z-50 flex flex-col justify-between overflow-y-auto select-none"><div class="flex flex-col"><div class="h-16 px-space-md flex items-center gap-space-sm bg-[#080d17]"><div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[20px]">hub</span></div><div class="flex flex-col min-w-0"><span class="font-headline-sm text-headline-sm text-white tracking-tight truncate">Dominion</span><span class="font-label-sm text-label-sm text-slate-400 tracking-wider uppercase truncate">Roam Admin Console</span></div></div><nav class="px-space-sm py-space-md flex flex-col gap-space-md" data-active-classes="bg-primary-container text-on-primary font-label-md"><div class="flex flex-col gap-space-xs"><span class="px-space-sm font-label-sm text-label-sm text-slate-400 font-semibold tracking-wider uppercase">Master Data</span><div class="flex flex-col gap-0.5 mt-1"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-slate-300 hover:bg-[#151f33] hover:text-white transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">space_dashboard</span><span class="font-body-sm text-body-sm">Overview</span></a><a aria-current="page" class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg transition-colors bg-primary-container text-on-primary font-label-md" data-path="vehicles-active" href="#"><span class="material-symbols-outlined text-[18px]">directions_car</span><span class="font-body-sm text-body-sm">Vehicles active</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-slate-300 hover:bg-[#151f33] hover:text-white transition-colors" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">map</span><span class="font-body-sm text-body-sm">Places and Maps</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-slate-300 hover:bg-[#151f33] hover:text-white transition-colors" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span class="font-body-sm text-body-sm">Fuel</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-slate-300 hover:bg-[#151f33] hover:text-white transition-colors" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px]">toll</span><span class="font-body-sm text-body-sm">Tolls</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-slate-300 hover:bg-[#151f33] hover:text-white transition-colors" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span class="font-body-sm text-body-sm">Tax and Vendors</span></a></div></div><div class="flex flex-col gap-space-xs"><span class="px-space-sm font-label-sm text-label-sm text-slate-400 font-semibold tracking-wider uppercase">Engines</span><div class="flex flex-col gap-0.5 mt-1"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-slate-300 hover:bg-[#151f33] hover:text-white transition-colors" data-path="engines" href="#"><span class="material-symbols-outlined text-[18px]">memory</span><span class="font-body-sm text-body-sm">Engines Control</span></a></div></div><div class="flex flex-col gap-space-xs"><span class="px-space-sm font-label-sm text-label-sm text-slate-400 font-semibold tracking-wider uppercase">Distribution</span><div class="flex flex-col gap-0.5 mt-1"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-slate-300 hover:bg-[#151f33] hover:text-white transition-colors" data-path="distribution" href="#"><span class="material-symbols-outlined text-[18px]">alt_route</span><span class="font-body-sm text-body-sm">Routing &amp; Fleet</span></a></div></div><div class="flex flex-col gap-space-xs"><span class="px-space-sm font-label-sm text-label-sm text-slate-400 font-semibold tracking-wider uppercase">Platform</span><div class="flex flex-col gap-0.5 mt-1"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-slate-300 hover:bg-[#151f33] hover:text-white transition-colors" data-path="platform" href="#"><span class="material-symbols-outlined text-[18px]">dns</span><span class="font-body-sm text-body-sm">System Clusters</span></a></div></div><div class="flex flex-col gap-space-xs"><span class="px-space-sm font-label-sm text-label-sm text-slate-400 font-semibold tracking-wider uppercase">Back Office</span><div class="flex flex-col gap-0.5 mt-1"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-slate-300 hover:bg-[#151f33] hover:text-white transition-colors" data-path="back-office" href="#"><span class="material-symbols-outlined text-[18px]">corporate_fare</span><span class="font-body-sm text-body-sm">Entity Records</span></a></div></div></nav></div><div class="p-space-sm m-space-sm rounded-lg bg-[#111c30] flex items-center justify-between"><div class="flex items-center gap-space-sm"><div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div><span class="font-code-sm text-code-sm text-slate-400">v2.14-prod</span></div><span class="material-symbols-outlined text-slate-400 text-[18px]">terminal</span></div></aside><div class="pl-64 flex flex-col min-h-screen"><header class="fixed top-0 left-64 right-0 h-16 bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 px-gutter flex items-center justify-between"><div class="w-96"><div class="relative flex items-center w-full"><span class="material-symbols-outlined absolute left-3 text-secondary text-[18px]">search</span><input class="w-full h-10 pl-9 pr-14 bg-surface-container-lowest text-on-surface placeholder:text-secondary rounded-lg font-body-sm text-body-sm outline-none shadow-[0_4px_16px_0_rgba(1,83,220,0.04)] focus:ring-2 focus:ring-primary-fixed transition-all" placeholder="Search entities, engines, routes…" type="text"/><div class="absolute right-2 px-1.5 py-0.5 rounded bg-surface-container font-code-sm text-code-sm text-on-surface-variant flex items-center select-none">⌘K</div></div></div><div class="flex items-center gap-space-md"><button aria-label="Switch Theme" class="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><button aria-label="Notifications" class="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors relative" type="button"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-error"></span></button><div class="h-6 w-px bg-surface-container-highest mx-space-xs"></div><div class="flex items-center gap-space-sm pl-space-xs"><div class="flex flex-col text-right"><span class="font-label-md text-label-md text-on-surface">Deeki T</span><span class="font-label-sm text-label-sm text-secondary">Owner</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full pt-16 flex-1 bg-surface"><div class="flex flex-col w-full relative min-h-full font-body-md text-on-surface">
+<!-- ======================================================== -->
+<!-- BACKGROUND UNDERLAY: Toyota Roomy Catalogue (Amayama)   -->
+<!-- ======================================================== -->
+<div class="w-full select-none pointer-events-none p-margin space-y-gutter opacity-45 filter blur-[0.5px]">
+<!-- Breadcrumb Bar -->
+<div class="flex items-center gap-space-sm font-code-sm text-code-sm text-secondary">
+<span class="hover:underline">Catalogues</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span>Toyota Genuine Parts</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="font-semibold text-on-surface">Roomy (M900A)</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="text-primary font-medium">87-14 Heating &amp; air conditioning - cooler unit</span>
+</div>
+<!-- Vehicle Specs Header Plate -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+<div class="flex items-start justify-between">
+<div>
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Catalogue Registry · Model Index</span>
+<h1 class="font-headline-lg text-headline-lg text-on-surface mt-1">Toyota Roomy M900A (2016.11 – 2020.09)</h1>
+<p class="font-body-sm text-body-sm text-secondary mt-1">2WD · 1KR-FE / 1KR-VET · Front Engine Transverse Layout · Chassis M900A-BGBGE</p>
+</div>
+<div class="flex gap-space-sm">
+<span class="px-3 py-1 rounded bg-surface-container font-code-sm text-code-sm text-on-surface-variant">Frame: M900A</span>
+<span class="px-3 py-1 rounded bg-surface-container font-code-sm text-code-sm text-on-surface-variant">Market: JDM</span>
+<span class="px-3 py-1 rounded bg-primary-fixed text-on-primary-fixed font-code-sm text-code-sm">Source: amayama.com</span>
+</div>
+</div>
+<!-- Schematic Diagram Box -->
+<div class="w-full h-80 rounded-lg bg-surface-container-low flex flex-col items-center justify-center p-space-md relative overflow-hidden">
+<div class="absolute top-3 left-4 font-code-sm text-code-sm text-secondary flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px]">account_tree</span>
+<span>FIG 87-14: COOLER UNIT &amp; EVAPORATOR PIPING</span>
+</div>
+<!-- Technical Diagram Illustration Placeholder -->
+<svg class="w-3/5 h-64 text-outline-variant stroke-current fill-none stroke-[1.5]" viewbox="0 0 540 220">
+<rect class="fill-surface-container-lowest/60 stroke-secondary" height="140" rx="8" stroke-dasharray="4 2" width="180" x="40" y="40"></rect>
+<path class="stroke-outline-variant" d="M 80,70 L 180,70 M 80,100 L 180,100 M 80,130 L 180,130 M 80,160 L 180,160"></path>
+<circle class="stroke-primary stroke-2 fill-primary-fixed/20" cx="130" cy="115" r="28"></circle>
+<path class="stroke-secondary stroke-2" d="M 220,115 L 290,115 L 340,65 L 420,65"></path>
+<path class="stroke-secondary stroke-2" d="M 290,115 L 340,165 L 440,165"></path>
+<rect class="fill-surface-container-lowest stroke-secondary" height="40" rx="4" width="90" x="420" y="45"></rect>
+<rect class="fill-surface-container-lowest stroke-secondary" height="40" rx="4" width="80" x="440" y="145"></rect>
+<text class="font-code-sm text-[10px] fill-secondary stroke-none" x="50" y="32">87103 (BLOWER)</text>
+<text class="font-code-sm text-[10px] fill-secondary stroke-none" x="350" y="55">88515</text>
+<text class="font-code-sm text-[10px] fill-secondary stroke-none" x="350" y="185">88501</text>
+<text class="font-code-sm text-[11px] fill-on-surface stroke-none font-semibold" x="430" y="68">EXPANSION</text>
+<text class="font-code-sm text-[11px] fill-on-surface stroke-none font-semibold" x="450" y="168">EVAPORATOR</text>
+</svg>
+<div class="absolute bottom-3 right-4 font-code-sm text-code-sm text-secondary">
+          Diagram Scale: 1:1 · Vector Reference V-8714-RMY
+        </div>
+</div>
+</div>
+<!-- Underlying Mock Catalogue Table -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<div class="bg-surface-container-low px-space-md py- space-sm flex items-center justify-between">
+<span class="font-label-md text-label-md text-secondary uppercase">Parts Reference Schedule</span>
+<span class="font-code-sm text-code-sm text-secondary">Showing 42 matched line items</span>
+</div>
+<div class="divide-y divide-surface-container-high font-body-sm text-body-sm text-on-surface">
+<div class="px-space-md py-3 flex items-center justify-between">
+<span class="font-code-sm text-code-sm text-primary">87103-B1040</span>
+<span>MOTOR SUB-ASSY, BLOWER W/FAN</span>
+<span class="font-code-sm text-code-sm text-secondary">11.2016 - 09.2020</span>
+</div>
+<div class="px-space-md py-3 flex items-center justify-between">
+<span class="font-code-sm text-code-sm text-primary">87138-B1010</span>
+<span>RESISTOR, BLOWER</span>
+<span class="font-code-sm text-code-sm text-secondary">11.2016 - 09.2020</span>
+</div>
+<div class="px-space-md py-3 flex items-center justify-between">
+<span class="font-code-sm text-code-sm text-primary">88515-B1020</span>
+<span>VALVE, COOLER EXPANSION</span>
+<span class="font-code-sm text-code-sm text-secondary">11.2016 - 09.2020</span>
+</div>
+<div class="px-space-md py-3 flex items-center justify-between">
+<span class="font-code-sm text-code-sm text-primary">88501-B1110</span>
+<span>EVAPORATOR SUB-ASSY, COOLER, NO.1</span>
+<span class="font-code-sm text-code-sm text-secondary">11.2016 - 09.2020</span>
+</div>
+</div>
+</div>
+</div>
+<!-- ======================================================== -->
+<!-- MODAL BACKDROP SHIELD (40% Alpha Overlay)                -->
+<!-- ======================================================== -->
+<div class="fixed inset-0 top-16 left-64 bg-[#0f172a]/40 backdrop-blur-[2px] z-50 flex items-start justify-center p-6 overflow-y-auto">
+<!-- ======================================================== -->
+<!-- IN-APP SAVED-PAGE RESULT MODAL (640px)                   -->
+<!-- ======================================================== -->
+<div class="w-[640px] my-auto bg-[#ffffff] rounded-[20px] p-8 shadow-[0_20px_40px_rgba(0,0,0,0.18)] flex flex-col gap-6 relative">
+<!-- Modal Header Section -->
+<div class="flex flex-col items-center text-center">
+<!-- Circular Success Badge -->
+<div class="w-14 h-14 rounded-full bg-[#e6f4ea] flex items-center justify-center mb-3">
+<span class="material-symbols-outlined text-[#006e31] text-[30px]" style="font-variation-settings: 'FILL' 1;">task_alt</span>
+</div>
+<!-- Title -->
+<h2 class="text-[26px] leading-[32px] font-semibold text-[#30323b] tracking-tight">
+          6 parts saved
+        </h2>
+<!-- Subtitle -->
+<p class="font-body-sm text-[13px] text-[#5d5f68] mt-1">
+          From amayama.com · read 26 Nov 2026
+        </p>
+<!-- Count Filter Pills Row -->
+<div class="flex flex-wrap items-center justify-center gap-2 mt-4">
+<span class="bg-[#e6f4ea] text-[#006e31] rounded-full px-3 py-1 font-label-md text-label-md">
+            Saved 6
+          </span>
+<span class="bg-[#f1f5f9] text-[#475569] rounded-full px-3 py-1 font-label-md text-label-md">
+            Already on file 2
+          </span>
+<span class="bg-[#fff4dc] text-[#8a5a00] rounded-full px-3 py-1 font-label-md text-label-md">
+            Needs you 0
+          </span>
+<span class="bg-transparent text-[#5d5f68] shadow-[inset_0_0_0_1px_#e2e8f0] rounded-full px-3 py-1 font-label-md text-label-md">
+            Not a Roam part type 34
+          </span>
+</div>
+<!-- Picture Generation Status Line -->
+<div class="flex items-center gap-1.5 mt-3 text-[#5d5f68] font-body-sm text-[13px]">
+<span class="material-symbols-outlined text-[16px] text-[#5d5f68]">image</span>
+<span>Pictures: 6 being made</span>
+</div>
+</div>
+<!-- Result Groups Content -->
+<div class="flex flex-col gap-5">
+<!-- GROUP 1: Saved (6) -->
+<div class="flex flex-col gap-2">
+<div class="flex items-center justify-between px-1">
+<h3 class="text-[16px] font-semibold text-[#30323b]">Saved (6)</h3>
+<span class="font-code-sm text-code-sm text-secondary">Catalogue Group 87-14</span>
+</div>
+<div class="bg-surface-container-lowest rounded-xl shadow-[0_2px_8px_rgba(1,83,220,0.04)] overflow-hidden divide-y divide-[#e6e7ee]">
+<!-- Row 1 -->
+<div class="p-3.5 flex items-center justify-between hover:bg-surface-container-low/50 transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-10 h-10 rounded-lg bg-[#dbe1ff] flex flex-col items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-[18px]">cached</span>
+<span class="text-[9px] font-semibold text-primary leading-none -mt-0.5">Making</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-2">
+<span class="font-headline-sm text-headline-sm text-[#30323b] truncate">Blower motor</span>
+<span class="bg-[#f1f5f9] text-[#475569] rounded-full px-2 py-0.5 font-label-sm text-[11px] font-medium shrink-0">New part type</span>
+</div>
+<span class="font-code-sm text-code-sm text-[#5d5f68]">87103-B1040 · 11.2016 – 09.2020</span>
+</div>
+</div>
+<span class="bg-[#e6f4ea] text-[#006e31] rounded-full px-3 py-1 font-label-md text-label-md shrink-0 flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-[#006e31]"></span>
+                Confirmed
+              </span>
+</div>
+<!-- Row 2 -->
+<div class="p-3.5 flex items-center justify-between hover:bg-surface-container-low/50 transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-10 h-10 rounded-lg bg-[#dbe1ff] flex flex-col items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-[18px]">cached</span>
+<span class="text-[9px] font-semibold text-primary leading-none -mt-0.5">Making</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-2">
+<span class="font-headline-sm text-headline-sm text-[#30323b] truncate">Blower resistor</span>
+<span class="bg-[#f1f5f9] text-[#475569] rounded-full px-2 py-0.5 font-label-sm text-[11px] font-medium shrink-0">New part type</span>
+</div>
+<span class="font-code-sm text-code-sm text-[#5d5f68]">87138-B1010 · 11.2016 – 09.2020</span>
+</div>
+</div>
+<span class="bg-[#e6f4ea] text-[#006e31] rounded-full px-3 py-1 font-label-md text-label-md shrink-0 flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-[#006e31]"></span>
+                Confirmed
+              </span>
+</div>
+<!-- Row 3 -->
+<div class="p-3.5 flex items-center justify-between hover:bg-surface-container-low/50 transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-10 h-10 rounded-lg bg-[#dbe1ff] flex flex-col items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-[18px]">cached</span>
+<span class="text-[9px] font-semibold text-primary leading-none -mt-0.5">Making</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-2">
+<span class="font-headline-sm text-headline-sm text-[#30323b] truncate">Cooler expansion valve</span>
+<span class="bg-[#f1f5f9] text-[#475569] rounded-full px-2 py-0.5 font-label-sm text-[11px] font-medium shrink-0">New part type</span>
+</div>
+<span class="font-code-sm text-code-sm text-[#5d5f68]">88515-B1020 · 11.2016 – 09.2020</span>
+</div>
+</div>
+<span class="bg-[#e6f4ea] text-[#006e31] rounded-full px-3 py-1 font-label-md text-label-md shrink-0 flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-[#006e31]"></span>
+                Confirmed
+              </span>
+</div>
+<!-- Row 4 -->
+<div class="p-3.5 flex items-center justify-between hover:bg-surface-container-low/50 transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-10 h-10 rounded-lg bg-[#dbe1ff] flex flex-col items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-[18px]">cached</span>
+<span class="text-[9px] font-semibold text-primary leading-none -mt-0.5">Making</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-2">
+<span class="font-headline-sm text-headline-sm text-[#30323b] truncate">Cooler evaporator</span>
+<span class="bg-[#f1f5f9] text-[#475569] rounded-full px-2 py-0.5 font-label-sm text-[11px] font-medium shrink-0">New part type</span>
+</div>
+<span class="font-code-sm text-code-sm text-[#5d5f68]">88501-B1110 · 11.2016 – 09.2020</span>
+</div>
+</div>
+<span class="bg-[#e6f4ea] text-[#006e31] rounded-full px-3 py-1 font-label-md text-label-md shrink-0 flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-[#006e31]"></span>
+                Confirmed
+              </span>
+</div>
+<!-- Row 5 -->
+<div class="p-3.5 flex items-center justify-between hover:bg-surface-container-low/50 transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-10 h-10 rounded-lg bg-[#dbe1ff] flex flex-col items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-[18px]">cached</span>
+<span class="text-[9px] font-semibold text-primary leading-none -mt-0.5">Making</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-headline-sm text-[#30323b] truncate">Heater core sub-assy</span>
+<span class="font-code-sm text-code-sm text-[#5d5f68]">87107-B1020 · 11.2016 – 09.2020</span>
+</div>
+</div>
+<span class="bg-[#e6f4ea] text-[#006e31] rounded-full px-3 py-1 font-label-md text-label-md shrink-0 flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-[#006e31]"></span>
+                Confirmed
+              </span>
+</div>
+<!-- Row 6 -->
+<div class="p-3.5 flex items-center justify-between hover:bg-surface-container-low/50 transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-10 h-10 rounded-lg bg-[#dbe1ff] flex flex-col items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-[18px]">cached</span>
+<span class="text-[9px] font-semibold text-primary leading-none -mt-0.5">Making</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-headline-sm text-[#30323b] truncate">Thermostat housing valve</span>
+<span class="font-code-sm text-code-sm text-[#5d5f68]">87106-B1010 · 11.2016 – 09.2020</span>
+</div>
+</div>
+<span class="bg-[#e6f4ea] text-[#006e31] rounded-full px-3 py-1 font-label-md text-label-md shrink-0 flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-[#006e31]"></span>
+                Confirmed
+              </span>
+</div>
+</div>
+</div>
+<!-- GROUP 2: Already on file (2) -->
+<div class="flex flex-col gap-2">
+<div class="flex items-center justify-between px-1">
+<h3 class="text-[16px] font-semibold text-[#30323b]">Already on file (2)</h3>
+<span class="font-code-sm text-code-sm text-secondary">HVAC Master Cache</span>
+</div>
+<div class="bg-surface-container-lowest rounded-xl shadow-[0_2px_8px_rgba(1,83,220,0.04)] overflow-hidden divide-y divide-[#e6e7ee]">
+<!-- Row 1 -->
+<div class="p-3.5 flex items-center justify-between hover:bg-surface-container-low/50 transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant shrink-0">
+<span class="material-symbols-outlined text-[20px]">filter_alt</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-headline-sm text-[#30323b] truncate">Cabin A/C Filter</span>
+<span class="font-code-sm text-code-sm text-[#5d5f68]">87139-50100 · 11.2016 – 09.2020</span>
+</div>
+</div>
+<span class="bg-[#e6f4ea] text-[#006e31] rounded-full px-3 py-1 font-label-md text-label-md shrink-0 flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-[#006e31]"></span>
+                Confirmed
+              </span>
+</div>
+<!-- Row 2 -->
+<div class="p-3.5 flex items-center justify-between hover:bg-surface-container-low/50 transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant shrink-0">
+<span class="material-symbols-outlined text-[20px]">air_purifier_gen</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-headline-sm text-[#30323b] truncate">Cabin A/C Filter (high efficiency)</span>
+<span class="font-code-sm text-code-sm text-[#5d5f68]">87139-52040 · 11.2016 – 09.2020</span>
+</div>
+</div>
+<span class="bg-[#e6f4ea] text-[#006e31] rounded-full px-3 py-1 font-label-md text-label-md shrink-0 flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-[#006e31]"></span>
+                Confirmed
+              </span>
+</div>
+</div>
+</div>
+<!-- Sort Summary Panel -->
+<div class="bg-[#f3f4fb] rounded-[12px] p-4 flex items-center justify-between gap-3 shadow-[inset_0_0_0_1px_#e6e7ee]">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-9 h-9 rounded-lg bg-[#dbe1ff] flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[#0153dc] text-[20px]">category</span>
+</div>
+<p class="font-body-md text-[14px] font-medium text-[#30323b] truncate">
+              Roam sorted 40 rows · 4 new part types · 3 fixings · 12 names not tracked
+            </p>
+</div>
+<button class="h-9 px-4 rounded-lg bg-surface-container-lowest text-on-surface font-label-md text-label-md shrink-0 shadow-[0_1px_3px_rgba(0,0,0,0.08),inset_0_0_0_1px_#c5c6d0] hover:bg-surface-container-high transition-colors" type="button">
+            Review
+          </button>
+</div>
+</div>
+<!-- Modal Action Footer -->
+<div class="pt-4 shadow-[inset_0_1px_0_#f1f5f9] flex items-center justify-between">
+<button class="h-11 px-5 rounded-[10px] bg-surface-container-lowest text-[#30323b] font-label-md text-body-md font-semibold shadow-[0_1px_3px_rgba(0,0,0,0.06),inset_0_0_0_1px_#c5c6d0] hover:bg-surface-container transition-colors flex items-center gap-2" type="button">
+<span class="material-symbols-outlined text-[18px]">photo_library</span>
+<span>See pictures</span>
+</button>
+<button class="h-11 px-8 rounded-[10px] bg-[#0153dc] text-white font-label-md text-body-md font-semibold hover:bg-[#0047c0] active:scale-[0.99] shadow-sm transition-all flex items-center gap-2" type="button">
+<span>Done</span>
+<span class="material-symbols-outlined text-[18px]">check</span>
+</button>
+</div>
+</div>
+</div>
+</div></main></div></body></html>

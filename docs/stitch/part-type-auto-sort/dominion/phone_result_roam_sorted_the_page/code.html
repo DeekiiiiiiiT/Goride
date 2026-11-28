@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_tab" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "tertiary-fixed": "#d5e3fc", "surface-bright": "#faf8ff", "on-background": "#191b24", "on-surface-variant": "#434655", "outline-variant": "#c3c6d7", "on-error": "#ffffff", "surface-container-lowest": "#ffffff", "secondary-container": "#d9dff4", "tertiary": "#3a485c", "background": "#faf8ff", "outline": "#737686", "secondary-fixed": "#dce2f6", "error": "#ba1a1a", "surface-container-high": "#e7e7f3", "inverse-surface": "#2e3039", "on-tertiary": "#ffffff", "primary-container": "#0153dc", "inverse-primary": "#b4c5ff", "on-primary-container": "#ced8ff", "inverse-on-surface": "#f0f0fc", "tertiary-fixed-dim": "#b9c7df", "error-container": "#ffdad6", "primary": "#003ea9", "on-secondary": "#ffffff", "tertiary-container": "#526074", "on-tertiary-fixed-variant": "#3a485b", "on-surface": "#191b24", "on-secondary-fixed-variant": "#404757", "primary-fixed": "#dbe1ff", "on-error-container": "#93000a", "primary-fixed-dim": "#b4c5ff", "secondary-fixed-dim": "#c0c6da", "surface-variant": "#e1e1ed", "on-primary-fixed": "#00174b", "surface-container-highest": "#e1e1ed", "surface-dim": "#d9d9e5", "surface-container-low": "#f3f3ff", "on-tertiary-fixed": "#0d1c2e", "on-primary-fixed-variant": "#003ea8", "on-primary": "#ffffff", "on-secondary-fixed": "#151b2a", "surface": "#faf8ff", "secondary": "#585e6f", "surface-tint": "#0053db", "surface-container": "#ededf9", "on-tertiary-container": "#ccdbf3", "on-secondary-container": "#5c6274" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-sm": "0.5rem", "space-xs": "0.25rem", "margin": "2rem", "space-lg": "1.5rem", "gutter-lg": "2rem", "space-xl": "2rem", "margin-mobile": "1rem", "gutter": "1.5rem", "gutter-sm": "1rem", "space-md": "1rem" }, "fontFamily": { "body-lg": ["Inter"], "display-lg": ["Inter"], "headline-md": ["Inter"], "code-sm": ["JetBrains Mono"], "body-sm": ["Inter"], "label-md": ["Inter"], "label-sm": ["Inter"], "headline-sm": ["Inter"], "body-md": ["Inter"], "headline-lg": ["Inter"], "code-md": ["JetBrains Mono"] }, "fontSize": { "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400" }], "display-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600" }], "headline-md": ["20px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "code-sm": ["11px", { "lineHeight": "16px", "letterSpacing": "0em", "fontWeight": "500" }], "body-sm": ["13px", { "lineHeight": "18px", "letterSpacing": "0.005em", "fontWeight": "400" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" }], "label-sm": ["11px", { "lineHeight": "14px", "letterSpacing": "0.03em", "fontWeight": "500" }], "headline-sm": ["16px", { "lineHeight": "24px", "letterSpacing": "-0.005em", "fontWeight": "600" }], "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400" }], "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.015em", "fontWeight": "600" }], "code-md": ["13px", { "lineHeight": "18px", "letterSpacing": "-0.01em", "fontWeight": "400" }] } } } }</script><style>@layer base{html,body{width:100%;margin:0;padding:0;}body{overscroll-behavior-y:none;background-color:#faf8ff;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style></head><body class="bg-surface text-on-surface font-body-md text-body-md antialiased min-h-screen flex flex-col"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-gutter-sm flex items-center justify-between gap-space-sm"><div class="flex items-center gap-space-sm min-w-0"><div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-on-primary text-[18px]">deployed_code</span></div><div class="flex flex-col min-w-0"><span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider truncate">Dominion Admin</span><h1 class="font-headline-sm text-headline-sm text-on-surface truncate leading-tight">Overview</h1></div></div><div class="flex items-center gap-space-xs shrink-0"><button aria-label="Global Search" class="w-11 h-11 flex items-center justify-center rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">search</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col w-full bg-surface pt-16 pb-24 px-gutter-sm"><div class="flex flex-col w-full relative">
+<!-- Dimmed Background Simulated Catalogue View (40% Opacity) -->
+<div aria-hidden="true" class="w-full opacity-40 select-none pointer-events-none mb-[-48px] px-space-xs flex flex-col gap-space-sm">
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<div class="flex items-center justify-between pb-space-sm">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">directions_car</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Toyota Roomy (M900A)</span>
+</div>
+<span class="font-code-sm text-code-sm text-on-surface-variant">FIG 87-01</span>
+</div>
+<div class="font-headline-sm text-headline-sm text-on-surface">Heating &amp; Air Conditioning - Cooler Unit &amp; Blower</div>
+<div class="h-32 mt-space-sm bg-surface-container rounded-lg flex items-center justify-center overflow-hidden">
+<div class="flex flex-col items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined text-[28px]">schema</span>
+<span class="font-code-sm text-code-sm">M900A-BGBGE · Amayama EPC Matrix</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Native Bottom Sheet Presentation (Elevated & Tactile) -->
+<section class="w-full bg-surface-container-lowest rounded-t-[24px] shadow-[0_-8px_32px_rgba(11,18,32,0.12)] pt-space-sm pb-space-xl px-space-md flex flex-col gap-space-lg relative z-10">
+<!-- Top Grab Handle -->
+<div class="w-full flex justify-center py-space-xs">
+<div class="w-9 h-1 rounded-full bg-outline-variant"></div>
+</div>
+<!-- Header & Status Block -->
+<div class="flex flex-col items-start gap-space-sm">
+<div class="w-[52px] h-[52px] rounded-full bg-[#e6f4ea] flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[#006e31] text-[30px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="flex flex-col">
+<h2 class="font-headline-lg text-headline-lg text-on-surface leading-tight">6 parts saved</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">From amayama.com · read 26 Nov 2026</p>
+</div>
+<!-- Count Pills Wrapping Across Two Lines -->
+<div class="flex flex-col gap-1.5 w-full pt-space-xs">
+<div class="flex flex-wrap items-center gap-1.5">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#e6f4ea] text-[#006e31] font-label-md text-label-md">
+<span class="w-1.5 h-1.5 rounded-full bg-[#006e31]"></span>
+            Saved 6
+          </span>
+<span class="inline-flex items-center px-2.5 py-1 rounded-full bg-[#f1f5f9] text-[#475569] font-label-md text-label-md">
+            Already on file 2
+          </span>
+</div>
+<div class="flex flex-wrap items-center gap-1.5">
+<span class="inline-flex items-center px-2.5 py-1 rounded-full bg-[#fff4dc] text-[#8a5a00] font-label-md text-label-md">
+            Needs you 0
+          </span>
+<span class="inline-flex items-center px-2.5 py-1 rounded-full bg-surface-container-low text-on-surface-variant font-label-md text-label-md">
+            Not a Roam part type 34
+          </span>
+</div>
+</div>
+<!-- Live Creation Progress Subline -->
+<div class="flex items-center gap-1.5 text-on-surface-variant pt-space-xs">
+<span class="material-symbols-outlined text-[17px] text-primary">image</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant font-medium">Pictures: 6 being made</span>
+<span class="inline-flex items-center justify-center w-2 h-2 rounded-full bg-primary animate-pulse ml-0.5"></span>
+</div>
+</div>
+<!-- Group: Saved (6) -->
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center justify-between px-space-xs pb-1">
+<span class="font-headline-sm text-headline-sm text-on-surface">Saved (6)</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Catalogued</span>
+</div>
+<div class="flex flex-col gap-2">
+<!-- Row 1 -->
+<div class="w-full bg-surface-container-low rounded-xl p-space-sm flex items-center justify-between gap-space-sm shadow-[0_1px_4px_rgba(1,83,220,0.03)] hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-10 h-10 rounded-lg bg-primary-fixed flex flex-col items-center justify-center shrink-0">
+<span class="font-code-sm text-[10px] font-bold text-on-primary-fixed uppercase leading-tight">Making</span>
+<span class="material-symbols-outlined text-[14px] text-primary">hourglass_top</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="font-headline-sm text-[14px] text-on-surface leading-snug">Blower motor</span>
+<span class="px-1.5 py-0.5 rounded-full bg-[#f1f5f9] text-[#475569] font-label-sm text-[10px]">New part type</span>
+</div>
+<span class="font-code-sm text-code-sm text-on-surface-variant truncate mt-0.5">87103-B1040 · 11.2016 – 09.2020</span>
+</div>
+</div>
+<span class="shrink-0 px-2 py-0.5 rounded-full bg-[#e6f4ea] text-[#006e31] font-label-sm text-[11px] font-semibold">Confirmed</span>
+</div>
+<!-- Row 2 -->
+<div class="w-full bg-surface-container-low rounded-xl p-space-sm flex items-center justify-between gap-space-sm shadow-[0_1px_4px_rgba(1,83,220,0.03)] hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-10 h-10 rounded-lg bg-primary-fixed flex flex-col items-center justify-center shrink-0">
+<span class="font-code-sm text-[10px] font-bold text-on-primary-fixed uppercase leading-tight">Making</span>
+<span class="material-symbols-outlined text-[14px] text-primary">hourglass_top</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="font-headline-sm text-[14px] text-on-surface leading-snug">Blower resistor</span>
+<span class="px-1.5 py-0.5 rounded-full bg-[#f1f5f9] text-[#475569] font-label-sm text-[10px]">New part type</span>
+</div>
+<span class="font-code-sm text-code-sm text-on-surface-variant truncate mt-0.5">87138-B1010 · 11.2016 – 09.2020</span>
+</div>
+</div>
+<span class="shrink-0 px-2 py-0.5 rounded-full bg-[#e6f4ea] text-[#006e31] font-label-sm text-[11px] font-semibold">Confirmed</span>
+</div>
+<!-- Row 3 -->
+<div class="w-full bg-surface-container-low rounded-xl p-space-sm flex items-center justify-between gap-space-sm shadow-[0_1px_4px_rgba(1,83,220,0.03)] hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-10 h-10 rounded-lg bg-primary-fixed flex flex-col items-center justify-center shrink-0">
+<span class="font-code-sm text-[10px] font-bold text-on-primary-fixed uppercase leading-tight">Making</span>
+<span class="material-symbols-outlined text-[14px] text-primary">hourglass_top</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="font-headline-sm text-[14px] text-on-surface leading-snug">Cooler expansion valve</span>
+<span class="px-1.5 py-0.5 rounded-full bg-[#f1f5f9] text-[#475569] font-label-sm text-[10px]">New part type</span>
+</div>
+<span class="font-code-sm text-code-sm text-on-surface-variant truncate mt-0.5">88515-B1020 · 11.2016 – 09.2020</span>
+</div>
+</div>
+<span class="shrink-0 px-2 py-0.5 rounded-full bg-[#e6f4ea] text-[#006e31] font-label-sm text-[11px] font-semibold">Confirmed</span>
+</div>
+<!-- Row 4 -->
+<div class="w-full bg-surface-container-low rounded-xl p-space-sm flex items-center justify-between gap-space-sm shadow-[0_1px_4px_rgba(1,83,220,0.03)] hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-10 h-10 rounded-lg bg-primary-fixed flex flex-col items-center justify-center shrink-0">
+<span class="font-code-sm text-[10px] font-bold text-on-primary-fixed uppercase leading-tight">Making</span>
+<span class="material-symbols-outlined text-[14px] text-primary">hourglass_top</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="font-headline-sm text-[14px] text-on-surface leading-snug">Cooler evaporator</span>
+<span class="px-1.5 py-0.5 rounded-full bg-[#f1f5f9] text-[#475569] font-label-sm text-[10px]">New part type</span>
+</div>
+<span class="font-code-sm text-code-sm text-on-surface-variant truncate mt-0.5">88501-B1110 · 11.2016 – 09.2020</span>
+</div>
+</div>
+<span class="shrink-0 px-2 py-0.5 rounded-full bg-[#e6f4ea] text-[#006e31] font-label-sm text-[11px] font-semibold">Confirmed</span>
+</div>
+<!-- Row 5 -->
+<div class="w-full bg-surface-container-low rounded-xl p-space-sm flex items-center justify-between gap-space-sm shadow-[0_1px_4px_rgba(1,83,220,0.03)] hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-10 h-10 rounded-lg bg-primary-fixed flex flex-col items-center justify-center shrink-0">
+<span class="font-code-sm text-[10px] font-bold text-on-primary-fixed uppercase leading-tight">Making</span>
+<span class="material-symbols-outlined text-[14px] text-primary">hourglass_top</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-[14px] text-on-surface leading-snug">Heater core sub-assy</span>
+<span class="font-code-sm text-code-sm text-on-surface-variant truncate mt-0.5">87107-B1020 · 11.2016 – 09.2020</span>
+</div>
+</div>
+<span class="shrink-0 px-2 py-0.5 rounded-full bg-[#e6f4ea] text-[#006e31] font-label-sm text-[11px] font-semibold">Confirmed</span>
+</div>
+<!-- Row 6 -->
+<div class="w-full bg-surface-container-low rounded-xl p-space-sm flex items-center justify-between gap-space-sm shadow-[0_1px_4px_rgba(1,83,220,0.03)] hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-10 h-10 rounded-lg bg-primary-fixed flex flex-col items-center justify-center shrink-0">
+<span class="font-code-sm text-[10px] font-bold text-on-primary-fixed uppercase leading-tight">Making</span>
+<span class="material-symbols-outlined text-[14px] text-primary">hourglass_top</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-[14px] text-on-surface leading-snug">Thermostat housing valve</span>
+<span class="font-code-sm text-code-sm text-on-surface-variant truncate mt-0.5">87106-B1010 · 11.2016 – 09.2020</span>
+</div>
+</div>
+<span class="shrink-0 px-2 py-0.5 rounded-full bg-[#e6f4ea] text-[#006e31] font-label-sm text-[11px] font-semibold">Confirmed</span>
+</div>
+</div>
+</div>
+<!-- Group: Already on file (2) -->
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center justify-between px-space-xs pb-1">
+<span class="font-headline-sm text-headline-sm text-on-surface">Already on file (2)</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Matched</span>
+</div>
+<div class="flex flex-col gap-2">
+<!-- Existing 1 -->
+<div class="w-full bg-surface-container-low rounded-xl p-space-sm flex items-center justify-between gap-space-sm shadow-[0_1px_4px_rgba(1,83,220,0.03)] hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-10 h-10 rounded-lg bg-secondary-fixed flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[20px] text-on-secondary-fixed">inventory_2</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-[14px] text-on-surface leading-snug">Cabin A/C Filter</span>
+<span class="font-code-sm text-code-sm text-on-surface-variant truncate mt-0.5">87139-50100 · 11.2016 – 09.2020</span>
+</div>
+</div>
+<span class="shrink-0 px-2 py-0.5 rounded-full bg-[#e6f4ea] text-[#006e31] font-label-sm text-[11px] font-semibold">Confirmed</span>
+</div>
+<!-- Existing 2 -->
+<div class="w-full bg-surface-container-low rounded-xl p-space-sm flex items-center justify-between gap-space-sm shadow-[0_1px_4px_rgba(1,83,220,0.03)] hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-10 h-10 rounded-lg bg-secondary-fixed flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[20px] text-on-secondary-fixed">inventory_2</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-[14px] text-on-surface leading-snug">Cabin A/C Filter (high efficiency)</span>
+<span class="font-code-sm text-code-sm text-on-surface-variant truncate mt-0.5">87139-52040 · 11.2016 – 09.2020</span>
+</div>
+</div>
+<span class="shrink-0 px-2 py-0.5 rounded-full bg-[#e6f4ea] text-[#006e31] font-label-sm text-[11px] font-semibold">Confirmed</span>
+</div>
+</div>
+</div>
+<!-- Sort Summary Panel -->
+<div class="w-full bg-surface-container-low rounded-xl p-3.5 flex flex-col gap-space-sm">
+<div class="flex items-start gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-primary-fixed flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-primary text-[18px]">auto_awesome</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface leading-snug flex-1">
+          Roam sorted 40 rows · 4 new part types · 3 fixings · 12 names not tracked
+        </p>
+</div>
+<button class="w-full h-11 bg-surface-container-lowest text-on-surface rounded-[10px] font-headline-sm text-[14px] flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-transform" type="button">
+<span>Review</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">arrow_forward</span>
+</button>
+</div>
+<!-- Primary & Secondary Bottom Action Bar -->
+<div class="flex flex-col gap-2.5 w-full pt-space-xs">
+<button class="w-full h-11 bg-primary text-on-primary rounded-[10px] font-headline-sm text-[15px] flex items-center justify-center gap-space-xs shadow-[0_4px_16px_rgba(1,83,220,0.24)] active:scale-[0.99] transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">done_all</span>
+<span>Done</span>
+</button>
+<button class="w-full h-11 bg-surface-container-lowest text-on-surface rounded-[10px] font-headline-sm text-[15px] flex items-center justify-center gap-space-xs shadow-sm active:scale-[0.99] transition-all" type="button">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">photo_library</span>
+<span>See pictures</span>
+</button>
+</div>
+</section>
+</div></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/80 backdrop-blur-xl shadow-[0_-2px_12px_rgba(1,83,220,0.04)]" data-active-classes="text-primary font-semibold"><div class="flex items-center justify-around h-16 px-space-xs"><a aria-current="page" class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-space-xs transition-colors text-primary font-semibold" data-path="overview" href="#"><span class="material-symbols-outlined text-[22px]">dashboard</span><span class="font-label-sm text-label-sm">Overview</span></a><a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-space-xs text-on-surface-variant hover:text-on-surface transition-colors" data-path="records" href="#"><span class="material-symbols-outlined text-[22px]">table_chart</span><span class="font-label-sm text-label-sm">Records</span></a><a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-space-xs text-on-surface-variant hover:text-on-surface transition-colors" data-path="infrastructure" href="#"><span class="material-symbols-outlined text-[22px]">dns</span><span class="font-label-sm text-label-sm">Infra</span></a><a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-space-xs text-on-surface-variant hover:text-on-surface transition-colors" data-path="operations" href="#"><span class="material-symbols-outlined text-[22px]">hub</span><span class="font-label-sm text-label-sm">Operations</span></a><a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-space-xs text-on-surface-variant hover:text-on-surface transition-colors" data-path="activity-audit" href="#"><span class="material-symbols-outlined text-[22px]">monitoring</span><span class="font-label-sm text-label-sm">Audit</span></a></div></nav></body></html>

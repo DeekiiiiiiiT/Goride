@@ -1,0 +1,170 @@
+ROAM DOMINION — MAINTENANCE: CAR DOCUMENTS IN, VALUES OUT — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+HOW TO USE: First paste = everything from the intro down to END OF FIRST PASTE (Screens 1 and 2). Then paste one SCREEN block at a time, in order. Never paste the last section ("FOR CLAUDE — DO NOT PASTE").
+Plan: docs/maintenance-enterprise-rebuild-review.md, "Build step 6b — Documents in, values out" (DOC-01 … DOC-12).
+Use the same Stitch project as docs/stitch/maintenance-rebuild-dominion-prompt.txt so these screens match the Manuals screens already made. If that project's saved design system is called "Precision", "Technical" or "Utilitarian", rename the style to "Calm modern workspace" first.
+
+
+==================== FIRST PASTE ====================
+
+Roam Dominion - Maintenance templates: car documents in, values out (desktop admin console for the owner, who is not a mechanic):
+
+Design high-fidelity, modern screens that make adding a car document effortless. The owner drops in a PDF (a car maker's maintenance sheet, a maintenance booklet, or an owner's manual). Roam reads its first pages by itself and fills in everything: which car it is for, which country, what kind of document it is, its name, the date printed on it, and which pages matter. The owner only checks and presses Upload. A service schedule document gives the part schedules (how often each part is changed). An owner's manual gives the car's specs: oil and fluids with their capacities, tyre sizes and pressures, the battery size, and every bulb. On the check screen each spec shows what Roam has now next to what the manual says, so nothing is ever changed without being seen, and the owner ticks which versions of the car each value is for (2WD, 4WD, turbo). It must feel effortless and premium, like a modern document app: big clear page pictures, calm progress, one obvious next step. Make each screen tall enough to show everything, with no inner scrolling and no cut-off boxes. Draw only the screens asked for in this message. Dominion is the master reference database: no fleet names, plates, drivers, vehicle counts, "used by", prices or stock anywhere.
+
+
+BRAND IDENTITY (take from the live Dominion screens — do not invent):
+- Keep the Dominion console frame exactly as it is:
+  - dark navy left sidebar "Dominion · Roam Admin Console" with groups MASTER DATA (Overview, Vehicles active, Places and Maps, Fuel, Tolls, Tax and Vendors), ENGINES (Fuel Brain, Toll Brain, Matching Brain), DISTRIBUTION (Apps, Data API, Change requests), PLATFORM (Staff and roles, Activity log, Platform Ops, Global settings), BACK OFFICE (GCT registrations, Ledger, Remittance)
+  - top bar: search "Search entities, engines, routes…" with a ⌘K chip, moon icon, user "Deeki T · Owner"
+  - everything right of the sidebar and below the top bar is the design
+- Page header on the Maintenance screens: breadcrumb "Dominion › Master data › Vehicles › Maintenance templates" in 13px muted sentence case; title "Maintenance templates" 26px semibold; subtitle "How often each part is serviced, for which cars, and why."; a pill tab bar: "Part schedules 24", "Manuals 1", "Service packages 5", "Jobs 167", "Supplies 57", "Review list 0", "History". The selected tab is a solid #0153dc pill with white text and a white count bubble; the others are plain text with a soft grey count bubble.
+- Theme: "Calm modern workspace". Generous spacing, 16px rounded cards, soft shadows, larger type, clear hierarchy, few codes.
+- LIGHT MODE (draw every screen in light mode):
+  - Primary #0153dc; primary container #dbe1ff
+  - Background #faf8fe; cards #ffffff, 16px radius, 1px #e6e7ee hairline, soft shadow 0 4px 16px rgba(1,83,220,0.04)
+  - Text #30323b; muted #5d5f68; input borders #c5c6d0; tint panels #f3f4fb with 12px radius
+  - Success #006e31 on #e6f4ea; warning #8a5a00 on #fff4dc; error #a83836 on #fdecec; slate #475569 on #f1f5f9
+- DARK MODE (for the theme switch): background #0b1220; cards #111a2e; hairlines #1e293b; text #e2e8f0; muted #94a3b8; primary #5b8def; success #4ade80; warning #fbbf24; error #f87171.
+- Document type pills, one look everywhere (rounded, icon + words): "Service schedule" (blue on #dbe1ff, event_repeat icon) and "Owner's manual" (slate on #f1f5f9, menu_book icon).
+- "Roam found this" marks, one look everywhere: a field Roam filled in with certainty shows a small green check and the muted line "From page 1"; a field Roam was unsure of has a 1px amber border, an amber "Check this" pill, and one muted line saying why ("The cover gives no years. Roam used the date printed on page 1: June 2021.").
+- Page chips, one look everywhere: a row of small rounded chips, each a page or range in mono ("3", "402–407", "412–413", "520–526"), with an × to remove one and a secondary "+ Add pages" button at the end. Under the chips, small page pictures (72×96 px) of the first page of each chip.
+- Printed page numbers: every page number a person sees is the number printed in the book. Never show two numbers for one page.
+- "Now → Manual" line, one look everywhere: muted "Now 3.2 L" on the left, a thin arrow, then the manual's value in bold "2.9 L" on the right; when they are the same, a single green "Matches" pill instead.
+- Version tick boxes, one look everywhere: 20px rounded squares with plain words beside them, e.g. "2016–2020 · 2WD", "2016–2020 · 4WD", "2020– · 2WD", "2020– · 4WD", "2020– · turbo".
+- Car names, one way everywhere: make, model and years in plain words — "Toyota Roomy 2020–", "Toyota Roomy 2016–2020". Engines in plain words — "1.0 petrol", "1.0 turbo". Never frame, chassis or engine codes on screen.
+- Buttons always look like buttons, never underlined text links:
+  - Primary: solid #0153dc, white text, 44px tall, 10px radius, semibold
+  - Secondary: white fill, visible #c5c6d0 border, dark text
+  - Danger (Cancel, Remove, Reject): white fill, #a83836 border and red text
+  - Disabled: 50% opacity, never hidden, with a small muted line under it saying why
+- Inputs and dropdowns: white, 10px radius, 1px #c5c6d0 border, 44px tall; focus ring #0153dc.
+- Typography: Inter. Titles 26px semibold, section titles 18px semibold, body 15px, hints 13px muted. JetBrains Mono with tabular numerals only for numbers, page numbers and dates, always after the plain words.
+- Icons: Material Symbols Outlined, 20–24px.
+- Every overlay is in-app: a centred white card over the page dimmed 40%, 20px radius, 32px padding. Never a browser pop-up.
+- Sample data (real, from the two Toyota Roomy documents):
+  - Document A: "maintenancelist_2106_roomy_passenger.pdf", 0.5 MB, 5 pages. Toyota's maintenance sheet for the Roomy (passenger car), printed date 1 June 2021, Japan. Service schedule. Useful page: 5.
+  - Document B: "roomy-2021.pdf", 8.8 MB, 568 pages. Toyota Roomy owner's manual, Japan. Owner's manual. Useful pages (printed numbers): front memo page, 402–407, 412–413, 520–526 — 16 pages instead of 568.
+  - Specs in document B: fuel regular unleaded, tank 36 L (2WD) / 38 L (4WD); engine oil 0W-20 (5W-30 allowed), 2.9 L without filter / 3.1 L with filter; coolant Toyota Super Long Life, 4.4 L (1.0 petrol) / 5.0 L (1.0 turbo); CVT fluid 5.8 L (petrol) / 6.4 L (turbo); washer 2.0 L; battery M-42, or N-55 with the electric parking brake; tyres 165/65R14 79S on 14×5J at 260 kPa (standard), 175/55R15 77V on 15×5J at 250 kPa (optional), spare T115/70D14 88M on 14×4T at 420 kPa; bulbs: headlamp H4 60/55 W, clearance 5 W, front indicator 21 W, side indicator 5 W, rear indicator 21 W, reverse 16 W, number plate 5 W, interior 5–8 W; "any lamp not listed is LED".
+  - What Roam has now: oil 3.2 L (all versions), coolant 4.5 L, tank 36 L (all versions), tyre size 165/65R14, no pressures, no bulbs, no battery on the 2020– versions.
+
+
+DESIGN PRINCIPLES (only what changes the drawing):
+- Desktop-first at 1440px; content column max 1180px. Overlays 720px wide.
+- The owner's job is to check, not to type: every field arrives filled; the eye goes to the amber "Check this" fields first.
+- One clear next action per screen.
+- The manual's value is always the bold one; Roam's current value is muted.
+- 8px spacing grid, 44px touch targets.
+
+
+SCREEN 1: ADD A CAR DOCUMENT — CHOOSE THE FILE
+Same Roam Dominion console frame, colours, cards and style. Behind the overlay, dimmed 40%: the Manuals tab with one model card "Toyota Roomy 2020–". Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 720px wide. Title "Add a car document". Muted line "Drop in a maintenance sheet, a maintenance booklet or an owner's manual. Roam fills in the rest."
+- A large drop zone (#f9f9fd fill, 2px dashed #c5c6d0, 20px radius, 240px tall): upload_file icon in a 56px #dbe1ff circle, "Drop the PDF here", muted "or", secondary button "Choose a PDF", muted "Up to 100 MB".
+- Under it, three small example cards in a row, each with an icon and one line: event_repeat "Maintenance sheet or booklet — when each part is changed" · menu_book "Owner's manual — oil, tyres, battery and bulbs" · translate "Japanese or English".
+- Footer: danger "Cancel" on the left. Nothing on the right yet.
+
+SCREEN 2: ROAM FOUND THIS — A MAINTENANCE SHEET
+Same Roam Dominion console frame, colours, cards and style. Behind the overlay, dimmed 40%: the Manuals tab. Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 720px wide. Title "Roam found this". Muted line "Check it, then press Upload."
+- File row at the top: PDF icon, "maintenancelist_2106_roomy_passenger.pdf", muted "0.5 MB · 5 pages", secondary button "Choose another file".
+- Field "What is it?": two large choice cards side by side — "Service schedule" (selected, blue border, tick, line "When each part is changed") and "Owner's manual" (line "Oil, tyres, battery and bulbs"). Green check and muted "From page 1: 点検整備方式 (Toyota maintenance sheet)".
+- Field "Car": four filled dropdowns in two rows — "Make · Toyota", "Model · Roomy", "Years · 2020–", "Version · All versions". The Years box has the amber border and "Check this" pill, with the muted line "The sheet gives no years. Roam used the date printed on page 1: 1 June 2021." Under it a green line with a check: "Covers Toyota Roomy, Toyota Tank, Daihatsu Thor and Subaru Justy — the same car under four names."
+- Field "Country": "Japan", green check, muted "The sheet is in Japanese and cites Japan's transport ministry."
+- Field "Name": filled "Toyota Roomy — Maintenance sheet (Japan, June 2021)".
+- Field "Pages to read": one chip "5" and secondary "+ Add pages"; one page picture of page 5 under it; muted "Page 5 is the replacement schedule. Pages 1–4 are inspection lists, not read."
+- Muted cost line with a small info icon: "Reading costs less than 1 US cent."
+- Footer: danger "Cancel"; primary "Upload and read".
+
+END OF FIRST PASTE
+
+
+SCREEN 3: ROAM FOUND THIS — AN OWNER'S MANUAL
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the overlay, dimmed 40%: the Manuals tab. Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 720px wide. Title "Roam found this". Muted line "Check it, then press Upload."
+- File row: PDF icon, "roomy-2021.pdf", muted "8.8 MB · 568 pages", secondary "Choose another file".
+- Field "What is it?": the two choice cards, "Owner's manual" selected (blue border, tick). Green check and muted "From the contents page".
+- Field "Car": "Make · Toyota", "Model · Roomy", "Years · 2020–", "Version · All versions". The Years box has the amber border, "Check this" pill and the muted line "The manual leaves the car name and model blank for the owner to fill in. Roam used the 2021 print date."
+- Field "Country": "Japan", green check.
+- Field "Name": filled "Toyota Roomy — Owner's manual (Japan, 2021)".
+- Field "Pages to read": chips "Front memo page", "402–407", "412–413", "520–526", each with ×, then secondary "+ Add pages". Under the chips, four small page pictures, one per chip. A green line: "16 pages instead of 568 — oil, tyres, battery, bulbs and the two intervals this manual prints."
+- A soft #f3f4fb panel with an info icon: "This manual does not give the full service schedule. Add the car's maintenance sheet or booklet for that."
+- Muted cost line: "Reading costs about 1 US cent."
+- Footer: danger "Cancel"; primary "Upload and read".
+
+SCREEN 4: MODEL PAGE — TWO DOCUMENTS AND THE SPECS
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Page header with the "Manuals" tab selected. Draw tall enough to show everything, no inner scrolling.
+- Back button (secondary, arrow) "Manuals". Title "Toyota Roomy 2020–". Muted "Also sold as Toyota Tank, Daihatsu Thor and Subaru Justy". Secondary button on the right "+ Add a car document".
+- Two document cards side by side, equal width:
+  - "Service schedule" pill · "Toyota Roomy — Maintenance sheet (Japan, June 2021)" · green "Checked" pill · "Japan" pill · muted "Page 5 · 15 numbers · 8 in use" · secondary buttons "See the numbers" and "Read again".
+  - "Owner's manual" pill · "Toyota Roomy — Owner's manual (Japan, 2021)" · amber "Waiting for you" pill · "Japan" pill · muted "16 pages · 27 specs found" · primary button "Check specs".
+- Card "Specs from the owner's manual", four sections in a 2×2 grid, each a small table with the source page as a secondary button "Page 521" at the end of each row:
+  - Fluids: Engine oil 0W-20 · 2.9 L (3.1 L with filter) · Coolant 4.4 L (5.0 L turbo) · CVT fluid 5.8 L (6.4 L turbo) · Washer 2.0 L · Fuel regular, 36 L (2WD) / 38 L (4WD)
+  - Tyres: 165/65R14 79S · 260 kPa · standard · 175/55R15 77V · 250 kPa · optional · Spare T115/70D14 · 420 kPa
+  - Battery: M-42 · N-55 with the electric parking brake
+  - Bulbs: Headlamp H4 60/55 W · Front indicator 21 W · Rear indicator 21 W · Reverse 16 W · "+4 more" · muted "Any lamp not listed is LED"
+  - Every value in this card is muted grey with a small amber "Not checked yet" pill on the card title, because the manual is waiting for the owner.
+
+SCREEN 5: CHECK THE SPECS
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Full-width page (no tab bar). Draw tall enough to show everything, no inner scrolling.
+- Top: back button "Toyota Roomy", title "Check the specs", muted "Toyota Roomy — Owner's manual (Japan, 2021) · 16 pages".
+- Progress strip: "0 of 27 checked", thin bar; page chips "Front memo", "402–407", "412–413", "520–526", with "520–526" selected.
+- Two columns:
+  - LEFT (45%): the picture of printed page 521 (a Japanese table of oil grades and capacities, with the row "エンジンオイル 2.9 L / 3.1 L" highlighted by a soft #dbe1ff band); zoom buttons under it; page number pill "521".
+  - RIGHT (55%), section "FLUIDS", one card per spec:
+    1. Engine oil capacity — "Now 3.2 L → Manual 2.9 L" — second line "With filter: Now — → Manual 3.1 L" — version tick boxes, all ticked: "2016–2020 · 2WD", "2016–2020 · 4WD", "2020– · 2WD", "2020– · 4WD", "2020– · turbo" — buttons secondary "Edit", primary-outline "Approve".
+    2. Engine oil grade — "Now — → Manual 0W-20 (5W-30 allowed)" — all versions ticked — "Edit", "Approve".
+    3. Coolant capacity — two lines: "1.0 petrol: Now 4.5 L → Manual 4.4 L" and "1.0 turbo: Now 4.5 L → Manual 5.0 L" — tick boxes split under each line: petrol versions under the first, "2020– · turbo" under the second — "Edit", "Approve".
+    4. Fuel tank — "2WD: Now 36 L · Matches" (green pill) and "4WD: Now 36 L → Manual 38 L" — the 4WD versions ticked under the second line — "Edit", "Approve".
+  - Then section "TYRES" with one card: three rows "165/65R14 79S · 14×5J · 260 kPa · standard", "175/55R15 77V · 15×5J · 250 kPa · optional", "Spare T115/70D14 88M · 14×4T · 420 kPa", muted "Now: size only, no pressures", all versions ticked — "Edit", "Approve".
+- Sticky footer bar: muted "Approved specs replace what Roam has for the ticked versions, and the old value is kept in History."; danger "Reject this manual"; secondary "Save and finish later"; primary "Approve all 27".
+
+SCREEN 6: CATALOGUE CAR PAGE — TYRES, BATTERY AND BULBS
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Page header: breadcrumb "Dominion › Master data › Vehicles › Toyota Roomy 2020– · 2WD · 1.0 petrol", title "Toyota Roomy 2020–", muted "2WD · 1.0 petrol · CVT". Draw tall enough to show everything, no inner scrolling.
+- A row of existing summary cards drawn small and calm (keep them simple): "Engine 1.0 petrol", "Fuel regular · 36 L", "Oil 0W-20 · 2.9 L (3.1 L with filter)".
+- Card "Tyres" with a tyre icon: a clean three-row table — Position · Size · Wheel · Pressure · Note: "Front and rear · 165/65R14 79S · 14×5J · 260 kPa · Standard"; "Front and rear · 175/55R15 77V · 15×5J · 250 kPa · Optional"; "Spare · T115/70D14 88M · 14×4T · 420 kPa · —". At the bottom right a secondary button "Owner's manual · page 525".
+- Card "Battery" with a battery icon: "M-42", muted "N-55 on cars with the electric parking brake", secondary "Owner's manual · page 524".
+- Card "Bulbs" with a lightbulb icon: a two-column list — Headlamp H4 60/55 W · Clearance 5 W · Front indicator 21 W · Side indicator 5 W · Rear indicator 21 W · Reverse 16 W · Number plate 5 W · Interior 5–8 W; muted "Any lamp not listed is LED"; secondary "Owner's manual · page 525".
+- Each card has a small green "Car maker" pill in its title row.
+
+SCREEN 7: ROAM COULD NOT TELL — A SCANNED DOCUMENT
+Same Roam Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the overlay, dimmed 40%: the Manuals tab. Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 720px wide. Title "Roam found some of this". Muted line "This PDF is a scan, so Roam read the first pages as pictures. Fill in what is missing."
+- File row: PDF icon, "honda-fit-maintenance.pdf", muted "3.1 MB · 12 pages".
+- Field "What is it?": "Service schedule" selected, amber "Check this" pill, muted "Looks like a schedule table on pages 4–5."
+- Field "Car": "Make · Honda" (green check), "Model · Fit" (green check), "Years · Choose the years" (empty, amber border, "Check this"), "Version · All versions".
+- Field "Country": empty dropdown "Choose the country", amber border, muted "The scan does not say which country."
+- Field "Name": filled "Honda Fit — Maintenance schedule".
+- Field "Pages to read": chip "4–5", page pictures of 4 and 5.
+- Footer: danger "Cancel"; primary "Upload and read" disabled at 50% with the muted line "Choose the years and the country."
+
+
+==================== FOR CLAUDE — DO NOT PASTE ====================
+
+ADDITIONAL UI COMPONENTS:
+- FoundField: value + certainty (sure → green check + "From page N"; unsure → amber border + "Check this" + reason line). Used for doc type, make/model/years/version, country, name, printed date, pages.
+- DocTypeChoice: two cards, schedule | owners_manual (maintenance_manual.doc_type).
+- PageChips: editable list of pages/ranges in PRINTED numbers; stored as PDF pages in maintenance_manual.pages with page_offset (printed = PDF − offset). "Front memo page" = a page with no printed number (show its label, not a number).
+- NowToManual: current catalogue value vs manual value; "Matches" when equal.
+- VersionTicks: the family's catalogue versions in plain words (years · drive · engine), pre-ticked from the spec's "applies to" note.
+- SpecCard sections: Fluids (oil grade, oil capacity with/without filter, coolant type/capacity, CVT fluid, transfer, differential, washer, fuel grade + tank), Tyres (vehicle_tyre rows), Battery, Bulbs (vehicle_bulb rows).
+- Exact colours (text-[#…]), never Tailwind colour names (Dominion dark mode remaps them).
+
+INTERACTIONS:
+- S1 choose/drop → the browser reads the text layer of pages 1–15 + contents with pdf.js (cMaps on) → POST maintenance-manuals/identify {text, page_count, file_name} → DeepSeek returns make, model, printed date, market, doc_type, title, page_offset, suggested pages with reasons → catalogue match (make/model; years from printed date against production years) → S2/S3. No text layer → send first 6 page images → S7 with gaps.
+- Years from a printed date pick the catalogue years that contain that date (June 2021 → 2020–). The owner can change them; a dated document never silently covers earlier years (DOC-05).
+- Upload as today (upload-url → PUT → uploaded) with doc_type, pages, page_offset, year_from/year_to.
+- owners_manual pages go to the specs reader (DOC-06) and also return any intervals they print (tyre rotation 5,000 km, cabin filter 20,000 / 10,000).
+- S5 Approve writes to the ticked versions only: vehicle_catalog columns (oil, coolant, tank), catalog_spec_value (new spec keys, trust_route 'maker_document'), vehicle_tyre, vehicle_bulb; each change writes a history line (who, when, old, new, manual, printed page) (DOC-12). "Approve all" skips rows with an amber note.
+- S6 is read-only, shown on the existing catalogue car page; the page button opens the page picture.
+- Owner-only: Approve, Approve all, Reject. Staff can upload and edit.
+
+Spec screens / Area:
+| Screen | Plan | Area |
+|---|---|---|
+| 1 | DOC-01 | Upload overlay, step 1 (replaces the current single-step upload) |
+| 2 | DOC-01/02/03/05 | Upload overlay, step 2, schedule document |
+| 3 | DOC-01/02/03/04 | Upload overlay, step 2, owner's manual |
+| 4 | DOC-02/06 | Manuals → model page (two document cards + specs card) |
+| 5 | DOC-06/09/10/12 | Check the specs page |
+| 6 | DOC-07/08 | Vehicles → catalogue car page, new Tyres / Battery / Bulbs cards |
+| 7 | DOC-01 (scan fallback) | Upload overlay, step 2, partial |

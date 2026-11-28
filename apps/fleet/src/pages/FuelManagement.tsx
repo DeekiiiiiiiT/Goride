@@ -7,7 +7,7 @@ import { FuelCardList } from '../components/fuel/FuelCardList';
 import { FuelCardModal } from '../components/fuel/FuelCardModal';
 import { FuelCardAssignModal } from '../components/fuel/FuelCardAssignModal';
 import { FuelLogModal } from '../components/fuel/FuelLogModal';
-import { FuelLogTable } from '../components/fuel/FuelLogTable';
+import { FuelLogTable, FUEL_LOGS_OPEN_VIEW_KEY } from '../components/fuel/FuelLogTable';
 import { FuelConfiguration } from '../components/fuel/FuelConfiguration';
 import { FuelIntegrityDesk, type FuelIntegritySubtab } from '../components/fuel/integrity/FuelIntegrityDesk';
 import { BucketReconciliationView } from '../components/fuel/BucketReconciliationView';
@@ -122,6 +122,7 @@ import { FuelPhoneWaitingCard, FuelReviewTiles, useFuelPhoneOutbox } from '../co
 import { isPendingTabRow } from '@roam/fuel-core';
 import {
   FuelNeedsLookPanel,
+  isFillNeedingLook,
   isPhoneFillBeingRead,
   isPhoneFillNeedingLook,
 } from '../components/fuel/phone-fills/FuelNeedsLookPanel';
@@ -142,7 +143,6 @@ export function FuelManagement(props: {
   deskSections?: boolean;
   summaryTarget?: HTMLElement | null;
   onDeskFinalized?: () => void | Promise<void>;
-  onUploadCardStatement?: () => void;
 }) {
   return (
     <FuelReconBusyProvider>
@@ -164,7 +164,6 @@ function FuelManagementInner({
   deskSections,
   summaryTarget,
   onDeskFinalized,
-  onUploadCardStatement,
 }: {
   defaultTab?: string;
   onViewDriverLedger?: (driverId: string) => void;
@@ -177,7 +176,6 @@ function FuelManagementInner({
   deskSections?: boolean;
   summaryTarget?: HTMLElement | null;
   onDeskFinalized?: () => void | Promise<void>;
-  onUploadCardStatement?: () => void;
 }) {
   const queryClient = useQueryClient();
   const { can } = usePermissions();
@@ -1560,9 +1558,14 @@ function FuelManagementInner({
       setCascadeDelete(true);
   }, []);
 
-  const handleApproveLogReview = useCallback(async (id: string, odometer: number, notes?: string) => {
+  const handleApproveLogReview = useCallback(async (
+      id: string,
+      odometer: number,
+      notes?: string,
+      stationOpts?: { matchedStationId?: string; stationLocation?: string },
+  ) => {
       try {
-          const updated = await api.approveExpense(id, notes, odometer);
+          const updated = await api.approveExpense(id, notes, odometer, stationOpts);
           // RQ-08: update the one row; Transaction Logs loads its own list when opened.
           setTransactions(prev => prev.map(t => t.id === id ? updated : t));
           invalidateReviewQueueCounts();
@@ -1659,7 +1662,7 @@ function FuelManagementInner({
           toast.success(
               action === 'void'
                   ? 'Cash reimbursement voided'
-                  : 'Cash amount set — approve in Pending when ready',
+                  : 'Cash amount set — approve it in Review Queue when ready',
           );
       } catch (e) {
           console.error(e);
@@ -1999,9 +2002,6 @@ function FuelManagementInner({
       }
 
       const result = await runExclusive('Finalizing week…', async () => {
-      // Declared outside the try so the catch can use it (it was out of scope there: a finalize
-      // error crashed the error handler instead of showing "Finalization failed").
-      let recoverIfAlreadyLocked: () => Promise<boolean> = async () => false;
       try {
           setIsRefreshing(true);
           setMessage('Finalizing week…');
@@ -2055,7 +2055,7 @@ function FuelManagementInner({
             (s, r) => s + (Number(r.totalGasCardCost) || 0),
             0,
           );
-          recoverIfAlreadyLocked = async (): Promise<boolean> => {
+          const recoverIfAlreadyLocked = async (): Promise<boolean> => {
             const fresh = await api.getFuelReconciliationPeriod(periodRow.id).catch(() => null);
             const locked =
               fresh &&
@@ -2184,7 +2184,7 @@ function FuelManagementInner({
       pageDescription = "Manage gas cards and their assignments.";
   } else if (activeTab === 'logs') {
       pageTitle = "Transaction Logs";
-      pageDescription = "Posted fuel fill-ups. Use Add fuel to create. Odometer shows current km; Δ Prev shows change from last fill.";
+      pageDescription = "Every saved fuel fill. Add fuel to log one yourself.";
   } else if (activeTab === 'integrity') {
       pageTitle = "Fuel Integrity";
       pageDescription =
@@ -2268,10 +2268,10 @@ function FuelManagementInner({
             </div>
           )}
           <FuelReviewTiles
-              needsLook={transactions.filter(isPhoneFillNeedingLook).length}
+              needsLook={transactions.filter(isFillNeedingLook).length}
               waitingFills={phoneOutbox.rows.reduce((s, r) => s + (r.pendingCount || 0), 0)}
               waitingDrivers={phoneOutbox.rows.length}
-              ready={transactions.filter((t) => isPendingTabRow(t) && !isPhoneFillNeedingLook(t) && !isPhoneFillBeingRead(t)).length}
+              ready={transactions.filter((t) => isPendingTabRow(t) && !isFillNeedingLook(t) && !isPhoneFillBeingRead(t)).length}
           />
           <FuelPhoneWaitingCard rows={phoneOutbox.rows} vehicles={phoneFillVehicles} />
           <FuelNeedsLookPanel
@@ -2280,34 +2280,29 @@ function FuelManagementInner({
               vehicles={phoneFillVehicles}
               onSaved={(updated) => setTransactions((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))}
               onApprove={(id, stationOpts) => handleApproveReimbursement(id, undefined, stationOpts)}
+              onApproveWithOdometer={(id, odometer, stationOpts) => handleApproveLogReview(id, odometer, undefined, stationOpts)}
               onReject={handleRejectReimbursement}
           />
           <FuelReimbursementTable
-              // Phone fills still being read or needing numbers are handled above, never approved at J$0 here.
-              transactions={transactions.filter((t) => !isPhoneFillNeedingLook(t) && !isPhoneFillBeingRead(t))}
+              // Fills needing a look (unread photos, odometer checks) and fills still being read are
+              // handled above — never approved at J$0 or without an odometer here.
+              transactions={transactions.filter((t) => !isFillNeedingLook(t) && !isPhoneFillBeingRead(t))}
               logs={logs}
               onApprove={handleApproveReimbursement}
               onReject={handleRejectReimbursement}
               onEdit={can('fuel.edit_entry') ? handleEditExpense : undefined}
               onDelete={can('fuel.delete_entry') ? handleDeleteExpense : undefined}
               onViewDriverLedger={onViewDriverLedger}
-              onApproveLogReview={handleApproveLogReview}
-              onResolveSplitCash={handleResolveSplitCash}
-              drivers={drivers}
               isRefreshing={isRefreshing}
               showServiceLineControls={showTabs}
-              lineFilter={unattributedOnly ? 'unattributed' : apiFilter === 'rush_delivery' ? 'rush_delivery' : apiFilter === 'rideshare' ? 'rideshare' : 'all'}
-              onLineFilterChange={(v) => {
-                if (v === 'unattributed') {
-                  setUnattributedOnly(true);
-                  return;
-                }
-                setUnattributedOnly(false);
-                if (v === 'all') setLine('all');
-                else if (v === 'rideshare') setLine('rideshare');
-                else if (v === 'rush_delivery') setLine('delivery');
+              // The page's All / Rideshare / Delivery tabs are the only line lens here.
+              lineFilter={apiFilter === 'rush_delivery' ? 'rush_delivery' : apiFilter === 'rideshare' ? 'rideshare' : 'all'}
+              vehicles={phoneFillVehicles}
+              onOpenAwaitingStatement={() => {
+                  sessionStorage.setItem(FUEL_LOGS_OPEN_VIEW_KEY, 'awaiting');
+                  setActiveTab('logs');
+                  onTabChange?.('logs');
               }}
-              unattributedCount={unattributedCountForUi ?? 0}
               onBulkSetServiceLine={async (ids, line) => {
                 await fuelService.setFuelEntriesServiceLine(ids, line);
                 await loadLogsAndTransactions();
@@ -2358,7 +2353,6 @@ function FuelManagementInner({
           deskSections={deskSections}
           summaryTarget={summaryTarget}
           onDeskFinalized={onDeskFinalized}
-          onUploadCardStatement={onUploadCardStatement}
           dispositions={flagDispositions}
           onOpenIntegrityStopToStop={({ weekStart, vehicleId }) => {
             setFlagsWeekStart(weekStart);
@@ -2695,6 +2689,7 @@ function FuelManagementInner({
                 unlinkedCardChargesCount={unlinkedCardChargesCountForUi}
                 unlinkedCardChargesOnly={unlinkedCardChargesOnly}
                 onUnlinkedCardChargesOnlyChange={setUnlinkedCardChargesOnly}
+                onResolveSplitCashTx={handleResolveSplitCash}
             />
         </div>
       )}

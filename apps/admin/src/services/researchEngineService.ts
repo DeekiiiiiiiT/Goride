@@ -195,6 +195,8 @@ export type ResearchJobDetail = {
   car: ResearchCar | null;
   partType: { id: string; name: string; position_scheme?: string | null } | null;
   spec: { key: string; label: string; unit: string | null } | null;
+  /** Owner 27 Nov: "any_page" = a spec a parts catalogue never shows (bulb, tyre, oil…), checked on any page about the car. */
+  specSource?: "catalogue" | "any_page" | null;
   browserCheckUrl: string | null;
   /** RE-63: the same model's other engines built in the same years (e.g. the turbo). */
   sisterEngines?: Array<{ code: string; turbo: boolean }>;
@@ -202,6 +204,8 @@ export type ResearchJobDetail = {
   makerPartName?: string | null;
   /** Answers teach Roam AT-06: the word to search the maker's site for, when the maker's words are known. */
   makerSearch?: string | null;
+  /** Owner 27 Nov: the exact page this part was found on before (an upload for this car that has it). */
+  savedPage?: { url: string; domain: string | null; readAt: string } | null;
   /** AT-11 / AT-12: the question card this browser check carries (the saved-page row Roam read). */
   question?: {
     savedPageId: string;
@@ -466,7 +470,16 @@ export type SavedPageQuestion = {
   note?: string | null;
 };
 /** The answer the owner gives on a question card. */
-export type QuestionAnswer = { yes?: boolean; typeId?: string | null; axle?: "front" | "rear"; side?: "left" | "right" | "both" };
+export type QuestionAnswer = {
+  yes?: boolean;
+  typeId?: string | null;
+  axle?: "front" | "rear";
+  side?: "left" | "right" | "both";
+  /** "It has no front or rear": the part type's place setting is corrected for every car. */
+  noPlace?: boolean;
+  /** "It has no left or right": the part type keeps front/rear only. */
+  noSide?: boolean;
+};
 /** One owner lesson on Part types → Learned from you (§5.3). */
 export type MakerLesson = {
   id: string;

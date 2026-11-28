@@ -474,6 +474,40 @@ export function partFinder(
 }
 
 /**
+ * Browser check hint for a spec (bulb size, tyre size, oil…): the word catalogues use for it ("headlamp", not
+ * "headlight") and what the value looks like when written. Site-neutral; unknown specs search their own label.
+ */
+export type SpecFinder = { search: string; looksLike: string | null };
+
+const SPEC_FINDERS: Array<{ test: RegExp; search: string; looksLike: string | null }> = [
+  { test: /headl(amp|ight)|beam|fog/, search: "headlamp", looksLike: "H4" },
+  { test: /tire|tyre/, search: "tire", looksLike: "165/65R14" },
+  { test: /battery/, search: "battery", looksLike: "34B19L" },
+  { test: /oil.*(capacity|_l\b)|capacity/, search: "oil", looksLike: "3.4 L" },
+  { test: /oil/, search: "oil", looksLike: "0W-20" },
+  { test: /wiper/, search: "wiper", looksLike: "600 mm" },
+  { test: /brake_fluid|brake fluid/, search: "brake fluid", looksLike: "DOT 3" },
+  { test: /coolant/, search: "coolant", looksLike: null },
+];
+
+export function specFinder(specKey: string | null | undefined, label: string): SpecFinder {
+  const k = `${specKey ?? ""} ${label}`.toLowerCase();
+  const hit = SPEC_FINDERS.find((f) => f.test.test(k));
+  return hit ? { search: hit.search, looksLike: hit.looksLike } : { search: label.toLowerCase(), looksLike: null };
+}
+
+/** Owner 27 Nov: the page a spec was found on (any site) — an https link that isn't the search page itself. */
+export function anyPageLinkOk(link: string): boolean {
+  try {
+    const u = new URL(link.trim());
+    if (u.protocol !== "https:") return false;
+    return !/(^|\.)google\.[a-z.]+$/i.test(u.hostname) || !u.pathname.startsWith("/search");
+  } catch {
+    return false;
+  }
+}
+
+/**
  * A car maker's part name written the catalogue way ("NOUN, WHERE": "Hub & bearing assy, rear axle", "THERMOSTAT")
  * → search the noun's first word, open the section named by where + noun, look for the row by its full name.
  */

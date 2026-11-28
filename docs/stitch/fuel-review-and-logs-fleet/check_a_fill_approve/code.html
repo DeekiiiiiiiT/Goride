@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><title>Roam Fleet</title><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: 'class', theme: { extend: { colors: { 'surface-tint': '#5e5c74', 'surface-dim': '#ccdbf4', 'on-error-container': '#93000a', 'primary': '#000000', 'on-primary-container': '#84819a', 'on-primary': '#ffffff', 'secondary-fixed': '#dde3ed', 'inverse-surface': '#233144', 'on-tertiary': '#ffffff', 'on-primary-fixed': '#1b192e', 'outline-variant': '#c9c5cd', 'inverse-primary': '#c8c3df', 'on-secondary-fixed-variant': '#414750', 'surface-container-low': '#eff4ff', 'on-secondary-container': '#5d636c', 'tertiary-fixed-dim': '#68dba9', 'secondary': '#595f68', 'on-surface': '#0d1c2e', 'error': '#ba1a1a', 'on-tertiary-container': '#079669', 'on-tertiary-fixed': '#002114', 'primary-fixed-dim': '#c8c3df', 'tertiary': '#000000', 'outline': '#78767d', 'surface': '#f8f9ff', 'on-surface-variant': '#47464c', 'surface-container-lowest': '#ffffff', 'on-primary-fixed-variant': '#46445b', 'inverse-on-surface': '#eaf1ff', 'on-background': '#0d1c2e', 'background': '#f8f9ff', 'on-tertiary-fixed-variant': '#005137', 'primary-container': '#1b192e', 'surface-bright': '#f8f9ff', 'on-secondary': '#ffffff', 'on-secondary-fixed': '#161c24', 'surface-container-high': '#dce9ff', 'primary-fixed': '#e4dffc', 'surface-container': '#e6eeff', 'tertiary-fixed': '#85f8c4', 'error-container': '#ffdad6', 'surface-variant': '#d5e3fc', 'tertiary-container': '#002114', 'surface-container-highest': '#d5e3fc', 'on-error': '#ffffff', 'secondary-container': '#dbe0eb', 'secondary-fixed-dim': '#c1c7d1' }, borderRadius: { 'DEFAULT': '0.25rem', 'lg': '0.5rem', 'xl': '0.75rem', 'full': '9999px' }, spacing: { 'margin': '2rem', 'space-sm': '0.5rem', 'space-xs': '0.25rem', 'space-md': '1rem', 'gutter-compact': '1rem', 'space-lg': '1.5rem', 'gutter': '1.5rem', 'margin-compact': '1.5rem', 'space-xl': '2rem' }, fontFamily: { 'label-sm': ['Inter'], 'headline-xl': ['Inter'], 'numeric-lg': ['Inter'], 'headline-lg': ['Inter'], 'headline-md': ['Inter'], 'body-md': ['Inter'], 'label-md': ['Inter'], 'body-lg': ['Inter'], 'numeric-md': ['Inter'], 'body-sm': ['Inter'], 'title-sm': ['Inter'] }, fontSize: { 'label-sm': ['11px', { lineHeight: '14px', letterSpacing: '0.03em', fontWeight: '500' }], 'headline-xl': ['32px', { lineHeight: '40px', letterSpacing: '-0.02em', fontWeight: '600' }], 'numeric-lg': ['22px', { lineHeight: '28px', letterSpacing: '-0.01em', fontWeight: '600' }], 'headline-lg': ['24px', { lineHeight: '32px', letterSpacing: '-0.015em', fontWeight: '600' }], 'headline-md': ['20px', { lineHeight: '28px', letterSpacing: '-0.01em', fontWeight: '600' }], 'body-md': ['14px', { lineHeight: '20px', fontWeight: '400' }], 'label-md': ['12px', { lineHeight: '16px', letterSpacing: '0.02em', fontWeight: '600' }], 'body-lg': ['16px', { lineHeight: '24px', fontWeight: '400' }], 'numeric-md': ['14px', { lineHeight: '20px', fontWeight: '500' }], 'body-sm': ['13px', { lineHeight: '18px', fontWeight: '400' }], 'title-sm': ['16px', { lineHeight: '24px', letterSpacing: '-0.005em', fontWeight: '600' }] } } } };</script></head><body class="bg-surface font-body-md text-on-surface antialiased min-h-screen"><header class="fixed top-0 left-0 right-0 z-50 shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 bg-surface-container-lowest px-margin flex items-center justify-between"><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-sm"><div class="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-sm"><span class="material-symbols-outlined text-on-primary text-[20px]">local_shipping</span></div><span class="font-title-sm text-title-sm text-on-surface tracking-tight">Roam Fleet</span></div><nav class="hidden xl:flex items-center gap-space-md h-16" data-active-classes="text-on-surface font-title-sm border-b-2 border-primary"><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="dashboard" href="#">Dashboard</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="fleet-operations" href="#">Fleet Operations</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="driver-operations" href="#">Driver Operations</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="money" href="#">Money</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="vehicle-operations" href="#">Vehicle Operations</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="delivery-operations" href="#">Delivery Operations</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="analytics" href="#">Analytics</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="reports" href="#">Reports</a><a class="h-16 flex items-center px-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="business-finance" href="#">Business Finance</a></nav></div><div class="flex items-center gap-space-md"><div class="flex items-center gap-space-xs text-on-surface-variant"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="material-symbols-outlined text-[20px]">tune</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div><div class="h-12 bg-primary-container px-margin flex items-center justify-between"><div class="flex items-center"><div class="relative flex items-center"><span class="material-symbols-outlined absolute left-3 text-on-primary-container text-[18px]">search</span><input class="w-80 h-8 pl-9 pr-3 rounded-full bg-on-primary-fixed/20 text-on-primary font-body-sm text-body-sm placeholder:text-on-primary-container focus:outline-none focus:ring-1 focus:ring-on-primary-container transition-all" placeholder="Switch vehicle or search hub…" type="text"/></div></div><div class="flex items-center gap-space-md text-on-primary-container font-label-sm text-label-sm"><div class="flex items-center gap-space-xs"><span class="material-symbols-outlined text-[16px]">schedule</span><span class="font-numeric-md text-numeric-md text-on-primary">03:11:28 PM EST</span></div><div class="w-px h-4 bg-on-primary-container/30"></div><div class="flex items-center gap-space-xs"><span class="material-symbols-outlined text-[16px]">public</span><span>America/Jamaica</span></div></div></div></header><main class="w-full pt-28 bg-surface min-h-screen"><div class="flex flex-col w-full relative">
+<!-- DIMMED BACKGROUND LAYER: Fuel Review Queue Context -->
+<div class="w-full pointer-events-none select-none filter blur-[2px] opacity-40 transition-all px-margin py-space-md">
+<!-- Top Action & View Bar -->
+<div class="flex items-center justify-between pb-space-lg">
+<div class="flex items-center gap-space-md">
+<h1 class="font-headline-lg text-headline-lg text-on-surface">Fuel Approvals Queue</h1>
+<span class="px-3 py-1 rounded-full bg-surface-container font-label-md text-label-md text-on-surface-variant">Fleet Hub: Kingston Central</span>
+</div>
+<div class="flex items-center gap-space-sm">
+<div class="h-11 px-4 rounded-xl bg-surface-container-lowest shadow-sm flex items-center gap-space-xs text-on-surface-variant font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[18px]">calendar_today</span>
+<span>Nov 20 - Nov 27, 2025</span>
+</div>
+<div class="h-11 px-4 rounded-xl bg-surface-container-lowest shadow-sm flex items-center gap-space-xs text-on-surface-variant font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[18px]">filter_list</span>
+<span>Filter (3 active)</span>
+</div>
+</div>
+</div>
+<!-- Metric Tiles Array -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-gutter mb-space-lg">
+<div class="bg-surface-container-lowest p-space-lg rounded-2xl shadow-sm">
+<div class="flex items-center justify-between mb-space-xs">
+<span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">All Submissions</span>
+<span class="w-2 h-2 rounded-full bg-on-surface"></span>
+</div>
+<div class="font-headline-xl text-headline-xl text-on-surface">43</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant mt-1">Total pending and audited</div>
+</div>
+<div class="bg-surface-container-lowest p-space-lg rounded-2xl shadow-sm">
+<div class="flex items-center justify-between mb-space-xs">
+<span class="font-label-md text-label-md text-error uppercase tracking-wider">Needs a look</span>
+<span class="w-2 h-2 rounded-full bg-error"></span>
+</div>
+<div class="font-headline-xl text-headline-xl text-on-surface">1 <span class="font-body-md text-body-md text-error">fill</span></div>
+<div class="font-body-sm text-body-sm text-on-surface-variant mt-1">Odometer delta warning</div>
+</div>
+<div class="bg-surface-container-lowest p-space-lg rounded-2xl shadow-sm">
+<div class="flex items-center justify-between mb-space-xs">
+<span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Waiting on phones</span>
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+</div>
+<div class="font-headline-xl text-headline-xl text-on-surface">0 <span class="font-body-md text-body-md text-on-surface-variant">fills</span></div>
+<div class="font-body-sm text-body-sm text-on-surface-variant mt-1">Receipt telemetry syncing</div>
+</div>
+<div class="bg-surface-container-lowest p-space-lg rounded-2xl shadow-sm">
+<div class="flex items-center justify-between mb-space-xs">
+<span class="font-label-md text-label-md text-on-tertiary-container uppercase tracking-wider">Ready to approve</span>
+<span class="w-2 h-2 rounded-full bg-on-tertiary-container"></span>
+</div>
+<div class="font-headline-xl text-headline-xl text-on-surface">2 <span class="font-body-md text-body-md text-on-tertiary-container">fills</span></div>
+<div class="font-body-sm text-body-sm text-on-surface-variant mt-1">AI verified with high confidence</div>
+</div>
+</div>
+<!-- Dummy Table List Representation Behind Overlay -->
+<div class="w-full bg-surface-container-lowest rounded-2xl shadow-sm overflow-hidden p-space-md">
+<div class="h-12 bg-surface-container-low rounded-xl px-4 flex items-center justify-between text-on-surface-variant font-label-md text-label-md">
+<span>TRANSACTION REF &amp; DRIVER</span>
+<span>VEHICLE</span>
+<span>GALLONS / LITRES</span>
+<span>STATION LOCATION</span>
+<span>PAYMENT</span>
+<span>TOTAL AMOUNT</span>
+<span>STATUS</span>
+</div>
+<div class="py-4 px-4 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center font-title-sm text-title-sm text-on-surface">MS</div>
+<div>
+<div class="font-title-sm text-title-sm text-on-surface">Marlon Andre Sterling</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">#FL-89214 · Nov 26, 6:40 PM</div>
+</div>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface">Toyota Roomy (8421LA)</span>
+<span class="font-body-sm text-body-sm text-on-surface">13.90 L</span>
+<span class="font-body-sm text-body-sm text-on-surface">TotalEnergies - Spanish Town Rd</span>
+<span class="font-body-sm text-body-sm text-on-surface">Cash</span>
+<span class="font-numeric-md text-numeric-md text-on-surface">J$3,000.00</span>
+<span class="px-2.5 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm">Reviewing</span>
+</div>
+</div>
+</div>
+<!-- FIXED MODAL OVERLAY BACKDROP -->
+<div class="fixed inset-0 z-40 bg-inverse-surface/60 backdrop-blur-sm transition-opacity flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+<!-- MODAL WINDOW CARD -->
+<div class="relative w-full max-w-[760px] bg-surface-container-lowest rounded-2xl shadow-[0_20px_50px_rgba(15,23,42,0.25)] overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200">
+<!-- MODAL HEADER -->
+<div class="px-6 py-5 bg-surface-container-lowest flex items-start justify-between">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container animate-pulse"></span>
+<h2 class="font-headline-md text-headline-md text-on-surface">Thu 26 Nov, 6:40 PM · Marlon Andre Sterling</h2>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant">Check the photos and numbers, then approve.</p>
+</div>
+<button aria-label="Close dialog" class="h-9 w-9 rounded-xl bg-surface-container-low text-on-surface-variant hover:text-on-surface hover:bg-surface-container flex items-center justify-center transition-colors" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- MODAL BODY: Two Column Layout -->
+<div class="grid grid-cols-12 gap-6 p-6 bg-surface-container-lowest">
+<!-- LEFT COLUMN: Dual Photo Inspection Tiles (5 cols) -->
+<div class="col-span-12 md:col-span-5 flex flex-col gap-4">
+<!-- Inspection Photo 1: Odometer -->
+<div class="group relative h-[250px] rounded-xl overflow-hidden bg-surface-container-low flex flex-col shadow-sm">
+<!-- Top Badges -->
+<div class="absolute top-3 left-3 right-3 z-10 flex items-center justify-between pointer-events-none">
+<span class="pointer-events-auto bg-surface-container-lowest/95 backdrop-blur-md px-3 py-1 rounded-full shadow-sm font-label-md text-label-md text-on-surface flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[14px] text-on-surface-variant">speed</span>
+                Odometer
+              </span>
+<span class="pointer-events-auto bg-inverse-surface/80 backdrop-blur-md text-inverse-on-surface font-label-sm text-label-sm px-2 py-0.5 rounded-full">
+                154,880 km
+              </span>
+</div>
+<!-- Image Asset -->
+<img class="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-300" data-alt="Close up crisp smartphone inspection capture of a Toyota digital car dashboard cluster lit at dusk, showing odometer readout 154,880 km and digital fuel gauge, sharp clarity, neutral clean tones, enterprise fleet audit photo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAhlMnstOS4taRXm31L4aaMXLgasChAIxFEe2rSnFNOZxqjvX6edlei5VjEkWSL2KLJ9u53fRfZME7umwD3D0kbzkr3b4UHRoYEZWEO0u971iJsbZqHjaIY4udrob44sY5U4halO73Fi_nidKWxZO1vV2EieFT3aUmnWDF3mWsANocs1_Efz-LkdZKxqkkUmtZk4boSH0uM-GgAy983xm9TESLZ-UeWxNrVI98OlLg"/>
+<!-- Bottom Floating Action Strip -->
+<div class="absolute bottom-0 inset-x-0 p-2.5 bg-gradient-to-t from-inverse-surface/90 via-inverse-surface/50 to-transparent flex items-center justify-between gap-2 z-10">
+<div class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm shadow-sm">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+<span>Read clearly</span>
+</div>
+<button class="px-2.5 py-1 rounded-lg bg-surface-container-lowest/90 hover:bg-surface-container-lowest text-on-surface font-label-sm text-label-sm backdrop-blur-sm transition-all shadow-sm flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[14px]">zoom_in</span>
+<span>View full size</span>
+</button>
+</div>
+</div>
+<!-- Inspection Photo 2: Fuel Pump Dispenser -->
+<div class="group relative h-[250px] rounded-xl overflow-hidden bg-surface-container-low flex flex-col shadow-sm">
+<!-- Top Badges -->
+<div class="absolute top-3 left-3 right-3 z-10 flex items-center justify-between pointer-events-none">
+<span class="pointer-events-auto bg-surface-container-lowest/95 backdrop-blur-md px-3 py-1 rounded-full shadow-sm font-label-md text-label-md text-on-surface flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[14px] text-on-surface-variant">local_gas_station</span>
+                Pump
+              </span>
+<span class="pointer-events-auto bg-inverse-surface/80 backdrop-blur-md text-inverse-on-surface font-label-sm text-label-sm px-2 py-0.5 rounded-full">
+                13.90 L
+              </span>
+</div>
+<!-- Image Asset -->
+<img class="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-300" data-alt="Digital display of a TotalEnergies commercial fuel pump dispenser nozzle meter showing J$3,000.00 cash total and 13.90 liters delivered, crisp LCD segment display, clear daytime forecourt lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCht2fBbD9sYuC10AnWmtZMPz2QGHoROFjMuqBzXKLO3bPAumcDRegiqLYC_cK17dmv3FJMDV25vwwW0fknTwNxYNZjvXpimKvuk1Zz0CCPLT_7PgpBQNHi0dq9vKaAToCWohzbq2P1KCf1jIXeaahY6VYo4NvMB8vM_8eEf456I1u_-2X3ujOtAeS9P-toZWqQFP0OxPFhkkveuaDwPnv6IacS_v7G5wn2-xYVms0"/>
+<!-- Bottom Floating Action Strip -->
+<div class="absolute bottom-0 inset-x-0 p-2.5 bg-gradient-to-t from-inverse-surface/90 via-inverse-surface/50 to-transparent flex items-center justify-between gap-2 z-10">
+<div class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm shadow-sm">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+<span>Read clearly</span>
+</div>
+<button class="px-2.5 py-1 rounded-lg bg-surface-container-lowest/90 hover:bg-surface-container-lowest text-on-surface font-label-sm text-label-sm backdrop-blur-sm transition-all shadow-sm flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[14px]">zoom_in</span>
+<span>View full size</span>
+</button>
+</div>
+</div>
+</div>
+<!-- RIGHT COLUMN: Ledger Values, Location, Category, Note (7 cols) -->
+<div class="col-span-12 md:col-span-7 flex flex-col justify-between">
+<!-- Structured Values Key-Value Ledger -->
+<div class="bg-surface-container-low rounded-xl p-4 flex flex-col gap-2.5 shadow-sm">
+<div class="flex items-center justify-between text-body-sm">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Driver</span>
+<span class="font-body-md text-body-md text-on-surface font-medium flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">badge</span>
+                Marlon Andre Sterling
+              </span>
+</div>
+<div class="flex items-center justify-between text-body-sm">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Car</span>
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded bg-surface-container-high font-label-sm text-label-sm text-on-surface uppercase tracking-wide">8421LA</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Toyota Roomy</span>
+</div>
+</div>
+<div class="flex items-center justify-between text-body-sm">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Date</span>
+<span class="font-numeric-md text-numeric-md text-on-surface">Thu 26 Nov, 6:40 PM</span>
+</div>
+<div class="flex items-center justify-between text-body-sm">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Total</span>
+<span class="font-title-sm text-title-sm text-on-surface font-bold text-base">J$3,000.00</span>
+</div>
+<div class="flex items-center justify-between text-body-sm">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Litres</span>
+<span class="font-numeric-md text-numeric-md text-on-surface">13.9 L</span>
+</div>
+<div class="flex items-center justify-between text-body-sm">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Price</span>
+<span class="font-numeric-md text-numeric-md text-on-surface">J$215.83 a litre</span>
+</div>
+<div class="flex items-center justify-between text-body-sm">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Odometer</span>
+<span class="font-numeric-md text-numeric-md text-on-surface">154,880 km</span>
+</div>
+<div class="flex items-center justify-between text-body-sm">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Paid with</span>
+<div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-container-highest text-on-surface font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[14px]">payments</span>
+<span>Cash</span>
+</div>
+</div>
+</div>
+<!-- FUEL STATION BLOCK -->
+<div class="bg-surface-container-low rounded-xl p-4 mt-3">
+<div class="flex items-center justify-between mb-3">
+<span class="font-label-md text-label-md text-on-surface uppercase tracking-wider">Fuel Station</span>
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[13px]">verified</span>
+                Verified station
+              </span>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+<!-- Brand Dropdown -->
+<div class="flex flex-col gap-1">
+<label class="font-label-sm text-label-sm text-on-surface-variant">Brand</label>
+<div class="relative">
+<div class="h-10 px-3 bg-surface-container-lowest rounded-xl flex items-center justify-between text-on-surface font-body-sm text-body-sm cursor-pointer shadow-sm">
+<span class="font-medium">TotalEnergies</span>
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">expand_more</span>
+</div>
+</div>
+</div>
+<!-- Station Dropdown -->
+<div class="flex flex-col gap-1">
+<label class="font-label-sm text-label-sm text-on-surface-variant">Station</label>
+<div class="relative">
+<div class="h-10 px-3 bg-surface-container-lowest rounded-xl flex items-center justify-between text-on-surface font-body-sm text-body-sm cursor-pointer shadow-sm">
+<span class="font-medium truncate">Spanish Town Rd</span>
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">expand_more</span>
+</div>
+</div>
+</div>
+</div>
+<button class="w-full py-2 px-3 bg-surface-container-lowest hover:bg-surface rounded-xl text-on-surface font-label-md text-label-md transition-colors text-center shadow-sm" type="button">
+              Station not listed — type the address
+            </button>
+</div>
+<!-- SERVICE LINE TOGGLE -->
+<div class="mt-3">
+<label class="block font-label-md text-label-md text-on-surface uppercase tracking-wider mb-2">Service line</label>
+<div class="grid grid-cols-2 gap-3" id="service-line-group">
+<!-- Rideshare (Selected) -->
+<button class="h-11 rounded-xl bg-primary text-on-primary font-body-md text-body-md font-medium flex items-center justify-center gap-2 shadow-sm transition-all" id="btn-rideshare" onclick="selectService('rideshare')" type="button">
+<span class="material-symbols-outlined text-[18px]">directions_car</span>
+<span>Rideshare</span>
+</button>
+<!-- Delivery (Unselected) -->
+<button class="h-11 rounded-xl bg-surface-container-lowest text-on-surface font-body-md text-body-md font-medium flex items-center justify-center gap-2 hover:bg-surface-container-low shadow-sm transition-all" id="btn-delivery" onclick="selectService('delivery')" type="button">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">inventory_2</span>
+<span>Delivery</span>
+</button>
+</div>
+</div>
+<!-- NOTE INPUT -->
+<div class="mt-3">
+<div class="flex items-center justify-between mb-1.5">
+<label class="font-label-md text-label-md text-on-surface-variant" for="review-note">Note (optional)</label>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Audit recorded</span>
+</div>
+<input class="w-full h-11 px-3.5 bg-surface-container-low rounded-xl font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:bg-surface-container-lowest transition-all" id="review-note" placeholder="e.g. Checked the odometer photo." type="text" value="Checked the odometer photo."/>
+</div>
+</div>
+</div>
+<!-- MODAL BOTTOM FOOTER ACTION BAR -->
+<div class="px-6 py-4 bg-surface-container-low flex items-center justify-between gap-4">
+<!-- Danger Action -->
+<button class="h-11 px-5 rounded-xl bg-surface-container-lowest text-error font-body-md text-body-md font-medium hover:bg-error-container transition-all flex items-center gap-1.5 shadow-sm" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+<span>Reject</span>
+</button>
+<!-- Right Workflow Actions -->
+<div class="flex items-center gap-3">
+<button class="h-11 px-5 rounded-xl bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-md text-body-md font-medium transition-all shadow-sm" type="button">
+            Back
+          </button>
+<button class="h-11 px-6 rounded-xl bg-primary text-on-primary font-body-md text-body-md font-medium hover:bg-on-primary-fixed transition-all flex items-center gap-2 shadow-sm" type="button">
+<span class="material-symbols-outlined text-[18px]">check</span>
+<span>Approve fill</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+  function selectService(type) {
+    const rideshareBtn = document.getElementById('btn-rideshare');
+    const deliveryBtn = document.getElementById('btn-delivery');
+    
+    if (type === 'rideshare') {
+      rideshareBtn.className = 'h-11 rounded-xl bg-primary text-on-primary font-body-md text-body-md font-medium flex items-center justify-center gap-2 shadow-sm transition-all';
+      deliveryBtn.className = 'h-11 rounded-xl bg-surface-container-lowest text-on-surface font-body-md text-body-md font-medium flex items-center justify-center gap-2 hover:bg-surface-container-low shadow-sm transition-all';
+    } else {
+      deliveryBtn.className = 'h-11 rounded-xl bg-primary text-on-primary font-body-md text-body-md font-medium flex items-center justify-center gap-2 shadow-sm transition-all';
+      rideshareBtn.className = 'h-11 rounded-xl bg-surface-container-lowest text-on-surface font-body-md text-body-md font-medium flex items-center justify-center gap-2 hover:bg-surface-container-low shadow-sm transition-all';
+    }
+  }
+</script></main><footer class="w-full bg-surface-container-low py-space-xl mt-space-xl"><div class="max-w-7xl mx-auto px-margin flex flex-col md:flex-row items-center justify-between gap-space-md font-body-sm text-body-sm text-on-surface-variant"><div>© 2025 Roam Fleet OS. Enterprise Fleet Management Systems.</div><div class="flex items-center gap-space-lg"><span>System Status: <span class="text-on-tertiary-container font-label-md text-label-md">Operational</span></span><a class="hover:text-on-surface transition-colors" href="#">Privacy Policy</a><a class="hover:text-on-surface transition-colors" href="#">Security &amp; Compliance</a></div></div></footer></body></html>

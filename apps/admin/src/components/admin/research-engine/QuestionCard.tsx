@@ -47,6 +47,8 @@ export function questionChoices(q: SavedPageQuestion): { ask: string; choices: C
       choices: [
         { key: "front", label: "Front", answer: { axle: "front" } },
         { key: "rear", label: "Rear", answer: { axle: "rear" } },
+        // Owner 27 Nov: a part type set up with the wrong place (Radiator hose) is corrected here, once, for every car.
+        { key: "noplace", label: "It has no front or rear", answer: { noPlace: true } },
       ],
     };
   }
@@ -56,6 +58,7 @@ export function questionChoices(q: SavedPageQuestion): { ask: string; choices: C
       { key: "left", label: "Left", answer: { side: "left" } },
       { key: "right", label: "Right", answer: { side: "right" } },
       { key: "both", label: "Both sides", answer: { side: "both" } },
+      { key: "noside", label: "It has no left or right", answer: { noSide: true } },
     ],
   };
 }
@@ -120,7 +123,7 @@ export function QuestionCard({
     }
   };
   // Three side buttons sit in a row; two buttons share the row; the phone stacks them (Stitch screen 6).
-  const grid = choices.length >= 3 ? "sm:grid-cols-3" : "sm:grid-cols-2";
+  const grid = choices.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2";
   return (
     <div
       className="relative flex flex-col gap-3 overflow-hidden rounded-2xl border border-[#f1d9a6] bg-white p-5 pl-6 dark:border-[#78350f] dark:bg-[#111a2e]"

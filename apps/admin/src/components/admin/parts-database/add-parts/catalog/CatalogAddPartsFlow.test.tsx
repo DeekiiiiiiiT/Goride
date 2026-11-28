@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { useState } from "react";
-import { act, fireEvent, render, screen, waitFor, cleanup } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, cleanup, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { emptyCatalogDraft, type CatalogPageDraft, type CatalogPartRow, type PartTypeRow } from "../addPartsTypes";
@@ -276,6 +276,59 @@ describe("Step 2 — the cars", () => {
   });
 });
 
+describe("Step 2 — years filter and bulk ticks", () => {
+  const baseDraft = (): CatalogPageDraft => ({
+    ...emptyCatalogDraft(),
+    evidenceUrl: PAGE_URL,
+    catalogCarMaker: "Toyota",
+    linkHints: { ok: true, trustedSite: true, frameCodes: ["M900A"], catalogMaker: "Toyota" },
+  });
+
+  it("hides the versions outside the page years when the filter is on", async () => {
+    api.searchAddPartVehicles.mockResolvedValue([
+      vehicle({ id: "v-2016" }),
+      vehicle({ id: "v-tank", model: "Tank" }),
+      vehicle({ id: "v-2021", production_start_year: 2021, production_end_year: 2022 }),
+    ]);
+    wrap(<Step2Harness initial={baseDraft()} />);
+    await screen.findByLabelText("Tick Toyota Roomy M900A 2016");
+    expect(screen.getByLabelText("Tick Toyota Roomy M900A 2021")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Page year from"), { target: { value: "2016" } });
+    fireEvent.change(screen.getByLabelText("Page year to"), { target: { value: "2020" } });
+    expect(screen.getByText("After 2020 — not on this page")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Show only the versions in these years"));
+    expect(screen.queryByLabelText("Tick Toyota Roomy M900A 2021")).toBeNull();
+    expect(screen.getByLabelText("Tick Toyota Roomy M900A 2016")).toBeTruthy();
+  });
+
+  it("Tick all ticks a whole model and unticks it again", async () => {
+    api.searchAddPartVehicles.mockResolvedValue([
+      vehicle({ id: "v-1" }),
+      vehicle({ id: "v-2", production_start_year: 2020 }),
+      vehicle({ id: "v-tank", model: "Tank" }),
+    ]);
+    wrap(<Step2Harness initial={baseDraft()} />);
+    await screen.findByLabelText("Tick Toyota Roomy M900A 2016");
+    fireEvent.click(screen.getByLabelText("Tick all Roomy"));
+    expect(await screen.findByText("Selected · 2 cars")).toBeTruthy();
+    expect((screen.getByLabelText("Tick Toyota Tank M900A 2016") as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(screen.getByLabelText("Tick all Roomy"));
+    expect(await screen.findByText("Selected · 0 cars")).toBeTruthy();
+  });
+
+  it("Clear all removes every ticked car", async () => {
+    api.searchAddPartVehicles.mockResolvedValue([vehicle({ id: "v-1" }), vehicle({ id: "v-2", production_start_year: 2020 })]);
+    wrap(<Step2Harness initial={baseDraft()} />);
+    await screen.findByLabelText("Tick Toyota Roomy M900A 2016");
+    fireEvent.click(screen.getByLabelText("Tick all Roomy"));
+    expect(await screen.findByText("Selected · 2 cars")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Clear all/ }));
+    expect(await screen.findByText("Selected · 0 cars")).toBeTruthy();
+    expect(screen.getByText("Tick at least one car.")).toBeTruthy();
+    expect((screen.getByRole("button", { name: /Next: the parts/ }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
 describe("Step 3 — the parts", () => {
   const draft = (rows: CatalogPartRow[]): CatalogPageDraft => ({
     ...emptyCatalogDraft(),
@@ -506,6 +559,52 @@ describe("Step 4 — trust", () => {
     );
     expect(screen.getByText("89467-B1040")).toBeTruthy();
     expect(screen.queryByText(/Toyota/)).toBeNull();
+  });
+
+  it("Mark many sets Needs checking with a reason on every ticked car", () => {
+    const initial: CatalogPageDraft = {
+      ...emptyCatalogDraft(),
+      evidenceUrl: PAGE_URL,
+      catalogCarMaker: "Toyota",
+      brandDefault: "Toyota",
+      partKind: "oem",
+      linkHints: { ok: true, trustedSite: true, catalogMaker: "Toyota" },
+      vehicleListings: [
+        listing({ vehicleId: "v1", trust: "confirmed" }),
+        listing({ vehicleId: "v2", label: "Toyota Tank", model: "Tank", trust: "confirmed" }),
+      ],
+      partRows: [partRow({ partTypeId: "t-o2", partNumber: "89467-B1040", position: "before_cat", brand: "Toyota" })],
+    };
+    function BulkHarness() {
+      const [d, setD] = useState<CatalogPageDraft>(initial);
+      return (
+        <CatalogStep4Trust
+          draft={d}
+          types={TYPES}
+          onNext={vi.fn()}
+          onBack={vi.fn()}
+          onTrustChange={(vehicleId, trust, reason) =>
+            setD((prev) => ({
+              ...prev,
+              vehicleListings: prev.vehicleListings.map((l) =>
+                l.vehicleId === vehicleId ? { ...l, trust, reason } : l),
+            }))
+          }
+          onYearsChange={vi.fn()}
+        />
+      );
+    }
+    wrap(<BulkHarness />);
+    fireEvent.click(screen.getByRole("button", { name: "Mark some as Needs checking" }));
+    fireEvent.click(screen.getByLabelText("Tick Toyota Roomy"));
+    fireEvent.click(screen.getByLabelText("Tick Toyota Tank"));
+    const apply = screen.getByRole("button", { name: "Apply to 2 cars" });
+    const bar = apply.parentElement as HTMLElement;
+    fireEvent.change(within(bar).getAllByRole("combobox")[0], { target: { value: "needs_checking" } });
+    fireEvent.change(within(bar).getAllByRole("combobox")[1], { target: { value: "Chassis code differs" } });
+    fireEvent.click(apply);
+    expect(screen.getAllByText(/Needs checking/, { selector: "span" }).length).toBeGreaterThanOrEqual(2);
+    expect((screen.getByRole("button", { name: /Next: check and save/ }) as HTMLButtonElement).disabled).toBe(false);
   });
 });
 

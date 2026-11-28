@@ -43,26 +43,29 @@ export function FuelEfficiencyTrend({
   }, [cycles, width, height]);
 
   if (!points) {
-    return <span className={`text-xs text-slate-400 ${className || ''}`}>Not enough data</span>;
+    return <span className={`text-[13px] text-[#47464c] ${className || ''}`}>Needs two or more full tanks to draw.</span>;
   }
 
   return (
     <div className={className}>
       <svg
-        width={width}
+        width="100%"
         height={height}
+        preserveAspectRatio="none"
         viewBox={`0 0 ${width} ${height}`}
         role="img"
         aria-label="Fuel efficiency trend"
       >
+        <polygon points={`0,${height} ${points} ${width},${height}`} className="fill-[#069669]/10" />
         <polyline
           points={points}
           fill="none"
           stroke="currentColor"
-          strokeWidth={1.5}
+          strokeWidth={2.5}
+          vectorEffect="non-scaling-stroke"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="text-emerald-500"
+          className="text-[#069669]"
         />
       </svg>
     </div>

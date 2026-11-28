@@ -84,6 +84,8 @@ unknown names. This plan closes the gap they left: **answers are never written b
     Merging PR #24 on its own would redeploy from main + PR #24 and **undo** this work. Add these files to PR #24, or
     ship them in their own PR, before any merge.
 
+- **On GitHub, 27 Nov:** everything is committed to PR #24 (branch `research-stale-checks-re73-75`, commit 8ba30867a), which now carries RE-73..75 + Answers teach Roam. **Not merged on purpose:** the maintenance rebuild (`fleet-ops` v480–v485, `maintenance-manual-worker`, 6 `mm_*` migrations) is live but only in `C:/Roam/Goride-mm3` (branch `mm-step3`, not pushed). Merging PR #24 first would redeploy `fleet-ops` from main and undo it, and CI's migration check stays red until those migrations are on main. Order: the maintenance work to main first, then merge PR #24.
+
 ### Build notes (Rev 3.1, 27 Nov): two changes made while building step 1
 
 1. **A new table, `part_maker_word`, instead of reshaping `part_term_synonym`.** `part_term_synonym`'s key is `term`
@@ -327,7 +329,10 @@ suggestion: `sources = [{kind: "saved_page", savedPageId, lineNo}]`. The drawer 
   Both live lessons were corrected by SQL on 27 Nov. The server half needs the next deploy (`saved_page_lessons.ts`,
   `saved_page_row_answer_routes.ts`): deployed 27 Nov (platform-catalog v269, catalog-research v88). Still not on main.
 
+- **Owner 27 Nov, wrong place settings:** "Radiator hose" was set up as front/rear (`axle`). It was corrected to `none` on live (audit log `part_type_place_fix`). Place cards now also offer **It has no front or rear** (→ `none`), and side cards offer **It has no left or right** (→ `axle`). That answer corrects the part type for every car, writes no place lesson, then saves the rows. Server: `saved_page_row_answer_routes.ts` (`correctedScheme`), in `C:/Roam/Goride-deploy-at`.
+
 ### 5.2 Browser check drawer (`ResearchJobDrawer.tsx`)
+- **Owner 27 Nov, step 3 for every site:** with a number Roam suggests, step 3 reads "Search {number} (or up to 2 more). Open what it finds and look for that number. / Nothing found? Search {word} and look for a row called {ROW}. / Found it? Press Yes. Not there? Press No, then Not on this page." The number goes first because a word can land on a different part (Roomy "thermostat" also finds 88620F THERMOSTAT ASSY in the heater piping, while 90916-03150 finds the one 16331A THERMOSTAT row). With no number, step 3 is as before. Above it, **Open the page you saved before** (job detail `savedPage`) shows when an upload for this car saved this part. A browser check only knows its start link, so uploaded pages are the pages Roam can reopen. Server half (`saved_page_question.ts` `findSavedPageForPart`, `catalog_research_routes.ts`): deployed 27 Nov (platform-catalog v270, catalog-research v89). Not on main.
 - For a job with a question (AT-11/12), the drawer opens on the **same question card** as §5.1, above the steps. Under it:
   "Or check it on the website step by step", which opens the usual steps.
 - Answering in the drawer does exactly what §5.1 does. The drawer then shows the green line and a **Done** button that

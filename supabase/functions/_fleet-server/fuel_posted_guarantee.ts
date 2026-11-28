@@ -152,7 +152,7 @@ export async function findFuelEntryByTransactionId(txId: string): Promise<any | 
   return pickOwned(byMeta.data);
 }
 
-async function resolveDriverName(
+export async function resolveDriverName(
   driverId: string | null | undefined,
   fallback?: string | null,
 ): Promise<string | undefined> {

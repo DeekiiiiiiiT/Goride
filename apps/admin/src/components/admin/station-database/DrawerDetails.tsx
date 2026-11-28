@@ -33,7 +33,7 @@ export function DrawerDetails({
         </select>
       </label>
       <label className="flex flex-col gap-1 font-semibold text-slate-700">Address
-        <input className="font-normal border border-slate-200 rounded-lg px-3 py-2" value={String(draft.address ?? place?.address ?? "")} disabled={locked} onChange={(event) => onChange({ address: event.target.value })} />
+        <input className="font-normal border border-slate-200 rounded-lg px-3 py-2" placeholder="Street address" value={String(draft.address ?? (place?.address === "Street Address Required" ? "" : place?.address) ?? "")} disabled={locked} onChange={(event) => onChange({ address: event.target.value })} />
       </label>
       <label className="flex flex-col gap-1 font-semibold text-slate-700">Phone
         <input className="font-normal border border-slate-200 rounded-lg px-3 py-2" value={String(draft.phone ?? place?.phone ?? "")} disabled={locked} onChange={(event) => onChange({ phone: event.target.value })} />
