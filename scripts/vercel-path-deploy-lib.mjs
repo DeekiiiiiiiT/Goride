@@ -35,43 +35,58 @@ export const APPS = [
     paths: ["apps/admin/"],
   },
   {
+    // Roam Plug deploys from Vercel's Git link (apps/plug/vercel.json), not a hook; it is listed
+    // so its ignoreCommand skips pushes that don't touch it (an unlisted app always builds).
+    label: "roam-plug",
+    secret: "VERCEL_DEPLOY_HOOK_PLUG",
+    appDir: "apps/plug",
+    paths: ["apps/plug/"],
+  },
+  {
     label: "roam-enterprise",
+    paused: true,
     secret: "VERCEL_DEPLOY_HOOK_ENTERPRISE",
     appDir: "apps/enterprise",
     paths: ["apps/enterprise/"],
   },
   {
     label: "roam-haul",
+    paused: true,
     secret: "VERCEL_DEPLOY_HOOK_HAUL",
     appDir: "apps/haul",
     paths: ["apps/haul/"],
   },
   {
     label: "rides-passenger",
+    paused: true,
     secret: "VERCEL_DEPLOY_HOOK_RIDES_PASSENGER",
     appDir: "apps/rides-passenger",
     paths: ["apps/rides-passenger/"],
   },
   {
     label: "roam-rush-command",
+    paused: true,
     secret: "VERCEL_DEPLOY_HOOK_RUSH_COMMAND",
     appDir: "apps/rush-command",
     paths: ["apps/rush-command/"],
   },
   {
     label: "roam-rush-customer",
+    paused: true,
     secret: "VERCEL_DEPLOY_HOOK_RUSH_CUSTOMER",
     appDir: "apps/dash-customer",
     paths: ["apps/dash-customer/"],
   },
   {
     label: "roam-rush-courier",
+    paused: true,
     secret: "VERCEL_DEPLOY_HOOK_RUSH_COURIER",
     appDir: "apps/dash-courier",
     paths: ["apps/dash-courier/"],
   },
   {
     label: "roam-rush-partner",
+    paused: true,
     secret: "VERCEL_DEPLOY_HOOK_RUSH_PARTNER",
     appDir: "apps/dash-merchant",
     paths: ["apps/dash-merchant/"],
@@ -214,6 +229,14 @@ export function selectSecretsToFire(files, opts) {
 
   if (onlyNoise && toFire.size === 0) {
     reasons.push("workspace-noise-or-non-app:skip");
+  }
+
+  // Paused apps (not being worked on, owner 28 Nov 2026) never deploy by themselves.
+  // To deploy one again, remove its `paused: true` line in APPS.
+  for (const app of APPS) {
+    if (app.paused && toFire.delete(app.secret)) {
+      reasons.push(`paused:${app.label}`);
+    }
   }
 
   return { secrets: toFire, reasons };

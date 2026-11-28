@@ -60,11 +60,22 @@ describe("selectSecretsToFire", () => {
     const { secrets } = selectSecretsToFire(["packages/ui/src/button.tsx"], {
       repoRoot: REPO_ROOT,
     });
-    // All current Roam Vercel apps depend on @roam/ui — assert none are missed
-    // and that selection is driven by deps (size matches dependents).
-    assert.ok(secrets.size >= 8);
-    assert.ok(secrets.has("VERCEL_DEPLOY_HOOK_FLEET"));
+    // Every app that is not paused and uses @roam/ui is selected; paused apps never are.
+    const expected = APPS.filter((a) => !a.paused).map((a) => a.secret);
+    for (const s of ["VERCEL_DEPLOY_HOOK_FLEET", "VERCEL_DEPLOY_HOOK_DRIVER", "VERCEL_DEPLOY_HOOK_DOMINION"]) {
+      assert.ok(secrets.has(s), s);
+    }
+    for (const s of secrets) assert.ok(expected.includes(s), `${s} is paused or unknown`);
     assert.ok(!secrets.has("VERCEL_DEPLOY_HOOK_MISSING"));
+  });
+
+  it("paused apps never deploy, even when their own folder changes", () => {
+    const { secrets, reasons } = selectSecretsToFire(
+      ["apps/dash-customer/src/main.tsx", "packages/types/src/index.ts"],
+      { repoRoot: REPO_ROOT },
+    );
+    for (const app of APPS.filter((a) => a.paused)) assert.ok(!secrets.has(app.secret), app.label);
+    assert.ok(reasons.some((r) => r.startsWith("paused:")));
   });
 });
 
