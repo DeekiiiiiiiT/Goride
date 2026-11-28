@@ -82,7 +82,7 @@ export function ReportProblemSheet({
         ) : (
           <>
             <div className="flex items-center justify-between">
-              <h2 className="text-[20px] font-semibold text-slate-900">Report a problem</h2>
+              <h2 className="text-[20px] font-semibold text-slate-900">Report a car problem</h2>
               <span className="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[13px] font-semibold">{plate}</span>
             </div>
 

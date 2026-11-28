@@ -96,7 +96,7 @@ export function CarServiceSection({
           className="mt-3 flex min-h-[48px] w-full items-center justify-center rounded-xl border border-slate-300 bg-white text-[15px] font-semibold text-slate-900"
           data-testid="report-problem"
         >
-          Report a problem
+          Report a car problem
         </button>
       </section>
     </div>
