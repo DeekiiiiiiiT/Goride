@@ -1194,6 +1194,22 @@ Everything here needs either a scheduled run or a human eye, so it is the next s
    keys were switched off; those users cannot sign in again on that build, so adoption is the remaining
    user-facing risk.
 
+### Phase 9 — DONE (checked 25 Nov 2026 ~22:20 UTC)
+
+Every key check passed. Nothing is still on the old keys.
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Cron since 24 Nov 18:00 | PASS for keys. 47 jobs, all succeeded except 3 that fail for non-key reasons (below). `net._http_response` (last ~6 h kept): 366/366 = 200. |
+| 2 | evidence-cleanup 03:00 25 Nov | PASS. Exactly 17 `evidence_files` rows marked deleted at 03:00:03; storage DELETE 200. |
+| 3 | Fuel nightly 04:45 | PASS. Checks 1–4 green for the 16 Nov week (gap 0.00). Check 0 false = old 12 Oct v2 week only (known). |
+| 4 | Edge logs since 22:15 | PASS. No "Legacy API keys are disabled" anywhere. Only keyless rest/auth/storage calls = 6 signed storage links (need no key). 401s = smoke probes + `enterprise/me/modules` from a signed-out tab (same rate on 22 Nov, before rotation). 5xx = finance-recon (old fault), 2 file-link probes, 4 org reads on Kenny's phone. |
+| 5 | Logins | PASS. Sign-ins 200 from roamfleet.co, roamdominion.co, localhost dev, and both driver phones (TECNO, OnePlus) on `sb_publishable_`. |
+| 6 | recon-worker | PASS. Now revision `recon-worker-00161-thj` (auto-deployed), env = `SUPABASE_URL` + `SUPABASE_SECRET_KEYS` only; 6,187 × 200 on `sb_secret_`, no errors in Cloud Run logs. |
+| 7 | GitHub Actions | PASS for deploys (every edge, recon-worker and Vercel deploy green). CI red on some pushes, not key-related: earlier = "migration version list matches production" (fixed by e938d07a); 372d5f70 = inventory job runs `supabase start` before building the git-ignored `fleet-core/index.ts`. |
+
+Not key-related, left open: `rush-trip-recon-daily` (null supabase_url setting, old), `catalog-demand-readiness` 03:30 statement timeout, `fleet-maintenance-nightly` 07:00 duplicate `uq_maint_alert_key`, finance-recon 500.
+
 ## Cleanup after phase 8 — code only (24 Nov 2026)
 
 With the legacy keys revoked, every fallback to them was dead code that could only hide a
