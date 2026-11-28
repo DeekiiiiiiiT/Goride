@@ -13,7 +13,7 @@ import { AddVehicleFlow } from './add-vehicle/AddVehicleFlow';
 import { VehicleThumb } from './add-vehicle/VehiclePicture';
 import { FrameDecodeButton } from './FrameDecodeDialog';
 import type { CatalogMaintenanceTaskOption, VehicleMaintenanceScheduleRowApi } from '../../types/maintenance';
-import { catalogOptionsFromScheduleRows } from '../../utils/maintenanceCatalogOptions';
+import { catalogOptionsFromScheduleRows, scheduleRowsWithPackages } from '../../utils/maintenanceCatalogOptions';
 import { Toaster, toast } from 'sonner';
 import { 
   Loader2, 
@@ -576,10 +576,7 @@ export function VehiclesPage({
     setActionVehicleId(id);
     try {
       const sch = await api.getMaintenanceSchedule(id);
-      const rows = Array.isArray(sch.schedule)
-        ? (sch.schedule as VehicleMaintenanceScheduleRowApi[])
-        : [];
-      setServiceCatalog(catalogOptionsFromScheduleRows(rows));
+      setServiceCatalog(catalogOptionsFromScheduleRows(scheduleRowsWithPackages(sch)));
       const v = vehicles.find((x: Vehicle) => x.id === id);
       const odo = Number((v as { odometer?: number } | undefined)?.odometer);
       setServiceOdo(Number.isFinite(odo) ? odo : undefined);

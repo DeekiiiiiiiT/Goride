@@ -3,8 +3,15 @@ export type MaintenanceFrequencyKind = "recurring" | "once_milestone" | "manual_
 
 export type MaintenanceTemplateScope = "global" | "catalog";
 
-/** Package due classification (service interval vs statutory inspection e.g. 車検). */
-export type MaintenanceDueKind = "service_package" | "statutory_inspection";
+/**
+ * What a template row is (MER-03): a package, a statutory inspection, one part's schedule, or a
+ * check row with no part attached. Keep in sync with the four copies of this file.
+ */
+export type MaintenanceDueKind =
+  | "service_package"
+  | "statutory_inspection"
+  | "part_schedule"
+  | "inspection";
 
 /** System (parent) vs component (loggable leaf). */
 export type MaintenanceCategoryKind = "system" | "component";

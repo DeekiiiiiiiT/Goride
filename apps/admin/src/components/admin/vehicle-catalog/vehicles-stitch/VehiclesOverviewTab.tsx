@@ -10,6 +10,7 @@ import { factValue } from "./vehiclesStitchShared";
 import { versionYearsLabel } from "@roam/vehicle-catalog-core";
 import { D_CARD, D_MONO, D_MUTED, D_TXT, DIcon } from "../../parts-database/add-parts/catalog/dominionKit";
 import { PowertrainCard } from "./PowertrainCard";
+import { MakerSpecsCards } from "./MakerSpecsCards";
 
 type SpecRow = { specKey?: string; value?: string | null };
 type JobRow = { status?: string; section?: string };
@@ -57,6 +58,7 @@ export function VehiclesOverviewTab({ car, specs, jobs, sisters, logoByMake, ite
   const c = 2 * Math.PI * r;
 
   return (
+    <>
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
       {/* Stitch powertrain 01–04: the card leads the main column; the side card stays on the right. */}
       <div className="flex flex-col gap-6 lg:col-span-2">
@@ -147,5 +149,8 @@ export function VehiclesOverviewTab({ car, specs, jobs, sisters, logoByMake, ite
         </PartsButton>
       </aside>
     </div>
+    {/* Build step 6b: the car maker's tyres, battery and bulbs from the owner's manual (shows once approved). */}
+    <MakerSpecsCards token={token} vehicleCatalogId={car.id} />
+    </>
   );
 }

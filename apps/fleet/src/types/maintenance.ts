@@ -5,8 +5,15 @@ export type MaintenanceFrequencyKind = "recurring" | "once_milestone" | "manual_
 
 export type MaintenanceTemplateScope = "global" | "catalog";
 
-/** Package due classification (service interval vs statutory inspection e.g. 車検). */
-export type MaintenanceDueKind = "service_package" | "statutory_inspection";
+/**
+ * What a template row is (MER-03): a package, a statutory inspection, one part's schedule, or a
+ * check row with no part attached. Keep in sync with the four copies of this file.
+ */
+export type MaintenanceDueKind =
+  | "service_package"
+  | "statutory_inspection"
+  | "part_schedule"
+  | "inspection";
 
 /** System (parent) vs component (loggable leaf). */
 export type MaintenanceCategoryKind = "system" | "component";
@@ -627,3 +634,39 @@ export function groupCategoriesBySystem(
   }
   return out;
 }
+
+/** Maintenance step 11: one work order as the Work orders tab shows it (GET /maintenance/work-orders/board). */
+export type WorkOrderBoardCard = {
+  id: string;
+  status: string;
+  stage: "decision" | "waiting" | "garage" | "saving" | "done" | "cancelled";
+  stageLabel: string;
+  vehicleId: string;
+  plate: string | null;
+  make: string | null;
+  model: string | null;
+  year: string | null;
+  garage: string | null;
+  openedAt: string | null;
+  offRoadAt: string | null;
+  daysOffRoad: number | null;
+  performedAtDate: string | null;
+  closedAt: string | null;
+  odometer: number | null;
+  total: number | null;
+  priority: string | null;
+  cancelReason: string | null;
+  jobs: string[];
+  request: {
+    recordId: string;
+    recordStatus: string;
+    type: string | null;
+    text: string | null;
+    priority: string | null;
+    date: string | null;
+    photoUrl: string | null;
+    odometer: number | null;
+    performedAtDate: string | null;
+    version: number | null;
+  } | null;
+};

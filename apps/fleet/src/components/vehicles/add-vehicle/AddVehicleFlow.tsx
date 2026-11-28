@@ -57,6 +57,13 @@ import {
   type StepNumber,
 } from "./AddVehicleUi";
 import { isVehicleColor, type VehicleColor } from "./vehicleColors";
+import { OdometerUseStep, odometerProblem, parseOdometerKm, type OdometerUseValue } from "./OdometerUseStep";
+import { MmFillHistoryDialog } from "../maintenance-logging/MmFillHistoryDialog";
+
+function localTodayIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 /** Power-train words documents add to the model name; the catalogue keeps them elsewhere. */
 const MODEL_NOISE = /\b(HYBRID|HV|PHEV|PETROL|GASOLINE|DIESEL)\b/g;
@@ -102,6 +109,7 @@ type Screen =
   | "checkRegistration"
   | "vehicleUse"
   | "confirm"
+  | "odometer"
   | "saved"
   | "couldntRead"
   | "tooMany";
@@ -195,6 +203,14 @@ export function AddVehicleFlow({
   });
 
   const [screen, setScreen] = useState<Screen>(update?.doc === "registration" ? "registration" : "fitness");
+  // Maintenance step 8: the first odometer reading (required).
+  const today = localTodayIso();
+  const [odoUse, setOdoUse] = useState<OdometerUseValue>(() => ({
+    km: "",
+    date: localTodayIso(),
+    historyAfterSave: false,
+  }));
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [problemDoc, setProblemDoc] = useState<DocKind>("fitness");
   const [problemCode, setProblemCode] = useState<string | undefined>();
   const [readingFile, setReadingFile] = useState<File | null>(null);
@@ -625,11 +641,24 @@ export function AddVehicleFlow({
 
       const res = await api.saveVehicle({ ...finalVehicle, documentChecks, colorStandard: colorStandard ?? undefined });
       const merged = res?.data && typeof res.data === "object" ? { ...finalVehicle, ...(res.data as object) } : finalVehicle;
+
+      // Step 8 (MER-26): the odometer typed on the last step is the car's first reading.
+      const km = parseOdometerKm(odoUse.km);
+      if (km != null && !Number.isNaN(km) && km > 0) {
+        try {
+          await api.addOdometerReading({ vehicleId: plate, odometer: km, value: km, date: odoUse.date, source: "manual" });
+        } catch {
+          toast.error("The car is saved, but its odometer reading isn't. Add it from Maintenance → Log odometer.");
+        }
+      }
+      // Step 16: no hard-use choice here. Roam decides it each night from how far the car drives.
+
       onVehicleAdded(merged as Vehicle);
       const parked = res?.catalogMatched === false || res?.catalogStatus === "pending_catalog" || res?.catalogStatus === "needs_info";
       setSaved({ vehicleId: plate, parked, picture: res?.picture ?? { status: "none", url: null } });
       setPictureWaitExpired(false);
       setScreen("saved");
+      if (odoUse.historyAfterSave && !parked) setHistoryOpen(true);
     } catch (error) {
       const err = error as Error & { code?: string };
       if (!showCatalogGateToastIfApplicable(error)) {
@@ -687,6 +716,8 @@ export function AddVehicleFlow({
     seededRef.current = false;
     pollStartRef.current = 0;
     setSaved(null);
+    setOdoUse({ km: "", date: localTodayIso(), historyAfterSave: false });
+    setHistoryOpen(false);
     setScreen("fitness");
   };
 
@@ -702,7 +733,8 @@ export function AddVehicleFlow({
     checkRegistration: 2,
     vehicleUse: 3,
     confirm: 4,
-    saved: 5,
+    odometer: 5,
+    saved: 6,
     couldntRead: problemDoc === "fitness" ? 1 : 2,
     tooMany: problemDoc === "fitness" ? 1 : 2,
   };
@@ -1085,8 +1117,32 @@ export function AddVehicleFlow({
             <ArrowLeft className="h-4 w-4" aria-hidden />
             Back
           </FlowButton>
-          <FlowButton tone="primary" busy={saving} disabled={!form.licensePlate.trim()} onClick={() => void save()} data-testid="confirm-save">
+          <FlowButton tone="primary" disabled={!form.licensePlate.trim()} onClick={() => setScreen("odometer")} data-testid="confirm-save">
             {r ? "This is my car" : "Send for checking"}
+            <Check className="h-4 w-4" aria-hidden />
+          </FlowButton>
+        </FlowFooter>
+      </>
+    );
+  } else if (screen === "odometer") {
+    const r = selectedCatalogRow;
+    const title = r ? `${r.make} ${r.model}` : [form.make, form.model].filter(Boolean).join(" ") || "Your car";
+    const subtitle = [r?.production_start_year ? String(r.production_start_year) : form.year, r?.engine_code].filter(Boolean).join(" · ");
+    const problem = odometerProblem(odoUse, today);
+    body = (
+      <>
+        <FlowTitle title="Odometer reading" subtitle="Every due date starts from this reading." />
+        <div className="rounded-[20px] border border-black/[0.06] p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] dark:border-[#3a3a3d]">
+          <CarSummary make={r?.make ?? form.make} title={title} subtitle={subtitle || undefined} color={colorStandard} plate={form.licensePlate} />
+        </div>
+        <OdometerUseStep value={odoUse} onChange={(p) => setOdoUse((v) => ({ ...v, ...p }))} today={today} disabled={saving} />
+        <FlowFooter onCancel={requestCancel}>
+          <FlowButton tone="secondary" onClick={() => setScreen("confirm")}>
+            <ArrowLeft className="h-4 w-4" aria-hidden />
+            Back
+          </FlowButton>
+          <FlowButton tone="primary" busy={saving} disabled={!!problem || !form.licensePlate.trim()} onClick={() => void save()} data-testid="odometer-save">
+            Save car
             <Check className="h-4 w-4" aria-hidden />
           </FlowButton>
         </FlowFooter>
@@ -1239,6 +1295,9 @@ export function AddVehicleFlow({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {saved ? (
+        <MmFillHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} vehicleId={saved.vehicleId} />
+      ) : null}
     </FlowShell>
   );
 }

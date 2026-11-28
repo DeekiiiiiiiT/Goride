@@ -29,7 +29,7 @@ import type { LogServiceVehicleStrip } from "./maintenance-logging/log-service";
 import {
   formatMaintenanceDisplayDate,
 } from "../../utils/maintenanceDisplayFormat";
-import { catalogOptionsFromScheduleRows } from "../../utils/maintenanceCatalogOptions";
+import { catalogOptionsFromScheduleRows, scheduleRowsWithPackages } from "../../utils/maintenanceCatalogOptions";
 import type {
   CatalogMaintenanceTaskOption,
   FoundWorkCounts,
@@ -41,6 +41,8 @@ import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { FindPartsTab } from "./find-parts/FindPartsTab";
 import { MaintenanceRequestsTab } from "./maintenance-logging/MaintenanceRequestsTab";
+import { WorkOrdersTab } from "./maintenance-logging/work-orders/WorkOrdersTab";
+import { ServiceHistoryViewDialog } from "./maintenance-logging/ServiceHistoryRowDialogs";
 import { FoundByInspectionSection, type AddToInspectionRequest } from "./maintenance-logging/FoundByInspection";
 import { MaintenanceScheduleTab } from "./maintenance-logging/MaintenanceScheduleTab";
 import { usePermissions } from "../../hooks/usePermissions";
@@ -147,6 +149,8 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const [partsRequisition, setPartsRequisition] = useState<{ status: string; detail: string } | null>(
     null,
   );
+  // Step 7: parts nobody has dated (counted on their own, never as Overdue).
+  const [historyUnknown, setHistoryUnknown] = useState<{ parts: number; cars: number } | null>(null);
   const [kpiMonth, setKpiMonth] = useState<{
     costPerKmApprox?: number;
     pmOnTimePct?: number;
@@ -168,6 +172,11 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   /** Inspection findings: open found-job counts (null = switch off or not loaded) and the job "Log it now" opened. */
   const [foundCounts, setFoundCounts] = useState<FoundWorkCounts | null>(null);
   const [fromFoundWork, setFromFoundWork] = useState<FoundWorkItem | null>(null);
+  /** Step 11: a request's "Open work order" opens that work order's panel on the Work orders tab. */
+  const [openWorkOrderId, setOpenWorkOrderId] = useState<string | null>(null);
+  const [viewingService, setViewingService] = useState<{ workOrderId: string; label: string } | null>(null);
+  /** Step 10: "Log this" on a due line opens Log service on that part. */
+  const [startOnPart, setStartOnPart] = useState<{ categoryId: string } | null>(null);
   /** LC-14: Log service opened to add jobs to a saved inspection. */
   const [addToInspection, setAddToInspection] = useState<AddToInspectionTarget | null>(null);
 
@@ -175,13 +184,14 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const [requestsLoading, setRequestsLoading] = useState(false);
 
   const [hubTab, setHubTab] = useState<
-    "by-vehicle" | "service-ledger" | "find-parts" | "not-done-yet" | "requests" | "schedule"
+    "by-vehicle" | "service-ledger" | "work-orders" | "find-parts" | "not-done-yet" | "requests" | "schedule"
   >(() => {
     const tab = new URLSearchParams(window.location.search).get("tab");
     if (tab === "find-parts") return "find-parts";
     if (tab === "service-ledger") return "service-ledger";
-    // LC-11: Work orders and Inspections were replaced by Not done yet; old links land there.
-    if (tab === "not-done-yet" || tab === "work-orders" || tab === "inspections") return "not-done-yet";
+    // Step 11 (MER-15): Work orders is its own tab again. Inspections still land on Not done yet (LC-11).
+    if (tab === "work-orders") return "work-orders";
+    if (tab === "not-done-yet" || tab === "inspections") return "not-done-yet";
     if (tab === "requests") return "requests";
     if (tab === "schedule") return "schedule";
     return "by-vehicle";
@@ -243,6 +253,14 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
       setPartsRequisition(
         (res as { partsRequisition?: { status: string; detail: string } | null }).partsRequisition ?? null,
       );
+      {
+        const hu = res as { historyUnknownParts?: number; historyUnknownCars?: number };
+        setHistoryUnknown(
+          hu.historyUnknownParts != null
+            ? { parts: Number(hu.historyUnknownParts), cars: Number(hu.historyUnknownCars ?? 0) }
+            : null,
+        );
+      }
       try {
         const kpiRes = await api.getMaintenanceKpiMonthly();
         const first = (kpiRes.items || [])[0] as Record<string, unknown> | undefined;
@@ -295,10 +313,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
       setScheduleLoading(true);
       try {
         const sch = await api.getMaintenanceSchedule(vehicleId);
-        const rows = Array.isArray(sch.schedule)
-          ? (sch.schedule as VehicleMaintenanceScheduleRowApi[])
-          : [];
-        setCatalogForLog(catalogOptionsFromScheduleRows(rows));
+        setCatalogForLog(catalogOptionsFromScheduleRows(scheduleRowsWithPackages(sch)));
         const odo = items.find((i) => i.vehicleId === vehicleId)?.odometer;
         setDefaultOdoForLog(initial?.odo ?? (Number.isFinite(odo) ? odo : undefined));
         setInitialLogForComplete(initial ?? null);
@@ -503,6 +518,8 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           pmOnTimePct={kpiMonth?.pmOnTimePct}
           foundByInspection={foundCounts}
           onOpenFound={() => setHubTab("not-done-yet")}
+          historyUnknownParts={historyUnknown?.parts}
+          historyUnknownCars={historyUnknown?.cars}
         />
       ) : null}
 
@@ -549,6 +566,10 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
             <TabsTrigger value="service-ledger" className="gap-1.5 px-4" data-maintenance-tab="service-ledger">
               <History className="w-4 h-4" />
               {findPartsActive ? "Service ledger" : "Service history"}
+            </TabsTrigger>
+            <TabsTrigger value="work-orders" className="gap-1.5 px-4" data-maintenance-tab="work-orders">
+              <Wrench className="w-4 h-4" />
+              Work orders
             </TabsTrigger>
             {canViewParts ? (
               <TabsTrigger value="find-parts" className="gap-1.5 px-4" data-maintenance-tab="find-parts">
@@ -616,8 +637,46 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           ) : null}
         </TabsContent>
 
+        <TabsContent value="work-orders" className="mt-0">
+          {hubTab === "work-orders" ? (
+            <WorkOrdersTab
+              canEdit={canEditMaintenance}
+              openWorkOrderId={openWorkOrderId}
+              onOpenedWorkOrder={() => setOpenWorkOrderId(null)}
+              onMarkDone={(card) => {
+                if (!card.request) return;
+                void handleCompleteRequest({
+                  id: card.request.recordId,
+                  vehicle_id: card.vehicleId,
+                  service_type: card.request.type,
+                  notes: card.request.text,
+                  performed_at_date: card.request.performedAtDate ?? new Date().toISOString().slice(0, 10),
+                  performed_at_miles: card.request.odometer ?? 0,
+                  status: card.request.recordStatus,
+                  work_order_id: card.id,
+                  payload_json: { workOrderId: card.id },
+                  version: card.request.version ?? undefined,
+                });
+              }}
+              onViewService={(card) =>
+                setViewingService({
+                  workOrderId: card.id,
+                  label: [card.plate, [card.make, card.model].filter(Boolean).join(" ")].filter(Boolean).join(" · "),
+                })
+              }
+            />
+          ) : null}
+        </TabsContent>
+
         <TabsContent value="requests" className="mt-0">
-          <MaintenanceRequestsTab vehicles={items} onApproved={() => void loadRequests()} />
+          <MaintenanceRequestsTab
+            vehicles={items}
+            onApproved={() => void loadRequests()}
+            onOpenWorkOrder={(id) => {
+              setOpenWorkOrderId(id);
+              setHubTab("work-orders");
+            }}
+          />
         </TabsContent>
 
 
@@ -689,8 +748,19 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           setServicesDueView(null);
           void prepareLogForVehicle(item.vehicleId, null, item);
         }}
+        onLogThis={(vehicleId, categoryId) => {
+          setServicesDueView(null);
+          setStartOnPart({ categoryId });
+          void prepareLogForVehicle(vehicleId);
+        }}
         onFoundChanged={() => void loadFoundCounts()}
         onAddToInspection={openAddToInspection}
+      />
+
+      <ServiceHistoryViewDialog
+        workOrderId={viewingService?.workOrderId ?? null}
+        vehicleLabel={viewingService?.label ?? ""}
+        onClose={() => setViewingService(null)}
       />
 
       <OdometerHistoryDrawer
@@ -732,6 +802,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
               setLogVehicleId("");
               setInitialLogForComplete(null);
               setFromFoundWork(null);
+              setStartOnPart(null);
               setAddToInspection(null);
             }
           }}
@@ -743,6 +814,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           draftUserId={user?.id}
           onSaved={handleLogSaved}
           fromFoundWork={fromFoundWork}
+          startOnPart={startOnPart}
           addToInspection={addToInspection}
         />
       ) : null}

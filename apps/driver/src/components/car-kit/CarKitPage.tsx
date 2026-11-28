@@ -1,4 +1,8 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { api } from '../../services/api';
+import type { DriverCarService } from '../../types/maintenance';
+import { CarServiceSection } from './service/CarServiceSection';
+import { ReportProblemSheet } from './service/ReportProblemSheet';
 import './car-kit.css';
 import { CarKitNavHost } from './CarKitNavHost';
 import { type CarKitNavAction } from './carKitNavigation';
@@ -9,7 +13,6 @@ import { Dk3ReportSent } from './screens/Dk3ReportSent';
 import { Dk4MyReports } from './screens/Dk4MyReports';
 import { Dk6States } from './screens/Dk6States';
 import { DkUpdateReportedItemSheet } from './screens/DkUpdateReportedItemSheet';
-import { Dk7PreShiftDvir } from './screens/Dk7PreShiftDvir';
 import type { DriverCarKitItem, DriverReportRow } from '../../services/driverInventoryApi';
 
 /** Driver car kit — DK1–DK6 navigation (R5-08). */
@@ -21,8 +24,28 @@ export function CarKitPage({
   vehicleId?: string | null;
 }) {
   const flow = useCarKitFlow(vehicleId);
-  const [showDvir, setShowDvir] = useState(false);
   const [activeReport, setActiveReport] = useState<DriverReportRow | null>(null);
+  // Maintenance step 13: the car's service state (do-not-drive, what's due) and the Report a problem sheet.
+  const [service, setService] = useState<DriverCarService | null>(null);
+  const [serviceLoading, setServiceLoading] = useState(true);
+  const [reportOpen, setReportOpen] = useState(false);
+
+  const loadService = useCallback(async () => {
+    setServiceLoading(true);
+    try {
+      setService(await api.getMaintenanceDriverCar(vehicleId));
+    } catch {
+      setService(null);
+    } finally {
+      setServiceLoading(false);
+    }
+  }, [vehicleId]);
+
+  useEffect(() => {
+    void loadService();
+  }, [loadService]);
+
+  const serviceVehicleId = service?.vehicle?.id ?? vehicleId ?? null;
 
   const handleNav = useCallback(
     (action: CarKitNavAction) => {
@@ -98,6 +121,7 @@ export function CarKitPage({
       case 'dk1':
       default:
         return (
+          <>
           <Dk1MyCarKit
             kit={flow.kit}
             onReportItem={(name) => flow.openReportSheet(name ?? undefined)}
@@ -119,6 +143,7 @@ export function CarKitPage({
               else flow.openReportSheet(item.name);
             }}
           />
+          </>
         );
     }
   })();
@@ -144,6 +169,16 @@ export function CarKitPage({
           My reports
         </button>
       </div>
+
+      {/* Maintenance step 13: shown on My car kit whatever state the kit is in (also "Kit not configured"). */}
+      {flow.screen === 'dk1' || flow.showDk6 ? (
+        <CarServiceSection
+          service={service}
+          loading={serviceLoading}
+          fleetSupportPhone={flow.kit?.fleetSupportPhone}
+          onReport={() => setReportOpen(true)}
+        />
+      ) : null}
 
       <CarKitNavHost onAction={handleNav}>{mainScreen}</CarKitNavHost>
 
@@ -175,10 +210,14 @@ export function CarKitPage({
         />
       ) : null}
 
-      {showDvir && vehicleId ? (
-        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
-          <Dk7PreShiftDvir vehicleId={vehicleId} onDone={() => setShowDvir(false)} />
-        </div>
+      {reportOpen ? (
+        <ReportProblemSheet
+          plate={service?.vehicle?.plate ?? serviceVehicleId ?? ''}
+          vehicleId={serviceVehicleId}
+          odometer={service?.odometer ?? null}
+          onClose={() => setReportOpen(false)}
+          onSent={() => void loadService()}
+        />
       ) : null}
     </div>
   );
