@@ -16,6 +16,8 @@ import {
 } from "./maintenanceMasterFleetUi";
 import { MmCustomScheduleDialog } from "./MmCustomScheduleDialog";
 import { MmHardUseDialog } from "./MmHardUseDialog";
+import { hardUseLine, hardUseTitle } from "./hardUseModel";
+import type { VehicleHardUse } from "../../../types/hardUse";
 import { MmWhySchedulePopover } from "./MmWhySchedulePopover";
 import { MmFillHistoryDialog } from "./MmFillHistoryDialog";
 import { formatMaintenanceDisplayDate } from "../../../utils/maintenanceDisplayFormat";
@@ -81,11 +83,16 @@ export function MaintenanceDueItemsDrawer({
   const [customRow, setCustomRow] = useState<MmDueRow | null>(null);
   const [whyRow, setWhyRow] = useState<MmDueRow | null>(null);
   const [hardUseOpen, setHardUseOpen] = useState(false);
+  const [hardUse, setHardUse] = useState<VehicleHardUse | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
 
   const reload = () => {
     if (!vehicle?.vehicleId) return;
     setLoading(true);
+    api
+      .getVehicleHardUse(vehicle.vehicleId)
+      .then(setHardUse)
+      .catch(() => setHardUse(null));
     api
       .getMaintenanceDueItems(vehicle.vehicleId)
       .then((res) => {
@@ -256,33 +263,23 @@ export function MaintenanceDueItemsDrawer({
                     : ""}
                 </p>
               ) : null}
-              {canEditMaintenance ? (
-                severeDuty ? (
+              {/* Step 16d: Roam decides hard use each night from distance; the fleet can only change it for this car. */}
+              <div className="mt-2 max-w-[420px] text-[12px] text-slate-600" data-testid="mm-hard-use-line">
+                <p className="font-medium text-slate-900">
+                  {hardUse ? hardUseTitle(hardUse) : severeDuty ? "Hard use: on" : "Hard use"}
+                </p>
+                {hardUseLine(hardUse) ? <p>{hardUseLine(hardUse)}</p> : null}
+                {canEditMaintenance ? (
                   <button
                     type="button"
-                    className="mt-2 inline-flex min-h-[32px] items-center gap-1 rounded-full border border-slate-400 bg-white px-3 text-[12px] font-medium"
-                    data-testid="mm-hard-use-chip"
+                    className="mt-1.5 inline-flex min-h-[44px] items-center rounded-full border border-slate-300 bg-white px-4 text-[13px] font-medium text-slate-800 hover:bg-slate-50"
                     onClick={() => setHardUseOpen(true)}
-                    title="Hard use is on. Tap to turn it off."
+                    data-testid="mm-hard-use-change"
                   >
-                    <span className="material-symbols-outlined text-[14px]">local_taxi</span>
-                    Hard use
+                    Change for this car
                   </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="mt-2 inline-flex min-h-[32px] items-center rounded-full border border-slate-300 bg-white px-3 text-[12px] font-medium text-slate-800 hover:bg-slate-50"
-                    onClick={() => setHardUseOpen(true)}
-                    data-testid="mm-hard-use-turn-on"
-                  >
-                    Turn on hard use
-                  </button>
-                )
-              ) : severeDuty ? (
-                <span className="mt-2 inline-flex rounded-full border border-slate-400 px-2 py-0.5 text-[11px]">
-                  Hard use
-                </span>
-              ) : null}
+                ) : null}
+              </div>
             </div>
             <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
               <X className="h-4 w-4" />
@@ -446,9 +443,10 @@ export function MaintenanceDueItemsDrawer({
           vehicleId={vehicle.vehicleId}
           plate={vehicle.licensePlate ?? ""}
           carName={vehicleLabel(vehicle)}
-          initial={severeDuty}
-          onSaved={(v) => {
-            setSevereDuty(v);
+          current={hardUse}
+          onSaved={(next) => {
+            setHardUse(next);
+            setSevereDuty(next.hardUse === true);
             reload();
           }}
         />

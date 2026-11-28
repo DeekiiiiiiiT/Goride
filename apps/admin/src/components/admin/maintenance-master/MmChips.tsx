@@ -66,14 +66,13 @@ export function MmScopeChip({ scope, code }: { scope: string; code?: string | nu
   if (s === "variant" || s.includes("car")) {
     label = "One car";
     icon = "directions_car";
-  } else if (s === "platform") {
-    label = code ? `Platform · ${code}` : "Platform";
+  } else if (s === "platform" || s === "platform_family") {
+    // Rebuild step 4: a model rule points at the model family; never show a platform code.
+    void code;
+    label = "One model";
     icon = "view_in_ar";
-  } else if (s === "platform_family") {
-    label = "Platform family";
-    icon = "account_tree";
   } else if (s === "engine_family") {
-    label = code ? `Engine · ${code}` : "Engine";
+    label = "One engine";
     icon = "settings_suggest";
   } else if (s === "global") {
     label = "Everyone";

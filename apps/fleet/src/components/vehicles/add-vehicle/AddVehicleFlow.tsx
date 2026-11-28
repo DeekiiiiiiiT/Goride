@@ -203,12 +203,11 @@ export function AddVehicleFlow({
   });
 
   const [screen, setScreen] = useState<Screen>(update?.doc === "registration" ? "registration" : "fitness");
-  // Maintenance steps 8 + 12: the first odometer reading (required) and how the car is used (hard use by default).
+  // Maintenance step 8: the first odometer reading (required).
   const today = localTodayIso();
   const [odoUse, setOdoUse] = useState<OdometerUseValue>(() => ({
     km: "",
     date: localTodayIso(),
-    hardUse: true,
     historyAfterSave: false,
   }));
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -652,15 +651,7 @@ export function AddVehicleFlow({
           toast.error("The car is saved, but its odometer reading isn't. Add it from Maintenance → Log odometer.");
         }
       }
-      // Step 12 (MER-25): hard use by default; the choice is recorded either way.
-      try {
-        await api.patchVehicleSevereDuty(plate, {
-          severe_duty: odoUse.hardUse,
-          reason: odoUse.hardUse ? "Hard use chosen when the car was added" : "Normal use chosen when the car was added",
-        });
-      } catch {
-        toast.error("The car is saved, but how it's used isn't. Set it from the car's due items in Maintenance.");
-      }
+      // Step 16: no hard-use choice here. Roam decides it each night from how far the car drives.
 
       onVehicleAdded(merged as Vehicle);
       const parked = res?.catalogMatched === false || res?.catalogStatus === "pending_catalog" || res?.catalogStatus === "needs_info";
@@ -725,7 +716,7 @@ export function AddVehicleFlow({
     seededRef.current = false;
     pollStartRef.current = 0;
     setSaved(null);
-    setOdoUse({ km: "", date: localTodayIso(), hardUse: true, historyAfterSave: false });
+    setOdoUse({ km: "", date: localTodayIso(), historyAfterSave: false });
     setHistoryOpen(false);
     setScreen("fitness");
   };
@@ -1140,7 +1131,7 @@ export function AddVehicleFlow({
     const problem = odometerProblem(odoUse, today);
     body = (
       <>
-        <FlowTitle title="Odometer and use" subtitle="Every due date starts from this reading." />
+        <FlowTitle title="Odometer reading" subtitle="Every due date starts from this reading." />
         <div className="rounded-[20px] border border-black/[0.06] p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] dark:border-[#3a3a3d]">
           <CarSummary make={r?.make ?? form.make} title={title} subtitle={subtitle || undefined} color={colorStandard} plate={form.licensePlate} />
         </div>

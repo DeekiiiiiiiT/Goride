@@ -43,6 +43,7 @@ import { fetchJobs } from "./jobs/jobsApi";
 import { SuppliesTab } from "./supplies/SuppliesTab";
 import { ReviewTab } from "./ReviewTab";
 import { ManualsTab } from "./manuals/ManualsTab";
+import { HardUseRuleCard } from "./HardUseRuleCard";
 
 type Tab = "schedules" | "manuals" | "packages" | "jobs" | "supplies" | "review" | "history";
 
@@ -395,6 +396,8 @@ export function MaintenanceMasterPage() {
           <div className="md:hidden space-y-3 mt-6">
             <p className="text-sm text-on-surface-variant">Read-only on phone — edit on a larger screen.</p>
           </div>
+          {/* Step 16e: the limits that decide hard use each night. Only the platform owner can change them. */}
+          <HardUseRuleCard token={token} canChange={role === "platform_owner"} />
         </>
       ) : null}
 

@@ -2857,7 +2857,24 @@ export const api = {
     return response.json();
   },
 
-  async patchVehicleSevereDuty(vehicleId: string, body: { severe_duty: boolean; reason?: string }) {
+  /** Step 16c: how Roam decided hard use for this car (the numbers, the sentence, any fleet keep). */
+  async getVehicleHardUse(vehicleId: string): Promise<import("../types/hardUse").VehicleHardUse> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetOps}/vehicles/${encodeURIComponent(vehicleId)}/maintenance/hard-use`,
+      { headers: await getHeaders() },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || "Could not load hard use");
+    }
+    return response.json();
+  },
+
+  /** Step 16c: the fleet keeps normal or shorter schedules for a while (reason required), or hands back to the numbers. */
+  async patchVehicleHardUse(
+    vehicleId: string,
+    body: { mode: import("../types/hardUse").HardUseMode; reason?: string },
+  ): Promise<import("../types/hardUse").VehicleHardUse> {
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.fleetOps}/vehicles/${encodeURIComponent(vehicleId)}/maintenance/severe-duty`,
       { method: "PATCH", headers: await getHeaders(), body: JSON.stringify(body) },

@@ -1,10 +1,11 @@
 /**
- * Add a car — "Odometer and use" step (maintenance rebuild steps 8 + 12: MER-26, MER-25), ported from
+ * Add a car — "Odometer reading" step (maintenance rebuild steps 8 + 12: MER-26, MER-25), ported from
  * docs/stitch/maintenance-rebuild-fleet/add_a_car_odometer_and_use with the Round 2 drops (no depot, VIN,
  * "baseline telemetry", cadence chips or auto-saving line).
  *
  * The odometer is required: it is saved as the car's first reading (source "manual"), so every due date has a
- * starting point. Hard use is chosen by default (ride-hail cars wear faster); picking Normal use is recorded.
+ * starting point. Hard use is not chosen here any more (step 16, 28 Nov 2026): Roam decides it each night from
+ * how far the car drives, and the fleet can change it from the car's due items.
  */
 import React from "react";
 import { Check, History } from "lucide-react";
@@ -12,7 +13,6 @@ import { Check, History } from "lucide-react";
 export type OdometerUseValue = {
   km: string;
   date: string;
-  hardUse: boolean;
   historyAfterSave: boolean;
 };
 
@@ -34,52 +34,6 @@ export function odometerProblem(value: Pick<OdometerUseValue, "km" | "date">, to
   if (!value.date) return "Pick the date of the reading.";
   if (value.date > today) return "The date can't be in the future.";
   return null;
-}
-
-function UseCard({
-  selected,
-  icon,
-  title,
-  line,
-  onSelect,
-  testId,
-}: {
-  selected: boolean;
-  icon: string;
-  title: string;
-  line: string;
-  onSelect: () => void;
-  testId: string;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onSelect}
-      data-testid={testId}
-      className={
-        "relative flex min-h-[140px] flex-col items-start gap-3 rounded-2xl border p-5 text-left transition-colors " +
-        (selected
-          ? "border-[#030213] bg-[#eff4ff] dark:border-[#fafafa] dark:bg-[#1c1c1e]"
-          : "border-[#e2e8f0] bg-white hover:bg-[#f8fafc] dark:border-[#3a3a3d] dark:bg-[#2a2a2d]")
-      }
-    >
-      <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#e5eeff] text-[#0a0a0a] dark:bg-[#3a3a3d] dark:text-[#fafafa]">
-        <span className="material-symbols-outlined text-[22px]">{icon}</span>
-      </span>
-      <span className="text-[17px] font-semibold text-[#0a0a0a] dark:text-[#fafafa]">{title}</span>
-      <span className="text-[15px] text-[#47464c] dark:text-[#a1a1aa]">{line}</span>
-      <span
-        className={
-          "absolute right-4 top-4 flex h-6 w-6 items-center justify-center rounded-full " +
-          (selected ? "bg-[#030213] text-white dark:bg-[#fafafa] dark:text-[#030213]" : "border border-[#cbd5e1]")
-        }
-        aria-hidden
-      >
-        {selected ? <Check className="h-4 w-4" /> : null}
-      </span>
-    </button>
-  );
 }
 
 export function OdometerUseStep({
@@ -139,28 +93,6 @@ export function OdometerUseStep({
             {problem}
           </p>
         ) : null}
-      </section>
-
-      <section className="rounded-[20px] border border-black/[0.06] p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] dark:border-[#3a3a3d]">
-        <h2 className="text-[19px] font-semibold text-[#0a0a0a] dark:text-[#fafafa]">How is this car used?</h2>
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <UseCard
-            selected={value.hardUse}
-            icon="local_taxi"
-            title="Hard use"
-            line="Taxi, ride-hail, delivery or heavy traffic. Uses the shorter schedules."
-            onSelect={() => onChange({ hardUse: true })}
-            testId="use-hard"
-          />
-          <UseCard
-            selected={!value.hardUse}
-            icon="directions_car"
-            title="Normal use"
-            line="Private use, mostly open roads."
-            onSelect={() => onChange({ hardUse: false })}
-            testId="use-normal"
-          />
-        </div>
       </section>
 
       <section className="flex flex-col gap-3 rounded-[20px] border border-black/[0.06] p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] sm:flex-row sm:items-center sm:justify-between dark:border-[#3a3a3d]">
