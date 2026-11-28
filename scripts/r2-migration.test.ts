@@ -57,7 +57,7 @@ const NOW = 1_800_000_000;
 const SIGN = (key: string) => `LINK:${key}`;
 
 const EVIDENCE_URL =
-  `${BASE}/storage/v1/object/sign/ephemeral-evidence/org-a/fuel_receipt/u1.jpg?token=abcdef123456789`;
+  `${BASE}/storage/v1/object/sign/ephemeral-evidence/org-a/fuel_receipt/u1.jpg?token=abcdef123456789`; // gitleaks:allow (fake test token)
 
 function manifest(entries: Array<Record<string, unknown>>) {
   return manifestIndex(
@@ -180,7 +180,7 @@ Deno.test("link signer: the signer bound to one clock is deterministic", () => {
 // ---------------------------------------------------------------- SigV4 port
 
 Deno.test("sigv4: the .mjs PUT signature matches sigv4.ts byte for byte", async () => {
-  const creds = { accessKeyId: "AKIAIOSFODNN7EXAMPLE", secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", region: "auto" };
+  const creds = { accessKeyId: "AKIAIOSFODNN7EXAMPLE", secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", region: "auto" }; // gitleaks:allow (AWS documented example key)
   const url = "https://abc123.r2.cloudflarestorage.com/roam-private/evidence/org-a/fuel_receipt/u1.jpg";
   const now = new Date("2026-11-25T03:44:00Z");
   const opts = {
@@ -460,7 +460,7 @@ Deno.test("inventory: dry-run output never shows a whole signature", () => {
 // ---------------------------------------------------------------- fleet.* (SQL half)
 
 const DOC_KEY = "fleet-docs/legacy/driver-docs/u2.pdf";
-const DOC_URL = `${BASE}/storage/v1/object/sign/make-37f42386-docs/driver-docs/u2.pdf?token=abcdef123456789`;
+const DOC_URL = `${BASE}/storage/v1/object/sign/make-37f42386-docs/driver-docs/u2.pdf?token=abcdef123456789`; // gitleaks:allow (fake test token)
 
 function docIndex() {
   return manifestIndex([{ bucket: "make-37f42386-docs", path: "driver-docs/u2.pdf", key: DOC_KEY, ok: true }]);

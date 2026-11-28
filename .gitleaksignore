@@ -1,0 +1,4 @@
+# Fake test values in scripts/r2-migration.test.ts (AWS example key, abcdef token), 28 Nov 2026
+af3b478a79516d7f65820e4656b8e6be083bbe65:scripts/r2-migration.test.ts:aws-access-token:183
+af3b478a79516d7f65820e4656b8e6be083bbe65:scripts/r2-migration.test.ts:generic-api-key:60
+af3b478a79516d7f65820e4656b8e6be083bbe65:scripts/r2-migration.test.ts:generic-api-key:463
