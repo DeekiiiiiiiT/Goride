@@ -453,10 +453,14 @@ export function answersGate(input: {
   jobAxle?: "front" | "rear" | null;
   /** RE-70: when the car was built (server's own record) — a change month must fall inside it. */
   build?: CarBuild | null;
+  /** Owner 27 Nov: a spec checked on any page about the car (owner's manual…): "is it for your car?" is a Yes, no model code. */
+  anyPage?: boolean;
 }): AnswersResult {
   const a = input.answers ?? {};
   // A remembered version is checked with Yes/No; otherwise the owner types the model shown at the top.
-  if (input.knownCode ? a.versionOk !== true : !String(a.versionCode ?? "").trim()) return { ok: false, reason: "version_no" };
+  if (input.anyPage) {
+    if (a.versionOk !== true) return { ok: false, reason: "version_no" };
+  } else if (input.knownCode ? a.versionOk !== true : !String(a.versionCode ?? "").trim()) return { ok: false, reason: "version_no" };
   if (a.partFound !== true) return { ok: false, reason: "part_not_found" };
   if (a.datesOk !== true) return { ok: false, reason: "dates_no" };
   const listed = input.jobType === "part" && Array.isArray(a.numbers) && a.numbers.length > 0;
@@ -472,7 +476,7 @@ export function answersGate(input: {
   if (!placed && input.needsSide && a.sideOk !== true) return { ok: false, reason: "side_no" };
 
   let versionCode: string | null = null;
-  if (!input.knownCode && a.versionCode && String(a.versionCode).trim()) {
+  if (!input.anyPage && !input.knownCode && a.versionCode && String(a.versionCode).trim()) {
     const typed = String(a.versionCode).trim().toUpperCase();
     // With a frame on file the model must be "<frame>-<suffix>"; without one, any model-like text is kept as typed.
     versionCode = input.frame ? versionCodeOnLine(typed, input.frame) : /^[A-Z0-9][A-Z0-9-]{3,39}$/.test(typed) ? typed : null;

@@ -15,6 +15,8 @@ import { savePartAnswers } from "./research_part_save.ts";
 import type { SavedPageSortAi } from "./saved_page_sort_ai.ts";
 import { registerCatalogRoutes } from "./catalog_routes.ts";
 import { normalisePhrase } from "./saved_page_phrases.ts";
+import { answerQuestion } from "./saved_page_row_answer_routes.ts";
+import { findQuestionForJob, findSavedPageForPart } from "./saved_page_question.ts";
 
 // ---------------------------------------------------------------- fixtures
 
@@ -31,6 +33,7 @@ const AIR_HOSE = "99999999-9999-4999-8999-999999999999";
 const BRAKE_PADS = "aaaa1111-1111-4111-8111-111111111111";
 const BRAKE_SHOES = "bbbb2222-2222-4222-8222-222222222222";
 const CYL_KIT = "cccc3333-3333-4333-8333-333333333333";
+const STRUT = "dddd4444-4444-4444-8444-444444444444";
 
 const RIGHT_GROUP = "GROUP 77777U - ABSORBER SET, SHOCK, FRONT RH";
 const LEFT_GROUP = "GROUP 77778U - ABSORBER SET, SHOCK, FRONT LH";
@@ -384,6 +387,8 @@ class FakeDb {
       { id: BRAKE_PADS, code: "BRK-PADS", name: "Brake pads", kind: "component", is_part: true, part_type_status: "active", position_scheme: "axle", parent_id: SUS_GROUP },
       { id: BRAKE_SHOES, code: "BRK-SHOES", name: "Brake shoes", kind: "component", is_part: true, part_type_status: "active", position_scheme: "axle", parent_id: SUS_GROUP },
       { id: CYL_KIT, code: "BRK-CYL", name: "Rear wheel cylinder kit", kind: "component", is_part: true, part_type_status: "active", position_scheme: "axle", parent_id: SUS_GROUP },
+      // Answers teach Roam: the Roomy strut mount, which Toyota calls "SUPPORT SUB-ASSY, FRONT SUSPENSION".
+      { id: STRUT, code: "SUS-STRUTMT", name: "Strut mount", kind: "component", is_part: true, part_type_status: "active", position_scheme: "axle", parent_id: SUS_GROUP },
     ],
     // Part pictures (§3.2): the part behind each number, its template, and the queue itself.
     part_master: [
@@ -460,8 +465,54 @@ class FakeDb {
       return result.error ? { data: null, error: result.error } : { data: result, error: null };
     }
     if (name === "part_name_answer_set") return { data: this.answerSet(args), error: null };
+    // Answers teach Roam: the maker-words table (migrations 20261127172750 + 20261127173506), faked.
+    if (name === "part_maker_words_for") {
+      const make = String(args.p_make ?? "").toLowerCase();
+      const types = this.table("maintenance_service_categories");
+      const rows = this.table("part_maker_word").filter((w) => String(w.make).toLowerCase() === make)
+        .map((w) => ({ ...w, part_type_name: types.find((t) => t.id === w.maintenance_component_id)?.name ?? "" }));
+      return { data: rows, error: null };
+    }
+    if (name === "part_maker_word_set") {
+      const words = this.table("part_maker_word");
+      const key = String(args.p_phrase_key);
+      const make = String(args.p_make);
+      const model = args.p_model == null ? null : String(args.p_model);
+      const found = words.find((w) =>
+        w.phrase_key === key && String(w.make).toLowerCase() === make.toLowerCase() &&
+        String(w.model ?? "").toLowerCase() === String(model ?? "").toLowerCase()
+      );
+      const patch = {
+        phrase: args.p_phrase, maintenance_component_id: args.p_component_id, set_by: "owner", answered_by: args.p_actor,
+        updated_at: new Date(this.now).toISOString(),
+      };
+      if (found) {
+        Object.assign(found, patch, { axle: args.p_axle ?? found.axle, side: args.p_side ?? found.side });
+        return { data: { id: found.id, replaced: true }, error: null };
+      }
+      const row = { id: `lesson-${this.seq++}`, phrase_key: key, make, model, axle: args.p_axle ?? null, side: args.p_side ?? null, search_word: null, parts_saved: 0, ...patch };
+      words.push(row);
+      return { data: { id: row.id, replaced: false }, error: null };
+    }
+    if (name === "part_maker_word_saved") {
+      const w = this.table("part_maker_word").find((x) => x.id === args.p_id);
+      if (w) w.parts_saved = Number(w.parts_saved ?? 0) + Number(args.p_count ?? 0);
+      return { data: null, error: null };
+    }
+    if (name === "part_maker_word_forget") {
+      const words = this.table("part_maker_word");
+      const i = words.findIndex((w) => w.id === args.p_id && w.set_by === "owner");
+      if (i < 0) return { data: false, error: null };
+      words.splice(i, 1);
+      return { data: true, error: null };
+    }
+    if (name === "catalog_part_fits_axle") {
+      return { data: !this.notFits.has(`${args.p_component_id}|${args.p_axle ?? ""}`), error: null };
+    }
     return { data: null, error: null };
   }
+  /** RE-73, faked: "type|axle" pairs this car can't have (pads on a drum axle). */
+  notFits = new Set<string>();
   /** The D1 function, faked: seed words are adopted and never relabelled; skip clears a seed's key; owner wins. */
   private answerSet(args: Record<string, unknown>) {
     const key = String(args.p_phrase_key ?? "");
@@ -2717,4 +2768,234 @@ Deno.test("Rev-16: both reads are kept on the upload, as each gave them", async 
   // The reads are stored with the upload, not shown: the row still follows the page (Brake shoes, rear, its number).
   const rows = (out.row.result.rows ?? []) as Array<Record<string, any>>;
   assertEquals([rows[0].partType, rows[0].place, rows[0].number], ["Brake shoes", "rear", "33333-S1001"]);
+});
+
+// ---------------------------------------------------------------- Answers teach Roam (docs/answers-teach-roam-audit.md §7)
+
+const SUPPORT_GROUP = "48609A - SUPPORT SUB-ASSY, FRONT SUSPENSION";
+const BEARING_GROUP = "48619 - BEARING, STRUT MOUNTING, RH";
+const supportRow = (number: string, notes = "M900,910", dates = "<td>11.2016</td><td>09.2020</td>") =>
+  `<tr><td>${number}</td><td>${notes}</td>${dates}<td>10.00</td></tr>`;
+
+/** A suspension page where the maker calls the strut mount "SUPPORT SUB-ASSY" (made-up numbers). */
+function supportPage(rows: string[] = [supportRow("77777-S1001")], group = SUPPORT_GROUP): string {
+  return `<!doctype html>
+<html><head><title>Check Catalogue ZZ900-AAAA 11.2016 - 09.2020</title></head>
+<body>
+<!-- saved from url=(0045)https://catalog.example/parts/ZZ900 -->
+<h2>Suspension</h2>
+<table>
+<tr><th>Number</th><th>Notes</th><th>From</th><th>To</th><th>Price</th></tr>
+<tr><td>${group}</td></tr>
+${rows.join("\n")}
+</table>
+</body></html>`;
+}
+
+const SUPPORT_ROW: RowSpec = { number: "77777-S1001", type: "Strut mount", axle: "front", side: "both", group: "SUPPORT SUB-ASSY", from: [2016, 11], to: [2020, 9] };
+
+/** A second car of the same make and model (same frame and build), with nothing on file yet. */
+const SISTER_CAR = "eeee5555-5555-4555-8555-555555555555";
+
+function teachDb(on = true): FakeDb {
+  const db = new FakeDb();
+  db.table("catalog_research_settings")[0].answers_teach_roam = on;
+  const car = db.table("vehicle_catalog").find((c) => c.id === CAR)!;
+  db.table("vehicle_catalog").push({ ...car, id: SISTER_CAR });
+  return db;
+}
+
+async function uploadSupport(db: FakeDb, opts: { rows?: string[]; specs?: RowSpec[]; group?: string; again?: boolean; car?: string } = {}) {
+  const specs = opts.specs ?? [SUPPORT_ROW];
+  const out = await run(db, supportPage(opts.rows, opts.group), { again: opts.again, car: opts.car, ai: fakeAi(db, specs) });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") throw new Error("not done");
+  const row = ((out.row.result.rows ?? []) as Row[]).find((r) => r.number === specs[0].number) as Row;
+  return { out, row, pageId: String(out.row.id) };
+}
+
+const answer = (db: FakeDb, pageId: string, lineNo: number, body: Record<string, unknown>) =>
+  answerQuestion(db as unknown as SupabaseClient, { pageId, lineNo, body, actor: ACTOR });
+
+Deno.test("AT test 1: the strut mount under 'SUPPORT SUB-ASSY' is a wording question; Yes saves it and remembers it", async () => {
+  const db = teachDb();
+  const { out, row, pageId } = await uploadSupport(db);
+  assertEquals(out.row.result.counts, counts({ held: 1 }));
+  assertEquals([row.group, row.question?.kind, row.question?.typeNames], ["held", "wording", ["Strut mount"]]);
+  // AT-11: the question rides on a browser check job; AT-06 / AT-12: its suggestion carries the maker's words and row.
+  assert(row.jobId, "a browser check job is opened for the question");
+  const prop = db.table("catalog_part_proposal").find((p) => p.job_id === row.jobId)!;
+  assertEquals(prop.part_name, "SUPPORT SUB-ASSY, FRONT SUSPENSION");
+  assertEquals(prop.sources, [{ kind: "saved_page", savedPageId: pageId, lineNo: row.lineNo }]);
+  const q = await findQuestionForJob(db as unknown as SupabaseClient, String(row.jobId), CAR);
+  assertEquals(q?.lineNo, row.lineNo);
+
+  const done = await answer(db, pageId, row.lineNo, { yes: true });
+  assertEquals(done.kind, "done");
+  if (done.kind !== "done") return;
+  const after = done.result.rows.find((r) => r.lineNo === row.lineNo)!;
+  assertEquals([after.group, after.question?.answer], ["saved", "yes"]);
+  assertEquals(savedListings(db, ["77777-S1001"]).length, 1);
+  const lesson = db.table("part_maker_word").find((w) => w.phrase_key === "SUPPORTSUBASSYFRONTSUSPENSION")!;
+  assertEquals([lesson.make, lesson.model, lesson.maintenance_component_id, lesson.parts_saved], ["Testmake", null, STRUT, 1]);
+});
+
+Deno.test("AT test 2: the lesson saves a new number under the same heading by itself, and says so", async () => {
+  const db = teachDb();
+  const first = await uploadSupport(db);
+  await answer(db, first.pageId, first.row.lineNo, { yes: true });
+  db.now += 60_000;
+  const second = await uploadSupport(db, { car: SISTER_CAR, rows: [supportRow("77777-S2002")], specs: [{ ...SUPPORT_ROW, number: "77777-S2002" }] });
+  assertEquals([second.row.group, second.row.learned, second.row.question ?? null], ["saved", true, null]);
+  assertEquals(second.out.row.result.learned, 1);
+  assertEquals(savedListings(db, ["77777-S2002"]).length, 1);
+});
+
+Deno.test("AT test 3: another maker's page with the same heading still asks", async () => {
+  const db = teachDb();
+  const first = await uploadSupport(db);
+  await answer(db, first.pageId, first.row.lineNo, { yes: true });
+  for (const car of db.table("vehicle_catalog")) car.make = "Othermake";
+  db.table("trusted_source")[0].maker_norm = "othermake";
+  db.now += 60_000;
+  const second = await uploadSupport(db, { car: SISTER_CAR, rows: [supportRow("77777-S3003")], specs: [{ ...SUPPORT_ROW, number: "77777-S3003" }] });
+  assertEquals(second.row.question?.kind, "wording");
+});
+
+Deno.test("AT test 4: a lesson never saves a row the page can't prove — no dates stays a quiet skip", async () => {
+  const db = teachDb();
+  const first = await uploadSupport(db);
+  await answer(db, first.pageId, first.row.lineNo, { yes: true });
+  db.now += 60_000;
+  const second = await uploadSupport(db, { car: SISTER_CAR, rows: [supportRow("77777-S4004", "M900,910", "")], specs: [{ ...SUPPORT_ROW, number: "77777-S4004" }] });
+  assertEquals([second.row.group, second.row.waitReason, second.row.question ?? null], ["left_for_later", "No dates shown on the page", null]);
+});
+
+Deno.test("AT test 5 + 6: a place answer is remembered for the car's model only; the page's own word still wins", async () => {
+  const db = teachDb();
+  const spec: RowSpec = { number: "77777-B5005", type: "Strut mount", axle: null, side: null, group: "BEARING, STRUT MOUNTING", from: [2016, 11], to: [2020, 9] };
+  const first = await uploadSupport(db, { rows: [supportRow("77777-B5005")], specs: [spec], group: BEARING_GROUP });
+  assertEquals(first.row.question?.kind, "axle");
+  const done = await answer(db, first.pageId, first.row.lineNo, { axle: "front" });
+  assertEquals(done.kind, "done");
+  const lesson = db.table("part_maker_word").find((w) => w.model === "Testmodel")!;
+  assertEquals([lesson.axle, lesson.phrase_key], ["front", "BEARINGSTRUTMOUNTING"]);
+  assertEquals(savedListings(db, ["77777-B5005"]).length, 1);
+
+  // Next page, same model: the place comes from the lesson.
+  db.now += 60_000;
+  const second = await uploadSupport(db, { car: SISTER_CAR, rows: [supportRow("77777-B6006")], specs: [{ ...spec, number: "77777-B6006" }], group: BEARING_GROUP });
+  assertEquals(second.row.group, "saved");
+
+  // Another model of the same maker: the place lesson doesn't travel.
+  for (const car of db.table("vehicle_catalog")) car.model = "Othermodel";
+  db.now += 60_000;
+  const third = await uploadSupport(db, { car: SISTER_CAR, rows: [supportRow("77777-B7007")], specs: [{ ...spec, number: "77777-B7007" }], group: BEARING_GROUP });
+  assertEquals(third.row.question?.kind, "axle");
+
+  // Back on the lesson's model, a row that says REAR beats the lesson (front): asked again, nothing saved.
+  for (const car of db.table("vehicle_catalog")) car.model = "Testmodel";
+  db.now += 60_000;
+  const fourth = await uploadSupport(db, { car: SISTER_CAR, rows: [supportRow("77777-B8008", "REAR M900")], specs: [{ ...spec, number: "77777-B8008" }], group: BEARING_GROUP });
+  assertEquals([fourth.row.group, fourth.row.question?.kind], ["held", "axle"]);
+  assertEquals(savedListings(db, ["77777-B8008"]).length, 0);
+});
+
+Deno.test("AT test 7: 'Which part is this?' never offers a part the car can't have there", async () => {
+  const db = teachDb();
+  db.notFits.add(`${BRAKE_PADS}|rear`);
+  const specs: RowSpec[] = [
+    { number: "77777-K7001", type: "Brake pads", axle: "rear", side: null, group: "KIT, REAR", from: [2016, 11], to: [2019, 5] },
+  ];
+  const ai: SavedPageAi = (input) => {
+    db.aiCalls.push(input);
+    const out = aiRows(input, specs);
+    // The two reads name two different parts for the row.
+    if (input.instruction === 2) out[0].partType = "Brake shoes";
+    return Promise.resolve(out as never);
+  };
+  const out = await run(db, supportPage([supportRow("77777-K7001", "Brake pads, set REAR M900", "<td>11.2016</td><td>05.2019</td>")], "04495 - KIT, REAR"), { ai });
+  assertEquals(out.kind, "done");
+  if (out.kind !== "done") return;
+  const row = ((out.row.result.rows ?? []) as Row[]).find((r) => r.number === "77777-K7001")!;
+  assertEquals(row.question?.kind, "types");
+  assertEquals(row.question?.typeNames, ["Brake shoes"]);
+});
+
+Deno.test("AT test 8: 'No, it's something else' saves nothing, writes no lesson or dismissal, and keeps the browser check", async () => {
+  const db = teachDb();
+  const { row, pageId } = await uploadSupport(db);
+  const done = await answer(db, pageId, row.lineNo, { yes: false });
+  assertEquals(done.kind, "done");
+  if (done.kind !== "done") return;
+  const after = done.result.rows.find((r) => r.lineNo === row.lineNo)!;
+  assertEquals([after.group, after.question?.answer], ["held", "no"]);
+  assertEquals(db.table("part_maker_word").length, 0);
+  assertEquals(db.table("part_type_suggestion_dismissal").length, 0);
+  assertEquals(db.table("catalog_research_job").find((j) => j.id === row.jobId)?.state, "browser_check");
+  assertEquals(savedListings(db, ["77777-S1001"]).length, 0);
+});
+
+Deno.test("AT test 9 (switch off): the same row is a quiet skip, exactly as before", async () => {
+  const db = teachDb(false);
+  const { out, row } = await uploadSupport(db);
+  assertEquals(out.row.result.counts, counts({ left_for_later: 1 }));
+  assertEquals([row.group, row.question ?? null, row.jobId], ["left_for_later", null, null]);
+  assertEquals(db.table("catalog_research_job").length, 0);
+});
+
+Deno.test("AT owner 27 Nov: a two-step answer counts the part on both lessons, and the lesson heading has no side word", async () => {
+  const db = teachDb();
+  // No FRONT / REAR anywhere: the card asks the part first, then where it is.
+  const spec: RowSpec = { number: "77777-W1001", type: "Strut mount", axle: null, side: null, group: "SUPPORT SUB-ASSY, SUSPENSION", from: [2016, 11], to: [2020, 9] };
+  const first = await uploadSupport(db, { rows: [supportRow("77777-W1001")], specs: [spec], group: "48609A - SUPPORT SUB-ASSY, SUSPENSION, RH" });
+  assertEquals(first.row.question?.kind, "wording");
+  const step1 = await answer(db, first.pageId, first.row.lineNo, { yes: true });
+  assertEquals(step1.kind, "done");
+  if (step1.kind !== "done") return;
+  assertEquals(step1.result.rows.find((r) => r.lineNo === first.row.lineNo)?.question?.kind, "axle");
+  const step2 = await answer(db, first.pageId, first.row.lineNo, { axle: "front" });
+  assertEquals(step2.kind, "done");
+  assertEquals(savedListings(db, ["77777-W1001"]).length, 1);
+  const lessons = db.table("part_maker_word").filter((w) => w.phrase_key === "SUPPORTSUBASSYSUSPENSION");
+  assertEquals(lessons.map((w) => [w.model, w.parts_saved, w.phrase]).sort(), [
+    [null, 1, "SUPPORT SUB-ASSY, SUSPENSION"],
+    ["Testmodel", 1, "SUPPORT SUB-ASSY, SUSPENSION"],
+  ].sort());
+});
+
+Deno.test("owner 27 Nov: a browser check finds the page the owner uploaded that has this part", async () => {
+  const db = teachDb();
+  const first = await uploadSupport(db);
+  // Not saved yet: no page has the strut mount.
+  assertEquals(await findSavedPageForPart(db as unknown as SupabaseClient, CAR, "Strut mount"), null);
+  await answer(db, first.pageId, first.row.lineNo, { yes: true });
+  const found = await findSavedPageForPart(db as unknown as SupabaseClient, CAR, "Strut mount");
+  assertEquals(found?.url, "https://catalog.example/parts/ZZ900");
+  assertEquals(await findSavedPageForPart(db as unknown as SupabaseClient, CAR, "Thermostat"), null);
+});
+
+Deno.test("owner 27 Nov: 'It has no front or rear' fixes the part type's place setting for every car, then saves", async () => {
+  const db = teachDb();
+  // A Radiator-hose-like row: the type is set up as front/rear, the page says neither.
+  const spec: RowSpec = { number: "77777-B5005", type: "Strut mount", axle: null, side: null, group: "BEARING, STRUT MOUNTING", from: [2016, 11], to: [2020, 9] };
+  const first = await uploadSupport(db, { rows: [supportRow("77777-B5005")], specs: [spec], group: BEARING_GROUP });
+  assertEquals(first.row.question?.kind, "axle");
+  const done = await answer(db, first.pageId, first.row.lineNo, { noPlace: true });
+  assertEquals(done.kind, "done");
+  if (done.kind !== "done") return;
+  assertEquals(db.table("maintenance_service_categories").find((c) => c.id === STRUT)?.position_scheme, "none");
+  const after = done.result.rows.find((r) => r.lineNo === first.row.lineNo)!;
+  assertEquals([after.group, after.question?.note], ["saved", "Roam will remember a strut mount has no front or rear."]);
+  assertEquals(savedListings(db, ["77777-B5005"]).length, 1);
+  // No place lesson is written for a part with no place.
+  assertEquals(db.table("part_maker_word").filter((w) => w.model).length, 0);
+});
+
+Deno.test("AT: a question answered twice is refused the second time", async () => {
+  const db = teachDb();
+  const { row, pageId } = await uploadSupport(db);
+  await answer(db, pageId, row.lineNo, { yes: true });
+  const again = await answer(db, pageId, row.lineNo, { yes: true });
+  assertEquals(again.kind, "error");
 });

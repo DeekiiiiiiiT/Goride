@@ -15,6 +15,7 @@ import { registerResearchEngineRoutes } from "../_fleet-server/research_engine_r
 import { productionPictureDeps, registerResearchSavedPageRoutes } from "../_fleet-server/research_saved_page_routes.ts";
 import { registerSavedPagePartTypeRoutes } from "../_fleet-server/saved_page_part_type_routes.ts";
 import { registerSavedPagePartNamesRoutes } from "../_fleet-server/saved_page_part_names_routes.ts";
+import { registerSavedPageRowAnswerRoutes } from "../_fleet-server/saved_page_row_answer_routes.ts";
 import { readSortWithGemini } from "../_fleet-server/saved_page_sort_ai.ts";
 import { registerPartPictureInternalRoutes } from "../_fleet-server/part_picture_routes.ts";
 import { registerPartPictureAdminRoutes } from "../_fleet-server/part_picture_admin_routes.ts";
@@ -381,6 +382,8 @@ try {
   registerSavedPagePartTypeRoutes(withPrivacyGuard(app), writer);
   // R4: the "Sorted by Roam" review list; track / don't track.
   registerSavedPagePartNamesRoutes(withPrivacyGuard(app), writer, { pictures: productionPictureDeps() });
+  // Answers teach Roam: answer a question card, the "Learned from you" list, Undo.
+  registerSavedPageRowAnswerRoutes(withPrivacyGuard(app), writer);
   // The part-picture worker's door: cron relay only, X-Fleet-Cron-Secret (see part_picture_routes.ts).
   registerPartPictureInternalRoutes(app, writer);
   // Dominion part pictures (§3.5): staff read; owner for the templates, the bulk remake and the settings.

@@ -22,6 +22,7 @@ import {
 import { identityTokens } from "./research_part_job.ts";
 import { rememberCarSiteVersion, savePartAnswers } from "./research_part_save.ts";
 import { siteDomain } from "./research_page_reader.ts";
+import { anyPageEvidenceOk, specSource } from "./research_spec_source.ts";
 import { type LookupRecipe, runRecipe } from "./research_recipes.ts";
 
 const PREFIX = "/make-server-37f42386/admin/catalog-research";
@@ -249,16 +250,22 @@ export function registerResearchEngineRoutes(
     } catch {
       return c.json({ error: "The catalogue page link is required (https)" }, 400);
     }
+    // Owner 27 Nov: a spec a parts catalogue never shows (bulb, tyre, oil…) is confirmed on any page about the car;
+    // the owner's own check is the proof and the page's link is kept as the evidence.
+    const anyPage = ctx.gateInput.jobType === "spec" && specSource(ctx.gateInput.specKey) === "any_page";
+    if (anyPage && !anyPageEvidenceOk(url)) {
+      return c.json({ error: "Paste the link of the page that shows it (not the search page)." }, 400);
+    }
     // Review #4: the page must be a trusted catalogue — the car maker's for this car's make, or a part maker's.
     const { data: trusted } = await supabase.from("trusted_source").select("kind, maker_norm").eq("domain", host);
     const make = String(ctx.car.make ?? "").trim().toLowerCase();
-    const allowed = (trusted ?? []).some((t) => {
+    const allowed = anyPage || (trusted ?? []).some((t) => {
       const row = t as { kind: string; maker_norm: string | null };
       return row.kind === "part_maker" || (row.kind === "car_maker" && String(row.maker_norm ?? "").toLowerCase() === make);
     });
     if (!allowed) return c.json({ error: "That page isn't on a trusted catalogue for this car. Use the Open page button." }, 400);
     // The car maker's own catalogue for this car: its numbers are the car maker's parts (OEM).
-    const carMakerPage = (trusted ?? []).some((t) => {
+    const carMakerPage = !anyPage && (trusted ?? []).some((t) => {
       const row = t as { kind: string; maker_norm: string | null };
       return row.kind === "car_maker" && String(row.maker_norm ?? "").toLowerCase() === make;
     });
@@ -282,11 +289,12 @@ export function registerResearchEngineRoutes(
         site: host,
         rowName: str(b.rowName, 120) || null,
         buildText: ctx.buildText,
-        knownCode: ctx.knownCode,
+        knownCode: anyPage ? null : ctx.knownCode,
         suggestions: ctx.gateInput.jobType === "part" ? ctx.gateInput.candidates : ctx.specSuggestions,
         positionScheme: ctx.positionScheme,
         jobAxle: side as "front" | "rear" | null,
         build: ctx.gateInput.build ?? null,
+        anyPage,
       });
       if (!ans.ok) {
         const msg: Record<string, string> = {
@@ -333,7 +341,7 @@ export function registerResearchEngineRoutes(
 
     // RE-63: once Confirm has fully worked, remember the catalogue's name and page for this car's version
     // (only when the paste names exactly one version), so the next check says "click it".
-    await rememberCarSiteVersion(supabase, {
+    if (!anyPage) await rememberCarSiteVersion(supabase, {
       carId: ctx.job.vehicle_catalog_id,
       host,
       versionCode: answeredVersion ?? versionCodeOnLine(pasted, ctx.car.chassis_code),
