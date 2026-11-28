@@ -173,16 +173,18 @@ BEGIN
   END IF;
   INSERT INTO mm_truth_log VALUES ('TT7_global_only', 'ok');
 
-  -- TT9 active global beats needs_checking engine
+  -- TT9 (rule changed in step 16b, 28 Nov 2026, live since 20261128005456): a needs_checking rule that is
+  -- more specific to the car (engine) beats an active everyone's rule, so a car maker's figure still waiting
+  -- for a document is used instead of Roam's default. At the same level an active rule still wins.
   UPDATE public.maintenance_task_templates SET status = 'needs_checking'
   WHERE id = 'e2000010-0000-4000-8000-000000000004'::uuid;
   UPDATE public.maintenance_task_templates SET status = 'active'
   WHERE id = 'e2000010-0000-4000-8000-000000000005'::uuid;
   SELECT r.rule_id INTO v_rule FROM public.schedule_rule_for_part(v_org, v_vehicle, v_part) r;
-  IF v_rule <> 'e2000010-0000-4000-8000-000000000005'::uuid THEN
+  IF v_rule <> 'e2000010-0000-4000-8000-000000000004'::uuid THEN
     RAISE EXCEPTION 'TT9 failed';
   END IF;
-  INSERT INTO mm_truth_log VALUES ('TT9_active_global_beats_weak_engine', 'ok');
+  INSERT INTO mm_truth_log VALUES ('TT9_specific_needs_checking_beats_active_global', 'ok');
 
   -- TT10 active platform beats needs_checking car
   UPDATE public.maintenance_task_templates SET status = 'needs_checking'
