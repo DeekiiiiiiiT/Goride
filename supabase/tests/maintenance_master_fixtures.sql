@@ -239,6 +239,10 @@ BEGIN
   ) ON CONFLICT (id) DO UPDATE SET applicable_vehicle_classes = ARRAY['motorcycle']::text[], status = 'active';
   UPDATE public.maintenance_task_templates SET status = 'active', applicable_vehicle_classes = ARRAY['car']::text[]
   WHERE id = 'e2000010-0000-4000-8000-000000000005'::uuid;
+  -- The engine rule left needs_checking by TT11/TT12 would now win over the everyone's rule (TT9), so it is
+  -- switched off here: TT13/TT14 test the class filter and the severe fallback on the everyone's rule only.
+  UPDATE public.maintenance_task_templates SET status = 'draft'
+  WHERE id = 'e2000010-0000-4000-8000-000000000004'::uuid;
   SELECT r.rule_id INTO v_rule FROM public.schedule_rule_for_part(v_org, v_vehicle, v_part) r;
   IF v_rule <> 'e2000010-0000-4000-8000-000000000005'::uuid THEN
     RAISE EXCEPTION 'TT13 failed';
