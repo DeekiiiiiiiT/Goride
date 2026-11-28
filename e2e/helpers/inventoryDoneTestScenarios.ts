@@ -204,6 +204,10 @@ export async function runDoneTest06(page: Page) {
   // Go offline only once the kit has loaded; cutting the network mid-load shows "Couldn't load your kit".
   const reportButton = page.getByRole('button', { name: /Report a problem/i }).first();
   await expect(reportButton).toBeVisible({ timeout: 60_000 });
+  // "Service coming up" loads after the kit; wait for every request to finish so the kit isn't caught mid-refresh.
+  await expect(page.getByText(/Service coming up/i).first()).toBeVisible({ timeout: 60_000 });
+  await page.waitForLoadState('networkidle');
+  await expect(reportButton).toBeVisible({ timeout: 30_000 });
   await page.context().setOffline(true);
   await reportButton.click();
   await page.getByRole('radio', { name: /Missing/i }).click();

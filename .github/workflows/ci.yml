@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      scan_range:
+        description: "Optional git range for the secret scan, e.g. abc123..def456"
+        required: false
+        default: ""
 
 # Private repo = 2,000 free Actions minutes a month (24 Nov 2026). A newer push cancels the older
 # run, docs-only pushes skip the build, and the inventory e2e only runs for inventory/car-kit files.
@@ -646,8 +651,11 @@ jobs:
           PR_BASE: ${{ github.event.pull_request.base.sha }}
           BEFORE: ${{ github.event.before }}
           SHA: ${{ github.sha }}
+          SCAN_RANGE: ${{ github.event.inputs.scan_range }}
         run: |
-          if [ "$EVENT" = "pull_request" ]; then
+          if [ -n "$SCAN_RANGE" ]; then
+            RANGE="$SCAN_RANGE"
+          elif [ "$EVENT" = "pull_request" ]; then
             RANGE="$PR_BASE..$SHA"
           elif [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
             RANGE="$BEFORE..$SHA"
@@ -655,7 +663,7 @@ jobs:
             RANGE="$SHA~1..$SHA"
           fi
           echo "Scanning $RANGE"
-          gitleaks detect --source . --config .gitleaks.toml --log-opts="$RANGE" --redact --no-banner --exit-code 1
+          gitleaks detect --source . --config .gitleaks.toml --log-opts="$RANGE" --redact --no-banner --verbose --exit-code 1
 
   inventory:
     needs: changes
