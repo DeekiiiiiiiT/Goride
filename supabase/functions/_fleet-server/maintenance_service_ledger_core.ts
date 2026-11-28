@@ -388,8 +388,32 @@ export async function bootstrapVehicleComponentSchedules(args: {
     }
   }
 
+  // As needed parts (frequency_kind = 'manual_only') are done only when a job calls for them, so
+  // they never get a schedule row and never get a due date (MER-04). Same rule as
+  // public.mm_part_is_as_needed: a part with a manual_only rule and no other rule is As needed.
+  // Keep in sync with supabase/migrations/20261127114220_mm_as_needed_engine.sql.
+  const asNeededParts = new Set<string>();
+  const categoryIds = [...byCat.keys()];
+  if (categoryIds.length) {
+    const { data: partRules } = await sb
+      .from("maintenance_task_templates")
+      .select("component_id, frequency_kind, status")
+      .in("component_id", categoryIds)
+      .in("status", ["active", "needs_checking"])
+      .is("archived_at", null);
+    const scheduledParts = new Set<string>();
+    for (const r of (partRules || []) as Record<string, unknown>[]) {
+      const cid = String(r.component_id ?? "");
+      if (!cid) continue;
+      if (String(r.frequency_kind ?? "recurring") === "manual_only") asNeededParts.add(cid);
+      else scheduledParts.add(cid);
+    }
+    for (const cid of scheduledParts) asNeededParts.delete(cid);
+  }
+
   let created = 0;
   for (const [categoryId, acc] of byCat) {
+    if (asNeededParts.has(categoryId)) continue;
     const template = acc.templates.length
       ? pickTightestInterval(acc.templates)
       : acc.defaults;

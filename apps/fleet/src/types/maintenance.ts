@@ -627,3 +627,39 @@ export function groupCategoriesBySystem(
   }
   return out;
 }
+
+/** Maintenance step 11: one work order as the Work orders tab shows it (GET /maintenance/work-orders/board). */
+export type WorkOrderBoardCard = {
+  id: string;
+  status: string;
+  stage: "decision" | "waiting" | "garage" | "saving" | "done" | "cancelled";
+  stageLabel: string;
+  vehicleId: string;
+  plate: string | null;
+  make: string | null;
+  model: string | null;
+  year: string | null;
+  garage: string | null;
+  openedAt: string | null;
+  offRoadAt: string | null;
+  daysOffRoad: number | null;
+  performedAtDate: string | null;
+  closedAt: string | null;
+  odometer: number | null;
+  total: number | null;
+  priority: string | null;
+  cancelReason: string | null;
+  jobs: string[];
+  request: {
+    recordId: string;
+    recordStatus: string;
+    type: string | null;
+    text: string | null;
+    priority: string | null;
+    date: string | null;
+    photoUrl: string | null;
+    odometer: number | null;
+    performedAtDate: string | null;
+    version: number | null;
+  } | null;
+};

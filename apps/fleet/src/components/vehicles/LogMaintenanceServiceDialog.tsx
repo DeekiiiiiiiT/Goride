@@ -158,319 +158,45 @@ import {
 } from "../../types/maintenance";
 import type { CompatiblePartsItem } from "../../types/partSourcing";
 
-type DialogStep =
-  | "dateMileage"
-  | "whatWasDone"
-  | "lineDetails"
-  | "review"
-  | "system"
-  | "component"
-  | "inspect";
-type LogMode = "package" | "quick_job" | "inspect";
+import {
+  TIRE_BRAKE_POSITIONS,
+  categoryMatchLine,
+  defaultExtras,
+  defaultFieldSchema,
+  dialogWizardStep,
+  emptyValuesForCategory,
+  lineFromCategoryValues,
+  lineMatchKey,
+  linesForSave,
+  lineTotalPreview,
+  numFrom,
+  packageFromCatalog,
+  packageFromPreset,
+  quickJobTypeLabel,
+  stripEverySuffix,
+  syntheticCategoriesFromNames,
+  type AddToInspectionTarget,
+  type DialogStep,
+  type LineExtras,
+  type LogMaintenanceServiceDialogProps,
+  type LogMode,
+  type LogServicePackageStatus,
+  type PackageChoice,
+} from "./maintenance-logging/log-service/logServiceDialogModel";
+import {
+  followUpQueue,
+  inspectionFindingsFromLines,
+  isDiscountChanged,
+  isDiscountProblem,
+  saveBlockReason,
+  saveFailureReason,
+  stockWarningsText,
+} from "./maintenance-logging/log-service/logServiceSave";
 
-type LogServicePackageStatus = "overdue" | "due_soon" | "ok" | "mandatory";
+// Step 9: these lived here before the split; other files still import them from this file.
+export { quickJobTypeLabel };
+export type { AddToInspectionTarget, LogMaintenanceServiceDialogProps };
 
-type PackageChoice = {
-  id: string;
-  label: string;
-  shortLabel: string;
-  iconKey: string;
-  templateId?: string;
-  categories: MaintenanceServiceCategory[];
-  dueKind?: CatalogMaintenanceTaskOption["dueKind"] | LogServicePackageStatus;
-  intervalText?: string;
-  status?: LogServicePackageStatus;
-  kmLabel?: string | null;
-};
-
-const TIRE_BRAKE_POSITIONS = ["LF", "RF", "LR", "RR"] as const;
-
-export interface LogMaintenanceServiceDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  vehicleId: string;
-  catalogTemplates: CatalogMaintenanceTaskOption[];
-  /** Prefill odometer (e.g. fleet canonical reading). */
-  defaultOdo?: number;
-  /** Car strip + labels for Stitch wizard chrome. */
-  vehicleStrip?: LogServiceVehicleStrip;
-  /** When set, PATCH this record (e.g. complete a driver Requested row). */
-  initialLog?: Partial<MaintenanceLog> | null;
-  /** Supabase user id for draft storage key. */
-  draftUserId?: string;
-  onSaved?: () => void;
-  /** Powertrain job fit: "Link this car" opens the car's page (only where the host can). */
-  onLinkCar?: () => void;
-  /**
-   * Opened from "Log it now" on a found job (inspection findings): after Date & mileage the dialog goes
-   * straight to that job's details, shows the "From inspection" banner and saves with fromFoundLineId.
-   */
-  fromFoundWork?: FoundWorkItem | null;
-  /**
-   * LC-14 "Add a job to this inspection": the same window, but the jobs are what a saved inspection found (not done
-   * yet, J$ 0). No Date & mileage, no prices; Review adds them to that inspection. What was paid never changes.
-   */
-  addToInspection?: AddToInspectionTarget | null;
-}
-
-export type AddToInspectionTarget = {
-  workOrderId: string;
-  /** LC-17: Add / Edit quote on this one waiting job (opens straight on its form, saves only its quote). */
-  editLine?: FoundWorkItem | null;
-  /** "Inspection / diagnostic fee · 22 Aug 2026 · Whol-Hearted Car Service Ltd" */
-  inspectionLine: string;
-};
-
-function stripEverySuffix(label: string): string {
-  return label.replace(/\s*\(Every[^)]*\)\s*$/i, "").trim() || label;
-}
-
-function defaultFieldSchema(): MaintenanceServiceCategory["field_schema"] {
-  return {
-    fields: [
-      { key: "material", type: "number", label: "Parts / materials", required: false },
-      { key: "labor", type: "number", label: "Labor", required: false },
-    ],
-  };
-}
-
-function syntheticCategoriesFromNames(names: string[]): MaintenanceServiceCategory[] {
-  return names.map((name, index) => ({
-    id: `synthetic-${index}-${name}`,
-    code: `synthetic_${index}`,
-    name,
-    icon_key: "wrench",
-    field_schema: defaultFieldSchema(),
-    quick_job_eligible: false,
-    sort_order: index,
-    kind: "component" as const,
-    parent_id: null,
-    created_at: "",
-    updated_at: "",
-  }));
-}
-
-function packageFromCatalog(t: CatalogMaintenanceTaskOption): PackageChoice {
-  const cats =
-    t.categories && t.categories.length > 0
-      ? t.categories.filter(
-          (c) => c.kind !== "system" && !String(c.code || "").startsWith("sys_"),
-        )
-      : syntheticCategoriesFromNames(t.checklistLines);
-  return {
-    id: t.templateId,
-    label: t.label,
-    shortLabel: stripEverySuffix(t.label),
-    iconKey: t.iconKey || inferPackageIconKey(t.label),
-    templateId: t.templateId,
-    categories: cats,
-    dueKind: t.dueKind,
-  };
-}
-
-function packageFromPreset(p: (typeof MAINTENANCE_SCHEDULE_PRESETS)[number]): PackageChoice {
-  return {
-    id: `preset-${p.id}`,
-    label: p.label,
-    shortLabel: stripEverySuffix(p.label),
-    iconKey: inferPackageIconKey(p.label, p.id),
-    templateId: undefined,
-    categories: syntheticCategoriesFromNames(p.items),
-  };
-}
-
-function emptyValuesForCategory(cat: MaintenanceServiceCategory): Record<string, string | number | boolean | null> {
-  if (cat.is_part === false) return { cost_mode: "total", service_amount: null };
-  const values: Record<string, string | number | boolean | null> = {};
-  for (const field of cat.field_schema?.fields || []) {
-    if (field.type === "boolean") values[field.key] = false;
-    else if (field.type === "number") {
-      if (field.key === "qty" && (cat.code === "tires" || cat.icon_key === "tires")) {
-        values[field.key] = 1;
-      } else {
-        values[field.key] = null;
-      }
-    } else if (field.type === "select") {
-      values[field.key] = field.options?.[0] ?? null;
-    } else {
-      values[field.key] = "";
-    }
-  }
-  return values;
-}
-
-function numFrom(v: unknown): number | undefined {
-  if (v == null || v === "") return undefined;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : undefined;
-}
-
-type LineExtras = {
-  action: MaintenanceLineAction;
-  laborHours: number | null;
-  laborRate: number | null;
-  brand: string;
-  partNumber: string;
-  positions: string[];
-  /** A position chip or wheel button was tapped (LS-05: an untouched saved line keeps its positions). */
-  positionsTouched: boolean;
-  warranty: boolean;
-  complimentary: boolean;
-  partId: string | null;
-  supplierPartOfferId: string | null;
-  partConfirmedFit: boolean;
-  system: MaintenanceServiceCategory | null;
-  /** Items used on this job (never pre-ticked). */
-  items: LineItemDraft[];
-  /** "Done today" job: the inspection job it came from (saved as values.found_today + found_by_job). */
-  foundToday: string | null;
-  /** Opened from "Log it now": the found job this line closes. */
-  fromFoundLineId: string | null;
-};
-
-function defaultExtras(system: MaintenanceServiceCategory | null = null): LineExtras {
-  return {
-    items: [],
-    foundToday: null,
-    fromFoundLineId: null,
-    action: "replace",
-    laborHours: null,
-    laborRate: null,
-    brand: "",
-    partNumber: "",
-    positions: [],
-    positionsTouched: false,
-    warranty: false,
-    complimentary: false,
-    partId: null,
-    supplierPartOfferId: null,
-    partConfirmedFit: false,
-    system,
-  };
-}
-
-function lineFromCategoryValues(
-  cat: MaintenanceServiceCategory,
-  values: Record<string, string | number | boolean | null>,
-  extras: LineExtras,
-): MaintenanceLogLine {
-  const isSynthetic = cat.id.startsWith("synthetic-");
-  if (isServiceJob(cat)) {
-    return {
-      categoryId: isSynthetic ? undefined : cat.id,
-      categoryCode: cat.code,
-      categoryName: cat.name,
-      systemId: extras.system?.id,
-      systemCode: extras.system?.code,
-      systemName: extras.system?.name,
-      action: extras.action,
-      labor: serviceJobCost(values, extras.positions, extras.complimentary),
-      positions: [...extras.positions],
-      positionsTouched: extras.positionsTouched,
-      positionScheme: cat.position_scheme ?? null,
-      positionAware: cat.position_aware ?? null,
-      complimentary: extras.complimentary || undefined,
-      notes: typeof values.notes === "string" ? values.notes : undefined,
-      values: {
-        cost_mode: values.cost_mode === "per_wheel" ? "per_wheel" : "total",
-        service_amount: serviceJobAmount(values),
-        ...(extras.foundToday ? { found_today: true, found_by_job: extras.foundToday } : {}),
-      },
-      items: extras.items.length ? extras.items.map((i) => ({ ...i })) : undefined,
-      ...(extras.fromFoundLineId ? { fromFoundLineId: extras.fromFoundLineId } : {}),
-    };
-  }
-  const conditionRaw = values.condition;
-  const hours = extras.laborHours;
-  const rate = extras.laborRate;
-  let labor = numFrom(values.labor);
-  if (hours != null && hours > 0 && rate != null && rate > 0) {
-    labor = hours * rate;
-  }
-  if (extras.complimentary) labor = 0;
-
-  return {
-    categoryId: isSynthetic ? undefined : cat.id,
-    categoryCode: cat.code,
-    categoryName: cat.name,
-    systemId: extras.system?.id,
-    systemCode: extras.system?.code,
-    systemName: extras.system?.name,
-    action: extras.action,
-    qty: numFrom(values.qty),
-    unitPrice: numFrom(values.unit_price),
-    material: numFrom(values.material),
-    labor,
-    laborHours: hours ?? undefined,
-    laborRate: rate ?? undefined,
-    condition:
-      typeof conditionRaw === "string" && conditionRaw
-        ? conditionRaw
-        : undefined,
-    positions: [...extras.positions],
-    positionsTouched: extras.positionsTouched,
-    positionScheme: cat.position_scheme ?? null,
-    positionAware: cat.position_aware ?? null,
-    brand: extras.brand.trim() || undefined,
-    partNumber: extras.partNumber.trim() || undefined,
-    warranty: extras.warranty || undefined,
-    complimentary: extras.complimentary || undefined,
-    partId: extras.partId || undefined,
-    supplierPartOfferId: extras.supplierPartOfferId || undefined,
-    partConfirmedFit: extras.partId ? extras.partConfirmedFit : undefined,
-    notes: typeof values.notes === "string" ? values.notes : undefined,
-    values: extras.foundToday ? { ...values, found_today: true, found_by_job: extras.foundToday } : { ...values },
-    items: extras.items.length ? extras.items.map((i) => ({ ...i })) : undefined,
-    ...(extras.fromFoundLineId ? { fromFoundLineId: extras.fromFoundLineId } : {}),
-  };
-}
-
-/**
- * Lines as the server takes them: items reduced to the keys it reads. With the switch known to be off,
- * unsaved items are dropped; items already saved are still sent, so the server refuses rather than
- * this screen silently deleting them.
- */
-function linesForSave(lines: MaintenanceLogLine[], itemsEnabled: boolean | null): MaintenanceLogLine[] {
-  return lines.map((line) => {
-    const l = positionsForWire(line);
-    const { items, itemsAmount: _ia, lineTotal: _lt, voidedAt: _va, ...rest } = l;
-    if (l.declined || !items?.length) return rest;
-    if (itemsEnabled === false && !items.some((i) => i.id)) return rest;
-    return { ...rest, items: items.map(lineItemForWire) as unknown as LineItemDraft[] };
-  });
-}
-
-function lineTotalPreview(line: MaintenanceLogLine): number {
-  return sumMaintenanceLogLines([line]);
-}
-
-function lineMatchKey(line: MaintenanceLogLine): string {
-  return `${line.categoryId || ""}|${line.categoryCode}|${line.categoryName}|${line.recommended ? "r" : "n"}`;
-}
-
-function categoryMatchLine(cat: MaintenanceServiceCategory, line: MaintenanceLogLine): boolean {
-  if (line.recommended) return false;
-  return (
-    (Boolean(line.categoryId) && line.categoryId === cat.id) ||
-    (!line.categoryId && line.categoryCode === cat.code && line.categoryName === cat.name)
-  );
-}
-
-/** Service title for one or more jobs: "Wheel Alignment + Wheel Balancing", "A + B + 2 more". */
-export function quickJobTypeLabel(lines: MaintenanceLogLine[]): string {
-  const done = lines.filter((l) => !l.recommended);
-  const source = done.length ? done : lines;
-  const names = [...new Set(source.map((l) => (l.categoryName || "").trim()).filter(Boolean))];
-  if (names.length <= 2) return names.join(" + ");
-  return `${names.slice(0, 2).join(" + ")} + ${names.length - 2} more`;
-}
-
-function dialogWizardStep(step: DialogStep): LogServiceWizardStep {
-  if (step === "dateMileage") return 1;
-  if (step === "lineDetails") return 3;
-  if (step === "review") return 4;
-  return 2;
-}
 
 export function LogMaintenanceServiceDialog({
   open,
@@ -484,6 +210,7 @@ export function LogMaintenanceServiceDialog({
   onSaved,
   onLinkCar,
   fromFoundWork = null,
+  startOnPart = null,
   addToInspection = null,
 }: LogMaintenanceServiceDialogProps) {
   const addMode = Boolean(addToInspection);
@@ -863,7 +590,9 @@ export function LogMaintenanceServiceDialog({
 
     // "Log it now" always starts fresh on step 1 for that job; an unrelated saved draft is left alone.
     const savedDraft =
-      draftUserId && !initialLog?.id && !fromFoundWork && !addToInspection ? readLogServiceDraft(draftUserId, vehicleId) : null;
+      draftUserId && !initialLog?.id && !fromFoundWork && !startOnPart && !addToInspection
+        ? readLogServiceDraft(draftUserId, vehicleId)
+        : null;
     // Only a draft with jobs in it is worth keeping. It reopens on Review (jobs listed,
     // "Add another job" / "Discard draft" there). A draft with no jobs is dropped so the
     // window always opens fresh on step 1 — never stranded half-way.
@@ -998,7 +727,7 @@ export function LogMaintenanceServiceDialog({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset when dialog opens
-  }, [open, vehicleId, defaultOdo, catalogTemplates, initialLog, fromFoundWork]);
+  }, [open, vehicleId, defaultOdo, catalogTemplates, initialLog, fromFoundWork, startOnPart]);
 
   // Load compatible parts when editing a component form
   useEffect(() => {
@@ -1628,28 +1357,12 @@ export function LogMaintenanceServiceDialog({
   };
 
   const handleSave = async () => {
-    if (!formMeta.date) {
-      toast.error("Please fill in required fields");
+    const blocked = saveBlockReason(formMeta.date, formMeta.odo, lines);
+    if (blocked) {
+      toast.error(blocked);
       return;
     }
     const odoNum = Number(formMeta.odo);
-    if (!Number.isFinite(odoNum) || odoNum <= 0) {
-      toast.error("Odometer is required and must be greater than zero");
-      return;
-    }
-    const activeLines = lines.filter((l) => !l.declined);
-    if (!activeLines.length && !lines.length) {
-      toast.error("Add at least one line before saving");
-      return;
-    }
-    if (!lines.length) {
-      toast.error("Add at least one line before saving");
-      return;
-    }
-    if (linesHaveItemErrors(lines)) {
-      toast.error("Fix the items marked in red first");
-      return;
-    }
 
     const retryingFinish = saveProblem?.kind === "notFinished";
     setIsLoading(true);
@@ -1714,16 +1427,7 @@ export function LogMaintenanceServiceDialog({
         // so the old DVI route skips them. Lines from the old Digital inspection step still get their record.
         if (woId) {
           try {
-            const findings = lines
-              .filter((l) => l.recommended && !foundByJob(l))
-              .map((l) => ({
-                itemId: null as string | null,
-                systemId: l.systemId || null,
-                componentId: l.categoryId || null,
-                status: (l.declined ? "attention" : "fail") as "attention" | "fail",
-                notes: l.notes || null,
-                declined: Boolean(l.declined),
-              }));
+            const findings = inspectionFindingsFromLines(lines);
             if (findings.length) {
               await api.saveInspectionFindings({
                 vehicleId,
@@ -1754,24 +1458,9 @@ export function LogMaintenanceServiceDialog({
         item?: { lines?: Array<{ id?: string; partId?: string; declined?: boolean }> };
         lines?: Array<{ id?: string; partId?: string; declined?: boolean }>;
       };
-      const stockWarnings = Array.isArray(saved.stockWarnings) ? saved.stockWarnings : [];
-      if (stockWarnings.length) {
-        toast.warning(stockWarnings.map((warning) => {
-          const name = warning.partName?.trim() || "A part";
-          const shortBy = Number(warning.shortBy);
-          const count = Number.isFinite(shortBy) ? shortBy : 1;
-          return `${name} is short by ${count} on the shelf`;
-        }).join(". "));
-      }
-      const prompts = saved.warrantyPrompts;
-      const savedLines = saved.item?.lines?.length ? saved.item.lines : saved.lines?.length ? saved.lines : lines;
-      const queue: Array<{ kind: "fit" | "warranty"; partId: string; supplierId?: string | null; workOrderLineId?: string | null }> = [];
-      for (const prompt of prompts || []) {
-        if (prompt.partId) queue.push({ kind: "warranty", partId: String(prompt.partId), supplierId: prompt.supplierId, workOrderLineId: prompt.workOrderLineId });
-      }
-      for (const line of savedLines) {
-        if (line.partId && !line.declined) queue.push({ kind: "fit", partId: line.partId, workOrderLineId: line.id });
-      }
+      const shortText = stockWarningsText(saved.stockWarnings);
+      if (shortText) toast.warning(shortText);
+      const queue = followUpQueue(saved, lines);
       if (queue.length) setFollowQueue(queue);
       else onOpenChange(false);
     } catch (error) {
@@ -1792,20 +1481,13 @@ export function LogMaintenanceServiceDialog({
         onSaved?.();
         return;
       }
-      // Say why: a network failure (server unreachable) reads differently from a server refusal.
-      const reason =
-        error instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(error.message)
-          ? "could not reach the server — check your connection and try again"
-          : error instanceof Error && error.message
-            ? error.message
-            : "";
-      if (/discount changed/i.test(reason)) {
+      const reason = saveFailureReason(error);
+      if (isDiscountChanged(reason)) {
         // CR-03: the next Save starts a fresh save key with the new discount.
         setIdempotencyKey(crypto.randomUUID());
         sentDiscountRef.current = null;
       }
-      const discountErr = /discount can't be more|discounts are switched|valid discount|discount changed/i.test(reason);
-      if (discountErr) toast.error(reason);
+      if (isDiscountProblem(reason)) toast.error(reason);
       else setSaveProblem({ kind: "failed", reason });
     } finally {
       setIsLoading(false);
@@ -2569,8 +2251,13 @@ export function LogMaintenanceServiceDialog({
                       setOdoTouched(true);
                       if (!canContinueDateStep) return;
                       // "Log it now": straight to that job's details (Stitch screen 10).
-                      const foundCat = fromFoundWork ? catalogById.get(fromFoundWork.jobId) : undefined;
-                      if (fromFoundWork && foundCat && lines.length === 0) {
+                      // Step 10 "Log this" on a due line: the same shortcut, on that part.
+                      const foundCat = fromFoundWork
+                        ? catalogById.get(fromFoundWork.jobId)
+                        : startOnPart
+                          ? catalogById.get(startOnPart.categoryId)
+                          : undefined;
+                      if ((fromFoundWork || startOnPart) && foundCat && lines.length === 0) {
                         setLogMode("quick_job");
                         setSelectedPackage(null);
                         const parent = resolveSystemForComponent(foundCat);

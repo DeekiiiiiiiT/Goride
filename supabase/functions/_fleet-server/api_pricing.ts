@@ -12,7 +12,7 @@
  *   immediately without a third-party round trip.
  */
 
-export type Provider = "openai" | "gemini" | "google_maps" | "supabase" | "uber";
+export type Provider = "openai" | "gemini" | "deepseek" | "google_maps" | "supabase" | "uber";
 
 export interface UsageInput {
   inputTokens?: number;
@@ -57,6 +57,26 @@ const GEMINI_IMAGE_PER_IMG: Record<string, number> = {
   "gemini-2.0-flash-exp-image-generation": 0.04,
   "gemini-3.1-flash-image": 0.04,
 };
+
+// ---------------------------------------------------------------------------
+// DeepSeek — $/1K tokens for chat (the manual reader uses `deepseek-flash`), $/page for file parsing.
+// Source: https://api-docs.deepseek.com/quick_start/pricing (checked 27 Nov 2026). Listed per 1M tokens
+// there; converted to the per-1K form the estimator uses.
+//
+// Peak rates are on purpose: off-peak is half, so charging the peak price means the budget guard can
+// never undercount a month's spend. Cache-hit input is cheaper ($0.006/1M peak) but the reply does not
+// always say which tokens were cache hits, so the cache-miss rate covers every input token.
+// ---------------------------------------------------------------------------
+const DEEPSEEK_TEXT: Record<string, { in: number; out: number }> = {
+  // peak: in $0.30 / 1M (cache miss), out $1.20 / 1M; off-peak: $0.15 / $0.60
+  "deepseek-flash":               { in: 0.0003, out: 0.0012 },
+  "deepseek-v4-flash":            { in: 0.0003, out: 0.0012 },
+  "deepseek-v4-flash-vision-exp": { in: 0.0003, out: 0.0012 },
+  "deepseek-v4-pro":              { in: 0.00132, out: 0.00396 },
+};
+
+/** File parsing / OCR: $0.225 per 1,000 pages, billed once per page when parsing succeeds. */
+export const DEEPSEEK_FILE_PARSE_PER_PAGE_USD = 0.000225;
 
 // ---------------------------------------------------------------------------
 // Google Maps Platform — $/1K requests.
@@ -122,6 +142,17 @@ export function estimateCostUSD(
       const outTok = usage.outputTokens || 0;
       return (inTok / 1000) * rate.in + (outTok / 1000) * rate.out;
     }
+    if (provider === "deepseek") {
+      // Uploading and parsing a document is billed by the page, not by tokens.
+      if (service === "file_parsing") {
+        return (usage.requests || 0) * DEEPSEEK_FILE_PARSE_PER_PAGE_USD;
+      }
+      const rate = model ? DEEPSEEK_TEXT[model] : undefined;
+      if (!rate) return 0;
+      const inTok = usage.inputTokens || 0;
+      const outTok = usage.outputTokens || 0;
+      return (inTok / 1000) * rate.in + (outTok / 1000) * rate.out;
+    }
     if (provider === "google_maps") {
       const rate = service ? GOOGLE_MAPS_PER_1K[service] : undefined;
       if (!rate) return 0;
@@ -143,6 +174,7 @@ export function getPricingTable() {
       image: GEMINI_IMAGE_PER_IMG,
       grounding: { perQueryUSD: GEMINI_GROUNDING_PER_QUERY_USD, freeQueriesPerMonth: GEMINI_GROUNDING_FREE_QUERIES_PER_MONTH },
     },
+    deepseek:   { text: DEEPSEEK_TEXT, fileParsingPerPageUSD: DEEPSEEK_FILE_PARSE_PER_PAGE_USD },
     google_maps: GOOGLE_MAPS_PER_1K,
   };
 }

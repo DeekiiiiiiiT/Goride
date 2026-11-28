@@ -8,15 +8,17 @@ import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-const { parseDocument, saveVehicle, uploadFile, getVehiclePicture } = vi.hoisted(() => ({
+const { parseDocument, saveVehicle, uploadFile, getVehiclePicture, addOdometerReading, patchVehicleSevereDuty } = vi.hoisted(() => ({
   parseDocument: vi.fn(),
   saveVehicle: vi.fn(),
   uploadFile: vi.fn(),
   getVehiclePicture: vi.fn(),
+  addOdometerReading: vi.fn(async () => ({ success: true })),
+  patchVehicleSevereDuty: vi.fn(async () => ({ success: true })),
 }));
 
 vi.mock("../../../services/api", () => ({
-  api: { parseDocument, saveVehicle, uploadFile, getVehiclePicture },
+  api: { parseDocument, saveVehicle, uploadFile, getVehiclePicture, addOdometerReading, patchVehicleSevereDuty },
 }));
 vi.mock("../../../utils/pdf-helper", () => ({ convertPdfToImage: vi.fn(async (f: File) => f) }));
 vi.mock("../../../hooks/useCatalogCandidates", () => ({
@@ -166,6 +168,13 @@ describe("AddVehicleFlow", () => {
     expect(screen.queryByText(/Not right\?/)).toBeNull();
     expect((screen.getByTestId("confirm-save") as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(screen.getByTestId("confirm-save"));
+    // Maintenance step 8: the odometer is required before the car can be saved.
+    await screen.findByText("Odometer and use");
+    expect((screen.getByTestId("odometer-save") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId("use-hard").getAttribute("aria-pressed")).toBe("true");
+    fireEvent.change(screen.getByTestId("odo-km"), { target: { value: "143,220" } });
+    expect((screen.getByTestId("odometer-save") as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByTestId("odometer-save"));
     await screen.findByText("Vehicle added");
     expect(uploadFile).not.toHaveBeenCalled();
     const body = saveVehicle.mock.calls[0][0];
@@ -175,6 +184,8 @@ describe("AddVehicleFlow", () => {
     expect(JSON.stringify(body)).not.toMatch(/CertificateUrl|"image"/);
     expect(added).toHaveBeenCalled();
     expect(screen.getByText("Picture will be added tomorrow")).toBeTruthy();
+    expect(addOdometerReading).toHaveBeenCalledWith(expect.objectContaining({ vehicleId: "5179KZ", odometer: 143220, source: "manual" }));
+    expect(patchVehicleSevereDuty).toHaveBeenCalledWith("5179KZ", expect.objectContaining({ severe_duty: true }));
   });
 
   it("a parked vehicle shows the waiting-for-check card", async () => {
@@ -187,7 +198,11 @@ describe("AddVehicleFlow", () => {
     fireEvent.click(await screen.findByTestId("registration-next"));
     fireEvent.click(await screen.findByTestId("use-next"));
     fireEvent.click(await screen.findByTestId("confirm-save"));
+    fireEvent.change(await screen.findByTestId("odo-km"), { target: { value: "90000" } });
+    fireEvent.click(screen.getByTestId("use-normal"));
+    fireEvent.click(screen.getByTestId("odometer-save"));
     await waitFor(() => expect(screen.getAllByText("Waiting for Roam to check this car").length).toBeGreaterThan(0));
+    expect(patchVehicleSevereDuty).toHaveBeenCalledWith("5179KZ", expect.objectContaining({ severe_duty: false }));
   });
 
   it("Cancel asks first; Stop closes", () => {

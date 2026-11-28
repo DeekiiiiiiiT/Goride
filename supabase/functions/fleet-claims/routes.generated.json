@@ -1,6 +1,6 @@
 {
   "slug": "fleet-claims",
-  "generatedAt": "2026-11-15T22:27:03.563Z",
+  "generatedAt": "2026-11-28T01:48:14.693Z",
   "routeCount": 5,
   "routes": [
     "DELETE ${BASE}/claims/:id",

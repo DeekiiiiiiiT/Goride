@@ -9,6 +9,46 @@ function formatInterval(km: number | null, mo: number | null): string {
   return parts.join(" or ");
 }
 
+const AS_NEEDED_REASON = "As needed: done only when a job calls for it";
+
+/** The printed page of the car maker's document a rule came from (PDF page − the manual's offset). */
+export function sourcePage(
+  rule: Record<string, unknown> | undefined,
+  manualsById: Map<string, { page_offset: number; doc_type: string | null }>,
+): { page: number; doc: "owners_manual" | "schedule" } | null {
+  if (!rule || rule.evidence_page == null) return null;
+  const pdfPage = Number(rule.evidence_page);
+  if (!Number.isFinite(pdfPage)) return null;
+  const manual = rule.manual_id ? manualsById.get(String(rule.manual_id)) : undefined;
+  const printed = pdfPage - (manual?.page_offset ?? 0);
+  return {
+    page: printed >= 1 ? printed : pdfPage,
+    doc: manual?.doc_type === "owners_manual" ? "owners_manual" : "schedule",
+  };
+}
+
+/**
+ * Where the clock started for one part: a logged service, history a person filled in, or the car's first
+ * odometer reading. Null fields when nobody knows (History unknown).
+ */
+export function countingFrom(sched: Record<string, unknown> | undefined): {
+  counting_from_km: number | null;
+  counting_from_date: string | null;
+  counting_from_source: "service" | "filled_in" | "first_reading" | null;
+} {
+  if (!sched) return { counting_from_km: null, counting_from_date: null, counting_from_source: null };
+  const lastKm = sched.last_performed_km != null ? Number(sched.last_performed_km) : null;
+  const lastDate = sched.last_performed_date != null ? String(sched.last_performed_date).slice(0, 10) : null;
+  if (lastKm != null || lastDate != null) {
+    return {
+      counting_from_km: lastKm,
+      counting_from_date: lastDate,
+      counting_from_source: sched.last_performed_source === "manual" ? "filled_in" : "service",
+    };
+  }
+  return { counting_from_km: null, counting_from_date: null, counting_from_source: null };
+}
+
 export async function enrichMaintenanceDueItems(
   supabase: SupabaseClient,
   orgId: string,
@@ -25,7 +65,7 @@ export async function enrichMaintenanceDueItems(
   const { data: schedules } = await supabase
     .from("vehicle_component_schedule")
     .select(
-      "category_id, position, schedule_status, rule_id, rule_revision_no, interval_km_used, interval_months_used, interval_basis, custom_interval_km, custom_interval_months, custom_reason, custom_set_at, computed_at, category:maintenance_service_categories(id, code, name)",
+      "id, category_id, position, schedule_status, retired_reason, rule_id, rule_revision_no, interval_km_used, interval_months_used, interval_basis, custom_interval_km, custom_interval_months, custom_reason, custom_set_at, computed_at, last_performed_km, last_performed_date, last_performed_source, baseline_odometer, baseline_date, baseline_source, history_check_at_next_service, category:maintenance_service_categories(id, code, name)",
     )
     .eq("organization_id", orgId)
     .eq("vehicle_id", vehicleId);
@@ -35,9 +75,22 @@ export async function enrichMaintenanceDueItems(
   if (ruleIds.length) {
     const { data: rules } = await supabase
       .from("maintenance_task_templates")
-      .select("id, source_type, status, template_scope, interval_km, interval_months, severe_interval_km, severe_interval_months, updated_at, task_name")
+      .select("id, source_type, status, template_scope, interval_km, interval_months, severe_interval_km, severe_interval_months, updated_at, task_name, manual_id, evidence_page")
       .in("id", ruleIds);
     for (const r of rules || []) rulesById.set(String(r.id), r as Record<string, unknown>);
+  }
+
+  // Step 10: "Car maker · page 412" — the printed page of the manual a rule came from.
+  const manualIds = [...new Set([...rulesById.values()].map((r) => r.manual_id).filter(Boolean))] as string[];
+  const manualsById = new Map<string, { page_offset: number; doc_type: string | null }>();
+  if (manualIds.length) {
+    const { data: manuals } = await supabase
+      .from("maintenance_manual")
+      .select("id, page_offset, doc_type")
+      .in("id", manualIds);
+    for (const m of manuals || []) {
+      manualsById.set(String(m.id), { page_offset: Number(m.page_offset ?? 0), doc_type: m.doc_type ?? null });
+    }
   }
 
   const schedKey = (cat: unknown, pos: unknown) => `${String(cat)}::${pos == null || pos === "" ? "-" : String(pos)}`;
@@ -94,15 +147,24 @@ export async function enrichMaintenanceDueItems(
       interval_basis: sched?.interval_basis ?? null,
       updated_by_roam_at: updatedAt ?? null,
       odometer_needed: row.due_status === "odometer_needed" || sched?.schedule_status === "odometer_needed",
+      // Step 10 (B5, MER-18): where the number comes from, where the clock started, why a part was retired.
+      schedule_id: sched?.id ?? null,
+      retired_reason: sched?.retired_reason ?? null,
+      source_page: sourcePage(rule, manualsById),
+      ...countingFrom(sched),
     };
   };
 
   const dueKeys = new Set(items.map((row) => schedKey(row.category_id ?? row.categoryId, row.position)));
-  const enrichedDue = items.map(enrichOne);
+  // Step 10 (MER-04 display): an as-needed part (done only when a job calls for it) is never a due line.
+  const enrichedDue = items
+    .map(enrichOne)
+    .filter((row) => String(row.retired_reason ?? "") !== AS_NEEDED_REASON);
 
   const retiredExtras: Record<string, unknown>[] = [];
   for (const s of schedules || []) {
     if (String(s.schedule_status ?? "") !== "retired") continue;
+    if (String(s.retired_reason ?? "") === AS_NEEDED_REASON) continue;
     const key = schedKey(s.category_id, s.position);
     if (dueKeys.has(key)) continue;
     const catJoin = s.category as { name?: string; code?: string } | null | undefined;

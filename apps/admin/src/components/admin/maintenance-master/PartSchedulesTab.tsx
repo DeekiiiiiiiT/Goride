@@ -96,12 +96,12 @@ export function PartSchedulesTab({
     <div className="mt-6 space-y-6">
       {!bannerDismissed ? (
         <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-secondary-container/60 bg-secondary-container/30 px-4 py-3 text-sm text-on-secondary-container">
-          <p>
-            Part schedules decide how often. Service packages only group parts for one garage visit.{" "}
-            <button type="button" className="font-medium text-secondary underline">
-              How this works
-            </button>
-          </p>
+          {/* Step 15 (MER-24): the inert "How this works" button is gone; its three lines are the panel. */}
+          <ul className="space-y-0.5">
+            <li>Part schedules decide how often a part is due.</li>
+            <li>Service packages only group parts for one garage visit.</li>
+            <li>Due is whichever comes first: the km or the months.</li>
+          </ul>
           <button type="button" className="text-on-surface-variant" onClick={onDismissBanner} aria-label="Dismiss">
             <span className="material-symbols-outlined text-[20px]">close</span>
           </button>
@@ -264,7 +264,13 @@ export function PartSchedulesTab({
                         </div>
                       </td>
                       <td className="px-4 py-3 font-code text-xs text-on-surface">
-                        {idx ? formatInterval(idx.interval_km, idx.interval_months) : "—"}
+                        {idx?.as_needed ? (
+                          <span className="font-body text-on-surface-variant">Done when needed</span>
+                        ) : idx ? (
+                          formatInterval(idx.interval_km, idx.interval_months)
+                        ) : (
+                          "—"
+                        )}
                       </td>
                       <td className="px-4 py-3 text-xs text-on-surface-variant">
                         {(idx?.specific_count ?? 0) === 0 ? (
@@ -274,7 +280,9 @@ export function PartSchedulesTab({
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        {idx?.source_type ? (
+                        {idx?.as_needed ? (
+                          <span className="text-on-surface-variant">—</span>
+                        ) : idx?.source_type ? (
                           <div className="flex flex-col gap-0.5">
                             <MmSourceChip source={idx.source_type} />
                             <MmConfidenceLabel confidence={idx.confidence} />
@@ -284,7 +292,14 @@ export function PartSchedulesTab({
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <MmStatusChip status={idx?.status} />
+                        {idx?.as_needed ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-[#94a3b8] px-2 py-0.5 text-[11px] font-medium text-[#475569]">
+                            <span className="material-symbols-outlined text-[14px]">build</span>
+                            As needed
+                          </span>
+                        ) : (
+                          <MmStatusChip status={idx?.status} />
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">

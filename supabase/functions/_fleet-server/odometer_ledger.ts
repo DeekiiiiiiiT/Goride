@@ -14,7 +14,8 @@ export type OdometerLedgerSource =
   | "checkin"
   | "service"
   | "import"
-  | "correction";
+  | "correction"
+  | "pre_shift";
 
 export type OdometerReferenceType =
   | "fuel_entry"
@@ -22,7 +23,8 @@ export type OdometerReferenceType =
   | "maintenance_log"
   | "manual"
   | "import_batch"
-  | "correction";
+  | "correction"
+  | "inspection";
 
 export type ProjectOdometerInput = {
   organizationId?: string | null;
@@ -134,7 +136,9 @@ function toClientValue(row: Record<string, unknown>): Record<string, unknown> {
         ? "checkin"
         : source === "service"
           ? "service"
-          : "manual";
+          : source === "pre_shift"
+            ? "pre_shift"
+            : "manual";
   // Column recorded_at is source of truth (payload may still hold pre-Jamaica-fix stamps)
   const recordedAt =
     row.recorded_at != null ? String(row.recorded_at) : (v.recordedAt != null ? String(v.recordedAt) : null);

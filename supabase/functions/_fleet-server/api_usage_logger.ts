@@ -349,15 +349,22 @@ export interface TrackedCallOptions<T> {
   run: () => Promise<T>;
   /** Optional mapper from the provider response to token / image counts. */
   extractUsage?: (result: T) => UsageInput & { requestId?: string };
+  /**
+   * Test seams only. Production leaves both out: the shared pre-flight guards (kill switch, budget) and the shared
+   * call log are used. A test that must not touch the database passes its own.
+   */
+  guards?: () => Promise<void>;
+  log?: (entry: ProviderCallEntry) => Promise<void>;
 }
 
 export async function trackedProviderCall<T>(opts: TrackedCallOptions<T>): Promise<T> {
   const t0 = Date.now();
-  await checkProviderGuards(opts.provider);
+  const writeLog = opts.log ?? logProviderCall;
+  await (opts.guards ?? (() => checkProviderGuards(opts.provider)))();
   try {
     const result = await opts.run();
     const usage = opts.extractUsage ? opts.extractUsage(result) : {};
-    await logProviderCall({
+    await writeLog({
       provider: opts.provider,
       service: opts.service,
       route: opts.route,
@@ -376,7 +383,7 @@ export async function trackedProviderCall<T>(opts: TrackedCallOptions<T>): Promi
     return result;
   } catch (err: any) {
     if (err instanceof ProviderBlockedError) {
-      await logProviderCall({
+      await writeLog({
         provider: opts.provider,
         service: opts.service,
         route: opts.route,
@@ -391,7 +398,7 @@ export async function trackedProviderCall<T>(opts: TrackedCallOptions<T>): Promi
       });
       throw err;
     }
-    await logProviderCall({
+    await writeLog({
       provider: opts.provider,
       service: opts.service,
       route: opts.route,

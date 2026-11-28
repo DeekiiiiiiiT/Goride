@@ -595,3 +595,8 @@ verify_jwt = false
 
 [functions.delivery]
 verify_jwt = false
+
+# The minute cron (private.invoke_maintenance_manual_worker) sends X-Fleet-Cron-Secret, which is not a JWT.
+# The function checks it with _shared/authorizeCronOrServiceRole.ts before doing anything.
+[functions.maintenance-manual-worker]
+verify_jwt = false
