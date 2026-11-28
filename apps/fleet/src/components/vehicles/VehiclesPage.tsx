@@ -7,7 +7,7 @@ import { applyDriverAssignmentChange } from '../../utils/vehicleDriverAssignment
 import { VehicleListCard } from './add-vehicle/VehicleListCard';
 import { VehicleDetail } from './VehicleDetail'; // New Component
 import { DriverAssignmentModal } from './DriverAssignmentModal';
-import { FuelLogForm } from '../driver-portal/FuelLogForm';
+import { FuelLogForm } from './FuelLogForm';
 import { LogMaintenanceServiceDialog } from './LogMaintenanceServiceDialog';
 import { AddVehicleFlow } from './add-vehicle/AddVehicleFlow';
 import { VehicleThumb } from './add-vehicle/VehiclePicture';
