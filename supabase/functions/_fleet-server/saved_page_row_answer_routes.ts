@@ -30,7 +30,23 @@ type Axle = "front" | "rear";
 type Side = "left" | "right" | "both";
 type Question = NonNullable<ResultRow["question"]>;
 
-export type AnswerBody = { yes?: boolean; typeId?: string | null; axle?: Axle | null; side?: Side | null };
+export type AnswerBody = {
+  yes?: boolean;
+  typeId?: string | null;
+  axle?: Axle | null;
+  side?: Side | null;
+  /** Owner 27 Nov: "It has no front or rear" — the part type's place setting is wrong; it becomes "none". */
+  noPlace?: boolean;
+  /** Owner 27 Nov: "It has no left or right" — the part type keeps front/rear but has no sides. */
+  noSide?: boolean;
+};
+
+/** The place setting a "no front or rear" / "no left or right" answer gives a part type. */
+export function correctedScheme(scheme: string | null, body: AnswerBody): string | null {
+  if (body.noPlace) return "none";
+  if (body.noSide && (scheme === "axle_left_right" || scheme === "four_corners")) return "axle";
+  return null;
+}
 
 export type AnswerOutcome =
   | { kind: "error"; status: number; error: string }
@@ -70,8 +86,10 @@ export function readAnswer(
     return q.typeIds.includes(String(body.typeId)) ? { typeId: String(body.typeId), axle: null, side: null } : "bad";
   }
   if (q.kind === "axle") {
+    if (body.noPlace) return { typeId: q.typeIds[0], axle: null, side: null };
     return body.axle === "front" || body.axle === "rear" ? { typeId: q.typeIds[0], axle: body.axle, side: null } : "bad";
   }
+  if (body.noSide) return { typeId: q.typeIds[0], axle: null, side: null };
   return body.side === "left" || body.side === "right" || body.side === "both"
     ? { typeId: q.typeIds[0], axle: null, side: body.side }
     : "bad";
@@ -140,6 +158,24 @@ export async function answerQuestion(
   if (!typeRow) return { kind: "error", status: 400, error: "That part type isn't on file" };
   const type = { id: String((typeRow as { id: string }).id), name: String((typeRow as { name: string }).name), scheme: (typeRow as { position_scheme?: string | null }).position_scheme ?? null };
 
+  // Owner 27 Nov: "It has no front or rear" / "It has no left or right" corrects the part type's place setting, for every
+  // car, so the wrong question is never asked again (Radiator hose was set up as front/rear).
+  const fixedScheme = correctedScheme(type.scheme, input.body);
+  if (fixedScheme && fixedScheme !== type.scheme) {
+    const { error: schemeError } = await supabase.from("maintenance_service_categories")
+      .update({ position_scheme: fixedScheme }).eq("id", type.id).eq("position_scheme", type.scheme);
+    if (schemeError) return { kind: "error", status: 500, error: SAVE_FAILED };
+    await supabase.from("dominion_audit_log").insert({
+      actor: input.actor,
+      action: "part_type_place_fix",
+      table_name: "maintenance_service_categories",
+      row_id: type.id,
+      before: { position_scheme: type.scheme },
+      after: { position_scheme: fixedScheme, why: input.body.noPlace ? "no front or rear" : "no left or right", savedPageId: page.id },
+    });
+    type.scheme = fixedScheme;
+  }
+
   const { data: carRow } = await supabase.from("vehicle_catalog").select("make, model").eq("id", page.vehicle_catalog_id).maybeSingle();
   const make = (carRow as { make?: string | null } | null)?.make ?? null;
   const model = (carRow as { model?: string | null } | null)?.model ?? null;
@@ -152,6 +188,9 @@ export async function answerQuestion(
   );
   const placed = siblings.map((r) => {
     const p = placeOf(r);
+    // A part with no front/rear keeps no place; a part with no sides keeps only its axle.
+    if (input.body.noPlace) return { row: r, axle: null, side: null };
+    if (input.body.noSide) return { row: r, axle: p.axle ?? read.axle, side: null };
     return { row: r, axle: p.axle ?? read.axle, side: p.side ?? read.side };
   });
   const me = placed.find((p) => p.row.lineNo === row.lineNo)!;
@@ -215,7 +254,11 @@ export async function answerQuestion(
 
   // The answered card's second line (Stitch screens 2 and 9), in the server's own words.
   const phrase = lessonPhrase(row.groupLine);
-  const note = !remembered.ok
+  const note = fixedScheme
+    ? input.body.noPlace
+      ? `Roam will remember a ${type.name.toLowerCase()} has no front or rear.`
+      : `Roam will remember a ${type.name.toLowerCase()} has no left or right.`
+    : !remembered.ok
     ? null
     : wording
     ? `Roam will remember '${phrase}' for ${make}.`

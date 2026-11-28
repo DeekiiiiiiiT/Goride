@@ -240,11 +240,13 @@ function yearOf(index: number): number {
 
 /** D1: the date range as ISO days — the first day of the from month, the last day of the to month. */
 function isoMonthStart(index: number | null): string | null {
-  if (index == null) return null;
+  // An open end ("09.2020 - ...") is Infinity: no end day (it crashed toISOString, 27 Nov).
+  if (index == null || !Number.isFinite(index)) return null;
   return `${yearOf(index)}-${String(monthOf(index)).padStart(2, "0")}-01`;
 }
 function isoMonthEnd(index: number | null): string | null {
-  if (index == null) return null;
+  // An open end ("09.2020 - ...") is Infinity: no end day (it crashed toISOString, 27 Nov).
+  if (index == null || !Number.isFinite(index)) return null;
   return new Date(Date.UTC(yearOf(index), monthOf(index), 0)).toISOString().slice(0, 10);
 }
 
@@ -934,8 +936,9 @@ export async function runSavedPage(
           : {
             fromYear: yearOf(r.from),
             fromMonth: monthOf(r.from),
-            toYear: r.to == null ? null : yearOf(r.to),
-            toMonth: r.to == null ? null : monthOf(r.to),
+            // An open end ("09.2020 - ...") is Infinity: "to now", which the gate reads as no end year.
+            toYear: r.to == null || !Number.isFinite(r.to) ? null : yearOf(r.to),
+            toMonth: r.to == null || !Number.isFinite(r.to) ? null : monthOf(r.to),
           };
       // Rev 2 §3.4: the gate's second typing is the page's own number (P1 already proved it), never read 2's — a read
       // that misread a digit must not stop a page-proved number from saving.

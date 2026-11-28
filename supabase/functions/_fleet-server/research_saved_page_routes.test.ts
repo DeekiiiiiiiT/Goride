@@ -16,7 +16,7 @@ import type { SavedPageSortAi } from "./saved_page_sort_ai.ts";
 import { registerCatalogRoutes } from "./catalog_routes.ts";
 import { normalisePhrase } from "./saved_page_phrases.ts";
 import { answerQuestion } from "./saved_page_row_answer_routes.ts";
-import { findQuestionForJob } from "./saved_page_question.ts";
+import { findQuestionForJob, findSavedPageForPart } from "./saved_page_question.ts";
 
 // ---------------------------------------------------------------- fixtures
 
@@ -2962,6 +2962,34 @@ Deno.test("AT owner 27 Nov: a two-step answer counts the part on both lessons, a
     [null, 1, "SUPPORT SUB-ASSY, SUSPENSION"],
     ["Testmodel", 1, "SUPPORT SUB-ASSY, SUSPENSION"],
   ].sort());
+});
+
+Deno.test("owner 27 Nov: a browser check finds the page the owner uploaded that has this part", async () => {
+  const db = teachDb();
+  const first = await uploadSupport(db);
+  // Not saved yet: no page has the strut mount.
+  assertEquals(await findSavedPageForPart(db as unknown as SupabaseClient, CAR, "Strut mount"), null);
+  await answer(db, first.pageId, first.row.lineNo, { yes: true });
+  const found = await findSavedPageForPart(db as unknown as SupabaseClient, CAR, "Strut mount");
+  assertEquals(found?.url, "https://catalog.example/parts/ZZ900");
+  assertEquals(await findSavedPageForPart(db as unknown as SupabaseClient, CAR, "Thermostat"), null);
+});
+
+Deno.test("owner 27 Nov: 'It has no front or rear' fixes the part type's place setting for every car, then saves", async () => {
+  const db = teachDb();
+  // A Radiator-hose-like row: the type is set up as front/rear, the page says neither.
+  const spec: RowSpec = { number: "77777-B5005", type: "Strut mount", axle: null, side: null, group: "BEARING, STRUT MOUNTING", from: [2016, 11], to: [2020, 9] };
+  const first = await uploadSupport(db, { rows: [supportRow("77777-B5005")], specs: [spec], group: BEARING_GROUP });
+  assertEquals(first.row.question?.kind, "axle");
+  const done = await answer(db, first.pageId, first.row.lineNo, { noPlace: true });
+  assertEquals(done.kind, "done");
+  if (done.kind !== "done") return;
+  assertEquals(db.table("maintenance_service_categories").find((c) => c.id === STRUT)?.position_scheme, "none");
+  const after = done.result.rows.find((r) => r.lineNo === first.row.lineNo)!;
+  assertEquals([after.group, after.question?.note], ["saved", "Roam will remember a strut mount has no front or rear."]);
+  assertEquals(savedListings(db, ["77777-B5005"]).length, 1);
+  // No place lesson is written for a part with no place.
+  assertEquals(db.table("part_maker_word").filter((w) => w.model).length, 0);
 });
 
 Deno.test("AT: a question answered twice is refused the second time", async () => {

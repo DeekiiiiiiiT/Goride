@@ -20,6 +20,7 @@ import {
 import { SPEC_VALUE_SHAPES } from "./research_browser_check.ts";
 import { identityTokens } from "./research_part_job.ts";
 import { findCarCatalogueLink } from "./research_car_link.ts";
+import { specSearchLink, specSource } from "./research_spec_source.ts";
 
 type Job = Record<string, unknown> & { id: string; job_type: string; vehicle_catalog_id?: string | null; spec_key?: string | null; group_key?: string | null; browser_check_allowed?: boolean };
 type Ctx = { job: Job; jobId: string; msgId: number; queue: string; started: number };
@@ -149,6 +150,10 @@ export async function runSpecJob(supabase: SupabaseClient, ctx: Ctx): Promise<Re
       route: "review",
       status: "open",
     }, { onConflict: "job_id,spec_key" });
+  }
+  // Owner 27 Nov: a spec a parts catalogue never shows (bulb, tyre, oil…) → a search for any page about the car.
+  if (specSource(specKey) === "any_page") {
+    browserUrl = specSearchLink(c as Record<string, string | number | null>, String((key as { label: string }).label));
   }
   // NR-01: no catalogue page among the AI's sources → the car's own catalogue link (the version the owner confirmed).
   if (!browserUrl) browserUrl = await findCarCatalogueLink(supabase, { vehicleId: job.vehicle_catalog_id, carMake: carMake });
