@@ -30,8 +30,8 @@ export function scopeLabel(rule: {
 }): string {
   const scope = String(rule.template_scope ?? "global");
   if (scope === "variant" || rule.vehicle_catalog_id) return "One car version";
-  if (scope === "platform" && rule.platform_id) return "Platform";
-  if (scope === "engine_family" && rule.engine_family_id) return "Engine";
+  if (scope === "platform" && rule.platform_id) return "One model";
+  if (scope === "engine_family" && rule.engine_family_id) return "One engine";
   if (scope === "global") return "Everyone";
   return scope;
 }

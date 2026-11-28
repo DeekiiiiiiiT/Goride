@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assessFillPlausibility,
   listUnreviewedImplausibleFills,
   weekHasUnreviewedImplausibleFills,
 } from './fillPlausibility.ts';
@@ -208,5 +209,28 @@ describe('weekHasUnreviewedImplausibleFills', () => {
     expect(flagged[0].amount).toBe(4000);
     expect(flagged[0].odometer).toBe(187759);
     expect(flagged[0].reasons.some((r) => /odometer/i.test(r))).toBe(true);
+  });
+});
+
+describe('assessFillPlausibility odometer order', () => {
+  const codes = (input: Parameters<typeof assessFillPlausibility>[0]) =>
+    assessFillPlausibility(input).map((i) => i.code);
+
+  it('accepts a late-entered fill that sits between the fill before and after it', () => {
+    // 24 Nov 3:58 PM = 200,558; 25 Nov 7:02 AM = 200,613 (entered late); 25 Nov 10:45 AM = 200,692
+    expect(codes({ amount: 2000, liters: 9, odometer: 200613, previousOdometer: 200558, nextOdometer: 200692, tankCapacityLiters: 40 }))
+      .not.toContain('odometer_backwards');
+    expect(codes({ amount: 2000, liters: 9, odometer: 200613, previousOdometer: 200558, nextOdometer: 200692, tankCapacityLiters: 40 }))
+      .not.toContain('odometer_above_next');
+  });
+
+  it('blocks a reading lower than the fill before it', () => {
+    expect(codes({ amount: 2000, liters: 9, odometer: 200500, previousOdometer: 200558, tankCapacityLiters: 40 }))
+      .toContain('odometer_backwards');
+  });
+
+  it('blocks a reading higher than a later fill', () => {
+    expect(codes({ amount: 2000, liters: 9, odometer: 200700, previousOdometer: 200558, nextOdometer: 200692, tankCapacityLiters: 40 }))
+      .toContain('odometer_above_next');
   });
 });

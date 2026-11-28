@@ -191,6 +191,11 @@ export function proposalConfirmed(p: Pick<PartProposal, "checks" | "trust_route"
   return p.checks?.trust === "confirmed" || p.trust_route === "a" || p.trust_route === "b" || p.trust_route === "c" || p.trust_route === "owner_browser";
 }
 
+/** NR-03: a spec value Roam read on a trusted site (not only the AI's guess). */
+export function specConfirmed(p: { trust_route?: string | null; evidence_read_ids?: string[] | null }): boolean {
+  return Boolean(p.trust_route) || (p.evidence_read_ids ?? []).length > 0;
+}
+
 /** The "how sure" line on a Roam found card. */
 export function howSureLine(p: Pick<PartProposal, "checks" | "trust_route" | "sources">): string {
   switch (p.trust_route) {
@@ -436,15 +441,89 @@ export type PartFinder = { search: string; rowName: string | null; section?: str
  * What to type in a Japanese maker catalogue's search box (Toyota / Daihatsu / Lexus parts catalogues), and the row's
  * name there. Only names seen in those catalogues; other parts fall back to the part's own name.
  */
-export function partFinder(itemName: string, make: string | null | undefined, fitDescriptor?: string | null): PartFinder {
+export function partFinder(
+  itemName: string,
+  make: string | null | undefined,
+  fitDescriptor?: string | null,
+  makerName?: string | null,
+  /** Answers teach Roam AT-06: the search word for the maker's words, from the server (job detail makerSearch). */
+  makerSearch?: string | null,
+): PartFinder {
   const found = makerPartFinder(itemName, make, fitDescriptor);
   if (found.section) return found;
+  let base: PartFinder = found;
+  if (makerName && makerSearch) {
+    // The maker's words on file for this part (a seed row or the owner's lesson): search them, look for that row.
+    base = { search: makerSearch, rowName: makerName.toUpperCase() };
+    // 26 Nov: "air filter" also finds the engine's air cleaner; the cabin filter sits with the heater and air con.
+    if (/toyota|daihatsu|lexus/i.test(String(make ?? "")) && /\bcabin\b|a\/c filter|air ?con(ditioning)? filter/i.test(itemName)) {
+      return { ...base, section: "heater and air conditioning" };
+    }
+  } else if (makerName) {
+    // Owner 26 Nov: no wording on file for this part → the car maker's own name for it (confirmed before on this make,
+    // or Roam's guess under the car maker's brand), e.g. "Hub & bearing assy, rear axle" → search "hub".
+    const fromMaker = finderFromMakerName(makerName);
+    if (fromMaker) return fromMaker;
+  }
   // Owner 25 Nov: a front / rear check says which section to open, on any site, for any part (brakes, bearings…).
   const fit = String(fitDescriptor ?? "").toLowerCase();
   const axle = fit.includes("rear") ? "rear" : fit.includes("front") ? "front" : null;
-  if (!axle) return found;
+  if (!axle) return base;
   const part = itemName.toLowerCase().replace(/\b(front|rear)\b/g, "").replace(/\s+/g, " ").trim() || itemName.toLowerCase();
-  return { ...found, section: `${axle} ${part}` };
+  return { ...base, section: `${axle} ${part}` };
+}
+
+/**
+ * Browser check hint for a spec (bulb size, tyre size, oil…): the word catalogues use for it ("headlamp", not
+ * "headlight") and what the value looks like when written. Site-neutral; unknown specs search their own label.
+ */
+export type SpecFinder = { search: string; looksLike: string | null };
+
+const SPEC_FINDERS: Array<{ test: RegExp; search: string; looksLike: string | null }> = [
+  { test: /headl(amp|ight)|beam|fog/, search: "headlamp", looksLike: "H4" },
+  { test: /tire|tyre/, search: "tire", looksLike: "165/65R14" },
+  { test: /battery/, search: "battery", looksLike: "34B19L" },
+  { test: /oil.*(capacity|_l\b)|capacity/, search: "oil", looksLike: "3.4 L" },
+  { test: /oil/, search: "oil", looksLike: "0W-20" },
+  { test: /wiper/, search: "wiper", looksLike: "600 mm" },
+  { test: /brake_fluid|brake fluid/, search: "brake fluid", looksLike: "DOT 3" },
+  { test: /coolant/, search: "coolant", looksLike: null },
+];
+
+export function specFinder(specKey: string | null | undefined, label: string): SpecFinder {
+  const k = `${specKey ?? ""} ${label}`.toLowerCase();
+  const hit = SPEC_FINDERS.find((f) => f.test.test(k));
+  return hit ? { search: hit.search, looksLike: hit.looksLike } : { search: label.toLowerCase(), looksLike: null };
+}
+
+/** Owner 27 Nov: the page a spec was found on (any site) — an https link that isn't the search page itself. */
+export function anyPageLinkOk(link: string): boolean {
+  try {
+    const u = new URL(link.trim());
+    if (u.protocol !== "https:") return false;
+    return !/(^|\.)google\.[a-z.]+$/i.test(u.hostname) || !u.pathname.startsWith("/search");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A car maker's part name written the catalogue way ("NOUN, WHERE": "Hub & bearing assy, rear axle", "THERMOSTAT")
+ * → search the noun's first word, open the section named by where + noun, look for the row by its full name.
+ */
+export function finderFromMakerName(makerName: string): PartFinder | null {
+  const name = makerName.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
+  if (name.length < 3) return null;
+  const [headRaw, ...rest] = name.split(",");
+  const head = headRaw.replace(/\b(sub-?assy|assy|assembly|set|kit)\b/gi, " ").replace(/\s+/g, " ").trim();
+  const where = rest.join(",").replace(/\s+/g, " ").trim();
+  const search = head.split(/[\s&/]+/).find((w) => /[a-z]{3,}/i.test(w))?.toLowerCase();
+  if (!search) return null;
+  return {
+    search,
+    rowName: name.toUpperCase(),
+    section: `${where ? `${where} ` : ""}${head}`.toLowerCase(),
+  };
 }
 
 function makerPartFinder(itemName: string, make: string | null | undefined, fitDescriptor?: string | null): PartFinder {
@@ -461,18 +540,8 @@ function makerPartFinder(itemName: string, make: string | null | undefined, fitD
       return { search: "shock absorber", section: `${axle.toLowerCase()} shock absorber`, rowName: `SHOCK, ${axle.toUpperCase()}`, rowContains: true };
     }
   }
-  // Parts that only sit near these (mounts, sensors, timing belts, A/C compressors…) get no row name: better none than wrong.
-  if (/mount|sensor|switch|timing|compressor|bearing|hose|cover|bracket|gasket/.test(n)) return plain;
-  if (/\bcabin\b|a\/c filter|air ?con(ditioning)? filter/.test(n)) return { search: "air filter", rowName: "ELEMENT, CLEAN AIR FILTER (or AIR REFINER)" };
-  if (/engine air filter|^air filter$|air cleaner/.test(n)) return { search: "air cleaner", rowName: "ELEMENT SUB-ASSY, AIR CLEANER FILTER" };
-  if (/spark plug/.test(n)) return { search: "spark plug", rowName: "PLUG, SPARK" };
-  if (/shock absorber|^shocks?$/.test(n)) return { search: "shock absorber", rowName: "ABSORBER ASSY, SHOCK" };
-  if (/thermostat/.test(n)) return { search: "thermostat", rowName: "THERMOSTAT" };
-  if (/brake pads?|^pads?$/.test(n)) return { search: "disc brake", rowName: "PAD KIT, DISC BRAKE" };
-  if (/brake shoes?/.test(n)) return { search: "brake shoe", rowName: "SHOE SET, BRAKE" };
-  if (/wiper blades?/.test(n)) return { search: "wiper", rowName: "BLADE ASSY, WIPER" };
-  if (/serpentine belt|drive belt|fan belt|v-?ribbed belt/.test(n)) return { search: "belt", rowName: "BELT, V-RIBBED" };
-  if (/oil filter/.test(n)) return { search: "oil filter", rowName: "FILTER SUB-ASSY, OIL" };
+  // Answers teach Roam AT-01 / AT-06: the maker's words for a part (the old hand-written rows, and the owner's
+  // lessons) now come from the server (job detail makerPartName + makerSearch), never from a list here.
   return plain;
 }
 

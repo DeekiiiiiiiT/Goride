@@ -1,6 +1,6 @@
 {
   "slug": "fleet-pay",
-  "generatedAt": "2026-11-25T14:27:46.628Z",
+  "generatedAt": "2026-11-28T01:48:14.468Z",
   "routeCount": 42,
   "routes": [
     "GET ${BASE}/:anchor",

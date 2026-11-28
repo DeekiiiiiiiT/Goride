@@ -194,6 +194,7 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
       'fuel': 'Fuel Receipt',
       'service': 'Service Log',
       'checkin': 'Vehicle Handover',
+      'pre_shift': 'Pre-shift check',
       'manual': 'Manual Entry'
     };
 
@@ -238,6 +239,7 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
       case 'manual': return 'Manual';
       case 'fuel': return 'Fuel';
       case 'service': return 'Service';
+      case 'pre_shift': return 'Pre-shift check';
       case 'checkin': return 'Vehicle Handover';
       case 'Trip Import': return 'Import';
       case 'Manual Update': return 'Manual';

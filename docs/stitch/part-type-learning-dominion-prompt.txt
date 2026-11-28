@@ -1,0 +1,168 @@
+ROAM DOMINION — NEW PART TYPES FROM A SAVED PAGE — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+HOW TO USE: First paste = everything from the intro down to END OF FIRST PASTE (Screens 1 and 2). Then paste one SCREEN block at a time, in order. Never paste the last section ("FOR CLAUDE — DO NOT PASTE").
+Plan: docs/part-type-learning-audit.md (Rev 2), §4 S1–S2.
+
+
+==================== FIRST PASTE ====================
+
+Roam Dominion - New part types from a saved page (desktop admin console for the owner, who is not a mechanic):
+
+Design high-fidelity, modern screens for a "self-learning" parts database in the Roam Dominion admin console. Today the owner uploads a page they saved from a car-parts catalogue website, and Roam saves every part on it that matches one of Roam's part types (air filter, brake pads, shock absorber…). Parts Roam has no type for yet — an air cleaner hose, a ventilation pipe — are just listed as "not a Roam part type" and thrown away. Now Roam turns them into suggestions: for each part it doesn't know, it suggests a plain name and a part group, and the owner presses one button, "Add part type". Roam creates the part type, saves those parts from the same page with their own dates, and makes a picture of each — no second upload. Small fixings (clips, clamps, bolts) are never suggested. If Roam already has a type that covers the part, the card says so and saves the parts under it instead. It must feel effortless and trustworthy, like a premium consumer app: clear cards, one obvious button each, calm states. Make each screen tall enough to show everything, with no inner scrolling and no cut-off boxes. Draw only the screens asked for in this message. Dominion is the master reference database: no fleet names, plates, drivers, vehicle counts, "used by", prices, suppliers, stock or quantities anywhere.
+
+
+BRAND IDENTITY (take from the live Dominion screens — do not invent):
+- Keep the Dominion console frame exactly as it is:
+  - dark navy left sidebar "Dominion · Roam Admin Console" with groups MASTER DATA (Overview, Vehicles active, Places and Maps, Fuel, Tolls, Tax and Vendors), ENGINES, DISTRIBUTION, PLATFORM, BACK OFFICE
+  - top bar: search "Search entities, engines, routes…" with a ⌘K chip, moon icon, user "Deeki T · Owner"
+  - everything right of the sidebar and below the top bar is the design
+- Theme: "Calm modern workspace". Generous spacing, 16px rounded cards, soft shadows, larger type, clear hierarchy, few codes.
+- LIGHT MODE (draw every screen in light mode):
+  - Primary #0153dc; primary container #dbe1ff
+  - Background #faf8fe; cards #ffffff, 16px radius, 1px #e6e7ee hairline, soft shadow 0 4px 16px rgba(1,83,220,0.04)
+  - Text #30323b; muted #5d5f68; input borders #c5c6d0; tint panels #f3f4fb with 12px radius
+  - Success #006e31 on #e6f4ea; warning #8a5a00 on #fff4dc; error #a83836 on #fdecec; slate #475569 on #f1f5f9
+- DARK MODE (for the theme switch): background #0b1220; cards #111a2e; hairlines #1e293b; text #e2e8f0; muted #94a3b8; primary #5b8def; success #4ade80; warning #fbbf24; error #f87171.
+- The saved-page result overlay (already live): a centred white overlay 640px wide over the car page dimmed 40%, 20px radius, 32px padding. At the top a 56px circle with a tick, the title, the muted line "From amayama.com · read 26 Nov 2026", then four count pills in a row: green "Saved", slate "Already on file", amber "Needs you", grey outline "Not a Roam part type". Under them the line "Pictures: 1 being made" with an image icon. Then result groups, each a heading with a small count and a white card of rows (a 40px picture tile or part-type icon square, the plain name, the number and dates in mono, a pill on the right). Footer: secondary "See pictures" on the left, primary "Done" on the right.
+- The suggestion card, one look everywhere: a white card inside the group, 16px radius, 20px padding, hairline border:
+  - a "Name" text box (white, 44px tall, 10px radius, #c5c6d0 border) holding the suggested name
+  - under it, small grey mono text: the page's own words, e.g. "INLET, AIR CLEANER, NO.1"
+  - a "Part group" dropdown (44px tall) showing the suggested group
+  - a tint panel listing the rows it covers: "3 rows · 17751-B1031, 17751-B1070" in mono, and under it the dates "11.2016 – 12.2019 and 01.2020 – 09.2020" in mono
+  - a button row: primary "Add part type" on the right, secondary "Not a part we track" on its left
+- Card state pills: "Added" (green with a tick), "Adding…" (blue with a small spinner), "Added, needs you" (amber), "Couldn't add" (red).
+- Buttons always look like buttons, never underlined text links:
+  - Primary: solid #0153dc, white text, 44px tall, 10px radius, semibold
+  - Secondary: white fill, visible #c5c6d0 border, dark text
+  - Danger: white fill, #a83836 border and red text
+  - Disabled: 50% opacity, never hidden, with a small muted line under it saying why
+- Typography: Inter. Titles 26px semibold, section titles 18px semibold, body 15px, hints 13px muted. JetBrains Mono with tabular numerals only for part numbers and dates, always after the plain words.
+- Icons: Material Symbols Outlined, 20–24px. Part groups show in a 44px soft #dbe1ff rounded square with a blue icon.
+- Every overlay is in-app. Never a browser pop-up.
+- Sample data (real, from the owner's saved page "Air cleaner for Toyota Tank/Roomy M900A-AGBVE"):
+  - Car: Toyota Roomy 2016–2020 · 2WD · frame M900A. Site: amayama.com.
+  - Already on file: Engine Air Filter · 17801-21060 · 11.2016 – 09.2020 (picture "Making").
+  - Four suggestions Roam makes from this page:
+    1. "Air cleaner inlet" · page's words "INLET, AIR CLEANER, NO.1" · group Engine · 3 rows · 17751-B1031, 17751-B1070 · 11.2016 – 12.2019 and 01.2020 – 09.2020
+    2. "Air cleaner hose" · "HOSE, AIR CLEANER, NO.1" · group Belts & hoses · 1 row · 17881-B1130 · 11.2016 – 09.2020
+    3. "Ventilation pipe" · "PIPE, VENTILATION" · group Belts & hoses · 1 row · 12229-B1010 · 11.2016 – 09.2020
+    4. "Air cleaner cap" · "CAP SUB-ASSY, AIR CLEANER" · group Engine · 1 row · 17705-B1100 · 11.2016 – 09.2020
+  - Two fixings Roam never suggests: hose clip 90044-66035, hose clamp 90044-66050.
+  - The 13 part groups: Engine, Filters, Brakes, Suspension & steering, Battery & electrical, Exhaust & emissions, Lighting & visibility, HVAC, Belts & hoses, Transmission, Hybrid & electric, Fluids, Tires & wheels. Fluids and Tires & wheels get no pictures.
+
+
+DESIGN PRINCIPLES (only what changes the drawing):
+- Desktop-first at 1440px. The result overlay is 640px wide; on a phone it is a bottom sheet.
+- One clear action per card: "Add part type". "Not a part we track" is secondary and quieter.
+- The page's own words are always shown under the suggested name, small and grey, so the owner can see where the name came from.
+- Plain words first, then numbers and dates in mono.
+- Cards in different states sit together; each card shows its own state, the rest of the result stays usable.
+- 8px spacing grid, 44px touch targets.
+
+
+SCREEN 1: RESULT — FOUR NEW PART TYPES SUGGESTED
+Same Dominion console frame, colours and style. Behind the overlay, dimmed 40%: the Toyota Roomy car page. Draw tall enough to show everything, no inner scrolling.
+- Centred white overlay, 640px wide. A 56px slate circle with a white tick. Title "Nothing new to save" (26px semibold), muted line "From amayama.com · read 26 Nov 2026".
+- Count pills: green "Saved 0", slate "Already on file 1", amber "Needs you 0", grey outline "Not a Roam part type 8". Under them: "Pictures: 1 being made".
+- Group "Already on file" (slate pill, count 1): one row — picture tile with a blue "Making" pill, "Engine Air Filter", "17801-21060 · 11.2016 – 09.2020", slate "Already on file" pill.
+- Group "Parts Roam doesn't know yet" (18px, count 8), with a muted line under the heading: "Add a part type and Roam saves these parts from this page and makes their pictures."
+- Four suggestion cards stacked, all in their Ready state, with the sample data above (Air cleaner inlet, Air cleaner hose, Ventilation pipe, Air cleaner cap), each with secondary "Not a part we track" and primary "Add part type".
+- Under the cards, one muted line with a small bolt icon: "2 fixings (hose clip, hose clamp) — Roam doesn't track these". No buttons.
+- Footer: secondary "See pictures" on the left; primary "Done" on the right.
+
+SCREEN 2: RESULT — CARDS IN DIFFERENT STATES
+Same Dominion console frame, colours and style. Behind the overlay, dimmed 40%: the Toyota Roomy car page. Draw tall enough to show everything, no inner scrolling.
+- The same overlay as the result above, with the count pills now: green "Saved 3", slate "Already on file 1", amber "Needs you 0", grey outline "Not a Roam part type 5", and the line "Pictures: 3 being made · 1 made".
+- Group "Parts Roam doesn't know yet" with four cards:
+  1. "Air cleaner inlet" — green "Added" pill at the top right; the name shown as plain text (no box); the line "3 parts saved · pictures being made"; no buttons.
+  2. "Air cleaner hose" — blue "Adding…" pill; the name box and group dropdown greyed (locked); the primary button reads "Adding…" with a small spinner and is disabled.
+  3. "Ventilation pipe" — red "Couldn't add" pill; a red line with an error icon "That didn't work. Try again in a minute."; the name and group still filled in; primary button "Try again".
+  4. "Air cleaner cap" — Ready, but the owner has changed the name box to "Air filter housing cap" and the group dropdown to "Filters"; both buttons live.
+- The fixings line under the cards, unchanged.
+- Footer: "See pictures" and "Done".
+
+END OF FIRST PASTE
+
+
+SCREEN 3: RESULT — ROAM ALREADY HAS THE TYPE, AND A PART THAT NEEDS YOU
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the overlay, dimmed 40%: the Toyota Roomy car page. Draw tall enough to show everything, no inner scrolling.
+- Overlay title "4 parts saved", muted line "From amayama.com · read 26 Nov 2026" (this time the owner's "Front spring & shock absorber" page).
+- Count pills: green "Saved 4", slate "Already on file 2", amber "Needs you 1", grey outline "Not a Roam part type 3".
+- Group "Parts Roam doesn't know yet" with two cards:
+  1. A card with a blue info strip at the top: "Roam already has this: Coil spring". Under it the page's words "SPRING, COIL, FRONT" in small grey mono, the rows panel "2 rows · 48131-B1310 · 11.2016 – 09.2020", and one primary button "Save under Coil spring" (with secondary "Not a part we track" beside it). No name box, no group dropdown.
+  2. "Front strut mount" — amber "Added, needs you" pill; the line "1 part saved · 1 needs you"; under it one held row in the same look as the "Needs you" group: "Front strut mount · 48609-B1060 · 11.2016 – 09.2020" with an amber reason line "The two reads don't agree" and a secondary button "Check this part".
+- Footer: "See pictures" and "Done".
+
+SCREEN 4: RESULT — STAFF VIEW (ONLY THE OWNER CAN ADD)
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. The top bar shows a staff member (role "Staff"). Behind the overlay, dimmed 40%: the Toyota Roomy car page. Draw tall enough to show everything, no inner scrolling.
+- The same result as Screen 1 (four suggestion cards: Air cleaner inlet, Air cleaner hose, Ventilation pipe, Air cleaner cap).
+- On every card the name box and group dropdown are read-only, and both buttons ("Not a part we track", "Add part type") are disabled at 50% with one muted line under them: "Only the owner can add a part type".
+- The fixings line and the footer unchanged.
+
+SCREEN 5: RESULT — ONLY FIXINGS ROAM DOESN'T KNOW
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. Behind the overlay, dimmed 40%: the Toyota Roomy car page. Draw tall enough to show everything, no inner scrolling.
+- Overlay title "2 parts saved", count pills: green "Saved 2", slate "Already on file 0", amber "Needs you 0", grey outline "Not a Roam part type 2".
+- Group "Saved" with two rows: "Front stabilizer link · 48820-B1010 · 11.2016 – 09.2020" and "Front stabilizer link · 48820-B1011 · 11.2016 – 09.2020", each with a green "Confirmed" pill.
+- Group "Parts Roam doesn't know yet" (count 2) with no cards — only the muted line with the bolt icon: "2 fixings (nut, bolt) — Roam doesn't track these".
+- Footer: "See pictures" and "Done".
+
+SCREEN 6: PHONE — RESULT WITH SUGGESTIONS (390px)
+Same Dominion console frame, colours, cards and style as the earlier screens in this project, on a 390px phone: the result is a bottom sheet with a small grab bar at the top, rounded top corners. Draw tall enough to show everything, no inner scrolling.
+- Title "Nothing new to save", the count pills wrapping onto two lines, "Pictures: 1 being made".
+- Group "Parts Roam doesn't know yet" with the four Ready cards stacked full width: name box full width, page's words under it, group dropdown full width, rows panel, then the two buttons stacked full width — primary "Add part type" on top, secondary "Not a part we track" under it.
+- The fixings line, then full-width "Done" and "See pictures" at the bottom.
+
+SCREEN 7: PART TYPES — CREATE A PART TYPE, WITH THE PART GROUP PICKER
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. The page is Vehicles › Parts database › Add parts › Part types. Draw tall enough to show everything, no inner scrolling.
+- Page title "Part types", muted line "The kinds of parts Roam keeps. Only the owner can add or change one."
+- A white card "Create part type" (18px title) with these fields, each with a label above:
+  - "Name" text box, filled "Air cleaner hose"
+  - "Part group" dropdown — required, with the placeholder "Choose a part group" and the 13 groups in the list (draw it open, showing the list with small group icons; "Fluids" and "Tires & wheels" each followed by a small grey "no picture" tag; "Belts & hoses" highlighted as the choice)
+  - "Plain name people use" text box, filled "Air intake hose"
+  - "Where it sits on the car" dropdown showing "Not by position"
+- A muted line under the fields: "Every part type sits in a part group. Its pictures use that group's materials."
+- Card footer: danger "Cancel" on the left; primary "Create part type" on the right.
+
+SCREEN 8: PART TYPES — HIDDEN FROM SAVED PAGES
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. The page is Vehicles › Parts database › Add parts › Part types. Draw tall enough to show everything, no inner scrolling.
+- Page title "Part types". Under the existing part-type list (draw it as a short collapsed list "86 part types" with a chevron), a new white card titled "Hidden from saved pages" (18px) with the muted line "Things you said Roam doesn't track. Roam won't suggest them again until you bring them back."
+- Three rows, each a full-width row with a hairline between: the page's words in mono ("WASHER, PLATE", "GROMMET, HOSE", "BRACKET, STABILIZER BAR"), under each a muted line "Hidden by Deeki T · 26 Nov 2026", and on the right a secondary button "Suggest again".
+
+SCREEN 9: PART TYPES — HIDDEN LIST EMPTY
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. The page is Vehicles › Parts database › Add parts › Part types.
+- The "Hidden from saved pages" card with its muted line, and inside it one centred muted line with an eye icon: "Nothing hidden."
+
+SCREEN 10: PART TYPES — HIDDEN LIST COULDN'T LOAD
+Same Dominion console frame, colours, cards and style as the earlier screens in this project. The page is Vehicles › Parts database › Add parts › Part types.
+- The "Hidden from saved pages" card with one red line and an error icon "Couldn't load the hidden list." and a secondary button "Try again" (refresh icon).
+
+
+==================== FOR CLAUDE — DO NOT PASTE ====================
+
+ADDITIONAL UI COMPONENTS:
+- SuggestionCard (plan S1): name box (max 60), page's words (mono, grey), Part group dropdown (13 groups; Fluids + Tires & wheels tagged "no picture"), rows panel (count, numbers, periods), buttons. States: ready / adding / added / added_needs_you / failed / existing (no name box, no group, "Save under {type}") / dismissed (card gone, rows stay listed without buttons). Owner-only buttons; staff see them disabled with "Only the owner can add a part type".
+- FixingsLine: bolt icon + "{n} fixings ({names}) — Roam doesn't track these". Never a card, never a button.
+- GroupPicker: the 13 groups, required, no default on the Part types screen; pre-set to the suggestion on a card.
+- HiddenList row: page's words (mono), who + when, "Suggest again" (owner). Loading = two grey placeholder rows.
+
+INTERACTIONS:
+- "Add part type" → POST saved-pages/:id/part-type (plan R5) with name + group; card goes Adding… → Added (or Added, needs you / Couldn't add). The top count pills recount; the pictures line updates as pictures are queued.
+- "Save under {type}" → same route with the existing type; no type is created.
+- "Not a part we track" → dismissal (D3); card disappears, its rows stay listed with no button; it shows up in "Hidden from saved pages".
+- "Suggest again" removes the dismissal; the phrase can be suggested on the next upload.
+- "Check this part" opens the normal browser check, as in the "Needs you" group today.
+- Pressing Add twice on the same card makes one type (rule 6).
+- Note for the plan: §4 S1's summary example says "· 1 fixing (hose clip)", but its own §1.4 table names two fixings on the air-cleaner page (17875C clip and 17881A clamp). These screens use 2; fix the plan's example in round 2.
+
+Spec screens / Area:
+| Screen | Plan | Area |
+|---|---|---|
+| 1 | S1 ready | SavedPageOverlay result → suggestions group |
+| 2 | S1 states (added, adding, failed, edited) | SavedPageOverlay |
+| 3 | S1 existing match + added-needs-you | SavedPageOverlay |
+| 4 | S1 owner-only | SavedPageOverlay (staff) |
+| 5 | S1 fixings only | SavedPageOverlay |
+| 6 | S1 phone | SavedPageOverlay bottom sheet |
+| 7 | S2 group picker | PartTypesSettings create form |
+| 8 | S2 hidden list | PartTypesSettings new section |
+| 9–10 | S2 empty / error | PartTypesSettings |

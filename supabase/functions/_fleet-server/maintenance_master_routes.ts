@@ -16,10 +16,20 @@ import { isMaintenanceMasterGovernanceEnabled } from "./maintenance_master_flag.
 import { ROAM_POLICY_STARTER_SET, matchCategoryId } from "./maintenance_master_starter.ts";
 import { enrichMaintenanceDueItems, fetchScheduleExplain } from "./maintenance_master_fleet_enrich.ts";
 import { fleetDb } from "./repos/baseRepo.ts";
+import { insertMaintenanceAuditLog } from "./maintenance_logging_helpers.ts";
+import { familyIdOf, familyNames } from "./maintenance_family_names.ts";
 import {
   MAINTENANCE_JOBS_ADMIN_ROUTE_GUARDS,
   registerMaintenanceJobsAdminRoutes,
 } from "./maintenance_jobs_admin_routes.ts";
+
+import {
+  handleGetHardUsePolicy,
+  handleGetVehicleHardUse,
+  handlePatchVehicleHardUse,
+  handlePutHardUsePolicy,
+  hardUseHealthRows,
+} from "./maintenance_hard_use_routes.ts";
 
 function errMsg(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -83,6 +93,14 @@ type RouteApp = {
 };
 
 export function registerMaintenanceMasterRoutes(route: RouteApp, supabase: SupabaseClient): void {
+  const hardUseDeps = {
+    supabase,
+    fleetDb,
+    getOrgId,
+    governanceOn: () => isMaintenanceMasterGovernanceEnabled(supabase),
+    actorId: catalogActorId,
+    insertAudit: (row: Parameters<typeof insertMaintenanceAuditLog>[1]) => insertMaintenanceAuditLog(supabase, row),
+  };
   route.get("/admin/platform-feature-flags/maintenance_master_governance", requireAuth(), async (c: Context) => {
     const denied = assertPlatformStaffResponse(c);
     if (denied) return denied;
@@ -133,7 +151,15 @@ export function registerMaintenanceMasterRoutes(route: RouteApp, supabase: Supab
           async () => {
             const governDenied = assertCatalogGovernResponse(c);
             if (governDenied) return governDenied;
-            return c.json({ error: "Use draft status or proposal flow" }, 400);
+            // Rebuild step 4: the owner's "Make active" on a new schedule saves it live and updates every car
+            // it covers now (it used to answer "Use draft status or proposal flow" and save nothing).
+            const row = mapRuleBodyToRow({ ...body, status: "active" });
+            const { data, error } = await supabase.from("maintenance_task_templates").insert(row).select("*").single();
+            if (error) throw error;
+            if (await isMaintenanceMasterGovernanceEnabled(supabase)) {
+              await supabase.rpc("recompute_component_schedules_for_rule", { p_rule_id: (data as { id: string }).id });
+            }
+            return c.json({ item: data });
           },
         );
       }
@@ -142,7 +168,7 @@ export function registerMaintenanceMasterRoutes(route: RouteApp, supabase: Supab
       if (error) throw error;
       return c.json({ item: data });
     } catch (e: unknown) {
-      return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+      return ruleSaveFailure(c, e);
     }
   });
 
@@ -168,7 +194,7 @@ export function registerMaintenanceMasterRoutes(route: RouteApp, supabase: Supab
       if (error) throw error;
       return c.json({ item: data });
     } catch (e: unknown) {
-      return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+      return ruleSaveFailure(c, e);
     }
   });
 
@@ -335,11 +361,12 @@ export function registerMaintenanceMasterRoutes(route: RouteApp, supabase: Supab
     try {
       const { data: rules, error: rErr } = await supabase
         .from("maintenance_task_templates")
-        .select("id, status, source_type, template_scope, component_id")
+        .select("id, status, source_type, template_scope, component_id, frequency_kind")
         .not("component_id", "is", null)
         .is("archived_at", null);
       if (rErr) throw rErr;
-      const list = rules || [];
+      // MER-04: As needed jobs (manual_only) are not schedules, so they are not counted as one.
+      const list = (rules || []).filter((r) => String((r as { frequency_kind?: string }).frequency_kind ?? "recurring") !== "manual_only");
       const globalActive = list.filter((r) => String(r.template_scope) === "global" && r.status === "active").length;
       const specific = list.filter((r) => String(r.template_scope) !== "global").length;
       const bySource = { maker_manual: 0, part_maker: 0, roam_policy: 0 };
@@ -475,7 +502,7 @@ export function registerMaintenanceMasterRoutes(route: RouteApp, supabase: Supab
       const { data: rules, error: rErr } = await supabase
         .from("maintenance_task_templates")
         .select(
-          "id, component_id, template_scope, status, source_type, confidence, interval_km, interval_months, updated_at, engine_family_id, platform_id, vehicle_catalog_id",
+          "id, component_id, template_scope, status, source_type, confidence, interval_km, interval_months, updated_at, engine_family_id, platform_id, vehicle_catalog_id, frequency_kind",
         )
         .not("component_id", "is", null)
         .is("archived_at", null);
@@ -531,6 +558,8 @@ export function registerMaintenanceMasterRoutes(route: RouteApp, supabase: Supab
           package_names: packagesByComponent.get(componentId) || [],
           last_changed_at: lastChanged || null,
           rule_count: list.length,
+          // MER-04: a part whose only rule is "manual_only" is done when a job calls for it, never on a schedule.
+          as_needed: list.every((r) => String(r.frequency_kind ?? "recurring") === "manual_only"),
         });
       }
       return c.json({ items });
@@ -604,7 +633,13 @@ export function registerMaintenanceMasterRoutes(route: RouteApp, supabase: Supab
       } else if (scope === "platform") {
         const platformId = String(c.req.query("platform_id") ?? "");
         if (!isUuid(platformId)) return c.json({ count: 0 });
-        q = q.eq("platform_id", platformId);
+        // "One model" points at the model family row; its cars sit on the platforms under it too.
+        const { data: kids, error: kidError } = await supabase
+          .from("vehicle_platform")
+          .select("id")
+          .eq("parent_id", platformId);
+        if (kidError) throw kidError;
+        q = q.in("platform_id", [platformId, ...((kids ?? []) as Array<{ id: string }>).map((k) => k.id)]);
       } else if (scope === "engine_family") {
         const engineId = String(c.req.query("engine_family_id") ?? "");
         if (!isUuid(engineId)) return c.json({ count: 0 });
@@ -626,6 +661,72 @@ export function registerMaintenanceMasterRoutes(route: RouteApp, supabase: Supab
     }
   });
 
+  // Rebuild step 4: the owner picks Make → Model → Years → Version; this says which model family and which
+  // engine that car belongs to, in plain words, so "One model" and "One engine" can save a real id (MER-01).
+  route.get("/admin/maintenance/car-scope", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    const carId = String(c.req.query("vehicle_catalog_id") ?? "");
+    if (!isUuid(carId)) return c.json({ error: "Pick the car version first." }, 400);
+    try {
+      const { data: car, error: carError } = await supabase
+        .from("vehicle_catalog")
+        .select("id, platform_id, engine_family_id")
+        .eq("id", carId)
+        .maybeSingle();
+      if (carError) throw carError;
+      if (!car) return c.json({ error: "That car version was not found." }, 404);
+      const row = car as { id: string; platform_id: string | null; engine_family_id: string | null };
+
+      let model: { platform_id: string; name: string; also: string[]; cars: number } | null = null;
+      if (row.platform_id) {
+        const { data: platform, error: pError } = await supabase
+          .from("vehicle_platform")
+          .select("id, parent_id")
+          .eq("id", row.platform_id)
+          .maybeSingle();
+        if (pError) throw pError;
+        if (platform) {
+          const familyId = familyIdOf(platform as { id: string; parent_id: string | null });
+          const names = (await familyNames(supabase, [familyId])).get(familyId);
+          model = {
+            platform_id: familyId,
+            name: names?.name ?? "This model",
+            also: names?.also ?? [],
+            cars: names?.cars ?? 0,
+          };
+        }
+      }
+
+      let engine: { engine_family_id: string; name: string; cars: number } | null = null;
+      if (row.engine_family_id) {
+        const { data: eng, error: eError } = await supabase
+          .from("engine_family")
+          .select("id, displacement_cc, fuel_type")
+          .eq("id", row.engine_family_id)
+          .maybeSingle();
+        if (eError) throw eError;
+        const { count, error: cError } = await supabase
+          .from("vehicle_catalog")
+          .select("id", { count: "exact", head: true })
+          .eq("engine_family_id", row.engine_family_id);
+        if (cError) throw cError;
+        const e = (eng ?? {}) as { displacement_cc?: number | null; fuel_type?: string | null };
+        const size = e.displacement_cc ? `${(Number(e.displacement_cc) / 1000).toFixed(1)} L` : "";
+        const fuel = e.fuel_type ? String(e.fuel_type).toLowerCase() : "";
+        engine = {
+          engine_family_id: row.engine_family_id,
+          name: [size, fuel].filter(Boolean).join(" ") ? `${[size, fuel].filter(Boolean).join(" ")} engine` : "This engine",
+          cars: count ?? 0,
+        };
+      }
+
+      return c.json({ vehicle_catalog_id: row.id, model, engine });
+    } catch (e: unknown) {
+      return c.json({ error: e instanceof Error ? e.message : "Could not look up that car." }, 500);
+    }
+  });
+
   route.get("/admin/maintenance/health", requireAuth(), async (c: Context) => {
     const denied = assertPlatformStaffResponse(c);
     if (denied) return denied;
@@ -637,9 +738,6 @@ export function registerMaintenanceMasterRoutes(route: RouteApp, supabase: Supab
         .from("vehicles")
         .select("*", { count: "exact", head: true })
         .not("vehicle_catalog_id", "is", null);
-      const { count: catalogInUse } = await supabase
-        .from("vehicle_catalog")
-        .select("*", { count: "exact", head: true });
       const { count: specificRules } = await supabase
         .from("maintenance_task_templates")
         .select("*", { count: "exact", head: true })
@@ -680,11 +778,31 @@ export function registerMaintenanceMasterRoutes(route: RouteApp, supabase: Supab
         const k = String(r.source_type ?? "roam_policy") as keyof typeof bySource;
         if (k in bySource) bySource[k]++;
       }
-      const carsNoSpecific = Math.max(0, (catalogInUse ?? 0) - (specificRules ?? 0));
+      // Step 15 (MER-19): real fleet cars, not catalogue versions minus a count of rules. A car "uses only
+      // everyone's schedule" when none of its schedule rows is won by a more specific (model / engine) rule.
+      const { data: specificIds } = await supabase
+        .from("maintenance_task_templates")
+        .select("id")
+        .not("component_id", "is", null)
+        .neq("template_scope", "global")
+        .eq("status", "active")
+        .is("archived_at", null);
+      const specificRuleIds = (specificIds ?? []).map((r) => String((r as { id: string }).id));
+      let carsWithSpecific = 0;
+      if (specificRuleIds.length) {
+        const { data: won } = await supabase
+          .from("vehicle_component_schedule")
+          .select("vehicle_id")
+          .in("rule_id", specificRuleIds);
+        carsWithSpecific = new Set((won ?? []).map((r) => String((r as { vehicle_id: string }).vehicle_id))).size;
+      }
+      const carsNoSpecific = Math.max(0, (fleetCars ?? 0) - carsWithSpecific);
+      // Step 16e: how the nightly hard-use rule left the cars.
+      const hardUseRows = await hardUseHealthRows(supabase);
       return c.json({
         lastCheckedAt: new Date().toISOString(),
         rows: [
-          { key: "no_specific", label: "Cars in use with no specific schedule", count: carsNoSpecific, page: "maintenance-templates" },
+          { key: "no_specific", label: "Fleet cars on everyone's schedule only (no model or engine schedule)", count: carsNoSpecific, page: "maintenance-templates" },
           {
             key: "by_source",
             label: "Schedules by source",
@@ -702,6 +820,7 @@ export function registerMaintenanceMasterRoutes(route: RouteApp, supabase: Supab
           },
           { key: "override", label: "More specific schedules overriding everyone's", count: specificRules ?? 0, page: "maintenance-templates" },
           { key: "retired_on_cars", label: "Retired part types still on cars", count: retiredCatsOnCars ?? 0, page: "maintenance-templates" },
+          ...hardUseRows,
         ],
         fleetCarsUsingSchedules: fleetCars ?? 0,
         sourceCounts: bySource,
@@ -1115,34 +1234,29 @@ export function registerMaintenanceMasterRoutes(route: RouteApp, supabase: Supab
     "/vehicles/:vehicleId/maintenance/severe-duty",
     requireAuth(),
     requirePermission("vehicles.edit"),
-    async (c: Context) => {
-      const orgId = getOrgId(c);
-      if (!orgId) return c.json({ error: "Organization required" }, 400);
-      const vehicleId = c.req.param("vehicleId");
-      const body = (await c.req.json()) as { severe_duty?: boolean; reason?: string };
-      try {
-        const { data, error } = await fleetDb()
-          .from("fleet_vehicles")
-          .update({ severe_duty: body.severe_duty === true })
-          .eq("organization_id", orgId)
-          .eq("id", vehicleId)
-          .select("id, severe_duty")
-          .maybeSingle();
-        if (error) throw error;
-        if (!data) return c.json({ error: "Vehicle not found" }, 404);
-        if (await isMaintenanceMasterGovernanceEnabled(supabase)) {
-          const { error: rpcErr } = await supabase.rpc("recompute_component_schedules_for_car", {
-            p_org: orgId,
-            p_vehicle_id: vehicleId,
-          });
-          if (rpcErr) throw rpcErr;
-        }
-        return c.json({ item: data, reason: body.reason ?? null });
-      } catch (e: unknown) {
-        return c.json({ error: errMsg(e) }, 500);
-      }
-    },
+    // Step 16c: the fleet's override only (keep normal / keep shorter for 90 days with a reason, or back to the
+    // numbers). The nightly database rule decides everything else.
+    (c: Context) => handlePatchVehicleHardUse(c, hardUseDeps),
   );
+
+  route.get(
+    "/vehicles/:vehicleId/maintenance/hard-use",
+    requireAuth(),
+    requirePermission("vehicles.view"),
+    (c: Context) => handleGetVehicleHardUse(c, hardUseDeps),
+  );
+
+  route.get("/admin/maintenance/hard-use-policy", requireAuth(), (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    return handleGetHardUsePolicy(c, hardUseDeps);
+  });
+
+  route.put("/admin/maintenance/hard-use-policy", requireAuth(), (c: Context) => {
+    const denied = assertCatalogGovernResponse(c);
+    if (denied) return denied;
+    return handlePutHardUsePolicy(c, hardUseDeps);
+  });
 
   registerMaintenanceJobsAdminRoutes(route, supabase);
 
@@ -1211,8 +1325,58 @@ function mapRuleBodyToRow(body: Record<string, unknown>, patch = false): Record<
     row.severe_interval_months =
       body.severe_interval_months != null && body.severe_interval_months !== "" ? Number(body.severe_interval_months) : null;
   }
+  // Rebuild step 4: a car-maker rule names its manual and page (MER-07), and "the manual gives one figure"
+  // (MER-05) replaces the severe numbers instead of leaving them blank.
+  if (!patch || body.manual_id !== undefined) {
+    row.manual_id = typeof body.manual_id === "string" && body.manual_id ? body.manual_id : null;
+  }
+  if (!patch || body.evidence_page !== undefined) {
+    row.evidence_page = body.evidence_page != null && body.evidence_page !== "" ? Number(body.evidence_page) : null;
+  }
+  if (!patch || body.severe_same_as_normal !== undefined) {
+    row.severe_same_as_normal = body.severe_same_as_normal === true;
+  }
+  // The manual itself is the evidence, the same way the manual reader writes it.
+  if (typeof row.manual_id === "string" && row.manual_id && !String(row.evidence_url ?? body.evidence_url ?? "").trim()) {
+    row.evidence_url = `r2:private/maintenance-manuals/${row.manual_id}.pdf`;
+  }
+  if (row.severe_same_as_normal === true) {
+    row.severe_interval_km = null;
+    row.severe_interval_months = null;
+    row.severe_interval_km_max = null;
+  }
   return row;
 }
+
+/** A failed schedule save: a broken database rule is the person's to fix (400, plain words); anything else is 500. */
+function ruleSaveFailure(c: Context, e: unknown): Response {
+  const raw = e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : String(e);
+  const plainText = plainRuleSaveError(raw);
+  const code = e && typeof e === "object" && "code" in e ? String((e as { code: unknown }).code) : "";
+  return c.json({ error: plainText }, plainText !== raw || code === "23514" ? 400 : 500);
+}
+
+/** Plain words for the database rules a schedule save can break. Anything else keeps its own message. */
+export function plainRuleSaveError(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes("maintenance_task_templates_scope_check")) {
+    return "Pick the model, engine or car version this schedule is for.";
+  }
+  if (m.includes("maker_manual_evidence_check")) {
+    return "A car maker number needs its manual and the page it is on.";
+  }
+  if (m.includes("part_rule_evidence_check")) {
+    return "Add the link to the page you used.";
+  }
+  if (m.includes("severe_same_as_normal_check")) {
+    return "Leave the harder-driving numbers empty when the manual gives one figure.";
+  }
+  if (m.includes("evidence_page_check")) {
+    return "The page number must be 1 or more.";
+  }
+  return message;
+}
+
 
 async function saveRuleAndRecompute(
   c: Context,
@@ -1236,13 +1400,17 @@ async function saveRuleAndRecompute(
   return c.json({ item: data, impact });
 }
 
-export const MAINTENANCE_MASTER_ROUTE_GUARDS: Record<string, "catalog.write" | "catalog.govern" | "staff_read" | "vehicles.edit"> = {
+export const MAINTENANCE_MASTER_ROUTE_GUARDS: Record<
+  string,
+  "catalog.write" | "catalog.govern" | "staff_read" | "vehicles.edit" | "vehicles.view"
+> = {
   "GET /admin/platform-feature-flags/maintenance_master_governance": "staff_read",
   "GET /admin/maintenance/summary": "staff_read",
   "GET /admin/maintenance/review-list": "staff_read",
   "GET /admin/maintenance/part-schedules-index": "staff_read",
   "GET /admin/maintenance-categories/:id/usage": "staff_read",
   "GET /admin/maintenance/scope-coverage": "staff_read",
+  "GET /admin/maintenance/car-scope": "staff_read",
   "GET /admin/maintenance/health": "staff_read",
   "POST /admin/maintenance/conflicts/:id/retire-both": "catalog.govern",
   "GET /admin/maintenance/history/export.csv": "staff_read",
@@ -1261,6 +1429,9 @@ export const MAINTENANCE_MASTER_ROUTE_GUARDS: Record<string, "catalog.write" | "
   "PATCH /vehicles/:vehicleId/maintenance/custom-interval": "vehicles.edit",
   "DELETE /vehicles/:vehicleId/maintenance/custom-interval": "vehicles.edit",
   "PATCH /vehicles/:vehicleId/maintenance/severe-duty": "vehicles.edit",
+  "GET /vehicles/:vehicleId/maintenance/hard-use": "vehicles.view",
+  "GET /admin/maintenance/hard-use-policy": "staff_read",
+  "PUT /admin/maintenance/hard-use-policy": "catalog.govern",
   "GET /vehicles/:vehicleId/maintenance/schedule-explain": "vehicles.view",
   ...MAINTENANCE_JOBS_ADMIN_ROUTE_GUARDS,
 };

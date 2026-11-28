@@ -57,7 +57,7 @@ export function MaintenanceMasterImpactDialog({
             ? "Drafts are not sent to any app until you make them active."
             : supportProposal
               ? "The owner approves it in the Review list before any app gets it."
-              : `Every app picks up the new schedule ${NIGHTLY_COPY}.`}
+              : `Cars update now. The nightly run re-checks ${NIGHTLY_COPY}.`}
         </p>
         {beforeAfter && afterText ? (
           <div className="mt-4 rounded-lg border border-outline-variant/30 bg-[#f4f3fa] px-3 py-2 text-sm">

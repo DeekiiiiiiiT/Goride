@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Screen 6: Catalogue car page — Tyres, battery and bulbs</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #faf8fe;
+      color: #30323b;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+      font-feature-settings: "tnum" 1;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      vertical-align: middle;
+    }
+    .btn-secondary {
+      background-color: #ffffff;
+      border: 1px solid #c5c6d0;
+      color: #30323b;
+      transition: all 0.15s ease;
+    }
+    .btn-secondary:hover {
+      background-color: #f3f4fb;
+    }
+    .card-base {
+      background-color: #ffffff;
+      border: 1px solid #e6e7ee;
+      border-radius: 16px;
+      box-shadow: 0 4px 16px rgba(1, 83, 220, 0.04);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex antialiased">
+
+  <!-- Left Sidebar (Dominion Frame) -->
+  <aside class="w-64 bg-[#0b1329] text-[#94a3b8] flex flex-col flex-shrink-0 min-h-screen border-r border-[#1e293b]">
+    <div class="h-16 flex items-center px-6 gap-3 border-b border-[#1e293b]/70">
+      <div class="w-8 h-8 rounded-lg bg-[#0153dc] flex items-center justify-center text-white font-bold text-sm tracking-wider">
+        D
+      </div>
+      <div>
+        <div class="text-white text-sm font-semibold tracking-tight">Dominion</div>
+        <div class="text-[11px] text-[#94a3b8] font-normal">Roam Admin Console</div>
+      </div>
+    </div>
+
+    <div class="flex-1 py-4 px-3 space-y-6 overflow-y-auto text-[13px]">
+      <div>
+        <div class="px-3 mb-2 text-[10px] font-bold tracking-wider text-[#64748b] uppercase">Master Data</div>
+        <nav class="space-y-0.5">
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">dashboard</span> Overview
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#0153dc]/20 text-white font-medium">
+            <span class="material-symbols-outlined text-[18px] text-[#5b8def]">directions_car</span> Vehicles active
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">map</span> Places and Maps
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">local_gas_station</span> Fuel
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">toll</span> Tolls
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">receipt_long</span> Tax and Vendors
+          </a>
+        </nav>
+      </div>
+
+      <div>
+        <div class="px-3 mb-2 text-[10px] font-bold tracking-wider text-[#64748b] uppercase">Engines</div>
+        <nav class="space-y-0.5">
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">smart_toy</span> Fuel Brain
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">traffic</span> Toll Brain
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">schema</span> Matching Brain
+          </a>
+        </nav>
+      </div>
+
+      <div>
+        <div class="px-3 mb-2 text-[10px] font-bold tracking-wider text-[#64748b] uppercase">Distribution</div>
+        <nav class="space-y-0.5">
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">apps</span> Apps
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">api</span> Data API
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">sync_alt</span> Change requests
+          </a>
+        </nav>
+      </div>
+
+      <div>
+        <div class="px-3 mb-2 text-[10px] font-bold tracking-wider text-[#64748b] uppercase">Platform</div>
+        <nav class="space-y-0.5">
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">badge</span> Staff and roles
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">history</span> Activity log
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">terminal</span> Platform Ops
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">tune</span> Global settings
+          </a>
+        </nav>
+      </div>
+
+      <div>
+        <div class="px-3 mb-2 text-[10px] font-bold tracking-wider text-[#64748b] uppercase">Back Office</div>
+        <nav class="space-y-0.5">
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">corporate_fare</span> GCT registrations
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">account_balance</span> Ledger
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">payments</span> Remittance
+          </a>
+        </nav>
+      </div>
+    </div>
+
+    <div class="p-4 border-t border-[#1e293b]/70 flex items-center justify-between text-[11px] text-[#64748b]">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span>Dominion v4.18</span>
+      </div>
+      <span>Tokyo DB</span>
+    </div>
+  </aside>
+
+  <!-- Main Content Frame -->
+  <div class="flex-1 flex flex-col min-w-0 bg-[#faf8fe] pb-16">
+    <!-- Top Bar -->
+    <header class="h-16 bg-white border-b border-[#e6e7ee] px-8 flex items-center justify-between sticky top-0 z-30">
+      <div class="relative w-96">
+        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#5d5f68] text-[20px]">search</span>
+        <input type="text" placeholder="Search entities, engines, routes…" class="w-full h-10 pl-10 pr-12 text-sm bg-[#faf8fe] rounded-lg border border-[#c5c6d0] focus:outline-none focus:border-[#0153dc] focus:ring-1 focus:ring-[#0153dc] text-[#30323b] placeholder-[#5d5f68]/70" />
+        <div class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-mono text-[#5d5f68] bg-white border border-[#c5c6d0] rounded px-1.5 py-0.5">⌘K</div>
+      </div>
+
+      <div class="flex items-center gap-4">
+        <button class="w-9 h-9 rounded-lg flex items-center justify-center text-[#5d5f68] hover:bg-[#f3f4fb] transition-colors" title="Toggle dark mode">
+          <span class="material-symbols-outlined text-[20px]">dark_mode</span>
+        </button>
+        <div class="flex items-center gap-3 pl-2 border-l border-[#e6e7ee]">
+          <div class="w-8 h-8 rounded-full bg-[#dbe1ff] text-[#0153dc] font-semibold text-xs flex items-center justify-center">
+            DT
+          </div>
+          <div class="text-xs">
+            <div class="font-semibold text-[#30323b]">Deeki T</div>
+            <div class="text-[#5d5f68]">Owner</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Page Body Container (max-w 1180px) -->
+    <main class="w-full max-w-[1180px] mx-auto px-6 py-6 space-y-6">
+
+      <!-- Breadcrumbs & Header -->
+      <div class="space-y-1">
+        <nav class="text-[13px] text-[#5d5f68]">
+          <ol class="flex items-center gap-1.5 flex-wrap">
+            <li><a href="#" class="hover:text-[#0153dc]">Dominion</a></li>
+            <li>›</li>
+            <li><a href="#" class="hover:text-[#0153dc]">Master data</a></li>
+            <li>›</li>
+            <li><a href="#" class="hover:text-[#0153dc]">Vehicles</a></li>
+            <li>›</li>
+            <li class="text-[#30323b] font-medium">Toyota Roomy 2020– · 2WD · 1.0 petrol</li>
+          </ol>
+        </nav>
+
+        <div class="flex items-baseline justify-between pt-1">
+          <div>
+            <h1 class="text-[26px] font-semibold text-[#30323b] tracking-tight">Toyota Roomy 2020–</h1>
+            <p class="text-sm text-[#5d5f68]">2WD · 1.0 petrol · CVT</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="btn-secondary h-9 px-3.5 rounded-lg text-xs font-medium flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-[16px]">swap_horiz</span> Switch variant
+            </button>
+            <div class="h-6 w-[1px] bg-[#e6e7ee] mx-1"></div>
+            <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-[#e6f4ea] text-[#006e31] flex items-center gap-1">
+              <span class="material-symbols-outlined text-[14px]">verified</span> Verified profile
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row of Existing Summary Cards (small & calm) -->
+      <div class="grid grid-cols-3 gap-4">
+        <!-- Summary 1: Engine -->
+        <div class="card-base p-4 flex items-center gap-3.5">
+          <div class="w-10 h-10 rounded-xl bg-[#f3f4fb] flex items-center justify-center text-[#0153dc] flex-shrink-0">
+            <span class="material-symbols-outlined text-[20px]">engineering</span>
+          </div>
+          <div class="min-w-0">
+            <div class="text-xs text-[#5d5f68]">Engine</div>
+            <div class="text-sm font-semibold text-[#30323b] truncate">1.0 petrol</div>
+          </div>
+        </div>
+
+        <!-- Summary 2: Fuel -->
+        <div class="card-base p-4 flex items-center gap-3.5">
+          <div class="w-10 h-10 rounded-xl bg-[#f3f4fb] flex items-center justify-center text-[#0153dc] flex-shrink-0">
+            <span class="material-symbols-outlined text-[20px]">local_gas_station</span>
+          </div>
+          <div class="min-w-0">
+            <div class="text-xs text-[#5d5f68]">Fuel</div>
+            <div class="text-sm font-semibold text-[#30323b] truncate font-mono">Regular · 36 L</div>
+          </div>
+        </div>
+
+        <!-- Summary 3: Oil -->
+        <div class="card-base p-4 flex items-center gap-3.5">
+          <div class="w-10 h-10 rounded-xl bg-[#f3f4fb] flex items-center justify-center text-[#0153dc] flex-shrink-0">
+            <span class="material-symbols-outlined text-[20px]">oil_barrel</span>
+          </div>
+          <div class="min-w-0">
+            <div class="text-xs text-[#5d5f68]">Oil</div>
+            <div class="text-sm font-semibold text-[#30323b] truncate font-mono">0W-20 · 2.9 L <span class="text-xs text-[#5d5f68] font-normal">(3.1 L with filter)</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Specification Cards Stack -->
+      <div class="space-y-6">
+
+        <!-- CARD 1: TYRES -->
+        <div class="card-base p-6 space-y-4">
+          <!-- Title Row -->
+          <div class="flex items-center justify-between pb-1 border-b border-[#e6e7ee]">
+            <div class="flex items-center gap-2.5">
+              <span class="material-symbols-outlined text-[22px] text-[#0153dc]">tire_repair</span>
+              <h2 class="text-lg font-semibold text-[#30323b]">Tyres</h2>
+              <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-[#e6f4ea] text-[#006e31] flex items-center gap-1">
+                <span class="material-symbols-outlined text-[13px]">verified</span> Car maker
+              </span>
+            </div>
+            <span class="text-xs text-[#5d5f68] font-mono">JIS D 4230 COMPLIANT</span>
+          </div>
+
+          <!-- Clean 3-Row Table: Position · Size · Wheel · Pressure · Note -->
+          <div class="overflow-hidden border border-[#e6e7ee] rounded-xl">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="bg-[#f9f9fd] border-b border-[#e6e7ee] text-[#5d5f68] uppercase text-[11px] font-semibold tracking-wider">
+                  <th class="py-3 px-4">Position</th>
+                  <th class="py-3 px-4">Size</th>
+                  <th class="py-3 px-4">Wheel</th>
+                  <th class="py-3 px-4">Pressure</th>
+                  <th class="py-3 px-4">Note</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-[#e6e7ee] text-[#30323b]">
+                <tr class="hover:bg-[#faf8fe] transition-colors">
+                  <td class="py-3.5 px-4 font-medium">Front and rear</td>
+                  <td class="py-3.5 px-4 font-mono font-semibold text-sm">165/65R14 79S</td>
+                  <td class="py-3.5 px-4 font-mono text-[#5d5f68]">14×5J</td>
+                  <td class="py-3.5 px-4 font-mono font-bold text-[#0153dc]">260 kPa</td>
+                  <td class="py-3.5 px-4">
+                    <span class="px-2.5 py-0.5 rounded-full bg-[#e6e7ee] text-[#30323b] font-medium text-[11px]">Standard</span>
+                  </td>
+                </tr>
+                <tr class="hover:bg-[#faf8fe] transition-colors">
+                  <td class="py-3.5 px-4 font-medium">Front and rear</td>
+                  <td class="py-3.5 px-4 font-mono font-semibold text-sm">175/55R15 77V</td>
+                  <td class="py-3.5 px-4 font-mono text-[#5d5f68]">15×5J</td>
+                  <td class="py-3.5 px-4 font-mono font-bold text-[#0153dc]">250 kPa</td>
+                  <td class="py-3.5 px-4">
+                    <span class="px-2.5 py-0.5 rounded-full bg-[#f3f4fb] border border-[#c5c6d0] text-[#5d5f68] font-medium text-[11px]">Optional</span>
+                  </td>
+                </tr>
+                <tr class="hover:bg-[#faf8fe] transition-colors">
+                  <td class="py-3.5 px-4 font-medium text-[#5d5f68]">Spare</td>
+                  <td class="py-3.5 px-4 font-mono font-semibold text-sm">T115/70D14 88M</td>
+                  <td class="py-3.5 px-4 font-mono text-[#5d5f68]">14×4T</td>
+                  <td class="py-3.5 px-4 font-mono font-bold text-[#0153dc]">420 kPa</td>
+                  <td class="py-3.5 px-4 text-[#5d5f68]">—</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Bottom Right Secondary Source Button -->
+          <div class="flex justify-end pt-1">
+            <button class="btn-secondary h-8 px-3 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-sm">
+              <span class="material-symbols-outlined text-[16px] text-[#5d5f68]">menu_book</span>
+              Owner's manual · page 525
+            </button>
+          </div>
+        </div>
+
+        <!-- CARD 2: BATTERY -->
+        <div class="card-base p-6 space-y-4">
+          <!-- Title Row -->
+          <div class="flex items-center justify-between pb-1 border-b border-[#e6e7ee]">
+            <div class="flex items-center gap-2.5">
+              <span class="material-symbols-outlined text-[22px] text-[#0153dc]">battery_charging_full</span>
+              <h2 class="text-lg font-semibold text-[#30323b]">Battery</h2>
+              <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-[#e6f4ea] text-[#006e31] flex items-center gap-1">
+                <span class="material-symbols-outlined text-[13px]">verified</span> Car maker
+              </span>
+            </div>
+            <span class="text-xs text-[#5d5f68] font-mono">JIS D 5301 LEAD-ACID</span>
+          </div>
+
+          <!-- Content: M-42 and N-55 note -->
+          <div class="bg-[#f9f9fd] p-5 rounded-xl border border-[#e6e7ee] flex items-center justify-between">
+            <div class="space-y-1">
+              <div class="flex items-baseline gap-3">
+                <span class="text-2xl font-bold font-mono text-[#30323b]">M-42</span>
+                <span class="text-xs text-[#5d5f68]">Standard idling-stop system battery</span>
+              </div>
+              <div class="text-sm text-[#5d5f68] flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-[#5d5f68]"></span>
+                <span>N-55 on cars with the electric parking brake</span>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs font-medium text-[#0153dc] bg-[#dbe1ff] px-2.5 py-1 rounded-md">12V EFB / ISS</div>
+            </div>
+          </div>
+
+          <!-- Bottom Right Secondary Source Button -->
+          <div class="flex justify-end pt-1">
+            <button class="btn-secondary h-8 px-3 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-sm">
+              <span class="material-symbols-outlined text-[16px] text-[#5d5f68]">menu_book</span>
+              Owner's manual · page 524
+            </button>
+          </div>
+        </div>
+
+        <!-- CARD 3: BULBS -->
+        <div class="card-base p-6 space-y-4">
+          <!-- Title Row -->
+          <div class="flex items-center justify-between pb-1 border-b border-[#e6e7ee]">
+            <div class="flex items-center gap-2.5">
+              <span class="material-symbols-outlined text-[22px] text-[#0153dc]">lightbulb</span>
+              <h2 class="text-lg font-semibold text-[#30323b]">Bulbs</h2>
+              <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-[#e6f4ea] text-[#006e31] flex items-center gap-1">
+                <span class="material-symbols-outlined text-[13px]">verified</span> Car maker
+              </span>
+            </div>
+            <span class="text-xs text-[#5d5f68] font-mono">ECE R37 CONVENTIONAL</span>
+          </div>
+
+          <!-- Content: Two-column grid list of bulbs -->
+          <div class="grid grid-cols-2 gap-x-6 gap-y-3 bg-[#f9f9fd] p-5 rounded-xl border border-[#e6e7ee] text-sm">
+            <!-- Column 1 -->
+            <div class="space-y-3">
+              <div class="flex items-center justify-between pb-2 border-b border-[#e6e7ee]">
+                <span class="text-[#30323b] font-medium">Headlamp</span>
+                <span class="font-mono font-semibold text-[#30323b]">H4 60/55 W</span>
+              </div>
+              <div class="flex items-center justify-between pb-2 border-b border-[#e6e7ee]">
+                <span class="text-[#30323b] font-medium">Clearance</span>
+                <span class="font-mono font-semibold text-[#30323b]">5 W</span>
+              </div>
+              <div class="flex items-center justify-between pb-2 border-b border-[#e6e7ee]">
+                <span class="text-[#30323b] font-medium">Front indicator</span>
+                <span class="font-mono font-semibold text-[#30323b]">21 W</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-[#30323b] font-medium">Side indicator</span>
+                <span class="font-mono font-semibold text-[#30323b]">5 W</span>
+              </div>
+            </div>
+
+            <!-- Column 2 -->
+            <div class="space-y-3">
+              <div class="flex items-center justify-between pb-2 border-b border-[#e6e7ee]">
+                <span class="text-[#30323b] font-medium">Rear indicator</span>
+                <span class="font-mono font-semibold text-[#30323b]">21 W</span>
+              </div>
+              <div class="flex items-center justify-between pb-2 border-b border-[#e6e7ee]">
+                <span class="text-[#30323b] font-medium">Reverse</span>
+                <span class="font-mono font-semibold text-[#30323b]">16 W</span>
+              </div>
+              <div class="flex items-center justify-between pb-2 border-b border-[#e6e7ee]">
+                <span class="text-[#30323b] font-medium">Number plate</span>
+                <span class="font-mono font-semibold text-[#30323b]">5 W</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-[#30323b] font-medium">Interior</span>
+                <span class="font-mono font-semibold text-[#30323b]">5–8 W</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Muted footer line and secondary source button -->
+          <div class="flex items-center justify-between pt-1">
+            <div class="flex items-center gap-2 text-xs text-[#5d5f68]">
+              <span class="material-symbols-outlined text-[16px]">info</span>
+              <span>Any lamp not listed is LED</span>
+            </div>
+            <button class="btn-secondary h-8 px-3 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-sm">
+              <span class="material-symbols-outlined text-[16px] text-[#5d5f68]">menu_book</span>
+              Owner's manual · page 525
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+  </div>
+
+</body>
+</html>

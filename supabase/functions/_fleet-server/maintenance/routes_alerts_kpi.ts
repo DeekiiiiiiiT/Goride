@@ -72,7 +72,8 @@ export function registerMaintenanceAlertsKpiRoutes(route: RouteApp, supabase: Su
           return {
             ...row,
             license_plate: plateByVehicleId.get(vehicleId) ?? row.license_plate ?? null,
-            category_name: categoryLabelById.get(categoryId) ?? row.category_name ?? null,
+            category_name: categoryLabelById.get(categoryId) ?? row.category_name ??
+              ((row.payload as { categoryName?: string } | null)?.categoryName ?? null),
           };
         });
         return c.json({ items });
@@ -210,14 +211,14 @@ export function registerMaintenanceAlertsKpiRoutes(route: RouteApp, supabase: Su
         const actorId = (c.get("rbacUser") as { userId?: string } | undefined)?.userId ?? null;
 
         const { data: before } = await fleetDb()
-          .from("vehicles")
+          .from("fleet_vehicles")
           .select("do_not_drive, do_not_drive_reason, do_not_drive_set_at")
           .eq("id", vehicleId)
           .eq("organization_id", orgId)
           .maybeSingle();
 
         const { data: updated, error } = await fleetDb()
-          .from("vehicles")
+          .from("fleet_vehicles")
           .update({
             do_not_drive: false,
             do_not_drive_reason: null,

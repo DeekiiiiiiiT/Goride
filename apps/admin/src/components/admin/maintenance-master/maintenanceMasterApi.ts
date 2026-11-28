@@ -49,6 +49,8 @@ export type PartScheduleIndexRow = {
   package_names: string[];
   last_changed_at: string | null;
   rule_count: number;
+  /** MER-04: the part is done when a job calls for it; not a schedule. */
+  as_needed?: boolean;
 };
 
 export type MaintenanceHealthResponse = {
@@ -316,4 +318,45 @@ export async function rejectProposal(token: string, id: string, note: string) {
     body: JSON.stringify({ note }),
   });
   if (!res.ok) throw new Error(await parseErr(res));
+}
+
+/** Step 16e: the limits that decide hard use each night (distance against the average-use baseline). */
+export type HardUsePolicy = {
+  baseline_km_per_year: number;
+  high_use_multiple: number;
+  window_days: number;
+  min_span_days: number;
+  short_trip_km: number;
+  short_trip_share: number;
+  min_trips: number;
+  clear_days: number;
+  kept_normal_days: number;
+  kept_hard_days: number;
+  updated_at?: string;
+  updated_by?: string | null;
+};
+
+export type HardUsePolicyLogRow = {
+  changed_at: string;
+  changed_by: string | null;
+  changed_by_label?: string;
+  before_json: Partial<HardUsePolicy> | null;
+  after_json: Partial<HardUsePolicy> | null;
+};
+
+export async function fetchHardUsePolicy(token: string): Promise<{ policy: HardUsePolicy | null; log: HardUsePolicyLogRow[] }> {
+  const res = await fetch(`${OPS}/admin/maintenance/hard-use-policy`, { headers: headers(token, false) });
+  if (!res.ok) throw new Error(await parseErr(res));
+  return res.json();
+}
+
+export async function saveHardUsePolicy(token: string, patch: Partial<HardUsePolicy>): Promise<HardUsePolicy> {
+  const res = await fetch(`${OPS}/admin/maintenance/hard-use-policy`, {
+    method: "PUT",
+    headers: headers(token),
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(await parseErr(res));
+  const body = (await res.json()) as { policy: HardUsePolicy };
+  return body.policy;
 }

@@ -25,6 +25,9 @@ function vehicleTitle(row: LogServiceVehicleOption): string {
 
 function statusChip(status?: string): { label: string; className: string } {
   const s = (status ?? "").toLowerCase();
+  if (s.includes("history unknown")) {
+    return { label: "History unknown", className: "bg-violet-50 text-violet-800" };
+  }
   if (s.includes("overdue")) {
     return { label: "Overdue", className: "bg-error-container text-on-error-container" };
   }

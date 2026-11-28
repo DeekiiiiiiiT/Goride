@@ -38,7 +38,9 @@ import {
   slotKeyFor,
 } from "./research_part_job.ts";
 import { autoResolveFromBatch } from "./catalog_request_autoresolve.ts";
+import { findCarCatalogueLink } from "./research_car_link.ts";
 import { runSpecJob, runVehicleListJob } from "./research_other_jobs.ts";
+import { sortWaitingNames } from "./saved_page_auto_sort_run.ts";
 
 export const ENGINE_REV = "catalog-research-7";
 
@@ -196,7 +198,22 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
   const { data: claim, error: claimErr } = await supabase.rpc("catalog_research_claim");
   if (claimErr) throw new Error(formatSupabaseError(claimErr));
   if (!claim?.claimed) {
-    return { ok: true, skipped: claim?.reason || "none" };
+    const reason = claim?.reason || "none";
+    // R5/R6: the idle minute sorts one upload's waiting/open names, at most one AI call an hour.
+    if (reason === "empty") {
+      try {
+        const sorted = await sortWaitingNames(supabase);
+        return {
+          ok: true,
+          skipped: reason,
+          ...(sorted.sorted ? { nameSort: sorted.sorted, nameSortPages: sorted.pages } : {}),
+          ...(sorted.skipped ? { nameSortSkipped: sorted.skipped } : {}),
+        };
+      } catch (e) {
+        console.warn("[catalog-research] name sort", e);
+      }
+    }
+    return { ok: true, skipped: reason };
   }
 
   const jobId = String(claim.jobId);
@@ -501,6 +518,17 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
         carMakerNorm,
         shape,
         passes,
+      });
+    }
+
+    // NR-01: no catalogue page among the AI's sources → Roam builds the car's own catalogue link.
+    if (!browserCheckUrl) {
+      browserCheckUrl = await findCarCatalogueLink(supabase, {
+        vehicleId: job.vehicle_catalog_id,
+        carMake: vc?.make,
+        carMakerNumbers: proposalRows
+          .filter((r) => carMakerNorm && brandNorm(String(r.brand ?? ""), aliases) === carMakerNorm)
+          .map((r) => String(r.part_number ?? "")),
       });
     }
 

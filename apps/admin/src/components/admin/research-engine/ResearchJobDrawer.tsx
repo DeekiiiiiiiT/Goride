@@ -9,11 +9,28 @@ import {
   researchApi,
   type BrowserCheckAnswersPayload,
   type PartProposal,
+  type QuestionAnswer,
   type ResearchJobDetail,
+  type SavedPageRow,
   type SpecProposal,
 } from "../../../services/researchEngineService";
+import { AnsweredLine, QuestionCard } from "./QuestionCard";
 import { patchPendingPartsGroup, type PendingPartsQueueGroup } from "../../../services/pendingPartsCatalogService";
 import { AddedPickPartPanel } from "../vehicle-catalog/pending-parts/AddedPickPartPanel";
+import { SavedPageOverlay } from "./SavedPageOverlay";
+import { useAuth } from "../../auth/AuthContext";
+import { picturesForNumbers, type PartPicture } from "../part-pictures/partPicturesApi";
+import {
+  AI_LINE,
+  PartPictureFrame,
+  PartPictureOverlay,
+  PictureButtons,
+  PictureStatePill,
+  pictureWord,
+  plainDay as pictureDay,
+  usePictureActions,
+  waitingLine,
+} from "../part-pictures/PartPictureBits";
 import {
   D_CARD,
   D_MONO,
@@ -47,16 +64,21 @@ import {
   checkPositions,
   catalogueEngineCode,
   partFinder,
+  specFinder,
+  anyPageLinkOk,
   carLabel,
   howSureLine,
   keptSources,
   placeLabel,
   proposalChecks,
   proposalConfirmed,
+  specConfirmed,
   readOnLabel,
   siteName,
   statePill,
   closedNoteOf,
+  shortDate,
+  type StatePill,
 } from "./researchModel";
 
 export type DrawerOutcome = { message: string; undoJobId?: string };
@@ -74,12 +96,21 @@ type Props = {
   onChanged: (outcome?: DrawerOutcome) => void;
 };
 
-export function ResearchJobDrawer({ token, jobId, group, fallbackTitle, fallbackCar, browserChecks, onClose, onChanged }: Props) {
+export function ResearchJobDrawer({ token, jobId: jobIdProp, group, fallbackTitle, fallbackCar, browserChecks, onClose, onChanged }: Props) {
+  // Saved pages (docs/saved-page-parts-audit.md S1 / S5): "Check this part" may open another job in this same drawer.
+  const [jobOverride, setJobOverride] = useState<string | null>(null);
+  const { role } = useAuth();
+  useEffect(() => setJobOverride(null), [jobIdProp]);
+  const jobId = jobOverride ?? jobIdProp;
+  const [savedPageOpen, setSavedPageOpen] = useState(false);
   const [detail, setDetail] = useState<ResearchJobDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [picking, setPicking] = useState(false);
+  // Answers teach Roam §5.2: "Or check it on the website step by step", and the answered card.
+  const [stepsOpen, setStepsOpen] = useState(false);
+  const [answered, setAnswered] = useState<SavedPageRow | null>(null);
   const open = Boolean(jobId || group);
 
   const load = useCallback(async () => {
@@ -101,8 +132,31 @@ export function ResearchJobDrawer({ token, jobId, group, fallbackTitle, fallback
   useEffect(() => {
     setEditing(false);
     setPicking(false);
+    setStepsOpen(false);
+    setAnswered(null);
     void load();
   }, [load]);
+
+  // Answers teach Roam §5.2 (Stitch screens 8–9): a check that carries a question opens on the question card.
+  const question = detail?.question ?? null;
+  const questionMode = Boolean(question && detail?.job.state === "browser_check" && !stepsOpen);
+  async function answerQuestion(a: QuestionAnswer) {
+    if (!question) return;
+    const reply = await researchApi.answerQuestion(token, question.savedPageId, question.lineNo, a);
+    const row = (reply.result?.rows ?? []).find((r) => r.lineNo === question.lineNo) ?? null;
+    if (row?.question?.answer === "yes") {
+      setAnswered(row);
+      onChanged({ message: `Saved ${itemName} for ${carName}.` });
+      return;
+    }
+    if (row?.question?.answer === "no") {
+      // A plain browser check now: the usual steps.
+      setStepsOpen(true);
+      onChanged({ message: `${itemName} is a browser check.` });
+    }
+    // Still something to ask (the part is settled, the place isn't): the card shows the next question.
+    await load();
+  }
 
   const job = detail?.job ?? null;
   const itemName = detail?.spec?.label || detail?.partType?.name || fallbackTitle || "Part";
@@ -110,7 +164,7 @@ export function ResearchJobDrawer({ token, jobId, group, fallbackTitle, fallback
   const carName = detail?.car ? carLabel(detail.car) : fallbackCar || "";
   const openConflict = (detail?.conflicts ?? []).find((c) => !c.closed_at) ?? null;
   const closedNote = closedNoteOf(job?.state ?? null, job?.last_error ?? null);
-  const pill = statePill(job?.state ?? null, Boolean(openConflict), closedNote);
+  const basePill = statePill(job?.state ?? null, Boolean(openConflict), closedNote);
   const readAt = useMemo(() => new Map((detail?.reads ?? []).map((r) => [r.id, r.read_at])), [detail]);
 
   const shownProposals = useMemo(() => {
@@ -119,6 +173,37 @@ export function ResearchJobDrawer({ token, jobId, group, fallbackTitle, fallback
     return live.length ? live : [];
   }, [detail]);
   const reviewProposal = shownProposals.find((p) => p.status === "open") ?? null;
+
+  // S2 part pictures: the picture of each number this job added; every 10 s while one is being made.
+  const [pictures, setPictures] = useState<{ aiOn: boolean; byNumber: Map<string, PartPicture | null> }>({ aiOn: false, byNumber: new Map() });
+  const addedNumbers = useMemo(
+    () => shownProposals.filter((p) => p.status === "promoted" && p.part_number).map((p) => String(p.part_number)),
+    [shownProposals],
+  );
+  const loadPictures = useCallback(async () => {
+    if (!addedNumbers.length) return;
+    try {
+      const r = await picturesForNumbers(addedNumbers);
+      setPictures({ aiOn: r.aiPicturesOn, byNumber: new Map(r.items.map((i) => [i.number, i.picture])) });
+    } catch {
+      // Pictures are extra: the card shows as before.
+    }
+  }, [addedNumbers]);
+  useEffect(() => {
+    void loadPictures();
+  }, [loadPictures]);
+  const pictureMaking = [...pictures.byNumber.values()].some((p) => p?.status === "being_made");
+  useEffect(() => {
+    if (!pictureMaking) return;
+    const t = window.setInterval(() => void loadPictures(), 10_000);
+    return () => window.clearInterval(t);
+  }, [pictureMaking, loadPictures]);
+  const setPicture = (picture: PartPicture) =>
+    setPictures((cur) => {
+      const next = new Map(cur.byNumber);
+      for (const [n, p] of next) if (p?.id === picture.id) next.set(n, picture);
+      return { ...cur, byNumber: next };
+    });
   const openSpec = (detail?.specProposals ?? []).find((p) => p.status === "open") ?? null;
   const promotedSpec = (detail?.specProposals ?? []).find((p) => p.status === "promoted") ?? null;
 
@@ -136,6 +221,11 @@ export function ResearchJobDrawer({ token, jobId, group, fallbackTitle, fallback
     }
   }
 
+  const pill: StatePill = answered
+    ? { label: "Added", tone: "green", icon: "check" }
+    : questionMode
+      ? { label: "Needs you", tone: "amber", icon: "help" }
+      : basePill;
   const header = (
     <div className="flex min-w-0 flex-col">
       <div className="flex flex-wrap items-center gap-2">
@@ -159,8 +249,17 @@ export function ResearchJobDrawer({ token, jobId, group, fallbackTitle, fallback
   } else if (openConflict) {
     footer = null;
   } else if (state === "needs_review" && (reviewProposal || openSpec)) {
+    // NR-03: one click adds only an answer Roam proved on a trusted site; a guess is never one click from the catalogue.
+    const proven = reviewProposal
+      ? proposalConfirmed(reviewProposal) || (reviewProposal.evidence_read_ids ?? []).length > 0
+      : specConfirmed(openSpec!);
     footer = (
       <>
+        {!proven ? (
+          <span className={`text-[13px] ${D_MUTED}`} data-testid="unproven-note">
+            Roam couldn&apos;t prove this on a trusted site. Check it before adding.
+          </span>
+        ) : (
         <PartsButton
           variant="primary"
           disabled={busy}
@@ -177,6 +276,7 @@ export function ResearchJobDrawer({ token, jobId, group, fallbackTitle, fallback
         >
           <DIcon name="check" className="text-[16px]" /> Looks right — add it
         </PartsButton>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           {reviewProposal ? (
             <PartsButton variant="secondary" disabled={busy} onClick={() => setEditing((v) => !v)} data-testid="edit-and-add">
@@ -250,8 +350,10 @@ export function ResearchJobDrawer({ token, jobId, group, fallbackTitle, fallback
     </div>
   ) : undefined;
 
+  const savedPageCarId = detail?.job.vehicle_catalog_id ?? null;
   return (
-    <ReDrawer open={open} onClose={onClose} header={header} footer={state === "browser_check" ? undefined : footerNode} testId="research-drawer">
+    <>
+    <ReDrawer open={open} onClose={savedPageOpen ? () => undefined : onClose} header={header} footer={state === "browser_check" ? undefined : footerNode} testId="research-drawer">
       {loading && !detail ? <ReSkeleton rows={3} /> : null}
 
       {picking && group ? (
@@ -287,7 +389,38 @@ export function ResearchJobDrawer({ token, jobId, group, fallbackTitle, fallback
         />
       ) : null}
 
-      {detail && !openConflict && state === "browser_check" ? (
+      {detail && answered ? (
+        <div className="flex flex-col gap-4" data-testid="drawer-answered">
+          <AnsweredLine row={{ ...answered, question: answered.question! }} />
+          <PartsButton variant="primary" className="!min-h-[44px] w-full" onClick={onClose} data-testid="drawer-answered-done">
+            Done
+          </PartsButton>
+        </div>
+      ) : null}
+
+      {detail && !answered && !openConflict && questionMode && question ? (
+        <div className="flex flex-col gap-4" data-testid="drawer-question">
+          <p className={`flex items-center gap-2 text-[14px] ${D_MUTED}`}>
+            <DIcon name="language" className="text-[18px]" />
+            From your saved page{question.domain ? ` · ${question.domain}` : ""} · {shortDate(question.readAt)}
+          </p>
+          <QuestionCard
+            row={{ ...question, question: question.question }}
+            canAnswer={role === "platform_owner"}
+            onAnswer={answerQuestion}
+          />
+          <PartsButton variant="secondary" className="!min-h-[44px] w-full" onClick={() => setStepsOpen(true)} data-testid="drawer-question-steps">
+            <DIcon name="open_in_new" className="text-[18px]" /> Or check it on the website step by step
+          </PartsButton>
+          {browserChecks ? (
+            <p className={`text-[13px] ${D_MUTED}`}>
+              Browser checks waiting for you: {browserChecks.open} of {browserChecks.max} · a check left for 30 days closes as Couldn&apos;t find.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {detail && !answered && !openConflict && state === "browser_check" && !questionMode ? (
         <BrowserCheckCard
           detail={detail}
           itemName={itemName}
@@ -301,6 +434,7 @@ export function ResearchJobDrawer({ token, jobId, group, fallbackTitle, fallback
           onNotOnPage={() =>
             void run("Not on page", () => researchApi.notOnPage(token, jobId!), { message: `${itemName} marked Couldn't find.` })
           }
+          onUseSavedPage={detail.job.job_type === "part" && detail.job.vehicle_catalog_id ? () => setSavedPageOpen(true) : undefined}
         />
       ) : null}
 
@@ -309,7 +443,18 @@ export function ResearchJobDrawer({ token, jobId, group, fallbackTitle, fallback
           {shownProposals.length > 0 ? (
             <ReSection title="Roam found">
               {shownProposals.map((p) => (
-                <RoamFoundCard key={p.id} p={p} carName={carName} chassis={detail.car?.chassis_code ?? null} readAt={readAt} />
+                <RoamFoundCard
+                  key={p.id}
+                  p={p}
+                  carName={carName}
+                  chassis={detail.car?.chassis_code ?? null}
+                  readAt={readAt}
+                  picture={
+                    p.status === "promoted" && p.part_number && (pictures.aiOn || pictures.byNumber.get(String(p.part_number)))
+                      ? { value: pictures.byNumber.get(String(p.part_number)) ?? null, onChanged: setPicture }
+                      : undefined
+                  }
+                />
               ))}
             </ReSection>
           ) : null}
@@ -368,13 +513,94 @@ export function ResearchJobDrawer({ token, jobId, group, fallbackTitle, fallback
         </>
       ) : null}
     </ReDrawer>
+    {savedPageOpen && savedPageCarId ? (
+      <SavedPageOverlay
+        token={token}
+        carId={savedPageCarId}
+        carLabel={[detail?.car ? `${detail.car.make} ${detail.car.model}` : carName, detail?.car?.chassis_code].filter(Boolean).join(" · ")}
+        jobId={jobId}
+        owner={role === "platform_owner"}
+        onClose={() => setSavedPageOpen(false)}
+        onChanged={() => {
+          onChanged();
+          void load();
+        }}
+        onCheckPart={(nextJobId) => {
+          setSavedPageOpen(false);
+          if (nextJobId === jobId) void load();
+          else setJobOverride(nextJobId);
+        }}
+      />
+    ) : null}
+    </>
   );
 }
 
 // ------------------------------------------------------------------ Screen 2: Roam found
 
-function RoamFoundCard({ p, carName, chassis, readAt }: { p: PartProposal; carName: string; chassis: string | null; readAt: Map<string, string> }) {
+/** S2: picture tile beside the number (Stitch screen 5), its state line, and Remake / Hide from Fleet / Show in Fleet. */
+function useCardPicture(slot: { value: PartPicture | null; onChanged: (p: PartPicture) => void } | undefined) {
+  const [open, setOpen] = useState(false);
+  const actions = usePictureActions((p) => slot?.onChanged(p));
+  if (!slot) return null;
+  const picture = slot.value;
+  const icon = "category";
+  const word = pictureWord(picture);
+  const line = !picture
+    ? "No picture yet"
+    : picture.status === "made" || picture.status === "hidden"
+      ? [AI_LINE, pictureDay(picture.madeAt)].filter(Boolean).join(" · ")
+      : picture.status === "being_made"
+        ? "Making the picture"
+        : picture.status === "waiting"
+          ? waitingLine(picture.waitingReason)
+          : "The picture couldn't be made";
+  const buttons = picture ? (
+    <PictureButtons
+      picture={picture}
+      busy={actions.busy}
+      onRemake={() => actions.askRemake(picture)}
+      onHide={() => void actions.hide(picture)}
+      onShow={() => void actions.show(picture)}
+    />
+  ) : null;
+  return {
+    tile: (
+      <PartPictureFrame picture={picture} size={112} icon={icon} onOpen={picture?.url ? () => setOpen(true) : undefined} />
+    ),
+    state: (
+      <div className="flex flex-wrap items-center gap-2" data-testid="card-picture-state">
+        {word ? <PictureStatePill word={word} /> : null}
+        <span className={`text-[13px] ${D_MUTED}`}>{line}</span>
+        {picture?.status === "hidden" ? <span className={`w-full text-[13px] ${D_MUTED}`}>Roam Fleet doesn&apos;t show this picture.</span> : null}
+      </div>
+    ),
+    footer: (
+      <>
+        {buttons ? <div data-testid="card-picture-buttons">{buttons}</div> : null}
+        {actions.error ? <p className="text-[13px] text-[#a83836] dark:text-[#f87171]">{actions.error}</p> : null}
+        {actions.confirm}
+        {open && picture ? <PartPictureOverlay picture={picture} onClose={() => setOpen(false)} actions={buttons} /> : null}
+      </>
+    ),
+  };
+}
+
+function RoamFoundCard({
+  p,
+  carName,
+  chassis,
+  readAt,
+  picture,
+}: {
+  p: PartProposal;
+  carName: string;
+  chassis: string | null;
+  readAt: Map<string, string>;
+  picture?: { value: PartPicture | null; onChanged: (p: PartPicture) => void };
+}) {
   const [showText, setShowText] = useState(false);
+  const pic = useCardPicture(picture);
   const kept = keptSources(p);
   const first = kept[0];
   const confirmed = proposalConfirmed(p);
@@ -383,17 +609,23 @@ function RoamFoundCard({ p, carName, chassis, readAt }: { p: PartProposal; carNa
   const firstRead = first?.readId ? readAt.get(first.readId) : undefined;
   return (
     <div className={`${D_CARD} flex flex-col gap-4 p-6`} data-testid="roam-found-card">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className={`text-[18px] font-semibold tracking-tight ${D_MONO} ${D_TXT}`} data-testid="found-number">
-          {[p.brand, p.part_number].filter(Boolean).join(" ")}
-        </span>
-        {p.status === "promoted" ? (
-          <RePill tone="green" icon="check">Added</RePill>
-        ) : confirmed ? (
-          <RePill tone="green" icon="check">Confirmed</RePill>
-        ) : (
-          <RePill tone="amber">Needs checking</RePill>
-        )}
+      <div className="flex items-start gap-4">
+        {pic?.tile}
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          {pic?.state}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className={`text-[18px] font-semibold tracking-tight ${D_MONO} ${D_TXT}`} data-testid="found-number">
+              {[p.brand, p.part_number].filter(Boolean).join(" ")}
+            </span>
+            {p.status === "promoted" ? (
+              <RePill tone="green" icon="check">Added</RePill>
+            ) : confirmed ? (
+              <RePill tone="green" icon="check">Confirmed</RePill>
+            ) : (
+              <RePill tone="amber">Needs checking</RePill>
+            )}
+          </div>
+        </div>
       </div>
       <div className={`rounded-xl p-4 ${RE_SOFT}`}>
         <p className={`text-[14px] ${D_TXT}`}>
@@ -433,6 +665,7 @@ function RoamFoundCard({ p, carName, chassis, readAt }: { p: PartProposal; carNa
           {howSureLine(p)}
         </p>
       </div>
+      {pic?.footer}
     </div>
   );
 }
@@ -511,6 +744,7 @@ function EditAndAdd({
 // ------------------------------------------------------------------ Screen 3 / 18: browser check
 
 function BrowserCheckCard({
+  onUseSavedPage,
   detail,
   itemName,
   browserChecks,
@@ -524,6 +758,8 @@ function BrowserCheckCard({
   busy: boolean;
   onConfirm: (payload: BrowserCheckAnswersPayload) => void;
   onNotOnPage: () => void;
+  /** S1: open the saved-page upload for this car and job (part checks only). */
+  onUseSavedPage?: () => void;
 }) {
   // RE-68: the owner looks and answers; nothing is copied (owner, 21 Nov).
   const [versionOk, setVersionOk] = useState<boolean | null>(null);
@@ -534,6 +770,8 @@ function BrowserCheckCard({
   const [typedAgain, setTypedAgain] = useState("");
   const [datesOk, setDatesOk] = useState<boolean | null>(null);
   const [sideOk, setSideOk] = useState<boolean | null>(null);
+  // Owner 27 Nov: the page a spec was found on, when it isn't a parts catalogue (owner's manual, finder site…).
+  const [pageLink, setPageLink] = useState("");
   // One number entry (tapped or typed, typed twice), keyed "<place>#<row>".
   const [posVals, setPosVals] = useState<Record<string, { picked: string; typed: string; again: string }>>({});
   // Owner 25 Nov: every number the site lists, per place, each with the dates shown next to it (any site, any count).
@@ -555,6 +793,7 @@ function BrowserCheckCard({
     setTypedAgain("");
     setDatesOk(null);
     setSideOk(null);
+    setPageLink("");
     setPosVals({});
   }, [detail.job.id]);
 
@@ -563,13 +802,17 @@ function BrowserCheckCard({
   // The button names the site it really opens (RE-69: it said Partsouq while opening the remembered Amayama page).
   const site = siteName(openUrl);
   const jobType = detail.job.job_type === "spec" ? "spec" : "part";
-  const finder = partFinder(itemName, detail.car?.make, detail.job.fit_descriptor);
+  // Owner 27 Nov: bulbs, tyres, oil… aren't in a parts catalogue; they're checked on any page about the car.
+  const anyPage = jobType === "spec" && detail.specSource === "any_page";
+  const pageLinkOk = anyPage ? anyPageLinkOk(pageLink) : true;
+  const finder = partFinder(itemName, detail.car?.make, detail.job.fit_descriptor, detail.makerPartName, detail.makerSearch);
   const known = detail.knownVersion ?? null;
   const versionRow = catalogueVersionRow(detail.car, known).filter((c) => c.label !== "Model code" && c.value !== "—");
   const dates = buildDates(detail.car);
   const fit = String(detail.job.fit_descriptor ?? "").toLowerCase();
   const side = fit.includes("rear") ? "rear" : fit.includes("front") ? "front" : null;
   const specLabel = (detail.spec?.label ?? itemName).toLowerCase();
+  const specHint = specFinder(detail.spec?.key, specLabel);
   // Roam's suggestions to tap (part numbers, or a spec's suggested value).
   const suggestions = [
     ...new Set(
@@ -585,9 +828,13 @@ function BrowserCheckCard({
   const needsAgain = !picked && Boolean(typed.trim());
   const againOk = !needsAgain || typedAgain.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") === typed.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
   const frame = String(detail.car?.chassis_code ?? "").trim().toUpperCase().replace(/^[A-Z0-9]{2,3}-(?=[A-Z])/, "");
+  const pickOf = (label: string) => versionRow.find((c) => c.label === label)?.value ?? "";
+  const pickBuilt = pickOf("Built");
+  const pickEngine = pickOf("Engine");
+  const pickGrade = pickOf("Grade");
   const typedModel = versionCode.trim().toUpperCase();
   const modelOk = frame ? typedModel.startsWith(`${frame}-`) && typedModel.length > frame.length + 3 : typedModel.length >= 4;
-  const versionAnswered = known ? versionOk === true : modelOk;
+  const versionAnswered = anyPage || known ? versionOk === true : modelOk;
   const positions = jobType === "part" ? checkPositions(detail.partType?.position_scheme, detail.job.fit_descriptor) : null;
   const pv = (k: string) => posVals[k] ?? { picked: "", typed: "", again: "" };
   const setPv = (k: string, patch: Partial<{ picked: string; typed: string; again: string }>) =>
@@ -643,7 +890,7 @@ function BrowserCheckCard({
       versionAnswered &&
       partFound === true &&
       (!needDatesAnswer || datesOk === true) &&
-      (jobType === "part" ? numbersOk && (positions || !side || sideOk === true) : Boolean(value) && againOk && (!side || sideOk === true)),
+      (jobType === "part" ? numbersOk && (positions || !side || sideOk === true) : Boolean(value) && againOk && pageLinkOk && (!side || sideOk === true)),
   );
   const dateYears = (() => {
     const now = new Date().getFullYear();
@@ -796,7 +1043,17 @@ function BrowserCheckCard({
   const steps: Step[] = [
     { id: "open", ok: Boolean(openUrl), node: (
       <div className="flex w-full flex-col gap-2">
-        <p>Open the parts site. It opens in a new tab; come back here to answer.</p>
+        <p>
+          {anyPage ? (
+            <>
+              Search for your car&apos;s <span className="font-semibold">{specLabel}</span>. Use a page for your exact car: the
+              owner&apos;s manual, the car maker&apos;s site, or a bulb, tyre or battery finder. It opens in a new tab; come back
+              here to answer.
+            </>
+          ) : (
+            "Open the parts site. It opens in a new tab; come back here to answer."
+          )}
+        </p>
         {openUrl ? (
           <a
             href={openUrl}
@@ -805,7 +1062,7 @@ function BrowserCheckCard({
             className="parts-btn parts-btn--primary !min-h-[40px] w-full justify-center md:w-auto"
             data-testid="open-catalogue-page"
           >
-            Open {site} <DIcon name="open_in_new" className="text-[16px]" />
+            {anyPage ? "Open the search" : `Open ${site}`} <DIcon name="open_in_new" className="text-[16px]" />
           </a>
         ) : (
           <span className={D_MUTED}>No {site} link for this one. Use Not on this page.</span>
@@ -814,7 +1071,20 @@ function BrowserCheckCard({
     ) },
     { id: "version", ok: versionAnswered, no: versionOk === false, node: (
       <div className="flex w-full flex-col gap-2" data-testid="browser-check-instruction">
-        {known ? (
+        {anyPage ? (
+          <>
+            <p data-testid="guide-any-page-car">
+              Is the page you opened for your car: <span className="font-semibold">{detail.car ? carLabel(detail.car) : "this car"}</span>
+              {pickEngine ? (
+                <>
+                  , engine <span className="font-semibold">{pickEngine}</span>
+                </>
+              ) : null}
+              ?
+            </p>
+            {yesNo(versionOk, setVersionOk, "q-version")}
+          </>
+        ) : known ? (
           <>
             <p>{known.url ? "Check the site shows your car:" : "Pick your car in the site's list:"}</p>
             <ul className="flex flex-col gap-0.5" data-testid="guide-version-row">
@@ -829,17 +1099,42 @@ function BrowserCheckCard({
           </>
         ) : (
           <>
-            <p>Pick the version of your car that has:</p>
-            <ul className="flex flex-col gap-0.5" data-testid="guide-version-row">
-              {versionRow.map((c) => (
-                <li key={c.label}>
-                  {c.label}: <span className="font-semibold">{c.value}</span>
-                  {(c.label === "Model code" || c.label === "Engine") && c.value !== "—" ? <CopyIcon text={c.value} /> : null}
-                </li>
-              ))}
-            </ul>
+            {/* Owner 27 Nov: an engine code finds no car on a parts site (Amayama: "No models found"). Every catalogue
+                lists the versions under the car's model code, so that is what to copy; the row is then matched by
+                the build dates and engine, which every site prints the same way. Grade only breaks a tie. */}
+            <div className="flex flex-col gap-1.5" data-testid="guide-version-row">
+              <p data-testid="guide-find-model">
+                {frame ? (
+                  <>
+                    1. Find <span className="font-semibold">{frame}</span>
+                    <CopyIcon text={frame} /> on the site. If the page doesn&apos;t list it, type it in the site&apos;s search box.
+                  </>
+                ) : (
+                  <>1. Find your car&apos;s list of versions on the site.</>
+                )}
+              </p>
+              <p data-testid="guide-pick-row">
+                2. In that list, pick the row
+                {pickBuilt ? (
+                  <>
+                    {" "}built <span className="font-semibold">{pickBuilt}</span>
+                  </>
+                ) : null}
+                {pickEngine ? (
+                  <>
+                    {" "}with engine <span className="font-semibold">{pickEngine}</span>
+                  </>
+                ) : null}
+                .
+              </p>
+              {pickGrade ? (
+                <p className={D_MUTED} data-testid="guide-pick-grade">
+                  More than one row? Pick grade <span className="font-semibold">{pickGrade}</span>. Sites often shorten grade names to a few capital letters.
+                </p>
+              ) : null}
+            </div>
             <label className="flex flex-col gap-1">
-              <span>Type the model code the site shows for it:</span>
+              <span>3. Type the model code shown on that row:</span>
               <input value={versionCode} onChange={(e) => setVersionCode(e.target.value)} maxLength={40} className={input} data-testid="q-version-code" />
             </label>
           </>
@@ -848,7 +1143,58 @@ function BrowserCheckCard({
     ) },
     { id: "part", ok: partFound === true, no: partFound === false, node: (
       <div className="flex w-full flex-col gap-2" data-testid="guide-find-part">
-        {jobType === "part" && finder.section ? (
+        {/* Owner 27 Nov: the number first, on any site. A word search can land on a different part with the same word
+            ("THERMOSTAT ASSY" in the heater piping); Roam's number finds the one row. The word is the fallback. */}
+        {jobType === "part" && detail.savedPage ? (
+          <a
+            href={detail.savedPage.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="parts-btn parts-btn--secondary !min-h-[44px] w-full justify-center"
+            data-testid="guide-open-saved-page"
+          >
+            <DIcon name="history" className="text-[18px]" /> Open the page you saved before
+            {detail.savedPage.domain ? ` (${detail.savedPage.domain})` : ""}
+            <DIcon name="open_in_new" className="text-[16px]" />
+          </a>
+        ) : null}
+        {jobType === "part" && suggestions.length ? (
+          <ul className="flex flex-col gap-1.5" data-testid="guide-number-first">
+            <li data-testid="guide-search-number">
+              Search <span className="font-semibold">{suggestions[0]}</span>
+              <CopyIcon text={suggestions[0]} />
+              {suggestions.length > 1 ? (
+                <>
+                  {" "}(or{" "}
+                  {suggestions.slice(1, 3).map((n, i) => (
+                    <span key={n}>
+                      {i ? ", " : ""}
+                      <span className="font-semibold">{n}</span>
+                      <CopyIcon text={n} />
+                    </span>
+                  ))}
+                  )
+                </>
+              ) : null}
+              . Open what it finds and look for that number.
+            </li>
+            <li data-testid="guide-search-word">
+              Nothing found? Search <span className="font-semibold">{finder.search}</span>
+              <CopyIcon text={finder.search} />
+              {finder.section ? (
+                <>
+                  , open the section for the <span className="font-semibold">{finder.section}</span>,
+                </>
+              ) : null}{" "}
+              and look for a row called{" "}
+              <span className="font-semibold">{finder.rowName ?? itemName.toUpperCase()}</span>
+              {finder.rowName ? <CopyIcon text={finder.rowName} /> : null}.
+            </li>
+            <li className="font-semibold" data-testid="guide-found-it">
+              Found it? Press Yes. Not there? Press No, then Not on this page.
+            </li>
+          </ul>
+        ) : jobType === "part" && finder.section ? (
           <ul className="flex flex-col gap-1.5">
             <li>
               Search <span className="font-semibold">{finder.search}</span>
@@ -880,9 +1226,29 @@ function BrowserCheckCard({
                 {finder.rowName ? <CopyIcon text={finder.rowName} /> : null}?
               </>
             ) : (
-              <>
-                Do you see the <span className="font-semibold">{specLabel}</span>?
-              </>
+              <span className="flex flex-col gap-1.5" data-testid="spec-hint">
+                <span>
+                  {anyPage ? null : (
+                    <>
+                      Search <span className="font-semibold">{specHint.search}</span>
+                      <CopyIcon text={specHint.search} />.
+                    </>
+                  )}
+                  {specHint.looksLike ? (
+                    <>
+                      {" "}It is written like <span className="font-semibold">{specHint.looksLike}</span>.
+                    </>
+                  ) : null}
+                </span>
+                <span>
+                  Do you see the <span className="font-semibold">{specLabel}</span>?
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {anyPage
+                    ? "Not written there? Try another page for your car. None shows it? Press No, then Not on this page."
+                    : "Only a part number, not the value itself? Press No, then Not on this page."}
+                </span>
+              </span>
             )}
           </p>
         )}
@@ -960,8 +1326,24 @@ function BrowserCheckCard({
         })),
       ]
       : [
-        { id: "numbers", ok: Boolean(value) && againOk, node: (
+        { id: "numbers", ok: Boolean(value) && againOk && pageLinkOk, node: (
           <div className="flex w-full flex-col gap-2">
+            {anyPage ? (
+              <label className="flex flex-col gap-1">
+                <span>Copy the link of the page that shows it (from the address bar) and paste it here:</span>
+                <input
+                  value={pageLink}
+                  onChange={(e) => setPageLink(e.target.value)}
+                  placeholder="https://…"
+                  maxLength={2000}
+                  className={input}
+                  data-testid="q-page-link"
+                />
+                {pageLink.trim() && !pageLinkOk ? (
+                  <span className="text-[#a83836]">Paste the page&apos;s own link (starting https://), not the search page.</span>
+                ) : null}
+              </label>
+            ) : null}
             <p>The value shown:</p>
             {suggestions.length ? (
               <p className={`text-[13px] ${D_MUTED}`}>Roam's guesses. Tap one only if it's exactly what the site shows; otherwise type it.</p>
@@ -1091,7 +1473,7 @@ function BrowserCheckCard({
               onClick={() =>
                 openUrl &&
                 onConfirm({
-                  url: openUrl,
+                  url: anyPage ? pageLink.trim() : openUrl,
                   answers: {
                     versionOk: known ? versionOk === true : null,
                     versionCode: known ? null : versionCode.trim(),
@@ -1125,6 +1507,21 @@ function BrowserCheckCard({
             Not on this page
           </PartsButton>
         </div>
+        {/* Owner 26 Nov: offer the upload once the user is on the parts page (the number steps), not on step 1. */}
+        {cur?.id.startsWith("numbers") && onUseSavedPage ? (
+          <div className="mt-2 flex flex-col gap-3 rounded-2xl border border-[#e6e7ee] p-4 sm:flex-row sm:items-center dark:border-[#1e293b]" data-testid="use-saved-page-card">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#dbe1ff] text-[#0153dc] dark:bg-[#1e3a8a]/50 dark:text-[#93b4ff]">
+              <DIcon name="upload_file" className="text-[20px]" />
+            </span>
+            <div className="flex min-w-0 flex-1 flex-col">
+              <span className={`text-[15px] font-semibold ${D_TXT}`}>Faster: upload the page instead</span>
+              <span className={`text-[13px] ${D_MUTED}`}>You&apos;re on the right page now. Save it with Ctrl+S and upload it, and Roam fills in every number and date for you.</span>
+            </div>
+            <PartsButton variant="secondary" className="!min-h-[44px]" disabled={busy} onClick={onUseSavedPage} data-testid="use-saved-page">
+              <DIcon name="upload" className="text-[18px]" /> Use a saved page
+            </PartsButton>
+          </div>
+        ) : null}
       </div>
     </div>
   );

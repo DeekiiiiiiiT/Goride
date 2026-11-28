@@ -10,7 +10,6 @@ import { closeJobNotFound } from "./catalog_research_not_found.ts";
 import {
   answersGate,
   browserCheckGate,
-  confirmedPartKind,
   type CarBuild,
   type CheckAnswers,
   type PositionItem,
@@ -21,7 +20,9 @@ import {
   withoutPrices,
 } from "./research_browser_check.ts";
 import { identityTokens } from "./research_part_job.ts";
+import { rememberCarSiteVersion, savePartAnswers } from "./research_part_save.ts";
 import { siteDomain } from "./research_page_reader.ts";
+import { anyPageEvidenceOk, specSource } from "./research_spec_source.ts";
 import { type LookupRecipe, runRecipe } from "./research_recipes.ts";
 
 const PREFIX = "/make-server-37f42386/admin/catalog-research";
@@ -249,16 +250,22 @@ export function registerResearchEngineRoutes(
     } catch {
       return c.json({ error: "The catalogue page link is required (https)" }, 400);
     }
+    // Owner 27 Nov: a spec a parts catalogue never shows (bulb, tyre, oil…) is confirmed on any page about the car;
+    // the owner's own check is the proof and the page's link is kept as the evidence.
+    const anyPage = ctx.gateInput.jobType === "spec" && specSource(ctx.gateInput.specKey) === "any_page";
+    if (anyPage && !anyPageEvidenceOk(url)) {
+      return c.json({ error: "Paste the link of the page that shows it (not the search page)." }, 400);
+    }
     // Review #4: the page must be a trusted catalogue — the car maker's for this car's make, or a part maker's.
     const { data: trusted } = await supabase.from("trusted_source").select("kind, maker_norm").eq("domain", host);
     const make = String(ctx.car.make ?? "").trim().toLowerCase();
-    const allowed = (trusted ?? []).some((t) => {
+    const allowed = anyPage || (trusted ?? []).some((t) => {
       const row = t as { kind: string; maker_norm: string | null };
       return row.kind === "part_maker" || (row.kind === "car_maker" && String(row.maker_norm ?? "").toLowerCase() === make);
     });
     if (!allowed) return c.json({ error: "That page isn't on a trusted catalogue for this car. Use the Open page button." }, 400);
     // The car maker's own catalogue for this car: its numbers are the car maker's parts (OEM).
-    const carMakerPage = (trusted ?? []).some((t) => {
+    const carMakerPage = !anyPage && (trusted ?? []).some((t) => {
       const row = t as { kind: string; maker_norm: string | null };
       return row.kind === "car_maker" && String(row.maker_norm ?? "").toLowerCase() === make;
     });
@@ -282,11 +289,12 @@ export function registerResearchEngineRoutes(
         site: host,
         rowName: str(b.rowName, 120) || null,
         buildText: ctx.buildText,
-        knownCode: ctx.knownCode,
+        knownCode: anyPage ? null : ctx.knownCode,
         suggestions: ctx.gateInput.jobType === "part" ? ctx.gateInput.candidates : ctx.specSuggestions,
         positionScheme: ctx.positionScheme,
         jobAxle: side as "front" | "rear" | null,
         build: ctx.gateInput.build ?? null,
+        anyPage,
       });
       if (!ans.ok) {
         const msg: Record<string, string> = {
@@ -319,150 +327,31 @@ export function registerResearchEngineRoutes(
     }
 
     const actor = actorOf(c);
-    const { data: read, error: readErr } = await supabase.from("research_page_read").insert({
-      job_id: jobId,
-      purpose: "job",
-      path: "owner_browser",
-      domain: host,
-      url,
-      final_url: url,
-      block_text: evidenceText,
-      block_hash: await sha256(evidenceText),
-      checked_by: actor,
-    }).select("id").single();
-    if (readErr) return c.json({ error: readErr.message }, 400);
-    const readId = String((read as { id: string }).id);
+    const saved = await savePartAnswers(supabase, jobId, {
+      job: ctx.job,
+      car: ctx.car,
+      host,
+      carMakerPage,
+      detected,
+      versionCode: answeredVersion,
+      items: positionItems,
+      actor,
+    }, url, evidenceText);
+    if (!saved.ok) return c.json({ error: saved.error, saved: saved.saved }, 400);
 
     // RE-63: once Confirm has fully worked, remember the catalogue's name and page for this car's version
     // (only when the paste names exactly one version), so the next check says "click it".
-    const rememberVersion = async () => {
-      const versionCode = answeredVersion ?? versionCodeOnLine(pasted, ctx.car.chassis_code);
-      if (!versionCode || !ctx.job.vehicle_catalog_id) return;
+    if (!anyPage) await rememberCarSiteVersion(supabase, {
+      carId: ctx.job.vehicle_catalog_id,
+      host,
+      versionCode: answeredVersion ?? versionCodeOnLine(pasted, ctx.car.chassis_code),
+      pageUrl: versionPageUrl(url),
       // RE-67: the version's dates as the catalogue writes them, from the pasted title line (when there).
-      const period = periodTextOnLine(pasted);
-      const { error: vErr } = await supabase.from("research_car_site_version").upsert({
-        vehicle_catalog_id: ctx.job.vehicle_catalog_id,
-        domain: host,
-        version_code: versionCode,
-        version_url: versionPageUrl(url),
-        ...(period ? { prod_period: period } : {}),
-        confirmed_by: actor,
-        confirmed_at: new Date().toISOString(),
-      }, { onConflict: "vehicle_catalog_id,domain" });
-      if (vErr) console.warn("research_car_site_version upsert failed", vErr.message);
-    };
-
-    if (ctx.job.job_type === "spec") {
-      const { data: prop, error } = await supabase.from("catalog_spec_proposal").upsert({
-        job_id: jobId,
-        vehicle_catalog_id: ctx.job.vehicle_catalog_id,
-        spec_key: ctx.job.spec_key,
-        value: detected,
-        evidence_read_ids: [readId],
-        trust_route: "owner_browser",
-        route: "review",
-        status: "open",
-      }, { onConflict: "job_id,spec_key" }).select("id").single();
-      if (error) return c.json({ error: error.message }, 400);
-      const { data, error: pErr } = await supabase.rpc("promote_spec_proposal", { p_proposal_id: (prop as { id: string }).id, p_actor: actor });
-      if (pErr) return c.json({ error: pErr.message }, 400);
-      await supabase.rpc("catalog_research_expire_browser_checks");
-      await rememberVersion();
-      return c.json({ result: data, detected: detected });
-    }
-
-    // Part: the number(s) the owner saw on the car maker's catalogue (owner-checked, RE-29). RE-69: parts that come in
-    // positions save one entry per number, listing each position it was confirmed for.
-    const { data: comp } = await supabase.from("maintenance_service_categories").select("name").eq("id", ctx.job.maintenance_component_id).maybeSingle();
-    const fit = String(ctx.job.fit_descriptor ?? "").toLowerCase();
-    const jobAxle = fit.includes("rear") ? "rear" : fit.includes("front") ? "front" : "";
-    // RE-70: a number that changed during the build carries the build years it is for.
-    type Place = { axle: string; side: string | null; yearFrom: number | null; yearTo: number | null; periodText: string | null };
-    type Group = { number: string; places: Place[] };
-    const groups = new Map<string, Group>();
-    if (positionItems && positionItems.length) {
-      for (const it of positionItems) {
-        const k = it.detected.toUpperCase().replace(/[^A-Z0-9]/g, "");
-        const g = groups.get(k) ?? { number: it.detected, places: [] };
-        g.places.push({
-          axle: it.axle ?? jobAxle,
-          side: it.side,
-          yearFrom: it.yearFrom ?? null,
-          yearTo: it.yearTo ?? null,
-          periodText: it.periodText ?? null,
-        });
-        groups.set(k, g);
-      }
-    } else {
-      groups.set(detected.toUpperCase().replace(/[^A-Z0-9]/g, ""), {
-        number: detected,
-        places: [{ axle: jobAxle, side: null, yearFrom: null, yearTo: null, periodText: null }],
-      });
-    }
-    const results: Array<{ number: string; places: string[]; result: unknown }> = [];
-    const placeText = (g: Group) =>
-      g.places.map((p) => [`${p.axle}${p.side ? ` ${p.side}` : ""}`.trim() || "this car", p.periodText ?? ""].filter(Boolean).join(" "));
-    const partial = (g: Group, why: string) => {
-      const saved = results.map((r) => `${r.places.join(", ")} ${r.number}`).join("; ");
-      return c.json({
-        error: saved
-          ? `Saved ${saved}. Couldn't save ${placeText(g).join(", ")} ${g.number}: ${why}`
-          : why,
-        saved: results,
-      }, 400);
-    };
-    for (const [norm, g] of groups) {
-      // Listings: one per axle (and build years, RE-70); both sides of an axle on the same number → side "both".
-      const byAxle = new Map<string, { axle: string; yearFrom: number | null; yearTo: number | null; sides: Set<string> }>();
-      for (const p of g.places) {
-        const key = `${p.axle}|${p.yearFrom ?? ""}|${p.yearTo ?? ""}`;
-        const e = byAxle.get(key) ?? { axle: p.axle, yearFrom: p.yearFrom, yearTo: p.yearTo, sides: new Set<string>() };
-        if (p.side) e.sides.add(p.side);
-        byAxle.set(key, e);
-      }
-      const listings = [...byAxle.values()].map(({ axle, yearFrom, yearTo, sides }) => {
-        const side = sides.size === 2 ? "both" : sides.size === 1 ? [...sides][0] : undefined;
-        return {
-          vehicleId: ctx.job.vehicle_catalog_id,
-          position: axle || undefined,
-          ...(side ? { side } : {}),
-          ...(yearFrom != null ? { yearFrom } : {}),
-          ...(yearTo != null ? { yearTo } : {}),
-        };
-      });
-      // The proposal keeps the lookup's own axle as its key (the worker's suggestion row is updated, not duplicated);
-      // the exact places live in its listings.
-      const positionKey = jobAxle;
-      // The suggestion the owner confirmed keeps its own brand and kind (a part maker's number stays aftermarket).
-      const { data: existingRows } = await supabase.from("catalog_part_proposal").select("id, brand, part_name, match_kind")
-        .eq("job_id", jobId).eq("part_number_norm", norm).order("created_at").limit(1);
-      const existing = (existingRows ?? [])[0] as { brand?: string; part_name?: string; match_kind?: string } | undefined;
-      const kind = confirmedPartKind(carMakerPage, ctx.car.make, existing);
-      const { data: prop, error } = await supabase.from("catalog_part_proposal").upsert({
-        job_id: jobId,
-        brand: kind.brand,
-        part_number: g.number,
-        part_number_norm: norm,
-        part_name: existing?.part_name ?? comp?.name ?? "Part",
-        position_key: positionKey,
-        match_kind: kind.matchKind,
-        trust_route: "owner_browser",
-        evidence_read_ids: [readId],
-        fits: { listings },
-        sources: [{ url, domain: host, readId, block: evidenceText }],
-        route: "review",
-        status: "open",
-      }, { onConflict: "job_id,part_number_norm,position_key" }).select("id").single();
-      if (error) return partial(g, error.message);
-      const { data: done, error: pErr } = await supabase.rpc("promote_part_proposal", { p_proposal_id: (prop as { id: string }).id, p_actor: actor });
-      if (pErr) return partial(g, pErr.message);
-      results.push({ number: g.number, places: placeText(g), result: done });
-      const batchId = (done as { batchId?: string } | null)?.batchId;
-      if (batchId) await autoResolveFromBatch(supabase, batchId, actor);
-    }
-    await supabase.rpc("catalog_research_expire_browser_checks");
-    await rememberVersion();
-    return c.json({ result: results[results.length - 1]?.result ?? null, results, detected: detected });
+      periodText: periodTextOnLine(pasted),
+      actor,
+    });
+    if (saved.jobType === "spec") return c.json({ result: saved.result, detected });
+    return c.json({ result: saved.result, results: saved.results, detected });
   });
 
   app.post(`${PREFIX}/browser-checks/:jobId/not-on-page`, async (c: Context) => {
@@ -726,11 +615,6 @@ export function registerResearchEngineRoutes(
 }
 
 // ---------------------------------------------------------------- helpers
-
-async function sha256(text: string): Promise<string> {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return [...new Uint8Array(buf)].map((x) => x.toString(16).padStart(2, "0")).join("");
-}
 
 type JobRow = {
   id: string;

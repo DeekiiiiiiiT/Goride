@@ -8,6 +8,10 @@ import { dominionCan } from "../../../packages/auth-client/src/dominionPermissio
 import { ENGINE_REV } from "./catalog_research_worker.ts";
 import { autoResolveFromBatch } from "./catalog_request_autoresolve.ts";
 import { versionListLink } from "./research_browser_check.ts";
+import { findCarCatalogueLink, findMakerPartName } from "./research_car_link.ts";
+import { specSearchLink, specSource } from "./research_spec_source.ts";
+import { loadMakerWords, makerWordsFor } from "./saved_page_lessons.ts";
+import { findQuestionForJob, findSavedPageForPart } from "./saved_page_question.ts";
 
 // RE-23: explicit columns only — never select("*") on research tables.
 const JOB_FIELDS = "id, job_type, state, vehicle_catalog_id, maintenance_component_id, fit_descriptor, match_type, spec_key, attempts, last_error, next_research_at, updated_at";
@@ -178,7 +182,7 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
       .find((u) => typeof u === "string" && u.startsWith("https://")) as string | undefined;
     const fromEvent = (linkEvent as { detail?: { url?: unknown } } | null)?.detail?.url;
     // RE-60: a link to one version of a frame is cut back to the frame's version list (Roam can't check the version).
-    const browserCheckUrl = versionListLink(fromProposal ?? (typeof fromEvent === "string" && fromEvent.startsWith("https://") ? fromEvent : null));
+    let browserCheckUrl = versionListLink(fromProposal ?? (typeof fromEvent === "string" && fromEvent.startsWith("https://") ? fromEvent : null));
     const vehicleId = (job as { vehicle_catalog_id?: string | null }).vehicle_catalog_id;
     const componentId = (job as { maintenance_component_id?: string | null }).maintenance_component_id;
     const specKey = (job as { spec_key?: string | null }).spec_key;
@@ -193,6 +197,23 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
     ]);
     // RE-62 / RE-63: the engine in plain words (only when Dominion knows it), the sister engines of the same years (so
     // the guide can say "not 1KRVET — that's the turbo"), and the catalogue version learned from an earlier check.
+    // NR-04: a Browser check moved over from Needs review has no stored link → the car's own catalogue link.
+    const jobState = String((job as { state?: string }).state ?? "");
+    // Owner 27 Nov: a spec a parts catalogue never shows (bulb, tyre, oil…) is checked on any page about the car.
+    const specFrom = specKey ? specSource(specKey) : null;
+    if (specFrom === "any_page") {
+      browserCheckUrl = specSearchLink(car as Record<string, string | number | null> | null, String((spec as { label?: string } | null)?.label ?? specKey));
+    }
+    if (!browserCheckUrl && (jobState === "browser_check" || jobState === "browser_check_queued")) {
+      const make = String((car as { make?: string } | null)?.make ?? "");
+      browserCheckUrl = await findCarCatalogueLink(supabase, {
+        vehicleId,
+        carMake: make,
+        carMakerNumbers: ((proposals ?? []) as Array<{ brand?: string | null; part_number?: string | null }>)
+          .filter((p) => make && String(p.brand ?? "").trim().toLowerCase() === make.trim().toLowerCase())
+          .map((p) => String(p.part_number ?? "")),
+      });
+    }
     let engineWords: string | null = null;
     let sisterEngines: Array<{ code: string; turbo: boolean }> = [];
     let knownVersion: {
@@ -263,7 +284,8 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
       };
       const vs = (versions ?? []) as Ver[];
       const v = vs.find((x) => x.domain === linkDomain) ?? vs[0];
-      if (v) {
+      // A catalogue version means nothing on an owner's manual page.
+      if (v && specFrom !== "any_page") {
         knownVersion = {
           domain: v.domain,
           code: v.version_code,
@@ -275,13 +297,49 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
         };
       }
     }
+    // Step 3 wording: the car maker's own name for this part. Answers teach Roam AT-06: the owner's lesson or the seed
+    // row for this make first, then the name confirmed before on this make, else this job's guess.
+    const isPart = (job as { job_type?: string }).job_type === "part";
+    const carMake = (car as { make?: string } | null)?.make ?? null;
+    let makerSearch: string | null = null;
+    let makerRow: string | null = null;
+    if (isPart && componentId && carMake) {
+      try {
+        const words = makerWordsFor(await loadMakerWords(supabase, carMake), componentId, String((comp as { name?: string } | null)?.name ?? ""));
+        makerRow = words.rowName;
+        makerSearch = words.rowName ? words.search : null;
+      } catch (err) {
+        console.warn("job detail: maker words not read", err);
+      }
+    }
+    const makerPartName = isPart
+      ? makerRow ?? await findMakerPartName(supabase, {
+        make: carMake,
+        componentId,
+        guesses: (proposals ?? []) as Array<{ brand?: string | null; part_name?: string | null }>,
+      })
+      : null;
+    // AT-11 / AT-12: the question card this browser check carries (the saved-page row Roam read), if any.
+    const question = isPart && vehicleId
+      ? await findQuestionForJob(supabase, String((job as { id: string }).id), vehicleId).catch(() => null)
+      : null;
+    // Owner 27 Nov: the exact page this part was found on before — a page the owner uploaded for this car that saved
+    // (or already had) this part. A browser check only knows the link it starts from, so uploads are the pages known.
+    const savedPage = isPart && vehicleId && (comp as { name?: string } | null)?.name
+      ? await findSavedPageForPart(supabase, vehicleId, String((comp as { name: string }).name)).catch(() => null)
+      : null;
     return c.json({
       job,
       car: car ? { ...(car as Record<string, unknown>), engine_words: engineWords } : null,
       sisterEngines,
       knownVersion,
+      makerPartName,
+      makerSearch,
+      question,
+      savedPage,
       partType: comp ?? null,
       spec: spec ?? null,
+      specSource: specFrom,
       browserCheckUrl,
       reads: reads || [],
       proposals: proposals || [],
@@ -361,6 +419,13 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
         rank: 1,
       });
     }
+    // Answers teach Roam §5.4: a browser check that carries a question card (an open suggestion from a saved-page row,
+    // AT-12) shows as "Needs you". Answering No clears the source, so it goes back to a plain browser check.
+    const questionJobs = new Set(
+      ((props || []) as Array<{ job_id: string; status?: string; sources?: Array<Record<string, unknown>> }>)
+        .filter((p) => p.status === "open" && Array.isArray(p.sources) && p.sources.some((s) => s?.kind === "saved_page"))
+        .map((p) => p.job_id),
+    );
     const carById = new Map((cars || []).map((v) => [(v as { id: string }).id, v]));
     const compById = new Map((comps || []).map((v) => [(v as { id: string }).id, (v as { name: string }).name]));
     const specByKey = new Map((specs || []).map((v) => [(v as { key: string }).key, v as { key: string; label: string; unit: string | null }]));
@@ -383,6 +448,7 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
         trustRoute: meta?.trustRoute ?? null,
         siteDomains: meta?.domains ?? [],
         conflictOpen: conflictJobs.has(row.id),
+        needsYou: row.state === "browser_check" && questionJobs.has(row.id),
         // RE-73: a job the owner had closed (e.g. "replaced by front and rear checks") shows as Closed with its note.
         closedNote: ownerClosedNote(row.state, row.last_error),
         // Vehicle jobs: the car being researched (make / model / year only) and what the engine proposed.

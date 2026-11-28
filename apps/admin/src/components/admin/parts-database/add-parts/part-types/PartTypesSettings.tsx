@@ -12,6 +12,26 @@ import {
 import type { FitMode } from "../addPartsTypes";
 import { groupPartTypesByArea, AddPartsBreadcrumb, fitModeLabel, positionSchemeLabel } from "../addPartsShared";
 import { PartsButton } from "../../PartsButton";
+import { listTemplates } from "../../../part-pictures/partPicturesApi";
+import { SortedByRoam } from "../../../research-engine/SortedByRoam";
+import { LearnedFromYou } from "../../../research-engine/LearnedFromYou";
+import { useAuth } from "../../../../auth/AuthContext";
+
+/** S2 (docs/part-type-learning-audit.md): every part type sits in a part group — required, no default. */
+function PartGroupPicker({ value, onChange, groups, testId }: { value: string; onChange: (id: string) => void; groups: Array<{ id: string; name: string; pictures: boolean }>; testId: string }) {
+  return (
+    <label className="flex flex-col gap-1 font-label-md">
+      Part group
+      <select className="min-h-[44px] px-3 rounded-lg bg-surface-container-lowest border border-outline-variant/50" value={value} onChange={(e) => onChange(e.target.value)} data-testid={testId}>
+        <option value="">Choose a part group</option>
+        {groups.map((g) => (
+          <option key={g.id} value={g.id}>{g.pictures ? g.name : `${g.name} — no picture`}</option>
+        ))}
+      </select>
+      <span className="font-body-sm text-on-surface-variant">Every part type sits in a part group. Its pictures use that group&apos;s materials.</span>
+    </label>
+  );
+}
 
 type SpecFieldDraft = {
   specKey: string;
@@ -33,13 +53,20 @@ const emptySpecField = (): SpecFieldDraft => ({
 
 export function PartTypesSettings({ owner, onClose, fullPage }: { owner: boolean; onClose: () => void; fullPage?: boolean }) {
   const qc = useQueryClient();
+  const { session } = useAuth();
   const types = useQuery({ queryKey: ["self-serve-part-types-owner"], queryFn: fetchSelfServePartTypes });
   const requests = useQuery({ queryKey: ["part-type-requests"], queryFn: () => fetchPartTypeRequests("pending"), enabled: owner });
   const specKeys = useQuery({ queryKey: ["spec-keys"], queryFn: fetchSpecKeys, enabled: owner });
+  const partGroups = useQuery({
+    queryKey: ["part-picture-templates", "groups"],
+    queryFn: async () => (await listTemplates()).map((t) => ({ id: t.catalogGroupId, name: t.name, pictures: t.enabled })).sort((a, b) => a.name.localeCompare(b.name)),
+    enabled: owner,
+  });
+  const [reqCreateAreaId, setReqCreateAreaId] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState("");
   const [opCode, setOpCode] = useState("");
-  const [areaId, setAreaId] = useState("b1000000-0000-4000-8000-000000000001");
+  const [areaId, setAreaId] = useState("");
   const [defaultFitMode, setDefaultFitMode] = useState<FitMode>("specific");
   const [specFields, setSpecFields] = useState<SpecFieldDraft[]>([]);
   const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null);
@@ -140,6 +167,7 @@ export function PartTypesSettings({ owner, onClose, fullPage }: { owner: boolean
           <div className="mb-space-md p-space-md rounded-xl border border-outline-variant/40 flex flex-col gap-space-md bg-surface-container-low/40">
             <input className="h-10 px-3 rounded-lg border border-outline-variant/50 bg-surface-container-lowest" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
             <input className="h-10 px-3 rounded-lg border border-outline-variant/50 bg-surface-container-lowest font-mono-sm" placeholder="Op code e.g. BRK-PADS" value={opCode} onChange={(e) => setOpCode(e.target.value)} />
+            <PartGroupPicker value={areaId} onChange={setAreaId} groups={partGroups.data ?? []} testId="create-part-group" />
             <label className="flex flex-col gap-1 font-label-md">
               How it usually fits
               <select
@@ -220,7 +248,9 @@ export function PartTypesSettings({ owner, onClose, fullPage }: { owner: boolean
             ) : null}
             <button
               type="button"
-              className="h-10 rounded-xl bg-primary-container text-on-primary font-semibold"
+              className="h-10 rounded-xl bg-primary-container text-on-primary font-semibold disabled:opacity-50"
+              disabled={!areaId}
+              data-testid="create-part-type-publish"
               onClick={() => {
                 const payload: Record<string, unknown> = {
                   name,
@@ -248,6 +278,7 @@ export function PartTypesSettings({ owner, onClose, fullPage }: { owner: boolean
                   setFormOpen(false);
                   setName("");
                   setOpCode("");
+                  setAreaId("");
                   setSpecFields([]);
                   void types.refetch();
                   void qc.invalidateQueries({ queryKey: ["self-serve-part-types"] });
@@ -411,6 +442,7 @@ export function PartTypesSettings({ owner, onClose, fullPage }: { owner: boolean
                         setReqCreateName(String(r.name));
                         setReqCreateOpCode(String(r.example_number ?? "NEW-PART").toUpperCase());
                         setReqCreateFitMode("specific");
+                        setReqCreateAreaId("");
                         setReqCreateSpecFields([]);
                       }}
                     >
@@ -439,6 +471,7 @@ export function PartTypesSettings({ owner, onClose, fullPage }: { owner: boolean
                 <h4 className="font-label-md font-semibold">Create from request</h4>
                 <input className="h-10 px-3 rounded-lg border bg-surface-container-lowest" value={reqCreateName} onChange={(e) => setReqCreateName(e.target.value)} placeholder="Name" />
                 <input className="h-10 px-3 rounded-lg border bg-surface-container-lowest font-mono-sm" value={reqCreateOpCode} onChange={(e) => setReqCreateOpCode(e.target.value)} placeholder="Op code" />
+                <PartGroupPicker value={reqCreateAreaId} onChange={setReqCreateAreaId} groups={partGroups.data ?? []} testId="request-part-group" />
                 <select className="h-10 px-3 rounded-lg border bg-surface-container-lowest" value={reqCreateFitMode} onChange={(e) => setReqCreateFitMode(e.target.value as FitMode)}>
                   <option value="specific">Specific cars</option>
                   <option value="engine">By engine</option>
@@ -463,14 +496,15 @@ export function PartTypesSettings({ owner, onClose, fullPage }: { owner: boolean
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    className="h-9 px-4 rounded-lg bg-primary-container text-on-primary font-semibold text-sm"
+                    className="h-9 px-4 rounded-lg bg-primary-container text-on-primary font-semibold text-sm disabled:opacity-50"
+                    disabled={!reqCreateAreaId}
                     onClick={() => {
                       void decidePartTypeRequest(requestCreateId, {
                         action: "create_part_type",
                         newType: {
                           name: reqCreateName,
                           opCode: reqCreateOpCode,
-                          areaId: "b1000000-0000-4000-8000-000000000001",
+                          areaId: reqCreateAreaId,
                           defaultFitMode: reqCreateFitMode,
                           positionScheme: reqCreateFitMode === "spec" ? "driver_passenger_rear" : "none",
                           status: "active",
@@ -495,6 +529,9 @@ export function PartTypesSettings({ owner, onClose, fullPage }: { owner: boolean
                 <p className="font-body-sm text-on-surface-variant">Choose Create part type on a pending row to open the form.</p>
               </div>
             ) : null}
+            <SortedByRoam token={session?.access_token ?? ""} owner={owner} />
+            {/* Answers teach Roam §5.3: what Roam remembers from the owner's answers, with Undo. */}
+            <LearnedFromYou token={session?.access_token ?? ""} />
           </div>
         </div>
         </div>

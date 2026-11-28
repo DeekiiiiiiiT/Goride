@@ -7,6 +7,7 @@ import { TollPlaza } from '../types/toll';
 import { API_ENDPOINTS } from './apiConfig';
 import { catalogPages } from '@roam/api-client';
 import type { CompatiblePartsResponse } from '../types/partSourcing';
+import type { DriverCarService } from '../types/maintenance';
 import { compressImage, OCR_COMPRESS_OPTS } from '../utils/compressImage';
 import { isTollCategory } from '../utils/tollCategoryHelper';
 import { unwrapFuelEntriesPayload } from '@roam/fuel-core';
@@ -1587,12 +1588,25 @@ export const api = {
       return response.json();
   },
 
-  async listInspectionTemplates() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance-inspection-templates`, {
+  /** `code` picks one checklist — the driver's walk-around is "pre_shift" (maintenance step 13). */
+  async listInspectionTemplates(code?: string) {
+    const q = code ? `?code=${encodeURIComponent(code)}` : "";
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance-inspection-templates${q}`, {
       headers: await getHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to fetch inspection templates");
     return response.json() as Promise<{ items?: unknown[] }>;
+  },
+
+  /** Step 13: My car kit — do-not-drive state, the next 3 due items, the calm line and the open work order. */
+  async getMaintenanceDriverCar(vehicleId?: string | null) {
+    const q = vehicleId ? `?vehicleId=${encodeURIComponent(vehicleId)}` : "";
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance-driver-car${q}`, {
+      headers: await getHeaders(null),
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error((json as { error?: string }).error || "Could not load the car's service");
+    return json as DriverCarService;
   },
 
   async saveInspectionFindings(payload: Record<string, unknown>) {

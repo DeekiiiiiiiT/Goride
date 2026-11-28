@@ -42,27 +42,113 @@ const normNum = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 export type CarBuild = { startYear: number | null; startMonth?: number | null; endYear: number | null; endMonth?: number | null };
 
-/** Build periods a catalogue line states: "11.2016 - 09.2020", "09.2020 - ...", "Production years 2016 2017 2018". */
+/**
+ * Build periods a catalogue line states (R7 / SP-30). Reads month-first and year-first dates, month names, a year alone,
+ * ranges joined by "-", "–", "~" or "to", and an open end ("11.2016 -", "09.2020 - present").
+ * A bare month is that month; a bare year is January to December of it.
+ * SP-40: a date counts only when it stands on its own — no letter, digit or number-hyphen touching it on either side —
+ * so "88568-52010" and "90919-02016" carry no date. The inside of a range (its separator) is not a touching side.
+ */
+const MONTH_NAME = "(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)";
+const DATE_BODY = `(?:\\d{1,2}[./]\\d{4}|\\d{4}[./-]\\d{1,2}|\\d{4}(?!\\d)(?![./]\\d{1,2}(?!\\d))(?!-\\d{1,2}(?!\\d))|${MONTH_NAME}\\.?\\s+\\d{4})`;
+const DATE_START = `(?<![A-Za-z0-9-])${DATE_BODY}`;
+const DATE_END = `${DATE_BODY}(?![A-Za-z0-9-])`;
+const DATE_ANY = `(?<![A-Za-z0-9-])${DATE_BODY}(?![A-Za-z0-9-])`;
+const OPEN_END = `(?:\\.{2,3}|…|now|present)`;
+const MONTH_NAMES: Record<string, number> = {
+  jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3, apr: 4, april: 4, may: 5, jun: 6, june: 6,
+  jul: 7, july: 7, aug: 8, august: 8, sep: 9, sept: 9, september: 9, oct: 10, october: 10, nov: 11,
+  november: 11, dec: 12, december: 12,
+};
+
+/** One date the reader found, as a month range. A bare year is its whole year. */
+function datePeriod(token: string): { from: number; to: number } | null {
+  const s = String(token ?? "").trim();
+  const goodYear = (y: number) => Number.isInteger(y) && y >= 1950 && y <= 2100;
+  const month = (m: number) => Number.isInteger(m) && m >= 1 && m <= 12;
+  let m = s.match(/^(\d{1,2})[./](\d{4})$/);
+  if (m) return month(Number(m[1])) && goodYear(Number(m[2])) ? { from: Number(m[2]) * 12 + Number(m[1]), to: Number(m[2]) * 12 + Number(m[1]) } : null;
+  m = s.match(/^(\d{4})[./-](\d{1,2})$/);
+  if (m) return month(Number(m[2])) && goodYear(Number(m[1])) ? { from: Number(m[1]) * 12 + Number(m[2]), to: Number(m[1]) * 12 + Number(m[2]) } : null;
+  m = s.match(/^(\d{4})$/);
+  if (m) return goodYear(Number(m[1])) ? { from: Number(m[1]) * 12 + 1, to: Number(m[1]) * 12 + 12 } : null;
+  m = s.match(new RegExp(`^(${MONTH_NAME})\\.?\\s+(\\d{4})$`, "i"));
+  if (m) {
+    const mm = MONTH_NAMES[m[1].toLowerCase()];
+    return mm && goodYear(Number(m[2])) ? { from: Number(m[2]) * 12 + mm, to: Number(m[2]) * 12 + mm } : null;
+  }
+  return null;
+}
+
 export function periodsOnLine(line: string): Array<{ from: number; to: number }> {
+  const text = String(line ?? "");
   const out: Array<{ from: number; to: number }> = [];
-  const re = /\b(\d{1,2})[./](\d{4})\s*[-–—~]\s*(?:(\d{1,2})[./](\d{4})|\.{2,3}|…|now|present)?/gi;
+  const taken: Array<[number, number]> = [];
+  const free = (start: number, end: number) => !taken.some(([a, b]) => start < b && end > a);
+
   let m: RegExpExecArray | null;
-  while ((m = re.exec(line))) {
-    const from = Number(m[2]) * 12 + Number(m[1]);
-    const to = m[4] ? Number(m[4]) * 12 + Number(m[3]) : Number.POSITIVE_INFINITY;
-    if (Number(m[1]) >= 1 && Number(m[1]) <= 12) out.push({ from, to });
-  }
-  // Year-only ranges: "2016-2020", "2020—2024", "2020 - now".
-  const yr = /(?<![\d./-])((?:19|20)\d{2})\s*[-–—~]\s*((?:19|20)\d{2}|now|present|\.{2,3}|…)(?![\d./-])/gi;
-  while ((m = yr.exec(line))) {
-    const end = /^\d{4}$/.test(m[2]) ? Number(m[2]) * 12 + 12 : Number.POSITIVE_INFINITY;
-    out.push({ from: Number(m[1]) * 12 + 1, to: end });
-  }
-  const years = line.match(/production\s+years?\s*:?\s*((?:(?:19|20)\d{2}[\s,]*)+)/i);
-  if (years) {
-    const ys = years[1].match(/(19|20)\d{2}/g)!.map(Number);
+  // "Production years 2016 2017 2018" stays one range.
+  const years = new RegExp(`production\\s+years?\\s*:?\\s*((?:(?:19|20)\\d{2}[\\s,]*)+)`, "gi");
+  while ((m = years.exec(text))) {
+    const ys = m[1].match(/(19|20)\d{2}/g)!.map(Number);
     out.push({ from: Math.min(...ys) * 12 + 1, to: Math.max(...ys) * 12 + 12 });
+    taken.push([m.index, m.index + m[0].length]);
   }
+
+  // Ranges with an end: 11.2016 - 09.2020 / 2016/11 ~ 2020/09 / Nov 2016 to Mar 2020.
+  const ranges = new RegExp(`(${DATE_START})\\s*(?:-|–|—|~|\\bto\\b)\\s*(${DATE_END}|${OPEN_END})`, "gi");
+  while ((m = ranges.exec(text))) {
+    const a = datePeriod(m[1]);
+    const open = new RegExp(`^${OPEN_END}$`, "i").test(String(m[2]).trim());
+    const b = open ? null : datePeriod(m[2]);
+    // A token that isn't a real date (a 4-digit code, an out-of-range year) must not eat the span: retry one
+    // character later, so "5547 | 11.2018 | 09.2020" still finds its two dates.
+    if (!a || (!open && !b) || !free(m.index, m.index + m[0].length)) {
+      ranges.lastIndex = m.index + 1;
+      continue;
+    }
+    out.push({ from: a.from, to: b ? b.to : Number.POSITIVE_INFINITY });
+    taken.push([m.index, m.index + m[0].length]);
+  }
+
+  // R2 joins a table row's cells with " | ": a From cell and a To cell are one range ("11.2016 | 11.2018").
+  const piped = new RegExp(`(${DATE_START})\\s*\\|\\s*(${DATE_END}|${OPEN_END})`, "gi");
+  while ((m = piped.exec(text))) {
+    const a = datePeriod(m[1]);
+    const open = new RegExp(`^${OPEN_END}$`, "i").test(String(m[2]).trim());
+    const b = open ? null : datePeriod(m[2]);
+    if (!a || (!open && !b) || !free(m.index, m.index + m[0].length)) {
+      piped.lastIndex = m.index + 1;
+      continue;
+    }
+    out.push({ from: a.from, to: b ? b.to : Number.POSITIVE_INFINITY });
+    taken.push([m.index, m.index + m[0].length]);
+  }
+
+  // An open end: "11.2016 -" at the end of the line or before a space/punctuation ("11.2016 - present" is above).
+  const openEnd = new RegExp(`(${DATE_START})\\s*(?:-|–|—|~)\\s*(?=$|[\\s,;|)])`, "g");
+  while ((m = openEnd.exec(text))) {
+    const a = datePeriod(m[1]);
+    if (!a || !free(m.index, m.index + m[0].length)) {
+      openEnd.lastIndex = m.index + 1;
+      continue;
+    }
+    out.push({ from: a.from, to: Number.POSITIVE_INFINITY });
+    taken.push([m.index, m.index + m[0].length]);
+  }
+
+  // A date on its own: 11.2016, 11/2016, 2016/11, 2016-11, 2016.11, Nov 2016, 2016.
+  const one = new RegExp(DATE_ANY, "gi");
+  while ((m = one.exec(text))) {
+    const p = datePeriod(m[0]);
+    if (!free(m.index, m.index + m[0].length) || !p) {
+      one.lastIndex = m.index + 1;
+      continue;
+    }
+    out.push(p);
+    taken.push([m.index, m.index + m[0].length]);
+  }
+
   return out;
 }
 
@@ -91,7 +177,12 @@ export function versionCodeOnLine(pasted: string, frame: string | null | undefin
     // The page may write it with its emissions prefix too ("DBA-M900A-AGBVE").
     const re = new RegExp(`(?<![A-Z0-9])(?:[A-Z0-9]{2,3}-)?(${f}-[A-Z0-9]{3,8})(?![A-Z0-9])`, "g");
     let m: RegExpExecArray | null;
-    while ((m = re.exec(text))) found.add(m[1]);
+    while ((m = re.exec(text))) {
+      // SP-12: a frame number ("M900A-0344862") ends in digits only and is never the version.
+      const suffix = m[1].slice(m[1].lastIndexOf("-") + 1);
+      if (/^\d+$/.test(suffix)) continue;
+      found.add(m[1]);
+    }
   }
   // Only one version named → that's the one used; several (or none) → remember nothing.
   return found.size === 1 ? [...found][0] : null;
@@ -166,7 +257,9 @@ export function typedLooksLikePartNumber(typed: string, line: string, identity: 
   const t = typed.trim().toUpperCase();
   const n = normNum(t);
   if (n.length < 5 || !/\d/.test(n) || !/^[A-Z0-9][A-Z0-9 .\-/]*$/.test(t)) return false;
-  if (YEAR_SHAPE.test(n) || FRAME_SHAPE.test(t)) return false;
+  // A date ("11.2016", "2016-11") and a bare year are never a part number (P1 / R7).
+  if (YEAR_SHAPE.test(n) || /^\d{1,2}[./]\d{4}$/.test(t) || /^\d{4}[./-]\d{1,2}$/.test(t)) return false;
+  if (FRAME_SHAPE.test(t)) return false;
   if (identity.map(normNum).filter(Boolean).some((c) => n === c || n.includes(c))) return false;
   // Codes the page lists after "Frame", "Engine" or "Model" describe the car, not the part.
   const carWords = line.match(/\b(?:frame|engine|model)\b[:\s]+((?:[A-Z0-9][A-Z0-9-]*\s*){1,4})/gi) ?? [];
@@ -227,7 +320,7 @@ export type CheckAnswers = {
     side?: "left" | "right" | null;
     value?: string | null;
     valueAgain?: string | null;
-    dates?: { fromMonth?: number | null; fromYear: number; toMonth?: number | null; toYear: number } | null;
+    dates?: { fromMonth?: number | null; fromYear: number; toMonth?: number | null; toYear?: number | null } | null;
   }> | null;
 };
 
@@ -360,10 +453,14 @@ export function answersGate(input: {
   jobAxle?: "front" | "rear" | null;
   /** RE-70: when the car was built (server's own record) — a change month must fall inside it. */
   build?: CarBuild | null;
+  /** Owner 27 Nov: a spec checked on any page about the car (owner's manual…): "is it for your car?" is a Yes, no model code. */
+  anyPage?: boolean;
 }): AnswersResult {
   const a = input.answers ?? {};
   // A remembered version is checked with Yes/No; otherwise the owner types the model shown at the top.
-  if (input.knownCode ? a.versionOk !== true : !String(a.versionCode ?? "").trim()) return { ok: false, reason: "version_no" };
+  if (input.anyPage) {
+    if (a.versionOk !== true) return { ok: false, reason: "version_no" };
+  } else if (input.knownCode ? a.versionOk !== true : !String(a.versionCode ?? "").trim()) return { ok: false, reason: "version_no" };
   if (a.partFound !== true) return { ok: false, reason: "part_not_found" };
   if (a.datesOk !== true) return { ok: false, reason: "dates_no" };
   const listed = input.jobType === "part" && Array.isArray(a.numbers) && a.numbers.length > 0;
@@ -379,7 +476,7 @@ export function answersGate(input: {
   if (!placed && input.needsSide && a.sideOk !== true) return { ok: false, reason: "side_no" };
 
   let versionCode: string | null = null;
-  if (!input.knownCode && a.versionCode && String(a.versionCode).trim()) {
+  if (!input.anyPage && !input.knownCode && a.versionCode && String(a.versionCode).trim()) {
     const typed = String(a.versionCode).trim().toUpperCase();
     // With a frame on file the model must be "<frame>-<suffix>"; without one, any model-like text is kept as typed.
     versionCode = input.frame ? versionCodeOnLine(typed, input.frame) : /^[A-Z0-9][A-Z0-9-]{3,39}$/.test(typed) ? typed : null;
@@ -435,13 +532,17 @@ export function answersGate(input: {
       let ty: number | null = null;
       if (n.dates) {
         from = monthIndex(n.dates.fromYear, n.dates.fromMonth, false);
-        to = monthIndex(n.dates.toYear, n.dates.toMonth, true);
+        // R7: an open end ("11.2016 -") has no end year: it covers every year from its start.
+        const openEnded = n.dates.toYear == null;
+        to = openEnded ? Number.POSITIVE_INFINITY : monthIndex(n.dates.toYear, n.dates.toMonth, true);
         if (from == null || to == null || to < from) return { ok: false, reason: "bad_dates" };
         // A number whose dates miss the car's build altogether isn't for this car.
         if ((bStart != null && to < bStart) || (bEnd != null && from > bEnd)) return { ok: false, reason: "dates_no" };
         fy = Number(n.dates.fromYear);
-        ty = Number(n.dates.toYear);
-        text = `${siteDateText(fy, n.dates.fromMonth)} – ${siteDateText(ty, n.dates.toMonth)}`;
+        ty = openEnded ? null : Number(n.dates.toYear);
+        text = openEnded
+          ? `${siteDateText(fy, n.dates.fromMonth)} – now`
+          : `${siteDateText(fy, n.dates.fromMonth)} – ${siteDateText(Number(n.dates.toYear), n.dates.toMonth)}`;
       }
       rows.push({ axle, side, detected: r.detected, from, to, text, fy, ty });
     }

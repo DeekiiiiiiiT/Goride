@@ -5,6 +5,10 @@ import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { toast } from "sonner";
 
+/** Step 11: said instead of "No linked work order". A request without one was sent before work orders existed. */
+const NO_WORK_ORDER =
+  "This request was sent before work orders were added, so it can't be approved here. Use Log service on the car to record the work.";
+
 type RequestRow = {
   id: string;
   vehicle_id: string;
@@ -17,9 +21,12 @@ type RequestRow = {
 export function MaintenanceRequestsTab({
   vehicles,
   onApproved,
+  onOpenWorkOrder,
 }: {
   vehicles: Array<{ vehicleId: string; licensePlate?: string; make?: string; model?: string }>;
   onApproved?: () => void;
+  /** Step 11 (MER-15): each request opens the work order it belongs to. */
+  onOpenWorkOrder?: (workOrderId: string) => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<RequestRow[]>([]);
@@ -55,7 +62,7 @@ export function MaintenanceRequestsTab({
   const approve = async (row: RequestRow) => {
     const woId = workOrderIdFor(row);
     if (!woId) {
-      toast.error("No linked work order");
+      toast.error(NO_WORK_ORDER);
       return;
     }
     await api.triageMaintenanceWorkOrder(woId, { action: "approve" });
@@ -69,7 +76,7 @@ export function MaintenanceRequestsTab({
     const row = rows.find((r) => r.id === declineId);
     const woId = row ? workOrderIdFor(row) : "";
     if (!woId) {
-      toast.error("No linked work order");
+      toast.error(NO_WORK_ORDER);
       return;
     }
     await api.triageMaintenanceWorkOrder(woId, { action: "decline", reason: declineReason.trim() });
@@ -110,6 +117,11 @@ export function MaintenanceRequestsTab({
                   ) : null}
                 </div>
                 <div className="flex gap-2 shrink-0">
+                  {onOpenWorkOrder && workOrderIdFor(row) ? (
+                    <Button type="button" size="sm" variant="outline" onClick={() => onOpenWorkOrder(workOrderIdFor(row))}>
+                      Open work order
+                    </Button>
+                  ) : null}
                   <Button type="button" size="sm" onClick={() => void approve(row)}>Approve</Button>
                   <Button type="button" size="sm" variant="outline" onClick={() => setDeclineId(row.id)}>Decline</Button>
                 </div>

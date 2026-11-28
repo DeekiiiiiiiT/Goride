@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"secondary-container":"#dae2fd","inverse-primary":"#b4c5ff","tertiary":"#005323","surface-container":"#ecedf8","primary-fixed":"#dbe1ff","on-surface-variant":"#434655","secondary-fixed-dim":"#bec6e0","secondary":"#565e74","on-tertiary-fixed":"#00210a","primary-fixed-dim":"#b4c5ff","inverse-surface":"#2e3038","error-container":"#ffdad6","primary-container":"#0153dc","surface-variant":"#e1e2ec","on-secondary-fixed-variant":"#3f465c","on-tertiary-fixed-variant":"#005323","on-tertiary-container":"#91eea1","on-error-container":"#93000a","primary":"#003ea9","surface-container-low":"#f2f3fe","outline":"#737686","secondary-fixed":"#dae2fd","on-surface":"#191b23","on-tertiary":"#ffffff","on-primary-fixed":"#00174b","tertiary-container":"#006e31","background":"#faf8ff","on-secondary-container":"#5c647a","surface-tint":"#0053db","surface":"#faf8ff","on-background":"#191b23","surface-dim":"#d8d9e4","outline-variant":"#c3c6d7","surface-container-lowest":"#ffffff","on-primary-fixed-variant":"#003ea8","surface-container-highest":"#e1e2ec","on-secondary":"#ffffff","tertiary-fixed":"#9af7aa","inverse-on-surface":"#eff0fb","on-primary":"#ffffff","on-primary-container":"#ced8ff","on-secondary-fixed":"#131b2e","surface-container-high":"#e7e7f2","error":"#ba1a1a","on-error":"#ffffff","tertiary-fixed-dim":"#7fda90","surface-bright":"#faf8ff"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},spacing:{"gutter":"1rem","space-xs":"0.25rem","space-base":"1rem","margin":"1rem","space-xxs":"0.125rem","gutter-desktop":"1.5rem","space-2xl":"3rem","space-md":"0.75rem","space-sm":"0.5rem","space-lg":"1.5rem","space-xl":"2rem","margin-desktop":"2rem"},fontFamily:{"headline-md":["Inter"],"mono-data-md":["JetBrains Mono"],"label-lg":["Inter"],"headline-xl-mobile":["Inter"],"headline-sm":["Inter"],"body-md":["Inter"],"label-md":["Inter"],"mono-data-sm":["JetBrains Mono"],"mono-metric-lg":["JetBrains Mono"],"headline-xl":["Inter"],"body-lg":["Inter"],"headline-lg":["Inter"],"label-sm":["Inter"],"body-sm":["Inter"]},fontSize:{"headline-md":["18px",{lineHeight:"24px",letterSpacing:"-0.01em",fontWeight:"600"}],"mono-data-md":["12px",{lineHeight:"16px",letterSpacing:"-0.01em",fontWeight:"400"}],"label-lg":["13px",{lineHeight:"16px",letterSpacing:"0.01em",fontWeight:"500"}],"headline-xl-mobile":["24px",{lineHeight:"32px",letterSpacing:"-0.015em",fontWeight:"600"}],"headline-sm":["15px",{lineHeight:"20px",letterSpacing:"-0.005em",fontWeight:"600"}],"body-md":["13px",{lineHeight:"18px",fontWeight:"400"}],"label-md":["11px",{lineHeight:"14px",letterSpacing:"0.02em",fontWeight:"500"}],"mono-data-sm":["11px",{lineHeight:"14px",fontWeight:"400"}],"mono-metric-lg":["16px",{lineHeight:"20px",letterSpacing:"-0.02em",fontWeight:"500"}],"headline-xl":["32px",{lineHeight:"40px",letterSpacing:"-0.02em",fontWeight:"600"}],"body-lg":["15px",{lineHeight:"22px",fontWeight:"400"}],"headline-lg":["22px",{lineHeight:"28px",letterSpacing:"-0.015em",fontWeight:"600"}],"label-sm":["10px",{lineHeight:"12px",letterSpacing:"0.03em",fontWeight:"600"}],"body-sm":["12px",{lineHeight:"16px",fontWeight:"400"}]}}}}</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-screen w-64 bg-inverse-surface z-50 flex flex-col overflow-y-auto"><div class="h-14 px-space-md flex items-center gap-space-sm"><div class="w-7 h-7 rounded-lg bg-primary-container flex items-center justify-center text-on-primary shadow-sm"><span class="material-symbols-outlined text-[18px]">shield</span></div><div class="flex flex-col"><span class="font-label-lg text-label-lg font-semibold text-inverse-on-surface tracking-tight leading-none">Dominion</span><span class="font-label-sm text-label-sm text-outline-variant leading-none mt-1">Roam Admin Console</span></div></div><nav class="flex-1 px-space-sm py-space-sm space-y-space-md" data-active-classes="bg-primary-container text-on-primary font-medium rounded-lg"><div class="space-y-space-xxs"><div class="px-space-sm py-space-xxs font-label-sm text-label-sm uppercase tracking-wider text-outline-variant font-semibold">Master Data</div><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/20 hover:text-inverse-on-surface transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span><span class="font-label-lg text-label-lg">Overview</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/20 hover:text-inverse-on-surface transition-colors" data-path="vehicles-active" href="#"><span class="material-symbols-outlined text-[18px]">directions_car</span><span class="font-label-lg text-label-lg">Vehicles active</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/20 hover:text-inverse-on-surface transition-colors" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">map</span><span class="font-label-lg text-label-lg">Places and Maps</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/20 hover:text-inverse-on-surface transition-colors" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span class="font-label-lg text-label-lg">Fuel</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/20 hover:text-inverse-on-surface transition-colors" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px]">toll</span><span class="font-label-lg text-label-lg">Tolls</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/20 hover:text-inverse-on-surface transition-colors" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span class="font-label-lg text-label-lg">Tax and Vendors</span></a></div><div class="space-y-space-xxs"><div class="px-space-sm py-space-xxs font-label-sm text-label-sm uppercase tracking-wider text-outline-variant font-semibold">Engines</div><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/20 hover:text-inverse-on-surface transition-colors" data-path="fuel-brain" href="#"><span class="material-symbols-outlined text-[18px]">psychology</span><span class="font-label-lg text-label-lg">Fuel Brain</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/20 hover:text-inverse-on-surface transition-colors" data-path="toll-brain" href="#"><span class="material-symbols-outlined text-[18px]">memory</span><span class="font-label-lg text-label-lg">Toll Brain</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/20 hover:text-inverse-on-surface transition-colors" data-path="matching-brain" href="#"><span class="material-symbols-outlined text-[18px]">hub</span><span class="font-label-lg text-label-lg">Matching Brain</span></a></div><div class="space-y-space-xxs"><div class="px-space-sm py-space-xxs font-label-sm text-label-sm uppercase tracking-wider text-outline-variant font-semibold">Distribution</div><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/20 hover:text-inverse-on-surface transition-colors" data-path="apps" href="#"><span class="material-symbols-outlined text-[18px]">apps</span><span class="font-label-lg text-label-lg">Apps</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/20 hover:text-inverse-on-surface transition-colors" data-path="data-api" href="#"><span class="material-symbols-outlined text-[18px]">api</span><span class="font-label-lg text-label-lg">Data API</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/20 hover:text-inverse-on-surface transition-colors" data-path="change-requests" href="#"><span class="material-symbols-outlined text-[18px]">published_with_changes</span><span class="font-label-lg text-label-lg">Change requests</span></a></div><div class="space-y-space-xxs"><div class="px-space-sm py-space-xxs font-label-sm text-label-sm uppercase tracking-wider text-outline-variant font-semibold">Platform</div><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/20 hover:text-inverse-on-surface transition-colors" data-path="staff-and-roles" href="#"><span class="material-symbols-outlined text-[18px]">badge</span><span class="font-label-lg text-label-lg">Staff and roles</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/20 hover:text-inverse-on-surface transition-colors" data-path="activity-log" href="#"><span class="material-symbols-outlined text-[18px]">history</span><span class="font-label-lg text-label-lg">Activity log</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/20 hover:text-inverse-on-surface transition-colors" data-path="platform-ops" href="#"><span class="material-symbols-outlined text-[18px]">terminal</span><span class="font-label-lg text-label-lg">Platform Ops</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/20 hover:text-inverse-on-surface transition-colors" data-path="global-settings" href="#"><span class="material-symbols-outlined text-[18px]">settings</span><span class="font-label-lg text-label-lg">Global settings</span></a></div><div class="space-y-space-xxs"><div class="px-space-sm py-space-xxs font-label-sm text-label-sm uppercase tracking-wider text-outline-variant font-semibold">Back Office</div><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/20 hover:text-inverse-on-surface transition-colors" data-path="gct-registrations" href="#"><span class="material-symbols-outlined text-[18px]">domain</span><span class="font-label-lg text-label-lg">GCT registrations</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/20 hover:text-inverse-on-surface transition-colors" data-path="ledger" href="#"><span class="material-symbols-outlined text-[18px]">account_balance</span><span class="font-label-lg text-label-lg">Ledger</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/20 hover:text-inverse-on-surface transition-colors" data-path="remittance" href="#"><span class="material-symbols-outlined text-[18px]">payments</span><span class="font-label-lg text-label-lg">Remittance</span></a></div></nav></aside><div class="pl-64 flex flex-col min-h-screen"><header class="fixed top-0 left-64 right-0 h-14 bg-surface/90 backdrop-blur-md z-40 shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-14 px-space-lg flex items-center justify-between gap-space-md"><div class="flex-1 max-w-lg"><div class="relative flex items-center w-full"><span class="material-symbols-outlined absolute left-space-sm text-on-surface-variant text-[18px]">search</span><input class="w-full h-9 pl-9 pr-14 rounded-lg bg-surface-container-low text-on-surface placeholder:text-outline text-body-md font-body-md focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary" placeholder="Search entities, engines, routes…" type="text"/><div class="absolute right-space-sm flex items-center pointer-events-none"><kbd class="px-1.5 py-0.5 rounded text-label-sm font-mono-data-sm bg-surface-container-high text-on-surface-variant">⌘K</kbd></div></div></div><div class="flex items-center gap-space-md"><button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" title="Toggle theme" type="button"><span class="material-symbols-outlined text-[18px]">dark_mode</span></button><div class="flex items-center gap-space-sm pl-space-sm"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="flex flex-col text-left"><span class="font-label-lg text-label-lg font-medium text-on-surface leading-tight">Deeki T</span><span class="font-label-sm text-label-sm text-on-surface-variant leading-tight">Owner</span></div></div></div></div></header><main class="flex-1 w-full pt-14 bg-surface"><div class="flex flex-col w-full">
+<!-- Sub-header / Context Breadcrumb Bar -->
+<div class="w-full bg-surface-container-lowest shadow-sm px-gutter-desktop py-space-md">
+<div class="max-w-[1360px] mx-auto flex flex-col gap-space-sm">
+<!-- Breadcrumb & Back Action -->
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs text-on-surface-variant font-label-md text-label-md">
+<span class="hover:text-primary cursor-pointer transition-colors">Dominion</span>
+<span class="material-symbols-outlined text-[14px] text-outline">chevron_right</span>
+<span class="hover:text-primary cursor-pointer transition-colors">Master data</span>
+<span class="material-symbols-outlined text-[14px] text-outline">chevron_right</span>
+<span class="hover:text-primary cursor-pointer transition-colors">Vehicles</span>
+<span class="material-symbols-outlined text-[14px] text-outline">chevron_right</span>
+<span class="hover:text-primary cursor-pointer transition-colors">Maintenance templates</span>
+<span class="material-symbols-outlined text-[14px] text-outline">chevron_right</span>
+<span class="font-medium text-on-surface">Honda Fit</span>
+</div>
+<button class="inline-flex items-center gap-space-xs px-space-sm py-1 rounded-lg text-secondary hover:text-on-surface hover:bg-surface-container-low transition-colors font-label-lg text-label-lg" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_back</span>
+<span>Manuals</span>
+</button>
+</div>
+<!-- Template Identity Title Block -->
+<div class="flex items-center justify-between pt-1">
+<div class="flex items-baseline gap-space-md">
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Honda Fit 2013–2020 · 1.5 hybrid</h1>
+<span class="font-mono-data-sm text-mono-data-sm text-secondary bg-surface-container-high px-2 py-0.5 rounded-full">SPEC-REF #HF15-GK3</span>
+</div>
+<div class="flex items-center gap-space-sm">
+<span class="inline-flex items-center gap-1 font-label-md text-label-md text-tertiary bg-tertiary-fixed/30 px-2.5 py-1 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Master Blueprint
+          </span>
+</div>
+</div>
+<!-- Segmented Pill Tab Bar -->
+<div class="flex items-center gap-space-xs pt-space-xs overflow-x-auto no-scrollbar">
+<button class="inline-flex items-center gap-space-xs px-3.5 py-1.5 rounded-full font-label-lg text-label-lg text-secondary hover:bg-surface-container-low hover:text-on-surface transition-colors whitespace-nowrap" type="button">
+<span>Part schedules</span>
+<span class="font-mono-data-sm text-mono-data-sm px-1.5 py-0.2 rounded-full bg-surface-container-high text-on-surface-variant">16</span>
+</button>
+<button class="inline-flex items-center gap-space-xs px-3.5 py-1.5 rounded-full font-label-lg text-label-lg bg-primary-container text-on-primary font-semibold shadow-sm transition-colors whitespace-nowrap" type="button">
+<span>Manuals</span>
+<span class="font-mono-data-sm text-mono-data-sm px-1.5 py-0.2 rounded-full bg-white text-primary font-bold">2</span>
+</button>
+<button class="inline-flex items-center gap-space-xs px-3.5 py-1.5 rounded-full font-label-lg text-label-lg text-secondary hover:bg-surface-container-low hover:text-on-surface transition-colors whitespace-nowrap" type="button">
+<span>Service packages</span>
+<span class="font-mono-data-sm text-mono-data-sm px-1.5 py-0.2 rounded-full bg-surface-container-high text-on-surface-variant">5</span>
+</button>
+<button class="inline-flex items-center gap-space-xs px-3.5 py-1.5 rounded-full font-label-lg text-label-lg text-secondary hover:bg-surface-container-low hover:text-on-surface transition-colors whitespace-nowrap" type="button">
+<span>Jobs</span>
+<span class="font-mono-data-sm text-mono-data-sm px-1.5 py-0.2 rounded-full bg-surface-container-high text-on-surface-variant">167</span>
+</button>
+<button class="inline-flex items-center gap-space-xs px-3.5 py-1.5 rounded-full font-label-lg text-label-lg text-secondary hover:bg-surface-container-low hover:text-on-surface transition-colors whitespace-nowrap" type="button">
+<span>Supplies</span>
+<span class="font-mono-data-sm text-mono-data-sm px-1.5 py-0.2 rounded-full bg-surface-container-high text-on-surface-variant">57</span>
+</button>
+<button class="inline-flex items-center gap-space-xs px-3.5 py-1.5 rounded-full font-label-lg text-label-lg text-secondary hover:bg-surface-container-low hover:text-on-surface transition-colors whitespace-nowrap" type="button">
+<span>Review list</span>
+<span class="font-mono-data-sm text-mono-data-sm px-1.5 py-0.2 rounded-full bg-surface-container-high text-on-surface-variant">0</span>
+</button>
+<button class="inline-flex items-center gap-space-xs px-3.5 py-1.5 rounded-full font-label-lg text-label-lg text-secondary hover:bg-surface-container-low hover:text-on-surface transition-colors whitespace-nowrap" type="button">
+<span>History</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Primary Workspace Content Canvas -->
+<div class="w-full max-w-[1360px] mx-auto p-gutter-desktop space-y-space-lg">
+<!-- Document Extraction Status Banner (Layer 2 Surface) -->
+<div class="w-full bg-surface-container-lowest rounded-xl shadow-md p-space-lg flex flex-col gap-space-lg">
+<!-- Card Header Block with Region and Status Indicators -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-sm pb-space-sm">
+<div class="flex flex-col gap-space-xs">
+<div class="flex flex-wrap items-center gap-space-sm">
+<h2 class="font-headline-md text-headline-md text-on-surface tracking-tight">
+              Honda Fit — Owner's manual (export edition)
+            </h2>
+<!-- Market Pill: Jamaica Flag Badge -->
+<span class="inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full bg-surface-container-low text-on-surface font-label-md text-label-md">
+<span class="inline-block w-3.5 h-2.5 rounded-sm overflow-hidden shadow-xs relative">
+<svg class="w-full h-full block" viewbox="0 0 600 300">
+<path d="M0 0h600v300H0z" fill="#000000"></path>
+<path d="M0 0l600 300M600 0L0 300" stroke="#f6d32d" stroke-width="60"></path>
+<path d="M0 0h600L300 150zM0 300h600L300 150z" fill="#008000"></path>
+</svg>
+</span>
+<span>Jamaica</span>
+</span>
+<!-- Status Pill: Waiting for you -->
+<span class="inline-flex items-center gap-1 h-6 px-2.5 rounded-full bg-amber-100 text-amber-900 font-label-md text-label-md font-medium">
+<span class="material-symbols-outlined text-[14px] text-amber-700">hourglass_top</span>
+<span>Waiting for you</span>
+</span>
+</div>
+<!-- Muted Technical Metadata Pipeline Information -->
+<div class="flex items-center gap-space-sm text-secondary font-body-sm text-body-sm">
+<span class="font-mono-data-sm text-mono-data-sm">Pages 386–392</span>
+<span>·</span>
+<span class="font-mono-data-sm text-mono-data-sm font-medium text-primary">9 numbers found</span>
+<span>·</span>
+<span>Uploaded 27 Nov 2026 by Deeki T</span>
+<span>·</span>
+<span class="font-mono-data-sm text-mono-data-sm text-outline">DOC-ID: HND-FIT-EXP-MAN-01</span>
+</div>
+</div>
+<div class="flex items-center gap-space-xs">
+<button class="h-8 px-3 rounded-lg bg-surface-container text-secondary hover:bg-surface-variant hover:text-on-surface transition-colors font-label-md text-label-md inline-flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[16px]">visibility</span>
+<span>View source PDF</span>
+</button>
+</div>
+</div>
+<!-- Soft Amber Notification Box (Layer 1 Recessed Bay) -->
+<div class="w-full bg-[#fff4dc] rounded-xl p-space-lg flex flex-col md:flex-row gap-space-lg items-start shadow-xs">
+<!-- Warning Icon and Explanatory Content -->
+<div class="flex-1 flex flex-col gap-space-md">
+<div class="flex items-start gap-space-md">
+<div class="w-10 h-10 rounded-full bg-amber-200/80 flex items-center justify-center shrink-0 text-amber-900 mt-0.5">
+<span class="material-symbols-outlined text-[22px]">warning</span>
+</div>
+<div class="flex flex-col gap-1">
+<h3 class="font-headline-sm text-headline-sm text-amber-950 font-semibold">
+                Pages 391 and 392 could not be read
+              </h3>
+<p class="font-body-md text-body-md text-amber-900/90 leading-relaxed max-w-2xl">
+                They look like a photo of a page. Roam tried to read them as pictures and found nothing. The text contrast, angle distortion, or camera glare prevented automatic metric tokenization.
+              </p>
+</div>
+</div>
+<!-- Remediation Options Inside Amber Container -->
+<div class="flex flex-wrap items-center gap-space-sm pl-13 pt-1">
+<button class="h-9 px-4 rounded-lg bg-white hover:bg-amber-50 text-amber-950 font-label-lg text-label-lg shadow-sm hover:shadow transition-all inline-flex items-center gap-2" type="button">
+<span class="material-symbols-outlined text-[16px] text-amber-800">sync</span>
+<span>Read those 2 pages again</span>
+</button>
+<button class="h-9 px-4 rounded-lg bg-white/70 hover:bg-white text-amber-900 font-label-lg text-label-lg shadow-2xs hover:shadow-xs transition-all inline-flex items-center gap-2" type="button">
+<span class="material-symbols-outlined text-[16px] text-amber-800">edit_document</span>
+<span>Choose different pages</span>
+</button>
+<span class="font-mono-data-sm text-mono-data-sm text-amber-800/80 ml-2">OCR Engine v4.8.2 (Neural-Vision)</span>
+</div>
+</div>
+<!-- Visual Thumbnails Bay: Failed Pages Side-by-Side -->
+<div class="flex items-center gap-space-md shrink-0 self-center md:self-auto pt-2 md:pt-0">
+<!-- Page 391 Card -->
+<div class="flex flex-col items-center gap-space-xs">
+<div class="relative w-28 h-36 bg-surface-container-lowest rounded-lg shadow-md p-2.5 flex flex-col justify-between overflow-hidden cursor-pointer hover:shadow-lg transition-shadow group">
+<!-- Corner Amber Warning Triangle Pill -->
+<div class="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full bg-amber-400 text-amber-950 flex items-center justify-center shadow-xs">
+<span class="material-symbols-outlined text-[13px] font-bold">priority_high</span>
+</div>
+<!-- Subtle Sketched Document Grid Lines -->
+<div class="w-full space-y-1.5 opacity-60 group-hover:opacity-80 transition-opacity">
+<div class="h-1.5 w-12 bg-outline-variant/60 rounded"></div>
+<div class="h-1 w-full bg-surface-variant rounded"></div>
+<div class="h-1 w-full bg-surface-variant rounded"></div>
+<div class="h-1 w-16 bg-surface-variant rounded"></div>
+<!-- Table Mockup Matrix -->
+<div class="mt-2 pt-1.5 grid grid-cols-2 gap-1 bg-surface-container-low/70 p-1 rounded">
+<div class="h-1 w-8 bg-outline-variant/70 rounded"></div>
+<div class="h-1 w-6 bg-outline-variant/70 rounded"></div>
+<div class="h-1 w-10 bg-outline-variant/40 rounded"></div>
+<div class="h-1 w-5 bg-outline-variant/40 rounded"></div>
+<div class="h-1 w-7 bg-outline-variant/40 rounded"></div>
+<div class="h-1 w-8 bg-outline-variant/40 rounded"></div>
+</div>
+<div class="h-1 w-20 bg-surface-variant rounded"></div>
+<div class="h-1 w-full bg-surface-variant rounded"></div>
+</div>
+<!-- Page Footer Detail -->
+<div class="flex justify-between items-center w-full pt-1">
+<span class="font-mono-data-sm text-[9px] text-outline">391</span>
+<span class="material-symbols-outlined text-[12px] text-amber-600">no_photography</span>
+</div>
+</div>
+<span class="font-mono-data-sm text-mono-data-sm font-semibold px-2 py-0.5 rounded-full bg-amber-200/60 text-amber-950">
+              Page 391
+            </span>
+</div>
+<!-- Page 392 Card -->
+<div class="flex flex-col items-center gap-space-xs">
+<div class="relative w-28 h-36 bg-surface-container-lowest rounded-lg shadow-md p-2.5 flex flex-col justify-between overflow-hidden cursor-pointer hover:shadow-lg transition-shadow group">
+<!-- Corner Amber Warning Triangle Pill -->
+<div class="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full bg-amber-400 text-amber-950 flex items-center justify-center shadow-xs">
+<span class="material-symbols-outlined text-[13px] font-bold">priority_high</span>
+</div>
+<!-- Subtle Sketched Document Grid Lines -->
+<div class="w-full space-y-1.5 opacity-60 group-hover:opacity-80 transition-opacity">
+<div class="h-1.5 w-14 bg-outline-variant/60 rounded"></div>
+<div class="h-1 w-full bg-surface-variant rounded"></div>
+<div class="h-1 w-18 bg-surface-variant rounded"></div>
+<!-- Table Mockup Matrix -->
+<div class="mt-2 pt-1.5 grid grid-cols-3 gap-1 bg-surface-container-low/70 p-1 rounded">
+<div class="h-1 w-5 bg-outline-variant/70 rounded"></div>
+<div class="h-1 w-6 bg-outline-variant/70 rounded"></div>
+<div class="h-1 w-5 bg-outline-variant/70 rounded"></div>
+<div class="h-1 w-6 bg-outline-variant/40 rounded"></div>
+<div class="h-1 w-4 bg-outline-variant/40 rounded"></div>
+<div class="h-1 w-7 bg-outline-variant/40 rounded"></div>
+</div>
+<div class="h-1 w-12 bg-surface-variant rounded"></div>
+<div class="h-1 w-full bg-surface-variant rounded"></div>
+</div>
+<!-- Page Footer Detail -->
+<div class="flex justify-between items-center w-full pt-1">
+<span class="font-mono-data-sm text-[9px] text-outline">392</span>
+<span class="material-symbols-outlined text-[12px] text-amber-600">no_photography</span>
+</div>
+</div>
+<span class="font-mono-data-sm text-mono-data-sm font-semibold px-2 py-0.5 rounded-full bg-amber-200/60 text-amber-950">
+              Page 392
+            </span>
+</div>
+</div>
+</div>
+<!-- Action Area: Primary Proceed and Success Validation Status -->
+<div class="flex flex-col sm:flex-row items-center justify-between gap-space-md pt-space-xs">
+<!-- Success State Indicator for Read Pages -->
+<div class="flex items-center gap-space-xs text-on-surface font-body-sm text-body-sm">
+<div class="w-5 h-5 rounded-full bg-tertiary-fixed flex items-center justify-center text-on-tertiary-fixed">
+<span class="material-symbols-outlined text-[14px] font-bold">check</span>
+</div>
+<span class="font-medium text-on-surface">Pages 386–390 read fine.</span>
+<span class="text-secondary ml-1">Extracted 9 interval and fluid capacity metrics.</span>
+</div>
+<!-- Primary High-Impact CTA -->
+<button class="w-full sm:w-auto h-11 px-space-lg rounded-lg bg-primary-container text-on-primary font-label-lg text-label-lg font-semibold shadow-md hover:bg-primary transition-all flex items-center justify-center gap-space-xs" type="button">
+<span>Check the 9 numbers found</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Contextual Baseline Specification Architecture: "What every Fit uses today" -->
+<div class="w-full bg-surface-container-lowest rounded-xl shadow-md p-space-lg flex flex-col gap-space-md">
+<!-- Baseline Header -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-xs pb-space-xs">
+<div>
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-[20px] text-secondary">tune</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold">What every Fit uses today</h3>
+<span class="font-mono-data-sm text-mono-data-sm text-secondary bg-surface-container-high px-2 py-0.5 rounded">Default Model Template</span>
+</div>
+<p class="font-body-sm text-body-sm text-secondary mt-1">
+            Current active fallback standards applied across Honda Fit vehicles prior to manual override verification.
+          </p>
+</div>
+<div class="text-right">
+<span class="font-mono-data-sm text-mono-data-sm text-secondary">Registry Version 14.1</span>
+</div>
+</div>
+<!-- Policy Data Matrix -->
+<div class="w-full overflow-x-auto rounded-lg bg-surface-container-low p-1">
+<table class="w-full text-left font-body-sm text-body-sm">
+<thead>
+<tr class="text-secondary font-label-md text-label-md">
+<th class="py-2.5 px-4 font-medium">Service Item</th>
+<th class="py-2.5 px-4 font-medium">Governing Policy</th>
+<th class="py-2.5 px-4 font-medium">Scheduled Distance Limit</th>
+<th class="py-2.5 px-4 font-medium">Scheduled Time Limit</th>
+<th class="py-2.5 px-4 font-medium">Fluid / Part Spec Ref</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container-high/60 bg-surface-container-lowest rounded-md">
+<!-- Row 1: Engine Oil -->
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="py-3 px-4 font-medium text-on-surface flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-[18px] text-primary">oil_barrel</span>
+<span>Engine oil &amp; filter</span>
+</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1 h-5 px-2 rounded-full bg-slate-100 text-slate-700 font-label-md text-label-md font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+                  Roam policy
+                </span>
+</td>
+<td class="py-3 px-4 font-mono-data-md text-mono-data-md text-on-surface">5,000 km</td>
+<td class="py-3 px-4 font-mono-data-md text-mono-data-md text-on-surface">3 months</td>
+<td class="py-3 px-4 font-mono-data-sm text-mono-data-sm text-secondary">API SN / ILSAC GF-5 0W-20</td>
+</tr>
+<!-- Row 2: Spark Plugs -->
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="py-3 px-4 font-medium text-on-surface flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-[18px] text-secondary">electric_bolt</span>
+<span>Spark plugs (Iridium)</span>
+</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1 h-5 px-2 rounded-full bg-slate-100 text-slate-700 font-label-md text-label-md font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+                  Roam policy
+                </span>
+</td>
+<td class="py-3 px-4 font-mono-data-md text-mono-data-md text-on-surface">100,000 km</td>
+<td class="py-3 px-4 font-mono-data-md text-mono-data-md text-secondary">—</td>
+<td class="py-3 px-4 font-mono-data-sm text-mono-data-sm text-secondary">DILZKAR7C11S</td>
+</tr>
+<!-- Row 3: Brake Fluid -->
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="py-3 px-4 font-medium text-on-surface flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-[18px] text-secondary">speed</span>
+<span>Brake fluid replacement</span>
+</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1 h-5 px-2 rounded-full bg-slate-100 text-slate-700 font-label-md text-label-md font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+                  Roam policy
+                </span>
+</td>
+<td class="py-3 px-4 font-mono-data-md text-mono-data-md text-on-surface">40,000 km</td>
+<td class="py-3 px-4 font-mono-data-md text-mono-data-md text-on-surface">24 months</td>
+<td class="py-3 px-4 font-mono-data-sm text-mono-data-sm text-secondary">DOT 3 or DOT 4 Genuine</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Footnote Banner -->
+<div class="flex items-center gap-space-xs text-secondary font-body-sm text-body-sm pt-1">
+<span class="material-symbols-outlined text-[16px] text-outline">info</span>
+<span>Approved manual numbers will replace Roam policy for this vehicle series. Unverified schedules remain tethered to the global benchmark.</span>
+</div>
+</div>
+</div>
+</div></main></div></body></html>

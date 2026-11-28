@@ -6,8 +6,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "../../auth/AuthContext";
-import { researchApi, type CarCoverage, type CoveragePart, type CoverageSpec } from "../../../services/researchEngineService";
+import {
+  researchApi,
+  type CarCoverage,
+  type CoveragePart,
+  type CoverageSpec,
+  type SavedPageListItem,
+} from "../../../services/researchEngineService";
 import { ResearchJobDrawer } from "./ResearchJobDrawer";
+import { SavedPageOverlay } from "./SavedPageOverlay";
 import {
   D_CARD,
   D_MONO,
@@ -46,13 +53,30 @@ type Props = {
 };
 
 export function CarCoverageTab({ carId, make, model, onOpenParts }: Props) {
-  const { session } = useAuth();
+  const { session, role } = useAuth();
   const token = session?.access_token ?? "";
   const [cov, setCov] = useState<CarCoverage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [drawerJob, setDrawerJob] = useState<{ jobId: string; title: string } | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  // Saved catalogue pages (docs/saved-page-parts-audit.md S2): the upload overlay, opened fresh or on one upload.
+  const [savedPage, setSavedPage] = useState<{ id: string | null } | null>(null);
+  const [savedList, setSavedList] = useState<SavedPageListItem[] | null>(null);
+  const [savedError, setSavedError] = useState<string | null>(null);
+
+  const loadSaved = useCallback(async () => {
+    if (!token) return;
+    setSavedError(null);
+    try {
+      setSavedList(await researchApi.savedPages(token, carId));
+    } catch (e) {
+      setSavedError(e instanceof Error ? e.message : "Couldn't load saved pages");
+    }
+  }, [token, carId]);
+  useEffect(() => {
+    void loadSaved();
+  }, [loadSaved]);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -181,6 +205,9 @@ export function CarCoverageTab({ carId, make, model, onOpenParts }: Props) {
           <PartsButton variant="secondary" className="!min-h-[40px]" disabled={busy} onClick={() => void run(() => researchApi.fillModel(token, make, model), `Every ${model} version is in the queue`)} data-testid="fill-every-version">
             <DIcon name="auto_mode" className="text-[18px]" /> Fill every {model} version
           </PartsButton>
+          <PartsButton variant="secondary" className="!min-h-[40px]" disabled={busy} onClick={() => setSavedPage({ id: null })} data-testid="add-from-saved-page">
+            <DIcon name="upload_file" className="text-[18px]" /> Add from a saved page
+          </PartsButton>
           <PartsButton
             variant="primary"
             className="!min-h-[40px]"
@@ -276,6 +303,13 @@ export function CarCoverageTab({ carId, make, model, onOpenParts }: Props) {
         </div>
       </section>
 
+      <SavedPagesCard
+        items={savedList}
+        error={savedError}
+        onRetry={() => void loadSaved()}
+        onOpen={(id) => setSavedPage({ id })}
+      />
+
       <section className="flex flex-col gap-4">
         <div className="flex flex-col justify-between gap-2 md:flex-row md:items-center">
           <div className="flex items-center gap-2">
@@ -322,7 +356,109 @@ export function CarCoverageTab({ carId, make, model, onOpenParts }: Props) {
           }}
         />
       ) : null}
+
+      {savedPage ? (
+        <SavedPageOverlay
+          token={token}
+          carId={carId}
+          carLabel={[`${cov.make} ${cov.model}`.trim(), cov.chassisCode].filter(Boolean).join(" · ")}
+          savedPageId={savedPage.id}
+          owner={role === "platform_owner"}
+          onClose={() => setSavedPage(null)}
+          onChanged={() => {
+            void load();
+            void loadSaved();
+          }}
+          onCheckPart={(jobId, partType) => {
+            setSavedPage(null);
+            setDrawerJob({ jobId, title: partType });
+          }}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/** S2: "Saved pages read" — each upload with its counts; a row opens that upload's result (S5). */
+function SavedPagesCard({
+  items,
+  error,
+  onRetry,
+  onOpen,
+}: {
+  items: SavedPageListItem[] | null;
+  error: string | null;
+  onRetry: () => void;
+  onOpen: (id: string) => void;
+}) {
+  const day = (iso: string) => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  };
+  return (
+    <section className="flex flex-col gap-4" data-testid="saved-pages-read">
+      <div className="flex items-center gap-2">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#e7e7f3] text-[#0153dc] dark:bg-[#1e293b]">
+          <DIcon name="description" className="text-[20px]" />
+        </div>
+        <h2 className={`text-[18px] font-semibold ${D_TXT}`}>Saved pages read</h2>
+      </div>
+      <div className={`${D_CARD} flex flex-col gap-3 p-6`}>
+        <p className={`text-[14px] ${D_MUTED}`}>Pages you saved and uploaded for this car. Nothing from the file is kept except the part facts.</p>
+        {error && !items ? (
+          <div className="flex flex-wrap items-center justify-between gap-2" data-testid="saved-pages-error">
+            <span className={`text-[14px] ${D_MUTED}`}>Couldn&apos;t load saved pages.</span>
+            <PartsButton variant="secondary" className="!min-h-[40px]" onClick={onRetry}>
+              <DIcon name="refresh" className="text-[16px]" /> Try again
+            </PartsButton>
+          </div>
+        ) : !items ? (
+          <div className="flex flex-col gap-2" data-testid="saved-pages-loading" aria-busy>
+            {[0, 1].map((i) => (
+              <div key={i} className={`h-[68px] animate-pulse rounded-xl ${RE_SOFT} ${i ? "opacity-60" : ""}`} />
+            ))}
+          </div>
+        ) : items.length === 0 ? (
+          <p className={`text-[14px] ${D_TXT}`} data-testid="saved-pages-empty">
+            No saved pages yet. Use Add from a saved page.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {items.map((it) => (
+              <button
+                key={it.id}
+                type="button"
+                onClick={() => onOpen(it.id)}
+                data-testid="saved-page-list-row"
+                className={`flex min-h-[64px] w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors hover:bg-[#ededf9] dark:hover:bg-[#172033] ${RE_SOFT}`}
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-[#5d5f68] dark:bg-[#111a2e] dark:text-[#94a3b8]">
+                  <DIcon name="description" className="text-[20px]" />
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  <span className={`text-[15px] font-semibold ${D_TXT}`}>
+                    {day(it.createdAt)}
+                    {it.domain ? ` · ${it.domain}` : ""}
+                  </span>
+                  {it.status === "stopped" ? (
+                    <span className="flex flex-wrap gap-1.5">
+                      <RePill tone="grey">Stopped, nothing saved</RePill>
+                    </span>
+                  ) : (
+                    <span className="flex flex-wrap gap-1.5">
+                      <RePill tone={it.counts.saved ? "green" : "grey"}>Saved {it.counts.saved}</RePill>
+                      <RePill tone={it.counts.held ? "amber" : "grey"}>Needs you {it.counts.held}</RePill>
+                      <RePill tone="grey-outline">Not a Roam part type {it.counts.not_roam_type}</RePill>
+                    </span>
+                  )}
+                </span>
+                <DIcon name="chevron_right" className={`text-[22px] ${D_MUTED}`} />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 

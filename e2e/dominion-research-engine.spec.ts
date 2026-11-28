@@ -106,6 +106,9 @@ function detail(jobId: string) {
         ...base,
         job: j("browser_check", { fit_descriptor: null }),
         partType: { id: "c-9", name: "Spark plugs" },
+        // Answers teach Roam: the server sends the maker's words (the Toyota seed row of part_maker_word).
+        makerPartName: "PLUG, SPARK",
+        makerSearch: "spark plug",
         browserCheckUrl: "https://www.amayama.com/en/part/toyota/roomy-m900a-plugs",
         knownVersion: { domain: "amayama.com", code: "M900A-AGBVE", url: "https://www.amayama.com/en/part/toyota/roomy-m900a-plugs" },
         proposals: [proposal("p-9", jobId, { brand: "Toyota", part_number: "00000-T0009" })],
@@ -115,6 +118,8 @@ function detail(jobId: string) {
         ...base,
         job: j("browser_check", { fit_descriptor: null }),
         partType: { id: "c-10", name: "Shock absorber", position_scheme: "four_corners" },
+        makerPartName: "ABSORBER ASSY, SHOCK",
+        makerSearch: "shock absorber",
         browserCheckUrl: "https://partsouq.com/en/catalog/toyota/roomy-shocks",
         knownVersion: { domain: "amayama.com", code: "M900A-AGBVE", url: "https://www.amayama.com/en/part/toyota/roomy-m900a-agbve" },
         proposals: [
@@ -322,7 +327,8 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect(page.getByTestId("row-route-line").first()).toContainText("Two makers agree");
     await expect(page.getByTestId("filter-browser_check")).toContainText("7 of 25 open");
     await expect(page.getByTestId("notice-engine_paused")).toContainText("Open research settings");
-    await expect(page.getByTestId("notice-site_blocked")).toContainText("Amayama blocks Roam. Its items are now browser checks.");
+    // Owner 27 Nov: a blocked site is never a banner (it stays in Settings and health).
+    await expect(page.getByTestId("notice-site_blocked")).toHaveCount(0);
     await page.getByTestId("filter-waiting").click();
     await expect(page.getByTestId("parts-row")).toHaveCount(1);
     await page.getByTestId("filter-all").click();
@@ -390,9 +396,12 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect(d.getByTestId("q-part-yes")).toHaveCount(0);
     await d.getByTestId("browser-check-next").click();
     // No remembered version: the row to click in the catalogue's own column words, never a frame code to read.
-    await expect(d.getByTestId("browser-check-instruction")).toContainText("Pick the version of your car that has:");
-    await expect(d.getByTestId("guide-version-row")).toContainText("Engine: 1KRFE");
-    await expect(d.getByTestId("guide-version-row")).toContainText("Built:");
+    // Owner 27 Nov: copy the model code (an engine code finds no car on a parts site), then match dates + engine.
+    await expect(d.getByTestId("guide-find-model")).toContainText("1. Find M900A");
+    await expect(d.getByTestId("guide-find-model")).toContainText("type it in the site's search box");
+    await expect(d.getByRole("button", { name: "Copy M900A" })).toBeVisible();
+    await expect(d.getByTestId("guide-pick-row")).toContainText("with engine 1KRFE");
+    await expect(d.getByTestId("guide-pick-row")).toContainText("built 2016");
     await expect(d.getByTestId("browser-check-counter")).toContainText("7 of 25");
     await expect(d.getByTestId("browser-check-next")).toBeDisabled();
     await d.getByTestId("q-version-code").fill("M900A-AGBVE");
@@ -441,8 +450,11 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect(d.getByTestId("guide-version-row")).toContainText("Model code: M900A-AGBVE");
     await d.getByTestId("q-version-yes").click();
     await d.getByTestId("browser-check-next").click();
-    await expect(d.getByTestId("guide-find-part")).toContainText("Search spark plug");
-    await expect(d.getByTestId("guide-find-part")).toContainText("Do you see PLUG, SPARK");
+    // Owner 27 Nov: Roam's number first, then the word as the fallback.
+    await expect(d.getByTestId("guide-search-number")).toContainText("Search 00000-T0009");
+    await expect(d.getByTestId("guide-search-word")).toContainText("Nothing found? Search spark plug");
+    await expect(d.getByTestId("guide-search-word")).toContainText("look for a row called PLUG, SPARK");
+    await expect(d.getByTestId("guide-found-it")).toContainText("Found it? Press Yes. Not there? Press No, then Not on this page.");
     await d.getByTestId("q-part-yes").click();
     await d.getByTestId("browser-check-next").click();
     // Owner 25 Nov: the number and the dates shown next to it, on one step; years alone are fine.
@@ -487,7 +499,9 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect(d.getByRole("button", { name: "Copy M900A-AGBVE" })).toBeVisible();
     await d.getByTestId("q-version-yes").click();
     await next();
-    await expect(d.getByTestId("copy-icon")).toHaveCount(2);
+    // Owner 27 Nov: Roam's 3 numbers, then the search word and the row name.
+    await expect(d.getByTestId("copy-icon")).toHaveCount(5);
+    await expect(d.getByTestId("guide-search-number")).toContainText("Search 00000-S0001");
     await d.getByTestId("q-part-yes").click();
     await next();
     // Owner 25 Nov: one place per step, each saying how to read the site.
@@ -926,11 +940,11 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect.poll(() => calls.find((x) => x.path === "/fill/item")?.body).toEqual({ vehicleCatalogId: CAR, specKey: "front_brake_type" });
   });
 
-  test("Screen 16 — Overview shows the two banners only", async ({ page }) => {
+  test("Screen 16 — Overview shows the paused banner only", async ({ page }) => {
     await install(page, []);
     await page.goto("/?page=dashboard");
     await expect(page.getByTestId("notice-engine_paused")).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByTestId("notice-site_blocked")).toContainText("Open trusted sources");
+    await expect(page.getByTestId("notice-site_blocked")).toHaveCount(0);
     await shot(page, "16-overview-banners");
     await noDropWords(page);
   });

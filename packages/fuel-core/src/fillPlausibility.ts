@@ -18,6 +18,8 @@ export type FillPlausibilityInput = {
   odometer?: number | null;
   /** Latest odometer already on the vehicle, if known. */
   previousOdometer?: number | null;
+  /** Lowest odometer on a fill made after this one, if any (late entries). */
+  nextOdometer?: number | null;
   tankCapacityLiters?: number | null;
   /** Other fills' prices (amount/liters) used as the week median. */
   peerPrices?: number[];
@@ -30,6 +32,7 @@ export type FillPlausibilityIssue = {
   code:
     | 'zero_liters_with_amount'
     | 'odometer_backwards'
+    | 'odometer_above_next'
     | 'odometer_jump'
     | 'over_tank'
     | 'price_off_median'
@@ -52,6 +55,7 @@ export function assessFillPlausibility(input: FillPlausibilityInput): FillPlausi
   const liters = Number(input.liters) || 0;
   const odo = Number(input.odometer) || 0;
   const prev = Number(input.previousOdometer) || 0;
+  const next = Number(input.nextOdometer) || 0;
   const tank = Number(input.tankCapacityLiters) || 0;
 
   if (amount > 0 && !(liters > 0)) {
@@ -72,6 +76,13 @@ export function assessFillPlausibility(input: FillPlausibilityInput): FillPlausi
       code: 'odometer_jump',
       severity: 'confirm',
       message: `Odometer jumped more than ${ODOMETER_JUMP_KM} km since the last reading.`,
+    });
+  }
+  if (odo > 0 && next > 0 && odo > next) {
+    issues.push({
+      code: 'odometer_above_next',
+      severity: 'block',
+      message: `Odometer is higher than a later fill (${next.toLocaleString('en-US')} km). Check this reading or the later one.`,
     });
   }
   if (tank > 0 && liters > tank) {

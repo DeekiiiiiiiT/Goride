@@ -589,3 +589,108 @@ Deno.test("Owner 25 Nov: a number confirmed on the car maker's catalogue is the 
   assertEquals(confirmedPartKind(false, "Toyota", { brand: "NiBK", match_kind: "aftermarket" }), { brand: "NiBK", matchKind: "aftermarket" });
   assertEquals(confirmedPartKind(false, "Toyota", null), { brand: "Toyota", matchKind: "oem" });
 });
+
+// R7 (SP-30): every date form a catalogue page uses, one test each.
+const at = (y: number, m: number) => y * 12 + m;
+
+Deno.test("R7: 11.2016 reads as November 2016", () => {
+  assertEquals(periodsOnLine("11.2016"), [{ from: at(2016, 11), to: at(2016, 11) }]);
+});
+
+Deno.test("R7: 11/2016 reads as November 2016", () => {
+  assertEquals(periodsOnLine("11/2016"), [{ from: at(2016, 11), to: at(2016, 11) }]);
+});
+
+Deno.test("R7: 2016/11 reads as November 2016", () => {
+  assertEquals(periodsOnLine("2016/11"), [{ from: at(2016, 11), to: at(2016, 11) }]);
+});
+
+Deno.test("R7: 2016-11 reads as November 2016", () => {
+  assertEquals(periodsOnLine("2016-11"), [{ from: at(2016, 11), to: at(2016, 11) }]);
+});
+
+Deno.test("R7: 2016.11 reads as November 2016", () => {
+  assertEquals(periodsOnLine("2016.11"), [{ from: at(2016, 11), to: at(2016, 11) }]);
+});
+
+Deno.test("R7: Nov 2016 reads as November 2016", () => {
+  assertEquals(periodsOnLine("Nov 2016"), [{ from: at(2016, 11), to: at(2016, 11) }]);
+});
+
+Deno.test("R7: November 2016 reads as November 2016", () => {
+  assertEquals(periodsOnLine("November 2016"), [{ from: at(2016, 11), to: at(2016, 11) }]);
+});
+
+Deno.test("R7: 2016 alone reads as the whole year", () => {
+  assertEquals(periodsOnLine("2016"), [{ from: at(2016, 1), to: at(2016, 12) }]);
+  // A sentence's full stop is not a number touching the date (SP-40).
+  assertEquals(periodsOnLine("built 2016."), [{ from: at(2016, 1), to: at(2016, 12) }]);
+});
+
+Deno.test("R7: ranges joined by -, –, ~ and to", () => {
+  for (const sep of ["-", "–", "~", "to"]) {
+    assertEquals(periodsOnLine(`11.2016 ${sep} 09.2020`), [{ from: at(2016, 11), to: at(2020, 9) }], sep);
+  }
+});
+
+Deno.test("R7: an open end is read (11.2016 - and 11.2016 - present)", () => {
+  assertEquals(periodsOnLine("11.2016 -"), [{ from: at(2016, 11), to: Number.POSITIVE_INFINITY }]);
+  assertEquals(periodsOnLine("11.2016 - present"), [{ from: at(2016, 11), to: Number.POSITIVE_INFINITY }]);
+});
+
+Deno.test("R7: a range is one period, not a range plus its two dates", () => {
+  assertEquals(periodsOnLine("48510-B9285 11.2016 - 09.2020").length, 1);
+});
+
+Deno.test("R7: a table row's From and To cells (joined with |) are one range", () => {
+  assertEquals(periodsOnLine("11111-A1001 | 11.2016 | 11.2018"), [{ from: at(2016, 11), to: at(2018, 11) }]);
+  assertEquals(periodsOnLine("22222-B1002 | from frame 0255547 | 11.2018 | 09.2020"), [{ from: at(2018, 11), to: at(2020, 9) }]);
+});
+
+// R7/R8: an open-ended number saves with no end year.
+Deno.test("R7/R8: a numbers row with an open end saves with no end year", () => {
+  const ans = answersGate({
+    jobType: "part",
+    answers: {
+      versionOk: true,
+      partFound: true,
+      datesOk: true,
+      numbers: [{ value: "11111-A1001", valueAgain: "11111-A1001", dates: { fromYear: 2016, fromMonth: 11, toYear: null } }],
+    },
+    identity: roomy,
+    frame: "M900A",
+    site: "example.com",
+    knownCode: "M900A-AGBGE",
+    positionScheme: "none",
+    build: { startYear: 2016, startMonth: 11, endYear: null },
+  });
+  assertEquals(ans.ok, true);
+  if (ans.ok) assertEquals([ans.items?.[0]?.yearFrom, ans.items?.[0]?.yearTo], [null, null]);
+});
+import { typedLooksLikePartNumber } from "./research_browser_check.ts";
+
+Deno.test("P1: a date is never a part number", () => {
+  assertEquals(typedLooksLikePartNumber("11.2016", "11.2016", []), false);
+  assertEquals(typedLooksLikePartNumber("2016-11", "2016-11", []), false);
+  assertEquals(typedLooksLikePartNumber("11111-A1001", "11111-A1001", []), true);
+});
+// SP-40 (server layer review): a year inside a part number is not a date.
+Deno.test("SP-40: a year inside a part number is not a date", () => {
+  assertEquals(periodsOnLine("88568-52010"), []);
+  assertEquals(periodsOnLine("90919-02016"), []);
+  assertEquals(periodsOnLine("Toyota Roomy M900A 88568-52010"), []);
+});
+
+Deno.test("SP-40: a part number with a year inside still passes the step-by-step check", () => {
+  assertEquals(
+    browserCheckGate({
+      jobType: "part",
+      pasted: "Toyota Roomy M900A 88568-52010",
+      identity: roomy,
+      candidates: ["88568-52010"],
+      build: ROOMY_BUILD,
+      ...ENGINES,
+    }),
+    { ok: true, detected: "88568-52010" },
+  );
+});

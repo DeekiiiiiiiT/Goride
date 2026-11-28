@@ -342,6 +342,7 @@ function ReadLog({ token, domain }: { token: string; domain: string }) {
           <span className="flex items-center gap-2">
             {r.purpose === "recipe_test" ? <RePill tone="grey">Test</RePill> : null}
             {r.path === "owner_browser" ? <RePill tone="blue">You checked it</RePill> : null}
+            {r.path === "roam_saved_page" ? <RePill tone="blue">Roam, from a saved page</RePill> : null}
             {r.foundRow ? <RePill tone="green">Row found</RePill> : <RePill tone="grey-outline">{r.httpStatus ? `No row · ${r.httpStatus}` : "No row"}</RePill>}
             <span>{shortDate(r.readAt)}</span>
           </span>

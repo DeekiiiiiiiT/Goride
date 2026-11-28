@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dominion - Add a Car Document</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      color: #30323b;
+      background-color: #faf8fe;
+      -webkit-font-smoothing: antialiased;
+    }
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-feature-settings: "tnum" 1;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      vertical-align: middle;
+    }
+    .material-symbols-outlined.fill {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .soft-card-shadow {
+      box-shadow: 0 4px 16px rgba(1, 83, 220, 0.04);
+    }
+    .overlay-shadow {
+      box-shadow: 0 24px 48px -12px rgba(15, 23, 42, 0.25), 0 8px 24px rgba(1, 83, 220, 0.06);
+    }
+  </style>
+</head>
+<body class="relative min-h-screen bg-[#faf8fe] overflow-x-hidden">
+
+  <!-- Console App Shell (Background Workspace) -->
+  <div class="flex min-h-screen w-full">
+    
+    <!-- Dark Navy Left Sidebar -->
+    <aside class="w-[260px] bg-[#0b1329] text-[#94a3b8] flex-shrink-0 flex flex-col justify-between select-none">
+      <div>
+        <!-- Logo / Brand Header -->
+        <div class="h-16 px-5 flex items-center gap-3 border-b border-[#1e293b]">
+          <div class="w-7 h-7 rounded-lg bg-[#0153dc] flex items-center justify-center text-white font-bold text-sm tracking-wider shadow-sm">
+            D
+          </div>
+          <div class="flex flex-col">
+            <span class="text-white text-[14px] font-semibold tracking-tight">Dominion</span>
+            <span class="text-[11px] text-slate-400 font-normal">Roam Admin Console</span>
+          </div>
+        </div>
+
+        <!-- Navigation Groups -->
+        <nav class="py-4 px-3 space-y-5 text-[13px]">
+          <!-- Master Data -->
+          <div>
+            <div class="px-2 mb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Master Data</div>
+            <div class="space-y-0.5">
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors">
+                <span class="material-symbols-outlined text-[19px] text-slate-400">dashboard</span>
+                <span>Overview</span>
+              </a>
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg bg-[#1a2749] text-white font-medium">
+                <span class="material-symbols-outlined text-[19px] text-[#5b8def]">directions_car</span>
+                <span>Vehicles active</span>
+              </a>
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors">
+                <span class="material-symbols-outlined text-[19px] text-slate-400">map</span>
+                <span>Places and Maps</span>
+              </a>
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors">
+                <span class="material-symbols-outlined text-[19px] text-slate-400">local_gas_station</span>
+                <span>Fuel</span>
+              </a>
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors">
+                <span class="material-symbols-outlined text-[19px] text-slate-400">toll</span>
+                <span>Tolls</span>
+              </a>
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors">
+                <span class="material-symbols-outlined text-[19px] text-slate-400">receipt_long</span>
+                <span>Tax and Vendors</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- Engines -->
+          <div>
+            <div class="px-2 mb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Engines</div>
+            <div class="space-y-0.5">
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors">
+                <span class="material-symbols-outlined text-[19px] text-slate-400">psychology</span>
+                <span>Fuel Brain</span>
+              </a>
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors">
+                <span class="material-symbols-outlined text-[19px] text-slate-400">toll</span>
+                <span>Toll Brain</span>
+              </a>
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors">
+                <span class="material-symbols-outlined text-[19px] text-slate-400">hub</span>
+                <span>Matching Brain</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- Distribution -->
+          <div>
+            <div class="px-2 mb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Distribution</div>
+            <div class="space-y-0.5">
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors">
+                <span class="material-symbols-outlined text-[19px] text-slate-400">apps</span>
+                <span>Apps</span>
+              </a>
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors">
+                <span class="material-symbols-outlined text-[19px] text-slate-400">api</span>
+                <span>Data API</span>
+              </a>
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors">
+                <span class="material-symbols-outlined text-[19px] text-slate-400">edit_note</span>
+                <span>Change requests</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- Platform -->
+          <div>
+            <div class="px-2 mb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Platform</div>
+            <div class="space-y-0.5">
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors">
+                <span class="material-symbols-outlined text-[19px] text-slate-400">badge</span>
+                <span>Staff and roles</span>
+              </a>
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors">
+                <span class="material-symbols-outlined text-[19px] text-slate-400">history</span>
+                <span>Activity log</span>
+              </a>
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors">
+                <span class="material-symbols-outlined text-[19px] text-slate-400">dns</span>
+                <span>Platform Ops</span>
+              </a>
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors">
+                <span class="material-symbols-outlined text-[19px] text-slate-400">settings</span>
+                <span>Global settings</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- Back Office -->
+          <div>
+            <div class="px-2 mb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Back Office</div>
+            <div class="space-y-0.5">
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors">
+                <span class="material-symbols-outlined text-[19px] text-slate-400">assignment_turned_in</span>
+                <span>GCT registrations</span>
+              </a>
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors">
+                <span class="material-symbols-outlined text-[19px] text-slate-400">account_balance</span>
+                <span>Ledger</span>
+              </a>
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 hover:bg-[#15203b] hover:text-white transition-colors">
+                <span class="material-symbols-outlined text-[19px] text-slate-400">payments</span>
+                <span>Remittance</span>
+              </a>
+            </div>
+          </div>
+        </nav>
+      </div>
+
+      <!-- Footer system status -->
+      <div class="p-3 border-t border-[#1e293b] text-[12px] flex items-center justify-between text-slate-400">
+        <span class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span>Dominion v4.18</span>
+        </span>
+        <span class="text-slate-400">Tokyo DB</span>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <div class="flex-1 flex flex-col min-w-0">
+      
+      <!-- Top Bar -->
+      <header class="h-16 bg-white border-b border-[#e6e7ee] px-8 flex items-center justify-between flex-shrink-0 z-10">
+        <div class="flex items-center gap-3 w-96">
+          <div class="relative w-full">
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">search</span>
+            <input 
+              type="text" 
+              placeholder="Search entities, engines, routes…" 
+              readonly
+              class="w-full h-10 pl-9 pr-12 rounded-lg bg-[#faf8fe] border border-[#c5c6d0] text-[14px] text-[#30323b] focus:outline-none focus:ring-2 focus:ring-[#0153dc]"
+            />
+            <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-mono-code font-medium text-slate-500 bg-white border border-[#e6e7ee] px-1.5 py-0.5 rounded shadow-xs">⌘K</span>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button class="w-9 h-9 rounded-lg border border-[#e6e7ee] flex items-center justify-center text-[#5d5f68] hover:bg-slate-50 transition-colors">
+            <span class="material-symbols-outlined text-[20px]">dark_mode</span>
+          </button>
+          <div class="h-6 w-px bg-[#e6e7ee]"></div>
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-full bg-[#dbe1ff] text-[#0153dc] font-semibold text-xs flex items-center justify-center">
+              DT
+            </div>
+            <div class="flex flex-col">
+              <span class="text-[13px] font-medium text-[#30323b] leading-tight">Deeki T</span>
+              <span class="text-[11px] text-[#5d5f68]">Owner</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Background Screen Content: Maintenance Templates Page -->
+      <main class="flex-1 p-8 max-w-[1240px] w-full mx-auto">
+        <!-- Breadcrumb -->
+        <div class="text-[13px] text-[#5d5f68] mb-1.5">
+          Dominion › Master data › Vehicles › <span class="text-[#30323b] font-medium">Maintenance templates</span>
+        </div>
+
+        <!-- Page Header -->
+        <div class="flex items-start justify-between mb-6">
+          <div>
+            <h1 class="text-[26px] font-semibold text-[#30323b] tracking-tight">Maintenance templates</h1>
+            <p class="text-[15px] text-[#5d5f68] mt-0.5">How often each part is serviced, for which cars, and why.</p>
+          </div>
+          <button class="h-11 px-5 rounded-[10px] bg-[#0153dc] text-white font-semibold text-[14px] flex items-center gap-2 shadow-sm hover:bg-[#0047be] transition-colors">
+            <span class="material-symbols-outlined text-[20px]">upload_file</span>
+            <span>Add document</span>
+          </button>
+        </div>
+
+        <!-- Pill Tab Bar -->
+        <div class="flex items-center gap-2 mb-7 overflow-x-auto pb-1 border-b border-[#e6e7ee]">
+          <button class="px-4 py-2 rounded-full text-[14px] font-medium text-[#5d5f68] hover:text-[#30323b] flex items-center gap-2">
+            <span>Part schedules</span>
+            <span class="text-[12px] font-mono-code bg-[#f3f4fb] px-2 py-0.5 rounded-full text-[#5d5f68]">24</span>
+          </button>
+          <button class="px-4 py-2 rounded-full bg-[#0153dc] text-white text-[14px] font-semibold flex items-center gap-2 shadow-sm">
+            <span>Manuals</span>
+            <span class="text-[12px] font-mono-code bg-white text-[#0153dc] font-semibold px-2 py-0.5 rounded-full">1</span>
+          </button>
+          <button class="px-4 py-2 rounded-full text-[14px] font-medium text-[#5d5f68] hover:text-[#30323b] flex items-center gap-2">
+            <span>Service packages</span>
+            <span class="text-[12px] font-mono-code bg-[#f3f4fb] px-2 py-0.5 rounded-full text-[#5d5f68]">5</span>
+          </button>
+          <button class="px-4 py-2 rounded-full text-[14px] font-medium text-[#5d5f68] hover:text-[#30323b] flex items-center gap-2">
+            <span>Jobs</span>
+            <span class="text-[12px] font-mono-code bg-[#f3f4fb] px-2 py-0.5 rounded-full text-[#5d5f68]">167</span>
+          </button>
+          <button class="px-4 py-2 rounded-full text-[14px] font-medium text-[#5d5f68] hover:text-[#30323b] flex items-center gap-2">
+            <span>Supplies</span>
+            <span class="text-[12px] font-mono-code bg-[#f3f4fb] px-2 py-0.5 rounded-full text-[#5d5f68]">57</span>
+          </button>
+          <button class="px-4 py-2 rounded-full text-[14px] font-medium text-[#5d5f68] hover:text-[#30323b] flex items-center gap-2">
+            <span>Review list</span>
+            <span class="text-[12px] font-mono-code bg-[#f3f4fb] px-2 py-0.5 rounded-full text-[#5d5f68]">0</span>
+          </button>
+          <button class="px-4 py-2 rounded-full text-[14px] font-medium text-[#5d5f68] hover:text-[#30323b] flex items-center gap-2">
+            <span>History</span>
+          </button>
+        </div>
+
+        <!-- Background Card Content: Manuals Tab (Model Card) -->
+        <div class="bg-white rounded-[16px] border border-[#e6e7ee] p-6 soft-card-shadow">
+          <div class="flex items-start justify-between pb-5 border-b border-[#f1f2f7]">
+            <div class="flex items-center gap-3.5">
+              <div class="w-12 h-12 rounded-xl bg-[#f3f4fb] flex items-center justify-center text-[#0153dc]">
+                <span class="material-symbols-outlined text-[28px]">directions_car</span>
+              </div>
+              <div>
+                <div class="flex items-center gap-2.5">
+                  <h3 class="text-[18px] font-semibold text-[#30323b]">Toyota Roomy 2020–</h3>
+                  <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-[#e6f4ea] text-[#006e31]">
+                    <span class="w-1.5 h-1.5 rounded-full bg-[#006e31]"></span> Verified master
+                  </span>
+                </div>
+                <p class="text-[13px] text-[#5d5f68] mt-0.5">Japan specification · 1.0 petrol & 1.0 turbo · 2WD and 4WD platforms</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-medium bg-[#f1f5f9] text-[#475569]">
+                <span class="material-symbols-outlined text-[16px]">menu_book</span>
+                Owner's manual (Japan)
+              </span>
+            </div>
+          </div>
+
+          <!-- Specs preview columns -->
+          <div class="grid grid-cols-4 gap-6 pt-5 text-[14px]">
+            <div>
+              <span class="text-[12px] font-medium text-[#5d5f68] block mb-1">Engine oil</span>
+              <span class="font-medium text-[#30323b]">0W-20</span>
+              <span class="text-[13px] text-[#5d5f68] block font-mono-code">2.9 L (without filter)</span>
+            </div>
+            <div>
+              <span class="text-[12px] font-medium text-[#5d5f68] block mb-1">Coolant capacity</span>
+              <span class="font-medium text-[#30323b]">Super Long Life</span>
+              <span class="text-[13px] text-[#5d5f68] block font-mono-code">4.4 L (1.0 petrol)</span>
+            </div>
+            <div>
+              <span class="text-[12px] font-medium text-[#5d5f68] block mb-1">Standard tyres</span>
+              <span class="font-mono-code text-[#30323b] font-medium">165/65R14 79S</span>
+              <span class="text-[13px] text-[#5d5f68] block font-mono-code">260 kPa front & rear</span>
+            </div>
+            <div>
+              <span class="text-[12px] font-medium text-[#5d5f68] block mb-1">Battery size</span>
+              <span class="font-mono-code text-[#30323b] font-medium">M-42</span>
+              <span class="text-[13px] text-[#5d5f68] block">N-55 with electric park brake</span>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- In-App Centered Modal Overlay (Dimmed 40%) -->
+  <div class="fixed inset-0 bg-[#0f172a]/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-6">
+    
+    <!-- Dialog Card: 720px Wide, 20px Radius, 32px Padding -->
+    <div class="w-[720px] max-w-full bg-white rounded-[20px] p-8 border border-[#e6e7ee] overlay-shadow animate-in fade-in zoom-in-95 duration-150">
+      
+      <!-- Overlay Header -->
+      <div class="mb-6">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-[#dbe1ff] text-[#0153dc] flex items-center justify-center">
+              <span class="material-symbols-outlined text-[20px]">upload_file</span>
+            </div>
+            <h2 class="text-[26px] font-semibold text-[#30323b] tracking-tight">Add a car document</h2>
+          </div>
+          <button class="w-8 h-8 rounded-full flex items-center justify-center text-[#5d5f68] hover:bg-[#f3f4fb] hover:text-[#30323b] transition-colors" title="Close">
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <p class="text-[15px] text-[#5d5f68] mt-1.5 ml-10">
+          Drop in a maintenance sheet, a maintenance booklet or an owner's manual. Roam fills in the rest.
+        </p>
+      </div>
+
+      <!-- Large Dropzone Area -->
+      <div class="h-[240px] rounded-[20px] bg-[#f9f9fd] border-2 border-dashed border-[#c5c6d0] hover:border-[#0153dc] transition-all flex flex-col items-center justify-center p-6 text-center cursor-pointer group">
+        <!-- Circle Icon -->
+        <div class="w-14 h-14 rounded-full bg-[#dbe1ff] flex items-center justify-center text-[#0153dc] mb-3 group-hover:scale-105 transition-transform shadow-xs">
+          <span class="material-symbols-outlined text-[28px]">upload_file</span>
+        </div>
+        
+        <p class="text-[16px] font-semibold text-[#30323b] mb-1">Drop the PDF here</p>
+        
+        <div class="flex items-center gap-2 text-[14px] text-[#5d5f68] mb-2">
+          <span>or</span>
+          <button type="button" class="h-9 px-4 rounded-[10px] bg-white border border-[#c5c6d0] text-[#30323b] font-medium hover:bg-slate-50 shadow-xs inline-flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-[18px] text-slate-500">folder_open</span>
+            Choose a PDF
+          </button>
+        </div>
+
+        <p class="text-[13px] text-[#5d5f68] font-mono-code">Up to 100 MB</p>
+      </div>
+
+      <!-- Three Small Example Cards in a Row -->
+      <div class="grid grid-cols-3 gap-3.5 mt-5">
+        <!-- Card 1 -->
+        <div class="bg-[#f3f4fb] rounded-[12px] p-3.5 flex items-start gap-3 border border-[#e6e7ee]/70">
+          <div class="w-7 h-7 rounded-lg bg-[#dbe1ff] text-[#0153dc] flex items-center justify-center flex-shrink-0 mt-0.5">
+            <span class="material-symbols-outlined text-[17px]">event_repeat</span>
+          </div>
+          <div>
+            <span class="text-[13px] font-semibold text-[#30323b] block">Maintenance sheet</span>
+            <p class="text-[12px] text-[#5d5f68] leading-snug mt-0.5">When each part is changed</p>
+          </div>
+        </div>
+
+        <!-- Card 2 -->
+        <div class="bg-[#f3f4fb] rounded-[12px] p-3.5 flex items-start gap-3 border border-[#e6e7ee]/70">
+          <div class="w-7 h-7 rounded-lg bg-[#f1f5f9] text-[#475569] flex items-center justify-center flex-shrink-0 mt-0.5">
+            <span class="material-symbols-outlined text-[17px]">menu_book</span>
+          </div>
+          <div>
+            <span class="text-[13px] font-semibold text-[#30323b] block">Owner's manual</span>
+            <p class="text-[12px] text-[#5d5f68] leading-snug mt-0.5">Oil, tyres, battery and bulbs</p>
+          </div>
+        </div>
+
+        <!-- Card 3 -->
+        <div class="bg-[#f3f4fb] rounded-[12px] p-3.5 flex items-start gap-3 border border-[#e6e7ee]/70">
+          <div class="w-7 h-7 rounded-lg bg-[#e6f4ea] text-[#006e31] flex items-center justify-center flex-shrink-0 mt-0.5">
+            <span class="material-symbols-outlined text-[17px]">translate</span>
+          </div>
+          <div>
+            <span class="text-[13px] font-semibold text-[#30323b] block">Japanese or English</span>
+            <p class="text-[12px] text-[#5d5f68] leading-snug mt-0.5">Automatically translated</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer Buttons -->
+      <div class="mt-8 pt-5 border-t border-[#e6e7ee] flex items-center justify-between">
+        <button class="h-11 px-5 rounded-[10px] bg-white border border-[#a83836] text-[#a83836] font-semibold text-[14px] hover:bg-[#fdecec]/40 transition-colors">
+          Cancel
+        </button>
+        <div>
+          <!-- Right side is intentionally empty until file is chosen -->
+          <span class="text-[13px] text-[#5d5f68]">Select or drop a file to begin reading</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</body>
+</html>

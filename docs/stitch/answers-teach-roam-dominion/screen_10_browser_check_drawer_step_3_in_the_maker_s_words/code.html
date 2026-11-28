@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"surface":"#faf8fe","secondary":"#515f78","on-secondary-fixed":"#0d1c32","surface-container-high":"#e9e7ed","outline-variant":"#c3c6d7","surface-dim":"#dbd9df","on-tertiary":"#ffffff","surface-bright":"#faf8fe","on-error":"#ffffff","secondary-fixed-dim":"#b9c7e4","inverse-surface":"#2f3035","tertiary":"#3a485c","surface-container-low":"#f5f3f9","on-surface-variant":"#434655","surface-tint":"#0053db","on-tertiary-fixed-variant":"#3a485b","error-container":"#ffdad6","surface-container-lowest":"#ffffff","surface-container":"#efedf3","outline":"#737686","secondary-fixed":"#d6e3ff","tertiary-container":"#526074","tertiary-fixed-dim":"#b9c7df","surface-container-highest":"#e3e2e7","on-primary-container":"#ced8ff","background":"#faf8fe","on-primary-fixed-variant":"#003ea8","on-surface":"#1b1b20","secondary-container":"#d2e0fe","error":"#ba1a1a","primary":"#003ea9","on-secondary-container":"#55637d","on-secondary-fixed-variant":"#39475f","on-secondary":"#ffffff","on-primary":"#ffffff","on-tertiary-container":"#ccdbf3","on-background":"#1b1b20","primary-fixed-dim":"#b4c5ff","on-tertiary-fixed":"#0d1c2e","surface-variant":"#e3e2e7","inverse-on-surface":"#f2f0f6","primary-fixed":"#dbe1ff","on-error-container":"#93000a","on-primary-fixed":"#00174b","tertiary-fixed":"#d5e3fc","inverse-primary":"#b4c5ff","primary-container":"#0153dc"},"borderRadius":{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},"spacing":{"gutter-dense":"1rem","space-lg":"1.5rem","space-sm":"0.5rem","space-xl":"2rem","margin":"2rem","space-md":"1rem","gutter":"1.5rem","space-xs":"0.25rem","margin-compact":"1.25rem"},"fontFamily":{"mono-data-sm":["JetBrains Mono"],"display-lg":["Inter"],"body-lg":["Inter"],"label-sm":["Inter"],"body-md":["Inter"],"body-sm":["Inter"],"mono-data-lg":["JetBrains Mono"],"headline-sm":["Inter"],"label-md":["Inter"],"headline-md":["Inter"],"mono-data-md":["JetBrains Mono"]},"fontSize":{"mono-data-sm":["11px",{"lineHeight":"14px","letterSpacing":"0","fontWeight":"400"}],"display-lg":["32px",{"lineHeight":"40px","letterSpacing":"-0.02em","fontWeight":"600"}],"body-lg":["16px",{"lineHeight":"24px","letterSpacing":"0","fontWeight":"400"}],"label-sm":["11px",{"lineHeight":"14px","letterSpacing":"0.04em","fontWeight":"600"}],"body-md":["14px",{"lineHeight":"20px","letterSpacing":"0","fontWeight":"400"}],"body-sm":["13px",{"lineHeight":"18px","letterSpacing":"0.005em","fontWeight":"400"}],"mono-data-lg":["14px",{"lineHeight":"20px","letterSpacing":"-0.01em","fontWeight":"500"}],"headline-sm":["18px",{"lineHeight":"26px","letterSpacing":"-0.01em","fontWeight":"600"}],"label-md":["12px",{"lineHeight":"16px","letterSpacing":"0.02em","fontWeight":"500"}],"headline-md":["24px",{"lineHeight":"32px","letterSpacing":"-0.015em","fontWeight":"600"}],"mono-data-md":["12px",{"lineHeight":"16px","letterSpacing":"0","fontWeight":"400"}]}}}};</script></head><body class="bg-surface font-body-md text-on-surface min-h-screen antialiased"><aside class="fixed left-0 top-0 bottom-0 w-[260px] bg-[#0b1220] z-50 flex flex-col justify-between border-r border-[#1e293b]/50 select-none"><div class="flex flex-col flex-1 overflow-y-auto"><div class="h-16 px-space-md flex items-center gap-space-sm border-b border-[#1e293b]/60"><div class="w-7 h-7 rounded bg-primary-container flex items-center justify-center text-on-primary shadow-sm flex-shrink-0"><span class="material-symbols-outlined text-[18px]">grid_view</span></div><div class="flex flex-col leading-tight min-w-0"><span class="font-headline-sm text-[14px] text-white font-semibold truncate tracking-tight">Dominion</span><span class="font-label-sm text-[10px] text-[#94a3b8] uppercase tracking-wider truncate">Roam Admin Console</span></div></div><nav class="flex-1 px-space-sm py-space-md space-y-space-md" data-active-classes="bg-primary text-white font-medium shadow-sm"><div class="space-y-space-xs"><p class="px-space-sm font-label-sm text-[10px] uppercase font-bold tracking-wider text-[#64748b]">Master Data</p><div class="space-y-[2px]"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#cbd5e1] hover:bg-[#1e293b] hover:text-white transition-colors text-[13px]" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px] text-[#94a3b8]">dashboard</span>Overview</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#cbd5e1] hover:bg-[#1e293b] hover:text-white transition-colors text-[13px]" data-path="vehicles" href="#"><span class="material-symbols-outlined text-[18px] text-[#94a3b8]">directions_car</span>Vehicles</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#cbd5e1] hover:bg-[#1e293b] hover:text-white transition-colors text-[13px]" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px] text-[#94a3b8]">map</span>Places and Maps</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#cbd5e1] hover:bg-[#1e293b] hover:text-white transition-colors text-[13px]" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px] text-[#94a3b8]">local_gas_station</span>Fuel</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#cbd5e1] hover:bg-[#1e293b] hover:text-white transition-colors text-[13px]" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px] text-[#94a3b8]">toll</span>Tolls</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#cbd5e1] hover:bg-[#1e293b] hover:text-white transition-colors text-[13px]" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px] text-[#94a3b8]">account_balance</span>Tax and Vendors</a></div></div><div class="space-y-space-xs"><p class="px-space-sm font-label-sm text-[10px] uppercase font-bold tracking-wider text-[#64748b]">Engines</p><div class="space-y-[2px]"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#cbd5e1] hover:bg-[#1e293b] hover:text-white transition-colors text-[13px]" data-path="fuel-brain" href="#"><span class="material-symbols-outlined text-[18px] text-[#94a3b8]">neurology</span>Fuel Brain</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#cbd5e1] hover:bg-[#1e293b] hover:text-white transition-colors text-[13px]" data-path="toll-brain" href="#"><span class="material-symbols-outlined text-[18px] text-[#94a3b8]">hub</span>Toll Brain</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#cbd5e1] hover:bg-[#1e293b] hover:text-white transition-colors text-[13px]" data-path="matching-brain" href="#"><span class="material-symbols-outlined text-[18px] text-[#94a3b8]">alt_route</span>Matching Brain</a></div></div><div class="space-y-space-xs"><p class="px-space-sm font-label-sm text-[10px] uppercase font-bold tracking-wider text-[#64748b]">Distribution</p><div class="space-y-[2px]"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#cbd5e1] hover:bg-[#1e293b] hover:text-white transition-colors text-[13px]" data-path="apps" href="#"><span class="material-symbols-outlined text-[18px] text-[#94a3b8]">apps</span>Apps</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#cbd5e1] hover:bg-[#1e293b] hover:text-white transition-colors text-[13px]" data-path="data-api" href="#"><span class="material-symbols-outlined text-[18px] text-[#94a3b8]">api</span>Data API</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#cbd5e1] hover:bg-[#1e293b] hover:text-white transition-colors text-[13px]" data-path="change-requests" href="#"><span class="material-symbols-outlined text-[18px] text-[#94a3b8]">rule</span>Change Requests</a></div></div><div class="space-y-space-xs"><p class="px-space-sm font-label-sm text-[10px] uppercase font-bold tracking-wider text-[#64748b]">Platform</p><div class="space-y-[2px]"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#cbd5e1] hover:bg-[#1e293b] hover:text-white transition-colors text-[13px]" data-path="staff-and-roles" href="#"><span class="material-symbols-outlined text-[18px] text-[#94a3b8]">badge</span>Staff and Roles</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#cbd5e1] hover:bg-[#1e293b] hover:text-white transition-colors text-[13px]" data-path="activity-log" href="#"><span class="material-symbols-outlined text-[18px] text-[#94a3b8]">history</span>Activity Log</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#cbd5e1] hover:bg-[#1e293b] hover:text-white transition-colors text-[13px]" data-path="platform-ops" href="#"><span class="material-symbols-outlined text-[18px] text-[#94a3b8]">dns</span>Platform Ops</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#cbd5e1] hover:bg-[#1e293b] hover:text-white transition-colors text-[13px]" data-path="global-settings" href="#"><span class="material-symbols-outlined text-[18px] text-[#94a3b8]">settings</span>Global Settings</a></div></div><div class="space-y-space-xs"><p class="px-space-sm font-label-sm text-[10px] uppercase font-bold tracking-wider text-[#64748b]">Back Office</p><div class="space-y-[2px]"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#cbd5e1] hover:bg-[#1e293b] hover:text-white transition-colors text-[13px]" data-path="gct-registrations" href="#"><span class="material-symbols-outlined text-[18px] text-[#94a3b8]">receipt_long</span>GCT Registrations</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#cbd5e1] hover:bg-[#1e293b] hover:text-white transition-colors text-[13px]" data-path="ledger" href="#"><span class="material-symbols-outlined text-[18px] text-[#94a3b8]">menu_book</span>Ledger</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#cbd5e1] hover:bg-[#1e293b] hover:text-white transition-colors text-[13px]" data-path="remittance" href="#"><span class="material-symbols-outlined text-[18px] text-[#94a3b8]">payments</span>Remittance</a></div></div></nav></div><div class="p-space-md border-t border-[#1e293b]/60 flex items-center justify-between"><span class="font-mono-data-sm text-[11px] text-[#64748b] tracking-wider">KGN-DC-01 · JMD READY</span><span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span></div></aside><div class="pl-[260px]"><header class="fixed top-0 left-[260px] right-0 h-16 bg-surface-container-lowest border-b border-surface-container-high z-40 px-space-lg flex items-center justify-between"><div class="relative flex-1 max-w-md"><span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-outline">search</span><input class="w-full h-10 pl-9 pr-14 bg-surface-container-lowest border border-outline-variant rounded-lg text-body-md text-on-surface placeholder:text-outline focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-fixed" placeholder="Search entities, engines, routes…" type="text"/><div class="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"><kbd class="font-mono-data-sm text-label-sm bg-surface-container text-on-surface-variant px-1.5 py-0.5 rounded border border-outline-variant">⌘K</kbd></div></div><div class="flex items-center gap-space-md"><button aria-label="Toggle theme" class="w-9 h-9 rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface flex items-center justify-center transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><div class="h-6 w-px bg-surface-container-high"></div><div class="flex items-center gap-space-sm py-1 px-2.5 rounded-full bg-surface-container-low border border-outline-variant/60"><div class="w-7 h-7 rounded-full bg-primary flex items-center justify-center"><span class="font-label-sm text-[11px] font-semibold text-on-primary">DT</span></div><div class="flex flex-col text-left"><span class="font-label-md text-on-surface leading-tight font-medium">Deeki T</span><span class="font-mono-data-sm text-[10px] text-outline leading-none">Owner</span></div></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><button aria-label="Sign out" class="w-9 h-9 rounded-lg text-on-surface-variant hover:text-error hover:bg-error-container/30 flex items-center justify-center transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">logout</span></button></div></header><main class="w-full pt-16 bg-surface min-h-screen"><div class="flex flex-col w-full relative min-h-[calc(100vh-4rem)] overflow-hidden">
+<!-- DIMMED & BLURRED BACKGROUND CONTEXT: Vehicles > Pending catalog table -->
+<div class="w-full p-margin pointer-events-none select-none filter blur-[3px] opacity-40 transition-all duration-300">
+<!-- Breadcrumb & Catalog Header Context -->
+<div class="flex items-center justify-between mb-space-lg">
+<div class="space-y-space-xs">
+<div class="flex items-center gap-space-xs font-mono-data-sm text-outline">
+<span>CATALOG</span>
+<span>/</span>
+<span>VEHICLES</span>
+<span>/</span>
+<span class="text-primary font-medium">PENDING VERIFICATION</span>
+</div>
+<h1 class="font-headline-md text-on-surface">Vehicle Catalog Queue</h1>
+</div>
+<div class="flex items-center gap-space-sm">
+<div class="h-10 px-space-md rounded-lg bg-surface-container text-on-surface-variant flex items-center gap-space-sm font-label-md">
+<span class="material-symbols-outlined text-[18px]">filter_list</span>
+<span>Filter Status (Pending: 42)</span>
+</div>
+<div class="h-10 px-space-md rounded-lg bg-primary text-on-primary flex items-center gap-space-sm font-label-md">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>New Catalog Request</span>
+</div>
+</div>
+</div>
+<!-- Filter Control Row -->
+<div class="grid grid-cols-12 gap-space-md mb-space-lg">
+<div class="col-span-4 h-10 rounded-lg bg-surface-container-low px-space-md flex items-center gap-space-sm text-outline">
+<span class="material-symbols-outlined text-[18px]">search</span>
+<span class="font-body-md text-on-surface-variant">Filter by model, VIN prefix, OEM tag...</span>
+</div>
+<div class="col-span-3 h-10 rounded-lg bg-surface-container-low px-space-md flex items-center justify-between text-on-surface-variant font-body-sm">
+<span>Make: Toyota (All Models)</span>
+<span class="material-symbols-outlined text-[18px]">expand_more</span>
+</div>
+<div class="col-span-3 h-10 rounded-lg bg-surface-container-low px-space-md flex items-center justify-between text-on-surface-variant font-body-sm">
+<span>Stage: Technical Verification</span>
+<span class="material-symbols-outlined text-[18px]">expand_more</span>
+</div>
+<div class="col-span-2 h-10 rounded-lg bg-surface-container-low px-space-md flex items-center justify-center font-label-md text-on-surface">
+        Clear All Filters
+      </div>
+</div>
+<!-- Mock Data Table Layout -->
+<div class="rounded-xl bg-surface-container-lowest shadow-sm overflow-hidden">
+<div class="h-10 bg-surface-container-low px-space-md grid grid-cols-12 items-center font-label-sm text-secondary uppercase tracking-wider">
+<span class="col-span-3">Item / Assembly</span>
+<span class="col-span-3">Vehicle Match</span>
+<span class="col-span-2">Source Protocol</span>
+<span class="col-span-2">Validation State</span>
+<span class="col-span-2 text-right">Actions</span>
+</div>
+<div class="divide-y-0 space-y-[1px] bg-surface-container-high">
+<div class="h-14 bg-surface-container-lowest px-space-md grid grid-cols-12 items-center font-body-md">
+<div class="col-span-3 flex items-center gap-space-sm">
+<span class="w-8 h-8 rounded bg-secondary-fixed flex items-center justify-center text-primary font-mono-data-sm">SM</span>
+<div>
+<p class="font-headline-sm text-on-surface text-[14px]">Strut Mount Sub-Assembly</p>
+<p class="font-mono-data-sm text-outline">OEM-TY-2024-SU-019</p>
+</div>
+</div>
+<span class="col-span-3 text-on-surface">Toyota Corolla (E210 Platform)</span>
+<span class="col-span-2 font-mono-data-sm text-secondary">Browser Verification</span>
+<span class="col-span-2">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-secondary-fixed text-primary font-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-primary-container"></span>
+              Step 3 Pending
+            </span>
+</span>
+<div class="col-span-2 flex justify-end">
+<span class="font-label-md text-primary font-semibold">Inspect Record</span>
+</div>
+</div>
+<div class="h-14 bg-surface-container-lowest px-space-md grid grid-cols-12 items-center font-body-md">
+<div class="col-span-3 flex items-center gap-space-sm">
+<span class="w-8 h-8 rounded bg-surface-container flex items-center justify-center text-secondary font-mono-data-sm">AR</span>
+<div>
+<p class="font-headline-sm text-on-surface text-[14px]">Lower Control Arm Bushing</p>
+<p class="font-mono-data-sm text-outline">OEM-TY-2021-CA-882</p>
+</div>
+</div>
+<span class="col-span-3 text-on-surface">Toyota Corolla Hatchback</span>
+<span class="col-span-2 font-mono-data-sm text-secondary">OEM Cross-Reference</span>
+<span class="col-span-2">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-container-high text-secondary font-label-sm">
+              Queued
+            </span>
+</span>
+<div class="col-span-2 flex justify-end">
+<span class="font-label-md text-secondary">View</span>
+</div>
+</div>
+<div class="h-14 bg-surface-container-lowest px-space-md grid grid-cols-12 items-center font-body-md">
+<div class="col-span-3 flex items-center gap-space-sm">
+<span class="w-8 h-8 rounded bg-surface-container flex items-center justify-center text-secondary font-mono-data-sm">TB</span>
+<div>
+<p class="font-headline-sm text-on-surface text-[14px]">Stabilizer Bar Link Kit</p>
+<p class="font-mono-data-sm text-outline">OEM-TY-2023-LK-104</p>
+</div>
+</div>
+<span class="col-span-3 text-on-surface">Toyota Corolla Touring Sports</span>
+<span class="col-span-2 font-mono-data-sm text-secondary">Manufacturer Spec</span>
+<span class="col-span-2">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-container-high text-secondary font-label-sm">
+              Queued
+            </span>
+</span>
+<div class="col-span-2 flex justify-end">
+<span class="font-label-md text-secondary">View</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- MUTED BACKDROP OVERLAY -->
+<div class="absolute inset-0 bg-[#0a192f]/25 backdrop-blur-[1px] transition-opacity duration-300 pointer-events-auto"></div>
+<!-- RIGHT SLIDE-OVER DRAWER (560px Wide) -->
+<aside aria-label="Browser Check Verification Panel" class="absolute top-0 right-0 bottom-0 w-[560px] bg-surface-container-lowest shadow-2xl flex flex-col justify-between z-50 transition-transform duration-300">
+<!-- DRAWER HEADER -->
+<div class="px-space-xl pt-space-xl pb-space-lg bg-surface-container-lowest flex items-start justify-between flex-shrink-0">
+<div class="space-y-space-xs min-w-0 pr-space-md">
+<div class="flex items-center gap-space-sm flex-wrap">
+<h2 class="font-headline-md text-on-surface text-[20px] tracking-tight truncate">Strut mount</h2>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary-fixed text-primary-container font-label-md text-[12px] font-medium leading-none">
+<span class="material-symbols-outlined text-[14px]">travel_explore</span>
+<span>Browser check</span>
+</span>
+</div>
+<p class="font-body-md text-secondary text-[14px] leading-relaxed">
+          Toyota Corolla 2019–2024 · Front
+        </p>
+</div>
+<!-- Close circular button -->
+<button aria-label="Close drawer" class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center text-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors flex-shrink-0" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- DRAWER BODY -->
+<div class="px-space-xl py-space-sm flex-1 overflow-y-auto space-y-space-lg">
+<!-- Primary Instruction Card: Step 3 Container -->
+<div class="rounded-xl bg-primary-fixed/40 p-space-lg flex flex-col gap-space-md relative overflow-hidden">
+<!-- Step Indicator Header -->
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-primary-container uppercase tracking-wider text-[12px] font-semibold">Step 3 of 5</span>
+<span class="font-mono-data-sm text-secondary text-[11px]">Dominion Engine · Step ID #892</span>
+</div>
+<!-- Instruction Section with Number Anchor -->
+<div class="flex items-start gap-space-md pt-space-xs">
+<!-- Step 3 Numbered Circle -->
+<div class="w-7 h-7 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-headline-sm text-[13px] font-bold flex-shrink-0 shadow-sm mt-0.5">
+            3
+          </div>
+<!-- Instruction Copy Flow -->
+<div class="flex-1 space-y-space-md min-w-0">
+<!-- Instruction 1 -->
+<div class="flex items-center gap-space-sm text-on-surface font-body-md">
+<span>Search <strong class="font-semibold text-on-surface">support</strong></span>
+<button aria-label="Copy search keyword 'support'" class="p-1 rounded hover:bg-primary-fixed text-primary transition-colors flex items-center justify-center" onclick="navigator.clipboard?.writeText('support')" type="button">
+<span class="material-symbols-outlined text-[16px]">content_copy</span>
+</button>
+</div>
+<!-- Instruction 2 -->
+<div class="text-on-surface font-body-md text-[14px] leading-relaxed">
+              Open the section for the strut mount
+            </div>
+<!-- Instruction 3 -->
+<div class="space-y-space-xs">
+<p class="font-body-md text-on-surface text-[14px]">Do you see</p>
+<div class="inline-flex items-center gap-space-sm bg-surface-container-lowest px-3 py-1.5 rounded-lg shadow-sm">
+<span class="font-mono-data-sm text-[12px] font-semibold text-on-surface tracking-wide select-all">SUPPORT SUB-ASSY, FRONT SUSPENSION</span>
+<button aria-label="Copy component designation" class="p-1 rounded hover:bg-surface-container text-secondary hover:text-on-surface transition-colors flex items-center justify-center" onclick="navigator.clipboard?.writeText('SUPPORT SUB-ASSY, FRONT SUSPENSION')" type="button">
+<span class="material-symbols-outlined text-[16px]">content_copy</span>
+</button>
+</div>
+<span class="font-body-md text-on-surface text-[14px]">?</span>
+</div>
+<!-- Step 3 Decision Options (Yes / No) -->
+<div class="pt-space-xs grid grid-cols-2 gap-space-md">
+<button class="h-10 px-space-md rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container-high transition-all flex items-center justify-center gap-space-sm font-label-md text-[13px] font-medium shadow-sm active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-primary-container" type="button">
+<span class="material-symbols-outlined text-primary text-[18px]">check_circle</span>
+<span>Yes</span>
+</button>
+<button class="h-10 px-space-md rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container-high transition-all flex items-center justify-center gap-space-sm font-label-md text-[13px] font-medium shadow-sm active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-primary-container" type="button">
+<span class="material-symbols-outlined text-secondary text-[18px]">cancel</span>
+<span>No</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Verification Context & Micro Guidance -->
+<div class="rounded-xl bg-surface-container-low p-space-md space-y-space-sm">
+<div class="flex items-center gap-space-sm text-secondary font-label-md">
+<span class="material-symbols-outlined text-[18px] text-primary">info</span>
+<span class="font-semibold text-on-surface">Target Catalog Reference</span>
+</div>
+<p class="font-body-sm text-secondary leading-relaxed">
+          Ensure your browser tab displays the official manufacturer parts schematic for suspension component group 48-02. If multiple sub-assemblies exist for AWD vs FWD, record the base FWD mount.
+        </p>
+<div class="pt-space-xs flex items-center gap-space-md font-mono-data-sm text-[11px] text-outline">
+<span>OEM SCHEMATIC: DIAG-4802A</span>
+<span>•</span>
+<span>VIN PROFILE: COR-GEN12</span>
+</div>
+</div>
+<!-- Quick Session Details -->
+<div class="px-space-xs space-y-space-xs">
+<div class="flex items-center justify-between font-label-sm text-secondary">
+<span>Session Started</span>
+<span class="font-mono-data-sm text-on-surface">Today, 14:22:08 UTC</span>
+</div>
+<div class="flex items-center justify-between font-label-sm text-secondary">
+<span>Operator ID</span>
+<span class="font-mono-data-sm text-on-surface">KGN-ADMIN-DT01</span>
+</div>
+</div>
+</div>
+<!-- DRAWER FOOTER -->
+<div class="p-space-xl bg-surface-container-lowest flex flex-col gap-space-md flex-shrink-0">
+<!-- Informational waiting message -->
+<div class="flex items-center gap-space-xs text-secondary text-[13px] font-body-sm leading-snug">
+<span class="material-symbols-outlined text-[16px] text-secondary flex-shrink-0">timer</span>
+<span>
+          Browser checks waiting for you: <strong class="font-medium text-on-surface">7 of 25</strong> · a check left for 30 days closes as <span class="italic text-on-surface-variant font-medium">Couldn't find</span>.
+        </span>
+</div>
+<!-- Action Button Group -->
+<div class="flex items-center gap-space-sm w-full">
+<!-- Back Button -->
+<button class="h-11 w-20 rounded-xl bg-surface-container-lowest text-on-surface hover:bg-surface-container-high transition-colors flex items-center justify-center font-label-md font-medium shadow-sm flex-shrink-0" type="button">
+          Back
+        </button>
+<!-- Next / Advance Button -->
+<button class="h-11 flex-1 rounded-xl bg-primary-container text-on-primary hover:bg-primary transition-colors flex items-center justify-center gap-space-xs font-label-md text-[14px] font-semibold shadow-sm active:scale-[0.99]" type="button">
+<span>Next</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+<!-- Danger Flag Button -->
+<button class="h-11 px-space-md rounded-xl bg-error-container/30 text-error hover:bg-error-container hover:text-on-error-container transition-colors flex items-center justify-center gap-1.5 font-label-md text-[13px] font-medium flex-shrink-0 shadow-sm" type="button">
+<span class="material-symbols-outlined text-[16px]">flag</span>
+<span>Not on this page</span>
+</button>
+</div>
+</div>
+</aside>
+</div></main></div></body></html>

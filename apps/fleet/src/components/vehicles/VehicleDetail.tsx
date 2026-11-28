@@ -65,7 +65,7 @@ import type {
   CatalogMaintenanceTaskOption,
   VehicleMaintenanceScheduleRowApi,
 } from '../../types/maintenance';
-import { catalogOptionsFromScheduleRows } from '../../utils/maintenanceCatalogOptions';
+import { catalogOptionsFromScheduleRows, scheduleRowsWithPackages } from "../../utils/maintenanceCatalogOptions";
 import { VehicleDetailCatalogGate } from './detail/VehicleDetailCatalogGate';
 import { VehicleDetailHeader } from './detail/VehicleDetailHeader';
 import { AddVehicleFlow } from './add-vehicle/AddVehicleFlow';
@@ -588,9 +588,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
           sch = await api.getMaintenanceSchedule(vId);
         }
         if (!cancelled) {
-          setMaintenanceScheduleRows(
-            Array.isArray(sch.schedule) ? (sch.schedule as VehicleMaintenanceScheduleRowApi[]) : [],
-          );
+          setMaintenanceScheduleRows(scheduleRowsWithPackages(sch));
         }
         if (!cancelled && sch.maintenanceStatus) {
           setMaintenanceStatus({
@@ -795,9 +793,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
       api
         .getMaintenanceSchedule(vId)
         .then((sch) => {
-          setMaintenanceScheduleRows(
-            Array.isArray(sch.schedule) ? (sch.schedule as VehicleMaintenanceScheduleRowApi[]) : [],
-          );
+          setMaintenanceScheduleRows(scheduleRowsWithPackages(sch));
           if (sch.maintenanceStatus) {
             setMaintenanceStatus({
               status: sch.maintenanceStatus.status,

@@ -501,10 +501,13 @@ export function requireAuth(options?: RequireAuthOptions) {
       // Server Places proxy — Fleet address fields (key stays server-side)
       path.includes("/places/autocomplete") ||
       (path.includes("/places/") && path.includes("/details")) ||
-      // OCR helpers — auth enforced by the route handler / client session JWT
+      // OCR helpers — auth enforced by the route handler / client session JWT.
       path.includes("/scan-receipt") ||
       path.includes("/scan-odometer") ||
-      path.includes("/upload")
+      // The receipt-photo upload itself is `/upload` (or `/upload/...`). It used to be a bare
+      // `includes("/upload")`, which also matched `/maintenance-manuals/upload-url` and
+      // `/maintenance-manuals/:id/uploaded` and let those staff routes run with no user at all.
+      /(^|\/)upload(\/|$)/.test(path)
     ) {
       await next();
       return;

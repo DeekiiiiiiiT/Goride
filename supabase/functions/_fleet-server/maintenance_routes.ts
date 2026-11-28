@@ -14,6 +14,7 @@ import {
   bootstrapVehicleComponentSchedules,
   getPackageChecklist,
 } from "./maintenance_service_ledger_core.ts";
+import { readUsedDraftTypeIds, visiblePartTypes } from "./maintenance_category_visibility.ts";
 import {
   canonicalOdometerForVehicle,
   canonicalOdometerFromMaps,
@@ -74,6 +75,9 @@ import { registerMaintenanceInspectionRoutes } from "./maintenance/routes_inspec
 import { registerMaintenanceWorkOrderRoutes } from "./maintenance/routes_work_orders.ts";
 import { fleetDb, fleetTable } from "./repos/baseRepo.ts";
 import { registerMaintenanceMasterRoutes } from "./maintenance_master_routes.ts";
+import { registerMaintenanceHistoryFillRoutes } from "./maintenance_history_fill_routes.ts";
+import { registerMaintenanceWorkOrderBoardRoutes } from "./maintenance_work_order_board_routes.ts";
+import { registerMaintenanceDriverCarRoutes } from "./maintenance_driver_car_routes.ts";
 import { buildLogServiceContext } from "./maintenance_log_service_context.ts";
 import { buildSystemSections } from "./maintenance_system_sections.ts";
 import { assertCatalogWriteResponse, governWriteOrProposal } from "./catalog_access.ts";
@@ -167,11 +171,13 @@ function aggregateFleetStatus(
 
 function aggregateFleetStatusFromDue(
   dueStatuses: string[],
-): "Healthy" | "Due Soon" | "Overdue" | "Odometer needed" | "No schedule" {
+): "Healthy" | "Due Soon" | "Overdue" | "Odometer needed" | "History unknown" | "No schedule" {
   if (!dueStatuses.length) return "No schedule";
   if (dueStatuses.includes("overdue")) return "Overdue";
   if (dueStatuses.includes("odometer_needed")) return "Odometer needed";
   if (dueStatuses.includes("due_soon")) return "Due Soon";
+  // Step 7: parts nobody has dated are their own answer, never Overdue and never Healthy.
+  if (dueStatuses.includes("history_unknown")) return "History unknown";
   if (dueStatuses.every((s) => s === "no_record" || s === "ok")) return "Healthy";
   return "Healthy";
 }
@@ -485,12 +491,30 @@ function assertCategoryKindParent(
   return null;
 }
 
-function parseDueKind(v: unknown): "service_package" | "statutory_inspection" | null {
+const MAINTENANCE_DUE_KINDS = [
+  "service_package",
+  "statutory_inspection",
+  "part_schedule",
+  "inspection",
+] as const;
+
+/** MER-03: part_schedule / inspection join the two original values. */
+function parseDueKind(v: unknown): (typeof MAINTENANCE_DUE_KINDS)[number] | null {
   if (v === undefined || v === null || v === "") return null;
   const s = String(v).trim();
-  if (s === "service_package" || s === "statutory_inspection") return s;
-  return null;
+  const hit = MAINTENANCE_DUE_KINDS.find((k) => k === s);
+  return hit ?? null;
 }
+
+/**
+ * What a row is when the caller does not say: a rule with a part attached is a part schedule,
+ * a row without one is a service package (MER-03).
+ */
+function defaultDueKindFor(componentId: unknown): (typeof MAINTENANCE_DUE_KINDS)[number] {
+  return typeof componentId === "string" && componentId.length > 0 ? "part_schedule" : "service_package";
+}
+
+const DUE_KIND_ERROR = "due_kind must be service_package, statutory_inspection, part_schedule or inspection";
 
 /**
  * Full path of the work-orders collection for an internal app.request, including the
@@ -974,12 +998,13 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const icon_key = (iconKeyRaw || "wrench").slice(0, 40);
         const dueKindParsed = parseDueKind(body.due_kind);
         if (body.due_kind !== undefined && body.due_kind !== null && body.due_kind !== "" && !dueKindParsed) {
-          return c.json({ error: "due_kind must be service_package or statutory_inspection" }, 400);
+          return c.json({ error: DUE_KIND_ERROR }, 400);
         }
+        const componentId = typeof body.component_id === "string" && body.component_id ? body.component_id : null;
         const row = {
           template_scope: "variant",
           vehicle_catalog_id: catalogId,
-          component_id: typeof body.component_id === "string" && body.component_id ? body.component_id : null,
+          component_id: componentId,
           task_name,
           task_code: parseTaskCode(body),
           description: body.description != null ? String(body.description) : null,
@@ -990,7 +1015,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             : null,
           frequency_kind,
           frequency_label,
-          due_kind: dueKindParsed ?? "service_package",
+          due_kind: dueKindParsed ?? defaultDueKindFor(componentId),
           priority: String(body.priority ?? "standard"),
           sort_order: body.sort_order != null ? Number(body.sort_order) : 0,
           icon_key,
@@ -1050,7 +1075,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         }
         if (body.due_kind !== undefined) {
           const dk = parseDueKind(body.due_kind);
-          if (!dk) return c.json({ error: "due_kind must be service_package or statutory_inspection" }, 400);
+          if (!dk) return c.json({ error: DUE_KIND_ERROR }, 400);
           patch.due_kind = dk;
         }
 
@@ -1240,12 +1265,13 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const icon_key = (iconKeyRawG || "wrench").slice(0, 40);
         const dueKindParsedG = parseDueKind(body.due_kind);
         if (body.due_kind !== undefined && body.due_kind !== null && body.due_kind !== "" && !dueKindParsedG) {
-          return c.json({ error: "due_kind must be service_package or statutory_inspection" }, 400);
+          return c.json({ error: DUE_KIND_ERROR }, 400);
         }
+        const componentIdG = typeof body.component_id === "string" && body.component_id ? body.component_id : null;
         const row = {
           template_scope: "global",
           vehicle_catalog_id: null as string | null,
-          component_id: typeof body.component_id === "string" && body.component_id ? body.component_id : null,
+          component_id: componentIdG,
           task_name,
           task_code: parseTaskCode(body),
           description: body.description != null ? String(body.description) : null,
@@ -1256,7 +1282,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             : null,
           frequency_kind,
           frequency_label,
-          due_kind: dueKindParsedG ?? "service_package",
+          due_kind: dueKindParsedG ?? defaultDueKindFor(componentIdG),
           priority: String(body.priority ?? "standard"),
           sort_order: body.sort_order != null ? Number(body.sort_order) : 0,
           icon_key,
@@ -1597,6 +1623,9 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
       try {
         const orgId = getOrgId(c);
         const kindFilter = parseCategoryKind(c.req.query("kind"));
+        // G9 (S1b): a draft is hidden from the Log service only when nothing uses it. If the check cannot run,
+        // keep every draft visible rather than lose a job/package that is already logged against it.
+        const usedDrafts = await readUsedDraftTypeIds(supabase).catch(() => null);
         let q = supabase
           .from("maintenance_service_categories")
           .select("*")
@@ -1604,7 +1633,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (kindFilter) q = q.eq("kind", kindFilter);
         const { data, error } = await q;
         if (error) throw error;
-        const baseItems = (data || []) as Record<string, unknown>[];
+        const baseItems = visiblePartTypes(
+          (data || []) as Array<{ id: string; part_type_status?: string | null }>,
+          usedDrafts,
+        ) as Record<string, unknown>[];
         const fitCtx = orgId ? await loadJobFitContext(c, supabase, orgId) : { mode: "off" as const };
         if (fitCtx instanceof Response) return fitCtx;
         if (fitCtx.mode === "off") {
@@ -1691,6 +1723,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const orgId = getOrgId(c);
         const systemId = c.req.param("systemId")?.trim() ?? "";
         if (!isUuid(systemId)) return c.json({ error: "Invalid system id" }, 400);
+        // G9 (S1b): same rule as the category list — a used draft stays, an unused draft is hidden.
+        const usedDrafts = await readUsedDraftTypeIds(supabase).catch(() => null);
         const { data, error } = await supabase
           .from("maintenance_service_categories")
           .select("*")
@@ -1698,7 +1732,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .eq("parent_id", systemId)
           .order("sort_order", { ascending: true });
         if (error) throw error;
-        const baseItems = (data || []) as Record<string, unknown>[];
+        const baseItems = visiblePartTypes(
+          (data || []) as Array<{ id: string; part_type_status?: string | null }>,
+          usedDrafts,
+        ) as Record<string, unknown>[];
         const fitCtx = orgId ? await loadJobFitContext(c, supabase, orgId) : { mode: "off" as const };
         if (fitCtx instanceof Response) return fitCtx;
         if (fitCtx.mode === "off") {
@@ -1965,6 +2002,28 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           };
         }
 
+        // Step 15 (MER-22): Dominion's service packages, so Log service offers every active package (new ones
+        // too), not only one already attached to this car. They carry no due date: a package never decides when
+        // a part is due. Kept apart from `schedule` so nothing counts them as schedule rows.
+        const { data: globalPkgs } = await supabase
+          .from("maintenance_task_templates")
+          .select("*")
+          .eq("template_scope", "global")
+          .is("component_id", null)
+          .eq("status", "active")
+          .is("archived_at", null)
+          .order("sort_order", { ascending: true })
+          .order("task_name", { ascending: true });
+        const onCar = new Set(templateIds);
+        const extraPkgs = (globalPkgs || []).filter((t: { id: string }) => !onCar.has(String(t.id)));
+        const extraCats = await loadCategoriesForTemplateIds(supabase, extraPkgs.map((t: { id: string }) => String(t.id)));
+        const packages = extraPkgs
+          .map((t: Record<string, unknown>) => ({
+            template_id: String(t.id),
+            template: { ...t, categories: extraCats.get(String(t.id)) || [] },
+          }))
+          .filter((p: { template: { categories: unknown[] } }) => p.template.categories.length > 0);
+
         const today = todayIso();
         const enriched = (scheduleRows || []).map((row: Record<string, unknown>) => {
           const nextMiles = row.next_due_miles != null ? Number(row.next_due_miles) : null;
@@ -2023,6 +2082,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             remainingKm,
           },
           schedule: enriched,
+          packages,
         });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -3044,6 +3104,9 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           priority,
           type: serviceType,
           description,
+          // Step 13: what the driver picked and the photo they took (Report a problem).
+          category: body.category != null ? String(body.category).slice(0, 60) : null,
+          photoUrl: body.photoUrl != null ? String(body.photoUrl).slice(0, 2000) : null,
           date: performed_at_date,
           odo: performed_at_miles,
           vehicleId,
@@ -3197,7 +3260,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
 
         const vehicles = await loadFleetVehiclesForOrg(orgId);
         const { data: dndVehicleRows } = await fleetDb()
-          .from("vehicles")
+          .from("fleet_vehicles")
           .select("id, do_not_drive, do_not_drive_reason, do_not_drive_set_at")
           .eq("organization_id", orgId);
         const doNotDriveByVehicle = new Map<string, {
@@ -3255,7 +3318,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const { data: componentSchedules } = await supabase
           .from("vehicle_component_schedule")
           .select(
-            "vehicle_id, position, next_due_km, next_due_km_max, next_due_date, schedule_status, rule_id, category:maintenance_service_categories(id, code, name)",
+            "vehicle_id, position, next_due_km, next_due_km_max, next_due_date, schedule_status, rule_id, last_performed_km, last_performed_date, category:maintenance_service_categories(id, code, name)",
           )
           .eq("organization_id", orgId);
 
@@ -3396,6 +3459,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           for (const row of compRows) {
             const schSt = row.schedule_status != null ? String(row.schedule_status) : "active";
             if (schSt === "retired") continue;
+            // Step 7: a part nobody has dated is "History unknown" (counted from the due view), never Overdue here.
+            if (row.last_performed_km == null && row.last_performed_date == null && schSt !== "no_rule") continue;
             const nextMiles = row.next_due_km != null ? Number(row.next_due_km) : null;
             const nextMilesMaxRaw = row.next_due_km_max != null ? Number(row.next_due_km_max) : null;
             const nextDate = row.next_due_date != null ? String(row.next_due_date).slice(0, 10) : null;
@@ -3494,6 +3559,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             dueCounts: {
               overdue: vehicleDue.filter((r) => r.due_status === "overdue").length,
               dueSoon: vehicleDue.filter((r) => r.due_status === "due_soon").length,
+              historyUnknown: vehicleDue.filter((r) => r.due_status === "history_unknown").length,
             },
             dominionScheduleStatus,
             severeDuty: (v as { severe_duty?: boolean }).severe_duty === true,
@@ -3587,6 +3653,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           nextScheduledWindow,
           nextScheduledDateLine,
           partsRequisition,
+          historyUnknownParts: dueRows.filter((r) => r.due_status === "history_unknown").length,
+          historyUnknownCars: new Set(
+            dueRows.filter((r) => r.due_status === "history_unknown").map((r) => String(r.vehicle_id)),
+          ).size,
         });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -4690,7 +4760,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const newStatus = String((wo as { status?: string }).status ?? existing.status);
         if (newStatus === "completed" || newStatus === "closed") {
           await fleetDb()
-            .from("vehicles")
+            .from("fleet_vehicles")
             .update({
               do_not_drive: false,
               do_not_drive_reason: null,
@@ -4792,10 +4862,14 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
     requireAuth(),
     async (c) => {
       try {
-        const { data: templates, error } = await supabase
+        // Step 13: ?code=pre_shift is the driver's walk-around; the garage's list never shows it.
+        const wantCode = String(c.req.query("code") ?? "").trim();
+        let tplQuery = supabase
           .from("maintenance_inspection_templates")
           .select("*")
           .order("sort_order", { ascending: true });
+        tplQuery = wantCode ? tplQuery.eq("code", wantCode) : tplQuery.neq("code", "pre_shift");
+        const { data: templates, error } = await tplQuery;
         if (error) throw error;
         const ids = (templates || []).map((t: { id: string }) => t.id);
         const { data: items, error: itemErr } = ids.length
@@ -4985,6 +5059,9 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   registerMaintenanceInspectionRoutes(route, supabase);
   registerMaintenanceWorkOrderRoutes(route, supabase);
   registerMaintenanceMasterRoutes(route, supabase);
+  registerMaintenanceHistoryFillRoutes(route, supabase);
+  registerMaintenanceWorkOrderBoardRoutes(route, supabase);
+  registerMaintenanceDriverCarRoutes(route, supabase);
 
   /**
    * Legacy cron path — forwards to nightly SQL job.

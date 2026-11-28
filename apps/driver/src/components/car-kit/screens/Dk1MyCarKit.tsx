@@ -11,13 +11,11 @@ import { Dk1KitItemRows } from '../Dk1KitItemRows';
 export function Dk1MyCarKit({
   kit,
   onReportItem,
-  onPreShiftInspection,
   onUpdateStatus,
   onOpenFixedReports,
 }: {
   kit?: DriverCarKitPayload | null;
   onReportItem?: (itemName: string | null) => void;
-  onPreShiftInspection?: () => void;
   onUpdateStatus?: (item: DriverCarKitItem) => void;
   onOpenFixedReports?: () => void;
 }) {
@@ -41,15 +39,6 @@ export function Dk1MyCarKit({
       <div className="flex flex-wrap items-baseline justify-between gap-space-xs">
       <h1 className="font-headline-md text-headline-md text-on-surface tracking-tight">My car kit</h1>
       <div className="flex items-center gap-2">
-      {onPreShiftInspection ? (
-        <button
-          type="button"
-          className="font-body-sm text-body-sm font-semibold text-primary underline min-h-[44px] px-2"
-          onClick={onPreShiftInspection}
-        >
-          Pre-shift inspection
-        </button>
-      ) : null}
       <div className="bg-surface-container-lowest px-space-xs py-0.5 rounded-lg shadow-sm">
       <span className="font-label-code text-label-code text-on-surface uppercase tracking-wider">{vehicleLabel}</span>
       </div>

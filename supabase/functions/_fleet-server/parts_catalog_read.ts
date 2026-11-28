@@ -42,6 +42,8 @@ export async function readPartsBrowse(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from("maintenance_service_categories")
     .select("id, name, plain_name, icon_key, parent_id, is_part, common_rank, position_aware, kind, op_code, description")
+    // G9: a draft type is not in the parts browser or a person's type picker.
+    .eq("part_type_status", "active")
     .order("name");
   if (error) throw error;
   return shapeBrowse((data || []) as Array<Record<string, unknown>>);
@@ -106,8 +108,27 @@ export async function readPartsBrowseForVariant(supabase: SupabaseClient, varian
   return { ...merged, systems };
 }
 
-export type TermComponent = { id: string; name?: string | null; plain_name?: string | null };
-export type TermSynonym = { term?: string | null; maintenance_component_id?: string | null };
+/** A part group: the 13 system rows a part type sits under (Brakes, Engine, Filters…), by name. */
+export type PartGroup = { id: string; name: string };
+
+/**
+ * The part groups on file. Same predicate as part_pictures' template seed: a system row with no parent that is a
+ * part and (being a group) has part types under it. It excludes the five import-only system rows.
+ */
+export async function readPartGroups(supabase: SupabaseClient): Promise<PartGroup[]> {
+  const { data, error } = await supabase
+    .from("maintenance_service_categories")
+    .select("id, name")
+    .eq("kind", "system")
+    .eq("is_part", true)
+    .is("parent_id", null)
+    .order("name")
+    .limit(50);
+  if (error) throw error;
+  return ((data ?? []) as Array<{ id: string; name: string }>).map((row) => ({ id: String(row.id), name: String(row.name) }));
+}
+
+export type TermComponent = { id: string; name?: string | null; plain_name?: string | null };export type TermSynonym = { term?: string | null; maintenance_component_id?: string | null };
 export type TermPart = {
   id: string;
   name?: string | null;
@@ -242,7 +263,9 @@ export async function readPartTerm(supabase: SupabaseClient, q: string, catalogI
   const like = searchLike(needle);
   const norm = partNorm(needle);
   const [{ data: names, error: nameError }, { data: synonyms, error: synonymError }, { data: numbers, error: numberError }, exactResult] = await Promise.all([
-    supabase.from("maintenance_service_categories").select("id, name, plain_name").or(`name.ilike.${like},plain_name.ilike.${like}`).limit(16),
+    supabase.from("maintenance_service_categories").select("id, name, plain_name")
+      .eq("part_type_status", "active")
+      .or(`name.ilike.${like},plain_name.ilike.${like}`).limit(16),
     supabase.from("part_term_synonym").select("term, maintenance_component_id, canonical").ilike("term", like).limit(16),
     supabase.from("part_master").select(PART_TERM_COLUMNS).or(`name.ilike.${like},oem_part_number.ilike.${like}`).limit(16),
     norm.length >= 4
@@ -257,7 +280,8 @@ export async function readPartTerm(supabase: SupabaseClient, q: string, catalogI
   const synonymRows = (synonyms || []) as TermSynonym[];
   const missing = [...new Set(synonymRows.map((row) => String(row.maintenance_component_id || "")).filter((id) => id && !components.some((row) => row.id === id)))];
   if (missing.length) {
-    const { data, error } = await supabase.from("maintenance_service_categories").select("id, name, plain_name").in("id", missing);
+    const { data, error } = await supabase.from("maintenance_service_categories").select("id, name, plain_name")
+      .eq("part_type_status", "active").in("id", missing);
     if (error) throw error;
     components.push(...((data || []) as TermComponent[]));
   }

@@ -38,9 +38,24 @@ jobs:
       - name: Parts sourcing SQL checks
         run: |
           set -euo pipefail
-          supabase db query -f supabase/tests/parts_rev2_checks.sql
-          supabase db query -f supabase/tests/vehicle_database_rebuild_checks.sql
-          supabase db query -f supabase/tests/places_checks.sql
-          supabase db query -f supabase/tests/price_engine_checks.sql
-          supabase db query -f supabase/tests/catalog_research_claim_checks.sql
-          supabase db query -f supabase/tests/research_engine_checks.sql
+          # psql, not `supabase db query`: the check files hold many statements, which
+          # `db query` refuses ("cannot insert multiple commands into a prepared statement").
+          # Same way parts-sql-checks.yml runs them.
+          db_container="$(docker ps --format '{{.Names}}' | grep '^supabase_db_' | head -n 1)"
+          test -n "$db_container"
+          for f in parts_rev2_checks vehicle_database_rebuild_checks places_checks price_engine_checks catalog_research_claim_checks research_engine_checks saved_page_parts_checks part_pictures_checks part_type_learning_checks part_type_auto_sort_checks; do
+            docker cp "supabase/tests/${f}.sql" "$db_container":"/tmp/${f}.sql"
+            docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f "/tmp/${f}.sql"
+          done
+
+      - name: 'Server code never selects * from the two new tables'
+        run: |
+          set -euo pipefail
+          # D8.9 of docs/part-type-learning-audit.md §2: the server reads part_type_suggestion_dismissal and
+          # research_saved_page_diagram by explicit column list only, never "*".
+          # The client chain can wrap over lines, so take the table call plus the next two lines.
+          if grep -rn -A2 -E "from\(['\"](part_type_suggestion_dismissal|research_saved_page_diagram)['\"]\)" supabase/functions \
+               | grep -E "select\([[:space:]]*['\"]\*"; then
+            echo "select(\"*\") found on a table the plan says to read by column list (D8.9)" >&2
+            exit 1
+          fi

@@ -21,6 +21,8 @@ type Props = {
   partRulesByComponent: Map<string, MaintenanceRule>;
   canWrite: boolean;
   onEditPackage: (pkg: PackageRow) => void;
+  /** Step 15 (MER-22): packages were only ever seeded; this opens the same drawer empty. */
+  onNewPackage?: () => void;
 };
 
 const SHOW_FIRST = 8;
@@ -32,7 +34,7 @@ function shortInterval(km?: number | null, mo?: number | null): string {
   return parts.length ? parts.join(" or ") : "—";
 }
 
-export function PackagesTab({ token, packages, partRulesByComponent, canWrite, onEditPackage }: Props) {
+export function PackagesTab({ token, packages, partRulesByComponent, canWrite, onEditPackage, onNewPackage }: Props) {
   const [members, setMembers] = useState<Record<string, Array<Record<string, unknown>>>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -45,10 +47,23 @@ export function PackagesTab({ token, packages, partRulesByComponent, canWrite, o
 
   return (
     <div className="mt-6 space-y-4">
-      <p className="flex items-center gap-2 rounded-xl border border-[#0153dc]/20 bg-[#dbe1ff]/40 px-4 py-3 text-sm text-on-surface">
-        <span className="material-symbols-outlined text-[18px] text-[#0153dc]">info</span>
-        A package is one garage visit. It lists jobs; each job keeps its own schedule.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="flex flex-1 items-center gap-2 rounded-xl border border-[#0153dc]/20 bg-[#dbe1ff]/40 px-4 py-3 text-sm text-on-surface">
+          <span className="material-symbols-outlined text-[18px] text-[#0153dc]">info</span>
+          A package is one garage visit. It lists jobs; each job keeps its own schedule.
+        </p>
+        {canWrite && onNewPackage ? (
+          <button
+            type="button"
+            onClick={onNewPackage}
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-secondary px-4 text-sm font-medium text-on-secondary"
+            data-testid="mm-new-package"
+          >
+            <span className="material-symbols-outlined text-[18px]">add</span>
+            New package
+          </button>
+        ) : null}
+      </div>
 
       {packages.map((pkg) => {
         const rows = (members[pkg.id] ?? []).filter((r) => (r as { category?: unknown }).category);

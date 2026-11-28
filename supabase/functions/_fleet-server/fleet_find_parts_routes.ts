@@ -36,7 +36,7 @@ import {
 } from "./catalog_research_intake.ts";
 import { readComponentFitHints } from "./parts_component_fit_hints.ts";
 import { resolvePartsFitPairs } from "../../../packages/types/src/partsFitParam.ts";
-import { readFleetPartLookup } from "./fleet_parts_lookup.ts";
+import { attachFleetPartPictures, readFleetPartLookup } from "./fleet_parts_lookup.ts";
 import { readBrakesOverview } from "./read_brakes_overview.ts";
 import { publicMediaUrl } from "../_shared/objectStorage/index.ts";
 import { isR2PrivateLinksEnabled, r2FromEnv, signFileLink } from "../_shared/objectStorage/index.ts";
@@ -373,7 +373,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
         }
       }
 
-      const body = await findParts(supabase, {
+      const found = await findParts(supabase, {
         make: String(vehicle.make ?? ""),
         model: String(vehicle.model ?? ""),
         year: vehicle.year != null ? Number(vehicle.year) : null,
@@ -387,6 +387,8 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
         orgId: null,
         downtimePerDay: 0,
       });
+      // §3.6: each answer card gets its own ready picture (calipers, cables, shoes).
+      const body = await attachFleetPartPictures(supabase, found as unknown as { sections?: Array<{ items?: Array<Record<string, unknown>> }> }) as typeof found;
 
       let ask: FindPartsAskState | undefined;
       if (partsGapsOn && componentId && catalogId && orgId) {

@@ -95,6 +95,7 @@ on:
       - 'supabase/tests/driver_phone_outbox_checks.sql'
       - 'supabase/migrations/20261125133536_driver_phone_outbox.sql'
       - 'supabase/tests/fuel_photo_read_queue_checks.sql'
+      - 'supabase/tests/part_type_auto_sort_checks.sql'
       - 'supabase/migrations/20261125135228_fuel_photo_read_queue.sql'
       - 'supabase/migrations/20261118182336_toll_screen_reads_disputes.sql'
       - 'packages/toll-core/src/v2/weekRuleCases.json'
@@ -190,6 +191,7 @@ on:
       - 'supabase/tests/driver_phone_outbox_checks.sql'
       - 'supabase/migrations/20261125133536_driver_phone_outbox.sql'
       - 'supabase/tests/fuel_photo_read_queue_checks.sql'
+      - 'supabase/tests/part_type_auto_sort_checks.sql'
       - 'supabase/migrations/20261125135228_fuel_photo_read_queue.sql'
       - 'supabase/migrations/20261118182336_toll_screen_reads_disputes.sql'
       - 'packages/toll-core/src/v2/weekRuleCases.json'
@@ -358,3 +360,5 @@ jobs:
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/driver_phone_outbox_checks.sql
           docker cp supabase/tests/fuel_photo_read_queue_checks.sql "$db_container":/tmp/fuel_photo_read_queue_checks.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/fuel_photo_read_queue_checks.sql
+          docker cp supabase/tests/part_type_auto_sort_checks.sql "$db_container":/tmp/part_type_auto_sort_checks.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/part_type_auto_sort_checks.sql

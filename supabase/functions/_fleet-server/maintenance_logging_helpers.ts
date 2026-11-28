@@ -63,6 +63,7 @@ export async function loadTrustedOdometerMap(
 
 export function formatOdometerSourceLabel(source: string): string {
   const s = source.toLowerCase();
+  if (s.includes("pre_shift") || s.includes("pre-shift")) return "pre-shift check";
   if (s.includes("fuel")) return "fuel fill log";
   if (s.includes("check")) return "check-in";
   if (s.includes("service") || s.includes("maintenance")) return "service log";

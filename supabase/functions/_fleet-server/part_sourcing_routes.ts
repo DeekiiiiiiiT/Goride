@@ -54,6 +54,9 @@ export function registerPartSourcingRoutes(
   };
   gate.use("/make-server-37f42386/admin/*", requireAuth(), async (c, next) => {
     if (!c.req.path.includes("/admin/part-")) return next();
+    // Part pictures carry their own guards (part_picture_admin_routes.ts): Remake, Hide and Show are staff actions
+    // (docs/part-pictures-audit.md §3.5), so they are not part-sourcing master writes.
+    if (c.req.path.includes("/admin/part-picture")) return next();
     if (c.req.method === "GET" || c.req.method === "HEAD") return next();
     const denied = assertPartSourcingPlatformAccess(c);
     if (denied) return denied;

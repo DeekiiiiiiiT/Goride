@@ -5,6 +5,7 @@
  */
 import { API_ENDPOINTS } from "./apiConfig";
 import { publicAnonKey } from "../utils/supabase/info";
+import type { PartPicture } from "../components/admin/part-pictures/partPicturesApi";
 
 const BASE = `${API_ENDPOINTS.catalog}/make-server-37f42386/admin/catalog-research`;
 
@@ -25,7 +26,7 @@ async function getJson<T>(token: string, path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-async function send<T>(token: string, method: "POST" | "PATCH", path: string, body?: unknown): Promise<T> {
+async function send<T>(token: string, method: "POST" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: headers(token, body !== undefined),
@@ -84,6 +85,8 @@ export type ResearchJobListItem = {
   trustRoute: TrustRoute | null;
   siteDomains: string[];
   conflictOpen: boolean;
+  /** Answers teach Roam §5.4: a browser check that carries a question card. */
+  needsYou?: boolean;
   /** RE-73: the owner's note when the job was closed on their say-so (shown as Closed), else null. */
   closedNote?: string | null;
   updatedAt: string;
@@ -192,9 +195,31 @@ export type ResearchJobDetail = {
   car: ResearchCar | null;
   partType: { id: string; name: string; position_scheme?: string | null } | null;
   spec: { key: string; label: string; unit: string | null } | null;
+  /** Owner 27 Nov: "any_page" = a spec a parts catalogue never shows (bulb, tyre, oil…), checked on any page about the car. */
+  specSource?: "catalogue" | "any_page" | null;
   browserCheckUrl: string | null;
   /** RE-63: the same model's other engines built in the same years (e.g. the turbo). */
   sisterEngines?: Array<{ code: string; turbo: boolean }>;
+  /** Step 3 wording: the car maker's own name for this part ("Hub & bearing assy, rear axle"), when Roam knows it. */
+  makerPartName?: string | null;
+  /** Answers teach Roam AT-06: the word to search the maker's site for, when the maker's words are known. */
+  makerSearch?: string | null;
+  /** Owner 27 Nov: the exact page this part was found on before (an upload for this car that has it). */
+  savedPage?: { url: string; domain: string | null; readAt: string } | null;
+  /** AT-11 / AT-12: the question card this browser check carries (the saved-page row Roam read). */
+  question?: {
+    savedPageId: string;
+    domain: string | null;
+    readAt: string;
+    lineNo: number;
+    partType: string;
+    place: string | null;
+    groupLine: string | null;
+    lineText: string;
+    number: string | null;
+    dates: string | null;
+    question: SavedPageQuestion;
+  } | null;
   /** RE-63: the catalogue's own name for this car's version, learned from an earlier confirmed check. */
   knownVersion?: {
     domain: string;
@@ -206,7 +231,12 @@ export type ResearchJobDetail = {
     grade?: string | null;
     transmission?: string | null;
   } | null;
-  reads: Array<{ id: string; domain: string | null; path: "direct" | "owner_browser"; read_at: string }>;
+  reads: Array<{
+    id: string;
+    domain: string | null;
+    path: "direct" | "owner_browser" | "roam_saved_page";
+    read_at: string;
+  }>;
   proposals: PartProposal[];
   vehicleProposals: VehicleProposal[];
   specProposals: SpecProposal[];
@@ -340,7 +370,8 @@ export type LookupRecipe = {
 export type SiteRead = {
   id: string;
   purpose: "job" | "recipe_test" | "recheck";
-  path: "direct" | "owner_browser";
+  /** Who read the page: the robot itself, a person's browser check, or Roam saving from an uploaded saved page. */
+  path: "direct" | "owner_browser" | "roam_saved_page";
   url: string;
   httpStatus: number | null;
   foundRow: boolean;
@@ -394,9 +425,232 @@ export type BrowserCheckGate =
   | { ok: true; detected: string }
   | { ok: false; reason: "no_car" | "no_number" | "number_not_on_line" | "wrong_years" | "wrong_engine" | "no_value" | "empty" };
 
+// ------------------------------------------------------------------ saved catalogue pages (docs/saved-page-parts-audit.md)
+
+/**
+ * docs/saved-page-reads-disagree-audit.md Rev 2: "not_saved" = Roam already has a different number here (a fact, no
+ * button); "left_for_later" = Roam couldn't prove the row from the page, so nothing was saved and nothing is asked.
+ */
+export type SavedPageGroup = "saved" | "already" | "held" | "not_saved" | "left_for_later" | "not_roam_type";
+/** Older uploads carry only the first four keys. */
+export type SavedPageCounts = Record<"saved" | "already" | "held" | "not_roam_type", number> &
+  Partial<Record<"not_saved" | "left_for_later", number>>;
+export type SavedPageRow = {
+  partType: string;
+  place: string | null;
+  number: string | null;
+  dates: string | null;
+  group: SavedPageGroup;
+  /** Plain reason from the server (held rows only); the screen never makes its own wording. */
+  reason: string | null;
+  jobId: string | null;
+  /** The suggestion this unknown row belongs to (docs/part-type-learning-audit.md D1/D2), or null. */
+  suggestion?: string | null;
+  /** Part pictures (docs/part-pictures-audit.md §3.5 point 7): only on GET saved-pages/:id. */
+  picture?: PartPicture | null;
+  // Answers teach Roam (docs/answers-teach-roam-audit.md §5.1): what Roam read, for the question card.
+  lineNo?: number;
+  groupLine?: string | null;
+  lineText?: string;
+  /** The one thing a held row asks; `answer` is set once the owner answered. */
+  question?: SavedPageQuestion | null;
+  /** This row was saved because of an earlier answer ("Learned from you"). */
+  learned?: boolean;
+  /** Skipped rows only: the server's plain reason the page couldn't prove it (shown on the Skipped tab). */
+  waitReason?: string | null;
+  /** The heading's key (side words removed), so the RH and LH rows of one heading share one question card. */
+  phraseKey?: string | null;
+};
+export type SavedPageQuestion = {
+  kind: "wording" | "types" | "axle" | "side";
+  typeIds: string[];
+  typeNames: string[];
+  answer?: "yes" | "no" | null;
+  /** The server's line under an answered card ("Roam will remember … for Toyota."). */
+  note?: string | null;
+};
+/** The answer the owner gives on a question card. */
+export type QuestionAnswer = {
+  yes?: boolean;
+  typeId?: string | null;
+  axle?: "front" | "rear";
+  side?: "left" | "right" | "both";
+  /** "It has no front or rear": the part type's place setting is corrected for every car. */
+  noPlace?: boolean;
+  /** "It has no left or right": the part type keeps front/rear only. */
+  noSide?: boolean;
+};
+/** One owner lesson on Part types → Learned from you (§5.3). */
+export type MakerLesson = {
+  id: string;
+  heading: string;
+  make: string;
+  model: string | null;
+  axle: "front" | "rear" | null;
+  side: "left" | "right" | "both" | null;
+  typeId: string;
+  typeName: string;
+  partsSaved: number;
+  answeredBy: string | null;
+  answeredAt: string | null;
+};
+/** What the upload did about pictures (§3.2). */
+export type SavedPagePictures = {
+  queued: number;
+  alreadyHave: number;
+  noDiagram: number;
+  failed: boolean;
+  rows: Array<{ number: string; status: "queued" | "alreadyHave" | "noDiagram" | "templateOff" }>;
+};
+/** One "Parts Roam doesn't know yet" card (docs/part-type-learning-audit.md D2). Every word comes from the server. */
+export type SavedPageSuggestion = {
+  key: string;
+  /** The suggested plain name; for kind "existing", the existing type's own name. */
+  name: string;
+  groupId: string | null;
+  groupName: string;
+  kind: "new" | "existing" | "fixings";
+  existingTypeId: string | null;
+  positionScheme: "none" | "axle" | "axle_left_right";
+  /** The catalogue's own words, e.g. "INLET, AIR CLEANER, NO.1". */
+  pagePhrase: string;
+  numbers: string[];
+  rowCount: number;
+  numberCount: number;
+  /** open/dismissed = the owner decides (older uploads); added/skipped/waiting = Roam sorted it (auto-sort plan). */
+  status: "open" | "added" | "dismissed" | "skipped" | "waiting";
+  typeId: string | null;
+  typeName: string | null;
+  /** Why the last Add didn't finish, in plain words. */
+  reason: string | null;
+};
+/** One "not a part we track" phrase (Part types → Hidden from saved pages). */
+export type HiddenPartTypePhrase = {
+  id: string;
+  phrase: string;
+  groupId: string | null;
+  groupName: string | null;
+  dismissedBy: string | null;
+  dismissedByName: string | null;
+  dismissedAt: string;
+};
+/** One answer on the "Sorted by Roam" review list (docs/part-type-auto-sort-audit.md R4). */
+export type PartNameItem = {
+  key: string;
+  /** Added: the search word (the plain name); Not tracked: the catalogue words as the page wrote them. */
+  phrase: string;
+  name: string | null;
+  typeId: string | null;
+  typeName: string | null;
+  groupName: string | null;
+  reason: string | null;
+  setBy: "owner" | "roam";
+  at: string;
+  uploads: number;
+};
+export type PartNamesTab = "added" | "not_tracked";
+export type TrackPartNameReply = { ok: true; saved: number; pages: number; remaining: number; busy: boolean; type: { id: string; name: string } | null };
+export type SavedPageStopCode =
+  | "wrong_car"
+  | "untrusted_site"
+  | "part_maker_page"
+  | "cap_reached"
+  | "too_big"
+  | "not_web_page"
+  | "no_rows"
+  | "no_build_dates"
+  | "too_many_pages"
+  | "ai_failed"
+  /** Answers teach Roam: the maker's words couldn't be read, so nothing was decided. */
+  | "words_unread";
+export type SavedPage = {
+  id: string;
+  vehicle_catalog_id: string;
+  job_id: string | null;
+  domain: string | null;
+  source_url: string | null;
+  file_name: string | null;
+  status: "reading" | "done" | "stopped";
+  stop_reason: string | null;
+  result: {
+    counts?: SavedPageCounts;
+    rows?: SavedPageRow[];
+    otherTypes?: string[];
+    stop?: { code: string; detail: string };
+    pictures?: SavedPagePictures;
+    suggestions?: SavedPageSuggestion[];
+    /** Unknown rows beyond the 20 cards. */
+    moreUnknownRows?: number;
+    /** When Roam last sorted this upload's unknown names (auto-sort plan R3/R5). */
+    sortAt?: string;
+    /** Rev 2 §3.3: rows Roam left out because the page couldn't prove them (same as counts.left_for_later). */
+    skipped?: number;
+    /** Answers teach Roam AT-08: rows saved on this upload because of an earlier answer. */
+    learned?: number;
+  };
+  created_at: string;
+};
+export type SavedPageReply = {
+  savedPage: SavedPage;
+  alreadyRead?: boolean;
+  readAt?: string;
+  stop?: { code: SavedPageStopCode; detail: string };
+  versionShown?: string | null;
+  carFrame?: string | null;
+};
+export type SavedPageListItem = { id: string; createdAt: string; domain: string | null; status: SavedPage["status"]; counts: SavedPageCounts };
+
+/** R1: upload one saved page (multipart; the browser sets the boundary). */
+async function uploadSavedPage(
+  token: string,
+  body: { file: File; vehicleCatalogId: string; jobId?: string | null; url?: string | null; again?: boolean },
+): Promise<SavedPageReply> {
+  const form = new FormData();
+  form.append("file", body.file, body.file.name);
+  form.append("vehicleCatalogId", body.vehicleCatalogId);
+  if (body.jobId) form.append("jobId", body.jobId);
+  if (body.url) form.append("url", body.url);
+  if (body.again) form.append("again", "true");
+  const res = await fetch(`${BASE}/saved-pages`, { method: "POST", headers: headers(token), body: form });
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()) as SavedPageReply;
+}
+
 // ------------------------------------------------------------------ reads
 
 export const researchApi = {
+  uploadSavedPage,
+  savedPages: (t: string, vehicleCatalogId: string) =>
+    getJson<{ items: SavedPageListItem[] }>(t, `/saved-pages?vehicleCatalogId=${encodeURIComponent(vehicleCatalogId)}`).then((r) => r.items ?? []),
+  savedPage: (t: string, id: string) => getJson<{ savedPage: SavedPage }>(t, `/saved-pages/${encodeURIComponent(id)}`).then((r) => r.savedPage),
+  /** The same page with each row's picture, and whether AI part pictures are on (S1). */
+  savedPageWithPictures: (t: string, id: string) =>
+    getJson<{ savedPage: SavedPage; picturesAiOn?: boolean }>(t, `/saved-pages/${encodeURIComponent(id)}`),
+  /** R5/R6: Add part type, or Not a part we track. Answers the whole page, as GET saved-pages/:id does. */
+  savedPagePartType: (t: string, id: string, body: { key: string; action: "add" | "dismiss"; name?: string; groupId?: string }) =>
+    send<{ savedPage: SavedPage; picturesAiOn?: boolean }>(t, "POST", `/saved-pages/${encodeURIComponent(id)}/part-type`, body),
+  hiddenPartTypePhrases: (t: string) =>
+    getJson<{ items: HiddenPartTypePhrase[] }>(t, "/hidden-part-type-phrases").then((r) => r.items ?? []),
+  partNames: (t: string, tab: PartNamesTab, cursor?: string | null) =>
+    getJson<{ items: PartNameItem[]; nextCursor: string | null }>(
+      t,
+      `/part-names?tab=${tab}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+    ),
+  trackPartName: (t: string, key: string) => send<TrackPartNameReply>(t, "POST", `/part-names/${encodeURIComponent(key)}/track`),
+  skipPartName: (t: string, key: string) =>
+    send<{ ok: true; drafted: boolean; pages: number }>(t, "POST", `/part-names/${encodeURIComponent(key)}/skip`),
+  suggestPartTypeAgain: (t: string, id: string) => send<{ deleted: string }>(t, "DELETE", `/hidden-part-type-phrases/${encodeURIComponent(id)}`),
+  /** Answers teach Roam §5.1 / §5.2: answer one question card. */
+  answerQuestion: (t: string, savedPageId: string, lineNo: number, body: QuestionAnswer) =>
+    send<{ result: SavedPage["result"]; message: string | null }>(
+      t,
+      "POST",
+      `/saved-pages/${encodeURIComponent(savedPageId)}/rows/${lineNo}/answer`,
+      body,
+    ),
+  /** §5.3: what Roam learned from the owner's answers, and Undo. */
+  lessons: (t: string) => getJson<{ lessons: MakerLesson[]; canUndo: boolean }>(t, "/lessons"),
+  forgetLesson: (t: string, id: string) => send<{ ok: true }>(t, "DELETE", `/lessons/${encodeURIComponent(id)}`),
   summary: (t: string) => getJson<ResearchSummary>(t, "/summary"),
   notices: (t: string) => getJson<{ items: ResearchNotice[] }>(t, "/notices").then((r) => r.items ?? []),
   coverage: (t: string, carId: string) => getJson<CarCoverage>(t, `/coverage/${encodeURIComponent(carId)}`),

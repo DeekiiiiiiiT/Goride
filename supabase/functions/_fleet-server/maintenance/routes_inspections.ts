@@ -7,7 +7,7 @@ import { requireAuth, requireAnyPermission, effectiveRole, type RbacUser } from 
 import { getOrgId } from "../org_scope.ts";
 import { fleetDb } from "../repos/baseRepo.ts";
 import { insertMaintenanceEvent } from "../maintenance_logging_helpers.ts";
-import { projectFromMaintenanceLog } from "../odometer_ledger.ts";
+import { projectFromMaintenanceLog, projectOdometerReading } from "../odometer_ledger.ts";
 
 type RouteApp = {
   post: (path: string, ...handlers: unknown[]) => void;
@@ -209,7 +209,7 @@ export function registerMaintenanceInspectionRoutes(route: RouteApp, supabase: S
           if (safetyFail) {
             const reason = f.notes != null ? String(f.notes) : (itemLabel || "Inspection safety fail");
             await fleetDb()
-              .from("vehicles")
+              .from("fleet_vehicles")
               .update({
                 do_not_drive: true,
                 do_not_drive_reason: reason,
@@ -245,7 +245,26 @@ export function registerMaintenanceInspectionRoutes(route: RouteApp, supabase: S
 
         const inspectionOdo = body.odometer ?? body.odo;
         const inspectionDate = body.date ?? body.performedAtDate ?? todayIso();
-        if (inspectionOdo != null && primaryVehicleId) {
+        // Step 13 (MER-17): a driver's pre-shift check reading is its own source, never mistaken for a service.
+        if (inspectionOdo != null && primaryVehicleId && String(body.purpose ?? "") === "pre_shift") {
+          try {
+            await projectOdometerReading({
+              organizationId: orgId,
+              vehicleId: primaryVehicleId,
+              reading: Number(inspectionOdo),
+              source: "pre_shift",
+              referenceId: sharedWoId ?? crypto.randomUUID(),
+              referenceType: "inspection",
+              readingDate: String(inspectionDate).slice(0, 10),
+              driverId: rbacUser?.userId ?? null,
+              isHard: true,
+              isVerified: false,
+              notes: "Pre-shift check",
+            });
+          } catch (odoErr) {
+            console.warn("[maintenance-inspection-findings] pre-shift odometer:", odoErr);
+          }
+        } else if (inspectionOdo != null && primaryVehicleId) {
           try {
             await projectFromMaintenanceLog(
               {

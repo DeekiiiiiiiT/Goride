@@ -135,7 +135,30 @@ describe("money and goal", () => {
   });
 });
 
-import { catalogueEngineCode, partFinder } from "./researchModel";
+import { anyPageLinkOk, catalogueEngineCode, partFinder, specFinder } from "./researchModel";
+
+describe("anyPageLinkOk (spec found on any page)", () => {
+  it("takes the page's own https link, never the search page", () => {
+    expect(anyPageLinkOk("https://www.toyota.jp/roomy/manual.html")).toBe(true);
+    expect(anyPageLinkOk("https://www.google.com/search?q=roomy")).toBe(false);
+    expect(anyPageLinkOk("http://example.com")).toBe(false);
+    expect(anyPageLinkOk("")).toBe(false);
+  });
+});
+
+describe("specFinder (spec browser check hint)", () => {
+  it("uses the catalogue's word and an example of the value", () => {
+    expect(specFinder("headlight_high_bulb", "headlight, high beam")).toEqual({ search: "headlamp", looksLike: "H4" });
+    expect(specFinder("headlight_low_bulb", "low beam bulb").search).toBe("headlamp");
+    expect(specFinder("tire_size", "tire size")).toEqual({ search: "tire", looksLike: "165/65R14" });
+    expect(specFinder("engine_oil_capacity_with_filter_l", "oil capacity").looksLike).toBe("3.4 L");
+    expect(specFinder("engine_oil_grade", "engine oil grade").looksLike).toBe("0W-20");
+    expect(specFinder("coolant_type", "coolant")).toEqual({ search: "coolant", looksLike: null });
+  });
+  it("falls back to the spec's own name", () => {
+    expect(specFinder("mystery_key", "Mystery Spec")).toEqual({ search: "mystery spec", looksLike: null });
+  });
+});
 
 describe("browser-check guide (RE-63)", () => {
   it("writes engine codes the way catalogue version tables do", () => {
@@ -144,11 +167,14 @@ describe("browser-check guide (RE-63)", () => {
     expect(catalogueEngineCode(null)).toBe("");
   });
 
+  // Answers teach Roam: the maker's words come from the server (seed rows of part_maker_word) as makerPartName +
+  // makerSearch; the screen only adds which section to open.
   it("tells what to search and which row to look for in a Toyota / Daihatsu catalogue", () => {
-    expect(partFinder("Engine Air Filter", "Toyota")).toEqual({ search: "air cleaner", rowName: "ELEMENT SUB-ASSY, AIR CLEANER FILTER" });
-    expect(partFinder("Spark Plugs", "Toyota")).toEqual({ search: "spark plug", rowName: "PLUG, SPARK" });
-    expect(partFinder("Cabin A/C Filter", "Daihatsu").search).toBe("air filter");
-    expect(partFinder("Shock absorber", "Toyota").rowName).toBe("ABSORBER ASSY, SHOCK");
+    expect(partFinder("Engine Air Filter", "Toyota", null, "ELEMENT SUB-ASSY, AIR CLEANER FILTER", "air cleaner")).toEqual({ search: "air cleaner", rowName: "ELEMENT SUB-ASSY, AIR CLEANER FILTER" });
+    expect(partFinder("Spark Plugs", "Toyota", null, "PLUG, SPARK", "spark plug")).toEqual({ search: "spark plug", rowName: "PLUG, SPARK" });
+    expect(partFinder("Cabin A/C Filter", "Daihatsu", null, "ELEMENT, CLEAN AIR FILTER (or AIR REFINER)", "air filter").search).toBe("air filter");
+    // 26 Nov: "air filter" also finds the engine's air cleaner; the cabin filter sits with the heater and air con.
+    expect(partFinder("Cabin A/C Filter", "Toyota", null, "ELEMENT, CLEAN AIR FILTER (or AIR REFINER)", "air filter").section).toBe("heater and air conditioning");
     // Owner 25 Nov: a front / rear check names the section to open and the words every such row has.
     expect(partFinder("Shock absorber", "Toyota", "Front")).toEqual({
       search: "shock absorber",
@@ -158,9 +184,9 @@ describe("browser-check guide (RE-63)", () => {
     });
     expect(partFinder("Shock absorber", "Toyota", "rear").section).toBe("rear shock absorber");
     // Any part with a front / rear names its section, on any make; the maker's row name stays as it was.
-    expect(partFinder("Front brake pads", "Toyota", "front")).toEqual({ search: "disc brake", rowName: "PAD KIT, DISC BRAKE", section: "front brake pads" });
+    expect(partFinder("Front brake pads", "Toyota", "front", "PAD KIT, DISC BRAKE", "disc brake")).toEqual({ search: "disc brake", rowName: "PAD KIT, DISC BRAKE", section: "front brake pads" });
     expect(partFinder("Wheel bearing", "Honda", "Rear")).toEqual({ search: "wheel bearing", rowName: null, section: "rear wheel bearing" });
-    expect(partFinder("Spark Plugs", "Toyota", null).section).toBeUndefined();
+    expect(partFinder("Spark Plugs", "Toyota", null, "PLUG, SPARK", "spark plug").section).toBeUndefined();
   });
 
   it("falls back to the part's own name for other makers and unknown parts", () => {
@@ -176,11 +202,12 @@ describe("browser-check guide — no wrong row names (code review)", () => {
     expect(partFinder("Brake pad wear sensor", "Toyota").rowName).toBeNull();
     expect(partFinder("Air con compressor belt", "Toyota").rowName).toBeNull();
   });
-  it("the real core part names still get their rows", () => {
-    expect(partFinder("Drive / Serpentine Belt", "Toyota").rowName).toBe("BELT, V-RIBBED");
-    expect(partFinder("Brakes", "Toyota").rowName).toBeNull();
-    expect(partFinder("Front brake pads", "Toyota").rowName).toBe("PAD KIT, DISC BRAKE");
-    expect(partFinder("Wiper Blades", "Toyota").rowName).toBe("BLADE ASSY, WIPER");
+  it("no list lives in the screen any more: with no maker words a part gets no row name", () => {
+    expect(partFinder("Drive / Serpentine Belt", "Toyota").rowName).toBeNull();
+    expect(partFinder("Drive / Serpentine Belt", "Toyota", null, "BELT, V-RIBBED", "belt").rowName).toBe("BELT, V-RIBBED");
+    expect(partFinder("Wiper Blades", "Toyota", null, "BLADE ASSY, WIPER", "wiper").rowName).toBe("BLADE ASSY, WIPER");
+    // The owner's lesson for the Roomy strut mount (Answers teach Roam, test 11).
+    expect(partFinder("Strut mount", "Toyota", "front", "SUPPORT SUB-ASSY, FRONT SUSPENSION", "support")).toEqual({ search: "support", rowName: "SUPPORT SUB-ASSY, FRONT SUSPENSION", section: "front strut mount" });
   });
 });
 
@@ -265,5 +292,36 @@ describe("missing dates (owner 25 Nov)", () => {
     expect(missingRanges([{ from: m(2016, 11), to: m(2018, 11) }], roomy).map((g) => `${monthIndexText(g.from)} – ${monthIndexText(g.to)}`)).toEqual(["12.2018 – 08.2020"]);
     expect(missingRanges([{ from: m(2016, 11), to: m(2018, 11) }, { from: m(2018, 11), to: m(2020, 9) }], roomy)).toEqual([]);
     expect(monthIndexText(m(2020, 12))).toBe("12.2020");
+  });
+});
+
+describe("NR-03 specConfirmed", () => {
+  it("a value read on a trusted site counts as proven", async () => {
+    const { specConfirmed } = await import("./researchModel");
+    expect(specConfirmed({ trust_route: "a", evidence_read_ids: [] })).toBe(true);
+    expect(specConfirmed({ trust_route: null, evidence_read_ids: ["r1"] })).toBe(true);
+  });
+  it("the AI's guess alone is not proven", async () => {
+    const { specConfirmed } = await import("./researchModel");
+    expect(specConfirmed({ trust_route: null, evidence_read_ids: [] })).toBe(false);
+  });
+});
+
+describe("step 3 words from the car maker's own part name", () => {
+  it("wheel bearing on a Roomy → search hub, rear axle section", async () => {
+    const { partFinder } = await import("./researchModel");
+    expect(partFinder("Wheel bearing", "Toyota", "rear:both", "Hub & bearing assy, rear axle")).toEqual({
+      search: "hub",
+      rowName: "HUB & BEARING ASSY, REAR AXLE",
+      section: "rear axle hub & bearing",
+    });
+  });
+  it("a part with wording on file keeps it", async () => {
+    const { partFinder } = await import("./researchModel");
+    expect(partFinder("Thermostat", "Toyota", null, "THERMOSTAT", "thermostat")).toEqual({ search: "thermostat", rowName: "THERMOSTAT" });
+  });
+  it("no maker name → as before", async () => {
+    const { partFinder } = await import("./researchModel");
+    expect(partFinder("Wheel bearing", "Toyota", "rear", null)).toEqual({ search: "wheel bearing", rowName: null, section: "rear wheel bearing" });
   });
 });

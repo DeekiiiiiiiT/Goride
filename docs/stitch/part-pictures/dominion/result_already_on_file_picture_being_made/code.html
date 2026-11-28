@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"on-secondary-container":"#394c84","on-primary-fixed":"#00174b","on-error":"#ffffff","on-surface-variant":"#434655","surface-container-low":"#f3f3ff","on-tertiary-fixed":"#3a0b00","surface-container":"#ededf9","background":"#faf8ff","primary-container":"#0153dc","on-error-container":"#93000a","tertiary-fixed-dim":"#ffb59e","surface-container-high":"#e7e7f3","surface-dim":"#d9d9e5","tertiary-fixed":"#ffdbd0","surface-tint":"#0053db","on-surface":"#191b24","surface-variant":"#e1e1ed","secondary-fixed-dim":"#b4c5ff","inverse-on-surface":"#f0f0fc","error-container":"#ffdad6","surface":"#faf8ff","surface-container-lowest":"#ffffff","error":"#ba1a1a","on-tertiary-fixed-variant":"#842500","surface-bright":"#faf8ff","outline-variant":"#c3c6d7","on-secondary-fixed":"#00174b","secondary-fixed":"#dbe1ff","on-secondary":"#ffffff","on-primary-container":"#ced8ff","tertiary":"#852500","on-primary":"#ffffff","primary-fixed":"#dbe1ff","surface-container-highest":"#e1e1ed","on-background":"#191b24","secondary":"#495c95","on-tertiary-container":"#ffcec0","secondary-container":"#acbfff","primary-fixed-dim":"#b4c5ff","inverse-primary":"#b4c5ff","on-secondary-fixed-variant":"#31447b","primary":"#003ea9","tertiary-container":"#ad3402","on-primary-fixed-variant":"#003ea8","inverse-surface":"#2e3039","outline":"#737686","on-tertiary":"#ffffff"},"borderRadius":{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},"spacing":{"space-lg":"1.5rem","margin":"1.5rem","space-xl":"2rem","space-xs":"0.25rem","gutter":"1rem","space-sm":"0.5rem","space-md":"1rem"},"fontFamily":{"headline-sm":["Inter"],"body-lg":["Inter"],"body-md":["Inter"],"mono-md":["JetBrains Mono"],"headline-md":["Inter"],"headline-lg":["Inter"],"mono-sm":["JetBrains Mono"],"label-lg":["Inter"],"title-md":["Inter"],"body-sm":["Inter"],"label-md":["Inter"]},"fontSize":{"headline-sm":["18px",{"lineHeight":"26px","letterSpacing":"-0.01em","fontWeight":"600"}],"body-lg":["15px",{"lineHeight":"22px","fontWeight":"400"}],"body-md":["14px",{"lineHeight":"20px","fontWeight":"400"}],"mono-md":["14px",{"lineHeight":"20px","fontWeight":"400"}],"headline-md":["22px",{"lineHeight":"28px","letterSpacing":"-0.015em","fontWeight":"600"}],"headline-lg":["26px",{"lineHeight":"34px","letterSpacing":"-0.02em","fontWeight":"600"}],"mono-sm":["13px",{"lineHeight":"18px","fontWeight":"400"}],"label-lg":["14px",{"lineHeight":"20px","fontWeight":"500"}],"title-md":["16px",{"lineHeight":"24px","fontWeight":"600"}],"body-sm":["13px",{"lineHeight":"18px","fontWeight":"400"}],"label-md":["12px",{"lineHeight":"16px","letterSpacing":"0.01em","fontWeight":"600"}]}}}}</script></head><body class="bg-surface font-body-md text-body-md text-on-surface"><aside class="fixed left-0 top-0 h-full w-64 bg-on-primary-fixed text-on-primary z-50 flex flex-col pt-space-lg pb-space-xl overflow-y-auto"><div class="px-space-lg mb-space-xl"><div class="font-title-md text-title-md tracking-tight text-on-primary">Dominion · Roam Admin Console</div></div><nav class="flex-1 px-space-md space-y-space-lg" data-active-classes="bg-primary-container text-on-primary-container font-label-lg rounded-lg"><div><div class="px-space-sm mb-space-xs font-label-md text-label-md uppercase tracking-wider text-primary-fixed-dim">MASTER DATA</div><div class="space-y-space-xs"><a class="flex items-center px-space-sm py-space-sm rounded-lg font-body-md text-body-md text-inverse-on-surface hover:bg-primary-container hover:text-on-primary-container transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined mr-space-sm text-[20px]">dashboard</span>Overview</a><a aria-current="page" class="flex items-center px-space-sm py-space-sm transition-colors bg-primary-container text-on-primary-container font-label-lg rounded-lg" data-path="vehicles" href="#"><span class="material-symbols-outlined mr-space-sm text-[20px]">directions_car</span>Vehicles</a><a class="flex items-center px-space-sm py-space-sm rounded-lg font-body-md text-body-md text-inverse-on-surface hover:bg-primary-container hover:text-on-primary-container transition-colors" data-path="places-and-maps" href="#"><span class="material-symbols-outlined mr-space-sm text-[20px]">map</span>Places and Maps</a><a class="flex items-center px-space-sm py-space-sm rounded-lg font-body-md text-body-md text-inverse-on-surface hover:bg-primary-container hover:text-on-primary-container transition-colors" data-path="fuel" href="#"><span class="material-symbols-outlined mr-space-sm text-[20px]">local_gas_station</span>Fuel</a><a class="flex items-center px-space-sm py-space-sm rounded-lg font-body-md text-body-md text-inverse-on-surface hover:bg-primary-container hover:text-on-primary-container transition-colors" data-path="tolls" href="#"><span class="material-symbols-outlined mr-space-sm text-[20px]">toll</span>Tolls</a><a class="flex items-center px-space-sm py-space-sm rounded-lg font-body-md text-body-md text-inverse-on-surface hover:bg-primary-container hover:text-on-primary-container transition-colors" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined mr-space-sm text-[20px]">receipt_long</span>Tax and Vendors</a></div></div><div><div class="px-space-sm mb-space-xs font-label-md text-label-md uppercase tracking-wider text-primary-fixed-dim">ENGINES</div><a class="flex items-center px-space-sm py-space-sm rounded-lg font-body-md text-body-md text-inverse-on-surface hover:bg-primary-container hover:text-on-primary-container transition-colors" data-path="engines" href="#"><span class="material-symbols-outlined mr-space-sm text-[20px]">memory</span>Engines</a></div><div><div class="px-space-sm mb-space-xs font-label-md text-label-md uppercase tracking-wider text-primary-fixed-dim">DISTRIBUTION</div><a class="flex items-center px-space-sm py-space-sm rounded-lg font-body-md text-body-md text-inverse-on-surface hover:bg-primary-container hover:text-on-primary-container transition-colors" data-path="distribution" href="#"><span class="material-symbols-outlined mr-space-sm text-[20px]">hub</span>Distribution</a></div><div><div class="px-space-sm mb-space-xs font-label-md text-label-md uppercase tracking-wider text-primary-fixed-dim">PLATFORM</div><a class="flex items-center px-space-sm py-space-sm rounded-lg font-body-md text-body-md text-inverse-on-surface hover:bg-primary-container hover:text-on-primary-container transition-colors" data-path="platform" href="#"><span class="material-symbols-outlined mr-space-sm text-[20px]">layers</span>Platform</a></div><div><div class="px-space-sm mb-space-xs font-label-md text-label-md uppercase tracking-wider text-primary-fixed-dim">BACK OFFICE</div><a class="flex items-center px-space-sm py-space-sm rounded-lg font-body-md text-body-md text-inverse-on-surface hover:bg-primary-container hover:text-on-primary-container transition-colors" data-path="back-office" href="#"><span class="material-symbols-outlined mr-space-sm text-[20px]">admin_panel_settings</span>Back Office</a></div></nav></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-16 bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 px-space-xl flex items-center justify-between"><div class="relative w-96"><span class="material-symbols-outlined absolute left-space-sm top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span><input class="w-full h-10 pl-space-xl pr-12 rounded-lg bg-surface-container-lowest font-body-md text-body-md text-on-surface placeholder:text-on-surface-variant focus:outline-none shadow-[0_1px_4px_rgba(0,0,0,0.04)]" placeholder="Search entities, engines, routes…" type="text"/><span class="absolute right-space-sm top-1/2 -translate-y-1/2 px-space-xs py-0.5 rounded bg-surface-container-low font-mono-sm text-mono-sm text-on-surface-variant">⌘K</span></div><div class="flex items-center gap-space-md"><button aria-label="Toggle theme" class="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><div class="flex items-center gap-space-sm"><span class="font-label-lg text-label-lg text-on-surface">Deeki T · Owner</span><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="relative pt-16 w-full px-space-xl bg-surface min-h-screen"><div class="flex flex-col w-full">
+<div class="relative w-full py-space-lg">
+<!-- Background: Toyota Roomy Car Page -->
+<div class="flex flex-col gap-space-lg">
+<!-- Breadcrumb -->
+<div class="flex items-center gap-space-sm font-body-sm text-body-sm text-on-surface-variant">
+<span>Vehicles</span>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+<span>Toyota</span>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+<span class="text-on-surface font-label-lg text-label-lg">Roomy</span>
+</div>
+<!-- Car Header Card -->
+<div class="bg-surface-container-lowest rounded-2xl p-space-lg shadow-[0_4px_16px_rgba(1,83,220,0.04)] flex items-center justify-between gap-space-lg">
+<div class="flex items-center gap-space-lg min-w-0">
+<div class="w-24 h-24 rounded-xl bg-surface-container-low overflow-hidden shrink-0">
+<img class="w-full h-full object-cover" data-alt="Clean studio three-quarter front photograph of a compact silver Toyota Roomy 2016-2020 MPV parked on a minimalist cool-tinted light grey studio floor, soft diffused overhead lighting, crisp modern automotive catalog aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBNJVqd9ThKYXXQVjd5JY3ZgtzGPsDbneSBwO0bhjNyKqvI3oOmU8tuvsFCpQxsVSrmjmH1je5csul19dTc9jet8vbGx2Lwox8kNUXsF3d4HLbb7wVuoPuQnW1t8ZXrUBHDLJfJbo8YpVDy77DeglVIfOQdFOm_UFhRzHOsd9jBQbCG4DlDXagjvQxXQDB0sYw93ngKCPQK0ujz8K9eMx8DT4kBv-ATa8u5bMcX33g"/>
+</div>
+<div class="flex flex-col gap-1 min-w-0">
+<div class="flex items-center gap-space-sm">
+<span class="font-headline-lg text-headline-lg text-on-surface">Toyota Roomy</span>
+<span class="px-2.5 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed-variant font-label-md text-label-md">M900A</span>
+</div>
+<p class="font-body-lg text-body-lg text-on-surface-variant">2016–2020 · 2WD · 1.0 petrol · frame M900A</p>
+</div>
+</div>
+<button class="h-11 px-5 rounded-[10px] bg-primary-container text-on-primary font-label-lg text-label-lg flex items-center gap-space-sm shrink-0" type="button">
+<span class="material-symbols-outlined text-[20px]">download</span>
+<span>Import from Amayama</span>
+</button>
+</div>
+<!-- Key Parts Grid -->
+<div class="flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Key parts</h2>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">6 categories</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-space-md">
+<!-- Part 1 -->
+<div class="bg-surface-container-lowest rounded-2xl p-5 shadow-[0_4px_16px_rgba(1,83,220,0.04)] flex items-start gap-space-md">
+<div class="w-11 h-11 rounded-xl bg-primary-fixed text-primary-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[22px]">air</span>
+</div>
+<div class="flex flex-col gap-1 min-w-0">
+<span class="font-title-md text-title-md text-on-surface truncate">Air filter</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">17801-21060</span>
+<span class="font-mono-sm text-mono-sm text-outline">11.2016 – 09.2020</span>
+</div>
+</div>
+<!-- Part 2 -->
+<div class="bg-surface-container-lowest rounded-2xl p-5 shadow-[0_4px_16px_rgba(1,83,220,0.04)] flex items-start gap-space-md">
+<div class="w-11 h-11 rounded-xl bg-primary-fixed text-primary-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[22px]">oil_barrel</span>
+</div>
+<div class="flex flex-col gap-1 min-w-0">
+<span class="font-title-md text-title-md text-on-surface truncate">Oil filter</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">90915-10009</span>
+<span class="font-mono-sm text-mono-sm text-outline">11.2016 – 09.2020</span>
+</div>
+</div>
+<!-- Part 3 -->
+<div class="bg-surface-container-lowest rounded-2xl p-5 shadow-[0_4px_16px_rgba(1,83,220,0.04)] flex items-start gap-space-md">
+<div class="w-11 h-11 rounded-xl bg-primary-fixed text-primary-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[22px]">hvac</span>
+</div>
+<div class="flex flex-col gap-1 min-w-0">
+<span class="font-title-md text-title-md text-on-surface truncate">Cabin air filter</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">87139-B1020</span>
+<span class="font-mono-sm text-mono-sm text-outline">11.2016 – 09.2020</span>
+</div>
+</div>
+<!-- Part 4 -->
+<div class="bg-surface-container-lowest rounded-2xl p-5 shadow-[0_4px_16px_rgba(1,83,220,0.04)] flex items-start gap-space-md">
+<div class="w-11 h-11 rounded-xl bg-primary-fixed text-primary-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[22px]">bolt</span>
+</div>
+<div class="flex flex-col gap-1 min-w-0">
+<span class="font-title-md text-title-md text-on-surface truncate">Spark plug</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">90048-51211</span>
+<span class="font-mono-sm text-mono-sm text-outline">11.2016 – 09.2020</span>
+</div>
+</div>
+<!-- Part 5 -->
+<div class="bg-surface-container-lowest rounded-2xl p-5 shadow-[0_4px_16px_rgba(1,83,220,0.04)] flex items-start gap-space-md">
+<div class="w-11 h-11 rounded-xl bg-primary-fixed text-primary-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[22px]">album</span>
+</div>
+<div class="flex flex-col gap-1 min-w-0">
+<span class="font-title-md text-title-md text-on-surface truncate">Front brake pad set</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">04465-B1360</span>
+<span class="font-mono-sm text-mono-sm text-outline">11.2016 – 09.2020</span>
+</div>
+</div>
+<!-- Part 6 -->
+<div class="bg-surface-container-lowest rounded-2xl p-5 shadow-[0_4px_16px_rgba(1,83,220,0.04)] flex items-start gap-space-md">
+<div class="w-11 h-11 rounded-xl bg-primary-fixed text-primary-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[22px]">cleaning_services</span>
+</div>
+<div class="flex flex-col gap-1 min-w-0">
+<span class="font-title-md text-title-md text-on-surface truncate">Wiper blade</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">85212-B1050</span>
+<span class="font-mono-sm text-mono-sm text-outline">11.2016 – 09.2020</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- 40% Dimmed In-App Backdrop + Centred Overlay -->
+<div class="fixed inset-0 left-64 top-16 bg-inverse-surface/40 z-30 flex items-center justify-center p-space-lg">
+<div class="w-full max-w-[640px] bg-surface-container-lowest rounded-[20px] p-8 shadow-2xl flex flex-col gap-6">
+<!-- 1. Top Icon & Header -->
+<div class="flex flex-col items-center text-center gap-3">
+<div class="w-14 h-14 rounded-full bg-on-surface-variant text-on-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[28px]">check</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface">Nothing new to save</h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant tabular-nums">From amayama.com · read 26 Nov 2026 · Toyota Roomy 2016–2020 · 2WD</p>
+</div>
+<!-- 2. Summary Pills -->
+<div class="flex flex-wrap items-center justify-center gap-2">
+<span class="px-3 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-md text-label-md">Saved 0</span>
+<span class="px-3 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-md text-label-md">Already on file 1</span>
+<span class="px-3 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-md text-label-md">Needs you 0</span>
+<span class="px-3 py-1 rounded-full bg-surface-container-lowest text-on-surface-variant shadow-[0_0_0_1px_rgba(195,198,215,0.8)] font-label-md text-label-md">Not a Roam part type 8</span>
+</div>
+<!-- 3. Pictures Status Line -->
+<div class="flex items-center justify-center gap-2 font-body-md text-body-md text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">image</span>
+<span>Pictures: 1 being made</span>
+</div>
+<!-- 4. Group: Already on file -->
+<div class="flex flex-col gap-3">
+<div class="flex items-center gap-2.5">
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Already on file</h2>
+<span class="px-2.5 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-md text-label-md">1</span>
+</div>
+<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-[0_0_0_1px_rgba(195,198,215,0.5)] flex items-center justify-between gap-4">
+<!-- Left: Thumbnail + Making Pill -->
+<div class="flex items-center gap-3 shrink-0">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low flex items-center justify-center text-outline-variant">
+<span class="material-symbols-outlined text-[20px]">filter_alt</span>
+</div>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary-fixed text-primary-container font-label-md text-label-md">
+<span class="w-1.5 h-1.5 rounded-full bg-primary-container animate-pulse"></span>
+<span>Making</span>
+</span>
+</div>
+<!-- Middle: Part Name, Number, Dates -->
+<div class="flex flex-col min-w-0 flex-1">
+<span class="font-label-lg text-label-lg text-on-surface truncate">Air filter</span>
+<div class="flex items-center gap-2 font-mono-sm text-mono-sm text-on-surface-variant">
+<span>17801-21060</span>
+<span>·</span>
+<span>11.2016 – 09.2020</span>
+</div>
+</div>
+<!-- Right: Already on file pill -->
+<span class="px-3 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-md text-label-md shrink-0">Already on file</span>
+</div>
+</div>
+<!-- 5. Group: Not a Roam part type (Collapsed Row) -->
+<button class="w-full bg-surface-container-low rounded-xl px-4 py-3 flex items-center justify-between gap-3 text-left hover:bg-surface-container transition-colors" id="toggle-ignored" type="button">
+<div class="flex flex-col gap-0.5 min-w-0">
+<span class="font-label-lg text-label-lg text-on-surface">Not a Roam part type</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant truncate">8 rows · ventilation pipe, air cleaner cap, inlet, hose clip, hose, hose clamp</span>
+</div>
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant shrink-0" id="ignored-chevron">chevron_right</span>
+</button>
+<!-- 6. Footer -->
+<div class="flex items-center justify-between pt-2">
+<button class="h-11 px-5 rounded-[10px] bg-surface-container-lowest text-on-surface shadow-[0_0_0_1px_rgba(195,198,215,0.85)] font-label-lg text-label-lg flex items-center gap-2 hover:bg-surface-container-low transition-colors" type="button">
+<span class="material-symbols-outlined text-[20px]">image</span>
+<span>See pictures</span>
+</button>
+<button class="h-11 px-6 rounded-[10px] bg-primary-container text-on-primary font-label-lg text-label-lg hover:bg-primary transition-colors" type="button">
+            Done
+          </button>
+</div>
+</div>
+</div>
+</div>
+</div></main></div></body></html>

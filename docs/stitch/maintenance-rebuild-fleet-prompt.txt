@@ -1,0 +1,202 @@
+ROAM FLEET — MAINTENANCE: DUE LIST, SERVICE HISTORY FILL-IN AND WORK ORDERS — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+HOW TO USE: First paste = everything from the intro down to END OF FIRST PASTE (Screens 1 and 2). Then paste one SCREEN block at a time, in order. Never paste the last section ("FOR CLAUDE — DO NOT PASTE").
+Plan: docs/maintenance-enterprise-rebuild-review.md (Rev 2), B3, B5, MER-09, MER-11, MER-12, MER-13, MER-15, MER-18, MER-25, MER-26.
+If this Stitch project's saved design system is "Precision Utilitarianism", "Technical Corporate Minimal" or a "logbook" style, start a fresh Stitch project for this file.
+
+
+==================== FIRST PASTE ====================
+
+Roam Fleet - Maintenance: due list, filling in service history, and work orders (Desktop Web App, for fleet owners, fleet managers and their staff):
+
+Design high-fidelity, modern screens for the Maintenance area of Roam Fleet. Every car has a list of parts that come due by km or by months, whichever comes first. Each due line says in plain words where its schedule comes from ("Car maker · owner's manual" or "Roam policy") and where the count started ("Counted from your service on 22 Aug 2026 at 180,088 km"). When nobody knows when a part was last done, the line says "History unknown" and asks to check it at the next service. It is never shown as overdue, never as OK. A short one-time "Fill in service history" step lets the owner type the last km and date for each part, or tick "Check at next service". Any due line can be logged on the spot with "Log this". A new "Work orders" tab shows every car that is at the garage or waiting to go, with the jobs on it. Adding a car now asks for its current odometer, and marks it "Hard use" (taxi, heavy traffic) from the start. The person using this is not a mechanic: every card says in plain words what it is for. The design must feel modern, calm and effortless, like the best consumer car-care apps. Every screen is tall enough to show everything, with no inner scrolling. Draw only the screens asked for in this message.
+
+
+BRAND IDENTITY:
+- Keep the existing Roam Fleet app frame exactly as it is today (do not redesign it):
+  - Top: a white nav row with the black "Roam Fleet" app tile, then: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations (active, underlined), Delivery Operations, Analytics, Reports, Business Finance; a bell with a red count badge; round black avatar "DT".
+  - Dark navy bar (#020817) below it: search box "Switch vehicle or search hub…" on the left; "10:42:15 AM EST · America/Jamaica" on the right.
+  - Page header: orange wrench tile, "Fleet Maintenance", buttons on the right: secondary "Refresh", primary "Log service". Tabs as pills: "Overview", "Service history", "Work orders" (new), "Find parts", "Not done yet", "Requests", "Schedule".
+- Theme: "Calm car-care desk" — clear, trustworthy, quiet and modern. Generous spacing, 16px rounded cards, soft shadows, larger type, clear hierarchy. Not a spreadsheet, not a developer tool.
+- LIGHT MODE (default):
+  - Primary: near-black #030213 — primary buttons, the active tab
+  - Page wash #f8fafc; cards #ffffff with a soft shadow (0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(15,23,42,0.06)) and a hairline border rgba(0,0,0,0.06)
+  - Text #0b1c30; muted #47464c
+  - OK: green #059669 on #ecfdf5
+  - Due soon: amber #b45309 on #fffbeb
+  - Overdue: red #d4183d on #fff1f2
+  - History unknown: violet #6d28d9 on #f5f3ff
+  - Waiting for odometer / neutral: slate #475569 on #f1f5f9
+  - Custom / changed by you: indigo #4f46e5 on #eef2ff
+- DARK MODE:
+  - Page #1c1c1e, cards #2a2a2d, border #3a3a3d, text #fafafa, muted #a1a1aa, primary buttons white #fafafa with near-black text
+  - Green #34d399 on #064e3b; amber #fbbf24 on #451a03; red #f87171 on #450a0a; violet #a78bfa on #2e1065; slate #94a3b8 on #1e293b; indigo #818cf8 on #1e1b4b
+- Shapes: cards 16px corner radius, buttons and inputs 12px, chips fully rounded.
+- Typography: Inter. Card title 20px semibold, subtitle 15px muted, body 15px, helper text 13px. Km, dates and money in tabular figures. Distances always "km" with commas (200,932 km). Money "J$" with 2 decimals (J$8,000.00).
+- Car plates are always in a small grey rounded box: "5179KZ". Cars are named in plain words: "Toyota Roomy 2018". Never chassis codes, part numbers or VINs.
+- Dates in plain words: "26 Nov 2026", "22 Aug 2026". Never "2026-11-26".
+- Status chips (fully rounded, icon + word, never colour alone): "Overdue" red · "Due soon" amber · "OK" green · "History unknown" violet with a help icon · "Waiting for odometer" slate with a speed icon · "Hard use" slate outline with a local_taxi icon · "Custom" indigo.
+- Where-the-schedule-comes-from line, one look everywhere: a small icon + muted 13px words under the part name: "Car maker · owner's manual" (menu_book icon) or "Roam policy" (shield icon) or "Your own: every 4,000 km — 'Kingston traffic'" (indigo, person icon).
+- Counted-from line, one look everywhere: muted 13px with a history icon: "Counted from your service on 22 Aug 2026 at 180,088 km".
+- Buttons always look like buttons:
+  - Primary = solid near-black with white text.
+  - Secondary = white with a visible #cbd5e1 border and dark text.
+  - Danger (Cancel, Remove, Turn off) = red border and red text; solid red only for a final confirm.
+  - Never underlined text links, never grey text-only buttons. Confirms are in-app dialogs, never browser pop-ups.
+- The pieces used across these screens (draw them the same way every time):
+  - Due line card: a 40px soft grey rounded square with the part icon; part name 16px semibold; the where-it-comes-from line; the counted-from line; on the right the status chip and one big plain number ("10,844 km overdue", "868 km left", "Due 1 Feb 2027"); far right a secondary button "Log this".
+  - Section header inside a list: an uppercase 12px muted label with a count ("OVERDUE · 1").
+  - Work order card: plate box, car name, status chip, garage name, "At the garage since 26 Nov, 9:30 AM", job chips, one button.
+- No gradients, glassmorphism or 3D. No AI badges. No telematics, sensors, "telemetry", health scores or percentages.
+- Sample data (cars, plates, readings, garages and past services are REAL from Roam's database; future due numbers are worked out from them):
+  - Cars: "Toyota Roomy 2018 · 5179KZ" (driver Kenny Gregory Rattray), last reading 200,932 km on 26 Nov 2026; "Honda Fit 2015 · 1505LM", no reading yet; "Toyota C-HR 2019 · 5404LK", no reading yet.
+  - Past services on 5179KZ: 22 Aug 2026 at 180,088 km, Whol-Hearted Car Service Ltd, J$8,000.00 (tires rotated); 10 Mar 2026 at 145,651 km, Amigo Auto Parts, J$12,000.00.
+  - Due on 5179KZ after history is filled in: Rotate tires — last 22 Aug 2026 at 180,088 km, every 10,000 km → 10,844 km overdue. Engine oil — last 1 Nov 2026 at 196,800 km, every 5,000 km (hard use) → 868 km left. Air filter — last 1 Nov 2026 at 196,800 km, every 20,000 km → 15,868 km left. Brake fluid — history unknown. Coolant — history unknown. Spark plugs — history unknown.
+
+
+DESIGN PRINCIPLES:
+- Each screen answers "what needs me now?" first: overdue, then due soon, then history unknown, then OK.
+- One big plain number per line. The km and date maths is never shown as a formula.
+- "History unknown" is calm, never alarming: a question to answer, not a warning.
+- Short plain words. Never explain how Roam works inside. Never say what Roam's database has or doesn't have.
+- One primary button per screen or dialog.
+- One view per screen.
+
+
+SCREEN 1: DUE ITEMS DRAWER — ONE CAR, ALL SECTIONS
+Same Roam Fleet app frame. Behind the drawer, dimmed 40%: the Maintenance Overview table of cars. Draw tall enough to show everything, no inner scrolling.
+- 600px right-hand drawer. Header card: car icon, "Toyota Roomy 2018", plate box "5179KZ", muted "Kenny Gregory Rattray"; on the right "200,932 km", muted "read 26 Nov 2026"; chip "Hard use". Close button (32px with a visible border).
+- A soft violet card with a help icon: "3 parts have no known history." Muted "Tell us when they were last done, or check them at the next service." Secondary button "Fill in history".
+- Section "OVERDUE · 1":
+  - Rotate tires — "Roam policy" — "Counted from your service on 22 Aug 2026 at 180,088 km" — red chip "Overdue" — big "10,844 km overdue" — button "Log this".
+- Section "DUE SOON · 1":
+  - Engine oil — "Car maker · owner's manual" — "Counted from your service on 1 Nov 2026 at 196,800 km" — amber "Due soon" — big "868 km left", muted "or by 1 May 2027" — "Log this".
+- Section "HISTORY UNKNOWN · 3", each line in a soft violet tint card:
+  - Brake fluid — "Car maker · owner's manual" — muted "We don't know when this was last done." — violet chip "History unknown" — muted "Check at next service" — secondary button "Fill in".
+  - Coolant — same layout.
+  - Spark plugs — same layout.
+- Section "OK · 4" (collapsed to one line each): Air filter "15,868 km left" · Cabin air filter "9,120 km left" · Wiper blades "Due 1 Feb 2027" · Brake pads "6,140 km left".
+- Section "NOT ON THIS CAR · 1", muted: "Timing belt — this car has a timing chain".
+- Footer: secondary "Log odometer"; primary "Log service".
+
+SCREEN 2: FILL IN SERVICE HISTORY — ONE CAR
+Same Roam Fleet app frame. Behind the overlay, dimmed 40%: the Maintenance Overview. Draw tall enough to show everything, no inner scrolling.
+- Centred white dialog, 760px wide. Title "Fill in service history". Muted line "Toyota Roomy 2018 · 5179KZ · now at 200,932 km".
+- One short line under it: "Type the last km and date each part was done. Not sure? Tick Check at next service."
+- A table-like list, one row per part, with a part icon square on the left:
+  - Engine oil — box "Last done at [196,800] km" — date box "[1 Nov 2026]" — tick box "Check at next service" (not ticked) — small green check at the end.
+  - Air filter — "[196,800] km" — "[1 Nov 2026]" — not ticked — green check.
+  - Rotate tires — "[180,088] km" — "[22 Aug 2026]" — not ticked — muted line under it "From your service at Whol-Hearted Car Service Ltd" with a green check.
+  - Brake fluid — empty km box, empty date box — tick box "Check at next service" ticked — violet chip "History unknown".
+  - Coolant — empty — ticked — violet chip.
+  - Spark plugs — empty — ticked — violet chip.
+  - Brake pads — "[190,000] km" — date empty — not ticked — muted "Date not needed if you know the km".
+- Footer: muted "You can change these later."; danger "Cancel"; primary "Save history".
+
+END OF FIRST PASTE
+
+
+SCREEN 3: MAINTENANCE OVERVIEW — WITH TASKS TO DO
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Page header with the "Overview" tab selected. Draw tall enough to show everything, no inner scrolling.
+- Row of four summary tiles: "OVERDUE" 1 (red tint); "DUE SOON" 1 (amber tint); "HISTORY UNKNOWN" 3 (violet tint); "WAITING FOR ODOMETER" 2 (slate tint).
+- A white card "To do" with two rows, each with an icon, one sentence and one button:
+  - speed icon: "2 cars have no odometer reading yet: 1505LM, 5404LK." — primary "Log odometer".
+  - history icon: "Fill in service history for 1505LM and 5404LK." — secondary "Fill in history".
+- Search "Search plate or model…" and chips "All cars", "Overdue", "Due soon", "History unknown", "Waiting for odometer".
+- Table of cars, columns: Car · Odometer · Status · Next due · Last service · (buttons):
+  - "Toyota Roomy 2018" plate "5179KZ" · "200,932 km" · red "Overdue" · "Rotate tires · 10,844 km overdue" · "22 Aug 2026" · secondary "View due items", secondary "Log service".
+  - "Honda Fit 2015" plate "1505LM" · "—" · slate "Waiting for odometer" · "Dates only until a reading is logged" · "—" · primary "Log odometer".
+  - "Toyota C-HR 2019" plate "5404LK" · "—" · slate "Waiting for odometer" · "Dates only until a reading is logged" · "—" · primary "Log odometer".
+- Footer "Showing 3 of 3 cars".
+
+SCREEN 4: WORK ORDERS TAB — OPEN AND RECENT
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Page header with the new "Work orders" tab selected. Draw tall enough to show everything, no inner scrolling.
+- Row of three summary tiles: "AT THE GARAGE" 1 (amber tint), "WAITING TO GO IN" 1 (blue tint #eff6ff / #1d4ed8), "DONE THIS MONTH" 2 (green tint).
+- Chips "Open" (selected, solid near-black), "Done", "Cancelled", "All"; search "Search plate, garage or job…"; primary "New work order".
+- Section "OPEN · 2":
+  - Work order card: plate "5179KZ", "Toyota Roomy 2018", amber chip "At the garage", garage "Whol-Hearted Car Service Ltd", "At the garage since 26 Nov, 9:30 AM · 1 day off the road", job chips "Rotate tires", "Engine oil", "Brake fluid check"; muted "From Kenny's request: 'Squeak from the front when braking'"; buttons secondary "Open", primary "Mark done".
+  - Work order card: plate "1505LM", "Honda Fit 2015", blue chip "Waiting to go in", garage "Amigo Auto Parts", "Booked for 2 Dec 2026", job chip "Air filter"; buttons secondary "Open", danger "Cancel".
+- Section "DONE RECENTLY":
+  - "5179KZ · Toyota Roomy 2018 · Whol-Hearted Car Service Ltd · 22 Aug 2026 · 180,088 km · J$8,000.00" — green chip "Done" — secondary "View service".
+  - "5179KZ · Toyota Roomy 2018 · Amigo Auto Parts · 10 Mar 2026 · 145,651 km · J$12,000.00" — green "Done" — "View service".
+
+SCREEN 5: ONE WORK ORDER — PANEL
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Behind the drawer, dimmed 40%: the Work orders tab list. Draw tall enough to show everything, no inner scrolling.
+- 600px right-hand drawer. Header: "Work order", plate "5179KZ", "Toyota Roomy 2018", amber chip "At the garage". Close button.
+- Card "Where and when": garage "Whol-Hearted Car Service Ltd"; "Went in 26 Nov 2026, 9:30 AM at 200,932 km"; "1 day off the road"; priority chip "Soon" (amber outline).
+- Card "Came from": driver request card — "Kenny Gregory Rattray · 25 Nov, 6:10 PM" — "Squeak from the front when braking" — a small photo thumbnail — green chip "Approved by Deeki T".
+- Card "Jobs": three rows, each a part icon, name, source line, a status chip:
+  - Rotate tires — "Overdue on the due list" — slate chip "Not done yet".
+  - Engine oil — "Due soon on the due list" — slate "Not done yet".
+  - Brake fluid check — "History unknown — check it now" — slate "Not done yet".
+  - Secondary button "+ Add a job".
+- Card "Do not drive": a switch with the words "Off" and muted "Turn on if the car must not be driven until this is done."
+- Footer: danger "Cancel work order"; secondary "Save"; primary "Mark done and log service".
+
+SCREEN 6: ADD A CAR — ODOMETER AND HARD USE STEP
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. A full page "Add a car", step 3 of 4, with a step bar at the top: "1 Car" ✓, "2 Plate and papers" ✓, "3 Odometer and use" (current), "4 Driver". Draw tall enough to show everything, no inner scrolling.
+- Car summary card at the top: car icon, "Toyota Corolla Axio 2017 · 1.5 petrol", plate "6120LP".
+- Field "Odometer now" (required): big number box "[143,220] km", date box "[27 Nov 2026]", secondary button "Add a photo of the dashboard" with a camera icon. Muted help line: "Every due date starts from this."
+- Card "How is this car used?" with two large choice cards side by side (icon, title, one line), the selected one with a near-black border and tick:
+  - "Hard use" (selected, local_taxi icon) — "Taxi, ride-hail, delivery or heavy traffic. Uses the shorter schedules."
+  - "Normal use" (directions_car icon) — "Private use, mostly open roads."
+- Card "Service history (optional)": one line "Know when the oil or other parts were last done?" and secondary button "Fill in history now"; muted "You can do this later from Maintenance."
+- Footer: secondary "Back"; primary "Continue".
+
+SCREEN 7: TURN OFF HARD USE — REASON
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Behind the dialog, dimmed 40%: the due items drawer of "Toyota Roomy 2018 · 5179KZ". Draw tall enough to show everything, no inner scrolling.
+- Centred white dialog, 520px. Title "Turn off hard use?". Plate "5179KZ" and "Toyota Roomy 2018".
+- Body: "This car will use the normal schedules. Some parts will come due later."
+- A small soft grey box with two lines: "Engine oil: every 5,000 km → every 10,000 km" · "Air filter: every 20,000 km → every 40,000 km".
+- Field "Why?" (required) text box with placeholder "For example: car moved to private use", muted "At least 10 characters".
+- Muted line: "Saved with your name and today's date."
+- Footer: secondary "Keep hard use"; solid red "Turn off".
+
+SCREEN 8: WHY THIS SCHEDULE — POPOVER
+Same Roam Fleet app frame, colours, cards and style as the earlier screens in this project. Behind the popover: the due items drawer of "Toyota Roomy 2018 · 5179KZ", with the Engine oil line highlighted. Draw tall enough to show everything, no inner scrolling.
+- White popover card (380px, 16px radius, soft shadow) anchored to the Engine oil line. Title "Engine oil".
+- Rows with icons:
+  - "Every 5,000 km or 6 months" — muted "Hard use schedule. Normal use is every 10,000 km or 12 months."
+  - "Car maker · owner's manual, page 414" (menu_book icon).
+  - "Counted from your service on 1 Nov 2026 at 196,800 km" (history icon).
+  - "Next due at 201,800 km or by 1 May 2027" (event icon).
+- Buttons: secondary "Set my own schedule"; primary "Log this".
+
+
+==================== FOR CLAUDE — DO NOT PASTE ====================
+
+DEVIATIONS FROM THE REVIEW, ON PURPOSE (owner rules win):
+- Review B5 says Fleet shows "Roam policy — no manual yet". Owner rule (no database talk to customers): Fleet shows only "Roam policy" or "Car maker · owner's manual". Never "no manual yet".
+- Engine oil hard-use numbers in samples use Roam policy (5,000 km) and the Dominion sample manual (5,000 km / 6 months severe, 10,000 km / 12 months normal). Sample only.
+- The open work orders, the driver request and 6120LP Corolla Axio are picture data. All 40 real work orders are closed.
+
+ADDITIONAL UI COMPONENTS:
+- DueLineCard: icon, name, SourceLine, CountedFromLine, StatusChip, BigNumber, "Log this". Status order: Overdue, Due soon, History unknown, OK, Not on this car (retired_reason shown, MER-18).
+- StatusChip: Overdue / Due soon / OK / History unknown / Waiting for odometer / Hard use / Custom.
+- HistoryFillTable: one row per part on the car's schedule: last km, last date, "Check at next service" tick; prefilled from logged services (green check + garage line). Same component in S2 and the add-car step.
+- WorkOrderCard + WorkOrderDrawer: status (Waiting to go in / At the garage / Done / Cancelled), garage, off-road since, jobs, linked request, do-not-drive switch.
+- HardUseChoice: two choice cards; turning hard use off on an existing car opens the reason dialog (S7).
+- Dark mode: exact colour values, never Tailwind colour names.
+
+INTERACTIONS:
+- "Log this" opens the Log service wizard at step 2 with that part already picked and the car chosen.
+- "Fill in history" / "Fill in" open S2 for that car; Save writes last_performed_km/date per part (source 'manual'); ticked rows stay History unknown. Recompute runs at once; the drawer updates.
+- Overview "To do" card shows only while there is something to do: cars with no reading (MER-13 alert), cars with History unknown parts. Hidden when empty.
+- Work orders tab: list open first; "Mark done" opens the Log service wizard prefilled with the jobs (one service per work order). "Cancel" → in-app confirm with reason (min 10 characters). Requests tab approve opens or creates the work order it belongs to (MER-15).
+- Do not drive switch on the work order sets/clears fleet.vehicles.do_not_drive with reason; clearing uses public.fleet_vehicles (MER-09). Driver is notified.
+- Add a car (S6): odometer required, saved as first reading source 'manual' (MER-26); Hard use is pre-selected (MER-25).
+- Turn off hard use (S7): PATCH severe_duty false with the typed reason (min 10 characters); writes fleet.maintenance_audit_log (who, when, why). Turning it on needs no reason.
+- "Why this schedule?" (S8): rule source, manual page, normal vs hard use numbers, counted-from, next due.
+- Owner/manager only: Turn off hard use, Cancel work order, Do not drive. Staff can log, fill history and add jobs.
+
+Spec screens / Area:
+| Screen | Plan | Area |
+|---|---|---|
+| 1 | B5, MER-11, MER-18 | MaintenanceDueItemsDrawer redraw |
+| 2 | MER-11, MER-12 | New Fill in service history dialog |
+| 3 | MER-13, B3 | FleetMaintenanceHub Overview, To do card |
+| 4 | MER-15 | New Work orders tab |
+| 5 | MER-15, MER-09 | New Work order drawer |
+| 6 | MER-25, MER-26 | AddVehicleFlow, odometer + use step |
+| 7 | MER-25 | MmHardUseDialog redraw (reason) |
+| 8 | B5 | Why this schedule? popover redraw |

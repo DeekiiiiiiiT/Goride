@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_tab" name="shell-type"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100%;margin:0;padding:0;background-color:#faf8ff;}body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: 'class', theme: { extend: { colors: { 'surface-container-low': '#f2f3ff', 'on-surface': '#131b2e', 'surface-container-highest': '#dae2fd', 'on-tertiary-fixed': '#331200', 'on-secondary-fixed-variant': '#0039b5', 'on-primary': '#ffffff', 'secondary': '#1d4ed8', 'outline': '#6d7a72', 'tertiary-fixed': '#ffdbca', 'primary': '#006948', 'secondary-container': '#4069f2', 'on-tertiary': '#ffffff', 'secondary-fixed': '#dce1ff', 'surface-container-lowest': '#ffffff', 'surface-tint': '#006c4a', 'on-secondary-container': '#fffbff', 'tertiary': '#984300', 'primary-fixed': '#85f8c4', 'on-primary-fixed': '#002114', 'surface-container-high': '#e2e7ff', 'surface-dim': '#d2d9f4', 'on-tertiary-container': '#fffbff', 'on-surface-variant': '#3d4a42', 'surface-container': '#eaedff', 'on-primary-fixed-variant': '#005137', 'on-error': '#ffffff', 'inverse-surface': '#283044', 'background': '#faf8ff', 'surface': '#faf8ff', 'surface-bright': '#faf8ff', 'tertiary-fixed-dim': '#ffb68e', 'outline-variant': '#bccac0', 'inverse-primary': '#68dba9', 'error': '#ba1a1a', 'on-error-container': '#93000a', 'on-secondary-fixed': '#001551', 'on-secondary': '#ffffff', 'tertiary-container': '#bb5810', 'secondary-fixed-dim': '#b7c4ff', 'surface-variant': '#dae2fd', 'primary-container': '#00855d', 'primary-fixed-dim': '#68dba9', 'on-tertiary-fixed-variant': '#763300', 'on-background': '#131b2e', 'on-primary-container': '#f5fff7', 'inverse-on-surface': '#eef0ff', 'error-container': '#ffdad6' }, borderRadius: { 'DEFAULT': '0.25rem', 'lg': '0.5rem', 'xl': '0.75rem', 'full': '9999px' }, spacing: { 'space-xl': '1.5rem', 'gutter': '0.75rem', 'space-sm': '0.5rem', 'margin': '1rem', 'space-xs': '0.25rem', 'space-md': '1rem', 'space-lg': '1.25rem' }, fontFamily: { 'body-sm': ['Inter'], 'body-lg': ['Inter'], 'metric-odometer': ['Inter'], 'headline-lg': ['Inter'], 'label-sm': ['Inter'], 'display': ['Inter'], 'body-md': ['Inter'], 'label-md': ['Inter'], 'plate-display': ['Inter'], 'headline-sm': ['Inter'], 'headline-md': ['Inter'], 'label-lg': ['Inter'] }, fontSize: { 'body-sm': ['13px', { lineHeight: '18px', fontWeight: '400' }], 'body-lg': ['16px', { lineHeight: '24px', fontWeight: '400' }], 'metric-odometer': ['22px', { lineHeight: '28px', letterSpacing: '0.02em', fontWeight: '700' }], 'headline-lg': ['24px', { lineHeight: '30px', letterSpacing: '-0.015em', fontWeight: '700' }], 'label-sm': ['11px', { lineHeight: '14px', letterSpacing: '0.03em', fontWeight: '600' }], 'display': ['32px', { lineHeight: '38px', letterSpacing: '-0.02em', fontWeight: '700' }], 'body-md': ['14px', { lineHeight: '20px', fontWeight: '400' }], 'label-md': ['13px', { lineHeight: '18px', letterSpacing: '0.01em', fontWeight: '600' }], 'plate-display': ['15px', { lineHeight: '18px', letterSpacing: '0.08em', fontWeight: '700' }], 'headline-sm': ['17px', { lineHeight: '22px', letterSpacing: '-0.005em', fontWeight: '600' }], 'headline-md': ['20px', { lineHeight: '26px', letterSpacing: '-0.01em', fontWeight: '600' }], 'label-lg': ['15px', { lineHeight: '20px', fontWeight: '600' }] } } } }</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head><body class="bg-surface text-on-surface font-body-md text-body-md antialiased min-h-screen flex flex-col justify-between selection:bg-primary-fixed"><header class="fixed top-0 left-0 right-0 z-50 bg-surface-container-lowest/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(15,23,42,0.04)] pt-safe"><div class="h-16 px-margin flex items-center justify-between max-w-[390px] mx-auto w-full"><button aria-label="Open Menu" class="w-12 h-12 -ml-2 rounded-xl flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors"><span class="material-symbols-outlined text-[24px]">menu</span></button><div class="flex items-center gap-1.5"><span class="font-display text-headline-md font-bold tracking-tight text-on-surface">Roam</span><span class="w-2 h-2 rounded-full bg-primary mt-1"></span></div><div class="flex items-center gap-1 -mr-2"><button aria-label="Notifications" class="relative w-12 h-12 rounded-xl flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors"><span class="material-symbols-outlined text-[24px]">notifications</span><span class="absolute top-3 right-3 w-2 h-2 bg-error rounded-full ring-2 ring-surface-container-lowest"></span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center ml-1"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col relative w-full max-w-[390px] mx-auto px-margin pt-16 pb-24 bg-surface"><div class="flex flex-col w-full pb-8">
+<!-- Sub-header & Navigation Context -->
+<div class="flex flex-col gap-space-xs mb-space-md">
+<div class="flex items-center justify-between">
+<button class="inline-flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface h-12 -ml-2 px-2 rounded-xl transition-colors" type="button">
+<span class="material-symbols-outlined text-[20px]">arrow_back</span>
+<span class="font-label-md text-label-md">My car kit</span>
+</button>
+<div class="bg-surface-container px-2.5 py-1 rounded-lg">
+<span class="font-plate-display text-plate-display text-on-surface tracking-wider">5179KZ</span>
+</div>
+</div>
+<div class="flex items-baseline justify-between mt-0.5">
+<div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Pre-shift check</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Toyota Roomy • Kenny Gregory Rattray</p>
+</div>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+        Ready to submit
+      </span>
+</div>
+</div>
+<!-- Progress Bar Strip -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm mb-space-md flex flex-col gap-2">
+<div class="flex items-center justify-between font-label-md text-label-md">
+<span class="text-on-surface font-semibold">10 of 10 done (100%)</span>
+<span class="text-primary font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">task_alt</span>
+        Complete
+      </span>
+</div>
+<div class="w-full h-2 bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full transition-all duration-500" style="width: 100%;"></div>
+</div>
+</div>
+<!-- Checklist List Container -->
+<div class="flex flex-col gap-space-sm mb-space-lg">
+<!-- Item 1: Tires and tire pressure (Safety) -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-fixed/60 text-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<span class="font-label-lg text-label-lg text-on-surface">1. Tires &amp; pressure</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">Safety</span>
+</div>
+<span class="font-body-sm text-body-sm text-outline">Checked &amp; confirmed</span>
+</div>
+</div>
+<span class="px-3 py-1 rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-semibold">Pass</span>
+</div>
+<!-- Item 2: Brakes (Expanded Failed Safety Item) -->
+<div class="bg-surface-container-lowest rounded-xl shadow-md overflow-hidden relative">
+<!-- Structural Left Accent Bar for Critical Alert -->
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-error"></div>
+<div class="p-space-md pl-space-lg flex flex-col gap-space-md">
+<!-- Card Header -->
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-full bg-error-container text-error flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px]">priority_high</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">2. Brakes</span>
+<span class="px-2 py-0.5 rounded-full bg-error-container text-error font-label-sm text-label-sm font-bold">Safety</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Footbrake &amp; emergency brake test</p>
+</div>
+</div>
+<span class="px-2.5 py-1 rounded-full bg-error text-on-error font-label-sm text-label-sm font-bold flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-[14px]">cancel</span>
+            Failed
+          </span>
+</div>
+<!-- Segmented Decision Buttons (Pass / Attention / Fail) -->
+<div class="grid grid-cols-3 gap-1.5 p-1 bg-surface-container rounded-xl">
+<button class="h-11 rounded-lg flex items-center justify-center gap-1 font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" type="button">
+<span>Pass</span>
+</button>
+<button class="h-11 rounded-lg flex items-center justify-center gap-1 font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" type="button">
+<span>Attention</span>
+</button>
+<button class="h-11 rounded-lg bg-error text-on-error flex items-center justify-center gap-1 font-label-md text-label-md font-bold shadow-sm" type="button">
+<span class="material-symbols-outlined text-[16px]">close</span>
+<span>Fail</span>
+</button>
+</div>
+<!-- Safety Documentation Section -->
+<div class="flex flex-col gap-space-sm pt-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Issue Evidence</span>
+<!-- Photo Attachment Thumbnail -->
+<div class="flex items-center gap-3 p-2.5 bg-surface-container-low rounded-xl">
+<div class="relative w-16 h-16 rounded-lg overflow-hidden shrink-0 shadow-sm">
+<img alt="Wheel and brake disc verification photo" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida/ALJJyrCUPrdLhmgDi4AN4hrq4jVsCo4dxY58TRL4YXQ23lIEQH--4pCxy2a36H7G2IhIfGD01I6oywr7YFZbI8CNrajB2eYwkTqRF2ue4d448Vf-vMB4DftUlFiyDtgABqM9Ov99nQfOX1FwBV84Rx1Lqo7PaMbxU8g_hDoXINFa2T7I0aFZRHLauKqpLr1prno8SZhyHEJC1xsxo-sjktmVUvlBC3UE3X664GM29h7HdfUMLw"/>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center gap-1.5 text-primary mb-0.5">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-label-sm text-label-sm font-semibold">Photo added</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface truncate">Left front disc inspection</p>
+<span class="font-label-sm text-label-sm text-outline">IMG_5179_brake.jpg</span>
+</div>
+<button aria-label="Change photo" class="w-10 h-10 rounded-lg flex items-center justify-center text-on-surface-variant hover:text-on-surface" type="button">
+<span class="material-symbols-outlined text-[20px]">refresh</span>
+</button>
+</div>
+<!-- Driver Notes Input Field -->
+<div class="flex flex-col gap-1.5">
+<label class="font-label-sm text-label-sm text-on-surface-variant">Driver description</label>
+<div class="p-3 bg-surface-container-low rounded-xl text-on-surface font-body-md text-body-md">
+              Pedal goes soft and the car pulls left.
+            </div>
+</div>
+<!-- Supportive Reassurance Callout Banner -->
+<div class="p-3.5 bg-error-container/40 rounded-xl flex items-start gap-3 mt-1">
+<span class="material-symbols-outlined text-error text-[20px] shrink-0 mt-0.5" style="font-variation-settings: 'FILL' 1;">warning</span>
+<div class="flex flex-col gap-0.5">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Safety Stop Protocol</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+                This is a safety item. The car will be stopped until the fleet clears it. The mechanic dispatch has been alerted.
+              </p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Item 3: Lights and indicators (Safety) -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-fixed/60 text-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<span class="font-label-lg text-label-lg text-on-surface">3. Lights &amp; indicators</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">Safety</span>
+</div>
+<span class="font-body-sm text-body-sm text-outline">Checked &amp; confirmed</span>
+</div>
+</div>
+<span class="px-3 py-1 rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-semibold">Pass</span>
+</div>
+<!-- Item 4: Windscreen and wipers (Safety) -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-fixed/60 text-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<span class="font-label-lg text-label-lg text-on-surface">4. Windscreen &amp; wipers</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">Safety</span>
+</div>
+<span class="font-body-sm text-body-sm text-outline">Checked &amp; confirmed</span>
+</div>
+</div>
+<span class="px-3 py-1 rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-semibold">Pass</span>
+</div>
+<!-- Item 5: Mirrors -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-fixed/60 text-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface">5. Mirrors</span>
+<span class="font-body-sm text-body-sm text-outline">Checked &amp; confirmed</span>
+</div>
+</div>
+<span class="px-3 py-1 rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-semibold">Pass</span>
+</div>
+<!-- Item 6: Horn -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-fixed/60 text-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface">6. Horn</span>
+<span class="font-body-sm text-body-sm text-outline">Checked &amp; confirmed</span>
+</div>
+</div>
+<span class="px-3 py-1 rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-semibold">Pass</span>
+</div>
+<!-- Item 7: Seat belts (Safety) -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-fixed/60 text-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<span class="font-label-lg text-label-lg text-on-surface">7. Seat belts</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">Safety</span>
+</div>
+<span class="font-body-sm text-body-sm text-outline">Checked &amp; confirmed</span>
+</div>
+</div>
+<span class="px-3 py-1 rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-semibold">Pass</span>
+</div>
+<!-- Item 8: Fluid leaks under car -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-fixed/60 text-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface">8. Fluid leaks under car</span>
+<span class="font-body-sm text-body-sm text-outline">Checked &amp; confirmed</span>
+</div>
+</div>
+<span class="px-3 py-1 rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-semibold">Pass</span>
+</div>
+<!-- Item 9: Dashboard warning lights (Safety) -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-fixed/60 text-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<span class="font-label-lg text-label-lg text-on-surface">9. Dashboard warning lights</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">Safety</span>
+</div>
+<span class="font-body-sm text-body-sm text-outline">Checked &amp; confirmed</span>
+</div>
+</div>
+<span class="px-3 py-1 rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-semibold">Pass</span>
+</div>
+<!-- Item 10: Inside clean and tidy -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-fixed/60 text-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface">10. Inside clean &amp; tidy</span>
+<span class="font-body-sm text-body-sm text-outline">Checked &amp; confirmed</span>
+</div>
+</div>
+<span class="px-3 py-1 rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-semibold">Pass</span>
+</div>
+</div>
+<!-- Bottom CTA & Operational Assurance -->
+<div class="flex flex-col gap-2.5 pt-space-xs">
+<button class="w-full h-12 bg-primary text-on-primary font-label-lg text-label-lg rounded-xl flex items-center justify-center gap-2 shadow-md hover:bg-primary-container active:scale-[0.99] transition-all" type="button">
+<span class="material-symbols-outlined text-[20px]">send</span>
+<span>Send check</span>
+</button>
+<p class="font-body-sm text-body-sm text-center text-on-surface-variant">
+      The fleet depot will be notified immediately.
+    </p>
+</div>
+</div>
+<script>
+  // Ensure the Vehicle tab reflects active state in the app shell
+  const vehicleNav = document.querySelector('nav a[data-path="vehicle"]');
+  if (vehicleNav) {
+    vehicleNav.classList.remove('text-on-surface-variant');
+    vehicleNav.classList.add('text-primary', 'font-semibold');
+  }
+</script></main><nav class="fixed bottom-0 left-0 right-0 z-50 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_-4px_16px_rgba(15,23,42,0.05)] pb-safe" data-active-classes="text-primary font-label-sm font-semibold"><div class="h-16 max-w-[390px] mx-auto px-space-xs grid grid-cols-4 items-center"><a class="flex flex-col items-center justify-center h-12 w-full text-on-surface-variant hover:text-on-surface transition-colors" data-path="home" href="#"><span class="material-symbols-outlined text-[24px] mb-0.5">home</span><span class="font-label-sm text-label-sm">Home</span></a><a class="flex flex-col items-center justify-center h-12 w-full text-on-surface-variant hover:text-on-surface transition-colors" data-path="vehicle" href="#"><span class="material-symbols-outlined text-[24px] mb-0.5">directions_car</span><span class="font-label-sm text-label-sm">Vehicle</span></a><a class="flex flex-col items-center justify-center h-12 w-full text-on-surface-variant hover:text-on-surface transition-colors" data-path="trips" href="#"><span class="material-symbols-outlined text-[24px] mb-0.5">route</span><span class="font-label-sm text-label-sm">Trips</span></a><a class="flex flex-col items-center justify-center h-12 w-full text-on-surface-variant hover:text-on-surface transition-colors" data-path="support" href="#"><span class="material-symbols-outlined text-[24px] mb-0.5">headset_mic</span><span class="font-label-sm text-label-sm">Support</span></a></div></nav></body></html>
