@@ -144,13 +144,14 @@ describe("browser-check guide (RE-63)", () => {
     expect(catalogueEngineCode(null)).toBe("");
   });
 
+  // Answers teach Roam: the maker's words come from the server (seed rows of part_maker_word) as makerPartName +
+  // makerSearch; the screen only adds which section to open.
   it("tells what to search and which row to look for in a Toyota / Daihatsu catalogue", () => {
-    expect(partFinder("Engine Air Filter", "Toyota")).toEqual({ search: "air cleaner", rowName: "ELEMENT SUB-ASSY, AIR CLEANER FILTER" });
-    expect(partFinder("Spark Plugs", "Toyota")).toEqual({ search: "spark plug", rowName: "PLUG, SPARK" });
-    expect(partFinder("Cabin A/C Filter", "Daihatsu").search).toBe("air filter");
+    expect(partFinder("Engine Air Filter", "Toyota", null, "ELEMENT SUB-ASSY, AIR CLEANER FILTER", "air cleaner")).toEqual({ search: "air cleaner", rowName: "ELEMENT SUB-ASSY, AIR CLEANER FILTER" });
+    expect(partFinder("Spark Plugs", "Toyota", null, "PLUG, SPARK", "spark plug")).toEqual({ search: "spark plug", rowName: "PLUG, SPARK" });
+    expect(partFinder("Cabin A/C Filter", "Daihatsu", null, "ELEMENT, CLEAN AIR FILTER (or AIR REFINER)", "air filter").search).toBe("air filter");
     // 26 Nov: "air filter" also finds the engine's air cleaner; the cabin filter sits with the heater and air con.
-    expect(partFinder("Cabin A/C Filter", "Toyota").section).toBe("heater and air conditioning");
-    expect(partFinder("Shock absorber", "Toyota").rowName).toBe("ABSORBER ASSY, SHOCK");
+    expect(partFinder("Cabin A/C Filter", "Toyota", null, "ELEMENT, CLEAN AIR FILTER (or AIR REFINER)", "air filter").section).toBe("heater and air conditioning");
     // Owner 25 Nov: a front / rear check names the section to open and the words every such row has.
     expect(partFinder("Shock absorber", "Toyota", "Front")).toEqual({
       search: "shock absorber",
@@ -160,9 +161,9 @@ describe("browser-check guide (RE-63)", () => {
     });
     expect(partFinder("Shock absorber", "Toyota", "rear").section).toBe("rear shock absorber");
     // Any part with a front / rear names its section, on any make; the maker's row name stays as it was.
-    expect(partFinder("Front brake pads", "Toyota", "front")).toEqual({ search: "disc brake", rowName: "PAD KIT, DISC BRAKE", section: "front brake pads" });
+    expect(partFinder("Front brake pads", "Toyota", "front", "PAD KIT, DISC BRAKE", "disc brake")).toEqual({ search: "disc brake", rowName: "PAD KIT, DISC BRAKE", section: "front brake pads" });
     expect(partFinder("Wheel bearing", "Honda", "Rear")).toEqual({ search: "wheel bearing", rowName: null, section: "rear wheel bearing" });
-    expect(partFinder("Spark Plugs", "Toyota", null).section).toBeUndefined();
+    expect(partFinder("Spark Plugs", "Toyota", null, "PLUG, SPARK", "spark plug").section).toBeUndefined();
   });
 
   it("falls back to the part's own name for other makers and unknown parts", () => {
@@ -178,11 +179,12 @@ describe("browser-check guide — no wrong row names (code review)", () => {
     expect(partFinder("Brake pad wear sensor", "Toyota").rowName).toBeNull();
     expect(partFinder("Air con compressor belt", "Toyota").rowName).toBeNull();
   });
-  it("the real core part names still get their rows", () => {
-    expect(partFinder("Drive / Serpentine Belt", "Toyota").rowName).toBe("BELT, V-RIBBED");
-    expect(partFinder("Brakes", "Toyota").rowName).toBeNull();
-    expect(partFinder("Front brake pads", "Toyota").rowName).toBe("PAD KIT, DISC BRAKE");
-    expect(partFinder("Wiper Blades", "Toyota").rowName).toBe("BLADE ASSY, WIPER");
+  it("no list lives in the screen any more: with no maker words a part gets no row name", () => {
+    expect(partFinder("Drive / Serpentine Belt", "Toyota").rowName).toBeNull();
+    expect(partFinder("Drive / Serpentine Belt", "Toyota", null, "BELT, V-RIBBED", "belt").rowName).toBe("BELT, V-RIBBED");
+    expect(partFinder("Wiper Blades", "Toyota", null, "BLADE ASSY, WIPER", "wiper").rowName).toBe("BLADE ASSY, WIPER");
+    // The owner's lesson for the Roomy strut mount (Answers teach Roam, test 11).
+    expect(partFinder("Strut mount", "Toyota", "front", "SUPPORT SUB-ASSY, FRONT SUSPENSION", "support")).toEqual({ search: "support", rowName: "SUPPORT SUB-ASSY, FRONT SUSPENSION", section: "front strut mount" });
   });
 });
 
@@ -293,7 +295,7 @@ describe("step 3 words from the car maker's own part name", () => {
   });
   it("a part with wording on file keeps it", async () => {
     const { partFinder } = await import("./researchModel");
-    expect(partFinder("Thermostat", "Toyota", null, "Something else")).toEqual({ search: "thermostat", rowName: "THERMOSTAT" });
+    expect(partFinder("Thermostat", "Toyota", null, "THERMOSTAT", "thermostat")).toEqual({ search: "thermostat", rowName: "THERMOSTAT" });
   });
   it("no maker name → as before", async () => {
     const { partFinder } = await import("./researchModel");

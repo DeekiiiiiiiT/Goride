@@ -5,24 +5,30 @@
  */
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { impliedAxle, nameFromPageWords, type PartType, rowNamesType, typeWords } from "./saved_page_proof.ts";
+import { type MakerWords, parseMakerWords } from "./saved_page_lessons.ts";
 
 const brakePads: PartType = { id: "pads", name: "Brake pads", scheme: "axle" };
 const brakeShoes: PartType = { id: "shoes", name: "Brake shoes", scheme: "axle" };
 const cylinderKit: PartType = { id: "cyl-kit", name: "Rear wheel cylinder kit", scheme: "axle" };
 const hoseClamp: PartType = { id: "clamp", name: "Hose clamp", scheme: "none" };
+// The seed rows of part_maker_word (migration 20261127172750) that these tests use: Toyota's pads and shoes rows.
+const TOYOTA: MakerWords = parseMakerWords("Toyota", [
+  { id: "s1", phrase_key: "PADKITDISCBRAKE", phrase: "PAD KIT, DISC BRAKE", make: "Toyota", maintenance_component_id: "pads", part_type_name: "Brake pads", search_word: "disc brake", set_by: "seed" },
+  { id: "s2", phrase_key: "SHOESETBRAKE", phrase: "SHOE SET, BRAKE", make: "Toyota", maintenance_component_id: "shoes", part_type_name: "Brake shoes", search_word: "brake shoe", set_by: "seed" },
+]);
 
 Deno.test("P4: KIT, SET, ASSY, SUB-ASSY, BRAKE, REAR, FRONT and WHEEL never name a type", () => {
   // The row that started the audit: a drum-brake shoe kit must never be read as brake pads.
-  assertEquals(rowNamesType(brakePads, "Toyota", "04495 - SHOE KIT, REAR BRAKE", null), false);
-  assertEquals(rowNamesType(brakeShoes, "Toyota", "04495 - SHOE KIT, REAR BRAKE", null), true);
+  assertEquals(rowNamesType(brakePads, TOYOTA, "04495 - SHOE KIT, REAR BRAKE", null), false);
+  assertEquals(rowNamesType(brakeShoes, TOYOTA, "04495 - SHOE KIT, REAR BRAKE", null), true);
   // Each filler word on its own names nothing at all.
   for (const word of ["KIT", "SET", "ASSY", "SUB-ASSY", "BRAKE", "REAR", "FRONT", "WHEEL"]) {
-    assertEquals(rowNamesType(brakePads, "Toyota", `04495 - ${word}`, null), false, word);
+    assertEquals(rowNamesType(brakePads, TOYOTA, `04495 - ${word}`, null), false, word);
   }
   // The type's own word still names it, and the filler is gone from its word list.
-  assertEquals(rowNamesType(brakePads, "Toyota", "PAD KIT, DISC BRAKE", null), true);
-  assertEquals(typeWords(brakeShoes, "Toyota").includes("KIT"), false);
-  assertEquals(typeWords(brakePads, "Toyota").includes("BRAKE"), false);
+  assertEquals(rowNamesType(brakePads, TOYOTA, "PAD KIT, DISC BRAKE", null), true);
+  assertEquals(typeWords(brakeShoes, TOYOTA).includes("KIT"), false);
+  assertEquals(typeWords(brakePads, TOYOTA).includes("BRAKE"), false);
 });
 
 Deno.test("the group row's head word picks the name", () => {

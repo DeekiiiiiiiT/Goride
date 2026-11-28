@@ -14,6 +14,7 @@ import { groupPartTypesByArea, AddPartsBreadcrumb, fitModeLabel, positionSchemeL
 import { PartsButton } from "../../PartsButton";
 import { listTemplates } from "../../../part-pictures/partPicturesApi";
 import { SortedByRoam } from "../../../research-engine/SortedByRoam";
+import { LearnedFromYou } from "../../../research-engine/LearnedFromYou";
 import { useAuth } from "../../../../auth/AuthContext";
 
 /** S2 (docs/part-type-learning-audit.md): every part type sits in a part group — required, no default. */
@@ -529,6 +530,8 @@ export function PartTypesSettings({ owner, onClose, fullPage }: { owner: boolean
               </div>
             ) : null}
             <SortedByRoam token={session?.access_token ?? ""} owner={owner} />
+            {/* Answers teach Roam §5.3: what Roam remembers from the owner's answers, with Undo. */}
+            <LearnedFromYou token={session?.access_token ?? ""} />
           </div>
         </div>
         </div>

@@ -446,21 +446,31 @@ export function partFinder(
   make: string | null | undefined,
   fitDescriptor?: string | null,
   makerName?: string | null,
+  /** Answers teach Roam AT-06: the search word for the maker's words, from the server (job detail makerSearch). */
+  makerSearch?: string | null,
 ): PartFinder {
   const found = makerPartFinder(itemName, make, fitDescriptor);
   if (found.section) return found;
-  // Owner 26 Nov: no wording on file for this part → the car maker's own name for it (confirmed before on this make, or
-  // Roam's guess under the car maker's brand), e.g. "Hub & bearing assy, rear axle" → search "hub".
-  if (!found.rowName && makerName) {
+  let base: PartFinder = found;
+  if (makerName && makerSearch) {
+    // The maker's words on file for this part (a seed row or the owner's lesson): search them, look for that row.
+    base = { search: makerSearch, rowName: makerName.toUpperCase() };
+    // 26 Nov: "air filter" also finds the engine's air cleaner; the cabin filter sits with the heater and air con.
+    if (/toyota|daihatsu|lexus/i.test(String(make ?? "")) && /\bcabin\b|a\/c filter|air ?con(ditioning)? filter/i.test(itemName)) {
+      return { ...base, section: "heater and air conditioning" };
+    }
+  } else if (makerName) {
+    // Owner 26 Nov: no wording on file for this part → the car maker's own name for it (confirmed before on this make,
+    // or Roam's guess under the car maker's brand), e.g. "Hub & bearing assy, rear axle" → search "hub".
     const fromMaker = finderFromMakerName(makerName);
     if (fromMaker) return fromMaker;
   }
   // Owner 25 Nov: a front / rear check says which section to open, on any site, for any part (brakes, bearings…).
   const fit = String(fitDescriptor ?? "").toLowerCase();
   const axle = fit.includes("rear") ? "rear" : fit.includes("front") ? "front" : null;
-  if (!axle) return found;
+  if (!axle) return base;
   const part = itemName.toLowerCase().replace(/\b(front|rear)\b/g, "").replace(/\s+/g, " ").trim() || itemName.toLowerCase();
-  return { ...found, section: `${axle} ${part}` };
+  return { ...base, section: `${axle} ${part}` };
 }
 
 /**
@@ -496,18 +506,8 @@ function makerPartFinder(itemName: string, make: string | null | undefined, fitD
       return { search: "shock absorber", section: `${axle.toLowerCase()} shock absorber`, rowName: `SHOCK, ${axle.toUpperCase()}`, rowContains: true };
     }
   }
-  // Parts that only sit near these (mounts, sensors, timing belts, A/C compressors…) get no row name: better none than wrong.
-  if (/mount|sensor|switch|timing|compressor|bearing|hose|cover|bracket|gasket/.test(n)) return plain;
-  if (/\bcabin\b|a\/c filter|air ?con(ditioning)? filter/.test(n)) return { search: "air filter", section: "heater and air conditioning", rowName: "ELEMENT, CLEAN AIR FILTER (or AIR REFINER)" };
-  if (/engine air filter|^air filter$|air cleaner/.test(n)) return { search: "air cleaner", rowName: "ELEMENT SUB-ASSY, AIR CLEANER FILTER" };
-  if (/spark plug/.test(n)) return { search: "spark plug", rowName: "PLUG, SPARK" };
-  if (/shock absorber|^shocks?$/.test(n)) return { search: "shock absorber", rowName: "ABSORBER ASSY, SHOCK" };
-  if (/thermostat/.test(n)) return { search: "thermostat", rowName: "THERMOSTAT" };
-  if (/brake pads?|^pads?$/.test(n)) return { search: "disc brake", rowName: "PAD KIT, DISC BRAKE" };
-  if (/brake shoes?/.test(n)) return { search: "brake shoe", rowName: "SHOE SET, BRAKE" };
-  if (/wiper blades?/.test(n)) return { search: "wiper", rowName: "BLADE ASSY, WIPER" };
-  if (/serpentine belt|drive belt|fan belt|v-?ribbed belt/.test(n)) return { search: "belt", rowName: "BELT, V-RIBBED" };
-  if (/oil filter/.test(n)) return { search: "oil filter", rowName: "FILTER SUB-ASSY, OIL" };
+  // Answers teach Roam AT-01 / AT-06: the maker's words for a part (the old hand-written rows, and the owner's
+  // lessons) now come from the server (job detail makerPartName + makerSearch), never from a list here.
   return plain;
 }
 

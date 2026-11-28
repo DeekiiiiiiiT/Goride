@@ -314,16 +314,21 @@ test.describe("Saved catalogue pages (S1–S6)", () => {
     await expect(o.getByTestId("count-already")).toHaveText("Already on file 1");
     await expect(o.getByTestId("count-not-saved")).toHaveText("Not saved 1");
     await expect(o.getByTestId("count-held")).toHaveText("Needs you 2");
+    // Owner 27 Nov: one tab per kind of row; Needs you opens first.
+    await expect(o.getByTestId("result-tab-held")).toHaveAttribute("aria-selected", "true");
     const held = o.getByTestId("group-held");
     await expect(held.getByTestId("saved-page-reason")).toContainText([
       "Dates missing 12.2018 – 08.2020",
       "Waits with the other side, so both sides save together",
     ]);
-    await expect(o.getByTestId("group-not-saved")).toContainText("Roam already has a different number here (00000-L1001)");
-    await expect(o.getByTestId("saved-page-skipped")).toContainText("Roam skipped 1 row it couldn't prove from the page.");
     await expect(o.getByTestId("saved-page-check-part")).toHaveCount(0);
     await expect(o.getByText("Check this part")).toHaveCount(0);
+    await o.getByTestId("result-tab-already").click();
+    await expect(o.getByTestId("group-not-saved")).toContainText("Roam already has a different number here (00000-L1001)");
     await expect(o.getByTestId("group-already")).toContainText("Already on file");
+    await o.getByTestId("result-tab-skipped").click();
+    await expect(o.getByTestId("saved-page-skipped")).toContainText("Roam skipped 1 row it couldn't prove from the page.");
+    await o.getByTestId("result-tab-held").click();
     await shot(page, "07-result-some-need-you");
     await noDropWords(page);
     expect(calls.some((c) => c.method === "GET" && c.path.startsWith("/jobs/"))).toBe(false);

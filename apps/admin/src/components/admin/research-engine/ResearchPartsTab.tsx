@@ -132,7 +132,11 @@ export function ResearchPartsTab({ onCount }: { onCount?: (n: number) => void })
   const rows: Row[] = useMemo(() => {
     const groupByJob = new Map(groups.filter((g) => g.researchJobId).map((g) => [String(g.researchJobId), g]));
     const out: Row[] = jobs.map((j) => {
-      const pill = statePill(j.state, j.conflictOpen, j.closedNote);
+      // Answers teach Roam §5.4 (Stitch screen 7): a browser check carrying a question card shows "Needs you"; it still
+      // counts as a browser check (card, chip and "N of 25").
+      const pill = j.needsYou && !j.conflictOpen
+        ? { label: "Needs you", tone: "amber" as const, icon: "help" }
+        : statePill(j.state, j.conflictOpen, j.closedNote);
       return {
         key: j.jobId,
         jobId: j.jobId,

@@ -106,6 +106,9 @@ function detail(jobId: string) {
         ...base,
         job: j("browser_check", { fit_descriptor: null }),
         partType: { id: "c-9", name: "Spark plugs" },
+        // Answers teach Roam: the server sends the maker's words (the Toyota seed row of part_maker_word).
+        makerPartName: "PLUG, SPARK",
+        makerSearch: "spark plug",
         browserCheckUrl: "https://www.amayama.com/en/part/toyota/roomy-m900a-plugs",
         knownVersion: { domain: "amayama.com", code: "M900A-AGBVE", url: "https://www.amayama.com/en/part/toyota/roomy-m900a-plugs" },
         proposals: [proposal("p-9", jobId, { brand: "Toyota", part_number: "00000-T0009" })],
@@ -115,6 +118,8 @@ function detail(jobId: string) {
         ...base,
         job: j("browser_check", { fit_descriptor: null }),
         partType: { id: "c-10", name: "Shock absorber", position_scheme: "four_corners" },
+        makerPartName: "ABSORBER ASSY, SHOCK",
+        makerSearch: "shock absorber",
         browserCheckUrl: "https://partsouq.com/en/catalog/toyota/roomy-shocks",
         knownVersion: { domain: "amayama.com", code: "M900A-AGBVE", url: "https://www.amayama.com/en/part/toyota/roomy-m900a-agbve" },
         proposals: [
@@ -322,7 +327,8 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect(page.getByTestId("row-route-line").first()).toContainText("Two makers agree");
     await expect(page.getByTestId("filter-browser_check")).toContainText("7 of 25 open");
     await expect(page.getByTestId("notice-engine_paused")).toContainText("Open research settings");
-    await expect(page.getByTestId("notice-site_blocked")).toContainText("Amayama blocks Roam. Its items are now browser checks.");
+    // Owner 27 Nov: a blocked site is never a banner (it stays in Settings and health).
+    await expect(page.getByTestId("notice-site_blocked")).toHaveCount(0);
     await page.getByTestId("filter-waiting").click();
     await expect(page.getByTestId("parts-row")).toHaveCount(1);
     await page.getByTestId("filter-all").click();
@@ -926,11 +932,11 @@ test.describe("Research engine screens (layer 3)", () => {
     await expect.poll(() => calls.find((x) => x.path === "/fill/item")?.body).toEqual({ vehicleCatalogId: CAR, specKey: "front_brake_type" });
   });
 
-  test("Screen 16 — Overview shows the two banners only", async ({ page }) => {
+  test("Screen 16 — Overview shows the paused banner only", async ({ page }) => {
     await install(page, []);
     await page.goto("/?page=dashboard");
     await expect(page.getByTestId("notice-engine_paused")).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByTestId("notice-site_blocked")).toContainText("Open trusted sources");
+    await expect(page.getByTestId("notice-site_blocked")).toHaveCount(0);
     await shot(page, "16-overview-banners");
     await noDropWords(page);
   });

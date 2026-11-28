@@ -9,9 +9,12 @@ import {
   researchApi,
   type BrowserCheckAnswersPayload,
   type PartProposal,
+  type QuestionAnswer,
   type ResearchJobDetail,
+  type SavedPageRow,
   type SpecProposal,
 } from "../../../services/researchEngineService";
+import { AnsweredLine, QuestionCard } from "./QuestionCard";
 import { patchPendingPartsGroup, type PendingPartsQueueGroup } from "../../../services/pendingPartsCatalogService";
 import { AddedPickPartPanel } from "../vehicle-catalog/pending-parts/AddedPickPartPanel";
 import { SavedPageOverlay } from "./SavedPageOverlay";
@@ -72,6 +75,8 @@ import {
   siteName,
   statePill,
   closedNoteOf,
+  shortDate,
+  type StatePill,
 } from "./researchModel";
 
 export type DrawerOutcome = { message: string; undoJobId?: string };
@@ -101,6 +106,9 @@ export function ResearchJobDrawer({ token, jobId: jobIdProp, group, fallbackTitl
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [picking, setPicking] = useState(false);
+  // Answers teach Roam §5.2: "Or check it on the website step by step", and the answered card.
+  const [stepsOpen, setStepsOpen] = useState(false);
+  const [answered, setAnswered] = useState<SavedPageRow | null>(null);
   const open = Boolean(jobId || group);
 
   const load = useCallback(async () => {
@@ -122,8 +130,31 @@ export function ResearchJobDrawer({ token, jobId: jobIdProp, group, fallbackTitl
   useEffect(() => {
     setEditing(false);
     setPicking(false);
+    setStepsOpen(false);
+    setAnswered(null);
     void load();
   }, [load]);
+
+  // Answers teach Roam §5.2 (Stitch screens 8–9): a check that carries a question opens on the question card.
+  const question = detail?.question ?? null;
+  const questionMode = Boolean(question && detail?.job.state === "browser_check" && !stepsOpen);
+  async function answerQuestion(a: QuestionAnswer) {
+    if (!question) return;
+    const reply = await researchApi.answerQuestion(token, question.savedPageId, question.lineNo, a);
+    const row = (reply.result?.rows ?? []).find((r) => r.lineNo === question.lineNo) ?? null;
+    if (row?.question?.answer === "yes") {
+      setAnswered(row);
+      onChanged({ message: `Saved ${itemName} for ${carName}.` });
+      return;
+    }
+    if (row?.question?.answer === "no") {
+      // A plain browser check now: the usual steps.
+      setStepsOpen(true);
+      onChanged({ message: `${itemName} is a browser check.` });
+    }
+    // Still something to ask (the part is settled, the place isn't): the card shows the next question.
+    await load();
+  }
 
   const job = detail?.job ?? null;
   const itemName = detail?.spec?.label || detail?.partType?.name || fallbackTitle || "Part";
@@ -131,7 +162,7 @@ export function ResearchJobDrawer({ token, jobId: jobIdProp, group, fallbackTitl
   const carName = detail?.car ? carLabel(detail.car) : fallbackCar || "";
   const openConflict = (detail?.conflicts ?? []).find((c) => !c.closed_at) ?? null;
   const closedNote = closedNoteOf(job?.state ?? null, job?.last_error ?? null);
-  const pill = statePill(job?.state ?? null, Boolean(openConflict), closedNote);
+  const basePill = statePill(job?.state ?? null, Boolean(openConflict), closedNote);
   const readAt = useMemo(() => new Map((detail?.reads ?? []).map((r) => [r.id, r.read_at])), [detail]);
 
   const shownProposals = useMemo(() => {
@@ -188,6 +219,11 @@ export function ResearchJobDrawer({ token, jobId: jobIdProp, group, fallbackTitl
     }
   }
 
+  const pill: StatePill = answered
+    ? { label: "Added", tone: "green", icon: "check" }
+    : questionMode
+      ? { label: "Needs you", tone: "amber", icon: "help" }
+      : basePill;
   const header = (
     <div className="flex min-w-0 flex-col">
       <div className="flex flex-wrap items-center gap-2">
@@ -351,7 +387,38 @@ export function ResearchJobDrawer({ token, jobId: jobIdProp, group, fallbackTitl
         />
       ) : null}
 
-      {detail && !openConflict && state === "browser_check" ? (
+      {detail && answered ? (
+        <div className="flex flex-col gap-4" data-testid="drawer-answered">
+          <AnsweredLine row={{ ...answered, question: answered.question! }} />
+          <PartsButton variant="primary" className="!min-h-[44px] w-full" onClick={onClose} data-testid="drawer-answered-done">
+            Done
+          </PartsButton>
+        </div>
+      ) : null}
+
+      {detail && !answered && !openConflict && questionMode && question ? (
+        <div className="flex flex-col gap-4" data-testid="drawer-question">
+          <p className={`flex items-center gap-2 text-[14px] ${D_MUTED}`}>
+            <DIcon name="language" className="text-[18px]" />
+            From your saved page{question.domain ? ` · ${question.domain}` : ""} · {shortDate(question.readAt)}
+          </p>
+          <QuestionCard
+            row={{ ...question, question: question.question }}
+            canAnswer={role === "platform_owner"}
+            onAnswer={answerQuestion}
+          />
+          <PartsButton variant="secondary" className="!min-h-[44px] w-full" onClick={() => setStepsOpen(true)} data-testid="drawer-question-steps">
+            <DIcon name="open_in_new" className="text-[18px]" /> Or check it on the website step by step
+          </PartsButton>
+          {browserChecks ? (
+            <p className={`text-[13px] ${D_MUTED}`}>
+              Browser checks waiting for you: {browserChecks.open} of {browserChecks.max} · a check left for 30 days closes as Couldn&apos;t find.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {detail && !answered && !openConflict && state === "browser_check" && !questionMode ? (
         <BrowserCheckCard
           detail={detail}
           itemName={itemName}
@@ -730,7 +797,7 @@ function BrowserCheckCard({
   // The button names the site it really opens (RE-69: it said Partsouq while opening the remembered Amayama page).
   const site = siteName(openUrl);
   const jobType = detail.job.job_type === "spec" ? "spec" : "part";
-  const finder = partFinder(itemName, detail.car?.make, detail.job.fit_descriptor, detail.makerPartName);
+  const finder = partFinder(itemName, detail.car?.make, detail.job.fit_descriptor, detail.makerPartName, detail.makerSearch);
   const known = detail.knownVersion ?? null;
   const versionRow = catalogueVersionRow(detail.car, known).filter((c) => c.label !== "Model code" && c.value !== "—");
   const dates = buildDates(detail.car);

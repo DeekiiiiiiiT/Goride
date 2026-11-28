@@ -11,6 +11,16 @@ is open.
 
 ## START HERE (new chat)
 
+> **27 Nov 2026: RE-73 / RE-74 / RE-75 (stale and impossible browser checks). All LIVE.**
+> - **DB** (owner pasted, logbook lines in): `20261127122811_part_fits_axle_drum_rule.sql` (RE-73: no pads, rotor or
+>   caliper on a drum axle; the car's own brake type decides) and `20261127132914_research_close_covered_checks.sql`
+>   (RE-75: a job whose answer is already Confirmed or sourced is never made, and cron `research-close-covered` every
+>   10 min closes open ones → `auto_added`). Root cause: jobs were judged once when made and never re-checked.
+> - **Edge** (RE-73 message + RE-74: a saved-page held row opens no check when that part + axle is already on file):
+>   `saved_page_proof.ts`, `research_saved_page_routes.ts`, `saved_page_part_type_core.ts`, `saved_page_on_file.ts`
+>   (+ `saved_page_on_file.test.ts`). `platform-catalog` v265 + `catalog-research` v84 deployed 27 Nov ~14:25 UTC from
+>   main e38dd9c72 + these files; this PR puts them on main.
+
 1. Read this file. Follow `docs/how-we-build-playbook.md`. The owner is not a coder: plain words, **short replies**.
    When asked "what next?", answer in one line.
 2. Owner rules (keep them):

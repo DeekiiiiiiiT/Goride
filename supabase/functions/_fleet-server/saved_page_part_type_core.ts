@@ -10,7 +10,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { answersGate, type CarBuild, type CheckAnswers } from "./research_browser_check.ts";
 import { identityTokens } from "./research_part_job.ts";
 import { savePartAnswers, type SaveJob } from "./research_part_save.ts";
-import { impliedAxle, PLACE_AXLE_REASON, PLACE_SIDE_REASON, type PartType, placeGap, rowNamesType } from "./saved_page_proof.ts";
+import { DRUM_AXLE_REASON, impliedAxle, PLACE_AXLE_REASON, PLACE_SIDE_REASON, type PartType, placeGap, rowNamesType } from "./saved_page_proof.ts";
 import { ROAM_SAVE_PROBLEM } from "./saved_page_result.ts";
 import { typeRoamAlreadyHas } from "./saved_page_suggest.ts";
 import { normalisePhrase } from "./saved_page_phrases.ts";
@@ -23,6 +23,7 @@ import {
 } from "./part_pictures_queue.ts";
 import { covers, type OnFile, overlaps, parseOnFile, placeMatches, POSITION_SCHEMES } from "./saved_page_on_file.ts";
 import { savedPageBuildText } from "./saved_page_build_text.ts";
+import { loadMakerWords, type MakerWords, NO_MAKER_WORDS } from "./saved_page_lessons.ts";
 import type { ResultRow } from "./research_saved_page_routes.ts";
 
 const SIDED = new Set(["four_corners", "axle_left_right"]);
@@ -105,11 +106,11 @@ export function uniqueOpCode(name: string, taken: ReadonlySet<string>): string {
 /** P4 at Add: the type's own words, or the page phrase when the card was renamed. */
 function rowNamesSuggestedPart(
   type: PartType,
-  make: string | null,
+  maker: MakerWords | null,
   row: ResultRow,
   pagePhrase: string,
 ): boolean {
-  if (rowNamesType(type, make, row.groupLine, row.lineText)) return true;
+  if (rowNamesType(type, maker, row.groupLine, row.lineText)) return true;
   const words = String(pagePhrase ?? "").toUpperCase().split(/[^A-Z0-9]+/).filter((w) => w.length >= 3);
   const text = String(row.groupLine ?? "").toUpperCase();
   return words.some((word) => new RegExp(`(^|[^A-Z0-9])${word}([^A-Z0-9]|$)`).test(text));
@@ -344,6 +345,12 @@ export async function saveRowsAsPartType(
   const version = await rememberedVersion(supabase, input.page.vehicle_catalog_id, domain).catch(() => null);
   const fromCarMaker = await carMakerPage(supabase, domain, make).catch(() => false);
   const onFile = await confirmedOnFile(supabase, input.page.vehicle_catalog_id).catch(() => [] as OnFile[]);
+  // AT-01: the maker's words. The page phrase still counts on this path (rowNamesSuggestedPart), so a failed read only
+  // loses the seed words, never the row.
+  const maker = await loadMakerWords(supabase, make).catch((err) => {
+    console.warn("saved page core: maker words not read", err);
+    return NO_MAKER_WORDS;
+  });
   const identity = identityTokens(car as unknown as Record<string, string>);
   const buildText = savedPageBuildText(car);
   const site = domain ?? "";
@@ -364,7 +371,7 @@ export async function saveRowsAsPartType(
     const held = (reason: string): Decision => ({ row, state: "left_for_later", reason: null, waitReason: reason, jobId: null, axle, side, fromMonth, toMonth });
     const base = { row, axle, side, fromMonth, toMonth };
 
-    if (!rowNamesSuggestedPart(type, make, row, input.phrase)) {
+    if (!rowNamesSuggestedPart(type, maker, row, input.phrase)) {
       decisions.push(held(NO_TYPE_WORDS_REASON));
       continue;
     }
@@ -436,7 +443,16 @@ export async function saveRowsAsPartType(
       lastReason = lastReason ?? "The browser check couldn't open. Try again.";
       continue;
     }
-    const jr = jobResult.data as { jobId?: string; state?: string; busy?: boolean } | null;
+    const jr = jobResult.data as { jobId?: string; state?: string; busy?: boolean; notApplicable?: boolean } | null;
+    // RE-73: this car can't have this part on that axle (disc-only part on a drum axle): no check is opened.
+    if (jr?.notApplicable) {
+      for (const d of groupRows) {
+        d.state = "held";
+        d.reason = DRUM_AXLE_REASON;
+      }
+      lastReason = lastReason ?? DRUM_AXLE_REASON;
+      continue;
+    }
     if (jr?.busy) {
       for (const d of groupRows) {
         d.state = "held";

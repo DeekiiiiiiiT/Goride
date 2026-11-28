@@ -29,6 +29,7 @@ import {
   axleWordsFor,
   type CarFacts,
   dateRangeText,
+  DRUM_AXLE_REASON,
   headerFacts,
   headerLineCount,
   isOtherTypeName,
@@ -42,6 +43,7 @@ import {
 } from "./saved_page_proof.ts";
 import { buildText } from "./saved_page_build_text.ts";
 import { buildSuggestions, type Suggestion } from "./saved_page_suggest.ts";
+import { countLessonSaves, loadMakerWords, type MakerWords } from "./saved_page_lessons.ts";
 import { normalisePhrase, pagePhraseFromGroupLine } from "./saved_page_phrases.ts";
 import { sortSavedPage } from "./saved_page_auto_sort_run.ts";
 import type { SavedPageSortAi } from "./saved_page_sort_ai.ts";
@@ -102,6 +104,8 @@ export type SavedPageResult = {
   skipped?: number;
   /** Rev 2 §3.9: the two reads as each gave them, so a disagreement can be looked at afterwards. */
   reads?: StoredRead[];
+  /** Answers teach Roam AT-08: rows saved on this upload because of an earlier owner answer. */
+  learned?: number;
 };
 
 export type SavedPageRow = {
@@ -176,7 +180,7 @@ export type SavedPageDeps = {
   sortAi?: SavedPageSortAi | null;
 };
 
-import { covers, type OnFile, overlaps, parseOnFile, placeMatches } from "./saved_page_on_file.ts";
+import { covers, type OnFile, overlaps, parseOnFile, placeMatches, placeOnFile } from "./saved_page_on_file.ts";
 
 export type ResultRow = {
   partType: string;
@@ -206,6 +210,20 @@ export type ResultRow = {
   suggestion: string | null;
   /** R1/AS-17: the normalised page phrase, the answer key shared by every page. */
   phraseKey: string | null;
+  /**
+   * Answers teach Roam AT-05: the question a `held` row asks (wording / types / axle / side), with the part types it
+   * offers. `answer` is set once the owner answered ("no" keeps the row as a browser check).
+   */
+  question?: {
+    kind: "wording" | "types" | "axle" | "side";
+    typeIds: string[];
+    typeNames: string[];
+    answer?: "yes" | "no" | null;
+    /** After a Yes: "Roam will remember 'SUPPORT SUB-ASSY, FRONT SUSPENSION' for Toyota." */
+    note?: string | null;
+  } | null;
+  /** AT-08: this row was saved because of an earlier owner answer. */
+  learned?: boolean;
 };
 
 function stripQuery(url: URL): string {
@@ -661,8 +679,10 @@ export async function runSavedPage(
       const { data } = await supabase.rpc("catalog_research_spend_today");
       return Number(data) || 0;
     };
-    const { data: settings } = await supabase.from("catalog_research_settings").select("daily_spend_usd").eq("id", 1).single();
+    const { data: settings } = await supabase.from("catalog_research_settings").select("*").eq("id", 1).single();
     const cap = Number((settings as { daily_spend_usd?: number } | null)?.daily_spend_usd ?? 0);
+    // Answers teach Roam §6: the switch. Read with "*" so a database without the column (before its migration) is "off".
+    const askQuestions = (settings as { answers_teach_roam?: boolean } | null)?.answers_teach_roam === true;
     const spendStart = await spendNow();
     if (cap > 0 && spendStart >= cap) return await stopReading("cap_reached", "Try again tomorrow.", 0);
 
@@ -716,6 +736,16 @@ export async function runSavedPage(
     const onFileByNumber = new Map<string, OnFile>();
     for (const a of onFile) if (!onFileByNumber.has(norm(a.number))) onFileByNumber.set(norm(a.number), a);
 
+    // AT-01: the car maker's words (seed rows + the owner's lessons). Without them a Toyota brake-pad row would quietly
+    // lose its words, so a failed read stops the upload with a plain line instead.
+    let makerWords: MakerWords;
+    try {
+      makerWords = await loadMakerWords(supabase, car.make);
+    } catch (err) {
+      console.error("saved page maker words not read", err);
+      return await stopReading("words_unread", "Roam couldn't read its part names. Try again.", aiCost);
+    }
+
     // R6: prove the rows on the page. D1 caps the kept rows at 400, so a pathological page can never grow the result.
     const proven = proveRows({
       reads: [read1, read2],
@@ -726,6 +756,8 @@ export async function runSavedPage(
       header: headerFacts(headerLines),
       headingText: headerText,
       isOnFile: (n) => onFileByNumber.has(norm(n)),
+      makerWords,
+      askQuestions,
     }).slice(0, MAX_RESULT_ROWS);
     if (!proven.length) {
       return await stopReading("no_rows", "Open the section that lists the part numbers, then save it again.", aiCost);
@@ -764,6 +796,9 @@ export async function runSavedPage(
           reason: `Roam already has a different number here (${d.onFile!.number})`,
           jobId: null,
         });
+      } else if (r.question) {
+        // AT-03: a question for the owner. Its browser check is opened below (AT-11); nothing saves until it's answered.
+        outcome.set(r.lineNo, { group: "held", reason: r.reason, jobId: null });
       } else if (r.leftForLater) {
         // Rev 2 §3.3: nothing saved, nothing asked, nothing opened. `result.skipped` counts it.
         outcome.set(r.lineNo, { group: "left_for_later", reason: null, jobId: null, waitReason: r.reason });
@@ -775,7 +810,7 @@ export async function runSavedPage(
     // the other number (§3.8) — neither ever opens a job on its own.
     const groups = new Map<string, { type: PartType; axle: "front" | "rear" | null; rows: ProvenRow[] }>();
     for (const r of proven) {
-      if (!r.type || r.dropped || r.leftForLater) continue;
+      if (!r.type || r.dropped || r.leftForLater || r.question) continue;
       const key = `${r.type.id}|${r.axle ?? ""}`;
       const g = groups.get(key) ?? { type: r.type, axle: r.axle, rows: [] };
       g.rows.push(r);
@@ -794,6 +829,35 @@ export async function runSavedPage(
       // Every row's number is already Confirmed for its place, or covered by another number: nothing to save and
       // nothing to check, so no browser check is opened (one opened here was never closed and sat in Pending catalog).
       if (!pending.length) continue;
+      // A number already on file covers its place just as well as a new one (nothing is saved for it, but the axle's
+      // other side must not be held because of it).
+      const coverRows = g.rows;
+
+      // P7: every place on the axle must be fully covered by its rows (or numbers already on file). Worked out before
+      // any browser check opens, so RE-74 below can decide whether one is needed at all.
+      let gap: string | null = null;
+      const gapFor = new Map<string, string | null>();
+      if (SIDED.has(String(g.type.scheme ?? ""))) {
+        for (const place of ["left", "right"]) {
+          const rs = coverRows.filter((r) => r.side === place || r.side === "both");
+          const placeGapText = rs.length ? placeGap(rs.map((r) => ({ from: r.from!, to: r.to! })), build) : "No number for this side";
+          gapFor.set(place, placeGapText);
+          if (placeGapText) gap = gap ?? placeGapText;
+        }
+      } else {
+        gap = placeGap(coverRows.map((r) => ({ from: r.from!, to: r.to! })), build);
+      }
+
+      // RE-74 (27 Nov): the rows can't save (a page gap) and this car already has a Confirmed number for this part on
+      // this axle, so there is nothing to ask. Before this, a stray row (Amayama's section code "42403" read as a
+      // number) opened a Brake drum · Rear check on a Roomy whose drum was confirmed on 7 Nov.
+      if (gap && placeOnFile(onFile, g.type, g.axle)) {
+        for (const r of pending) {
+          outcome.set(r.lineNo, { group: "not_saved", reason: "Roam already has a number for this part on this car", jobId: null });
+        }
+        continue;
+      }
+
       const positionAware = POSITION_SCHEMES.has(String(g.type.scheme ?? ""));
       const canHaveJob = !positionAware || g.axle != null;
       let job: { jobId: string; state: string } | null = null;
@@ -809,7 +873,12 @@ export async function runSavedPage(
           for (const r of pending) outcome.set(r.lineNo, { group: "held", reason: "The browser check couldn't open. Try again.", jobId: null });
           continue;
         }
-        const jr = jobResult as { jobId?: string; state?: string; busy?: boolean } | null;
+        const jr = jobResult as { jobId?: string; state?: string; busy?: boolean; notApplicable?: boolean } | null;
+        // RE-73: this car can't have this part on that axle (disc-only part on a drum axle): no check is opened.
+        if (jr?.notApplicable) {
+          for (const r of pending) outcome.set(r.lineNo, { group: "held", reason: DRUM_AXLE_REASON, jobId: null });
+          continue;
+        }
         if (jr?.busy) busy = true;
         else if (jr?.jobId) job = { jobId: String(jr.jobId), state: String(jr.state ?? "browser_check") };
       }
@@ -826,24 +895,6 @@ export async function runSavedPage(
       if (!job) {
         for (const r of pending) held(r, "The browser check couldn't open. Try again.");
         continue;
-      }
-
-      // A number already on file covers its place just as well as a new one (nothing is saved for it, but the axle's
-      // other side must not be held because of it).
-      const coverRows = g.rows;
-
-      // P7: every place on the axle must be fully covered by its rows (or numbers already on file).
-      let gap: string | null = null;
-      const gapFor = new Map<string, string | null>();
-      if (SIDED.has(String(g.type.scheme ?? ""))) {
-        for (const place of ["left", "right"]) {
-          const rs = coverRows.filter((r) => r.side === place || r.side === "both");
-          const placeGapText = rs.length ? placeGap(rs.map((r) => ({ from: r.from!, to: r.to! })), build) : "No number for this side";
-          gapFor.set(place, placeGapText);
-          if (placeGapText) gap = gap ?? placeGapText;
-        }
-      } else {
-        gap = placeGap(coverRows.map((r) => ({ from: r.from!, to: r.to! })), build);
       }
 
       // SP-39: an auto_added job never saves. Its number is already on the car, so the row is a fact, not a question.
@@ -963,6 +1014,75 @@ export async function runSavedPage(
       }
     }
 
+    // AT-11: every question rides on a browser check job, so it shows in Pending catalog, counts in "N of 25" and keeps
+    // RE-73 (impossible parts) and RE-74/75 (already on file). One job per part type + axle, shared by its questions.
+    const questionRows = proven.filter((r) => r.question && outcome.get(r.lineNo)?.group === "held");
+    const questionJobs = new Map<string, string | null>();
+    for (const r of questionRows) {
+      const q = r.question!;
+      // "Which part is this?" offers only the parts this car can have there (RE-73 answers notApplicable for the rest).
+      let jobId: string | null = null;
+      let fits = false;
+      for (const typeId of q.typeIds) {
+        const t = types.find((x) => x.id === typeId);
+        if (!t) continue;
+        if (r.axle && placeOnFile(onFile, t, r.axle)) {
+          // RE-74: this part is already confirmed on this axle; there is nothing to ask.
+          fits = true;
+          jobId = null;
+          outcome.set(r.lineNo, { group: "not_saved", reason: "Roam already has a number for this part on this car", jobId: null });
+          r.question = null;
+          break;
+        }
+        const key = `${t.id}|${r.axle ?? ""}`;
+        if (questionJobs.has(key)) {
+          jobId = questionJobs.get(key) ?? null;
+          fits = true;
+          break;
+        }
+        const { data: jr, error: jobError } = await supabase.rpc("research_saved_page_job", {
+          p_vehicle_catalog_id: car.id,
+          p_component_id: t.id,
+          p_axle: r.axle,
+          p_actor: actor,
+        });
+        const res = jr as { jobId?: string; notApplicable?: boolean; busy?: boolean } | null;
+        if (jobError) {
+          console.error("saved page question job failed", jobError.message);
+          fits = true;
+          break;
+        }
+        if (res?.notApplicable) continue;
+        fits = true;
+        jobId = res?.jobId ? String(res.jobId) : null;
+        questionJobs.set(key, jobId);
+        if (jobId) await writeSuggestions(supabase, jobId, t, r.axle, [r], decision, carMakerPage, car.make, row.id);
+        break;
+      }
+      if (!r.question) continue;
+      if (!fits) {
+        // Every part it could be is one this car can't have there (RE-73): not a question.
+        outcome.set(r.lineNo, { group: "held", reason: DRUM_AXLE_REASON, jobId: null });
+        r.question = null;
+        continue;
+      }
+      outcome.set(r.lineNo, { group: "held", reason: r.reason, jobId });
+    }
+    // The "Which part is this?" buttons: only the types the car can have on that axle (RE-73).
+    for (const r of questionRows) {
+      if (!r.question || r.question.kind !== "types") continue;
+      const kept: string[] = [];
+      for (const id of r.question.typeIds) {
+        const { data: fitsAxle } = await supabase.rpc("catalog_part_fits_axle", {
+          p_vehicle_catalog_id: car.id,
+          p_component_id: id,
+          p_axle: r.axle,
+        });
+        if (fitsAxle !== false) kept.push(id);
+      }
+      r.question.typeIds = kept;
+    }
+
     // R2: one suggestion per catalogue group row among the unknown rows (D2). A dismissed phrase is skipped here.
     // R3: the 20-card limit goes, so every unknown name is a suggestion the sorter can answer.
     const suggestionBuild = buildSuggestions({ rows: proven, types, groups: partGroups, dismissed, dismissedNotes, max: MAX_RESULT_ROWS });
@@ -996,9 +1116,25 @@ export async function runSavedPage(
         ...(o.group === "left_for_later" ? { waitReason: o.waitReason ?? r.reason ?? null } : {}),
         suggestion: suggestionBuild.keyByLine.get(r.lineNo) ?? null,
         phraseKey: r.groupLine ? normalisePhrase(pagePhraseFromGroupLine(r.groupLine)) || null : null,
+        ...(r.question && o.group === "held"
+          ? {
+            question: {
+              kind: r.question.kind,
+              typeIds: r.question.typeIds,
+              typeNames: r.question.typeIds.map((id) => types.find((t) => t.id === id)?.name ?? ""),
+              answer: null,
+            },
+          }
+          : {}),
+        ...(o.group === "saved" && r.lessonIds.length ? { learned: true } : {}),
       });
     }
     const counts = countRowsByGroup(rows);
+    // AT-08: rows an earlier answer settled, and each lesson's saved-parts count.
+    const learnedRows = proven.filter((r) => outcome.get(r.lineNo)?.group === "saved" && r.lessonIds.length);
+    const lessonCounts = new Map<string, number>();
+    for (const r of learnedRows) for (const id of r.lessonIds) lessonCounts.set(id, (lessonCounts.get(id) ?? 0) + 1);
+    await countLessonSaves(supabase, lessonCounts);
     // Rev 2 §3.3: the one number behind "Roam skipped N rows it couldn't prove from the page".
     const skipped = counts.left_for_later;
     // Rev 2 §3.9: both reads, as each gave them (bounded by the result's own row cap).
@@ -1062,6 +1198,7 @@ export async function runSavedPage(
       otherTypes,
       skipped,
       reads,
+      ...(learnedRows.length ? { learned: learnedRows.length } : {}),
       ...(suggestionBuild.moreUnknownRows > 0 ? { moreUnknownRows: suggestionBuild.moreUnknownRows } : {}),
       ...(pictures ? { pictures } : {}),
     };
@@ -1110,6 +1247,7 @@ async function writeSuggestions(
   decision: Map<number, { onFile: OnFile | null; same: boolean; conflict: boolean }>,
   carMakerPage: boolean,
   carMake: string | null,
+  savedPageId: string | null = null,
 ): Promise<void> {
   const kind = confirmedPartKind(carMakerPage, carMake, null);
   for (const r of rows) {
@@ -1117,12 +1255,16 @@ async function writeSuggestions(
     if (!r.numberOk || !r.number) continue;
     if (decision.get(r.lineNo)?.same) continue;
     const key = axle ?? "";
+    // AT-06 / AT-12: the maker's own words for the part (the page heading), and the page row it came from, so the
+    // browser check asks in the maker's words and can show what Roam read.
+    const heading = r.groupLine ? pagePhraseFromGroupLine(r.groupLine) : "";
     const { error } = await supabase.from("catalog_part_proposal").upsert({
       job_id: jobId,
       brand: kind.brand,
       part_number: r.number,
       part_number_norm: norm(r.number),
-      part_name: type.name,
+      part_name: heading || type.name,
+      ...(savedPageId ? { sources: [{ kind: "saved_page", savedPageId, lineNo: r.lineNo }] } : {}),
       position_key: key,
       match_kind: kind.matchKind,
       route: "review",
